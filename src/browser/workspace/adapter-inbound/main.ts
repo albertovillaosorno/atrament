@@ -162,6 +162,9 @@ let activeDividerPointerId: number | null = null;
 
 window.addEventListener("pagehide", (event): void => {
     copyGeneration += 1;
+    if (activeDividerPointerId !== null) {
+        releaseDividerPointer(activeDividerPointerId);
+    }
     if (event.persisted) {
         workspace.replaceChildren();
     }
