@@ -302,8 +302,10 @@ if (compactWorkspace === null) {
     window.addEventListener("resize", syncDividerAvailability);
 } else if (typeof compactWorkspace.addEventListener === "function") {
     compactWorkspace.addEventListener("change", syncDividerAvailability);
-} else {
+} else if (typeof compactWorkspace.addListener === "function") {
     compactWorkspace.addListener(syncDividerAvailability);
+} else {
+    window.addEventListener("resize", syncDividerAvailability);
 }
 syncDividerAvailability();
 
