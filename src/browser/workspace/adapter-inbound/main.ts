@@ -16,7 +16,8 @@
 // - Allows:
 //   - Inputs: User text entry and backend-presented prompt text.
 //   - Outputs: Character counts, local viewport controls, and clipboard writes.
-//   - Side effects: DOM updates, pointer capture, and clipboard writes only.
+//   - Side effects: DOM updates, pointer capture, clipboard writes, and
+//     bfcache reloads.
 // - Split-When:
 //   - Backend transport wiring needs an independently testable adapter.
 // - Merge-When:
@@ -141,6 +142,18 @@ const zoomIn = requireElement<HTMLButtonElement>("#zoom-in");
 const zoomStatus = requireElement<HTMLOutputElement>("#zoom-status");
 const previewScale = requireElement<HTMLElement>("#preview-scale");
 const workspace = requireElement<HTMLElement>(".workspace-grid");
+
+window.addEventListener("pagehide", (event): void => {
+    if (event.persisted) {
+        workspace.replaceChildren();
+    }
+});
+
+window.addEventListener("pageshow", (event): void => {
+    if (event.persisted) {
+        window.location.reload();
+    }
+});
 
 divider.setAttribute("tabindex", "0");
 divider.removeAttribute("aria-disabled");
