@@ -73,6 +73,11 @@ copyPrompt.addEventListener("click", (): void => {
         return;
     }
 
+    if (navigator.clipboard === undefined) {
+        copyStatus.textContent = "Clipboard access is unavailable.";
+        return;
+    }
+
     void navigator.clipboard.writeText(prompt).then(
         (): void => {
             copyStatus.textContent = "Prompt copied.";

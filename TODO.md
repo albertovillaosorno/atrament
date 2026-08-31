@@ -117,6 +117,12 @@ fallback, profile repair, content replacement, or export refusal.
 Show both editors concurrently with adjustable division, stable selection,
 keyboard navigation, zoom, page list, diagnostics, and no hidden main surface.
 
+Current frontend evidence: both editors are visible in one 16:9 workspace, the
+splitter supports pointer and keyboard adjustment from 35% through 65%, preview
+zoom is local from 60% through 160%, and the page-list and diagnostics surfaces
+remain visible. The task stays open for backend-fed page navigation and stable
+semantic selection.
+
 ### TODO - Build the structured LLM editor
 
 Edit task instructions and notebook source with structured completion,
@@ -388,6 +394,11 @@ digital themes, live themes, and overflow overlays independently.
 
 Make both editors, page navigation, diagnostics, drag alternatives, prompt copy,
 import, export, and hardware arming usable without a pointer.
+
+Current frontend evidence includes skip links, labeled text areas and counters,
+a keyboard-operable splitter, button-based zoom, status announcements, and
+native keyboard focus. Backend-owned editing, import, export, diagnostics, and
+hardware actions still need complete no-pointer paths before this task closes.
 
 ### TODO - Prove localhost security and privacy
 

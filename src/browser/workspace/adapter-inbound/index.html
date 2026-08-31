@@ -35,6 +35,7 @@
           <span class="field-label">Task</span>
           <textarea
             id="task-input"
+            aria-describedby="task-count"
             rows="4"
             placeholder="What should this notebook page communicate?"
           ></textarea>
@@ -45,6 +46,7 @@
           <span class="field-label">Source material</span>
           <textarea
             id="source-input"
+            aria-describedby="source-count"
             rows="9"
             placeholder="Paste notes, formulas, sources, or instructions."
           ></textarea>
@@ -93,17 +95,24 @@
           </div>
           <textarea
             id="prompt-output"
+            aria-describedby="copy-status"
             rows="5"
             readonly
             placeholder="The backend-produced prompt appears here."
           ></textarea>
-          <p class="action-status" id="copy-status" aria-live="polite"></p>
+          <p
+            class="action-status"
+            id="copy-status"
+            role="status"
+            aria-live="polite"
+          ></p>
         </section>
 
         <label class="field-block" for="candidate-input">
           <span class="field-label">Model response</span>
           <textarea
             id="candidate-input"
+            aria-describedby="candidate-count"
             rows="6"
             placeholder="Paste the complete external model response."
           ></textarea>
