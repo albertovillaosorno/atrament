@@ -9,25 +9,76 @@
 //
 // Boundary-Contract:
 // - Owns:
-//   - The browser workspace entry boundary.
+//   - Browser-only workspace interaction and clipboard presentation.
 // - Must-Not:
-//   - Implement document, layout, rendering, or hardware policy.
-//   - Become a second application authority.
+//   - Validate or reinterpret backend-owned notebook data.
+//   - Implement layout, rendering, diagnostics, or output compilation.
 // - Allows:
-//   - Inputs: Browser-local interaction events.
-//   - Outputs: Typed requests to the backend application boundary.
-//   - Side effects: Browser presentation only.
+//   - Inputs: User text entry and backend-presented prompt text.
+//   - Outputs: Character counts, focus behavior, and clipboard writes.
+//   - Side effects: DOM updates and explicit clipboard writes only.
 // - Split-When:
-//   - Split when another inbound interaction surface needs independent policy.
+//   - Backend transport wiring needs an independently testable adapter.
 // - Merge-When:
-//   - Merge when the browser boundary has no independent ownership.
+//   - Browser interaction no longer has independent ownership.
 // - Summary:
-//   - Declares the browser workspace entry point.
+//   - Keeps the TypeScript client intentionally thin.
 // - Description:
-//   - Keeps browser interaction separate from authoritative computation.
+//   - Presents backend authority without duplicating its domain contracts.
 // - Usage:
-//   - Expanded when the localhost workspace gains product behavior.
+//   - Loaded by the localhost workspace document.
 // - Defaults:
-//   - Exports no behavior in the scaffold.
+//   - Performs no network request and persists no browser state.
 //
-export {};
+function requireElement<T extends Element>(selector: string): T {
+    const element = document.querySelector<T>(selector);
+    if (element === null) {
+        throw new Error(`Missing required workspace element: ${selector}`);
+    }
+    return element;
+}
+
+function bindCharacterCount(
+    input: HTMLTextAreaElement,
+    output: HTMLElement,
+): void {
+    const update = (): void => {
+        const count = input.value.length;
+        const suffix = count === 1 ? "character" : "characters";
+        output.textContent = `${count} ${suffix}`;
+    };
+
+    input.addEventListener("input", update);
+    update();
+}
+
+const taskInput = requireElement<HTMLTextAreaElement>("#task-input");
+const sourceInput = requireElement<HTMLTextAreaElement>("#source-input");
+const candidateInput = requireElement<HTMLTextAreaElement>("#candidate-input");
+const taskCount = requireElement<HTMLElement>("#task-count");
+const sourceCount = requireElement<HTMLElement>("#source-count");
+const candidateCount = requireElement<HTMLElement>("#candidate-count");
+const promptOutput = requireElement<HTMLTextAreaElement>("#prompt-output");
+const copyPrompt = requireElement<HTMLButtonElement>("#copy-prompt");
+const copyStatus = requireElement<HTMLElement>("#copy-status");
+
+bindCharacterCount(taskInput, taskCount);
+bindCharacterCount(sourceInput, sourceCount);
+bindCharacterCount(candidateInput, candidateCount);
+
+copyPrompt.addEventListener("click", (): void => {
+    const prompt = promptOutput.value;
+    if (prompt.length === 0) {
+        copyStatus.textContent = "Waiting for a prompt from the backend.";
+        return;
+    }
+
+    void navigator.clipboard.writeText(prompt).then(
+        (): void => {
+            copyStatus.textContent = "Prompt copied.";
+        },
+        (): void => {
+            copyStatus.textContent = "Clipboard write failed.";
+        },
+    );
+});
