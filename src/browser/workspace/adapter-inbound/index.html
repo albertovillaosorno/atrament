@@ -148,18 +148,30 @@
           >Waiting for a prompt from the backend.</p>
         </section>
 
-        <label class="field-block" for="candidate-input">
-          <span class="field-label">Model response</span>
+        <section class="candidate-block" aria-labelledby="candidate-title">
+          <div class="section-row compact">
+            <div>
+              <p class="field-label" id="candidate-title">Model response</p>
+              <p class="field-help" id="candidate-help">
+                Raw untrusted input. Backend validation is required before any
+                notebook state can be accepted.
+              </p>
+            </div>
+            <span class="panel-badge">Untrusted input</span>
+          </div>
+          <label class="sr-only" for="candidate-input">
+            Complete external model response
+          </label>
           <textarea
             id="candidate-input"
             autocomplete="off"
             spellcheck="false"
-            aria-describedby="candidate-count"
+            aria-describedby="candidate-help candidate-count"
             rows="6"
             placeholder="Paste the complete external model response."
           ></textarea>
           <span class="field-meta" id="candidate-count">0 characters</span>
-        </label>
+        </section>
       </section>
 
       <div

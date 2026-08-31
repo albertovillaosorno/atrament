@@ -316,6 +316,7 @@ button:focus-visible {
 }
 
 .prompt-block,
+.candidate-block,
 .diagnostics,
 .output-bar {
   border: 1px solid #d5cec1;
@@ -323,8 +324,18 @@ button:focus-visible {
   background: #f4f0e8;
 }
 
-.prompt-block {
+.prompt-block,
+.candidate-block {
   padding: 12px;
+}
+
+.candidate-block textarea {
+  margin-top: 10px;
+}
+
+.candidate-block .field-meta {
+  display: block;
+  padding-top: 6px;
 }
 
 .prompt-block textarea {

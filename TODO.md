@@ -129,12 +129,11 @@ Edit task instructions and notebook source with structured completion,
 formatting,
 object navigation, diagnostics, and a safe raw-response inspection boundary.
 
-Current frontend evidence includes task, source, raw model-response, permanent
-prompt, profile, paper, style, and output surfaces. Backend-owned option
-controls
-start disabled rather than pretending to apply state before transport exists.
-Structured completion, object navigation, candidate diagnostics, and backend
-transport remain unfinished.
+Current frontend evidence includes task, source, permanent prompt, backend-owned
+options, and a visually isolated raw model-response boundary that explicitly
+remains untrusted until backend validation. Structured completion, object
+navigation, candidate diagnostics, acceptance, and backend transport remain
+unfinished.
 
 ### TODO - Build the human page editor
 
