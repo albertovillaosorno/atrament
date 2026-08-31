@@ -415,13 +415,6 @@ button:focus-visible {
   gap: 7px;
 }
 
-.tool-status {
-  margin: 0;
-  color: #70695e;
-  font-size: 11px;
-  line-height: 1.4;
-}
-
 .zoom-controls button {
   min-width: 36px;
 }
@@ -565,6 +558,22 @@ button:focus-visible {
     padding: 7px 8px;
     white-space: nowrap;
     font-size: 11px;
+  }
+
+  .preview-toolbar {
+    padding: 6px;
+  }
+
+  .zoom-controls {
+    width: 100%;
+    flex-wrap: nowrap;
+    gap: 4px;
+  }
+
+  .zoom-controls button {
+    flex: 1 1 0;
+    min-width: 0;
+    padding: 7px 4px;
   }
 
   .control-row {
