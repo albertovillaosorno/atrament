@@ -13,4 +13,7 @@ paths = ["docs/"]
 paths = [".jig/"]
 
 [role.root_governance]
-paths = [".editorconfig", ".gitattributes", ".gitignore", "LICENSE-MIT", "README.md", "TODO.md"]
+paths = [".editorconfig", ".gitattributes", ".gitignore", "LICENSE-MIT", "README.md", "TODO.md", "package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml", "tsconfig.json"]
+
+[role.source]
+paths = ["src/"]

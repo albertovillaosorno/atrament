@@ -1,0 +1,12 @@
+{
+  "name": "atrament-workspace",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.22.0",
+  "scripts": {
+    "check:frontend": "pnpm --filter @atrament/frontend run check"
+  },
+  "devDependencies": {
+    "typescript": "7.0.2"
+  }
+}

@@ -19,3 +19,21 @@ kind = "toml"
 path = ".jig/version/jig.toml"
 selector = "jig.version"
 template = "{version}"
+
+[authority.pnpm]
+current = "11.22.0"
+stable = "11.22.0"
+
+[authority.pnpm.projection.package_manager]
+kind = "package-manager"
+target = "pnpm"
+template = "pnpm@{version}"
+
+[authority.typescript]
+current = "7.0.2"
+stable = "7.0.2"
+
+[authority.typescript.projection.package]
+kind = "package"
+target = "typescript"
+template = "{version}"

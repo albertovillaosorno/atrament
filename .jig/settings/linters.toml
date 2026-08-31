@@ -66,8 +66,8 @@ enabled = false
 reason = "Rust policy activates with the first Rust workspace scaffold."
 
 [applicability.typescript]
-enabled = false
-reason = "The planning generation contains no TypeScript source."
+enabled = true
+reason = "The browser scaffold is governed by reviewed TypeScript policy."
 
 [applicability.unreal]
 enabled = false

@@ -20,7 +20,8 @@
     "order": [
       "function",
       "cargo-project",
-      "rust-library"
+      "rust-library",
+      "typescript-project"
     ],
     "required": [
       "function"
@@ -33,12 +34,17 @@
       ],
       "rust-library": [
         "lib.rs"
+      ],
+      "typescript-project": [
+        "package.json",
+        "tsconfig.json"
       ]
     },
     "kind_surfaces": {
       "function": [],
       "cargo-project": [],
-      "rust-library": []
+      "rust-library": [],
+      "typescript-project": []
     },
     "undeclared_surface": "fatal",
     "unknown_capability": "fatal"
@@ -47,7 +53,10 @@
     "cargo-project": [
       "Cargo.toml"
     ],
-    "rust-library": []
+    "rust-library": [],
+    "typescript-project": [
+      "package.json"
+    ]
   },
   "graph": {
     "edge_types": {

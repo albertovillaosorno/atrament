@@ -12,10 +12,17 @@ screenshots are never a substitute for semantic or geometric correctness.
 
 ## P0 — Freeze the product and repository contract
 
-### TODO - Create the Rust and TypeScript workspace scaffold
+### TODO - Complete the TypeScript frontend workspace
 
-Add the Rust workspace and TypeScript frontend without product behavior, then
-activate their exact Jig language, formatting, linting, and validation policy.
+Keep the browser a thin inbound adapter over the existing backend authority.
+Track only the TypeScript workspace, browser presentation, clipboard behavior,
+and interaction state needed by the localhost UI. Do not duplicate backend
+document, layout, diagnostic, rendering, or output logic in the frontend.
+
+Current validation evidence: the TypeScript workspace has exact TypeScript and
+pnpm versions, a generated lockfile, reviewed browser-source policy, and a clean
+compiler check. TypeScript remains present rather than analyzed because this Jig
+build has no TypeScript analysis adapter.
 
 ## P1 — Localhost runtime and ephemeral session
 

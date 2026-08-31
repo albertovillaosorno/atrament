@@ -1,0 +1,9 @@
+identity:
+  id: function:workspace
+  name: workspace
+  path: src/browser/workspace
+classification:
+  repository: atrament
+  domain: browser
+architecture:
+  kind: adapter-inbound

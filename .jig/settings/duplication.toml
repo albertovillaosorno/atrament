@@ -7,3 +7,8 @@ exact_languages = []
 authority = "jig.cspell.projection"
 kind = "generated"
 selectors = ["exact:.jig/cspell/cspell.json"]
+
+[override.generated_package_locks]
+authority = "jig.package-manager.lock-files"
+kind = "generated"
+selectors = ["exact:pnpm-lock.yaml"]
