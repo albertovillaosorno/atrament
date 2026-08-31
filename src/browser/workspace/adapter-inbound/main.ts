@@ -79,6 +79,7 @@ bindCharacterCount(candidateInput, candidateCount);
 
 function syncPromptCopyState(): void {
     const available = promptOutput.value.length > 0;
+    promptOutput.disabled = !available;
     copyPrompt.disabled = !available;
     if (!available) {
         copyStatus.textContent = "Waiting for a prompt from the backend.";
