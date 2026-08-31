@@ -196,6 +196,7 @@ button:focus-visible {
 
 .workspace-divider[aria-disabled="true"] {
   cursor: default;
+  touch-action: auto;
 }
 
 .workspace-divider::before {
