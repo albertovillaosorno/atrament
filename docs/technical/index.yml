@@ -13,3 +13,6 @@ contracts:
   - id: atrament.technical.representative-notebook-fixtures
     status: frozen
     path: representative-notebook-fixtures.md
+  - id: atrament.technical.digital-live-capability-matrix
+    status: frozen
+    path: digital-live-capability-matrix.md

@@ -12,11 +12,6 @@ screenshots are never a substitute for semantic or geometric correctness.
 
 ## P0 — Freeze the product and repository contract
 
-### TODO - Freeze the digital and live capability matrices
-
-List every block, style, image treatment, color, paper object, and hardware
-action and define accept, convert, reject, or future behavior for each mode.
-
 ### TODO - Freeze the first complete user journey
 
 Prove the intended sequence from pasted task through one-shot prompt, structured
