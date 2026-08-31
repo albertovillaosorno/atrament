@@ -159,6 +159,8 @@ divider.addEventListener("pointerdown", (event): void => {
     if (!event.isPrimary || event.button !== 0) {
         return;
     }
+    event.preventDefault();
+    divider.focus({ preventScroll: true });
     divider.setPointerCapture(event.pointerId);
     setEditorShare(shareFromPointer(event.clientX));
 });
