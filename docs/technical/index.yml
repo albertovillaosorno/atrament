@@ -22,3 +22,6 @@ contracts:
   - id: atrament.technical.initial-repository-validation
     status: verified
     path: initial-repository-validation.md
+  - id: atrament.technical.localhost-session-runtime-contract
+    status: frozen
+    path: localhost-session-runtime-contract.md
