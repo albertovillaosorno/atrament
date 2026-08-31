@@ -132,8 +132,9 @@ reachable at narrow and wide browser widths.
 
 At 480 px and below, both panels stay visible at a fixed 50/50 split so the
 document reflows without horizontal page scrolling; wider viewports restore the
-adjustable 35-65% range. The task stays open for backend-fed page navigation and
-stable semantic selection.
+adjustable 35-65% range. The workspace is viewport-bounded, with source and
+preview overflow contained by their own scroll surfaces. The task stays open
+for backend-fed page navigation and stable semantic selection.
 
 ### TODO - Build the structured LLM editor
 
