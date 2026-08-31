@@ -314,7 +314,6 @@ divider.addEventListener("pointerdown", (event): void => {
     }
     divider.focus();
     if (!dividerPointerCaptureAvailable) {
-        setEditorShare(shareFromPointer(event.clientX));
         return;
     }
     const dividerBounds = divider.getBoundingClientRect();
@@ -324,11 +323,21 @@ divider.addEventListener("pointerdown", (event): void => {
         divider.setPointerCapture(event.pointerId);
     } catch {
         disableDividerPointerCapture();
-        setEditorShare(shareFromPointer(event.clientX));
         return;
     }
     event.preventDefault();
     activeDividerPointerId = event.pointerId;
+});
+
+divider.addEventListener("click", (event): void => {
+    if (
+        dividerPointerCaptureAvailable
+        || divider.getAttribute("aria-disabled") === "true"
+        || event.detail === 0
+    ) {
+        return;
+    }
+    setEditorShare(shareFromPointer(event.clientX));
 });
 
 divider.addEventListener("pointermove", (event): void => {
