@@ -522,4 +522,19 @@ button:focus-visible {
   .control-row {
     grid-template-columns: minmax(0, 1fr);
   }
+
+  .preview-body {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .page-list {
+    padding: 8px 10px;
+    border-right: 0;
+    border-bottom: 1px solid #cbc4b7;
+  }
+
+  .page-list-label {
+    margin-bottom: 4px;
+  }
 }
