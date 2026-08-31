@@ -86,6 +86,21 @@ const sessionStatus = requireElement<HTMLElement>("#session-status");
 let copyGeneration = 0;
 let clipboardWriteQueue: Promise<void> = Promise.resolve();
 
+type ClipboardWrite = (text: string) => Promise<void>;
+
+function getClipboardWrite(): ClipboardWrite | null {
+    try {
+        const clipboard = navigator.clipboard;
+        const writeText = clipboard?.writeText;
+        if (typeof writeText !== "function") {
+            return null;
+        }
+        return writeText.bind(clipboard);
+    } catch {
+        return null;
+    }
+}
+
 bindCharacterCount(taskInput, taskCount);
 bindCharacterCount(sourceInput, sourceCount);
 bindCharacterCount(candidateInput, candidateCount);
@@ -113,10 +128,8 @@ copyPrompt.addEventListener("click", (): void => {
         return;
     }
 
-    if (
-        navigator.clipboard === undefined
-        || typeof navigator.clipboard.writeText !== "function"
-    ) {
+    const writeClipboard = getClipboardWrite();
+    if (writeClipboard === null) {
         setTextIfChanged(copyStatus, "Clipboard access is unavailable.");
         return;
     }
@@ -129,7 +142,7 @@ copyPrompt.addEventListener("click", (): void => {
         ) {
             return;
         }
-        return navigator.clipboard.writeText(prompt);
+        return writeClipboard(prompt);
     });
     clipboardWriteQueue = write.catch((): void => {});
     void write.then(
