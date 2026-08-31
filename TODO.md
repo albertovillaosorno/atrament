@@ -133,8 +133,9 @@ reachable at narrow and wide browser widths.
 At 480 px and below, both panels stay visible at a fixed 50/50 split so the
 document reflows without horizontal page scrolling; wider viewports restore the
 adjustable 35-65% range. The workspace is viewport-bounded, with source and
-preview overflow contained by their own scroll surfaces. The task stays open
-for backend-fed page navigation and stable semantic selection.
+preview overflow contained by their own scroll surfaces. At 320 by 480 px, the
+Task field and page stage are both visible in the initial frame. The task stays
+open for backend-fed page navigation and stable semantic selection.
 
 ### TODO - Build the structured LLM editor
 
@@ -178,8 +179,8 @@ above-text, and clipped-region placement without overwriting the original.
 Generate one complete, versioned request from current task and constraints,
 copy it with one action, and confirm the exact prompt identity copied.
 
-Current frontend evidence: the single Copy prompt control lives in the sticky
-LLM editor heading and remains visible while source and response content scroll.
+Current frontend evidence: the single Copy prompt control lives in a compact
+sticky toolbar and remains visible while source and response content scroll.
 It starts disabled until a backend-presented prompt exists and reports clipboard
 failure when enabled. Backend prompt generation, identity, and transport still
 keep this task open.
