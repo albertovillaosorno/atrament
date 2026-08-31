@@ -106,7 +106,10 @@ copyPrompt.addEventListener("click", (): void => {
         return;
     }
 
-    if (navigator.clipboard === undefined) {
+    if (
+        navigator.clipboard === undefined
+        || typeof navigator.clipboard.writeText !== "function"
+    ) {
         copyStatus.textContent = "Clipboard access is unavailable.";
         return;
     }
