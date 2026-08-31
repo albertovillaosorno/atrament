@@ -433,8 +433,10 @@ persistent browser storage, domain parser, external assets, referrer, autofill,
 or browser spellcheck on session text. Its CSP blocks cross-origin script,
 style, image, and fetch attempts before a second loopback origin receives a
 request and denies unused frame, font, manifest, media, object, and worker
-classes. These browser constraints do not replace backend socket, token, host,
-path, cleanup, framing, or hostile-origin acceptance tests.
+classes. Text, selection, and dynamic enabled-state restoration are disabled so
+a reload returns browser controls to their static pre-session state. These
+browser constraints do not replace backend socket, token, host, path, cleanup,
+framing, or hostile-origin acceptance tests.
 
 ### TODO - Package reproducible desktop releases
 

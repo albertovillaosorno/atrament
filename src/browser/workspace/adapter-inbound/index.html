@@ -60,6 +60,7 @@
               class="primary-button"
               id="copy-prompt"
               type="button"
+              autocomplete="off"
               disabled
             >
               Copy prompt
@@ -103,13 +104,13 @@
           <div class="control-row">
             <label>
               <span>Profile</span>
-              <select id="profile-select" disabled>
+              <select id="profile-select" autocomplete="off" disabled>
                 <option selected disabled>Choose backend profile…</option>
               </select>
             </label>
             <label>
               <span>Paper</span>
-              <select id="paper-select" disabled>
+              <select id="paper-select" autocomplete="off" disabled>
                 <option>A4 · blank</option>
                 <option>A4 · squared</option>
                 <option>A4 · dotted</option>
@@ -118,7 +119,7 @@
             </label>
             <label>
               <span>Style</span>
-              <select id="style-select" disabled>
+              <select id="style-select" autocomplete="off" disabled>
                 <option>Sober</option>
                 <option>Study</option>
                 <option>Colorful</option>
@@ -126,7 +127,7 @@
             </label>
             <label>
               <span>Output</span>
-              <select id="output-select" disabled>
+              <select id="output-select" autocomplete="off" disabled>
                 <option>PDF</option>
                 <option>Live pen</option>
                 <option>PDF + live</option>
@@ -227,12 +228,12 @@
             role="group"
             aria-label="Backend editing tools"
           >
-            <button type="button" disabled>Select</button>
-            <button type="button" disabled>Text</button>
-            <button type="button" disabled>Move</button>
-            <button type="button" disabled>Resize</button>
-            <button type="button" disabled>Crop</button>
-            <button type="button" disabled>Layer</button>
+            <button type="button" autocomplete="off" disabled>Select</button>
+            <button type="button" autocomplete="off" disabled>Text</button>
+            <button type="button" autocomplete="off" disabled>Move</button>
+            <button type="button" autocomplete="off" disabled>Resize</button>
+            <button type="button" autocomplete="off" disabled>Crop</button>
+            <button type="button" autocomplete="off" disabled>Layer</button>
           </div>
           <div
             class="tool-group zoom-controls"
@@ -242,6 +243,7 @@
             <button
               id="zoom-out"
               type="button"
+              autocomplete="off"
               aria-label="Zoom out"
               aria-controls="page-stage"
               disabled
@@ -249,6 +251,7 @@
             <button
               id="zoom-reset"
               type="button"
+              autocomplete="off"
               aria-label="Reset preview zoom to 100%"
               aria-controls="page-stage"
               disabled
@@ -258,6 +261,7 @@
             <button
               id="zoom-in"
               type="button"
+              autocomplete="off"
               aria-label="Zoom in"
               aria-controls="page-stage"
               disabled
@@ -274,6 +278,7 @@
             <button
               class="page-thumb active"
               type="button"
+              autocomplete="off"
               aria-current="page"
               aria-controls="page-stage"
               disabled
@@ -312,8 +317,12 @@
             <p class="field-help">Available after backend validation.</p>
           </div>
           <div class="output-actions">
-            <button type="button" disabled>Export PDF</button>
-            <button type="button" disabled>Compile live plan</button>
+            <button type="button" autocomplete="off" disabled>
+              Export PDF
+            </button>
+            <button type="button" autocomplete="off" disabled>
+              Compile live plan
+            </button>
           </div>
         </footer>
       </section>
