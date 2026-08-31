@@ -199,6 +199,10 @@ button:focus-visible {
   touch-action: auto;
 }
 
+.workspace-divider[aria-disabled="true"]::before {
+  pointer-events: none;
+}
+
 .workspace-divider::before {
   position: absolute;
   inset: 0 -8px;
