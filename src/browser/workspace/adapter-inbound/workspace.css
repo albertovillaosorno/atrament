@@ -538,6 +538,35 @@ button:focus-visible {
 }
 
 @media (max-width: 480px) {
+  .editor-heading {
+    gap: 8px;
+    padding: 12px 10px 10px;
+  }
+
+  .editor-heading h2 {
+    font-size: 16px;
+  }
+
+  .editor-heading .panel-kicker {
+    font-size: 11px;
+  }
+
+  .editor-heading .panel-badge {
+    padding: 4px 6px;
+    font-size: 10px;
+  }
+
+  .copy-toolbar {
+    margin-top: -16px;
+    padding: 6px 10px;
+  }
+
+  .copy-toolbar .primary-button {
+    padding: 7px 8px;
+    white-space: nowrap;
+    font-size: 11px;
+  }
+
   .control-row {
     grid-template-columns: minmax(0, 1fr);
   }
