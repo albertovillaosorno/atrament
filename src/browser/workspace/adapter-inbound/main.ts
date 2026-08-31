@@ -123,6 +123,7 @@ const zoomOut = requireElement<HTMLButtonElement>("#zoom-out");
 const zoomReset = requireElement<HTMLButtonElement>("#zoom-reset");
 const zoomIn = requireElement<HTMLButtonElement>("#zoom-in");
 const zoomStatus = requireElement<HTMLOutputElement>("#zoom-status");
+const previewScale = requireElement<HTMLElement>("#preview-scale");
 const workspace = requireElement<HTMLElement>(".workspace-grid");
 
 divider.setAttribute("tabindex", "0");
@@ -181,6 +182,7 @@ function setPreviewZoom(percent: number): void {
     );
     zoomReset.textContent = `${previewZoom}%`;
     zoomStatus.textContent = `Preview zoom ${previewZoom}%`;
+    previewScale.textContent = `Preview · ${previewZoom}%`;
     zoomOut.disabled = previewZoom <= 60;
     zoomReset.disabled = previewZoom === 100;
     zoomIn.disabled = previewZoom >= 160;
