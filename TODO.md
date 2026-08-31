@@ -23,10 +23,10 @@ Open the browser workspace against the exact Rust session and present useful
 recovery when the frontend, port, or browser launch fails.
 
 Current frontend evidence: the split workspace shell, source inputs, backend
-prompt presentation, preview placeholder, diagnostics area, output controls,
-character counters, and clipboard action are tracked with zero runtime package
-dependencies. The task remains open until the backend serves the compiled
-TypeScript asset and owns launch and recovery behavior.
+prompt presentation, preview placeholder, diagnostics and output availability
+states, character counters, and clipboard action are tracked with zero runtime
+package dependencies. The task remains open until the backend serves the
+compiled TypeScript asset and owns launch and recovery behavior.
 
 ### TODO - Authenticate the browser session locally
 
@@ -38,10 +38,10 @@ and prevent another local page from controlling an active notebook.
 Exchange product, protocol, prompt, profile, renderer, and capability versions
 before enabling edits and fail clearly on incompatible frontend or backend.
 
-Current frontend evidence starts task, source, prompt, raw-response, option,
-and output editing disabled while the shell waits for a backend session. The
-task remains
-open until the backend handshake enables compatible controls or exposes a clear
+Current frontend evidence starts task, source, prompt, raw-response, and option
+editing disabled while the shell waits for a backend session. Output remains an
+availability state rather than a fabricated action. The task remains open until
+the backend handshake enables compatible controls or exposes a clear
 incompatibility state.
 
 ### TODO - Keep all notebook state in memory
