@@ -448,10 +448,12 @@ persistent browser storage, domain parser, external assets, referrer, autofill,
 or browser spellcheck on session text. Its CSP blocks cross-origin script,
 style, image, and fetch attempts before a second loopback origin receives a
 request and denies unused frame, font, manifest, media, object, and worker
-classes. Text, selection, dynamic enabled-state, and nested scroll restoration
-are disabled so a reload returns controls and scrollports to their static
-pre-session state. Before a bfcache snapshot, the disposable workspace DOM is
-removed; a bfcache return forces a fresh document load.
+classes. Text, selection, and dynamic enabled-state restoration are disabled.
+With the browser adapter active, a fresh reload also resets nested workspace
+scrollports to their static pre-session origin.
+
+Before a bfcache snapshot, the disposable workspace DOM is removed; a bfcache
+return forces a fresh document load.
 
 These browser constraints do not replace backend socket, token, host, path,
 cleanup, framing, or hostile-origin acceptance tests.
