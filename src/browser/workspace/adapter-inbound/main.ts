@@ -169,7 +169,7 @@ window.addEventListener("pagehide", (event): void => {
         releaseDividerPointer(activeDividerPointerId);
     }
     if (event.persisted) {
-        workspace.replaceChildren();
+        workspace.textContent = "";
     }
 });
 
