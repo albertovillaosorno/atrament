@@ -72,6 +72,9 @@ const candidateCount = requireElement<HTMLElement>("#candidate-count");
 const promptOutput = requireElement<HTMLTextAreaElement>("#prompt-output");
 const copyPrompt = requireElement<HTMLButtonElement>("#copy-prompt");
 const copyStatus = requireElement<HTMLElement>("#copy-status");
+const sessionStatus = requireElement<HTMLElement>("#session-status");
+
+sessionStatus.textContent = "Frontend ready · waiting for backend session";
 
 bindCharacterCount(taskInput, taskCount);
 bindCharacterCount(sourceInput, sourceCount);
