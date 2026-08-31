@@ -77,6 +77,21 @@ bindCharacterCount(taskInput, taskCount);
 bindCharacterCount(sourceInput, sourceCount);
 bindCharacterCount(candidateInput, candidateCount);
 
+function syncPromptCopyState(): void {
+    const available = promptOutput.value.length > 0;
+    copyPrompt.disabled = !available;
+    if (!available) {
+        copyStatus.textContent = "Waiting for a prompt from the backend.";
+    } else if (
+        copyStatus.textContent === "Waiting for a prompt from the backend."
+    ) {
+        copyStatus.textContent = "";
+    }
+}
+
+promptOutput.addEventListener("input", syncPromptCopyState);
+syncPromptCopyState();
+
 copyPrompt.addEventListener("click", (): void => {
     const prompt = promptOutput.value;
     if (prompt.length === 0) {
