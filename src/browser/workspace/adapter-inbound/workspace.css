@@ -231,6 +231,10 @@ button:focus-visible {
   background: #e5e0d6;
 }
 
+.preview-panel > * {
+  min-width: 0;
+}
+
 .panel-heading,
 .section-row,
 .output-bar {
