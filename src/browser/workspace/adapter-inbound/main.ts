@@ -247,12 +247,20 @@ let wideEditorShare = 46;
 let activeDividerPointerId: number | null = null;
 let activeDividerPointerOffsetX = 0;
 
+function clearSessionText(): void {
+    taskInput.value = "";
+    sourceInput.value = "";
+    promptOutput.value = "";
+    candidateInput.value = "";
+}
+
 window.addEventListener("pagehide", (event): void => {
     copyGeneration += 1;
     if (activeDividerPointerId !== null) {
         releaseDividerPointer(activeDividerPointerId);
     }
     if (event.persisted) {
+        clearSessionText();
         workspace.textContent = "";
     }
 });
