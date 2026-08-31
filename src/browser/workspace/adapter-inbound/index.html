@@ -12,6 +12,12 @@
   <a class="skip-link" href="#llm-editor-title">Skip to source editor</a>
   <a class="skip-link second" href="#human-editor-title">Skip to preview</a>
   <main class="workspace-shell">
+    <noscript>
+      <p class="script-warning" role="status">
+        Browser interaction is unavailable because JavaScript is disabled.
+        Backend-rendered content remains the authority.
+      </p>
+    </noscript>
     <header class="workspace-header">
       <div>
         <p class="eyebrow">ATRAMENT</p>
@@ -168,7 +174,8 @@
         aria-valuetext="46% source, 54% preview"
         aria-describedby="divider-help"
         aria-controls="source-panel preview-panel"
-        tabindex="0"
+        aria-disabled="true"
+        tabindex="-1"
       ></div>
 
       <section
@@ -199,8 +206,14 @@
               type="button"
               aria-label="Zoom out"
               aria-controls="page-stage"
+              disabled
             >−</button>
-            <button id="zoom-reset" type="button" aria-controls="page-stage">
+            <button
+              id="zoom-reset"
+              type="button"
+              aria-controls="page-stage"
+              disabled
+            >
               100%
             </button>
             <button
@@ -208,6 +221,7 @@
               type="button"
               aria-label="Zoom in"
               aria-controls="page-stage"
+              disabled
             >+</button>
             <output class="sr-only" id="zoom-status" aria-live="polite">
               Preview zoom 100%

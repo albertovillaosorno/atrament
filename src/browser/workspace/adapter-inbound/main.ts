@@ -107,6 +107,9 @@ const zoomIn = requireElement<HTMLButtonElement>("#zoom-in");
 const zoomStatus = requireElement<HTMLOutputElement>("#zoom-status");
 const workspace = requireElement<HTMLElement>(".workspace-grid");
 
+divider.setAttribute("tabindex", "0");
+divider.removeAttribute("aria-disabled");
+
 function setEditorShare(percent: number): void {
     const share = Math.min(65, Math.max(35, Math.round(percent)));
     document.documentElement.style.setProperty("--editor-share", `${share}%`);
@@ -161,6 +164,7 @@ function setPreviewZoom(percent: number): void {
     zoomReset.textContent = `${previewZoom}%`;
     zoomStatus.textContent = `Preview zoom ${previewZoom}%`;
     zoomOut.disabled = previewZoom <= 60;
+    zoomReset.disabled = previewZoom === 100;
     zoomIn.disabled = previewZoom >= 160;
 }
 
@@ -175,3 +179,5 @@ zoomReset.addEventListener("click", (): void => {
 zoomIn.addEventListener("click", (): void => {
     setPreviewZoom(previewZoom + 10);
 });
+
+setPreviewZoom(100);
