@@ -63,15 +63,20 @@ type TextCount = {
 function countText(value: string): TextCount {
     if (graphemeSegmenter !== null) {
         try {
-            return {
-                count: Array.from(graphemeSegmenter.segment(value)).length,
-                unit: "character",
-            };
+            let count = 0;
+            for (const _segment of graphemeSegmenter.segment(value)) {
+                count += 1;
+            }
+            return { count, unit: "character" };
         } catch {
             // Fall through to the code-point count below.
         }
     }
-    return { count: Array.from(value).length, unit: "code point" };
+    let count = 0;
+    for (const _codePoint of value) {
+        count += 1;
+    }
+    return { count, unit: "code point" };
 }
 
 function setTextIfChanged(element: HTMLElement, value: string): void {
