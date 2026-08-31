@@ -427,10 +427,11 @@ confinement, temporary cleanup, no telemetry, no autosave, and no undeclared
 network access.
 
 Current frontend evidence has no runtime dependencies, network client,
-persistent
-browser storage, domain parser, external assets, referrer, autofill, or browser
-spellcheck on session text. These browser constraints do not replace backend
-socket, token, host, path, cleanup, or hostile-origin acceptance tests.
+persistent browser storage, domain parser, external assets, referrer, autofill,
+or browser spellcheck on session text. Its CSP blocks cross-origin script,
+style, image, and fetch attempts before a second loopback origin receives a
+request. These browser constraints do not replace backend socket, token, host,
+path, cleanup, framing, or hostile-origin acceptance tests.
 
 ### TODO - Package reproducible desktop releases
 
