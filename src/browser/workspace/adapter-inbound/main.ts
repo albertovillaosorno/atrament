@@ -83,9 +83,7 @@ function syncPromptCopyState(): void {
     copyPrompt.disabled = !available;
     if (!available) {
         copyStatus.textContent = "Waiting for a prompt from the backend.";
-    } else if (
-        copyStatus.textContent === "Waiting for a prompt from the backend."
-    ) {
+    } else {
         copyStatus.textContent = "";
     }
 }
