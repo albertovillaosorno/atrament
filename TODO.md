@@ -140,8 +140,9 @@ Very-short reflow keeps both Task and the page stage visible down to 225 px of
 viewport height without document overflow. A 32-case Firefox matrix spanning
 320 through 1024 px widths, 225 through 576 px heights, split extremes, and 60%
 through 160% preview zoom completed without layout or reachability failures.
-The task stays open for backend-fed page navigation and stable semantic
-selection.
+With JavaScript disabled, the short-height warning stays visible without taking
+workspace flow, and Firefox requests only the document and stylesheet. The task
+stays open for backend-fed page navigation and stable semantic selection.
 
 ### TODO - Build the structured LLM editor
 
@@ -431,9 +432,10 @@ Current frontend evidence includes skip links, labeled text areas and counters,
 a keyboard-operable splitter, button-based zoom, a focusable preview scroll
 region, session, clipboard, zoom, and diagnostic status announcements, native
 keyboard focus, and measured normal-text contrast of at least 4.5:1 on the
-current shell. Backend-owned editing,
-import, export, diagnostic actions, and hardware actions still need complete
-no-pointer paths before this task closes.
+current shell. If a focused splitter becomes inert at the compact breakpoint,
+focus moves to a source heading that is scrolled into view. Backend-owned
+editing, import, export, diagnostic actions, and hardware actions still need
+complete no-pointer paths before this task closes.
 
 ### TODO - Prove localhost security and privacy
 
