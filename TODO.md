@@ -12,11 +12,6 @@ screenshots are never a substitute for semantic or geometric correctness.
 
 ## P0 — Freeze the product and repository contract
 
-### TODO - Freeze five representative notebook fixtures
-
-Specify dense two-column, table-led, diagram-led, colorful digital, and sober
-single-pen pages with exact content and expected semantic hierarchy.
-
 ### TODO - Freeze the digital and live capability matrices
 
 List every block, style, image treatment, color, paper object, and hardware

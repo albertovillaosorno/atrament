@@ -7,5 +7,9 @@ classification:
   domain: technical
 ownership:
   primary: repository:atrament
-status: reserved
-purpose: implementation contracts and measured evidence admitted after decisions
+status: active
+purpose: measured implementation evidence and frozen technical contracts
+contracts:
+  - id: atrament.technical.representative-notebook-fixtures
+    status: frozen
+    path: representative-notebook-fixtures.md
