@@ -228,11 +228,12 @@ from an uncertain position.
 
 It is also a failure to expose a capability in the editor that cannot be mapped
 to one of these mode outcomes. New semantic or style capabilities require a
-matrix row before they can be accepted into the first-release schema.
+matrix row before they can be accepted into the first-release model.
 
 ## Verification
 
-Schema tests must enumerate every admitted block, style, image treatment, color,
+Model coverage tests must enumerate every admitted block, style, image
+treatment, color,
 paper object, and hardware action and prove that each has exactly one matrix
 result per output mode. A coverage test must fail when a new capability lacks a
 row.

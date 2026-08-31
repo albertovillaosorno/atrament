@@ -31,8 +31,9 @@ guessed into a supported form.
 
 - Content can be edited without regenerating unrelated notebook regions.
 - Layout and handwriting are projections of stable semantic identities.
-- AI tools operate on a bounded schema instead of arbitrary canvas mutations.
-- Schema evolution requires explicit migrations and compatibility tests.
+- AI tools operate on a bounded semantic model instead of arbitrary canvas
+  mutations.
+- Model evolution requires explicit migrations and compatibility tests.
 
 ## Rejected Alternatives
 
@@ -46,5 +47,5 @@ guessed into a supported form.
 ## Verification
 
 Round-trip fixtures must serialize, reopen, edit, and render every block family
-without identity loss. Schema tests must reject unknown required semantics while
+without identity loss. Model tests must reject unknown required semantics while
 preserving explicitly admitted extension data.

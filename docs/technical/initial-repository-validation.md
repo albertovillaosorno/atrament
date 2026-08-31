@@ -128,7 +128,7 @@ commit hook is removed or bypassed, `.gitattributes` stops being canonical, Jig
 configuration no longer parses, or `jig check` fails on the committed tree.
 
 It is also invalid to cite this record as evidence that future Rust, TypeScript,
-schema generation, rendering, or hardware gates passed. Those gates must be
+transport generation, rendering, or hardware gates passed. Those gates must be
 activated and validated when their corresponding surfaces are introduced.
 
 The `jig doctor` degraded installation status must not be misreported as a clean

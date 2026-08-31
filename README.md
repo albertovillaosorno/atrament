@@ -37,9 +37,9 @@ The first LLM workflow requires no embedded model account:
 1. Adjust the accepted page in the human editor.
 1. Export PDF or compile a live writing plan.
 
-The copied prompt includes the complete schema, page constraints, source rules,
-style vocabulary, and return envelope. It never depends on hidden prior chat
-context.
+The copied prompt includes the complete backend-owned return format, page
+constraints, source rules, style vocabulary, and return envelope. It never
+depends on hidden prior chat context.
 
 ## What a notebook can contain
 

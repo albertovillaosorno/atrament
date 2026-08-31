@@ -128,7 +128,7 @@ request headers or private source material.
 ### Protocol handshake
 
 The first authenticated application exchange is a version handshake. It
-compares product, cross-boundary schema, prompt, profile, renderer, and
+compares product, protocol format, prompt, profile, renderer, and
 capability versions before editing commands are enabled.
 
 A mismatch is a typed incompatibility diagnostic. The browser cannot downgrade

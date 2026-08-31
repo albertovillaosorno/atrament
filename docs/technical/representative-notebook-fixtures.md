@@ -16,7 +16,7 @@ diagrams, digital decoration, or single-pen output undefined.
 This contract fixes each fixture's page intent, exact authored content, semantic
 hierarchy, and required layout relationships. It does not freeze serialized
 field names, renderer pixels, handwriting samples, or final coordinates; those
-belong to later schema, layout, profile, and visual-regression authorities.
+belong to later model, layout, profile, and visual-regression authorities.
 
 Whitespace inside the content blocks below is not semantic except inside the
 mathematical displays. Punctuation, capitalization, formulas, table cells, and
@@ -298,8 +298,8 @@ remain stable.
 
 ## Verification
 
-Before schema freeze, validation consists of review plus exact-content and
-hierarchy checks against this document. After the semantic schema exists, each
+Before model freeze, validation consists of review plus exact-content and
+hierarchy checks against this document. After the semantic model exists, each
 fixture must have a machine-readable source whose normalized authored content
 matches these blocks exactly and whose semantic tree matches the stated
 hierarchy.

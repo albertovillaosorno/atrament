@@ -43,7 +43,7 @@ and prevent another local page from controlling an active notebook.
 
 ### TODO - Implement the protocol handshake
 
-Exchange product, schema, prompt, profile, renderer, and capability versions
+Exchange product, protocol, prompt, profile, renderer, and capability versions
 before enabling edits and fail clearly on incompatible frontend or backend.
 
 ### TODO - Keep all notebook state in memory
@@ -68,7 +68,7 @@ and hardware errors with stable codes and actionable locations.
 
 ## P2 — Semantic notebook and physical layout
 
-### TODO - Implement the semantic notebook schema
+### TODO - Implement the semantic notebook model
 
 Represent notebooks, pages, flows, blocks, spans, formulas, tables, figures,
 styles, assets, constraints, output profiles, and provenance with stable IDs.
@@ -127,7 +127,8 @@ keyboard navigation, zoom, page list, diagnostics, and no hidden main surface.
 
 ### TODO - Build the structured LLM editor
 
-Edit task instructions and notebook source with schema completion, formatting,
+Edit task instructions and notebook source with structured completion,
+formatting,
 object navigation, diagnostics, and a safe raw-response inspection boundary.
 
 ### TODO - Build the human page editor
@@ -279,7 +280,7 @@ export on ordinary integrated-graphics computers with no compute GPU.
 
 ### TODO - Freeze the one-shot formatting prompt
 
-Include complete schema, allowed styles, output mode, paper bounds, language,
+Include the complete backend-owned return format, allowed styles, output mode,
 source rules, ambiguity behavior, and exact return envelope in one copy action.
 
 ### TODO - Implement assignment-to-notebook structuring
@@ -376,7 +377,7 @@ tables, and line art on calibrated blank sheets with no manual content repair.
 
 ## P8 — First-release completion
 
-### TODO - Complete schema and migration compatibility
+### TODO - Complete data-format and migration compatibility
 
 Test current, prior, future, corrupted, truncated, and partially unsupported
 notebook and profile data with explicit, non-destructive outcomes.

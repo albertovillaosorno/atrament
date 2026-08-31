@@ -23,7 +23,8 @@ profiles, assets, layout constraints, diagnostics, previews, and exports.
 
 The first browser workflow requires no model account or embedded model API. A
 permanent Copy prompt button produces one self-contained request containing the
-task, paper and style constraints, supported schema, source rules, and required
+task, paper and style constraints, backend-owned format, source rules, and
+required
 return envelope. The user pastes it once into a chat and pastes the response
 back into the LLM editor for validation and preview.
 
@@ -43,7 +44,7 @@ the source or statement correct.
 - Commands remain composable and inspectable without a graphical session.
 - The ordinary chat workflow needs one outbound copy and one inbound paste.
 - A malformed model response cannot mutate the accepted notebook.
-- Schema and prompt versions require compatibility evidence.
+- Data-format and prompt versions require compatibility evidence.
 - Agent convenience cannot bypass consent, provenance, or physical safety.
 
 ## Rejected Alternatives

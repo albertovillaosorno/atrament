@@ -16,7 +16,7 @@ motion plan.
 
 The journey covers one localhost session and one notebook. It does not require
 an embedded model account, network access from Atrament, physical device motion,
-or a final cross-boundary field schema. Later schema names may change without
+or a final cross-boundary field format. Later field names may change without
 changing the observable states and invariants defined here.
 
 The journey uses the exact authored content of the `sober-single-pen` fixture.
@@ -49,7 +49,8 @@ State: `source-prepared`.
 
 The permanent Copy prompt control generates one self-contained request. The
 copied request includes the task, complete source material, current paper and
-style constraints, output targets, complete admitted semantic schema, source
+style constraints, output targets, complete backend-owned semantic format,
+source
 and provenance rules, diagnostic expectations, and required return envelope.
 
 The copy result exposes a prompt identity and prompt version. Repeating Copy
@@ -66,7 +67,7 @@ structured response once back into Atrament. The raw pasted response is retained
 for inspection as session state but is not yet the accepted notebook.
 
 Parsing creates a candidate document or a diagnostic set. A malformed response,
-unknown required schema feature, fabricated source fact, or invalid identity
+unknown required format feature, fabricated source fact, or invalid identity
 cannot partially mutate the accepted notebook.
 
 For this journey, the candidate preserves every fixture sentence and formula,
@@ -188,7 +189,7 @@ output was requested.
   typed human command.
 - The pasted model response is never document authority by itself.
 - Every exact source sentence and formula remains traceable to supplied content.
-- Prompt identity changes when task, source, schema, paper, style, or output
+- Prompt identity changes when task, source, format, paper, style, or output
   constraints change.
 - Human direct manipulation serializes intent and recompiles authoritative
   geometry.
