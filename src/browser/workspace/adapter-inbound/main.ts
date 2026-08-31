@@ -148,6 +148,7 @@ const zoomReset = requireElement<HTMLButtonElement>("#zoom-reset");
 const zoomIn = requireElement<HTMLButtonElement>("#zoom-in");
 const zoomStatus = requireElement<HTMLOutputElement>("#zoom-status");
 const previewScale = requireElement<HTMLElement>("#preview-scale");
+const sourceEditorTitle = requireElement<HTMLElement>("#llm-editor-title");
 const workspace = requireElement<HTMLElement>(".workspace-grid");
 const compactWorkspace = window.matchMedia("(max-width: 480px)");
 let wideEditorShare = 46;
@@ -187,6 +188,9 @@ function syncDividerAvailability(): void {
         divider.setAttribute("aria-disabled", "true");
         divider.setAttribute("tabindex", "-1");
         setEditorShare(50);
+        if (document.activeElement === divider) {
+            sourceEditorTitle.focus({ preventScroll: true });
+        }
         return;
     }
 
