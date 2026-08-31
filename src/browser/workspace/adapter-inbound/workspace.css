@@ -86,6 +86,11 @@ textarea {
   line-height: 1.45;
 }
 
+textarea::placeholder {
+  color: #70695e;
+  opacity: 1;
+}
+
 textarea:focus,
 select:focus,
 button:focus-visible {
