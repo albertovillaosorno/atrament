@@ -16,3 +16,6 @@ contracts:
   - id: atrament.technical.digital-live-capability-matrix
     status: frozen
     path: digital-live-capability-matrix.md
+  - id: atrament.technical.first-complete-user-journey
+    status: frozen
+    path: first-complete-user-journey.md

@@ -12,11 +12,6 @@ screenshots are never a substitute for semantic or geometric correctness.
 
 ## P0 — Freeze the product and repository contract
 
-### TODO - Freeze the first complete user journey
-
-Prove the intended sequence from pasted task through one-shot prompt, structured
-response, human correction, overflow resolution, PDF, and live plan.
-
 ### TODO - Create the Rust and TypeScript workspace scaffold
 
 Add the Rust workspace and TypeScript frontend without product behavior, then
