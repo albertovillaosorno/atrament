@@ -147,6 +147,10 @@ copyPrompt.addEventListener("click", (): void => {
 
 
 const divider = requireElement<HTMLElement>("#workspace-divider");
+const supportsDividerPointerCapture =
+    typeof divider.setPointerCapture === "function"
+    && typeof divider.hasPointerCapture === "function"
+    && typeof divider.releasePointerCapture === "function";
 const zoomOut = requireElement<HTMLButtonElement>("#zoom-out");
 const zoomReset = requireElement<HTMLButtonElement>("#zoom-reset");
 const zoomIn = requireElement<HTMLButtonElement>("#zoom-in");
@@ -214,7 +218,10 @@ function setEditorShare(percent: number): void {
 }
 
 function releaseDividerPointer(pointerId: number): void {
-    if (divider.hasPointerCapture(pointerId)) {
+    if (
+        supportsDividerPointerCapture
+        && divider.hasPointerCapture(pointerId)
+    ) {
         divider.releasePointerCapture(pointerId);
     }
     if (activeDividerPointerId === pointerId) {
@@ -261,13 +268,21 @@ divider.addEventListener("pointerdown", (event): void => {
     }
     event.preventDefault();
     divider.focus({ preventScroll: true });
+    const share = shareFromPointer(event.clientX);
+    if (!supportsDividerPointerCapture) {
+        setEditorShare(share);
+        return;
+    }
     divider.setPointerCapture(event.pointerId);
     activeDividerPointerId = event.pointerId;
-    setEditorShare(shareFromPointer(event.clientX));
+    setEditorShare(share);
 });
 
 divider.addEventListener("pointermove", (event): void => {
-    if (divider.hasPointerCapture(event.pointerId)) {
+    if (
+        supportsDividerPointerCapture
+        && divider.hasPointerCapture(event.pointerId)
+    ) {
         setEditorShare(shareFromPointer(event.clientX));
     }
 });
