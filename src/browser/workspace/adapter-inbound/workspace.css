@@ -454,9 +454,7 @@ button:focus-visible {
   place-items: center;
   aspect-ratio: 210 / 297;
   width: min(62%, 520px);
-  transform: scale(var(--preview-zoom));
-  transform-origin: center;
-  transition: transform 120ms ease-out;
+  zoom: var(--preview-zoom);
   min-width: 320px;
   padding: 48px;
   border: 1px solid #d7d0c4;
@@ -472,10 +470,6 @@ button:focus-visible {
   text-align: center;
 }
 
-
-:root[data-preview-expanded] .paper-preview {
-  transform-origin: top left;
-}
 
 .preview-placeholder {
   margin: auto 0 8px;
@@ -507,12 +501,6 @@ button:focus-visible {
   .workspace-divider::after,
   .paper-preview {
     border: 1px solid CanvasText;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .paper-preview {
-    transition: none;
   }
 }
 
