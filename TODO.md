@@ -165,8 +165,8 @@ Generate one complete, versioned request from current task and constraints,
 copy it with one action, and confirm the exact prompt identity copied.
 
 Current frontend evidence: the single Copy prompt control lives in the sticky
-LLM
-editor heading and remains visible while source and response content scroll. It
+LLM editor heading and remains visible while source and response content scroll.
+It
 copies only backend-presented prompt text and reports unavailable or failed
 clipboard access. Backend prompt generation and identity still keep this task
 open.
