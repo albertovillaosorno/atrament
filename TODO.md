@@ -127,14 +127,17 @@ Current frontend evidence: both editors are visible in one 16:9 workspace. The
 splitter supports pointer and keyboard adjustment from 35% through 65% without
 forcing horizontal grid overflow, including at a 1024 px viewport, and exposes
 a wider invisible pointer target than its visual rule. Preview zoom remains
-local from 60% through 160%, with transformed page edges remaining scroll-
-reachable at narrow and wide browser widths.
+local from 60% through 160%, with layout-aware page geometry keeping every edge
+scroll-reachable at narrow, short, and wide browser sizes.
 
 At 480 px and below, both panels stay visible at a fixed 50/50 split so the
 document reflows without horizontal page scrolling; wider viewports restore the
 adjustable 35-65% range. The workspace is viewport-bounded, with source and
 preview overflow contained by their own scroll surfaces. At 320 by 480 px, the
-Task field and page stage are both visible in the initial frame. The task stays
+Task field and page stage are both visible in the initial frame.
+
+Short-height reflow keeps at least 24 px of both Task and the page stage visible
+at 320 by 240 px and 400 by 225 px without document overflow. The task stays
 open for backend-fed page navigation and stable semantic selection.
 
 ### TODO - Build the structured LLM editor
