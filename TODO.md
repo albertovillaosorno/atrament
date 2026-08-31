@@ -465,6 +465,10 @@ workspace → second-page → Back flow produced no intermediate workspace reque
 then forced one fresh reload where all four session text surfaces and the three
 nested scrollports returned empty or at their static origin.
 
+With bfcache disabled, the equivalent Back navigation performed a fresh
+`back_forward` document load and again restored all four text surfaces empty and
+all three nested scrollports to their static origin.
+
 These browser constraints do not replace backend socket, token, host, path,
 cleanup, framing, or hostile-origin acceptance tests.
 
