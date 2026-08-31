@@ -56,7 +56,8 @@ function bindCharacterCount(
 ): void {
     const update = (): void => {
         const count = countCharacters(input.value);
-        const suffix = count === 1 ? "character" : "characters";
+        const unit = graphemeSegmenter === null ? "code point" : "character";
+        const suffix = count === 1 ? unit : `${unit}s`;
         output.textContent = `${count} ${suffix}`;
     };
 
