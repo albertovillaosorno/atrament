@@ -110,9 +110,15 @@ copyPrompt.addEventListener("click", (): void => {
         return;
     }
 
-    const write = clipboardWriteQueue.then(
-        (): Promise<void> => navigator.clipboard.writeText(prompt),
-    );
+    const write = clipboardWriteQueue.then((): Promise<void> | void => {
+        if (
+            generation !== copyGeneration
+            || promptOutput.value !== prompt
+        ) {
+            return;
+        }
+        return navigator.clipboard.writeText(prompt);
+    });
     clipboardWriteQueue = write.catch((): void => {});
     void write.then(
         (): void => {
@@ -146,6 +152,7 @@ const compactWorkspace = window.matchMedia("(max-width: 480px)");
 let wideEditorShare = Number(divider.getAttribute("aria-valuenow") ?? "46");
 
 window.addEventListener("pagehide", (event): void => {
+    copyGeneration += 1;
     if (event.persisted) {
         workspace.replaceChildren();
     }
