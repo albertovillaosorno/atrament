@@ -199,12 +199,15 @@ button:focus-visible {
   z-index: 5;
   cursor: col-resize;
   background: #d4cec1;
+  touch-action: auto;
+}
+
+.workspace-divider[data-pointer-drag]:not([aria-disabled="true"]) {
   touch-action: none;
 }
 
 .workspace-divider[aria-disabled="true"] {
   cursor: default;
-  touch-action: auto;
 }
 
 .workspace-divider[aria-disabled="true"]::before {

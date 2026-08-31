@@ -152,6 +152,10 @@ const supportsDividerPointerCapture =
     typeof divider.setPointerCapture === "function"
     && typeof divider.hasPointerCapture === "function"
     && typeof divider.releasePointerCapture === "function";
+divider.toggleAttribute(
+    "data-pointer-drag",
+    supportsDividerPointerCapture,
+);
 const zoomOut = requireElement<HTMLButtonElement>("#zoom-out");
 const zoomReset = requireElement<HTMLButtonElement>("#zoom-reset");
 const zoomIn = requireElement<HTMLButtonElement>("#zoom-in");
