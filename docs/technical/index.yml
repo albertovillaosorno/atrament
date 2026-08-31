@@ -19,3 +19,6 @@ contracts:
   - id: atrament.technical.first-complete-user-journey
     status: frozen
     path: first-complete-user-journey.md
+  - id: atrament.technical.initial-repository-validation
+    status: verified
+    path: initial-repository-validation.md

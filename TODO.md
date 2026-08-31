@@ -17,17 +17,6 @@ screenshots are never a substitute for semantic or geometric correctness.
 Add the Rust workspace and TypeScript frontend without product behavior, then
 activate their exact Jig language, formatting, linting, and validation policy.
 
-### TODO - Define the cross-boundary schema authority
-
-Choose the schema source and generated projections so Rust and TypeScript share
-document, command, diagnostic, event, and capability identities without drift.
-
-### TODO - Establish clean initial repository validation
-
-Track root authorities in the first user-approved commit, install required
-hooks, and make exhaustive Jig validation clean without policy exceptions for
-unfinished implementation.
-
 ## P1 — Localhost runtime and ephemeral session
 
 ### TODO - Start a loopback-only Rust service
