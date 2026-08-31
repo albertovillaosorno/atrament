@@ -235,12 +235,30 @@ function setEditorShare(percent: number): void {
     );
 }
 
+function disableDividerPointerCapture(): void {
+    dividerPointerCaptureAvailable = false;
+    syncDividerPointerCapability();
+}
+
+function dividerHasPointerCapture(pointerId: number): boolean {
+    if (!dividerPointerCaptureAvailable) {
+        return false;
+    }
+    try {
+        return divider.hasPointerCapture(pointerId);
+    } catch {
+        disableDividerPointerCapture();
+        return false;
+    }
+}
+
 function releaseDividerPointer(pointerId: number): void {
-    if (
-        dividerPointerCaptureAvailable
-        && divider.hasPointerCapture(pointerId)
-    ) {
-        divider.releasePointerCapture(pointerId);
+    try {
+        if (dividerHasPointerCapture(pointerId)) {
+            divider.releasePointerCapture(pointerId);
+        }
+    } catch {
+        disableDividerPointerCapture();
     }
     if (activeDividerPointerId === pointerId) {
         activeDividerPointerId = null;
@@ -300,8 +318,7 @@ divider.addEventListener("pointerdown", (event): void => {
     try {
         divider.setPointerCapture(event.pointerId);
     } catch {
-        dividerPointerCaptureAvailable = false;
-        syncDividerPointerCapability();
+        disableDividerPointerCapture();
         setEditorShare(shareFromPointer(event.clientX));
         return;
     }
@@ -309,10 +326,7 @@ divider.addEventListener("pointerdown", (event): void => {
 });
 
 divider.addEventListener("pointermove", (event): void => {
-    if (
-        dividerPointerCaptureAvailable
-        && divider.hasPointerCapture(event.pointerId)
-    ) {
+    if (dividerHasPointerCapture(event.pointerId)) {
         setEditorShare(
             shareFromPointer(event.clientX - activeDividerPointerOffsetX),
         );
