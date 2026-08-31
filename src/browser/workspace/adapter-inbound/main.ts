@@ -210,7 +210,11 @@ function setEditorShare(percent: number): void {
     if (!compact) {
         wideEditorShare = share;
     }
-    document.documentElement.style.setProperty("--editor-share", `${share}%`);
+    document.documentElement.style.setProperty("--editor-track", `${share}fr`);
+    document.documentElement.style.setProperty(
+        "--preview-track",
+        `${100 - share}fr`,
+    );
     divider.setAttribute("aria-valuenow", String(share));
     divider.setAttribute(
         "aria-valuetext",

@@ -1,5 +1,6 @@
 :root {
-  --editor-share: 50%;
+  --editor-track: 50fr;
+  --preview-track: 50fr;
   --preview-zoom: 1;
   color-scheme: light;
   font-family: Inter, ui-sans-serif, system-ui, sans-serif;
@@ -165,9 +166,9 @@ button:focus-visible {
 .workspace-grid {
   display: grid;
   grid-template-columns:
-    var(--editor-share)
+    minmax(0, var(--editor-track))
     9px
-    minmax(0, 1fr);
+    minmax(0, var(--preview-track));
   flex: 1 1 0;
   min-height: 0;
   max-height: 850px;
