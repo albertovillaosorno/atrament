@@ -218,12 +218,31 @@ const sourcePanel = requireElement<HTMLElement>("#source-panel");
 const previewPanel = requireElement<HTMLElement>("#preview-panel");
 const pageStage = requireElement<HTMLElement>("#page-stage");
 const workspace = requireElement<HTMLElement>(".workspace-grid");
-const compactWorkspace = typeof window.matchMedia === "function"
-    ? window.matchMedia("(max-width: 480px)")
-    : null;
-const supportsPreviewZoom = typeof CSS !== "undefined"
-    && typeof CSS.supports === "function"
-    && CSS.supports("zoom", "1.1");
+function getCompactWorkspaceQuery(): MediaQueryList | null {
+    if (typeof window.matchMedia !== "function") {
+        return null;
+    }
+    try {
+        return window.matchMedia("(max-width: 480px)");
+    } catch {
+        return null;
+    }
+}
+
+function browserSupportsPreviewZoom(): boolean {
+    if (typeof CSS === "undefined") {
+        return false;
+    }
+    try {
+        return typeof CSS.supports === "function"
+            && CSS.supports("zoom", "1.1");
+    } catch {
+        return false;
+    }
+}
+
+const compactWorkspace = getCompactWorkspaceQuery();
+const supportsPreviewZoom = browserSupportsPreviewZoom();
 let wideEditorShare = 46;
 let activeDividerPointerId: number | null = null;
 let activeDividerPointerOffsetX = 0;
