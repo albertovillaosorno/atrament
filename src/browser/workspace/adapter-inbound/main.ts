@@ -154,7 +154,9 @@ const previewPanel = requireElement<HTMLElement>("#preview-panel");
 const pageStage = requireElement<HTMLElement>("#page-stage");
 const workspace = requireElement<HTMLElement>(".workspace-grid");
 const compactWorkspace = window.matchMedia("(max-width: 480px)");
-const supportsPreviewZoom = CSS.supports("zoom", "1.1");
+const supportsPreviewZoom = typeof CSS !== "undefined"
+    && typeof CSS.supports === "function"
+    && CSS.supports("zoom", "1.1");
 let wideEditorShare = 46;
 
 window.addEventListener("pagehide", (event): void => {
