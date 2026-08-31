@@ -170,6 +170,7 @@ const supportsPreviewZoom = typeof CSS !== "undefined"
     && CSS.supports("zoom", "1.1");
 let wideEditorShare = 46;
 let activeDividerPointerId: number | null = null;
+let activeDividerPointerOffsetX = 0;
 
 window.addEventListener("pagehide", (event): void => {
     copyGeneration += 1;
@@ -231,6 +232,7 @@ function releaseDividerPointer(pointerId: number): void {
     }
     if (activeDividerPointerId === pointerId) {
         activeDividerPointerId = null;
+        activeDividerPointerOffsetX = 0;
     }
 }
 
@@ -258,8 +260,11 @@ function syncDividerAvailability(): void {
 }
 
 function shareFromPointer(clientX: number): number {
-    const bounds = workspace.getBoundingClientRect();
-    return ((clientX - bounds.left) / bounds.width) * 100;
+    const workspaceBounds = workspace.getBoundingClientRect();
+    const dividerWidth = divider.getBoundingClientRect().width;
+    const panelWidth = workspaceBounds.width - dividerWidth;
+    const sourceWidth = clientX - workspaceBounds.left - dividerWidth / 2;
+    return (sourceWidth / panelWidth) * 100;
 }
 
 divider.addEventListener("pointerdown", (event): void => {
@@ -273,14 +278,15 @@ divider.addEventListener("pointerdown", (event): void => {
     }
     event.preventDefault();
     divider.focus({ preventScroll: true });
-    const share = shareFromPointer(event.clientX);
     if (!supportsDividerPointerCapture) {
-        setEditorShare(share);
+        setEditorShare(shareFromPointer(event.clientX));
         return;
     }
+    const dividerBounds = divider.getBoundingClientRect();
+    const dividerCenter = dividerBounds.left + dividerBounds.width / 2;
+    activeDividerPointerOffsetX = event.clientX - dividerCenter;
     divider.setPointerCapture(event.pointerId);
     activeDividerPointerId = event.pointerId;
-    setEditorShare(share);
 });
 
 divider.addEventListener("pointermove", (event): void => {
@@ -288,7 +294,9 @@ divider.addEventListener("pointermove", (event): void => {
         supportsDividerPointerCapture
         && divider.hasPointerCapture(event.pointerId)
     ) {
-        setEditorShare(shareFromPointer(event.clientX));
+        setEditorShare(
+            shareFromPointer(event.clientX - activeDividerPointerOffsetX),
+        );
     }
 });
 
@@ -301,6 +309,7 @@ divider.addEventListener("pointercancel", finishDividerPointer);
 divider.addEventListener("lostpointercapture", (event): void => {
     if (activeDividerPointerId === event.pointerId) {
         activeDividerPointerId = null;
+        activeDividerPointerOffsetX = 0;
     }
 });
 
