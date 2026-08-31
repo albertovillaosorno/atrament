@@ -53,7 +53,7 @@ function createGraphemeSegmenter(): Intl.Segmenter | null {
     }
 }
 
-const graphemeSegmenter = createGraphemeSegmenter();
+let graphemeSegmenter = createGraphemeSegmenter();
 
 type TextCount = {
     count: number;
@@ -69,6 +69,7 @@ function countText(value: string): TextCount {
             }
             return { count, unit: "character" };
         } catch {
+            graphemeSegmenter = null;
             // Fall through to the code-point count below.
         }
     }
