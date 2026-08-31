@@ -297,10 +297,12 @@ divider.addEventListener("keydown", (event): void => {
     }
 });
 
-if (compactWorkspace !== null) {
+if (compactWorkspace === null) {
+    window.addEventListener("resize", syncDividerAvailability);
+} else if (typeof compactWorkspace.addEventListener === "function") {
     compactWorkspace.addEventListener("change", syncDividerAvailability);
 } else {
-    window.addEventListener("resize", syncDividerAvailability);
+    compactWorkspace.addListener(syncDividerAvailability);
 }
 syncDividerAvailability();
 
