@@ -136,9 +136,12 @@ adjustable 35-65% range. The workspace is viewport-bounded, with source and
 preview overflow contained by their own scroll surfaces. At 320 by 480 px, the
 Task field and page stage are both visible in the initial frame.
 
-Short-height reflow keeps at least 24 px of both Task and the page stage visible
-at 320 by 240 px and 400 by 225 px without document overflow. The task stays
-open for backend-fed page navigation and stable semantic selection.
+Very-short reflow keeps both Task and the page stage visible down to 225 px of
+viewport height without document overflow. A 32-case Firefox matrix spanning
+320 through 1024 px widths, 225 through 576 px heights, split extremes, and 60%
+through 160% preview zoom completed without layout or reachability failures.
+The task stays open for backend-fed page navigation and stable semantic
+selection.
 
 ### TODO - Build the structured LLM editor
 
