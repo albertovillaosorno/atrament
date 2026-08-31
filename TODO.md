@@ -130,9 +130,11 @@ formatting,
 object navigation, diagnostics, and a safe raw-response inspection boundary.
 
 Current frontend evidence includes task, source, raw model-response, permanent
-prompt, profile, paper, style, and output surfaces. The profile catalogue stays
-backend-owned. Structured completion, object navigation, candidate diagnostics,
-and backend transport remain unfinished.
+prompt, profile, paper, style, and output surfaces. Backend-owned option
+controls
+start disabled rather than pretending to apply state before transport exists.
+Structured completion, object navigation, candidate diagnostics, and backend
+transport remain unfinished.
 
 ### TODO - Build the human page editor
 

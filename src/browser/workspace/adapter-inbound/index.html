@@ -19,7 +19,7 @@
       </div>
       <div class="session-note" role="status">
         <span class="session-dot" aria-hidden="true"></span>
-        <span>Ephemeral session · export to keep your work</span>
+        <span>Frontend ready · waiting for backend session</span>
       </div>
     </header>
 
@@ -86,7 +86,7 @@
             </label>
             <label>
               <span>Paper</span>
-              <select id="paper-select">
+              <select id="paper-select" disabled>
                 <option>A4 · blank</option>
                 <option>A4 · squared</option>
                 <option>A4 · dotted</option>
@@ -95,7 +95,7 @@
             </label>
             <label>
               <span>Style</span>
-              <select id="style-select">
+              <select id="style-select" disabled>
                 <option>Sober</option>
                 <option>Study</option>
                 <option>Colorful</option>
@@ -103,7 +103,7 @@
             </label>
             <label>
               <span>Output</span>
-              <select id="output-select">
+              <select id="output-select" disabled>
                 <option>PDF</option>
                 <option>Live pen</option>
                 <option>PDF + live</option>
@@ -176,7 +176,7 @@
             <p class="panel-kicker">Human editor</p>
             <h2 id="human-editor-title" tabindex="-1">Page preview</h2>
           </div>
-          <span class="panel-badge muted">A4 · 100%</span>
+          <span class="panel-badge muted">Preview · 100%</span>
         </div>
 
         <nav class="preview-toolbar" aria-label="Preview tools">
