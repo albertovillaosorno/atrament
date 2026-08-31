@@ -306,7 +306,6 @@ divider.addEventListener("pointerdown", (event): void => {
     ) {
         return;
     }
-    event.preventDefault();
     divider.focus();
     if (!dividerPointerCaptureAvailable) {
         setEditorShare(shareFromPointer(event.clientX));
@@ -322,6 +321,7 @@ divider.addEventListener("pointerdown", (event): void => {
         setEditorShare(shareFromPointer(event.clientX));
         return;
     }
+    event.preventDefault();
     activeDividerPointerId = event.pointerId;
 });
 
