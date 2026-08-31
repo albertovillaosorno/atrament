@@ -22,6 +22,12 @@ and reject remote interfaces and untrusted host headers.
 Open the browser workspace against the exact Rust session and present useful
 recovery when the frontend, port, or browser launch fails.
 
+Current frontend evidence: the split workspace shell, source inputs, backend
+prompt presentation, preview placeholder, diagnostics area, output controls,
+character counters, and clipboard action are tracked with zero runtime package
+dependencies. The task remains open until the backend serves the compiled
+TypeScript asset and owns launch and recovery behavior.
+
 ### TODO - Authenticate the browser session locally
 
 Issue an unguessable session token at startup, require it on mutating requests,
