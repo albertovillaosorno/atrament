@@ -131,7 +131,7 @@ button:focus-visible {
 .eyebrow,
 .panel-kicker {
   margin: 0 0 4px;
-  color: #797265;
+  color: #70695e;
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.14em;
@@ -294,7 +294,7 @@ button:focus-visible {
 .field-help,
 .action-status {
   margin: 0;
-  color: #81796d;
+  color: #70695e;
   font-size: 11px;
 }
 
@@ -377,7 +377,7 @@ button:focus-visible {
 
 .page-list-label {
   margin: 0 0 10px;
-  color: #746d61;
+  color: #645d52;
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -449,7 +449,7 @@ button:focus-visible {
 .preview-caption {
   max-width: 310px;
   margin: 0 auto auto;
-  color: #928a7e;
+  color: #70695e;
   font-size: 12px;
   line-height: 1.5;
 }

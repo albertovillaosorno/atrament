@@ -409,9 +409,10 @@ Make both editors, page navigation, diagnostics, drag alternatives, prompt copy,
 import, export, and hardware arming usable without a pointer.
 
 Current frontend evidence includes skip links, labeled text areas and counters,
-a keyboard-operable splitter, button-based zoom, status announcements, and
-native keyboard focus. Backend-owned editing, import, export, diagnostics, and
-hardware actions still need complete no-pointer paths before this task closes.
+a keyboard-operable splitter, button-based zoom, status announcements, native
+keyboard focus, and measured normal-text contrast of at least 4.5:1 on the
+current shell. Backend-owned editing, import, export, diagnostics, and hardware
+actions still need complete no-pointer paths before this task closes.
 
 ### TODO - Prove localhost security and privacy
 
