@@ -38,12 +38,23 @@ function requireElement<T extends Element>(selector: string): T {
     return element;
 }
 
+const graphemeSegmenter = typeof Intl.Segmenter === "function"
+    ? new Intl.Segmenter(undefined, { granularity: "grapheme" })
+    : null;
+
+function countCharacters(value: string): number {
+    if (graphemeSegmenter !== null) {
+        return Array.from(graphemeSegmenter.segment(value)).length;
+    }
+    return Array.from(value).length;
+}
+
 function bindCharacterCount(
     input: HTMLTextAreaElement,
     output: HTMLElement,
 ): void {
     const update = (): void => {
-        const count = input.value.length;
+        const count = countCharacters(input.value);
         const suffix = count === 1 ? "character" : "characters";
         output.textContent = `${count} ${suffix}`;
     };
