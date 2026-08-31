@@ -149,6 +149,9 @@ const zoomIn = requireElement<HTMLButtonElement>("#zoom-in");
 const zoomStatus = requireElement<HTMLOutputElement>("#zoom-status");
 const previewScale = requireElement<HTMLElement>("#preview-scale");
 const sourceEditorTitle = requireElement<HTMLElement>("#llm-editor-title");
+const sourcePanel = requireElement<HTMLElement>("#source-panel");
+const previewPanel = requireElement<HTMLElement>("#preview-panel");
+const pageStage = requireElement<HTMLElement>("#page-stage");
 const workspace = requireElement<HTMLElement>(".workspace-grid");
 const compactWorkspace = window.matchMedia("(max-width: 480px)");
 const supportsPreviewZoom = CSS.supports("zoom", "1.1");
@@ -161,10 +164,18 @@ window.addEventListener("pagehide", (event): void => {
     }
 });
 
+function resetLocalViewportState(): void {
+    sourcePanel.scrollTo(0, 0);
+    previewPanel.scrollTo(0, 0);
+    pageStage.scrollTo(0, 0);
+}
+
 window.addEventListener("pageshow", (event): void => {
     if (event.persisted) {
         window.location.reload();
+        return;
     }
+    resetLocalViewportState();
 });
 
 function setEditorShare(percent: number): void {
