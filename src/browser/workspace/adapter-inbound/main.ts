@@ -39,7 +39,8 @@ function requireElement<T extends Element>(selector: string): T {
     return element;
 }
 
-const graphemeSegmenter = typeof Intl.Segmenter === "function"
+const graphemeSegmenter = typeof Intl !== "undefined"
+    && typeof Intl.Segmenter === "function"
     ? new Intl.Segmenter(undefined, { granularity: "grapheme" })
     : null;
 
