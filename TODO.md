@@ -431,7 +431,9 @@ import, export, and hardware arming usable without a pointer.
 Current frontend evidence includes skip links, labeled text areas and counters,
 a keyboard-operable splitter, button-based zoom, and focusable source, preview,
 and page-stage scroll regions with explicit focus indicators measuring at least
-7.08:1 contrast. Session text follows its presented LTR or RTL direction without
+7.08:1 contrast. The two skip links also focus and reveal their panel headings
+using native anchor behavior when `main.ts` is absent. Session text follows its
+presented LTR or RTL direction without
 changing clipboard content; status announcements remain available for session,
 clipboard, zoom, and diagnostics, while normal text measures at least 4.5:1
 contrast. If a
