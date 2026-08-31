@@ -150,7 +150,7 @@ const zoomStatus = requireElement<HTMLOutputElement>("#zoom-status");
 const previewScale = requireElement<HTMLElement>("#preview-scale");
 const workspace = requireElement<HTMLElement>(".workspace-grid");
 const compactWorkspace = window.matchMedia("(max-width: 480px)");
-let wideEditorShare = Number(divider.getAttribute("aria-valuenow") ?? "46");
+let wideEditorShare = 46;
 
 window.addEventListener("pagehide", (event): void => {
     copyGeneration += 1;
