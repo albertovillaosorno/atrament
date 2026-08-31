@@ -158,6 +158,7 @@ const supportsPreviewZoom = typeof CSS !== "undefined"
     && typeof CSS.supports === "function"
     && CSS.supports("zoom", "1.1");
 let wideEditorShare = 46;
+let activeDividerPointerId: number | null = null;
 
 window.addEventListener("pagehide", (event): void => {
     copyGeneration += 1;
@@ -195,8 +196,20 @@ function setEditorShare(percent: number): void {
     );
 }
 
+function releaseDividerPointer(pointerId: number): void {
+    if (divider.hasPointerCapture(pointerId)) {
+        divider.releasePointerCapture(pointerId);
+    }
+    if (activeDividerPointerId === pointerId) {
+        activeDividerPointerId = null;
+    }
+}
+
 function syncDividerAvailability(): void {
     if (compactWorkspace.matches) {
+        if (activeDividerPointerId !== null) {
+            releaseDividerPointer(activeDividerPointerId);
+        }
         divider.setAttribute("aria-valuemin", "50");
         divider.setAttribute("aria-valuemax", "50");
         divider.setAttribute("aria-disabled", "true");
@@ -231,6 +244,7 @@ divider.addEventListener("pointerdown", (event): void => {
     event.preventDefault();
     divider.focus({ preventScroll: true });
     divider.setPointerCapture(event.pointerId);
+    activeDividerPointerId = event.pointerId;
     setEditorShare(shareFromPointer(event.clientX));
 });
 
@@ -240,14 +254,17 @@ divider.addEventListener("pointermove", (event): void => {
     }
 });
 
-function releaseDividerPointer(event: PointerEvent): void {
-    if (divider.hasPointerCapture(event.pointerId)) {
-        divider.releasePointerCapture(event.pointerId);
-    }
+function finishDividerPointer(event: PointerEvent): void {
+    releaseDividerPointer(event.pointerId);
 }
 
-divider.addEventListener("pointerup", releaseDividerPointer);
-divider.addEventListener("pointercancel", releaseDividerPointer);
+divider.addEventListener("pointerup", finishDividerPointer);
+divider.addEventListener("pointercancel", finishDividerPointer);
+divider.addEventListener("lostpointercapture", (event): void => {
+    if (activeDividerPointerId === event.pointerId) {
+        activeDividerPointerId = null;
+    }
+});
 
 divider.addEventListener("keydown", (event): void => {
     if (divider.getAttribute("aria-disabled") === "true") {
