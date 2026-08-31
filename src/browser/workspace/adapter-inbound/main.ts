@@ -51,6 +51,12 @@ function countCharacters(value: string): number {
     return Array.from(value).length;
 }
 
+function setTextIfChanged(element: HTMLElement, value: string): void {
+    if (element.textContent?.trim() !== value) {
+        element.textContent = value;
+    }
+}
+
 function bindCharacterCount(
     input: HTMLTextAreaElement,
     output: HTMLElement,
@@ -59,7 +65,7 @@ function bindCharacterCount(
         const count = countCharacters(input.value);
         const unit = graphemeSegmenter === null ? "code point" : "character";
         const suffix = count === 1 ? unit : `${unit}s`;
-        output.textContent = `${count} ${suffix}`;
+        setTextIfChanged(output, `${count} ${suffix}`);
     };
 
     input.addEventListener("input", update);
@@ -90,9 +96,9 @@ function syncPromptCopyState(): void {
     promptOutput.disabled = !available;
     copyPrompt.disabled = !available;
     if (!available) {
-        copyStatus.textContent = "Waiting for a prompt from the backend.";
+        setTextIfChanged(copyStatus, "Waiting for a prompt from the backend.");
     } else {
-        copyStatus.textContent = "";
+        setTextIfChanged(copyStatus, "");
     }
 }
 
@@ -103,7 +109,7 @@ copyPrompt.addEventListener("click", (): void => {
     const prompt = promptOutput.value;
     const generation = ++copyGeneration;
     if (prompt.length === 0) {
-        copyStatus.textContent = "Waiting for a prompt from the backend.";
+        setTextIfChanged(copyStatus, "Waiting for a prompt from the backend.");
         return;
     }
 
@@ -111,11 +117,11 @@ copyPrompt.addEventListener("click", (): void => {
         navigator.clipboard === undefined
         || typeof navigator.clipboard.writeText !== "function"
     ) {
-        copyStatus.textContent = "Clipboard access is unavailable.";
+        setTextIfChanged(copyStatus, "Clipboard access is unavailable.");
         return;
     }
 
-    copyStatus.textContent = "Copying prompt…";
+    setTextIfChanged(copyStatus, "Copying prompt…");
     const write = clipboardWriteQueue.then((): Promise<void> | void => {
         if (
             generation !== copyGeneration
@@ -132,7 +138,7 @@ copyPrompt.addEventListener("click", (): void => {
                 generation === copyGeneration
                 && promptOutput.value === prompt
             ) {
-                copyStatus.textContent = "Prompt copied.";
+                setTextIfChanged(copyStatus, "Prompt copied.");
             }
         },
         (): void => {
@@ -140,7 +146,7 @@ copyPrompt.addEventListener("click", (): void => {
                 generation === copyGeneration
                 && promptOutput.value === prompt
             ) {
-                copyStatus.textContent = "Clipboard write failed.";
+                setTextIfChanged(copyStatus, "Clipboard write failed.");
             }
         },
     );
@@ -382,9 +388,12 @@ let previewZoom = 100;
 function setPreviewZoom(percent: number): void {
     if (!supportsPreviewZoom) {
         previewZoom = 100;
-        zoomReset.textContent = "100%";
-        zoomStatus.textContent = "Preview zoom unavailable in this browser.";
-        previewScale.textContent = "Preview · 100%";
+        setTextIfChanged(zoomReset, "100%");
+        setTextIfChanged(
+            zoomStatus,
+            "Preview zoom unavailable in this browser.",
+        );
+        setTextIfChanged(previewScale, "Preview · 100%");
         zoomOut.disabled = true;
         zoomReset.disabled = true;
         zoomIn.disabled = true;
@@ -396,9 +405,9 @@ function setPreviewZoom(percent: number): void {
         "--preview-zoom",
         String(previewZoom / 100),
     );
-    zoomReset.textContent = `${previewZoom}%`;
-    zoomStatus.textContent = `Preview zoom ${previewZoom}%`;
-    previewScale.textContent = `Preview · ${previewZoom}%`;
+    setTextIfChanged(zoomReset, `${previewZoom}%`);
+    setTextIfChanged(zoomStatus, `Preview zoom ${previewZoom}%`);
+    setTextIfChanged(previewScale, `Preview · ${previewZoom}%`);
     zoomOut.disabled = previewZoom <= 60;
     zoomReset.disabled = previewZoom === 100;
     zoomIn.disabled = previewZoom >= 160;
@@ -417,4 +426,4 @@ zoomIn.addEventListener("click", (): void => {
 });
 
 setPreviewZoom(100);
-sessionStatus.textContent = "Frontend ready · waiting for backend session";
+setTextIfChanged(sessionStatus, "Frontend ready · waiting for backend session");
