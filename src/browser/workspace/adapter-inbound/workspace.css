@@ -289,6 +289,10 @@ button:focus-visible {
   flex: 1;
 }
 
+.field-label {
+  margin: 0;
+}
+
 .field-label,
 .control-row span {
   color: #4c473f;
