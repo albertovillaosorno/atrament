@@ -3,6 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
   <title>Atrament</title>
   <link rel="stylesheet" href="./workspace.css">
 </head>
@@ -44,6 +45,8 @@
           <span class="field-label">Task</span>
           <textarea
             id="task-input"
+            autocomplete="off"
+            spellcheck="false"
             aria-describedby="task-count"
             rows="4"
             placeholder="What should this notebook page communicate?"
@@ -55,6 +58,8 @@
           <span class="field-label">Source material</span>
           <textarea
             id="source-input"
+            autocomplete="off"
+            spellcheck="false"
             aria-describedby="source-count"
             rows="9"
             placeholder="Paste notes, formulas, sources, or instructions."
@@ -114,6 +119,7 @@
           <textarea
             id="prompt-output"
             aria-describedby="copy-status"
+            spellcheck="false"
             rows="5"
             readonly
             placeholder="The backend-produced prompt appears here."
@@ -130,6 +136,8 @@
           <span class="field-label">Model response</span>
           <textarea
             id="candidate-input"
+            autocomplete="off"
+            spellcheck="false"
             aria-describedby="candidate-count"
             rows="6"
             placeholder="Paste the complete external model response."
