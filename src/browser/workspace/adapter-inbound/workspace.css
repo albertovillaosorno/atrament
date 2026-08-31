@@ -202,6 +202,23 @@ button:focus-visible {
   font-size: 18px;
 }
 
+.editor-heading {
+  position: sticky;
+  top: -20px;
+  z-index: 4;
+  margin: -20px -20px 0;
+  padding: 20px 20px 14px;
+  border-bottom: 1px solid #ddd6ca;
+  background: #f8f5eeef;
+  backdrop-filter: blur(8px);
+}
+
+.panel-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .panel-badge,
 .diagnostic-count {
   border-radius: 999px;
@@ -410,6 +427,12 @@ button:focus-visible {
 .output-actions {
   display: flex;
   gap: 8px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .paper-preview {
+    transition: none;
+  }
 }
 
 @media (max-width: 1100px) {
