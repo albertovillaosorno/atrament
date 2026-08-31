@@ -38,6 +38,11 @@ and prevent another local page from controlling an active notebook.
 Exchange product, protocol, prompt, profile, renderer, and capability versions
 before enabling edits and fail clearly on incompatible frontend or backend.
 
+Current frontend evidence starts task, source, raw-response, option, and output
+editing disabled while the shell waits for a backend session. The task remains
+open until the backend handshake enables compatible controls or exposes a clear
+incompatibility state.
+
 ### TODO - Keep all notebook state in memory
 
 Hold documents, assets, undo history, previews, and derived plans only for the
