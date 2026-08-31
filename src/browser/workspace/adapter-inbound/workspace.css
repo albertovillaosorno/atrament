@@ -754,3 +754,17 @@ button:focus-visible {
     line-height: 1.05;
   }
 }
+
+@media (max-height: 360px) {
+  .script-warning {
+    position: fixed;
+    top: 4px;
+    right: 16px;
+    left: 16px;
+    z-index: 8;
+    margin: 0;
+    padding: 4px 6px;
+    font-size: 10px;
+    line-height: 1.15;
+  }
+}
