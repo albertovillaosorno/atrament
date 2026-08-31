@@ -15,8 +15,8 @@
 //   - Implement layout, rendering, diagnostics, or output compilation.
 // - Allows:
 //   - Inputs: User text entry and backend-presented prompt text.
-//   - Outputs: Character counts, focus behavior, and clipboard writes.
-//   - Side effects: DOM updates and explicit clipboard writes only.
+//   - Outputs: Character counts, local viewport controls, and clipboard writes.
+//   - Side effects: DOM updates, pointer capture, and clipboard writes only.
 // - Split-When:
 //   - Backend transport wiring needs an independently testable adapter.
 // - Merge-When:
@@ -81,4 +81,75 @@ copyPrompt.addEventListener("click", (): void => {
             copyStatus.textContent = "Clipboard write failed.";
         },
     );
+});
+
+
+const divider = requireElement<HTMLElement>("#workspace-divider");
+const zoomOut = requireElement<HTMLButtonElement>("#zoom-out");
+const zoomReset = requireElement<HTMLButtonElement>("#zoom-reset");
+const zoomIn = requireElement<HTMLButtonElement>("#zoom-in");
+const workspace = requireElement<HTMLElement>(".workspace-grid");
+
+function setEditorShare(percent: number): void {
+    const share = Math.min(65, Math.max(35, Math.round(percent)));
+    document.documentElement.style.setProperty("--editor-share", `${share}%`);
+    divider.setAttribute("aria-valuenow", String(share));
+}
+
+function shareFromPointer(clientX: number): number {
+    const bounds = workspace.getBoundingClientRect();
+    return ((clientX - bounds.left) / bounds.width) * 100;
+}
+
+divider.addEventListener("pointerdown", (event): void => {
+    divider.setPointerCapture(event.pointerId);
+    setEditorShare(shareFromPointer(event.clientX));
+});
+
+divider.addEventListener("pointermove", (event): void => {
+    if (divider.hasPointerCapture(event.pointerId)) {
+        setEditorShare(shareFromPointer(event.clientX));
+    }
+});
+
+divider.addEventListener("keydown", (event): void => {
+    const current = Number(divider.getAttribute("aria-valuenow") ?? "46");
+    if (event.key === "ArrowLeft") {
+        event.preventDefault();
+        setEditorShare(current - 2);
+    } else if (event.key === "ArrowRight") {
+        event.preventDefault();
+        setEditorShare(current + 2);
+    } else if (event.key === "Home") {
+        event.preventDefault();
+        setEditorShare(35);
+    } else if (event.key === "End") {
+        event.preventDefault();
+        setEditorShare(65);
+    }
+});
+
+let previewZoom = 100;
+
+function setPreviewZoom(percent: number): void {
+    previewZoom = Math.min(160, Math.max(60, percent));
+    document.documentElement.style.setProperty(
+        "--preview-zoom",
+        String(previewZoom / 100),
+    );
+    zoomReset.textContent = `${previewZoom}%`;
+    zoomOut.disabled = previewZoom <= 60;
+    zoomIn.disabled = previewZoom >= 160;
+}
+
+zoomOut.addEventListener("click", (): void => {
+    setPreviewZoom(previewZoom - 10);
+});
+
+zoomReset.addEventListener("click", (): void => {
+    setPreviewZoom(100);
+});
+
+zoomIn.addEventListener("click", (): void => {
+    setPreviewZoom(previewZoom + 10);
 });

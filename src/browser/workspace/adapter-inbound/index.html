@@ -7,6 +7,8 @@
   <link rel="stylesheet" href="./workspace.css">
 </head>
 <body>
+  <a class="skip-link" href="#llm-editor-title">Skip to source editor</a>
+  <a class="skip-link second" href="#human-editor-title">Skip to preview</a>
   <main class="workspace-shell">
     <header class="workspace-header">
       <div>
@@ -109,6 +111,18 @@
         </label>
       </section>
 
+      <div
+        class="workspace-divider"
+        id="workspace-divider"
+        role="separator"
+        aria-label="Resize source and preview panels"
+        aria-orientation="vertical"
+        aria-valuemin="35"
+        aria-valuemax="65"
+        aria-valuenow="46"
+        tabindex="0"
+      ></div>
+
       <section class="preview-panel" aria-labelledby="human-editor-title">
         <div class="panel-heading">
           <div>
@@ -119,13 +133,31 @@
         </div>
 
         <nav class="preview-toolbar" aria-label="Preview tools">
-          <button type="button" disabled>Select</button>
-          <button type="button" disabled>Text</button>
-          <button type="button" disabled>Move</button>
-          <button type="button" disabled>Crop</button>
+          <div class="tool-group" aria-label="Backend editing tools">
+            <button type="button" disabled>Select</button>
+            <button type="button" disabled>Text</button>
+            <button type="button" disabled>Move</button>
+            <button type="button" disabled>Resize</button>
+            <button type="button" disabled>Crop</button>
+            <button type="button" disabled>Layer</button>
+          </div>
+          <div class="tool-group zoom-controls" aria-label="Preview zoom">
+            <button id="zoom-out" type="button" aria-label="Zoom out">−</button>
+            <button id="zoom-reset" type="button">100%</button>
+            <button id="zoom-in" type="button" aria-label="Zoom in">+</button>
+          </div>
         </nav>
 
-        <div class="page-stage">
+        <div class="preview-body">
+          <nav class="page-list" aria-label="Notebook pages">
+            <p class="page-list-label">Pages</p>
+            <button class="page-thumb active" type="button" aria-current="page">
+              <span class="page-thumb-sheet" aria-hidden="true"></span>
+              <span>1</span>
+            </button>
+          </nav>
+
+          <div class="page-stage" id="page-stage">
           <article class="paper-preview" aria-label="Notebook page preview">
             <p class="preview-placeholder">Backend preview</p>
             <p class="preview-caption">
@@ -133,6 +165,7 @@
               in Rust. This pane only presents the result.
             </p>
           </article>
+          </div>
         </div>
 
         <section class="diagnostics" aria-labelledby="diagnostics-title">
