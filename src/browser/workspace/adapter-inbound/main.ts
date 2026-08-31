@@ -39,16 +39,39 @@ function requireElement<T extends Element>(selector: string): T {
     return element;
 }
 
-const graphemeSegmenter = typeof Intl !== "undefined"
-    && typeof Intl.Segmenter === "function"
-    ? new Intl.Segmenter(undefined, { granularity: "grapheme" })
-    : null;
-
-function countCharacters(value: string): number {
-    if (graphemeSegmenter !== null) {
-        return Array.from(graphemeSegmenter.segment(value)).length;
+function createGraphemeSegmenter(): Intl.Segmenter | null {
+    if (
+        typeof Intl === "undefined"
+        || typeof Intl.Segmenter !== "function"
+    ) {
+        return null;
     }
-    return Array.from(value).length;
+    try {
+        return new Intl.Segmenter(undefined, { granularity: "grapheme" });
+    } catch {
+        return null;
+    }
+}
+
+const graphemeSegmenter = createGraphemeSegmenter();
+
+type TextCount = {
+    count: number;
+    unit: "character" | "code point";
+};
+
+function countText(value: string): TextCount {
+    if (graphemeSegmenter !== null) {
+        try {
+            return {
+                count: Array.from(graphemeSegmenter.segment(value)).length,
+                unit: "character",
+            };
+        } catch {
+            // Fall through to the code-point count below.
+        }
+    }
+    return { count: Array.from(value).length, unit: "code point" };
 }
 
 function setTextIfChanged(element: HTMLElement, value: string): void {
@@ -62,8 +85,7 @@ function bindCharacterCount(
     output: HTMLElement,
 ): void {
     const update = (): void => {
-        const count = countCharacters(input.value);
-        const unit = graphemeSegmenter === null ? "code point" : "character";
+        const { count, unit } = countText(input.value);
         const suffix = count === 1 ? unit : `${unit}s`;
         setTextIfChanged(output, `${count} ${suffix}`);
     };
