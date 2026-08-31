@@ -423,28 +423,11 @@ button:focus-visible {
   text-transform: uppercase;
 }
 
-.page-thumb {
-  display: grid;
-  width: 100%;
-  gap: 5px;
-  place-items: center;
-  padding: 7px 5px;
-  background: transparent;
+.page-list-empty {
+  margin: 0;
+  color: #70695e;
   font-size: 11px;
-}
-
-.page-thumb.active {
-  border-color: #7d7568;
-  background: #eee9df;
-}
-
-.page-thumb-sheet {
-  display: block;
-  width: 31px;
-  aspect-ratio: 210 / 297;
-  border: 1px solid #c8c0b4;
-  background: #fffefa;
-  box-shadow: 0 2px 5px rgb(48 41 31 / 0.1);
+  line-height: 1.4;
 }
 
 .page-stage {
