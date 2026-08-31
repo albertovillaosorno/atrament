@@ -429,16 +429,16 @@ Make both editors, page navigation, diagnostics, drag alternatives, prompt copy,
 import, export, and hardware arming usable without a pointer.
 
 Current frontend evidence includes skip links, labeled text areas and counters,
-a keyboard-operable splitter, button-based zoom, a focusable preview scroll
-region, session, clipboard, zoom, and diagnostic status announcements, native
-keyboard focus, and measured normal-text contrast of at least 4.5:1 on the
-current shell. If a focused splitter becomes inert at the compact breakpoint,
-focus moves to a source heading that is scrolled into view. Divider pointer
-gestures are serialized, released on cancellation, navigation, or compacting,
-and the inert compact divider restores native touch behavior without an
-overlapping hit target. Backend-owned editing, import, export, diagnostic
-actions, and hardware actions still need complete no-pointer paths before this
-task closes.
+a keyboard-operable splitter, button-based zoom, and focusable source, preview,
+and page-stage scroll regions with explicit focus indicators measuring at least
+7.08:1 contrast. Session, clipboard, zoom, and diagnostic status announcements
+remain available, while normal text measures at least 4.5:1 contrast. If a
+focused splitter becomes inert at the compact breakpoint, focus moves to a
+source heading that is scrolled into view; divider pointer gestures are also
+serialized and released on cancellation, navigation, or compacting. The inert
+compact divider restores native touch behavior without an overlapping hit
+target; backend-owned editing, import, export, diagnostic actions, and hardware
+actions still need complete no-pointer paths before this task closes.
 
 ### TODO - Prove localhost security and privacy
 
