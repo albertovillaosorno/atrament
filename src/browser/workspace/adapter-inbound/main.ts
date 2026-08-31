@@ -156,6 +156,9 @@ function shareFromPointer(clientX: number): number {
 }
 
 divider.addEventListener("pointerdown", (event): void => {
+    if (!event.isPrimary || event.button !== 0) {
+        return;
+    }
     divider.setPointerCapture(event.pointerId);
     setEditorShare(shareFromPointer(event.clientX));
 });
