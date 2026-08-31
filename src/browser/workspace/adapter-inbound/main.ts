@@ -74,11 +74,14 @@ const copyPrompt = requireElement<HTMLButtonElement>("#copy-prompt");
 const copyStatus = requireElement<HTMLElement>("#copy-status");
 const sessionStatus = requireElement<HTMLElement>("#session-status");
 
+let copyGeneration = 0;
+
 bindCharacterCount(taskInput, taskCount);
 bindCharacterCount(sourceInput, sourceCount);
 bindCharacterCount(candidateInput, candidateCount);
 
 function syncPromptCopyState(): void {
+    copyGeneration += 1;
     const available = promptOutput.value.length > 0;
     promptOutput.disabled = !available;
     copyPrompt.disabled = !available;
@@ -94,6 +97,7 @@ syncPromptCopyState();
 
 copyPrompt.addEventListener("click", (): void => {
     const prompt = promptOutput.value;
+    const generation = ++copyGeneration;
     if (prompt.length === 0) {
         copyStatus.textContent = "Waiting for a prompt from the backend.";
         return;
@@ -106,12 +110,18 @@ copyPrompt.addEventListener("click", (): void => {
 
     void navigator.clipboard.writeText(prompt).then(
         (): void => {
-            if (promptOutput.value === prompt) {
+            if (
+                generation === copyGeneration
+                && promptOutput.value === prompt
+            ) {
                 copyStatus.textContent = "Prompt copied.";
             }
         },
         (): void => {
-            if (promptOutput.value === prompt) {
+            if (
+                generation === copyGeneration
+                && promptOutput.value === prompt
+            ) {
                 copyStatus.textContent = "Clipboard write failed.";
             }
         },
