@@ -110,6 +110,7 @@ copyPrompt.addEventListener("click", (): void => {
         return;
     }
 
+    copyStatus.textContent = "Copying prompt…";
     const write = clipboardWriteQueue.then((): Promise<void> | void => {
         if (
             generation !== copyGeneration
