@@ -174,9 +174,12 @@ window.addEventListener("pagehide", (event): void => {
 });
 
 function resetLocalViewportState(): void {
-    sourcePanel.scrollTo(0, 0);
-    previewPanel.scrollTo(0, 0);
-    pageStage.scrollTo(0, 0);
+    sourcePanel.scrollTop = 0;
+    sourcePanel.scrollLeft = 0;
+    previewPanel.scrollTop = 0;
+    previewPanel.scrollLeft = 0;
+    pageStage.scrollTop = 0;
+    pageStage.scrollLeft = 0;
 }
 
 window.addEventListener("pageshow", (event): void => {
