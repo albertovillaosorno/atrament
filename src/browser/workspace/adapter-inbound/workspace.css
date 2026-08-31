@@ -146,7 +146,7 @@ button:focus-visible {
 .eyebrow,
 .panel-kicker {
   margin: 0 0 4px;
-  color: #70695e;
+  color: #625b4f;
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.14em;
@@ -314,6 +314,7 @@ button:focus-visible {
 
 .panel-badge.muted {
   background: #d7d1c5;
+  color: #594f3f;
 }
 
 .option-fieldset {
