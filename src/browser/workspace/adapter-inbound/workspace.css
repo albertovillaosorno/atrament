@@ -387,14 +387,17 @@ button:focus-visible {
 }
 
 .preview-toolbar button,
-.output-actions button {
-  font-size: 12px;
-}
-
 .tool-group {
   display: flex;
   flex-wrap: wrap;
   gap: 7px;
+}
+
+.tool-status {
+  margin: 0;
+  color: #70695e;
+  font-size: 11px;
+  line-height: 1.4;
 }
 
 .zoom-controls button {
@@ -489,12 +492,6 @@ button:focus-visible {
 
 .section-row.compact {
   align-items: start;
-}
-
-.output-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
 }
 
 @media (forced-colors: active) {
