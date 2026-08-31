@@ -431,8 +431,10 @@ import, export, and hardware arming usable without a pointer.
 Current frontend evidence includes skip links, labeled text areas and counters,
 a keyboard-operable splitter, button-based zoom, and focusable source, preview,
 and page-stage scroll regions with explicit focus indicators measuring at least
-7.08:1 contrast. Session, clipboard, zoom, and diagnostic status announcements
-remain available, while normal text measures at least 4.5:1 contrast. If a
+7.08:1 contrast. Session text follows its presented LTR or RTL direction without
+changing clipboard content; status announcements remain available for session,
+clipboard, zoom, and diagnostics, while normal text measures at least 4.5:1
+contrast. If a
 focused splitter becomes inert at the compact breakpoint, focus moves to a
 source heading that is scrolled into view.
 
