@@ -500,7 +500,6 @@ button:focus-visible {
 @media (forced-colors: active) {
   .workspace-divider,
   .workspace-divider::after,
-  .page-thumb-sheet,
   .paper-preview {
     border: 1px solid CanvasText;
   }
