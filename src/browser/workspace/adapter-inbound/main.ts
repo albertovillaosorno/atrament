@@ -284,7 +284,7 @@ divider.addEventListener("pointerdown", (event): void => {
         return;
     }
     event.preventDefault();
-    divider.focus({ preventScroll: true });
+    divider.focus();
     if (!supportsDividerPointerCapture) {
         setEditorShare(shareFromPointer(event.clientX));
         return;
