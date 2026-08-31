@@ -203,7 +203,7 @@ function syncDividerAvailability(): void {
         divider.setAttribute("tabindex", "-1");
         setEditorShare(50);
         if (document.activeElement === divider) {
-            sourceEditorTitle.focus({ preventScroll: true });
+            sourceEditorTitle.focus();
         }
         return;
     }
