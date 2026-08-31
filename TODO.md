@@ -433,9 +433,12 @@ a keyboard-operable splitter, button-based zoom, a focusable preview scroll
 region, session, clipboard, zoom, and diagnostic status announcements, native
 keyboard focus, and measured normal-text contrast of at least 4.5:1 on the
 current shell. If a focused splitter becomes inert at the compact breakpoint,
-focus moves to a source heading that is scrolled into view. Backend-owned
-editing, import, export, diagnostic actions, and hardware actions still need
-complete no-pointer paths before this task closes.
+focus moves to a source heading that is scrolled into view. Divider pointer
+gestures are serialized, released on cancellation, navigation, or compacting,
+and the inert compact divider restores native touch behavior without an
+overlapping hit target. Backend-owned editing, import, export, diagnostic
+actions, and hardware actions still need complete no-pointer paths before this
+task closes.
 
 ### TODO - Prove localhost security and privacy
 
