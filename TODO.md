@@ -128,8 +128,12 @@ splitter supports pointer and keyboard adjustment from 35% through 65% without
 forcing horizontal grid overflow, including at a 1024 px viewport, and exposes
 a wider invisible pointer target than its visual rule. Preview zoom remains
 local from 60% through 160%, with transformed page edges remaining scroll-
-reachable at narrow and wide browser widths. The task stays open for backend-
-fed page navigation and stable semantic selection.
+reachable at narrow and wide browser widths.
+
+At 480 px and below, both panels stay visible at a fixed 50/50 split so the
+document reflows without horizontal page scrolling; wider viewports restore the
+adjustable 35-65% range. The task stays open for backend-fed page navigation and
+stable semantic selection.
 
 ### TODO - Build the structured LLM editor
 

@@ -13,7 +13,6 @@
 
 body {
   margin: 0;
-  min-width: 960px;
   min-height: 100vh;
   background:
     linear-gradient(180deg, #f4f1ea 0, #e9e5dc 100%);
@@ -177,7 +176,8 @@ button:focus-visible {
   flex-direction: column;
   gap: 16px;
   padding: 20px;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 .workspace-divider {
@@ -256,12 +256,15 @@ button:focus-visible {
 
 .panel-actions {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
 }
 
 .panel-badge,
 .diagnostic-count {
+  max-width: 100%;
+  overflow-wrap: anywhere;
   border-radius: 999px;
   padding: 5px 8px;
   background: #e9e3d7;
@@ -527,12 +530,14 @@ button:focus-visible {
 }
 
 @media (max-width: 1100px) {
-  body {
-    min-width: 760px;
-  }
-
   .paper-preview {
     min-width: 280px;
     width: 72%;
+  }
+}
+
+@media (max-width: 480px) {
+  .control-row {
+    grid-template-columns: minmax(0, 1fr);
   }
 }

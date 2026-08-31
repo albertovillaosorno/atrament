@@ -142,6 +142,8 @@ const zoomIn = requireElement<HTMLButtonElement>("#zoom-in");
 const zoomStatus = requireElement<HTMLOutputElement>("#zoom-status");
 const previewScale = requireElement<HTMLElement>("#preview-scale");
 const workspace = requireElement<HTMLElement>(".workspace-grid");
+const compactWorkspace = window.matchMedia("(max-width: 480px)");
+let wideEditorShare = Number(divider.getAttribute("aria-valuenow") ?? "46");
 
 window.addEventListener("pagehide", (event): void => {
     if (event.persisted) {
@@ -155,11 +157,13 @@ window.addEventListener("pageshow", (event): void => {
     }
 });
 
-divider.setAttribute("tabindex", "0");
-divider.removeAttribute("aria-disabled");
-
 function setEditorShare(percent: number): void {
-    const share = Math.min(65, Math.max(35, Math.round(percent)));
+    const minimum = compactWorkspace.matches ? 50 : 35;
+    const maximum = compactWorkspace.matches ? 50 : 65;
+    const share = Math.min(maximum, Math.max(minimum, Math.round(percent)));
+    if (!compactWorkspace.matches) {
+        wideEditorShare = share;
+    }
     document.documentElement.style.setProperty("--editor-share", `${share}%`);
     divider.setAttribute("aria-valuenow", String(share));
     divider.setAttribute(
@@ -168,13 +172,34 @@ function setEditorShare(percent: number): void {
     );
 }
 
+function syncDividerAvailability(): void {
+    if (compactWorkspace.matches) {
+        divider.setAttribute("aria-valuemin", "50");
+        divider.setAttribute("aria-valuemax", "50");
+        divider.setAttribute("aria-disabled", "true");
+        divider.setAttribute("tabindex", "-1");
+        setEditorShare(50);
+        return;
+    }
+
+    divider.setAttribute("aria-valuemin", "35");
+    divider.setAttribute("aria-valuemax", "65");
+    divider.removeAttribute("aria-disabled");
+    divider.setAttribute("tabindex", "0");
+    setEditorShare(wideEditorShare);
+}
+
 function shareFromPointer(clientX: number): number {
     const bounds = workspace.getBoundingClientRect();
     return ((clientX - bounds.left) / bounds.width) * 100;
 }
 
 divider.addEventListener("pointerdown", (event): void => {
-    if (!event.isPrimary || event.button !== 0) {
+    if (
+        divider.getAttribute("aria-disabled") === "true"
+        || !event.isPrimary
+        || event.button !== 0
+    ) {
         return;
     }
     event.preventDefault();
@@ -190,6 +215,9 @@ divider.addEventListener("pointermove", (event): void => {
 });
 
 divider.addEventListener("keydown", (event): void => {
+    if (divider.getAttribute("aria-disabled") === "true") {
+        return;
+    }
     const current = Number(divider.getAttribute("aria-valuenow") ?? "46");
     if (event.key === "ArrowLeft") {
         event.preventDefault();
@@ -205,6 +233,9 @@ divider.addEventListener("keydown", (event): void => {
         setEditorShare(65);
     }
 });
+
+compactWorkspace.addEventListener("change", syncDividerAvailability);
+syncDividerAvailability();
 
 let previewZoom = 100;
 
