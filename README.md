@@ -14,8 +14,9 @@ calibrated personal profile, and every visual adjustment remains an explicit
 constraint.
 
 > [!IMPORTANT]
-> Atrament is currently a design contract. The repository contains governance,
-> ADRs, and the delivery roadmap; the application has not been implemented yet.
+> Atrament is under active implementation. The repository includes the thin
+> TypeScript browser workspace; backend-owned product behavior remains the
+> authoritative implementation boundary as the roadmap is completed.
 
 ## The workspace
 

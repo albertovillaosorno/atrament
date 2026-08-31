@@ -10,20 +10,6 @@ Architecture decisions live in `docs/adr/`. A task closes only with executable,
 visual, or physical acceptance evidence appropriate to the claim; attractive
 screenshots are never a substitute for semantic or geometric correctness.
 
-## P0 — Freeze the product and repository contract
-
-### TODO - Complete the TypeScript frontend workspace
-
-Keep the browser a thin inbound adapter over the existing backend authority.
-Track only the TypeScript workspace, browser presentation, clipboard behavior,
-and interaction state needed by the localhost UI. Do not duplicate backend
-document, layout, diagnostic, rendering, or output logic in the frontend.
-
-Current validation evidence: the TypeScript workspace has exact TypeScript and
-pnpm versions, a generated lockfile, reviewed browser-source policy, and a clean
-compiler check. TypeScript remains present rather than analyzed because this Jig
-build has no TypeScript analysis adapter.
-
 ## P1 — Localhost runtime and ephemeral session
 
 ### TODO - Start a loopback-only Rust service
