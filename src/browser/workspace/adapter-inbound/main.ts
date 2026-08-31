@@ -207,19 +207,21 @@ function setEditorShare(percent: number): void {
     const compact = isCompactWorkspace();
     const minimum = compact ? 50 : 35;
     const maximum = compact ? 50 : 65;
-    const share = Math.min(maximum, Math.max(minimum, Math.round(percent)));
+    const clamped = Math.min(maximum, Math.max(minimum, percent));
+    const share = Math.round(clamped * 10) / 10;
+    const previewShare = Math.round((100 - share) * 10) / 10;
     if (!compact) {
         wideEditorShare = share;
     }
     document.documentElement.style.setProperty("--editor-track", `${share}fr`);
     document.documentElement.style.setProperty(
         "--preview-track",
-        `${100 - share}fr`,
+        `${previewShare}fr`,
     );
     divider.setAttribute("aria-valuenow", String(share));
     divider.setAttribute(
         "aria-valuetext",
-        `${share}% source, ${100 - share}% preview`,
+        `${share}% source, ${previewShare}% preview`,
     );
 }
 
