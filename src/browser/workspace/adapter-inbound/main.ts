@@ -240,6 +240,15 @@ divider.addEventListener("pointermove", (event): void => {
     }
 });
 
+function releaseDividerPointer(event: PointerEvent): void {
+    if (divider.hasPointerCapture(event.pointerId)) {
+        divider.releasePointerCapture(event.pointerId);
+    }
+}
+
+divider.addEventListener("pointerup", releaseDividerPointer);
+divider.addEventListener("pointercancel", releaseDividerPointer);
+
 divider.addEventListener("keydown", (event): void => {
     if (divider.getAttribute("aria-disabled") === "true") {
         return;
