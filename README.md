@@ -169,7 +169,8 @@ flowchart LR
 - **Rust backend:** document model, physical units, layout, handwriting,
   deterministic CPU rendering, diagnostics, PDF, CLI, MCP, and motion plans.
 - **TypeScript frontend:** localhost interaction, clipboard, split editors,
-  direct manipulation, preview presentation, and accessibility.
+  direct manipulation, preview presentation, and accessibility. It has no
+  runtime package dependency or independent domain-validation layer.
 - **Hexagonal boundaries:** the browser and agents are inbound adapters;
   codecs, transcription, files, and physical writers are outbound adapters.
 - **Ephemeral session:** no account, cloud sync, database, or autosave. Only an

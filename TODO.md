@@ -1,6 +1,6 @@
 # Atrament TODO
 
-Only unfinished product work appears here. P0 through P8 are the ordered path to
+Only unfinished product work appears here. P1 through P8 are the ordered path to
 the complete first release: a disposable localhost notebook with a Rust
 backend, TypeScript frontend, deterministic CPU renderer, PDF output, and safe
 single-pen hardware operation. P9 is optional future hardware and does not block
