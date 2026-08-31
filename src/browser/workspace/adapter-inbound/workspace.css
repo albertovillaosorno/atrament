@@ -446,7 +446,7 @@ button:focus-visible {
 
 .page-stage {
   display: grid;
-  place-items: center;
+  place-items: safe center;
   min-height: 0;
   padding: 28px;
   overflow: auto;
@@ -473,6 +473,11 @@ button:focus-visible {
     );
   box-shadow: 0 12px 28px rgb(48 41 31 / 0.14);
   text-align: center;
+}
+
+
+:root[data-preview-expanded] .paper-preview {
+  transform-origin: top left;
 }
 
 .preview-placeholder {

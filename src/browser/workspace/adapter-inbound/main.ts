@@ -194,6 +194,10 @@ function setPreviewZoom(percent: number): void {
     zoomReset.textContent = `${previewZoom}%`;
     zoomStatus.textContent = `Preview zoom ${previewZoom}%`;
     previewScale.textContent = `Preview · ${previewZoom}%`;
+    document.documentElement.toggleAttribute(
+        "data-preview-expanded",
+        previewZoom > 100,
+    );
     zoomOut.disabled = previewZoom <= 60;
     zoomReset.disabled = previewZoom === 100;
     zoomIn.disabled = previewZoom >= 160;
