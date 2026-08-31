@@ -223,6 +223,12 @@ button:focus-visible {
   font-size: 18px;
 }
 
+.panel-heading h2:focus-visible {
+  border-radius: 3px;
+  outline: 2px solid #45413a;
+  outline-offset: 4px;
+}
+
 .editor-heading {
   position: sticky;
   top: -20px;
