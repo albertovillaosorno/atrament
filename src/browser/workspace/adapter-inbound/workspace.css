@@ -498,7 +498,7 @@ button:focus-visible {
 
 .preview-placeholder {
   margin: auto 0 8px;
-  color: #7b7468;
+  color: #625b4f;
   font-family: ui-serif, Georgia, serif;
   font-size: 28px;
 }
@@ -506,7 +506,7 @@ button:focus-visible {
 .preview-caption {
   max-width: 310px;
   margin: 0 auto auto;
-  color: #70695e;
+  color: #625b4f;
   font-size: 12px;
   line-height: 1.5;
 }
