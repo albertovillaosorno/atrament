@@ -1,0 +1,84 @@
+{
+  "$schema": "atrament-jig-taxonomy/v1",
+  "version": 1,
+  "architecture": {
+    "kinds": {
+      "adapter-inbound": {},
+      "adapter-outbound": {},
+      "application": {},
+      "composition": {},
+      "contract": {},
+      "domain": {},
+      "math": {},
+      "port-inbound": {},
+      "port-outbound": {}
+    }
+  },
+  "function_capabilities": {
+    "manifest": "<function>.jig",
+    "delimiter": ",",
+    "order": [
+      "function",
+      "cargo-project",
+      "rust-library"
+    ],
+    "required": [
+      "function"
+    ],
+    "surface_sidecars": "optional",
+    "surfaces": {
+      "function": [],
+      "cargo-project": [
+        "Cargo.toml"
+      ],
+      "rust-library": [
+        "lib.rs"
+      ]
+    },
+    "kind_surfaces": {
+      "function": [],
+      "cargo-project": [],
+      "rust-library": []
+    },
+    "undeclared_surface": "fatal",
+    "unknown_capability": "fatal"
+  },
+  "function_projects": {
+    "cargo-project": [
+      "Cargo.toml"
+    ],
+    "rust-library": []
+  },
+  "graph": {
+    "edge_types": {
+      "depends-on": "required-by",
+      "required-by": "depends-on"
+    },
+    "edge_lifecycle": [
+      "active"
+    ],
+    "field_order": [],
+    "hub_kinds": [],
+    "node_kinds": [
+      "repository-artifact"
+    ],
+    "required_groups": [],
+    "required_hubs": [],
+    "role_groups": []
+  },
+  "lifecycle": {
+    "mandatory_causal_route": [
+      "active"
+    ]
+  },
+  "source": {
+    "route": "src/<domain>/<function>/<kind>/<part>",
+    "manifest": "function.yml",
+    "boundary_documents": [],
+    "boundary_sidecars": "optional",
+    "parts_at_function_root": "forbidden"
+  },
+  "tools": {
+    "route": "tools/<function>/<kind>/<part>"
+  }
+}

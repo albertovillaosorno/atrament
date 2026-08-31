@@ -1,0 +1,64 @@
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 2
+tab_width = 2
+max_line_length = 80
+
+[*.{c,cc,cpp,cxx,h,hpp,hxx,inl,py,pyi,pyw,rs}]
+indent_style = space
+indent_size = 4
+tab_width = 4
+max_line_length = 80
+
+[*.ps1]
+indent_style = space
+indent_size = 4
+tab_width = 4
+max_line_length = 80
+
+[*.{css,html,js,json,jsonc,jsx,less,mjs,scss,svelte}]
+indent_style = space
+indent_size = 2
+tab_width = 2
+max_line_length = 80
+
+[*.{toml,ts,tsx,vue,xml,yaml,yml}]
+indent_style = space
+indent_size = 2
+tab_width = 2
+max_line_length = 80
+
+[*.{md,rst,txt}]
+indent_style = space
+indent_size = 2
+tab_width = 2
+max_line_length = 80
+spelling_language = en-US
+
+[CMakeLists.txt]
+indent_style = space
+indent_size = 4
+tab_width = 4
+max_line_length = 80
+
+[*.cmake]
+indent_style = space
+indent_size = 4
+tab_width = 4
+max_line_length = 80
+
+[{Makefile,makefile,GNUmakefile}]
+indent_style = tab
+indent_size = tab
+tab_width = 4
+
+[*.mk]
+indent_style = tab
+indent_size = tab
+tab_width = 4

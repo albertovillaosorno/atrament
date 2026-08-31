@@ -1,0 +1,9 @@
+domain = "duplication"
+schema_version = 1
+default = "authored-production"
+exact_languages = []
+
+[override.generated_cspell_projection]
+authority = "jig.cspell.projection"
+kind = "generated"
+selectors = ["exact:.jig/cspell/cspell.json"]

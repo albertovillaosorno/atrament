@@ -1,0 +1,11 @@
+identity:
+  id: docs-domain:technical
+  name: technical
+  path: docs/technical
+classification:
+  repository: atrament
+  domain: technical
+ownership:
+  primary: repository:atrament
+status: reserved
+purpose: implementation contracts and measured evidence admitted after decisions

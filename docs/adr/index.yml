@@ -1,0 +1,97 @@
+identity:
+  id: docs-domain:adr
+  name: adr
+  path: docs/adr
+classification:
+  repository: atrament
+  domain: adr
+ownership:
+  primary: repository:atrament
+routes:
+  architecture: architecture/<decision>.md
+  document: document/<decision>.md
+  governance: governance/<decision>.md
+  handwriting: handwriting/<decision>.md
+  input: input/<decision>.md
+  language: language/<decision>.md
+  output: output/<decision>.md
+  physics: physics/<decision>.md
+  quality: quality/<decision>.md
+  rendering: rendering/<decision>.md
+  style: style/<decision>.md
+decisions:
+  - id: atrament.governance.product-story-and-repository-metadata
+    status: accepted
+    path: governance/product-story-and-repository-metadata.md
+  - id: atrament.governance.authorized-use-and-authorship-transparency
+    status: accepted
+    path: governance/authorized-use-and-authorship-transparency.md
+  - id: atrament.architecture.portable-core-and-adapter-boundaries
+    status: accepted
+    path: architecture/portable-core-and-adapter-boundaries.md
+  - id: atrament.architecture.local-first-document-authority
+    status: accepted
+    path: architecture/local-first-document-authority.md
+  - id: atrament.document.semantic-notebook-model
+    status: accepted
+    path: document/semantic-notebook-model.md
+  - id: atrament.document.compiled-spatial-layout-and-direct-manipulation
+    status: accepted
+    path: document/compiled-spatial-layout-and-direct-manipulation.md
+  - id: atrament.document.mathematics-tables-and-structured-blocks
+    status: accepted
+    path: document/mathematics-tables-and-structured-blocks.md
+  - id: atrament.input.multimodal-ingestion-and-ephemeral-media
+    status: accepted
+    path: input/multimodal-ingestion-and-ephemeral-media.md
+  - id: atrament.input.ai-formatting-cli-and-mcp
+    status: accepted
+    path: input/ai-formatting-cli-and-mcp.md
+  - id: atrament.handwriting.portable-atrament-profile
+    status: accepted
+    path: handwriting/portable-atrament-profile.md
+  - id: atrament.handwriting.calibration-from-written-samples
+    status: accepted
+    path: handwriting/calibration-from-written-samples.md
+  - id: atrament.handwriting.continuous-stroke-synthesis
+    status: accepted
+    path: handwriting/continuous-stroke-synthesis.md
+  - id: atrament.handwriting.bounded-natural-variation
+    status: accepted
+    path: handwriting/bounded-natural-variation.md
+  - id: atrament.physics.pen-ink-paper-contact-model
+    status: accepted
+    path: physics/pen-ink-paper-contact-model.md
+  - id: atrament.style.notebook-paper-and-decoration
+    status: accepted
+    path: style/notebook-paper-and-decoration.md
+  - id: atrament.output.pdf-print-and-photo-composition
+    status: accepted
+    path: output/pdf-print-and-photo-composition.md
+  - id: atrament.output.physical-writing-device-boundary
+    status: accepted
+    path: output/physical-writing-device-boundary.md
+  - id: atrament.rendering.cpu-vector-material-pipeline
+    status: accepted
+    path: rendering/cpu-vector-material-pipeline.md
+  - id: atrament.output.digital-and-live-capability-profiles
+    status: accepted
+    path: output/digital-and-live-capability-profiles.md
+  - id: atrament.language.english-spanish-unicode-baseline
+    status: accepted
+    path: language/english-spanish-unicode-baseline.md
+  - id: atrament.style.reference-notebook-visual-grammar
+    status: accepted
+    path: style/reference-notebook-visual-grammar.md
+  - id: atrament.quality.measured-fidelity-and-reproducibility
+    status: accepted
+    path: quality/measured-fidelity-and-reproducibility.md
+template:
+  required_sections:
+    - Status
+    - Decision ID
+    - Context
+    - Decision
+    - Consequences
+    - Rejected Alternatives
+    - Verification

@@ -1,0 +1,21 @@
+domain = "versions"
+schema_version = 1
+
+[authority.git-tool]
+current = "2.54.0"
+stable = "2.54.0"
+
+[authority.git-tool.projection.tool]
+kind = "tool"
+target = "git"
+template = "{version}"
+
+[authority.jig]
+current = "26.3.0"
+stable = "26.3.0"
+
+[authority.jig.projection.identity]
+kind = "toml"
+path = ".jig/version/jig.toml"
+selector = "jig.version"
+template = "{version}"

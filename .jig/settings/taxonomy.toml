@@ -1,0 +1,16 @@
+domain = "taxonomy"
+schema_version = 1
+required = true
+one_role_per_path = true
+overlapping_roles = "deny"
+spaces_in_paths = "deny"
+unknown_paths = "deny"
+
+[role.documentation]
+paths = ["docs/"]
+
+[role.jig_configuration]
+paths = [".jig/"]
+
+[role.root_governance]
+paths = [".editorconfig", ".gitattributes", ".gitignore", "LICENSE-MIT", "README.md", "TODO.md"]

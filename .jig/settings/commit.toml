@@ -1,0 +1,12 @@
+domain = "commit"
+schema_version = 1
+allowed_scopes = ["adr", "calibration", "cli", "docs", "handwriting", "hardware", "ingestion", "ink", "layout", "mcp", "output", "profile", "repo", "research", "transcription"]
+allowed_trailers = ["BREAKING CHANGE", "Co-authored-by"]
+allowed_types = ["build", "chore", "ci", "docs", "feat", "fix", "perf", "refactor", "revert", "style", "test"]
+allow_merge_commits = false
+allow_revert_type = true
+body_line_max_length = 80
+body_min_length = 1
+required_trailers = []
+require_scope = true
+subject_max_length = 72

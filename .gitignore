@@ -1,0 +1,33 @@
+# Repository-owned runtime state
+.cache/
+.dependencies/
+.logs/
+.temp/
+target/
+node_modules/
+dist/
+coverage/
+.pnpm-store/
+.npm/
+
+# Personal handwriting profiles are private by default.
+*.atrament
+!tests/fixtures/**/*.atrament
+
+# Local configuration and credentials
+.env
+.env.*
+!.env.example
+*.key
+*.p12
+*.pem
+*.pfx
+
+# Editor and operating-system state
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Jig telemetry
+JIG_SHIT.md

@@ -1,0 +1,74 @@
+domain = "linters"
+schema_version = 1
+
+[applicability.clang-format]
+enabled = false
+reason = "The planning generation contains no C, C++, or CUDA source."
+
+[applicability.clang-tidy]
+enabled = false
+reason = "The planning generation contains no C, C++, or CUDA source."
+
+[applicability.clippy-config]
+enabled = false
+reason = "Rust policy activates with the first Rust workspace scaffold."
+
+[applicability.clippy-lints]
+enabled = false
+reason = "Rust policy activates with the first Rust workspace scaffold."
+
+[applicability.coverage-py]
+enabled = false
+reason = "The planning generation has no Python coverage target."
+
+[applicability.csharp-global]
+enabled = false
+reason = "The repository contains no C# source."
+
+[applicability.csharp-visualstudio]
+enabled = false
+reason = "The repository contains no C# source."
+
+[applicability.directory-build]
+enabled = false
+reason = "The repository has no MSBuild authority."
+
+[applicability.editorconfig]
+enabled = true
+reason = "EditorConfig governs repository-authored text surfaces."
+
+[applicability.msvc-cpp]
+enabled = false
+reason = "The planning generation contains no C or C++ source."
+
+[applicability.pyright]
+enabled = false
+reason = "The planning generation contains no Python source."
+
+[applicability.pytest]
+enabled = false
+reason = "The planning generation contains no Python tests."
+
+[applicability.ruff]
+enabled = false
+reason = "The planning generation contains no Python source."
+
+[applicability.rust-toolchain]
+enabled = false
+reason = "Rust policy activates with the first Rust workspace scaffold."
+
+[applicability.rustc-lints]
+enabled = false
+reason = "Rust policy activates with the first Rust workspace scaffold."
+
+[applicability.rustfmt]
+enabled = false
+reason = "Rust policy activates with the first Rust workspace scaffold."
+
+[applicability.typescript]
+enabled = false
+reason = "The planning generation contains no TypeScript source."
+
+[applicability.unreal]
+enabled = false
+reason = "The repository is not an Unreal Engine project."

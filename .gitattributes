@@ -1,0 +1,31 @@
+* text=auto eol=lf
+
+*.atrament binary
+*.avif binary
+*.gif binary
+*.jpeg binary
+*.jpg binary
+*.pdf binary
+*.png binary
+*.webp binary
+*.7z binary
+*.a binary
+*.dll binary
+*.dylib binary
+*.exe binary
+*.gz binary
+*.ico binary
+*.lib binary
+*.so binary
+*.zip binary
+*.mp3 binary
+*.mp4 binary
+*.otf binary
+*.ttf binary
+*.wasm binary
+*.wav binary
+*.webm binary
+*.woff binary
+*.woff2 binary
+
+*.svg text eol=lf diff

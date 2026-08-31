@@ -1,0 +1,23 @@
+domain = "documentation"
+schema_version = 1
+paragraph_sentence_limit = 4
+path_style = "lower-kebab"
+required_paths = ["docs/adr/index.yml", "docs/technical/index.yml"]
+roots = ["docs/adr/", "docs/technical/"]
+
+[profile.atrament-adr]
+decision_id = "required"
+decision_id_prefix = "atrament"
+decision_id_section = "Decision ID"
+decision_id_style = "dotted-lower-kebab"
+kind = "adr"
+paths = ["docs/adr/"]
+section_mode = "exact"
+sections = ["Status", "Decision ID", "Context", "Decision", "Consequences", "Rejected Alternatives", "Verification"]
+
+[profile.atrament-technical]
+decision_id = "none"
+kind = "markdown"
+paths = ["docs/technical/"]
+section_mode = "exact"
+sections = ["Status", "Purpose", "Scope", "Contract", "Failure Modes", "Verification"]

@@ -1,0 +1,5 @@
+domain = "git"
+schema_version = 1
+required_hooks = ["commit-msg"]
+required_ignored_paths = []
+binary_extensions = ["atrament", "avif", "gif", "jpeg", "jpg", "mp3", "mp4", "otf", "pdf", "png", "ttf", "wasm", "wav", "webm", "webp", "woff", "woff2"]
