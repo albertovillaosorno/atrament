@@ -700,14 +700,14 @@ button:focus-visible {
   .editor-heading .panel-kicker,
   .preview-panel > .panel-heading .panel-kicker {
     margin-bottom: 1px;
-    font-size: 8px;
+    font-size: 10px;
     line-height: 1.05;
   }
 
   .editor-heading .panel-badge,
   .preview-panel > .panel-heading .panel-badge {
     padding: 2px 4px;
-    font-size: 8px;
+    font-size: 10px;
     line-height: 1.05;
   }
 
@@ -750,7 +750,7 @@ button:focus-visible {
 
   .page-list-label,
   .page-list-empty {
-    font-size: 8px;
+    font-size: 10px;
     line-height: 1.05;
   }
 }
