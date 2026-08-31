@@ -203,6 +203,10 @@ button:focus-visible {
   pointer-events: none;
 }
 
+.workspace-divider[aria-disabled="true"]::after {
+  display: none;
+}
+
 .workspace-divider::before {
   position: absolute;
   inset: 0 -8px;
