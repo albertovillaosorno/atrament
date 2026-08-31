@@ -684,3 +684,73 @@ button:focus-visible {
     font-size: 10px;
   }
 }
+
+@media (max-height: 240px) {
+  .editor-heading {
+    gap: 3px;
+    padding: 2px 6px;
+  }
+
+  .editor-heading h2,
+  .preview-panel > .panel-heading h2 {
+    font-size: 12px;
+    line-height: 1.05;
+  }
+
+  .editor-heading .panel-kicker,
+  .preview-panel > .panel-heading .panel-kicker {
+    margin-bottom: 1px;
+    font-size: 8px;
+    line-height: 1.05;
+  }
+
+  .editor-heading .panel-badge,
+  .preview-panel > .panel-heading .panel-badge {
+    padding: 2px 4px;
+    font-size: 8px;
+    line-height: 1.05;
+  }
+
+  .copy-toolbar {
+    margin-top: -4px;
+    padding: 2px 6px;
+  }
+
+  .copy-toolbar .primary-button {
+    min-height: 24px;
+    padding: 2px 5px;
+    font-size: 10px;
+    line-height: 1;
+  }
+
+  .preview-panel > .panel-heading {
+    gap: 3px;
+    padding: 2px 6px;
+  }
+
+  .preview-toolbar {
+    padding: 2px 4px;
+  }
+
+  .zoom-controls {
+    gap: 2px;
+  }
+
+  .zoom-controls button {
+    min-height: 24px;
+    padding: 2px 3px;
+    font-size: 10px;
+    line-height: 1;
+  }
+
+  .page-list {
+    gap: 3px;
+    padding-block: 2px;
+  }
+
+  .page-list-label,
+  .page-list-empty {
+    font-size: 8px;
+    line-height: 1.05;
+  }
+}
