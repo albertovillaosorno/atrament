@@ -151,6 +151,7 @@ const previewScale = requireElement<HTMLElement>("#preview-scale");
 const sourceEditorTitle = requireElement<HTMLElement>("#llm-editor-title");
 const workspace = requireElement<HTMLElement>(".workspace-grid");
 const compactWorkspace = window.matchMedia("(max-width: 480px)");
+const supportsPreviewZoom = CSS.supports("zoom", "1.1");
 let wideEditorShare = 46;
 
 window.addEventListener("pagehide", (event): void => {
@@ -252,6 +253,17 @@ syncDividerAvailability();
 let previewZoom = 100;
 
 function setPreviewZoom(percent: number): void {
+    if (!supportsPreviewZoom) {
+        previewZoom = 100;
+        zoomReset.textContent = "100%";
+        zoomStatus.textContent = "Preview zoom unavailable in this browser.";
+        previewScale.textContent = "Preview · 100%";
+        zoomOut.disabled = true;
+        zoomReset.disabled = true;
+        zoomIn.disabled = true;
+        return;
+    }
+
     previewZoom = Math.min(160, Math.max(60, percent));
     document.documentElement.style.setProperty(
         "--preview-zoom",
