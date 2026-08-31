@@ -153,7 +153,9 @@ const sourcePanel = requireElement<HTMLElement>("#source-panel");
 const previewPanel = requireElement<HTMLElement>("#preview-panel");
 const pageStage = requireElement<HTMLElement>("#page-stage");
 const workspace = requireElement<HTMLElement>(".workspace-grid");
-const compactWorkspace = window.matchMedia("(max-width: 480px)");
+const compactWorkspace = typeof window.matchMedia === "function"
+    ? window.matchMedia("(max-width: 480px)")
+    : null;
 const supportsPreviewZoom = typeof CSS !== "undefined"
     && typeof CSS.supports === "function"
     && CSS.supports("zoom", "1.1");
@@ -184,11 +186,16 @@ window.addEventListener("pageshow", (event): void => {
     resetLocalViewportState();
 });
 
+function isCompactWorkspace(): boolean {
+    return compactWorkspace?.matches ?? window.innerWidth <= 480;
+}
+
 function setEditorShare(percent: number): void {
-    const minimum = compactWorkspace.matches ? 50 : 35;
-    const maximum = compactWorkspace.matches ? 50 : 65;
+    const compact = isCompactWorkspace();
+    const minimum = compact ? 50 : 35;
+    const maximum = compact ? 50 : 65;
     const share = Math.min(maximum, Math.max(minimum, Math.round(percent)));
-    if (!compactWorkspace.matches) {
+    if (!compact) {
         wideEditorShare = share;
     }
     document.documentElement.style.setProperty("--editor-share", `${share}%`);
@@ -209,7 +216,7 @@ function releaseDividerPointer(pointerId: number): void {
 }
 
 function syncDividerAvailability(): void {
-    if (compactWorkspace.matches) {
+    if (isCompactWorkspace()) {
         if (activeDividerPointerId !== null) {
             releaseDividerPointer(activeDividerPointerId);
         }
@@ -290,7 +297,11 @@ divider.addEventListener("keydown", (event): void => {
     }
 });
 
-compactWorkspace.addEventListener("change", syncDividerAvailability);
+if (compactWorkspace !== null) {
+    compactWorkspace.addEventListener("change", syncDividerAvailability);
+} else {
+    window.addEventListener("resize", syncDividerAvailability);
+}
 syncDividerAvailability();
 
 let previewZoom = 100;
