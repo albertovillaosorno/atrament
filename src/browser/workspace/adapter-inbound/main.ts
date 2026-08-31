@@ -74,8 +74,6 @@ const copyPrompt = requireElement<HTMLButtonElement>("#copy-prompt");
 const copyStatus = requireElement<HTMLElement>("#copy-status");
 const sessionStatus = requireElement<HTMLElement>("#session-status");
 
-sessionStatus.textContent = "Frontend ready · waiting for backend session";
-
 bindCharacterCount(taskInput, taskCount);
 bindCharacterCount(sourceInput, sourceCount);
 bindCharacterCount(candidateInput, candidateCount);
@@ -204,3 +202,4 @@ zoomIn.addEventListener("click", (): void => {
 });
 
 setPreviewZoom(100);
+sessionStatus.textContent = "Frontend ready · waiting for backend session";
