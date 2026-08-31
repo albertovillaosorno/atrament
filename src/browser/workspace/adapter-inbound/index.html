@@ -40,7 +40,12 @@
           </div>
           <div class="panel-actions">
             <span class="panel-badge">Backend-owned format</span>
-            <button class="primary-button" id="copy-prompt" type="button">
+            <button
+              class="primary-button"
+              id="copy-prompt"
+              type="button"
+              disabled
+            >
               Copy prompt
             </button>
           </div>
@@ -134,7 +139,7 @@
             id="copy-status"
             role="status"
             aria-live="polite"
-          ></p>
+          >Waiting for a prompt from the backend.</p>
         </section>
 
         <label class="field-block" for="candidate-input">
