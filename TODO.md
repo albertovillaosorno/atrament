@@ -442,10 +442,11 @@ source heading that is scrolled into view.
 
 Divider pointer gestures preserve grab offsets and tenth-point ratios that match
 measured panel geometry, and are serialized and released on cancellation,
-navigation, or compacting. The inert compact divider restores native touch
-behavior without an overlapping hit target; backend-owned editing, import,
-export, diagnostic actions, and hardware actions still need complete no-pointer
-paths before this task closes.
+navigation, or compacting. If captured dragging is absent or fails, native touch
+defaults remain available and only a completed click changes the split. The
+inert compact divider restores native touch behavior without an overlapping hit
+target; backend-owned editing, import, export, diagnostic actions, and hardware
+actions still need complete no-pointer paths before this task closes.
 
 ### TODO - Prove localhost security and privacy
 
