@@ -455,8 +455,10 @@ classes. Text, selection, and dynamic enabled-state restoration are disabled.
 With the browser adapter active, a fresh reload also resets nested workspace
 scrollports to their static pre-session origin.
 
-Before a bfcache snapshot, the disposable workspace DOM is removed; a bfcache
-return forces a fresh document load.
+Before a bfcache snapshot, the disposable workspace DOM is removed. A real
+workspace → second-page → Back flow produced no intermediate workspace request,
+then forced one fresh reload where all four session text surfaces and the three
+nested scrollports returned empty or at their static origin.
 
 These browser constraints do not replace backend socket, token, host, path,
 cleanup, framing, or hostile-origin acceptance tests.
