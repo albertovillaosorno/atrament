@@ -27,7 +27,11 @@
       source editor; End selects the largest.
     </p>
     <section class="workspace-grid" aria-label="Notebook workspace">
-      <section class="editor-panel" aria-labelledby="llm-editor-title">
+      <section
+        class="editor-panel"
+        id="source-panel"
+        aria-labelledby="llm-editor-title"
+      >
         <div class="panel-heading editor-heading">
           <div>
             <p class="panel-kicker">LLM editor</p>
@@ -75,7 +79,7 @@
           <div class="control-row">
             <label>
               <span>Profile</span>
-              <select id="profile-select">
+              <select id="profile-select" disabled>
                 <option selected disabled>Choose backend profile…</option>
               </select>
             </label>
@@ -157,10 +161,15 @@
         aria-valuenow="46"
         aria-valuetext="46% source, 54% preview"
         aria-describedby="divider-help"
+        aria-controls="source-panel preview-panel"
         tabindex="0"
       ></div>
 
-      <section class="preview-panel" aria-labelledby="human-editor-title">
+      <section
+        class="preview-panel"
+        id="preview-panel"
+        aria-labelledby="human-editor-title"
+      >
         <div class="panel-heading">
           <div>
             <p class="panel-kicker">Human editor</p>
@@ -179,9 +188,21 @@
             <button type="button" disabled>Layer</button>
           </div>
           <div class="tool-group zoom-controls" aria-label="Preview zoom">
-            <button id="zoom-out" type="button" aria-label="Zoom out">−</button>
-            <button id="zoom-reset" type="button">100%</button>
-            <button id="zoom-in" type="button" aria-label="Zoom in">+</button>
+            <button
+              id="zoom-out"
+              type="button"
+              aria-label="Zoom out"
+              aria-controls="page-stage"
+            >−</button>
+            <button id="zoom-reset" type="button" aria-controls="page-stage">
+              100%
+            </button>
+            <button
+              id="zoom-in"
+              type="button"
+              aria-label="Zoom in"
+              aria-controls="page-stage"
+            >+</button>
             <output class="sr-only" id="zoom-status" aria-live="polite">
               Preview zoom 100%
             </output>
@@ -191,7 +212,12 @@
         <div class="preview-body">
           <nav class="page-list" aria-label="Notebook pages">
             <p class="page-list-label">Pages</p>
-            <button class="page-thumb active" type="button" aria-current="page">
+            <button
+              class="page-thumb active"
+              type="button"
+              aria-current="page"
+              aria-controls="page-stage"
+            >
               <span class="page-thumb-sheet" aria-hidden="true"></span>
               <span>1</span>
             </button>
