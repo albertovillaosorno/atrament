@@ -93,12 +93,17 @@ const divider = requireElement<HTMLElement>("#workspace-divider");
 const zoomOut = requireElement<HTMLButtonElement>("#zoom-out");
 const zoomReset = requireElement<HTMLButtonElement>("#zoom-reset");
 const zoomIn = requireElement<HTMLButtonElement>("#zoom-in");
+const zoomStatus = requireElement<HTMLOutputElement>("#zoom-status");
 const workspace = requireElement<HTMLElement>(".workspace-grid");
 
 function setEditorShare(percent: number): void {
     const share = Math.min(65, Math.max(35, Math.round(percent)));
     document.documentElement.style.setProperty("--editor-share", `${share}%`);
     divider.setAttribute("aria-valuenow", String(share));
+    divider.setAttribute(
+        "aria-valuetext",
+        `${share}% source, ${100 - share}% preview`,
+    );
 }
 
 function shareFromPointer(clientX: number): number {
@@ -143,6 +148,7 @@ function setPreviewZoom(percent: number): void {
         String(previewZoom / 100),
     );
     zoomReset.textContent = `${previewZoom}%`;
+    zoomStatus.textContent = `Preview zoom ${previewZoom}%`;
     zoomOut.disabled = previewZoom <= 60;
     zoomIn.disabled = previewZoom >= 160;
 }

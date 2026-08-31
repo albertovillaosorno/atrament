@@ -19,6 +19,17 @@ body {
     linear-gradient(180deg, #f4f1ea 0, #e9e5dc 100%);
 }
 
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .skip-link {
   position: fixed;
   top: 8px;
@@ -427,6 +438,15 @@ button:focus-visible {
 .output-actions {
   display: flex;
   gap: 8px;
+}
+
+@media (forced-colors: active) {
+  .workspace-divider,
+  .workspace-divider::after,
+  .page-thumb-sheet,
+  .paper-preview {
+    border: 1px solid CanvasText;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

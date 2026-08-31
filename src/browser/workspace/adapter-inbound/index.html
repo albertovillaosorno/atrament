@@ -21,6 +21,10 @@
       </div>
     </header>
 
+    <p class="sr-only" id="divider-help">
+      Use Left and Right Arrow to resize the editors. Home selects the smallest
+      source editor; End selects the largest.
+    </p>
     <section class="workspace-grid" aria-label="Notebook workspace">
       <section class="editor-panel" aria-labelledby="llm-editor-title">
         <div class="panel-heading editor-heading">
@@ -131,6 +135,8 @@
         aria-valuemin="35"
         aria-valuemax="65"
         aria-valuenow="46"
+        aria-valuetext="46% source, 54% preview"
+        aria-describedby="divider-help"
         tabindex="0"
       ></div>
 
@@ -156,6 +162,9 @@
             <button id="zoom-out" type="button" aria-label="Zoom out">−</button>
             <button id="zoom-reset" type="button">100%</button>
             <button id="zoom-in" type="button" aria-label="Zoom in">+</button>
+            <output class="sr-only" id="zoom-status" aria-live="polite">
+              Preview zoom 100%
+            </output>
           </div>
         </nav>
 
