@@ -105,10 +105,14 @@ copyPrompt.addEventListener("click", (): void => {
 
     void navigator.clipboard.writeText(prompt).then(
         (): void => {
-            copyStatus.textContent = "Prompt copied.";
+            if (promptOutput.value === prompt) {
+                copyStatus.textContent = "Prompt copied.";
+            }
         },
         (): void => {
-            copyStatus.textContent = "Clipboard write failed.";
+            if (promptOutput.value === prompt) {
+                copyStatus.textContent = "Clipboard write failed.";
+            }
         },
     );
 });
