@@ -239,6 +239,7 @@ function shareFromPointer(clientX: number): number {
 divider.addEventListener("pointerdown", (event): void => {
     if (
         divider.getAttribute("aria-disabled") === "true"
+        || activeDividerPointerId !== null
         || !event.isPrimary
         || event.button !== 0
     ) {
