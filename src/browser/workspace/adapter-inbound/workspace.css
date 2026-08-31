@@ -290,6 +290,7 @@ button:focus-visible {
 }
 
 .option-fieldset {
+  min-width: 0;
   margin: 0;
   border: 1px solid #d5cec1;
   border-radius: 12px;
