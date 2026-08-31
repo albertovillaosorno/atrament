@@ -123,11 +123,12 @@ fallback, profile repair, content replacement, or export refusal.
 Show both editors concurrently with adjustable division, stable selection,
 keyboard navigation, zoom, page list, diagnostics, and no hidden main surface.
 
-Current frontend evidence: both editors are visible in one 16:9 workspace, the
-splitter supports pointer and keyboard adjustment from 35% through 65%, preview
-zoom is local from 60% through 160%, and the page-list and diagnostics surfaces
-remain visible. The task stays open for backend-fed page navigation and stable
-semantic selection.
+Current frontend evidence: both editors are visible in one 16:9 workspace. The
+splitter supports pointer and keyboard adjustment from 35% through 65% without
+forcing horizontal grid overflow, including at a 1024 px viewport, and exposes
+a wider invisible pointer target than its visual rule. Preview zoom remains
+local from 60% through 160%. The task stays open for backend-fed page navigation
+and stable semantic selection.
 
 ### TODO - Build the structured LLM editor
 

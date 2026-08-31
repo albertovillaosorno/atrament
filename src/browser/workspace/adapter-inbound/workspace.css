@@ -156,9 +156,9 @@ button:focus-visible {
 .workspace-grid {
   display: grid;
   grid-template-columns:
-    minmax(360px, var(--editor-share))
+    var(--editor-share)
     9px
-    minmax(460px, calc(100% - var(--editor-share) - 9px));
+    minmax(0, 1fr);
   min-height: min(850px, calc(100vh - 122px));
   overflow: hidden;
   border: 1px solid #c8c1b5;
@@ -187,6 +187,13 @@ button:focus-visible {
   touch-action: none;
 }
 
+.workspace-divider::before {
+  position: absolute;
+  inset: 0 -8px;
+  z-index: 1;
+  content: "";
+}
+
 .workspace-divider::after {
   position: absolute;
   top: 50%;
@@ -195,6 +202,7 @@ button:focus-visible {
   height: 46px;
   transform: translateY(-50%);
   border-radius: 999px;
+  z-index: 2;
   background: #aaa295;
   content: "";
 }
@@ -214,6 +222,7 @@ button:focus-visible {
 .section-row,
 .output-bar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
@@ -376,6 +385,7 @@ button:focus-visible {
 
 .tool-group {
   display: flex;
+  flex-wrap: wrap;
   gap: 7px;
 }
 
@@ -487,6 +497,7 @@ button:focus-visible {
 
 .output-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
 }
 
@@ -508,13 +519,6 @@ button:focus-visible {
 @media (max-width: 1100px) {
   body {
     min-width: 760px;
-  }
-
-  .workspace-grid {
-    grid-template-columns:
-      minmax(330px, var(--editor-share))
-      9px
-      minmax(400px, calc(100% - var(--editor-share) - 9px));
   }
 
   .paper-preview {
