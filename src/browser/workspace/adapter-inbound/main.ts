@@ -75,6 +75,7 @@ const copyStatus = requireElement<HTMLElement>("#copy-status");
 const sessionStatus = requireElement<HTMLElement>("#session-status");
 
 let copyGeneration = 0;
+let clipboardWriteQueue: Promise<void> = Promise.resolve();
 
 bindCharacterCount(taskInput, taskCount);
 bindCharacterCount(sourceInput, sourceCount);
@@ -108,7 +109,11 @@ copyPrompt.addEventListener("click", (): void => {
         return;
     }
 
-    void navigator.clipboard.writeText(prompt).then(
+    const write = clipboardWriteQueue.then(
+        (): Promise<void> => navigator.clipboard.writeText(prompt),
+    );
+    clipboardWriteQueue = write.catch((): void => {});
+    void write.then(
         (): void => {
             if (
                 generation === copyGeneration
