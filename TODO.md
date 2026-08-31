@@ -433,12 +433,12 @@ a keyboard-operable splitter, button-based zoom, and focusable source, preview,
 and page-stage scroll regions with explicit focus indicators measuring at least
 7.08:1 contrast. The two skip links also focus and reveal their panel headings
 using native anchor behavior when `main.ts` is absent. Session text follows its
-presented LTR or RTL direction without
-changing clipboard content; status announcements remain available for session,
-clipboard, zoom, and diagnostics, while normal text measures at least 4.5:1
-contrast. If a
-focused splitter becomes inert at the compact breakpoint, focus moves to a
-source heading that is scrolled into view.
+presented LTR or RTL direction without changing clipboard content; status
+announcements remain available for session, clipboard, zoom, and diagnostics.
+
+A visible-text sweep, explicit textarea placeholders, and ruled preview copy all
+measure at least 4.5:1 contrast. If a focused splitter becomes inert at the
+compact breakpoint, focus moves to a source heading that is scrolled into view.
 
 Divider pointer gestures preserve grab offsets and tenth-point ratios that match
 measured panel geometry, and are serialized and released on cancellation,
@@ -463,10 +463,12 @@ classes. Text, selection, and dynamic enabled-state restoration are disabled.
 With the browser adapter active, a fresh reload also resets nested workspace
 scrollports to their static pre-session origin.
 
-Before a bfcache snapshot, the disposable workspace DOM is removed. A real
-workspace → second-page → Back flow produced no intermediate workspace request,
-then forced one fresh reload where all four session text surfaces and the three
-nested scrollports returned empty or at their static origin.
+Before a bfcache snapshot, all four session text values are cleared before the
+disposable workspace DOM is removed; retained detached element references also
+measure empty. A real workspace → second-page → Back flow produced no
+intermediate workspace request, then forced one fresh reload where all four text
+surfaces and the three nested scrollports returned empty or at their static
+origin.
 
 With bfcache disabled, the equivalent Back navigation performed a fresh
 `back_forward` document load and again restored all four text surfaces empty and
