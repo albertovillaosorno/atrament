@@ -62,33 +62,45 @@
           <span class="field-meta" id="source-count">0 characters</span>
         </label>
 
-        <div class="control-row" aria-label="Notebook options">
-          <label>
-            <span>Paper</span>
-            <select id="paper-select">
-              <option>A4 · blank</option>
-              <option>A4 · squared</option>
-              <option>A4 · dotted</option>
-              <option>Letter · ruled</option>
-            </select>
-          </label>
-          <label>
-            <span>Style</span>
-            <select id="style-select">
-              <option>Sober</option>
-              <option>Study</option>
-              <option>Colorful</option>
-            </select>
-          </label>
-          <label>
-            <span>Output</span>
-            <select id="output-select">
-              <option>PDF</option>
-              <option>Live pen</option>
-              <option>PDF + live</option>
-            </select>
-          </label>
-        </div>
+        <fieldset class="option-fieldset" aria-describedby="option-help">
+          <legend>Notebook options</legend>
+          <p class="field-help" id="option-help">
+            The backend owns available profiles and applies these choices.
+          </p>
+          <div class="control-row">
+            <label>
+              <span>Profile</span>
+              <select id="profile-select">
+                <option selected disabled>Choose backend profile…</option>
+              </select>
+            </label>
+            <label>
+              <span>Paper</span>
+              <select id="paper-select">
+                <option>A4 · blank</option>
+                <option>A4 · squared</option>
+                <option>A4 · dotted</option>
+                <option>Letter · ruled</option>
+              </select>
+            </label>
+            <label>
+              <span>Style</span>
+              <select id="style-select">
+                <option>Sober</option>
+                <option>Study</option>
+                <option>Colorful</option>
+              </select>
+            </label>
+            <label>
+              <span>Output</span>
+              <select id="output-select">
+                <option>PDF</option>
+                <option>Live pen</option>
+                <option>PDF + live</option>
+              </select>
+            </label>
+          </div>
+        </fieldset>
 
         <section class="prompt-block" aria-labelledby="prompt-title">
           <div class="section-row">

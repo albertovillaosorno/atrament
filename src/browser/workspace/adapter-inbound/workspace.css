@@ -244,6 +244,24 @@ button:focus-visible {
   background: #d7d1c5;
 }
 
+.option-fieldset {
+  margin: 0;
+  border: 1px solid #d5cec1;
+  border-radius: 12px;
+  padding: 10px 12px 12px;
+}
+
+.option-fieldset legend {
+  padding: 0 6px;
+  color: #4c473f;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.option-fieldset > .field-help {
+  margin: 0 0 9px;
+}
+
 .field-block,
 .control-row label {
   display: flex;
@@ -272,7 +290,7 @@ button:focus-visible {
 
 .control-row {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
 }
 

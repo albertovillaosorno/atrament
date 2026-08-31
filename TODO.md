@@ -129,6 +129,11 @@ Edit task instructions and notebook source with structured completion,
 formatting,
 object navigation, diagnostics, and a safe raw-response inspection boundary.
 
+Current frontend evidence includes task, source, raw model-response, permanent
+prompt, profile, paper, style, and output surfaces. The profile catalogue stays
+backend-owned. Structured completion, object navigation, candidate diagnostics,
+and backend transport remain unfinished.
+
 ### TODO - Build the human page editor
 
 Support selection, text correction, drag, resize, crop, align, group, layer,
