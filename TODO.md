@@ -545,6 +545,11 @@ then terminated Firefox with `SIGKILL`. Restarting the same profile restored the
 workspace with all four surfaces empty and disabled and no plaintext secret hit
 in the profile files.
 
+Disposable viewport state follows the same rule. Reload, bfcache Back,
+non-bfcache `back_forward`, and same-profile crash recovery all reset a 65/35
+split, 160% preview zoom, and available nested scroll offsets to the static
+46/54, 100%, and zero-origin state.
+
 A control copy with `autocomplete="off"` removed only from Task restored its
 secret after the same crash cycle, confirming that the fixture detects Firefox
 form-state persistence rather than merely reopening a blank page.
