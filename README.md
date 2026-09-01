@@ -4,9 +4,9 @@
 and photographs into uncannily human notebooks—PDF or real ink.**
 
 Atrament is a disposable localhost workspace for composing polished handwritten
-notes. An LLM can propose a complete structured notebook or a targeted semantic
-command batch; Atrament validates the result, shows the affected page state, and
-exports the accepted notebook to PDF or a compatible pen-writing machine.
+notes. The first-release design admits either a complete structured notebook or
+a targeted semantic command batch from an LLM, then validates accepted state
+before PDF, preview, live-plan, or physical-output projections.
 
 It is not a word processor, a handwriting font, or a cloud notebook. Content is
 semantic, layout is compiled against a physical page, handwriting comes from a
@@ -42,22 +42,22 @@ The copied prompt includes the complete backend-owned return format, page
 constraints, source rules, style vocabulary, and return envelope. It never
 depends on hidden prior chat context.
 
-After a notebook is accepted, Atrament also supports a semantic command mode.
-Instead of regenerating the notebook, an LLM can return a versioned batch of
-typed operations against stable notebook identities and a specific base
-revision. The backend validates the complete batch atomically, applies only its
-accepted semantic effects, and recomputes only derived regions invalidated by
+After a notebook is accepted, the first-release design specifies a semantic
+command mode. Instead of regenerating the notebook, an LLM returns a versioned
+batch of typed operations against stable notebook identities and a specific base
+revision. The backend contract validates the complete batch atomically, applies
+only accepted semantic effects, and recomputes derived regions invalidated by
 those effects and their dependencies.
 
-The same command model is available through clipboard-assisted chat, CLI, and
-MCP. Clipboard responses remain untrusted until backend validation and review;
-an explicitly invoked CLI or MCP apply operation can automate the same validated
-transaction without requiring a browser click.
+The same command model is designed for clipboard-assisted chat, CLI, and MCP.
+Clipboard responses remain untrusted until backend validation and review; the
+frozen MCP contract projects the same validated application transaction without
+requiring a browser click.
 
-MCP can automate notebook inspection, edits, diagnostics, rendering, export, and
-device-neutral plan compilation end to end. Physical machine arming and start
-remain separate explicit safety operations rather than side effects of a generic
-LLM edit.
+That MCP projection is designed to automate notebook inspection, edits,
+diagnostics, rendering, export, and device-neutral plan compilation end to end.
+Physical machine arming and start remain separate explicit safety operations
+rather than side effects of a generic LLM edit.
 
 ### Targeted command mode
 
