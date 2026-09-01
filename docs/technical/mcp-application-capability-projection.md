@@ -188,6 +188,14 @@ revision merely because the agent issued them in the same conversation.
 Retry identities are scoped to their owning mutating capability. They are not a
 global credential and are not reused to authorize unrelated operations.
 
+If an MCP transport timeout or disconnect makes an Apply outcome unknown, the
+agent retries the same normalized batch with the same retry identity before
+issuing another edit. It does not assume timeout means rollback.
+
+That recovery is bounded to the active ephemeral session. A later independent
+session cannot use a retry identity as a durable transaction lookup or session
+credential.
+
 ### Adapter parity
 
 MCP may improve ergonomics by projecting bounded tools, but it cannot create new

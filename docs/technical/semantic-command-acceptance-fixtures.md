@@ -111,6 +111,21 @@ does not duplicate inserted content.
 Reusing `K1` with different normalized command content is a typed retry conflict
 and leaves `R1` unchanged.
 
+### Fixture `lost-apply-receipt`
+
+A valid batch with retry identity `K2` reaches the atomic commit point, but the
+client transport drops before the Apply receipt is delivered.
+
+The caller cannot tell from the failed transport alone whether the batch
+committed. It repeats the same normalized batch with `K2`.
+
+Expected result: exactly one accepted revision exists for that semantic apply.
+The retry returns the prior normalized result or equivalent receipt rather than
+applying the batch a second time.
+
+Repeating the edit with a new retry identity is not the recovery procedure and
+is not used by this fixture.
+
 ### Fixture `atomic-middle-failure`
 
 A batch contains three ordered commands. The first and third are individually

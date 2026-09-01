@@ -161,9 +161,32 @@ silently
 rebased onto newer accepted work.
 
 When two valid batches race from one base revision, at most one can commit
-first.
-The other observes the changed current revision and returns a stale-base result
-without partial mutation.
+first. The other observes the changed current revision and returns a stale-base
+result without partial mutation.
+
+### Cancellation and unknown outcomes
+
+Validation and pre-commit simulation may admit cancellation without changing the
+accepted revision. Cancellation is not implemented by committing part of a batch
+or by truncating its remaining commands.
+
+Once Apply crosses its atomic commit point, a caller disconnect, timeout, or
+cancel request does not pretend the accepted revision rolled back. The commit
+result remains authoritative even when the transport failed before delivering
+the receipt.
+
+A caller with an unknown Apply outcome retries with the same retry identity and
+the same normalized batch. Within the active session, the application returns
+the prior normalized result or completes the one admitted attempt according to
+its retry contract.
+
+The caller must not manufacture a new retry identity merely because it lost the
+first response. A new identity could represent a genuinely new application
+attempt and therefore cannot be used as outcome recovery.
+
+Retry-result state is ephemeral session state. It is not an autosave or durable
+cross-session transaction log, and closing the session removes it with the rest
+of the notebook session.
 
 ### Semantic change set
 
