@@ -43,9 +43,6 @@ body {
   text-decoration: none;
 }
 
-.skip-link.second {
-  left: 170px;
-}
 
 .skip-link:focus {
   transform: translateY(0);
