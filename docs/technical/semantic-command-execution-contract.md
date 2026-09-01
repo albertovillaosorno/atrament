@@ -168,9 +168,19 @@ storage paths as application semantics.
 
 The backend may present a self-contained command-mode request through the same
 browser prompt surface used for one-shot model exchange. The user copies it to
-an
-external chat and pastes the complete returned command envelope into the raw
+an external chat and pastes the complete returned command envelope into the raw
 untrusted response surface.
+
+The observable interactive sequence is:
+
+```text
+accepted-revision
+→ command-context-copied
+→ command-batch-pasted
+→ command-batch-validated
+→ command-batch-accepted
+→ accepted-revision
+```
 
 The browser transports that text unchanged. Backend validation returns the
 command diff, impact preview, and diagnostics before an interactive acceptance
@@ -186,18 +196,28 @@ application capabilities. They do not gain a separate command language or a
 privileged document mutation path.
 
 An explicitly invoked CLI or MCP apply capability may validate and commit a
-batch
-without a browser acceptance click. That is full automation of the same atomic
-application command, not a bypass around validation or revision preconditions.
+batch without a browser acceptance click. That is full automation of the same
+atomic application command, not a bypass around validation or revision
+preconditions.
 
 An MCP agent may iterate by inspecting the current revision, proposing or
 validating commands, applying them, inspecting diagnostics, and requesting
 outputs. A stale receipt requires another inspection rather than an implicit
 agent-side rebase.
 
-Generic semantic editing does not implicitly arm physical hardware. Motion
-planning and any later device execution remain behind their own capability and
-safety boundaries.
+The equivalent automated sequence omits clipboard transport:
+
+```text
+inspect
+→ validate or apply
+→ inspect receipt and diagnostics
+→ render, export, or plan
+```
+
+Generic semantic editing does not implicitly arm physical hardware. MCP may
+automate notebook editing and device-neutral plan compilation, but `arm` and
+`start` remain explicit device-boundary operations with their own safety and
+operator requirements.
 
 ### Browser boundary
 
@@ -238,8 +258,7 @@ flow measurements.
 
 A global-style fixture must preserve authored content identities while
 invalidating every derived result that actually depends on the style. This
-proves
-that impact scope follows dependencies rather than command count.
+proves that impact scope follows dependencies rather than command count.
 
 A batch containing valid, invalid, then valid commands must leave the accepted
 revision unchanged. A concurrent pair from the same base must allow one commit

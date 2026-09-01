@@ -54,6 +54,11 @@ MCP. Clipboard responses remain untrusted until backend validation and review;
 an explicitly invoked CLI or MCP apply operation can automate the same validated
 transaction without requiring a browser click.
 
+MCP can automate notebook inspection, edits, diagnostics, rendering, export, and
+device-neutral plan compilation end to end. Physical machine arming and start
+remain separate explicit safety operations rather than side effects of a generic
+LLM edit.
+
 ## What a notebook can contain
 
 The initial semantic vocabulary covers the material expected in serious school
