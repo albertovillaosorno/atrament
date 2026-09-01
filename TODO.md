@@ -350,11 +350,24 @@ context, writable targets or insertion anchors, preconditions, retry identity,
 and normalized application receipt without exposing storage paths as document
 semantics.
 
+Current design evidence freezes those semantics, revision-owned command
+families,
+and acceptance fixtures without choosing final wire field names or JSON Schema.
+The task remains open until the backend-owned envelope and compatibility rules
+are
+implemented and versioned.
+
 ### TODO - Implement atomic command validation and apply
 
 Validate the whole batch against one accepted snapshot, reject stale or invalid
 commands without partial mutation, and make retry behavior idempotent enough for
 CLI and MCP automation.
+
+Current design evidence covers stale bases, retry identity, no-op behavior,
+concurrent commits, scope escape, unsupported requests, forged identities, and
+middle-command failure. No tracked Rust application core exists yet, so
+executable
+apply remains open.
 
 ### TODO - Implement impact-scoped recomputation
 
@@ -362,6 +375,11 @@ Compute changed semantic identities and dependency-expanded invalidation so a
 small command does not regenerate unrelated notebook content, while every
 derived layout, handwriting, diagnostic, preview, export, or motion result that
 can change is recomputed.
+
+Current design evidence separates semantic change from derived impact and covers
+one-paragraph, table-cell, spatial, asset-reference, and document-wide
+constraint
+fixtures. Dependency tracking and incremental backend recomputation remain open.
 
 ### TODO - Add clipboard command-mode round trips
 
@@ -380,6 +398,12 @@ requiring a browser or changing domain behavior.
 Project bounded inspect, validate, apply, render, export, and plan capabilities
 for agents and prove normalized receipts match CLI and interactive application.
 Keep physical `arm` and `start` behind their separate device-safety boundary.
+
+Current design evidence freezes MCP effect classes, bounded context/write scope,
+receipt chaining, separate adapter admission, no internal-file authority, and
+browser/CLI/MCP parity targets. Tool schemas, transport, admission mechanism,
+and
+backend implementation remain open.
 
 ### TODO - Package self-contained agent instructions
 
