@@ -54,8 +54,11 @@ requested output identities. Equivalent direct, CLI, browser-assisted, and MCP
 requests return equivalent application results.
 
 The browser does not parse or apply semantic commands. The backend may present a
-self-contained command-mode prompt and a complete command envelope for Copy, and
-the browser may carry the returned text back through the raw-response surface.
+self-contained command-mode prompt and a complete command envelope for Copy. The
+prompt may expose broader read context than write scope, and the browser may
+carry the returned text back through the raw-response surface without
+interpreting
+that scope.
 
 Clipboard command batches remain untrusted input until backend validation. An
 interactive workflow may preview their semantic diff and require acceptance;

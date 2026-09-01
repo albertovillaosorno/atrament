@@ -336,9 +336,10 @@ language assignments with dense but readable page organization.
 
 ### TODO - Freeze the semantic command-batch envelope
 
-Version the batch, base notebook revision, command identities, stable semantic
-targets or insertion anchors, preconditions, retry identity, and normalized
-application receipt without exposing storage paths as document semantics.
+Version the batch, base notebook revision, command-context identity, readable
+context, writable targets or insertion anchors, preconditions, retry identity,
+and normalized application receipt without exposing storage paths as document
+semantics.
 
 ### TODO - Implement atomic command validation and apply
 

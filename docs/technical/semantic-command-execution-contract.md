@@ -51,6 +51,15 @@ The context may be smaller than the complete notebook when stable identities and
 dependencies make a bounded edit sufficient. The backend decides that scope and
 must include any surrounding content or constraints required for a correct edit.
 
+The request distinguishes readable context from writable command scope. An LLM
+may use surrounding identities for reasoning without gaining permission to edit
+them, and insertion commands are limited to explicitly admitted anchors.
+
+A pasted batch that targets outside the writable scope is rejected. A genuinely
+global request may intentionally expose notebook-wide scope, but the model
+cannot
+widen a bounded scope from its response.
+
 Copying that request is a presentation action only. It does not create an
 accepted command, mutate the notebook, or authorize a pasted response.
 
@@ -59,6 +68,11 @@ accepted command, mutate the notebook, or authorize a pasted response.
 Every command batch is associated with a protocol version, one accepted notebook
 identity, and one explicit base revision. The base revision is a precondition,
 not a hint for best-effort rebasing.
+
+A browser-assisted batch is also bound to the backend-generated command context
+that declared its readable identities, writable scope, and admitted command
+families. That binding prevents a returned batch from silently expanding the
+request it was given.
 
 Each command has its own stable command identity within the batch. Commands
 address stable semantic targets, insertion anchors, or typed session settings
@@ -157,8 +171,12 @@ interactive, CLI, and MCP comparison. The receipt identifies the base revision,
 result revision or unchanged state, batch identity, and retry identity.
 
 It also reports per-command outcomes, semantic identities changed by the batch,
-derived identities or regions invalidated, and diagnostics. Requested exports or
-plans report their own output identities without becoming notebook state.
+derived identities or regions invalidated, and diagnostics. A scoped interactive
+receipt can distinguish admitted writable targets from the identities that
+actually changed.
+
+Requested exports or plans report their own output identities without becoming
+notebook state.
 
 The receipt is inspectable enough to explain why a command did not apply and
 which semantic or derived regions changed. It does not expose private internal
@@ -241,8 +259,11 @@ edited another identity. Omitting a dependency that can change from derived
 invalidation is also a correctness failure.
 
 Clipboard paste must not become accepted authority before backend validation and
-acceptance. MCP must not use a privileged mutation model, and TypeScript must
-never become command or impact authority.
+acceptance. A returned batch must not expand its backend-declared writable
+scope.
+
+MCP must not use a privileged mutation model, and TypeScript must never become
+command or impact authority.
 
 ## Verification
 
