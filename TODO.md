@@ -480,10 +480,10 @@ classes. Text, selection, and dynamic enabled-state restoration are disabled.
 With the browser adapter active, every page exit clears all four session text
 surfaces and their local enabled/count/copy state before navigation continues.
 
-Fresh loads discard only URL fragments that resolve to local document targets
-and reset all three nested scrollports to their static origin. Those local
-navigation fragments also receive one timer-backed reset so browser scroll work
-queued before `pageshow` cannot reopen a panel afterward.
+Fresh loads discard only URL fragments that resolve to local document IDs and
+reset all three nested scrollports to their static origin. A 70-reload mixed
+stress covered plain and percent-encoded local IDs plus unknown and malformed
+fragments without a viewport-restoration failure.
 
 Unknown fragments remain untouched by the presentation adapter. This avoids
 preempting the runtime contract's in-memory session-secret handoff before the
