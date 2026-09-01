@@ -409,9 +409,10 @@ requiring a browser or changing domain behavior.
 
 ### TODO - Expose MCP from the same command schemas
 
-Project bounded inspect, validate, apply, render, export, and plan capabilities
-for agents and prove normalized receipts match CLI and interactive application.
-Keep physical `arm` and `start` behind their separate device-safety boundary.
+Project bounded capability discovery, inspect, validate, apply, render, export,
+and plan capabilities for agents and prove normalized receipts match CLI and
+interactive application. Keep physical `arm` and `start` behind their separate
+device-safety boundary.
 
 Current design evidence freezes MCP effect classes, bounded context/write scope,
 receipt chaining, lost-receipt recovery, typed application outcomes, separate

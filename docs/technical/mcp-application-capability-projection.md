@@ -48,6 +48,14 @@ Inspect returns accepted revision identity plus bounded semantic context,
 diagnostics, capability metadata, or receipts required for the next operation.
 It never mutates the notebook, history, files, adapters, or hardware.
 
+Capability discovery projects the backend-owned capability snapshot used by the
+semantic command contract. An MCP caller can learn admitted protocol versions,
+command families, relevant limits, and behavior versions before constructing a
+batch instead of probing unsupported mutations.
+
+The capability snapshot is not MCP authentication and does not widen writable
+scope merely because an agent can read it.
+
 An agent may request broader context when the admitted application contract
 allows it. The core determines the returned semantic representation rather than
 exposing internal storage objects or DOM state.

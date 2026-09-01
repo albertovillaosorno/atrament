@@ -87,6 +87,21 @@ Expected result: validation rejects the forged accepted identity. A valid
 insertion request allows the backend to allocate the new accepted identity and
 reports it in the apply receipt.
 
+### Fixture `capability-snapshot-drift`
+
+Base notebook revision remains unchanged while the admitted command capability
+snapshot changes in one behavior-significant way, such as protocol admission,
+family behavior version, normalization behavior, or a required resource limit.
+
+A batch returned for the older command context is then submitted unchanged.
+
+Expected result: the backend returns the appropriate Unsupported protocol or
+capability or Command-context mismatch class without accepted mutation. It does
+not reinterpret the old batch under the new capability behavior.
+
+The caller obtains a fresh capability snapshot and command context before
+constructing another batch.
+
 ### Fixture `stale-base-revision`
 
 Base command context names revision `R0`. Before its returned batch is applied,
@@ -370,6 +385,8 @@ The result taxonomy gives each fixture an application-level outcome expectation:
   unresolved response without mutation;
 - `forged-accepted-identity` and invalid asset-reference payloads produce
   Semantic validation rejection;
+- `capability-snapshot-drift` produces Unsupported protocol or capability or
+  Command-context mismatch according to the changed behavior boundary;
 - `stale-base-revision` produces Stale base;
 - the first successful `idempotent-retry` application produces Applied, its
   equivalent replay produces Idempotent replay, and changed content with the

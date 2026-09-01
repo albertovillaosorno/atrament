@@ -41,6 +41,36 @@ The backend chooses and describes the admitted response mode in the generated
 prompt. An external model does not switch modes by emitting an unrecognized
 envelope or by mixing replacement fields with commands.
 
+### Capability snapshot
+
+Before generating or accepting command-mode work, the backend owns one
+versioned capability snapshot for the active application context. It describes
+the command behavior a caller may rely on without exposing implementation
+internals.
+
+The snapshot communicates at least:
+
+- admitted command protocol versions;
+- admitted semantic command families and family behavior versions;
+- backend-owned command/context resource limits relevant to callers;
+- normalization and typed-result behavior versions that affect compatibility;
+- whether command-context, Validate, Apply, selective rebatching, and related
+  application capabilities are admitted for the active adapter.
+
+A capability snapshot is read-only application metadata. It is not a notebook
+revision, retry identity, command-context identity, browser secret, or MCP
+credential.
+
+Command contexts bind the capability snapshot or equivalent behavior identity
+used to construct them. If command meaning changes while the accepted notebook
+revision remains otherwise unchanged, an older context is not silently upgraded
+or reinterpreted.
+
+A caller refreshes capability discovery and command context after a typed
+Unsupported protocol or capability or Command-context mismatch result requires
+it.
+
+### Command context export
 ### Command context export
 
 A command-mode prompt is self-contained and names the accepted base revision. It
