@@ -25,3 +25,6 @@ contracts:
   - id: atrament.technical.localhost-session-runtime-contract
     status: frozen
     path: localhost-session-runtime-contract.md
+  - id: atrament.technical.semantic-command-execution-contract
+    status: frozen
+    path: semantic-command-execution-contract.md

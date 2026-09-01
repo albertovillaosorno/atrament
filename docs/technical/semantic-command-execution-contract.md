@@ -1,0 +1,253 @@
+# Semantic command execution contract
+
+## Status
+
+Frozen for the semantic command-mode design.
+
+## Purpose
+
+This contract defines how an accepted Atrament notebook can be refined through
+small typed application commands without replacing unrelated notebook content.
+It connects clipboard-assisted model use, CLI automation, and MCP to one atomic
+backend command boundary.
+
+## Scope
+
+The contract covers command-batch meaning, validation, application, retry
+behavior, impact calculation, receipts, interactive review, and MCP parity. It
+does not freeze HTTP routes, final wire field names, MCP tool names, or a JSON
+Schema.
+
+The Rust application core remains authoritative for command semantics,
+validation, notebook revisions, dependency expansion, diagnostics, and derived
+recomputation. The TypeScript browser may present and transport command text but
+never parses or applies semantic commands.
+
+## Contract
+
+### Two model response modes
+
+Initial structuring may return a complete candidate notebook. That mode remains
+appropriate when no accepted notebook exists or when the requested
+reorganization
+is intentionally broad.
+
+Command mode refines an accepted notebook. It returns an ordered semantic
+command
+batch against one explicit accepted base revision instead of returning a full
+replacement notebook.
+
+The backend chooses and describes the admitted response mode in the generated
+prompt. An external model does not switch modes by emitting an unrecognized
+envelope or by mixing replacement fields with commands.
+
+### Command context export
+
+A command-mode prompt is self-contained and names the accepted base revision. It
+includes the admitted command vocabulary plus enough backend-selected semantic
+context to perform the requested change without hidden prior chat context.
+
+The context may be smaller than the complete notebook when stable identities and
+dependencies make a bounded edit sufficient. The backend decides that scope and
+must include any surrounding content or constraints required for a correct edit.
+
+Copying that request is a presentation action only. It does not create an
+accepted command, mutate the notebook, or authorize a pasted response.
+
+### Batch identity and base revision
+
+Every command batch is associated with a protocol version, one accepted notebook
+identity, and one explicit base revision. The base revision is a precondition,
+not a hint for best-effort rebasing.
+
+Each command has its own stable command identity within the batch. Commands
+address stable semantic targets, insertion anchors, or typed session settings
+rather than storage paths, DOM nodes, page pixels, or serialized object offsets.
+
+A batch also carries an application retry identity. Reusing that identity with a
+different normalized batch is a conflict rather than permission to replace the
+original request.
+
+### Validation and proposal
+
+Validation parses the complete envelope and resolves every required target
+against one base snapshot. Version, target, provenance, capability, and command
+preconditions are checked before accepted state can change.
+
+Validation may simulate the ordered commands in an isolated candidate state. A
+later command may observe valid effects produced earlier in the same batch when
+the command contract explicitly admits that dependency.
+
+A validation result contains a semantic diff, diagnostics, predicted changed
+identities, and predicted derived invalidation. It never changes the accepted
+notebook revision.
+
+### Atomic apply
+
+Apply performs the same validation and simulation before commit. The application
+rechecks the accepted base revision at commit time so a concurrent accepted edit
+cannot race between validation and mutation.
+
+If one required command fails, the batch does not partially apply. The accepted
+notebook, undo state, and authoritative derived inputs remain at the prior
+revision.
+
+A successful non-empty semantic change commits exactly one new accepted notebook
+revision. The accepted batch is one undoable application transaction even when
+it contains several commands.
+
+A semantically empty batch does not create revision churn. Its receipt reports
+an
+unchanged accepted revision and an empty semantic change set.
+
+### Retry and concurrency behavior
+
+Repeating a completed apply with the same retry identity and the same normalized
+batch does not apply the commands twice. The application returns the prior
+normalized result or an equivalent typed idempotent receipt.
+
+Repeating the retry identity with different normalized content is rejected. A
+new batch against an obsolete base revision is also rejected rather than
+silently
+rebased onto newer accepted work.
+
+When two valid batches race from one base revision, at most one can commit
+first.
+The other observes the changed current revision and returns a stale-base result
+without partial mutation.
+
+### Semantic change set
+
+The core derives the semantic change set from accepted command effects. Targets
+that receive no semantic change keep their stable identities and accepted
+content.
+
+Insert, delete, move, text, structure, provenance, style, constraint, and
+session-setting commands may affect different semantic authorities. The command
+type determines which authoritative data can change.
+
+A command cannot claim that an object is unaffected merely to suppress work. The
+backend computes the accepted change set from domain behavior rather than
+trusting
+an agent-provided list.
+
+### Impact-scoped recomputation
+
+The core expands the semantic change set through its dependency relationships to
+produce an impact set. That set identifies derived regions whose results may no
+longer be valid.
+
+Derived layout, handwriting, diagnostics, preview, export, and motion
+projections
+are recomputed only where their dependencies are invalidated. A local edit may
+therefore preserve unrelated pages or blocks when no dependency connects them.
+
+Correctness is stronger than minimal invalidation. A reflowing paragraph may
+invalidate following geometry, and a global paper or style constraint may expand
+the impact set to the complete notebook even when only one command named it.
+
+Export files and motion plans are projections, not patchable document authority.
+When an affected output is requested, it is compiled from the current accepted
+semantic and derived authorities.
+
+### Application receipt
+
+Every validation or apply operation returns a normalized receipt suitable for
+interactive, CLI, and MCP comparison. The receipt identifies the base revision,
+result revision or unchanged state, batch identity, and retry identity.
+
+It also reports per-command outcomes, semantic identities changed by the batch,
+derived identities or regions invalidated, and diagnostics. Requested exports or
+plans report their own output identities without becoming notebook state.
+
+The receipt is inspectable enough to explain why a command did not apply and
+which semantic or derived regions changed. It does not expose private internal
+storage paths as application semantics.
+
+### Clipboard-assisted command mode
+
+The backend may present a self-contained command-mode request through the same
+browser prompt surface used for one-shot model exchange. The user copies it to
+an
+external chat and pastes the complete returned command envelope into the raw
+untrusted response surface.
+
+The browser transports that text unchanged. Backend validation returns the
+command diff, impact preview, and diagnostics before an interactive acceptance
+can commit the batch.
+
+A pasted command batch is never accepted merely because it parses. Interactive
+application remains an explicit accepted transaction after backend validation.
+
+### CLI and MCP automation
+
+CLI and MCP project the same inspect, validate, apply, render, export, and plan
+application capabilities. They do not gain a separate command language or a
+privileged document mutation path.
+
+An explicitly invoked CLI or MCP apply capability may validate and commit a
+batch
+without a browser acceptance click. That is full automation of the same atomic
+application command, not a bypass around validation or revision preconditions.
+
+An MCP agent may iterate by inspecting the current revision, proposing or
+validating commands, applying them, inspecting diagnostics, and requesting
+outputs. A stale receipt requires another inspection rather than an implicit
+agent-side rebase.
+
+Generic semantic editing does not implicitly arm physical hardware. Motion
+planning and any later device execution remain behind their own capability and
+safety boundaries.
+
+### Browser boundary
+
+No command vocabulary, command parser, revision validator, impact graph, or MCP
+schema belongs in the TypeScript frontend. The browser may expose backend-owned
+mode labels, prompt text, raw response text, diffs, receipts, and diagnostics.
+
+Clipboard support remains a human transport convenience. Removing the browser or
+clipboard from an automated workflow does not change command semantics because
+CLI and MCP enter through the same application services.
+
+## Failure Modes
+
+The command-mode contract fails if any required command failure changes the
+accepted revision, or if a stale base revision is silently rebased. It also
+fails when a retry can apply the same normalized batch twice or when a no-op
+batch creates revision churn.
+
+It fails if an unrelated semantic identity is regenerated merely because an LLM
+edited another identity. Omitting a dependency that can change from derived
+invalidation is also a correctness failure.
+
+Clipboard paste must not become accepted authority before backend validation and
+acceptance. MCP must not use a privileged mutation model, and TypeScript must
+never become command or impact authority.
+
+## Verification
+
+A one-paragraph fixture must change that paragraph identity's accepted content
+while preserving unrelated semantic identities. Its layout impact may expand
+only as required by measured flow dependencies.
+
+A global-style fixture must preserve authored content identities while
+invalidating every derived result that actually depends on the style. This
+proves
+that impact scope follows dependencies rather than command count.
+
+A batch containing valid, invalid, then valid commands must leave the accepted
+revision unchanged. A concurrent pair from the same base must allow one commit
+and reject the other as stale.
+
+Retry tests must send the same normalized batch and retry identity more than
+once, then send different content with that identity. The first case is
+idempotent and the second is a conflict.
+
+Parity tests must normalize receipts from the direct application boundary, CLI,
+clipboard-assisted validation, and MCP. Equivalent operations must agree on the
+accepted revision, changed identities, impact set, diagnostics, and outputs.
+
+An end-to-end MCP fixture must inspect an accepted notebook, apply a bounded
+semantic edit, render or export the affected result, and finish without opening
+a browser. The resulting accepted notebook must match the equivalent interactive
+application transaction.
