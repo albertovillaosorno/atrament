@@ -403,7 +403,6 @@ divider.addEventListener("pointerdown", (event): void => {
     ) {
         return;
     }
-    divider.focus();
     if (!dividerPointerCaptureAvailable) {
         return;
     }
@@ -416,6 +415,7 @@ divider.addEventListener("pointerdown", (event): void => {
         disableDividerPointerCapture();
         return;
     }
+    divider.focus();
     event.preventDefault();
     activeDividerPointerId = event.pointerId;
 });
@@ -428,6 +428,7 @@ divider.addEventListener("click", (event): void => {
     ) {
         return;
     }
+    divider.focus();
     setEditorShare(shareFromPointer(event.clientX));
 });
 
