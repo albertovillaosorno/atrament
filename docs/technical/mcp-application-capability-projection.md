@@ -100,9 +100,14 @@ start motion. Those are separate capabilities.
 Effect class: accepted-history mutation.
 
 Undo and redo traverse accepted application history through the core. They
-replay
-or reverse accepted transactions according to the eventual history contract and
-return the resulting accepted revision and diagnostics.
+replay or reverse accepted transactions according to the frozen semantic
+application-history contract and return the resulting accepted revision and
+diagnostics.
+
+Read-only inspection may expose whether each history direction is currently
+admitted. Traversal returns machine-readable history outcomes such as Traversed,
+History boundary, Idempotent replay, or Stale current revision rather than
+requiring agents to match prose.
 
 They are not semantic command families and cannot be embedded inside an edit
 batch to obscure history traversal.

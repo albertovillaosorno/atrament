@@ -180,9 +180,9 @@ embedded in a new batch.
 
 Current design evidence freezes new revision identities for every accepted
 history traversal, stable semantic identity restoration, branch invalidation,
-transaction provenance, same-retry lost-receipt recovery, concurrency, and
-session-only history lifetime. Backend history storage and execution remain
-open.
+transaction provenance, typed traversal outcomes, read-only traversal
+availability, same-retry lost-receipt recovery, concurrency, and session-only
+history lifetime. Backend history storage and execution remain open.
 
 ### TODO - Implement rich clipboard intake
 

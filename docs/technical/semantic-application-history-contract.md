@@ -129,6 +129,35 @@ semantic state was restored.
 Complete external conversations, clipboard archives, browser credentials, or
 adapter secrets are not required to retain this local provenance.
 
+### History result semantics
+
+History traversal returns a typed application outcome rather than requiring an
+adapter to parse prose.
+
+The minimum semantic cases are:
+
+- Traversed: one admitted Undo or Redo committed and produced a new accepted
+  revision;
+- History boundary: no admitted Undo or Redo step exists at the current history
+  position, so accepted state is unchanged;
+- Idempotent replay: the same completed traversal and retry identity is repeated
+  and history does not advance again;
+- Stale current revision: another accepted mutation changed the revision or
+  history position before the traversal could commit;
+- Cancelled before commit or known no-commit failure when the implementation can
+  prove no traversal committed.
+
+A lost transport response remains an Unknown transport outcome at the caller,
+not a fabricated history result. Same-retry recovery resolves the committed or
+non-committed history operation inside the active session.
+
+History boundary is not represented as an error that should be retried forever.
+Read-only history inspection can expose whether Undo or Redo is currently
+admitted so an agent need not probe mutation merely to discover availability.
+
+Final wire enum names may differ, but browser, CLI, and MCP adapters preserve
+these application meanings.
+
 ### Retry and lost receipts
 
 Undo and redo are mutating application capabilities and therefore use their own
