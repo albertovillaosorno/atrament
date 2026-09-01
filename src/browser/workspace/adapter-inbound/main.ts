@@ -267,6 +267,12 @@ function clearSessionText(): void {
     sourceInput.value = "";
     promptOutput.value = "";
     candidateInput.value = "";
+    taskInput.disabled = true;
+    sourceInput.disabled = true;
+    promptOutput.disabled = true;
+    candidateInput.disabled = true;
+    copyPrompt.disabled = true;
+    setTextIfChanged(copyStatus, "Waiting for a prompt from the backend.");
     updateCharacterCount(taskInput, taskCount);
     updateCharacterCount(sourceInput, sourceCount);
     updateCharacterCount(candidateInput, candidateCount);
