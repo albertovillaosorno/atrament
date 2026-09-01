@@ -537,7 +537,13 @@ divider.addEventListener("lostpointercapture", (event): void => {
 });
 
 divider.addEventListener("keydown", (event): void => {
-    if (divider.getAttribute("aria-disabled") === "true") {
+    if (
+        divider.getAttribute("aria-disabled") === "true"
+        || event.altKey
+        || event.ctrlKey
+        || event.metaKey
+        || event.shiftKey
+    ) {
         return;
     }
     const current = Number(divider.getAttribute("aria-valuenow") ?? "46");
