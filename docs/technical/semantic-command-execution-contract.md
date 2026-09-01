@@ -300,6 +300,35 @@ can commit the batch.
 A pasted command batch is never accepted merely because it parses. Interactive
 application remains an explicit accepted transaction after backend validation.
 
+### Interactive command selection
+
+A validated batch is immutable as an application request. Interactive review may
+show commands individually, but the browser does not delete or rewrite commands
+inside the validated envelope and then apply the remainder as if it were the
+same
+batch.
+
+If the user wants only a subset of returned commands, that choice becomes a new
+backend-owned batch proposal against the same still-current base revision. The
+backend checks that the selected commands form a valid dependency-closed
+request,
+normalizes the new batch, assigns or admits its own retry identity, and
+validates
+it again before acceptance.
+
+A selection that omits a required dependency is not silently repaired by
+applying
+extra commands the user did not choose. The backend reports the dependency and
+can present a new explicit proposal if the user wants the required closure.
+
+If accepted state changed while the user was reviewing, the selected batch is
+stale and must be regenerated or revalidated against a new command context. The
+review UI cannot use a prior validation receipt as a commit reservation.
+
+This keeps selective human review compatible with atomic application: each
+accepted transaction remains one complete validated batch even when it was
+created from a subset of an earlier model response.
+
 ### CLI and MCP automation
 
 CLI and MCP project the same inspect, validate, apply, render, export, and plan

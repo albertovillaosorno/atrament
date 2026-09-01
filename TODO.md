@@ -390,6 +390,10 @@ revision and parse the pasted command envelope through the same untrusted raw
 response boundary. Show the semantic diff and diagnostics before interactive
 acceptance rather than parsing commands in TypeScript.
 
+If review permits selecting only some returned commands, submit that selection
+to the backend as a new dependency-checked batch and revalidate it. Never splice
+or partially apply the old validated envelope in TypeScript.
+
 ### TODO - Expose CLI parity for every application command
 
 Create, inspect, validate, transform, render, export, and plan hardware without

@@ -283,6 +283,24 @@ command remains separate from the transaction-origin record.
 No full external conversation, clipboard payload archive, or browser session
 secret is required merely to distinguish those accepted origins.
 
+### Fixture `interactive-subset-rebatch`
+
+A clipboard-assisted model response contains three individually visible
+commands.
+The second depends on the first; the third is independent.
+
+The user chooses only the independent third command during interactive review.
+The browser does not splice the raw response or apply the old validated batch.
+
+Expected result: the backend produces or admits a new one-command batch for the
+selection, normalizes and validates it again, and Apply commits only that new
+atomic transaction if the base revision is still current.
+
+A second selection chooses the dependent second command without its first
+command. Expected result: dependency validation rejects that selection or
+presents an explicit dependency-closed proposal; it never silently adds the
+first command and commits it as though the user selected it.
+
 ### Fixture `clipboard-and-mcp-parity`
 
 Base: the accepted `sober-single-pen` revision used by `idea-text-correction`.
