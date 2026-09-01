@@ -484,6 +484,12 @@ With bfcache disabled, the equivalent Back navigation performed a fresh
 `back_forward` document load and again restored all four text surfaces empty and
 all three nested scrollports to their static origin.
 
+A hostile page on a second loopback port can currently frame the static shell
+and cause its three assets to load. The document-level CSP cannot provide an
+effective `frame-ancestors` policy from a meta element, so the future localhost
+server must emit a framing-denial response header and prove it against hostile
+local origins.
+
 These browser constraints do not replace backend socket, token, host, path,
 cleanup, framing, or hostile-origin acceptance tests.
 
