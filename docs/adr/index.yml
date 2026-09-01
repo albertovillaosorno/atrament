@@ -47,6 +47,9 @@ decisions:
   - id: atrament.input.ai-formatting-cli-and-mcp
     status: accepted
     path: input/ai-formatting-cli-and-mcp.md
+  - id: atrament.input.semantic-command-batches-and-impact-scoped-recomputation
+    status: accepted
+    path: input/semantic-command-batches-and-impact-scoped-recomputation.md
   - id: atrament.handwriting.portable-atrament-profile
     status: accepted
     path: handwriting/portable-atrament-profile.md
