@@ -242,7 +242,7 @@ function browserSupportsPreviewZoom(): boolean {
     }
 }
 
-const compactWorkspace = getCompactWorkspaceQuery();
+let compactWorkspace = getCompactWorkspaceQuery();
 const supportsPreviewZoom = browserSupportsPreviewZoom();
 let wideEditorShare = 46;
 let activeDividerPointerId: number | null = null;
@@ -449,15 +449,33 @@ divider.addEventListener("keydown", (event): void => {
     }
 });
 
-if (compactWorkspace === null) {
-    window.addEventListener("resize", syncDividerAvailability);
-} else if (typeof compactWorkspace.addEventListener === "function") {
-    compactWorkspace.addEventListener("change", syncDividerAvailability);
-} else if (typeof compactWorkspace.addListener === "function") {
-    compactWorkspace.addListener(syncDividerAvailability);
-} else {
+function bindCompactWorkspaceChanges(): void {
+    if (compactWorkspace !== null) {
+        try {
+            if (typeof compactWorkspace.addEventListener === "function") {
+                compactWorkspace.addEventListener(
+                    "change",
+                    syncDividerAvailability,
+                );
+                return;
+            }
+        } catch {
+            // Try the legacy listener below before falling back to resize.
+        }
+        try {
+            if (typeof compactWorkspace.addListener === "function") {
+                compactWorkspace.addListener(syncDividerAvailability);
+                return;
+            }
+        } catch {
+            // Fall through to the width-based resize listener below.
+        }
+    }
+    compactWorkspace = null;
     window.addEventListener("resize", syncDividerAvailability);
 }
+
+bindCompactWorkspaceChanges();
 syncDividerAvailability();
 
 let previewZoom = 100;
