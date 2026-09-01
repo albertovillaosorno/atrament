@@ -367,8 +367,9 @@ requiring a browser or changing domain behavior.
 
 ### TODO - Expose MCP from the same command schemas
 
-Project bounded tools for agents and prove equivalent requests return the same
-accepted documents, diagnostics, plans, and manifests as CLI.
+Project bounded inspect, validate, apply, render, export, and plan capabilities
+for agents and prove normalized receipts match CLI and interactive application.
+Keep physical `arm` and `start` behind their separate device-safety boundary.
 
 ### TODO - Package self-contained agent instructions
 

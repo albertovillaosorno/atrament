@@ -4,9 +4,9 @@
 and photographs into uncannily human notebooks—PDF or real ink.**
 
 Atrament is a disposable localhost workspace for composing polished handwritten
-notes. Paste an assignment, describe the desired result to an LLM, inspect the
-structured response beside the page, correct it by hand, and export the same
-notebook to PDF or a compatible pen-writing machine.
+notes. An LLM can propose a complete structured notebook or a targeted semantic
+command batch; Atrament validates the result, shows the affected page state, and
+exports the accepted notebook to PDF or a compatible pen-writing machine.
 
 It is not a word processor, a handwriting font, or a cloud notebook. Content is
 semantic, layout is compiled against a physical page, handwriting comes from a
