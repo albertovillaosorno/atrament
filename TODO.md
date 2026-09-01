@@ -538,7 +538,8 @@ both live and default value state.
 A real workspace → second-page → Back flow produced no intermediate workspace
 request, then forced one fresh reload where those controls, counters, copy
 status, and the three nested scrollports returned to their static pre-session
-state.
+state. A 30-cycle bfcache stress repeated retained Text/Attr scrubbing and the
+forced fresh reload without a scrub or restoration failure.
 
 With bfcache disabled, the equivalent Back navigation performed a fresh
 `back_forward` document load and again restored all four text surfaces empty and
