@@ -173,8 +173,10 @@ same stable semantic identity in the other surface.
 
 ### TODO - Implement semantic undo and redo
 
-Record accepted commands rather than DOM or canvas snapshots and preserve
-selection and deterministic recomputation across the history.
+Record accepted command batches rather than DOM or canvas snapshots and preserve
+selection and deterministic recomputation across history. Expose undo and redo
+as application-history commands, not semantic operations embedded in a new
+batch.
 
 ### TODO - Implement rich clipboard intake
 

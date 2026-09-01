@@ -199,6 +199,7 @@ The following capabilities are not semantic notebook batch families:
 - raw asset-byte ingestion or remote download;
 - import from or export to a persistent file;
 - runtime health, process, or adapter lifecycle control;
+- undo or redo of already accepted application history;
 - physical device connect, identify, home, arm, start, pause, resume, cancel, or
   safe stop;
 - raw device motion or vendor command streams.
@@ -206,6 +207,9 @@ The following capabilities are not semantic notebook batch families:
 CLI and MCP may expose admitted application capabilities for some of these
 operations. They remain separate from the notebook revision transaction and keep
 their own validation, lifecycle, provenance, and safety rules.
+
+Undo and redo replay accepted history through the application core. They do not
+permit a model to hide history traversal inside a new semantic edit batch.
 
 ### Receipt expectations
 

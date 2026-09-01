@@ -119,6 +119,10 @@ A successful non-empty semantic change commits exactly one new accepted notebook
 revision. The accepted batch is one undoable application transaction even when
 it contains several commands.
 
+Undo and redo operate on accepted application history after a batch commits.
+They are not semantic command families that can be embedded inside another batch
+alongside new edits.
+
 A semantically empty batch does not create revision churn. Its receipt reports
 an
 unchanged accepted revision and an empty semantic change set.
@@ -189,8 +193,12 @@ derived identities or regions invalidated, and diagnostics. A scoped interactive
 receipt can distinguish admitted writable targets from the identities that
 actually changed.
 
-Requested exports or plans report their own output identities without becoming
-notebook state.
+Semantic apply does not implicitly render, export, compile a motion plan, or
+perform another adapter effect. Those are separate application capabilities
+that consume the resulting accepted revision when explicitly requested.
+
+Their own receipts report output identities without turning those projections
+into notebook state.
 
 The receipt is inspectable enough to explain why a command did not apply and
 which semantic or derived regions changed. It does not expose private internal
@@ -237,13 +245,14 @@ validating commands, applying them, inspecting diagnostics, and requesting
 outputs. A stale receipt requires another inspection rather than an implicit
 agent-side rebase.
 
-The equivalent automated sequence omits clipboard transport:
+The equivalent automated sequence omits clipboard transport and keeps mutation
+separate from output effects:
 
 ```text
 inspect
 → validate or apply
 → inspect receipt and diagnostics
-→ render, export, or plan
+→ render, export, or plan the accepted revision
 ```
 
 Generic semantic editing does not implicitly arm physical hardware. MCP may
