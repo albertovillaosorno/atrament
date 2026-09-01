@@ -355,9 +355,9 @@ The result taxonomy gives each fixture an application-level outcome expectation:
 - the first successful `idempotent-retry` application produces Applied, its
   equivalent replay produces Idempotent replay, and changed content with the
   same retry identity produces Retry conflict;
-- `lost-apply-receipt` first leaves the caller in Unknown transport outcome,
-  then
-  same-retry recovery returns Applied-equivalent or Idempotent replay semantics;
+- `lost-apply-receipt` first leaves the caller in Unknown transport outcome;
+  same-retry recovery then returns Applied-equivalent or Idempotent replay
+  semantics;
 - `equivalent-serialization-retry` produces Idempotent replay after the original
   successful application;
 - `ordered-retry-conflict` produces Retry conflict;
@@ -365,6 +365,9 @@ The result taxonomy gives each fixture an application-level outcome expectation:
   rejection;
 - `resource-limit-rejection` produces Resource-limit rejection for the
   over-limit case;
+- `insert-handle-retry` produces Applied, then Idempotent replay after lost
+  receipt recovery; its undeclared-handle variant produces Dependency-graph
+  rejection;
 - `atomic-middle-failure` produces Semantic validation rejection;
 - `concurrent-base-race` produces one Applied result and one Stale base result;
 - `no-op-apply` produces No-op;

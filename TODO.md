@@ -355,9 +355,10 @@ semantics.
 
 Current design evidence freezes those semantics, revision-owned command
 families, acceptance fixtures, semantic normalization, command ordering,
-dependency validity, and backend-owned resource limits without choosing final
-wire field names or JSON Schema. The task remains open until the backend-owned
-envelope and compatibility rules are implemented and versioned.
+dependency validity, retry-safe batch-local insertion handles, and backend-owned
+resource limits without choosing final wire field names or JSON Schema. The task
+remains open until the backend-owned envelope and compatibility rules are
+implemented and versioned.
 
 ### TODO - Implement atomic command validation and apply
 
