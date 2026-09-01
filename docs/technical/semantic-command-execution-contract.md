@@ -101,6 +101,32 @@ cannot widen a bounded scope from its response.
 Copying that request is a presentation action only. It does not create an
 accepted command, mutate the notebook, or authorize a pasted response.
 
+### Model instruction and data separation
+
+Backend-generated command prompts distinguish application instructions from
+notebook, task, source, citation, and asset-derived content supplied as data.
+Content inside readable context never becomes an application instruction merely
+because its prose addresses an agent or resembles a prompt.
+
+A self-contained copied prompt labels or structurally delimits untrusted source
+data sufficiently for the admitted model workflow. It does not interpolate the
+browser session secret, MCP admission material, internal file paths, hidden
+application credentials, or unrelated private runtime state into model context.
+
+Source text may contain adversarial phrases such as requests to ignore writable
+scope, invent commands, export files, reveal credentials, or control hardware.
+Those phrases do not widen admitted command families or application authority.
+
+The backend remains secure even when an external model follows hostile source
+instructions. Returned content is still untrusted and must pass protocol,
+command-context, writable-scope, precondition, capability, provenance, and
+atomic validation before any accepted mutation.
+
+MCP structured context preserves the same distinction. Agent-readable notebook
+content is domain data; tool descriptions and application capability contracts
+remain the authority for what operations are available.
+
+### Agent response requirements
 ### Agent response requirements
 
 A command-mode request instructs the model to return only the admitted response

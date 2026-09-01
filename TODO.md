@@ -395,8 +395,12 @@ fixtures. Dependency tracking and incremental backend recomputation remain open.
 
 Let the backend present a self-contained command-mode prompt for an accepted
 revision and parse the pasted command envelope through the same untrusted raw
-response boundary. Show the semantic diff and diagnostics before interactive
-acceptance rather than parsing commands in TypeScript.
+response boundary. Delimit notebook/task/source material as data, exclude
+session
+credentials and internal paths, and treat prompt-injection-like source prose as
+untrusted content rather than application authority. Show the semantic diff and
+diagnostics before interactive acceptance rather than parsing commands in
+TypeScript.
 
 If review permits selecting only some returned commands, submit that selection
 to the backend as a new dependency-checked batch and revalidate it. Never splice
