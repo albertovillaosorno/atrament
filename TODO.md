@@ -209,6 +209,15 @@ response surfaces with exact content equality and one write. That evidence shows
 the frontend path does not parse or truncate command text; it does not define a
 backend protocol limit or prove an operating-system clipboard capacity.
 
+A hostile-text transport probe placed script markup, a fetch expression,
+out-of-scope command prose, file-export prose, hardware-start prose, JSON-like
+text, and Unicode in the prompt/response surfaces. The frontend preserved the
+payload exactly, performed one mocked clipboard write, created no child
+elements,
+executed none of the text, and emitted no hostile `/evil` request. This proves
+browser transport inertness only; backend prompt construction and semantic
+validation remain authoritative for model-injection resistance.
+
 Backend prompt generation, identity, mode selection, and transport still keep
 this task open.
 
