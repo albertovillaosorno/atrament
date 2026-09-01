@@ -366,8 +366,18 @@ function resetLocalViewportState(): void {
     pageStage.scrollLeft = 0;
 }
 
-function discardRetainedFragment(): boolean {
-    if (window.location.hash === "") {
+function discardLocalNavigationFragment(): boolean {
+    const hash = window.location.hash;
+    if (hash === "") {
+        return false;
+    }
+    let targetId: string;
+    try {
+        targetId = decodeURIComponent(hash.slice(1));
+    } catch {
+        return false;
+    }
+    if (document.getElementById(targetId) === null) {
         return false;
     }
     try {
@@ -387,9 +397,9 @@ window.addEventListener("pageshow", (event): void => {
         window.location.reload();
         return;
     }
-    const hadRetainedFragment = discardRetainedFragment();
+    const hadLocalNavigationFragment = discardLocalNavigationFragment();
     resetLocalViewportState();
-    if (hadRetainedFragment) {
+    if (hadLocalNavigationFragment) {
         window.setTimeout(resetLocalViewportState, 0);
     }
 });
