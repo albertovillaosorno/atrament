@@ -319,17 +319,6 @@ const sourcePanel = requireElement<HTMLElement>("#source-panel");
 const previewPanel = requireElement<HTMLElement>("#preview-panel");
 const pageStage = requireElement<HTMLElement>("#page-stage");
 const workspace = requireElement<HTMLElement>(".workspace-grid");
-function getCompactWorkspaceQuery(): MediaQueryList | null {
-    try {
-        if (typeof window.matchMedia !== "function") {
-            return null;
-        }
-        return window.matchMedia("(max-width: 480px)");
-    } catch {
-        return null;
-    }
-}
-
 function browserSupportsPreviewZoom(): boolean {
     if (typeof CSS === "undefined") {
         return false;
@@ -342,8 +331,6 @@ function browserSupportsPreviewZoom(): boolean {
     }
 }
 
-let compactWorkspace = getCompactWorkspaceQuery();
-let compactWorkspaceResizeBound = false;
 const supportsPreviewZoom = browserSupportsPreviewZoom();
 let wideEditorShare = 46;
 let activeDividerPointerId: number | null = null;
@@ -429,13 +416,7 @@ window.addEventListener("pageshow", (event): void => {
 });
 
 function isCompactWorkspace(): boolean {
-    try {
-        return compactWorkspace?.matches ?? window.innerWidth <= 480;
-    } catch {
-        compactWorkspace = null;
-        bindWidthResize();
-        return window.innerWidth <= 480;
-    }
+    return window.innerWidth <= 480;
 }
 
 function setEditorShare(percent: number): void {
@@ -633,41 +614,7 @@ function handleViewportResize(): void {
     syncDividerAvailability();
 }
 
-function bindWidthResize(): void {
-    if (!compactWorkspaceResizeBound) {
-        window.addEventListener("resize", handleViewportResize);
-        compactWorkspaceResizeBound = true;
-    }
-}
-
-function bindCompactWorkspaceChanges(): void {
-    bindWidthResize();
-    if (compactWorkspace !== null) {
-        try {
-            if (typeof compactWorkspace.addEventListener === "function") {
-                compactWorkspace.addEventListener(
-                    "change",
-                    syncDividerAvailability,
-                );
-                return;
-            }
-        } catch {
-            // Try the legacy listener below before falling back to resize.
-        }
-        try {
-            if (typeof compactWorkspace.addListener === "function") {
-                compactWorkspace.addListener(syncDividerAvailability);
-                return;
-            }
-        } catch {
-            // Fall through to the width-based resize listener below.
-        }
-    }
-    compactWorkspace = null;
-    bindWidthResize();
-}
-
-bindCompactWorkspaceChanges();
+window.addEventListener("resize", handleViewportResize);
 syncDividerAvailability();
 
 let previewZoom = 100;
