@@ -374,9 +374,10 @@ CLI and MCP automation.
 
 Current design evidence covers stale bases, retry identity, no-op behavior,
 concurrent commits, scope escape, unsupported requests, forged identities,
-middle-command failure, lost Apply receipts, normalized retry equality, invalid
-command dependencies, and typed application result classes. No tracked Rust
-application core exists yet, so executable apply remains open.
+semantic local preconditions, middle-command failure, lost Apply receipts,
+normalized retry equality, invalid command dependencies, and typed application
+result classes. No tracked Rust application core exists yet, so executable apply
+remains open.
 
 ### TODO - Implement impact-scoped recomputation
 

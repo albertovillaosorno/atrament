@@ -177,6 +177,25 @@ Expected result: requests at the admitted bound continue to normal semantic
 validation. Over-limit input returns typed diagnostics before accepted mutation
 and is never silently truncated into a smaller transaction.
 
+### Fixture `local-precondition-mismatch`
+
+Base: one accepted revision contains a text block with stable identity `P1` and
+an admitted insertion anchor after that block.
+
+The command context exposes `P1` as text owned by the expected flow. Returned
+commands intentionally provide one wrong expected semantic kind, one wrong
+owner or anchor relationship, and one wrong expected normalized base value in
+separate negative cases.
+
+Expected result: each batch produces Semantic validation rejection with no
+accepted mutation. The backend does not retarget to a similar block or nearest
+anchor.
+
+A fourth case changes the current accepted revision after the command context
+was
+created. That case returns Stale base rather than treating matching local
+preconditions as permission to apply against the newer revision.
+
 ### Fixture `atomic-middle-failure`
 
 A batch contains three ordered commands. The first and third are individually
@@ -368,6 +387,8 @@ The result taxonomy gives each fixture an application-level outcome expectation:
 - `insert-handle-retry` produces Applied, then Idempotent replay after lost
   receipt recovery; its undeclared-handle variant produces Dependency-graph
   rejection;
+- `local-precondition-mismatch` produces Semantic validation rejection, while
+  its changed-revision variant produces Stale base;
 - `atomic-middle-failure` produces Semantic validation rejection;
 - `concurrent-base-race` produces one Applied result and one Stale base result;
 - `no-op-apply` produces No-op;

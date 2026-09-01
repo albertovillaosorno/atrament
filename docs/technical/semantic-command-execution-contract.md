@@ -113,6 +113,34 @@ A batch also carries an application retry identity. Reusing that identity with a
 different normalized batch is a conflict rather than permission to replace the
 original request.
 
+### Command preconditions
+
+The explicit base revision is the global stale-state precondition for the whole
+batch. Per-command preconditions add local intent checks; they do not weaken or
+replace the base-revision requirement.
+
+An admitted command family may require preconditions such as:
+
+- the target identity exists in the named base revision and has the expected
+  semantic kind or owner;
+- an insertion or move anchor is still the admitted anchor or relationship;
+- a normalized semantic value, relationship, or revision-owned constraint has
+  the expected base value when the family needs compare-and-set intent;
+- an admitted asset or semantic dependency has the expected identity and kind.
+
+Preconditions are expressed in semantic authority terms. Storage paths, DOM
+selectors, serialized array indexes, page pixels, browser state, and mutable
+adapter internals are not command preconditions.
+
+A failed local precondition rejects the atomic batch through semantic
+validation.
+The backend does not search for a similar object, choose a nearby anchor, or
+reinterpret the command merely because the requested intent appears obvious.
+
+Per-command preconditions also do not provide an automatic rebase mechanism. A
+batch whose base revision is stale returns Stale base before a caller can use
+local preconditions as permission to apply against the newer revision.
+
 ### Validation and proposal
 
 Validation parses the complete envelope and resolves every required target
