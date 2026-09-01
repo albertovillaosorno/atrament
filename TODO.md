@@ -453,9 +453,10 @@ navigation, compacting, browser-window blur, or document hiding. If captured
 dragging is absent,
 throws, or silently fails to capture, native touch defaults remain available and
 only a completed click changes the split; an uncaptured pointerdown also
-preserves the prior keyboard focus. Broken modern or legacy media-query
-listeners fall back to viewport width plus resize without changing the compact
-splitter contract.
+preserves the prior keyboard focus. Media-query changes are always backstopped
+by viewport resize, including listeners that silently fail to notify. Repeated
+same-state resizes do not rewrite separator ARIA, while real breakpoint changes
+retain the compact splitter contract.
 
 The inert compact divider restores native touch behavior without an overlapping
 hit target. Backend-owned editing, import, export, diagnostic actions, and
@@ -479,10 +480,12 @@ skip-link fragment would otherwise re-scroll a panel after `pageshow`.
 
 The second reset degrades to a timer when animation frames are unavailable or
 fail. Clipboard writes retain at most one active operation and the newest
-pending
-prompt. Prompt changes and page exit discard pending work and scrub the
-frontend's prompt copy from an already-started request without claiming that the
-external clipboard operation itself can be cancelled.
+pending prompt. Malformed or rejecting clipboard promises fail closed, and
+stale duplicate completions cannot unlock a newer write.
+
+Prompt changes and page exit discard pending work and scrub the frontend's
+prompt copy from an already-started request without claiming that the external
+clipboard operation itself can be cancelled.
 
 Before a bfcache snapshot, all four session text values are cleared and their
 retained detached references return disabled with zero-length counters and the
