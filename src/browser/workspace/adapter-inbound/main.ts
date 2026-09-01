@@ -336,18 +336,25 @@ let wideEditorShare = 46;
 let activeDividerPointerId: number | null = null;
 let activeDividerPointerOffsetX = 0;
 
+function scrubBfcacheElement(element: Element): void {
+    for (const child of Array.from(element.childNodes)) {
+        if (child.nodeType !== Node.ELEMENT_NODE) {
+            child.textContent = "";
+        }
+    }
+    for (const attribute of Array.from(element.attributes)) {
+        element.removeAttributeNode(attribute);
+        attribute.value = "";
+    }
+    element.textContent = "";
+}
+
 function scrubBfcacheSubtree(root: HTMLElement): void {
     const descendants = Array.from(root.querySelectorAll<Element>("*"));
     for (const element of descendants.reverse()) {
-        for (const attribute of Array.from(element.attributes)) {
-            element.removeAttribute(attribute.name);
-        }
-        element.textContent = "";
+        scrubBfcacheElement(element);
     }
-    for (const attribute of Array.from(root.attributes)) {
-        root.removeAttribute(attribute.name);
-    }
-    root.textContent = "";
+    scrubBfcacheElement(root);
 }
 
 function clearSessionText(): void {
