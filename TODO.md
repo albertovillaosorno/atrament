@@ -452,12 +452,12 @@ and plan capabilities for agents and prove normalized receipts match CLI and
 interactive application. Keep physical `arm` and `start` behind their separate
 device-safety boundary.
 
-Current design evidence freezes MCP effect classes, bounded context/write scope,
-receipt chaining, lost-receipt recovery, typed application outcomes, separate
-adapter admission, no internal-file authority, and browser/CLI/MCP parity
-targets. Tool schemas, transport, admission mechanism, and backend
-implementation
-remain open.
+Current design evidence freezes MCP effect classes, capability discovery,
+revision-bound Inspect semantics, explicit completeness and continuation,
+backend-owned command-context derivation, bounded read/write scope, receipt
+chaining, lost-receipt recovery, typed application outcomes, separate adapter
+admission, no internal-file authority, and browser/CLI/MCP parity targets. Tool
+schemas, transport, admission mechanism, and backend implementation remain open.
 
 ### TODO - Package self-contained agent instructions
 
