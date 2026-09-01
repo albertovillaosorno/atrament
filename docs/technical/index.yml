@@ -37,6 +37,9 @@ contracts:
   - id: atrament.technical.semantic-command-normalization-and-limits
     status: frozen
     path: semantic-command-normalization-and-limits.md
+  - id: atrament.technical.semantic-command-result-taxonomy
+    status: frozen
+    path: semantic-command-result-taxonomy.md
   - id: atrament.technical.mcp-application-capability-projection
     status: frozen
     path: mcp-application-capability-projection.md
