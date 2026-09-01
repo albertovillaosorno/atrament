@@ -200,10 +200,18 @@ copyPrompt.addEventListener("click", (): void => {
 
 
 const divider = requireElement<HTMLElement>("#workspace-divider");
-let dividerPointerCaptureAvailable =
-    typeof divider.setPointerCapture === "function"
-    && typeof divider.hasPointerCapture === "function"
-    && typeof divider.releasePointerCapture === "function";
+
+function browserSupportsDividerPointerCapture(): boolean {
+    try {
+        return typeof divider.setPointerCapture === "function"
+            && typeof divider.hasPointerCapture === "function"
+            && typeof divider.releasePointerCapture === "function";
+    } catch {
+        return false;
+    }
+}
+
+let dividerPointerCaptureAvailable = browserSupportsDividerPointerCapture();
 
 function syncDividerPointerCapability(): void {
     if (dividerPointerCaptureAvailable) {
