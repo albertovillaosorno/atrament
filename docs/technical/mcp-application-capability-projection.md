@@ -116,12 +116,12 @@ batch to obscure history traversal.
 
 Effect class: derived computation.
 
-Render consumes an accepted revision and admitted render inputs to produce a
-preview or other derived result. It does not mutate semantic source merely to
+Render consumes an accepted revision and admitted render inputs through the
+frozen Render application contract. It does not mutate semantic source merely to
 make rendering succeed.
 
 A render receipt identifies the accepted revision and renderer inputs that
-produced the result.
+produced the result. MCP does not define a separate preview or layout engine.
 
 #### Export
 
@@ -131,18 +131,20 @@ Export writes an admitted output to an explicit caller-supplied or otherwise
 explicitly selected path through the owning file adapter. It consumes accepted
 source and derived authorities and does not become autosave.
 
-The path boundary, overwrite behavior, format validation, and output receipt are
-owned by the export application contract. MCP does not gain permission to write
-arbitrary internal repository files.
+The path boundary, overwrite behavior, format validation, retry recovery, and
+output receipt are owned by the frozen explicit Export application contract.
+MCP does not gain permission to write arbitrary internal repository files.
 
 #### Plan
 
 Effect class: derived device-neutral computation.
 
-Plan compiles an accepted revision against one admitted live capability profile.
-It returns a device-neutral motion plan plus diagnostics and provenance.
+Plan compiles an accepted revision against one admitted live capability profile
+through the frozen device-neutral Plan application contract. It returns a
+motion plan plus diagnostics and provenance.
 
-Planning does not connect, home, arm, or start physical hardware.
+Planning does not connect, home, arm, or start physical hardware, and it does
+not write a persistent plan file implicitly.
 
 ### Physical device capabilities
 
