@@ -174,9 +174,15 @@ same stable semantic identity in the other surface.
 ### TODO - Implement semantic undo and redo
 
 Record accepted command batches rather than DOM or canvas snapshots and preserve
-selection and deterministic recomputation across history. Expose undo and redo
-as application-history commands, not semantic operations embedded in a new
-batch.
+stable semantic identities plus deterministic recomputation across history.
+Expose undo and redo as application-history commands, not semantic operations
+embedded in a new batch.
+
+Current design evidence freezes new revision identities for every accepted
+history traversal, stable semantic identity restoration, branch invalidation,
+transaction provenance, same-retry lost-receipt recovery, concurrency, and
+session-only history lifetime. Backend history storage and execution remain
+open.
 
 ### TODO - Implement rich clipboard intake
 

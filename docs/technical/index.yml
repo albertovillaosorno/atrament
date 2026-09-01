@@ -46,6 +46,9 @@ contracts:
   - id: atrament.technical.semantic-command-review-projection
     status: frozen
     path: semantic-command-review-projection.md
+  - id: atrament.technical.semantic-application-history-contract
+    status: frozen
+    path: semantic-application-history-contract.md
   - id: atrament.technical.mcp-application-capability-projection
     status: frozen
     path: mcp-application-capability-projection.md
