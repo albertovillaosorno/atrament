@@ -58,7 +58,8 @@ unchanged.
 
 ### Fixture `unrepresentable-request`
 
-Base: a bounded command context whose writable scope and admitted families cannot
+Base: a bounded command context whose writable scope and admitted families
+cannot
 express the requested change.
 
 One example asks the model to import a new remote image while command mode only
@@ -70,7 +71,8 @@ without inventing a URL-download command, widening writable scope, or replacing
 the complete notebook.
 
 Expected backend behavior: a malicious or mistaken returned batch that attempts
-those effects is rejected atomically. Accepted revision and external state remain
+those effects is rejected atomically. Accepted revision and external state
+remain
 unchanged.
 
 ### Fixture `forged-accepted-identity`
