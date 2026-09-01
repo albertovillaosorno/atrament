@@ -101,7 +101,8 @@ USB endpoint, shell command, or browser presentation coordinate as authority.
 ### Diagnostics and refusal
 
 Planning validates every semantic object against the selected live capability
-profile. Blocking incompatibilities remain explicit typed diagnostics.
+profile. Blocking incompatibilities use the frozen typed diagnostic envelope
+contract.
 
 The compiler does not silently omit unsupported objects, convert content without
 an accepted conversion, clip out-of-bounds motion, or invent tool changes to

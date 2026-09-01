@@ -88,7 +88,8 @@ same directory.
 ### Pre-write validation
 
 Export checks blocking semantic, capability, source, layout, asset, and output
-format diagnostics required by the selected target before reporting success.
+format diagnostics through the frozen typed diagnostic envelope contract before
+reporting success.
 
 An unsupported or unresolved object is not silently dropped merely to create a
 file. The output-specific contract determines whether an admitted conversion,

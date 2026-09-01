@@ -166,10 +166,10 @@ or permission by itself.
 
 ### Diagnostics and provenance
 
-Inspect and command-context generation return typed diagnostics through the
-shared diagnostic contract. Diagnostics can identify omitted unavailable data,
-unsupported selectors, stale inputs, unresolved provenance, or capability
-limits without changing accepted state.
+Inspect and command-context generation use the frozen typed diagnostic envelope
+contract. Diagnostics can identify omitted unavailable data, unsupported
+selectors, stale inputs, unresolved provenance, or capability limits without
+changing accepted state.
 
 Semantic source provenance stays attached to the semantic authority being read.
 Transaction provenance can explain how the current accepted revision was

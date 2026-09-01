@@ -207,8 +207,7 @@ clients can correlate diagnostics without depending on list position alone.
 ### Diagnostic relationship
 
 Result class answers what happened to the application operation. Diagnostics
-explain why and where, using the shared typed diagnostic contract when
-implemented.
+explain why and where through the frozen typed diagnostic envelope contract.
 
 One result may carry several diagnostics. Diagnostic severity does not override
 the batch result class, and prose wording is not a substitute for typed outcome

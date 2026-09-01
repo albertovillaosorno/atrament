@@ -214,8 +214,8 @@ credential.
 ### Result-class projection
 
 MCP exposes the semantic application result class frozen by the command result
-taxonomy in a machine-readable form. Human-readable diagnostics may accompany it
-but are not the automation branch condition.
+taxonomy in a machine-readable form. Diagnostics use the frozen typed diagnostic
+envelope contract; human-readable prose is not the automation branch condition.
 
 Stale base and Command-context mismatch lead back to inspection. Idempotent
 replay is success-equivalent for outcome recovery. Retry conflict, scope,

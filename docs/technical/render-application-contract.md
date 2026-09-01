@@ -115,9 +115,9 @@ profiles while sharing one semantic notebook authority.
 
 ### Diagnostics
 
-Render returns typed diagnostics for missing assets, unsupported render inputs,
-invalid geometry, material failures, or other conditions that prevent an
-admitted result.
+Render returns diagnostics through the frozen typed diagnostic envelope
+contract for missing assets, unsupported render inputs, invalid geometry,
+material failures, or other conditions that prevent an admitted result.
 
 The renderer does not silently omit a semantic object, replace an asset, change
 layout, or flatten unsupported content simply to manufacture a successful
