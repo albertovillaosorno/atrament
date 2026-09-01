@@ -268,6 +268,21 @@ semantic change set.
 
 Derived work is not invalidated merely to manufacture evidence of application.
 
+### Fixture `transaction-provenance-origin`
+
+Equivalent semantic edits are accepted once through clipboard-assisted model
+response and once through MCP in otherwise equivalent fixture sessions.
+
+Expected notebook semantics may match, while transaction provenance records the
+actual application entry path for each accepted transaction. Neither returned
+batch can self-declare a different adapter origin.
+
+The fixture proves that source or citation provenance edited by a semantic
+command remains separate from the transaction-origin record.
+
+No full external conversation, clipboard payload archive, or browser session
+secret is required merely to distinguish those accepted origins.
+
 ### Fixture `clipboard-and-mcp-parity`
 
 Base: the accepted `sober-single-pen` revision used by `idea-text-correction`.

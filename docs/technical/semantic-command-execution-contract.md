@@ -208,6 +208,32 @@ physical arming, and physical start are not part of the notebook revision. They
 cannot be smuggled into a semantic command batch merely to gain batch atomicity
 or MCP automation.
 
+### Transaction provenance
+
+Semantic source provenance and application transaction provenance are distinct.
+A provenance command may edit admitted revision-owned source, claim, citation,
+or unresolved-state metadata, subject to its writable scope and validation.
+
+The accepted application history separately records how a mutation entered the
+core. At minimum, command-mode history can distinguish direct human application,
+clipboard-assisted model response, CLI, and MCP entry paths together with the
+base/result revision, batch identity, and command-context identity when one
+exists.
+
+Transaction provenance is assigned by the application boundary, not supplied as
+self-attested truth by the returned model batch. A batch cannot label an MCP or
+clipboard-assisted mutation as an unaided human edit.
+
+The provenance record does not require storing the complete external chat,
+clipboard contents, model prompt text, or browser session secret. Stable
+identities and admitted metadata provide inspectable local history without
+turning sensitive transport payloads into hidden persistence.
+
+Within the disposable session, accepted history and its transaction provenance
+remain ephemeral. An explicit notebook export preserves whatever provenance the
+owning file contract requires; closing the unexported session still destroys the
+in-memory history.
+
 ### Impact-scoped recomputation
 
 The core expands the semantic change set through its dependency relationships to

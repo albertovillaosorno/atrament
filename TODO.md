@@ -336,7 +336,10 @@ citations, examples, and conclusions without inventing missing task facts.
 ### TODO - Implement source and claim provenance
 
 Distinguish provided, derived, cited, and unverified content and link every
-citation to the exact claim and source metadata the user must review.
+citation to the exact claim and source metadata the user must review. Keep that
+semantic provenance separate from application transaction provenance recording
+whether an accepted mutation entered through direct human editing,
+clipboard-assisted model response, CLI, or MCP.
 
 ### TODO - Prove complex educational coverage
 
