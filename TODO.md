@@ -434,7 +434,8 @@ and page-stage scroll regions with explicit focus indicators measuring at least
 7.08:1 contrast. The two skip links also focus and reveal their panel headings
 using native anchor behavior when `main.ts` is absent. Session text follows its
 presented LTR or RTL direction without changing clipboard content; status
-announcements remain available for session, clipboard, zoom, and diagnostics.
+announcements remain available for session, clipboard, and zoom. Diagnostics
+remain ordinary unavailable text until a backend feed can update them.
 
 A visible-text sweep, explicit textarea placeholders, and ruled preview copy all
 measure at least 4.5:1 contrast. If a focused splitter becomes inert at the
@@ -442,9 +443,10 @@ compact breakpoint, focus moves to a source heading that is scrolled into view.
 
 Divider pointer gestures preserve grab offsets and tenth-point ratios that match
 measured panel geometry, and are serialized and released on cancellation,
-navigation, or compacting. If captured dragging is absent or fails, native touch
-defaults remain available and only a completed click changes the split; an
-uncaptured pointerdown also preserves the prior keyboard focus. Broken modern or
+navigation, or compacting. If captured dragging is absent, throws, or silently
+fails to capture, native touch defaults remain available and only a completed
+click changes the split; an uncaptured pointerdown also preserves the prior
+keyboard focus. Broken modern or
 legacy media-query listeners fall back to viewport width plus resize without
 changing the compact splitter contract.
 
@@ -466,6 +468,10 @@ request and denies unused frame, font, manifest, media, object, and worker
 classes. Text, selection, and dynamic enabled-state restoration are disabled.
 With the browser adapter active, a fresh reload also resets nested workspace
 scrollports to their static pre-session origin.
+
+Clipboard writes retain at most one active operation and the newest pending
+prompt; prompt changes and page exit discard pending work before it can reach
+the clipboard.
 
 Before a bfcache snapshot, all four session text values are cleared and their
 retained detached references return disabled with zero-length counters and the
