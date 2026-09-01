@@ -86,6 +86,16 @@ function setTextIfChanged(element: HTMLElement, value: string): void {
     }
 }
 
+function setAttributeIfChanged(
+    element: Element,
+    name: string,
+    value: string,
+): void {
+    if (element.getAttribute(name) !== value) {
+        element.setAttribute(name, value);
+    }
+}
+
 function updateCharacterCount(
     input: HTMLTextAreaElement,
     output: HTMLElement,
@@ -390,8 +400,9 @@ function setEditorShare(percent: number): void {
         "--preview-track",
         `${previewShare}fr`,
     );
-    divider.setAttribute("aria-valuenow", String(share));
-    divider.setAttribute(
+    setAttributeIfChanged(divider, "aria-valuenow", String(share));
+    setAttributeIfChanged(
+        divider,
         "aria-valuetext",
         `${share}% source, ${previewShare}% preview`,
     );
@@ -433,10 +444,10 @@ function syncDividerAvailability(): void {
         if (activeDividerPointerId !== null) {
             releaseDividerPointer(activeDividerPointerId);
         }
-        divider.setAttribute("aria-valuemin", "50");
-        divider.setAttribute("aria-valuemax", "50");
-        divider.setAttribute("aria-disabled", "true");
-        divider.setAttribute("tabindex", "-1");
+        setAttributeIfChanged(divider, "aria-valuemin", "50");
+        setAttributeIfChanged(divider, "aria-valuemax", "50");
+        setAttributeIfChanged(divider, "aria-disabled", "true");
+        setAttributeIfChanged(divider, "tabindex", "-1");
         setEditorShare(50);
         if (document.activeElement === divider) {
             sourceEditorTitle.focus();
@@ -444,10 +455,10 @@ function syncDividerAvailability(): void {
         return;
     }
 
-    divider.setAttribute("aria-valuemin", "35");
-    divider.setAttribute("aria-valuemax", "65");
+    setAttributeIfChanged(divider, "aria-valuemin", "35");
+    setAttributeIfChanged(divider, "aria-valuemax", "65");
     divider.removeAttribute("aria-disabled");
-    divider.setAttribute("tabindex", "0");
+    setAttributeIfChanged(divider, "tabindex", "0");
     setEditorShare(wideEditorShare);
 }
 
