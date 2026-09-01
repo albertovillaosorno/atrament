@@ -40,13 +40,13 @@ function requireElement<T extends Element>(selector: string): T {
 }
 
 function createGraphemeSegmenter(): Intl.Segmenter | null {
-    if (
-        typeof Intl === "undefined"
-        || typeof Intl.Segmenter !== "function"
-    ) {
-        return null;
-    }
     try {
+        if (
+            typeof Intl === "undefined"
+            || typeof Intl.Segmenter !== "function"
+        ) {
+            return null;
+        }
         return new Intl.Segmenter(undefined, { granularity: "grapheme" });
     } catch {
         return null;
@@ -220,10 +220,10 @@ const previewPanel = requireElement<HTMLElement>("#preview-panel");
 const pageStage = requireElement<HTMLElement>("#page-stage");
 const workspace = requireElement<HTMLElement>(".workspace-grid");
 function getCompactWorkspaceQuery(): MediaQueryList | null {
-    if (typeof window.matchMedia !== "function") {
-        return null;
-    }
     try {
+        if (typeof window.matchMedia !== "function") {
+            return null;
+        }
         return window.matchMedia("(max-width: 480px)");
     } catch {
         return null;
@@ -243,6 +243,7 @@ function browserSupportsPreviewZoom(): boolean {
 }
 
 let compactWorkspace = getCompactWorkspaceQuery();
+let compactWorkspaceResizeBound = false;
 const supportsPreviewZoom = browserSupportsPreviewZoom();
 let wideEditorShare = 46;
 let activeDividerPointerId: number | null = null;
@@ -284,7 +285,13 @@ window.addEventListener("pageshow", (event): void => {
 });
 
 function isCompactWorkspace(): boolean {
-    return compactWorkspace?.matches ?? window.innerWidth <= 480;
+    try {
+        return compactWorkspace?.matches ?? window.innerWidth <= 480;
+    } catch {
+        compactWorkspace = null;
+        bindWidthResize();
+        return window.innerWidth <= 480;
+    }
 }
 
 function setEditorShare(percent: number): void {
@@ -449,6 +456,13 @@ divider.addEventListener("keydown", (event): void => {
     }
 });
 
+function bindWidthResize(): void {
+    if (!compactWorkspaceResizeBound) {
+        window.addEventListener("resize", syncDividerAvailability);
+        compactWorkspaceResizeBound = true;
+    }
+}
+
 function bindCompactWorkspaceChanges(): void {
     if (compactWorkspace !== null) {
         try {
@@ -472,7 +486,7 @@ function bindCompactWorkspaceChanges(): void {
         }
     }
     compactWorkspace = null;
-    window.addEventListener("resize", syncDividerAvailability);
+    bindWidthResize();
 }
 
 bindCompactWorkspaceChanges();
