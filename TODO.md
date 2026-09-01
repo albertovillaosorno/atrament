@@ -443,12 +443,12 @@ compact breakpoint, focus moves to a source heading that is scrolled into view.
 
 Divider pointer gestures preserve grab offsets and tenth-point ratios that match
 measured panel geometry, and are serialized and released on cancellation,
-navigation, or compacting. If captured dragging is absent, throws, or silently
-fails to capture, native touch defaults remain available and only a completed
-click changes the split; an uncaptured pointerdown also preserves the prior
-keyboard focus. Broken modern or
-legacy media-query listeners fall back to viewport width plus resize without
-changing the compact splitter contract.
+navigation, compacting, or browser-window blur. If captured dragging is absent,
+throws, or silently fails to capture, native touch defaults remain available and
+only a completed click changes the split; an uncaptured pointerdown also
+preserves the prior keyboard focus. Broken modern or legacy media-query
+listeners fall back to viewport width plus resize without changing the compact
+splitter contract.
 
 The inert compact divider restores native touch behavior without an overlapping
 hit target. Backend-owned editing, import, export, diagnostic actions, and
@@ -467,11 +467,13 @@ style, image, and fetch attempts before a second loopback origin receives a
 request and denies unused frame, font, manifest, media, object, and worker
 classes. Text, selection, and dynamic enabled-state restoration are disabled.
 With the browser adapter active, a fresh reload also resets nested workspace
-scrollports to their static pre-session origin.
+scrollports to their static pre-session origin, including reloads whose retained
+skip-link fragment would otherwise re-scroll a panel after `pageshow`.
 
 Clipboard writes retain at most one active operation and the newest pending
-prompt; prompt changes and page exit discard pending work before it can reach
-the clipboard.
+prompt. Prompt changes and page exit discard pending work and scrub the
+frontend's prompt copy from an already-started request without claiming that the
+external clipboard operation itself can be cancelled.
 
 Before a bfcache snapshot, all four session text values are cleared and their
 retained detached references return disabled with zero-length counters and the
