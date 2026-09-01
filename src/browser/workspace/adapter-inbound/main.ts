@@ -350,10 +350,14 @@ let activeDividerPointerId: number | null = null;
 let activeDividerPointerOffsetX = 0;
 
 function clearSessionText(): void {
+    taskInput.defaultValue = "";
     taskInput.value = "";
+    sourceInput.defaultValue = "";
     sourceInput.value = "";
+    promptOutput.defaultValue = "";
     promptOutput.value = "";
     presentedPromptValue = "";
+    candidateInput.defaultValue = "";
     candidateInput.value = "";
     taskInput.disabled = true;
     sourceInput.disabled = true;
