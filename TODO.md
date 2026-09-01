@@ -514,6 +514,16 @@ With bfcache disabled, the equivalent Back navigation performed a fresh
 `back_forward` document load and again restored all four text surfaces empty and
 all three nested scrollports to their static origin.
 
+A Firefox crash-recovery fixture created live sessionstore recovery files, used
+trusted keyboard input for task, source, and candidate text, presented a prompt,
+then terminated Firefox with `SIGKILL`. Restarting the same profile restored the
+workspace with all four surfaces empty and disabled and no plaintext secret hit
+in the profile files.
+
+A control copy with `autocomplete="off"` removed only from Task restored its
+secret after the same crash cycle, confirming that the fixture detects Firefox
+form-state persistence rather than merely reopening a blank page.
+
 A hostile page on a second loopback port can currently frame the static shell
 and cause its three assets to load. The document-level CSP cannot provide an
 effective `frame-ancestors` policy from a meta element, so the future localhost
