@@ -570,6 +570,7 @@ function bindWidthResize(): void {
 }
 
 function bindCompactWorkspaceChanges(): void {
+    bindWidthResize();
     if (compactWorkspace !== null) {
         try {
             if (typeof compactWorkspace.addEventListener === "function") {
