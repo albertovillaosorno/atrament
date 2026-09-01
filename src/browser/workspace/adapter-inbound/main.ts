@@ -126,6 +126,7 @@ type ClipboardRequest = {
 
 let copyGeneration = 0;
 let clipboardWriteInFlight = false;
+let activeClipboardWrite: ClipboardRequest | null = null;
 let pendingClipboardWrite: ClipboardRequest | null = null;
 
 function getClipboardWrite(): ClipboardWrite | null {
@@ -145,9 +146,17 @@ bindCharacterCount(taskInput, taskCount);
 bindCharacterCount(sourceInput, sourceCount);
 bindCharacterCount(candidateInput, candidateCount);
 
-function syncPromptCopyState(): void {
+function invalidateClipboardRequests(): number {
     copyGeneration += 1;
     pendingClipboardWrite = null;
+    if (activeClipboardWrite !== null) {
+        activeClipboardWrite.prompt = "";
+    }
+    return copyGeneration;
+}
+
+function syncPromptCopyState(): void {
+    invalidateClipboardRequests();
     const available = promptOutput.value.length > 0;
     promptOutput.disabled = !available;
     copyPrompt.disabled = !available;
@@ -166,6 +175,9 @@ function finishClipboardWrite(
     succeeded: boolean,
 ): void {
     clipboardWriteInFlight = false;
+    if (activeClipboardWrite === request) {
+        activeClipboardWrite = null;
+    }
     if (
         request.generation === copyGeneration
         && promptOutput.value === request.prompt
@@ -193,6 +205,7 @@ function drainClipboardWrite(): void {
     }
 
     clipboardWriteInFlight = true;
+    activeClipboardWrite = request;
     let write: Promise<void>;
     try {
         write = request.write(request.prompt);
@@ -208,7 +221,7 @@ function drainClipboardWrite(): void {
 
 copyPrompt.addEventListener("click", (): void => {
     const prompt = promptOutput.value;
-    const generation = ++copyGeneration;
+    const generation = invalidateClipboardRequests();
     if (prompt.length === 0) {
         pendingClipboardWrite = null;
         setTextIfChanged(copyStatus, "Waiting for a prompt from the backend.");
@@ -312,8 +325,7 @@ function clearSessionText(): void {
 }
 
 window.addEventListener("pagehide", (event): void => {
-    copyGeneration += 1;
-    pendingClipboardWrite = null;
+    invalidateClipboardRequests();
     if (activeDividerPointerId !== null) {
         releaseDividerPointer(activeDividerPointerId);
     }
