@@ -455,6 +455,11 @@ divider.addEventListener("pointerdown", (event): void => {
         disableDividerPointerCapture();
         return;
     }
+    if (!dividerHasPointerCapture(event.pointerId)) {
+        disableDividerPointerCapture();
+        activeDividerPointerOffsetX = 0;
+        return;
+    }
     divider.focus();
     event.preventDefault();
     activeDividerPointerId = event.pointerId;
