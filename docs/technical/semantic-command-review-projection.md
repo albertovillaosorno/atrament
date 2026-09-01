@@ -180,8 +180,11 @@ The `idea-text-correction` fixture shows exactly one semantic paragraph change
 and any dependency-expanded downstream layout impact as separate lists.
 
 The table-cell fixture shows one structured cell change while preserving the
-table and unrelated cell identities. The global-constraint fixture shows one
-semantic constraint change with notebook-wide derived impact.
+table and unrelated cell identities. The provenance-only fixture shows citation
+or source metadata changing without fabricating a claim-text edit. The
+global-constraint fixture shows one semantic constraint change with
+notebook-wide
+derived impact.
 
 The insertion-handle fixture validates using a candidate handle, then Apply
 returns the same semantic insertion with the newly allocated accepted identity.

@@ -362,6 +362,11 @@ semantic provenance separate from application transaction provenance recording
 whether an accepted mutation entered through direct human editing,
 clipboard-assisted model response, CLI, or MCP.
 
+Current command-mode design evidence includes a provenance-only acceptance case
+where source/citation metadata changes while claim text and identity stay
+stable.
+Backend provenance storage, validation, and citation UI remain open.
+
 ### TODO - Prove complex educational coverage
 
 Exercise bilingual mathematics, physics, chemistry, biology, history, and

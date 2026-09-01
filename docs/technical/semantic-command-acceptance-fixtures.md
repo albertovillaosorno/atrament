@@ -291,6 +291,26 @@ replacement of the whole table.
 Expected derived impact is limited to the owning table, its measured flow, and
 any downstream page geometry or outputs that depend on the new measurement.
 
+### Fixture `provenance-only-edit`
+
+Base: an accepted claim with stable semantic identity, unchanged authored text,
+and revision-owned citation/source metadata requiring correction.
+
+Intent: correct only the admitted source or citation provenance through the
+Provenance command family.
+
+Expected semantic result: provenance authority changes while claim text, claim
+identity, unrelated source records, and surrounding authored blocks remain
+unchanged.
+
+Expected review: the semantic diff identifies a provenance change on the same
+owner rather than presenting the claim as rewritten text. Derived impact is
+limited to citation/source diagnostics and outputs that expose the changed
+provenance unless another declared dependency expands it.
+
+Transaction provenance still records how the correction entered the application
+and remains distinct from the source/citation provenance edited by the command.
+
 ### Fixture `spatial-parity`
 
 Base: an accepted notebook with one movable callout or image and a stable object
@@ -399,9 +419,9 @@ machine-neutral plan does not authorize motion.
 
 The result taxonomy gives each fixture an application-level outcome expectation:
 
-- `idea-text-correction`, `table-cell-edit`, `spatial-parity`,
-  `global-constraint-impact`, and valid `admitted-asset-reference` paths produce
-  Applied;
+- `idea-text-correction`, `table-cell-edit`, `provenance-only-edit`,
+  `spatial-parity`, `global-constraint-impact`, and valid
+  `admitted-asset-reference` paths produce Applied;
 - `bounded-scope-escape` produces Writable-scope violation;
 - a compliant `hostile-readable-context` path can produce Applied for its
   admitted edit; its injected authority attempts produce the appropriate
