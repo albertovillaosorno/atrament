@@ -25,6 +25,9 @@ contracts:
   - id: atrament.technical.localhost-session-runtime-contract
     status: frozen
     path: localhost-session-runtime-contract.md
+  - id: atrament.technical.typed-diagnostic-envelope
+    status: frozen
+    path: typed-diagnostic-envelope-contract.md
   - id: atrament.technical.semantic-command-execution-contract
     status: frozen
     path: semantic-command-execution-contract.md

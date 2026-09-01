@@ -71,6 +71,13 @@ state and media intermediates disappear while explicit exports remain intact.
 Represent field, object, page, source, glyph, collision, capability, renderer,
 and hardware errors with stable codes and actionable locations.
 
+Current design evidence freezes the semantic envelope: result class remains
+separate from diagnostic explanation; code, severity, capability blocking,
+semantic locations, typed evidence, remediation classes, completeness, privacy,
+and browser/CLI/MCP parity are defined without choosing final wire field names.
+The task remains open until backend diagnostics implement and version that
+shared contract.
+
 ## P2 — Semantic notebook and physical layout
 
 ### TODO - Implement the semantic notebook model
