@@ -385,6 +385,9 @@ Keep physical `arm` and `start` behind their separate device-safety boundary.
 
 Allow a user to provide the repository or release bundle to an agent and have
 it discover the exact CLI, schemas, examples, and validation workflow locally.
+Command-mode instructions must distinguish readable context from writable scope,
+forbid agent-allocated accepted IDs and embedded adapter effects, and use an
+admitted unresolved response when the requested edit cannot be represented.
 
 ### TODO - Implement optional audio and video transcription
 

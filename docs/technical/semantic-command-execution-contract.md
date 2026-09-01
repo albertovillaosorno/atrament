@@ -71,6 +71,28 @@ cannot widen a bounded scope from its response.
 Copying that request is a presentation action only. It does not create an
 accepted command, mutate the notebook, or authorize a pasted response.
 
+### Agent response requirements
+
+A command-mode request instructs the model to return only the admitted response
+mode for that command context. It must not mix a complete replacement notebook
+with semantic commands unless a future version explicitly defines such a mode.
+
+The model may reference only writable semantic identities or insertion anchors
+admitted by the command context. Readable neighboring context is evidence for
+reasoning, not permission to mutate those identities.
+
+The model does not allocate accepted identities, choose its own base revision,
+or claim an impact set as authoritative. New identity allocation and dependency
+expansion remain backend responsibilities.
+
+Semantic batches do not contain clipboard actions, file export requests, browser
+state, device lifecycle commands, or raw motion. Those operations remain
+separate application capabilities.
+
+When the requested edit cannot be expressed within the admitted families,
+writable scope, or supplied evidence, the model uses the backend-admitted
+unresolved or refusal form rather than broadening scope or fabricating data.
+
 ### Batch identity and base revision
 
 Every command batch is associated with a protocol version, one accepted notebook
