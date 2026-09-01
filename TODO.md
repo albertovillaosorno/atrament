@@ -457,6 +457,11 @@ and return that panel to its origin. Sharing their viewport anchor keeps the
 preview skip link 60 pixels tall at 200% text instead of the prior 104-pixel
 wrapped block, without horizontal overflow through 480 pixels.
 
+A real-compact text-spacing override at 320 and 480 pixels, plus the 481-pixel
+wide boundary, keeps document overflow at zero. Task, Copy prompt, page stage,
+and Diagnostics all remain reachable through their owning scrollports at short
+225-pixel height.
+
 Modified divider navigation keys remain unconsumed while plain Arrow, Home, and
 End keys retain separator behavior. Zoom controls hand focus to an enabled
 sibling instead of the document body when a boundary or reset action disables
