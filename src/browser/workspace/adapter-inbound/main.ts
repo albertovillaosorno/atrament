@@ -350,6 +350,7 @@ window.addEventListener("pageshow", (event): void => {
         return;
     }
     resetLocalViewportState();
+    window.requestAnimationFrame(resetLocalViewportState);
 });
 
 function isCompactWorkspace(): boolean {
