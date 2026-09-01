@@ -482,6 +482,12 @@ note, raster-only effect, or multi-tool action before motion planning.
 Emit ordered pen-up and pen-down paths, speed, acceleration, optional pressure,
 safe bounds, pauses, checkpoints, semantic origin, and estimated duration.
 
+Current design evidence freezes Plan as a read-only derived application
+capability bound to one accepted revision and live capability profile, with
+deterministic inputs, blocking diagnostics, plan identity, no file side effect,
+no device side effect, safe retry, derived invalidation, and browser/CLI/MCP
+parity. Backend plan compilation remains open.
+
 ### TODO - Optimize path order without changing handwriting
 
 Reduce pen-up travel and drying conflicts while preserving stroke order where
