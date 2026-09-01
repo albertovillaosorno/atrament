@@ -319,6 +319,13 @@ not move geometry, obscure small writing, or create repeated tiles.
 Use the same vectors, seeds, blend order, and page geometry while varying only
 declared texture resolution and sampling cost.
 
+Current design evidence freezes Render as a read-only application capability
+bound to one accepted revision and deterministic vector/material inputs. Preview
+and final profiles share geometry, seeds, physical dimensions, and blend order;
+quality-only sampling may differ. Render identity, retry safety, invalidation,
+no-file behavior, and browser/CLI/MCP parity are frozen while implementation
+remains open.
+
 ### TODO - Implement configurable line-art extraction
 
 Convert images to transparent single-color paths with levels, threshold,
