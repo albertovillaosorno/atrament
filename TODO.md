@@ -54,6 +54,13 @@ active session with no database, autosave, hidden recovery file, or cloud copy.
 Allow deliberate notebook bundle and `.atrament` profile reads or writes at
 user-selected paths without converting them into background persistence.
 
+Current export design evidence freezes accepted-revision binding, explicit path
+and overwrite intent, blocking validation, temporary cleanup, complete file
+commit semantics, output identity, same-retry lost-receipt recovery, external
+target drift handling, concurrency, and browser/CLI/MCP parity. File adapters
+and
+format-specific execution remain open.
+
 ### TODO - Prove session destruction and temporary cleanup
 
 Close, refresh, cancel, crash, and restart fixtures must show that ephemeral
