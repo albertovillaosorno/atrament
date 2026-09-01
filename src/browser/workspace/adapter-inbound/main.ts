@@ -572,9 +572,16 @@ divider.addEventListener("keydown", (event): void => {
     }
 });
 
+function handleViewportResize(): void {
+    if (activeDividerPointerId !== null) {
+        releaseDividerPointer(activeDividerPointerId);
+    }
+    syncDividerAvailability();
+}
+
 function bindWidthResize(): void {
     if (!compactWorkspaceResizeBound) {
-        window.addEventListener("resize", syncDividerAvailability);
+        window.addEventListener("resize", handleViewportResize);
         compactWorkspaceResizeBound = true;
     }
 }
