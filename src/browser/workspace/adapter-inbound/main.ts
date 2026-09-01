@@ -351,8 +351,8 @@ window.addEventListener("pagehide", (event): void => {
     if (activeDividerPointerId !== null) {
         releaseDividerPointer(activeDividerPointerId);
     }
+    clearSessionText();
     if (event.persisted) {
-        clearSessionText();
         workspace.textContent = "";
     }
 });
