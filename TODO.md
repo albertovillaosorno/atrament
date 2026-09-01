@@ -198,8 +198,11 @@ failure when enabled.
 
 The same presentation surface is mode-neutral: the backend may provide a full
 candidate prompt or a targeted semantic-command prompt without adding frontend
-command parsing. Backend prompt generation, identity, mode selection, and
-transport still keep this task open.
+command parsing. Command-mode identity must include the accepted revision and
+bounded command context so stale copied requests cannot masquerade as current.
+
+Backend prompt generation, identity, mode selection, and transport still keep
+this task open.
 
 ### TODO - Validate pasted model responses transactionally
 

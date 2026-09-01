@@ -55,10 +55,18 @@ The request distinguishes readable context from writable command scope. An LLM
 may use surrounding identities for reasoning without gaining permission to edit
 them, and insertion commands are limited to explicitly admitted anchors.
 
+A command-mode request has a reproducible prompt identity. That identity changes
+when the prompt protocol version, accepted base revision, requested intent,
+backend-selected readable context, writable scope, admitted command families, or
+relevant constraints change.
+
+Repeating Copy with all of those inputs unchanged produces the same prompt
+identity. The returned batch is bound to that command context so a response from
+an older revision or different scope cannot be accepted as the current request.
+
 A pasted batch that targets outside the writable scope is rejected. A genuinely
 global request may intentionally expose notebook-wide scope, but the model
-cannot
-widen a bounded scope from its response.
+cannot widen a bounded scope from its response.
 
 Copying that request is a presentation action only. It does not create an
 accepted command, mutate the notebook, or authorize a pasted response.
