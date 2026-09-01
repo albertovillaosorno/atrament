@@ -116,10 +116,17 @@ const copyPrompt = requireElement<HTMLButtonElement>("#copy-prompt");
 const copyStatus = requireElement<HTMLElement>("#copy-status");
 const sessionStatus = requireElement<HTMLElement>("#session-status");
 
-let copyGeneration = 0;
-let clipboardWriteQueue: Promise<void> = Promise.resolve();
-
 type ClipboardWrite = (text: string) => Promise<void>;
+
+type ClipboardRequest = {
+    generation: number;
+    prompt: string;
+    write: ClipboardWrite;
+};
+
+let copyGeneration = 0;
+let clipboardWriteInFlight = false;
+let pendingClipboardWrite: ClipboardRequest | null = null;
 
 function getClipboardWrite(): ClipboardWrite | null {
     try {
@@ -140,6 +147,7 @@ bindCharacterCount(candidateInput, candidateCount);
 
 function syncPromptCopyState(): void {
     copyGeneration += 1;
+    pendingClipboardWrite = null;
     const available = promptOutput.value.length > 0;
     promptOutput.disabled = !available;
     copyPrompt.disabled = !available;
@@ -153,49 +161,74 @@ function syncPromptCopyState(): void {
 promptOutput.addEventListener("input", syncPromptCopyState);
 syncPromptCopyState();
 
+function finishClipboardWrite(
+    request: ClipboardRequest,
+    succeeded: boolean,
+): void {
+    clipboardWriteInFlight = false;
+    if (
+        request.generation === copyGeneration
+        && promptOutput.value === request.prompt
+    ) {
+        setTextIfChanged(
+            copyStatus,
+            succeeded ? "Prompt copied." : "Clipboard write failed.",
+        );
+    }
+    drainClipboardWrite();
+}
+
+function drainClipboardWrite(): void {
+    if (clipboardWriteInFlight || pendingClipboardWrite === null) {
+        return;
+    }
+    const request = pendingClipboardWrite;
+    pendingClipboardWrite = null;
+    if (
+        request.generation !== copyGeneration
+        || promptOutput.value !== request.prompt
+    ) {
+        drainClipboardWrite();
+        return;
+    }
+
+    clipboardWriteInFlight = true;
+    let write: Promise<void>;
+    try {
+        write = request.write(request.prompt);
+    } catch {
+        finishClipboardWrite(request, false);
+        return;
+    }
+    void write.then(
+        (): void => finishClipboardWrite(request, true),
+        (): void => finishClipboardWrite(request, false),
+    );
+}
+
 copyPrompt.addEventListener("click", (): void => {
     const prompt = promptOutput.value;
     const generation = ++copyGeneration;
     if (prompt.length === 0) {
+        pendingClipboardWrite = null;
         setTextIfChanged(copyStatus, "Waiting for a prompt from the backend.");
         return;
     }
 
     const writeClipboard = getClipboardWrite();
     if (writeClipboard === null) {
+        pendingClipboardWrite = null;
         setTextIfChanged(copyStatus, "Clipboard access is unavailable.");
         return;
     }
 
     setTextIfChanged(copyStatus, "Copying prompt…");
-    const write = clipboardWriteQueue.then((): Promise<void> | void => {
-        if (
-            generation !== copyGeneration
-            || promptOutput.value !== prompt
-        ) {
-            return;
-        }
-        return writeClipboard(prompt);
-    });
-    clipboardWriteQueue = write.catch((): void => {});
-    void write.then(
-        (): void => {
-            if (
-                generation === copyGeneration
-                && promptOutput.value === prompt
-            ) {
-                setTextIfChanged(copyStatus, "Prompt copied.");
-            }
-        },
-        (): void => {
-            if (
-                generation === copyGeneration
-                && promptOutput.value === prompt
-            ) {
-                setTextIfChanged(copyStatus, "Clipboard write failed.");
-            }
-        },
-    );
+    pendingClipboardWrite = {
+        generation,
+        prompt,
+        write: writeClipboard,
+    };
+    drainClipboardWrite();
 });
 
 
@@ -280,6 +313,7 @@ function clearSessionText(): void {
 
 window.addEventListener("pagehide", (event): void => {
     copyGeneration += 1;
+    pendingClipboardWrite = null;
     if (activeDividerPointerId !== null) {
         releaseDividerPointer(activeDividerPointerId);
     }
