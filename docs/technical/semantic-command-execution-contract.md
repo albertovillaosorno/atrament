@@ -226,9 +226,15 @@ never become command or impact authority.
 
 ## Verification
 
-A one-paragraph fixture must change that paragraph identity's accepted content
-while preserving unrelated semantic identities. Its layout impact may expand
-only as required by measured flow dependencies.
+The `sober-single-pen` fixture provides the first one-paragraph command case.
+Starting from its accepted notebook, command mode changes the `Idea` paragraph
+from the authored sentence containing `entonces` to the shorter correction
+already frozen in the first complete user journey.
+
+The semantic change set for that batch contains only the `Idea` paragraph.
+Every other authored block keeps its stable identity and content, while derived
+layout impact may expand to later geometry when the shorter paragraph changes
+flow measurements.
 
 A global-style fixture must preserve authored content identities while
 invalidating every derived result that actually depends on the style. This
@@ -247,7 +253,8 @@ Parity tests must normalize receipts from the direct application boundary, CLI,
 clipboard-assisted validation, and MCP. Equivalent operations must agree on the
 accepted revision, changed identities, impact set, diagnostics, and outputs.
 
-An end-to-end MCP fixture must inspect an accepted notebook, apply a bounded
-semantic edit, render or export the affected result, and finish without opening
-a browser. The resulting accepted notebook must match the equivalent interactive
-application transaction.
+An end-to-end MCP fixture must inspect the accepted `sober-single-pen`
+revision, apply the same `Idea` edit, inspect any remaining diagnostics, and
+request the next admitted output operation without opening a browser. The
+resulting accepted notebook must match the equivalent interactive command
+transaction.

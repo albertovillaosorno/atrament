@@ -116,6 +116,26 @@ without regenerating unrelated notebook content.
 
 State: `human-corrected`.
 
+### Equivalent command-mode refinement
+
+A parity test may start again from `candidate-accepted` and request the same
+`Idea` correction through semantic command mode. The returned batch targets the
+stable paragraph identity and the exact accepted base revision rather than
+returning a replacement notebook.
+
+Interactive paste validates the complete batch and shows its semantic diff
+before acceptance. An explicitly invoked MCP apply capability may perform the
+same validated transaction without a browser click.
+
+Both paths must produce the same corrected paragraph content as the human edit.
+Unrelated semantic identities remain unchanged, while downstream derived layout
+may recompute when the paragraph's changed measure affects page flow.
+
+This parity path does not add a state to the canonical successful sequence
+below.
+It proves that human, clipboard-assisted, and MCP commands enter the same
+application authority.
+
 ### Resolve the overflow
 
 The page preview highlights the `Error común` callout and the violated bottom
@@ -185,8 +205,8 @@ output was requested.
 
 ### Cross-step invariants
 
-- The accepted notebook changes only through explicit candidate acceptance or a
-  typed human command.
+- The accepted notebook changes only through explicit candidate acceptance, an
+  accepted semantic command batch, or a typed human command.
 - The pasted model response is never document authority by itself.
 - Every exact source sentence and formula remains traceable to supplied content.
 - Prompt identity changes when task, source, format, paper, style, or output
@@ -210,9 +230,12 @@ of diagnosed, PDF and live paths use different layout authorities, live
 compilation drops an unsupported object, or export creates undeclared autosave
 state.
 
-It also fails if an invalid candidate leaves a partially updated notebook or if
-the user cannot identify why export is blocked and which semantic object owns
-the diagnostic.
+It also fails if an invalid candidate or command batch leaves a partially
+updated notebook. Command-mode parity also fails if the same accepted edit
+produces different notebook semantics through browser-assisted and MCP paths.
+
+The user must be able to identify why export is blocked and which semantic
+object owns the diagnostic.
 
 ## Verification
 
