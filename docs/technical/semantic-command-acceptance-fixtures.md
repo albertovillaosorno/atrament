@@ -56,6 +56,35 @@ Expected result: validation rejects the complete batch for writable-scope
 violation. Accepted revision, undo history, formulas, and paragraph text remain
 unchanged.
 
+### Fixture `unrepresentable-request`
+
+Base: a bounded command context whose writable scope and admitted families cannot
+express the requested change.
+
+One example asks the model to import a new remote image while command mode only
+admits edits to an existing paragraph and no asset ingestion capability is part
+of the context.
+
+Expected model behavior: use the backend-admitted unresolved or refusal form
+without inventing a URL-download command, widening writable scope, or replacing
+the complete notebook.
+
+Expected backend behavior: a malicious or mistaken returned batch that attempts
+those effects is rejected atomically. Accepted revision and external state remain
+unchanged.
+
+### Fixture `forged-accepted-identity`
+
+Base: a valid insertion context with one admitted anchor.
+
+Returned batch invents an accepted-looking semantic identity for the new block
+instead of using the backend-owned allocation mechanism admitted by the final
+wire contract.
+
+Expected result: validation rejects the forged accepted identity. A valid
+insertion request allows the backend to allocate the new accepted identity and
+reports it in the apply receipt.
+
 ### Fixture `stale-base-revision`
 
 Base command context names revision `R0`. Before its returned batch is applied,
