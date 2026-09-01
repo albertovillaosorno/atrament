@@ -89,7 +89,8 @@ used to forge document authority.
 
 If batch-local handles are admitted for newly inserted objects, handle names are
 also unique within the batch and cannot collide ambiguously with accepted
-semantic identities.
+semantic identities. Their normalized meaning includes the producing command and
+admitted dependency relationships, not merely the handle's display spelling.
 
 ### Dependency validity
 

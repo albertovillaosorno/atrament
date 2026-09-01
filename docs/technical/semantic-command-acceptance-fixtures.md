@@ -202,6 +202,26 @@ without partial mutation.
 The losing caller must inspect the new revision before deciding whether to issue
 a new command.
 
+### Fixture `insert-handle-retry`
+
+A valid batch inserts one new semantic block at an admitted anchor using one
+batch-local handle, then applies a second command to that candidate object
+through
+an explicit dependency on the insertion.
+
+Validation can resolve the handle in isolated candidate state without treating
+it as an accepted notebook identity. Apply commits one new backend-allocated
+accepted identity and reports the handle-to-identity mapping.
+
+The Apply receipt is then lost in transport. Same-retry recovery returns the
+same
+accepted identity mapping. It does not allocate another identity, duplicate the
+block, or replay the dependent command against a second object.
+
+A second variant references an undeclared handle or uses the handle without the
+required admitted dependency. Expected result: the complete batch is rejected
+before accepted mutation.
+
 ### Fixture `table-cell-edit`
 
 Base: an accepted representative notebook containing a typed table.

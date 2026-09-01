@@ -159,6 +159,19 @@ A later command in one batch may depend on an earlier insertion only through an
 admitted command dependency. Hidden reliance on mutation order is not accepted
 as a substitute for typed intent.
 
+When the wire contract admits batch-local handles, a producing insertion command
+owns one unique handle for candidate references inside that batch. The handle is
+not an accepted semantic identity and does not escape into notebook authority.
+
+A later command can target that candidate object only through the admitted
+handle/dependency mechanism. Validation may simulate the candidate reference,
+but accepted identity allocation belongs to the atomic Apply commit.
+
+The Apply receipt maps each committed insertion handle to the accepted semantic
+identity allocated by the backend. Idempotent replay returns the same mapping
+and
+does not allocate another identity or insert another object.
+
 ### Asset boundary
 
 Semantic commands may reference an asset already admitted to the active session
@@ -218,9 +231,10 @@ reports accepted semantic identities that changed and the dependency-expanded
 derived regions invalidated by the complete batch.
 
 For insertions, the receipt exposes the accepted identity allocated by the
-backend. For deletions, it identifies the removed accepted identity. For a
-no-op,
-it reports no semantic change and does not create revision churn.
+backend and any admitted batch-local handle mapping. For deletions, it
+identifies
+the removed accepted identity. For a no-op, it reports no semantic change and
+does not create revision churn.
 
 The receipt does not claim that every invalidated region changed visibly. It
 reports which derived results had to be considered stale and recomputed for
