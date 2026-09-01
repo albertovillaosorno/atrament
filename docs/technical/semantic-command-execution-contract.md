@@ -83,8 +83,9 @@ families. That binding prevents a returned batch from silently expanding the
 request it was given.
 
 Each command has its own stable command identity within the batch. Commands
-address stable semantic targets, insertion anchors, or typed session settings
-rather than storage paths, DOM nodes, page pixels, or serialized object offsets.
+address stable semantic targets, insertion anchors, or accepted constraints
+owned by the base revision rather than storage paths, DOM nodes, page pixels, or
+serialized object offsets.
 
 A batch also carries an application retry identity. Reusing that identity with a
 different normalized batch is a conflict rather than permission to replace the
@@ -144,14 +145,19 @@ The core derives the semantic change set from accepted command effects. Targets
 that receive no semantic change keep their stable identities and accepted
 content.
 
-Insert, delete, move, text, structure, provenance, style, constraint, and
-session-setting commands may affect different semantic authorities. The command
+Insert, delete, move, text, structure, provenance, style, and constraint
+commands may affect different revision-owned semantic authorities. The command
 type determines which authoritative data can change.
 
 A command cannot claim that an object is unaffected merely to suppress work. The
 backend computes the accepted change set from domain behavior rather than
 trusting
 an agent-provided list.
+
+Viewport position, clipboard state, transient UI selection, device connection,
+physical arming, and physical start are not part of the notebook revision. They
+cannot be smuggled into a semantic command batch merely to gain batch atomicity
+or MCP automation.
 
 ### Impact-scoped recomputation
 
@@ -244,6 +250,10 @@ Generic semantic editing does not implicitly arm physical hardware. MCP may
 automate notebook editing and device-neutral plan compilation, but `arm` and
 `start` remain explicit device-boundary operations with their own safety and
 operator requirements.
+
+Other non-revision application commands, such as inspecting runtime status or
+managing an admitted adapter lifecycle, use their own application contracts.
+They are not embedded inside a semantic notebook batch.
 
 ### Browser boundary
 

@@ -26,8 +26,8 @@ produce inconsistent recomputation, and make automated edits hard to audit.
 Atrament exposes versioned semantic command batches as application input. A
 batch
 addresses one accepted notebook revision and contains ordered typed commands
-against stable semantic identities, insertion anchors, or explicit session-level
-settings.
+against stable semantic identities, insertion anchors, or accepted constraints
+owned by that notebook revision.
 
 Each command carries enough precondition information to reject stale or
 inapplicable intent. The application core validates the complete batch against
@@ -42,6 +42,11 @@ relationships. Semantic identities outside that set keep their accepted content,
 while only invalidated derived layout, handwriting, diagnostics, preview,
 export,
 or motion projections are recomputed.
+
+Ephemeral browser state, clipboard state, device connection state, and physical
+`arm` or `start` state are not revision-owned semantic command targets. Those
+operations remain separate application or adapter commands with their own
+lifecycle and safety boundaries.
 
 Impact-scoped recomputation is an optimization of derived work, not a weaker
 correctness rule. Any dependency whose result can change must be invalidated
