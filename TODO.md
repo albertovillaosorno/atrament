@@ -480,10 +480,10 @@ classes. Text, selection, and dynamic enabled-state restoration are disabled.
 With the browser adapter active, every page exit clears all four session text
 surfaces and their local enabled/count/copy state before navigation continues.
 
-Fresh loads discard retained URL fragments before resetting all three nested
-scrollports to their static origin. If the History API cannot remove the
-fragment, a timer-backed reset still prevents late fragment scrolling. Clipboard
-writes retain at most one active operation and the newest pending prompt.
+Fresh loads discard retained URL fragments when the History API permits it and
+reset all three nested scrollports to their static origin. Any load that arrived
+with a fragment also performs one timer-backed reset so browser fragment
+scrolling already queued before `pageshow` cannot reopen a panel afterward.
 
 Malformed or rejecting clipboard promises fail closed, and stale duplicate
 completions cannot unlock a newer write.

@@ -366,9 +366,9 @@ function resetLocalViewportState(): void {
     pageStage.scrollLeft = 0;
 }
 
-function clearRetainedFragment(): boolean {
+function discardRetainedFragment(): boolean {
     if (window.location.hash === "") {
-        return true;
+        return false;
     }
     try {
         window.history.replaceState(
@@ -377,9 +377,9 @@ function clearRetainedFragment(): boolean {
             `${window.location.pathname}${window.location.search}`,
         );
     } catch {
-        return false;
+        // The delayed reset below still contains late fragment scrolling.
     }
-    return window.location.hash === "";
+    return true;
 }
 
 window.addEventListener("pageshow", (event): void => {
@@ -387,9 +387,9 @@ window.addEventListener("pageshow", (event): void => {
         window.location.reload();
         return;
     }
-    const fragmentCleared = clearRetainedFragment();
+    const hadRetainedFragment = discardRetainedFragment();
     resetLocalViewportState();
-    if (!fragmentCleared) {
+    if (hadRetainedFragment) {
         window.setTimeout(resetLocalViewportState, 0);
     }
 });
