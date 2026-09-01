@@ -439,11 +439,18 @@ remain ordinary unavailable text until a backend feed can update them.
 
 A visible-text sweep, explicit textarea placeholders, and ruled preview copy all
 measure at least 4.5:1 contrast. If a focused splitter becomes inert at the
-compact breakpoint, focus moves to a source heading that is scrolled into view.
+compact breakpoint, focus moves to a source heading whose full contextual header
+is scrolled into view.
+
+Trusted Firefox keyboard actions Tab to each skip link, activate it with Enter,
+PageDown the focused heading's scrollport, and continue with Tab to the next
+local control. Modified divider navigation keys remain unconsumed while plain
+Arrow, Home, and End keys retain separator behavior.
 
 Divider pointer gestures preserve grab offsets and tenth-point ratios that match
 measured panel geometry, and are serialized and released on cancellation,
-navigation, compacting, or browser-window blur. If captured dragging is absent,
+navigation, compacting, browser-window blur, or document hiding. If captured
+dragging is absent,
 throws, or silently fails to capture, native touch defaults remain available and
 only a completed click changes the split; an uncaptured pointerdown also
 preserves the prior keyboard focus. Broken modern or legacy media-query
@@ -470,7 +477,9 @@ With the browser adapter active, a fresh reload also resets nested workspace
 scrollports to their static pre-session origin, including reloads whose retained
 skip-link fragment would otherwise re-scroll a panel after `pageshow`.
 
-Clipboard writes retain at most one active operation and the newest pending
+The second reset degrades to a timer when animation frames are unavailable or
+fail. Clipboard writes retain at most one active operation and the newest
+pending
 prompt. Prompt changes and page exit discard pending work and scrub the
 frontend's prompt copy from an already-started request without claiming that the
 external clipboard operation itself can be cancelled.
