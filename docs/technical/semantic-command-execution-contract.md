@@ -71,7 +71,6 @@ Unsupported protocol or capability or Command-context mismatch result requires
 it.
 
 ### Command context export
-### Command context export
 
 A command-mode prompt is self-contained and names the accepted base revision. It
 includes the admitted command vocabulary plus enough backend-selected semantic
@@ -126,7 +125,6 @@ MCP structured context preserves the same distinction. Agent-readable notebook
 content is domain data; tool descriptions and application capability contracts
 remain the authority for what operations are available.
 
-### Agent response requirements
 ### Agent response requirements
 
 A command-mode request instructs the model to return only the admitted response
