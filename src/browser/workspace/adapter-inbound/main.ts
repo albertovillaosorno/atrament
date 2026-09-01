@@ -366,12 +366,32 @@ function resetLocalViewportState(): void {
     pageStage.scrollLeft = 0;
 }
 
+function clearRetainedFragment(): boolean {
+    if (window.location.hash === "") {
+        return true;
+    }
+    try {
+        window.history.replaceState(
+            window.history.state,
+            "",
+            `${window.location.pathname}${window.location.search}`,
+        );
+    } catch {
+        return false;
+    }
+    return window.location.hash === "";
+}
+
 window.addEventListener("pageshow", (event): void => {
     if (event.persisted) {
         window.location.reload();
         return;
     }
+    const fragmentCleared = clearRetainedFragment();
     resetLocalViewportState();
+    if (!fragmentCleared) {
+        window.setTimeout(resetLocalViewportState, 0);
+    }
 });
 
 function isCompactWorkspace(): boolean {
