@@ -445,11 +445,14 @@ is scrolled into view.
 Trusted Firefox keyboard actions Tab to each skip link, activate it with Enter,
 PageDown the focused heading's scrollport, and continue with Tab to the next
 local control. Modified divider navigation keys remain unconsumed while plain
-Arrow, Home, and End keys retain separator behavior.
+Arrow, Home, and End keys retain separator behavior. Zoom controls hand focus to
+an enabled sibling instead of the document body when a boundary or reset action
+disables the control that was activated.
 
 Divider pointer gestures preserve grab offsets and tenth-point ratios that match
 measured panel geometry, and are serialized and released on cancellation,
-navigation, compacting, browser-window blur, or document hiding. If captured
+navigation, compacting, viewport resize, browser-window blur, or document
+hiding. If captured
 dragging is absent,
 throws, or silently fails to capture, native touch defaults remain available and
 only a completed click changes the split; an uncaptured pointerdown also
@@ -474,9 +477,8 @@ or browser spellcheck on session text. Its CSP blocks cross-origin script,
 style, image, and fetch attempts before a second loopback origin receives a
 request and denies unused frame, font, manifest, media, object, and worker
 classes. Text, selection, and dynamic enabled-state restoration are disabled.
-With the browser adapter active, a fresh reload also resets nested workspace
-scrollports to their static pre-session origin, including reloads whose retained
-skip-link fragment would otherwise re-scroll a panel after `pageshow`.
+With the browser adapter active, every page exit clears all four session text
+surfaces and their local enabled/count/copy state before navigation continues.
 
 Fresh loads discard retained URL fragments before resetting all three nested
 scrollports to their static origin. If the History API cannot remove the
