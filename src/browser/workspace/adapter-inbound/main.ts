@@ -503,6 +503,11 @@ function finishDividerPointer(event: PointerEvent): void {
 
 divider.addEventListener("pointerup", finishDividerPointer);
 divider.addEventListener("pointercancel", finishDividerPointer);
+window.addEventListener("blur", (): void => {
+    if (activeDividerPointerId !== null) {
+        releaseDividerPointer(activeDividerPointerId);
+    }
+});
 divider.addEventListener("lostpointercapture", (event): void => {
     if (activeDividerPointerId === event.pointerId) {
         activeDividerPointerId = null;
