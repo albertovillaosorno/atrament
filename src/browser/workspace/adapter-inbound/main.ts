@@ -126,7 +126,7 @@ const copyPrompt = requireElement<HTMLButtonElement>("#copy-prompt");
 const copyStatus = requireElement<HTMLElement>("#copy-status");
 const sessionStatus = requireElement<HTMLElement>("#session-status");
 
-type ClipboardWrite = (text: string) => Promise<void>;
+type ClipboardWrite = (text: string) => unknown;
 
 type ClipboardRequest = {
     generation: number;
@@ -184,10 +184,11 @@ function finishClipboardWrite(
     request: ClipboardRequest,
     succeeded: boolean,
 ): void {
-    clipboardWriteInFlight = false;
-    if (activeClipboardWrite === request) {
-        activeClipboardWrite = null;
+    if (activeClipboardWrite !== request) {
+        return;
     }
+    clipboardWriteInFlight = false;
+    activeClipboardWrite = null;
     if (
         request.generation === copyGeneration
         && promptOutput.value === request.prompt
@@ -216,17 +217,28 @@ function drainClipboardWrite(): void {
 
     clipboardWriteInFlight = true;
     activeClipboardWrite = request;
-    let write: Promise<void>;
     try {
-        write = request.write(request.prompt);
+        const write = request.write(request.prompt);
+        if (
+            write === null
+            || (typeof write !== "object" && typeof write !== "function")
+        ) {
+            finishClipboardWrite(request, false);
+            return;
+        }
+        const then = (write as { then?: unknown }).then;
+        if (typeof then !== "function") {
+            finishClipboardWrite(request, false);
+            return;
+        }
+        then.call(
+            write,
+            (): void => finishClipboardWrite(request, true),
+            (): void => finishClipboardWrite(request, false),
+        );
     } catch {
         finishClipboardWrite(request, false);
-        return;
     }
-    void write.then(
-        (): void => finishClipboardWrite(request, true),
-        (): void => finishClipboardWrite(request, false),
-    );
 }
 
 copyPrompt.addEventListener("click", (): void => {
