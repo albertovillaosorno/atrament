@@ -138,6 +138,7 @@ let copyGeneration = 0;
 let clipboardWriteInFlight = false;
 let activeClipboardWrite: ClipboardRequest | null = null;
 let pendingClipboardWrite: ClipboardRequest | null = null;
+let presentedPromptValue = promptOutput.value;
 
 function getClipboardWrite(): ClipboardWrite | null {
     try {
@@ -166,13 +167,18 @@ function invalidateClipboardRequests(): number {
 }
 
 function syncPromptCopyState(): void {
-    invalidateClipboardRequests();
-    const available = promptOutput.value.length > 0;
+    const prompt = promptOutput.value;
+    const changed = prompt !== presentedPromptValue;
+    if (changed) {
+        presentedPromptValue = prompt;
+        invalidateClipboardRequests();
+    }
+    const available = prompt.length > 0;
     promptOutput.disabled = !available;
     copyPrompt.disabled = !available;
     if (!available) {
         setTextIfChanged(copyStatus, "Waiting for a prompt from the backend.");
-    } else {
+    } else if (changed) {
         setTextIfChanged(copyStatus, "");
     }
 }
@@ -243,13 +249,26 @@ function drainClipboardWrite(): void {
 
 copyPrompt.addEventListener("click", (): void => {
     const prompt = promptOutput.value;
-    const generation = invalidateClipboardRequests();
     if (prompt.length === 0) {
         pendingClipboardWrite = null;
         setTextIfChanged(copyStatus, "Waiting for a prompt from the backend.");
         return;
     }
+    if (
+        (
+            activeClipboardWrite?.generation === copyGeneration
+            && activeClipboardWrite.prompt === prompt
+        )
+        || (
+            pendingClipboardWrite?.generation === copyGeneration
+            && pendingClipboardWrite.prompt === prompt
+        )
+    ) {
+        setTextIfChanged(copyStatus, "Copying prompt…");
+        return;
+    }
 
+    const generation = invalidateClipboardRequests();
     const writeClipboard = getClipboardWrite();
     if (writeClipboard === null) {
         pendingClipboardWrite = null;
@@ -334,6 +353,7 @@ function clearSessionText(): void {
     taskInput.value = "";
     sourceInput.value = "";
     promptOutput.value = "";
+    presentedPromptValue = "";
     candidateInput.value = "";
     taskInput.disabled = true;
     sourceInput.disabled = true;
