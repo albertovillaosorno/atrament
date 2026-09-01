@@ -31,3 +31,6 @@ contracts:
   - id: atrament.technical.semantic-command-capability-matrix
     status: frozen
     path: semantic-command-capability-matrix.md
+  - id: atrament.technical.semantic-command-acceptance-fixtures
+    status: frozen
+    path: semantic-command-acceptance-fixtures.md
