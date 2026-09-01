@@ -86,18 +86,23 @@ function setTextIfChanged(element: HTMLElement, value: string): void {
     }
 }
 
+function updateCharacterCount(
+    input: HTMLTextAreaElement,
+    output: HTMLElement,
+): void {
+    const { count, unit } = countText(input.value);
+    const suffix = count === 1 ? unit : `${unit}s`;
+    setTextIfChanged(output, `${count} ${suffix}`);
+}
+
 function bindCharacterCount(
     input: HTMLTextAreaElement,
     output: HTMLElement,
 ): void {
-    const update = (): void => {
-        const { count, unit } = countText(input.value);
-        const suffix = count === 1 ? unit : `${unit}s`;
-        setTextIfChanged(output, `${count} ${suffix}`);
-    };
-
-    input.addEventListener("input", update);
-    update();
+    input.addEventListener("input", (): void => {
+        updateCharacterCount(input, output);
+    });
+    updateCharacterCount(input, output);
 }
 
 const taskInput = requireElement<HTMLTextAreaElement>("#task-input");
@@ -254,6 +259,9 @@ function clearSessionText(): void {
     sourceInput.value = "";
     promptOutput.value = "";
     candidateInput.value = "";
+    updateCharacterCount(taskInput, taskCount);
+    updateCharacterCount(sourceInput, sourceCount);
+    updateCharacterCount(candidateInput, candidateCount);
 }
 
 window.addEventListener("pagehide", (event): void => {
