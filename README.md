@@ -59,6 +59,26 @@ device-neutral plan compilation end to end. Physical machine arming and start
 remain separate explicit safety operations rather than side effects of a generic
 LLM edit.
 
+### Targeted command mode
+
+For a bounded edit to an accepted notebook, the backend can generate a command
+prompt instead of a full-notebook formatting prompt. That request identifies the
+base revision, readable context, writable semantic targets or insertion anchors,
+and admitted command families.
+
+The user copies it with the same **Copy prompt** control, pastes it into an
+external chat, and pastes the returned command envelope into the same **Model
+response** surface. The backend validates the complete batch, shows the semantic
+diff and dependency-expanded impact, then applies one accepted transaction.
+
+Unrelated semantic identities remain unchanged. Derived page regions may still
+recompute when the changed target affects their dependencies, such as text
+reflow moving later content.
+
+With MCP, the clipboard round trip disappears: an agent can inspect the current
+revision, validate or apply the same command batch, inspect its receipt and
+diagnostics, then request rendering or export through the same application core.
+
 ## What a notebook can contain
 
 The initial semantic vocabulary covers the material expected in serious school

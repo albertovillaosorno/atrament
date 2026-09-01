@@ -194,8 +194,12 @@ copy it with one action, and confirm the exact prompt identity copied.
 Current frontend evidence: the single Copy prompt control lives in a compact
 sticky toolbar and remains visible while source and response content scroll.
 It starts disabled until a backend-presented prompt exists and reports clipboard
-failure when enabled. Backend prompt generation, identity, and transport still
-keep this task open.
+failure when enabled.
+
+The same presentation surface is mode-neutral: the backend may provide a full
+candidate prompt or a targeted semantic-command prompt without adding frontend
+command parsing. Backend prompt generation, identity, mode selection, and
+transport still keep this task open.
 
 ### TODO - Validate pasted model responses transactionally
 
