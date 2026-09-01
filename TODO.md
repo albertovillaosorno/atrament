@@ -492,18 +492,23 @@ final secret-handling guarantee: authenticated startup must consume an admitted
 secret in memory and remove it from the visible URL.
 
 Malformed or rejecting clipboard promises fail closed, and stale duplicate
-completions cannot unlock a newer write.
+completions cannot unlock a newer write. One thousand same-value prompt events
+plus one thousand concurrent repeat clicks retained one active clipboard write
+with no redundant status or disabled-state mutations before completion.
 
 Prompt changes and page exit discard pending work and scrub the frontend's
 prompt copy from an already-started request without claiming that the external
 clipboard operation itself can be cancelled.
 
-Before a bfcache snapshot, all four session text values are cleared and their
-retained detached references return disabled with zero-length counters and the
-static prompt-copy state before the disposable workspace DOM is removed. A real
-workspace → second-page → Back flow produced no intermediate workspace request,
-then forced one fresh reload where those controls, counters, copy status, and
-the three nested scrollports returned to their static pre-session state.
+Before a bfcache snapshot, all four session text live values, default values,
+and textarea text nodes are cleared. Their retained detached references return
+disabled with zero-length counters and the static prompt-copy state before the
+disposable workspace DOM is removed.
+
+A real workspace → second-page → Back flow produced no intermediate workspace
+request, then forced one fresh reload where those controls, counters, copy
+status, and the three nested scrollports returned to their static pre-session
+state.
 
 With bfcache disabled, the equivalent Back navigation performed a fresh
 `back_forward` document load and again restored all four text surfaces empty and
