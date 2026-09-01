@@ -526,9 +526,14 @@ prompt copy from an already-started request without claiming that the external
 clipboard operation itself can be cancelled.
 
 Before a bfcache snapshot, all four session text live values, default values,
-and textarea text nodes are cleared. Their retained detached references return
-disabled with zero-length counters and the static prompt-copy state before the
-disposable workspace DOM is removed.
+and textarea text nodes are cleared. The disposable workspace then scrubs
+retained descendant text and comment payloads plus detached attribute-node
+values before removing its element tree.
+
+A fixture retaining source, preview, page-stage, paper, diagnostic, textarea,
+Text, Comment, and Attr references observed empty text and attribute payloads
+after `pagehide(persisted=true)`. The textarea references also remained empty in
+both live and default value state.
 
 A real workspace → second-page → Back flow produced no intermediate workspace
 request, then forced one fresh reload where those controls, counters, copy
