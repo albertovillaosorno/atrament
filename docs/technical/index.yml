@@ -28,3 +28,6 @@ contracts:
   - id: atrament.technical.semantic-command-execution-contract
     status: frozen
     path: semantic-command-execution-contract.md
+  - id: atrament.technical.semantic-command-capability-matrix
+    status: frozen
+    path: semantic-command-capability-matrix.md
