@@ -301,6 +301,41 @@ transport metadata may differ and is not document authority.
 Physical `arm` and `start` are outside this fixture. Producing an admitted
 machine-neutral plan does not authorize motion.
 
+### Expected result-class mapping
+
+The result taxonomy gives each fixture an application-level outcome expectation:
+
+- `idea-text-correction`, `table-cell-edit`, `spatial-parity`,
+  `global-constraint-impact`, and valid `admitted-asset-reference` paths produce
+  Applied;
+- `bounded-scope-escape` produces Writable-scope violation;
+- an admitted `unrepresentable-request` response produces Unrepresentable or
+  unresolved response without mutation;
+- `forged-accepted-identity` and invalid asset-reference payloads produce
+  Semantic validation rejection;
+- `stale-base-revision` produces Stale base;
+- the first successful `idempotent-retry` application produces Applied, its
+  equivalent replay produces Idempotent replay, and changed content with the
+  same retry identity produces Retry conflict;
+- `lost-apply-receipt` first leaves the caller in Unknown transport outcome,
+  then
+  same-retry recovery returns Applied-equivalent or Idempotent replay semantics;
+- `equivalent-serialization-retry` produces Idempotent replay after the original
+  successful application;
+- `ordered-retry-conflict` produces Retry conflict;
+- `duplicate-command-identity` and `dependency-cycle` produce Dependency-graph
+  rejection;
+- `resource-limit-rejection` produces Resource-limit rejection for the
+  over-limit case;
+- `atomic-middle-failure` produces Semantic validation rejection;
+- `concurrent-base-race` produces one Applied result and one Stale base result;
+- `no-op-apply` produces No-op;
+- `transaction-provenance-origin` and `clipboard-and-mcp-parity` produce Applied
+  in their valid paths while preserving their additional parity assertions.
+
+Final wire enum names may differ, but executable fixtures compare the semantic
+result classes frozen by the result taxonomy rather than diagnostic prose.
+
 ## Failure Modes
 
 These fixtures fail if a rejected batch changes accepted state, if retries

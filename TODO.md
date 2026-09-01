@@ -367,9 +367,9 @@ CLI and MCP automation.
 
 Current design evidence covers stale bases, retry identity, no-op behavior,
 concurrent commits, scope escape, unsupported requests, forged identities,
-middle-command failure, lost Apply receipts, normalized retry equality, and
-invalid command dependencies. No tracked Rust application core exists yet, so
-executable apply remains open.
+middle-command failure, lost Apply receipts, normalized retry equality, invalid
+command dependencies, and typed application result classes. No tracked Rust
+application core exists yet, so executable apply remains open.
 
 ### TODO - Implement impact-scoped recomputation
 
@@ -402,9 +402,11 @@ for agents and prove normalized receipts match CLI and interactive application.
 Keep physical `arm` and `start` behind their separate device-safety boundary.
 
 Current design evidence freezes MCP effect classes, bounded context/write scope,
-receipt chaining, lost-receipt recovery, separate adapter admission, no
-internal-file authority, and browser/CLI/MCP parity targets. Tool schemas,
-transport, admission mechanism, and backend implementation remain open.
+receipt chaining, lost-receipt recovery, typed application outcomes, separate
+adapter admission, no internal-file authority, and browser/CLI/MCP parity
+targets. Tool schemas, transport, admission mechanism, and backend
+implementation
+remain open.
 
 ### TODO - Package self-contained agent instructions
 
