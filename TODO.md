@@ -203,6 +203,12 @@ candidate prompt or a targeted semantic-command prompt without adding frontend
 command parsing. Command-mode identity must include the accepted revision and
 bounded command context so stale copied requests cannot masquerade as current.
 
+A transport probe passed a command-like Unicode payload measuring 1,406,010
+UTF-8 bytes through the presented prompt, mocked clipboard `writeText`, and raw
+response surfaces with exact content equality and one write. That evidence shows
+the frontend path does not parse or truncate command text; it does not define a
+backend protocol limit or prove an operating-system clipboard capacity.
+
 Backend prompt generation, identity, mode selection, and transport still keep
 this task open.
 
