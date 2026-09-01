@@ -271,6 +271,7 @@ button:focus-visible {
 }
 
 .panel-heading h2 {
+  scroll-margin-top: 40px;
   font-size: 18px;
 }
 
