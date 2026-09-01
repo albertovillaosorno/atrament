@@ -444,10 +444,18 @@ is scrolled into view.
 
 Trusted Firefox keyboard actions Tab to each skip link, activate it with Enter,
 PageDown the focused heading's scrollport, and continue with Tab to the next
-local control. Modified divider navigation keys remain unconsumed while plain
-Arrow, Home, and End keys retain separator behavior. Zoom controls hand focus to
-an enabled sibling instead of the document body when a boundary or reset action
-disables the control that was activated.
+local control. BiDi viewport emulation confirms the compact 320-pixel tab order
+omits the inert divider while 481 pixels restores it between source and preview.
+
+At a real 320-pixel viewport, both skip links still focus the expected heading
+and return that panel to its origin. Sharing their viewport anchor keeps the
+preview skip link 60 pixels tall at 200% text instead of the prior 104-pixel
+wrapped block, without horizontal overflow through 480 pixels.
+
+Modified divider navigation keys remain unconsumed while plain Arrow, Home, and
+End keys retain separator behavior. Zoom controls hand focus to an enabled
+sibling instead of the document body when a boundary or reset action disables
+the control that was activated.
 
 Divider pointer gestures preserve grab offsets and tenth-point ratios that match
 measured panel geometry, and are serialized and released on cancellation,
