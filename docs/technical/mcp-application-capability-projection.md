@@ -196,6 +196,26 @@ That recovery is bounded to the active ephemeral session. A later independent
 session cannot use a retry identity as a durable transaction lookup or session
 credential.
 
+### Result-class projection
+
+MCP exposes the semantic application result class frozen by the command result
+taxonomy in a machine-readable form. Human-readable diagnostics may accompany it
+but are not the automation branch condition.
+
+Stale base and Command-context mismatch lead back to inspection. Idempotent
+replay is success-equivalent for outcome recovery. Retry conflict, scope,
+dependency, resource, and semantic validation failures remain distinguishable so
+an agent can correct the appropriate part of its request.
+
+A transport error that arrives without a valid Apply receipt remains an Unknown
+transport outcome at the caller. The MCP adapter does not fabricate a rejected
+or
+cancelled application result merely to fit transport error framing.
+
+Adapter-specific MCP error metadata may exist alongside the application result.
+It cannot erase or reinterpret the normalized core outcome when the application
+actually completed.
+
 ### Adapter parity
 
 MCP may improve ergonomics by projecting bounded tools, but it cannot create new
