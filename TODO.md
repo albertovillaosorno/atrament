@@ -478,10 +478,11 @@ With the browser adapter active, a fresh reload also resets nested workspace
 scrollports to their static pre-session origin, including reloads whose retained
 skip-link fragment would otherwise re-scroll a panel after `pageshow`.
 
-The second reset degrades to a timer when animation frames are unavailable or
-fail. Clipboard writes retain at most one active operation and the newest
-pending prompt. Malformed or rejecting clipboard promises fail closed, and
-stale duplicate completions cannot unlock a newer write.
+Reloads with or without either retained skip-link fragment keep all three nested
+scrollports at their static origin without a delayed animation-frame reset.
+Clipboard writes retain at most one active operation and the newest pending
+prompt. Malformed or rejecting clipboard promises fail closed, and stale
+duplicate completions cannot unlock a newer write.
 
 Prompt changes and page exit discard pending work and scrub the frontend's
 prompt copy from an already-started request without claiming that the external

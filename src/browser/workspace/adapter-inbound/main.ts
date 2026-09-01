@@ -366,25 +366,12 @@ function resetLocalViewportState(): void {
     pageStage.scrollLeft = 0;
 }
 
-function scheduleViewportReset(): void {
-    try {
-        if (typeof window.requestAnimationFrame === "function") {
-            window.requestAnimationFrame(resetLocalViewportState);
-            return;
-        }
-    } catch {
-        // Fall through to the timer-based browser baseline below.
-    }
-    window.setTimeout(resetLocalViewportState, 0);
-}
-
 window.addEventListener("pageshow", (event): void => {
     if (event.persisted) {
         window.location.reload();
         return;
     }
     resetLocalViewportState();
-    scheduleViewportReset();
 });
 
 function isCompactWorkspace(): boolean {
