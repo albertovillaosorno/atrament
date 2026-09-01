@@ -351,11 +351,10 @@ and normalized application receipt without exposing storage paths as document
 semantics.
 
 Current design evidence freezes those semantics, revision-owned command
-families,
-and acceptance fixtures without choosing final wire field names or JSON Schema.
-The task remains open until the backend-owned envelope and compatibility rules
-are
-implemented and versioned.
+families, acceptance fixtures, semantic normalization, command ordering,
+dependency validity, and backend-owned resource limits without choosing final
+wire field names or JSON Schema. The task remains open until the backend-owned
+envelope and compatibility rules are implemented and versioned.
 
 ### TODO - Implement atomic command validation and apply
 
@@ -364,10 +363,10 @@ commands without partial mutation, and make retry behavior idempotent enough for
 CLI and MCP automation.
 
 Current design evidence covers stale bases, retry identity, no-op behavior,
-concurrent commits, scope escape, unsupported requests, forged identities, and
-middle-command failure. No tracked Rust application core exists yet, so
-executable
-apply remains open.
+concurrent commits, scope escape, unsupported requests, forged identities,
+middle-command failure, lost Apply receipts, normalized retry equality, and
+invalid command dependencies. No tracked Rust application core exists yet, so
+executable apply remains open.
 
 ### TODO - Implement impact-scoped recomputation
 
@@ -400,10 +399,9 @@ for agents and prove normalized receipts match CLI and interactive application.
 Keep physical `arm` and `start` behind their separate device-safety boundary.
 
 Current design evidence freezes MCP effect classes, bounded context/write scope,
-receipt chaining, separate adapter admission, no internal-file authority, and
-browser/CLI/MCP parity targets. Tool schemas, transport, admission mechanism,
-and
-backend implementation remain open.
+receipt chaining, lost-receipt recovery, separate adapter admission, no
+internal-file authority, and browser/CLI/MCP parity targets. Tool schemas,
+transport, admission mechanism, and backend implementation remain open.
 
 ### TODO - Package self-contained agent instructions
 

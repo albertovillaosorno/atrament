@@ -126,6 +126,57 @@ applying the batch a second time.
 Repeating the edit with a new retry identity is not the recovery procedure and
 is not used by this fixture.
 
+### Fixture `equivalent-serialization-retry`
+
+Two transport envelopes differ only in representation details that the admitted
+protocol version declares semantically irrelevant, such as harmless whitespace
+or object-member serialization order.
+
+Both parse to the same normalized semantic batch and use the same retry
+identity.
+
+Expected result: retry comparison treats the second request as an idempotent
+replay rather than a conflict. No second revision is created.
+
+### Fixture `ordered-retry-conflict`
+
+Two batches contain the same command identities and bodies but reverse two
+commands whose order is behaviorally significant. Both use the same retry
+identity.
+
+Expected result: normalized semantic content differs because command order is
+significant. The second request is a retry conflict rather than an idempotent
+replay.
+
+### Fixture `duplicate-command-identity`
+
+One batch repeats the same command identity for two command entries, regardless
+of whether their bodies match.
+
+Expected result: validation rejects the complete batch before accepted mutation.
+No command outcome is committed and no retry success is recorded for an invalid
+transaction.
+
+### Fixture `dependency-cycle`
+
+A batch contains a direct self-dependency, a missing command dependency, or a
+cycle across multiple command identities.
+
+Expected result: validation rejects the complete dependency graph. The backend
+does not guess an order, drop an edge, or apply the acyclic subset.
+
+### Fixture `resource-limit-rejection`
+
+For each backend-admitted command-mode bound, one request exercises the limit
+and
+one exceeds it. Bounds include envelope size, command count, dependency edges,
+context, writable scope, and family-specific structured payload size where
+applicable.
+
+Expected result: requests at the admitted bound continue to normal semantic
+validation. Over-limit input returns typed diagnostics before accepted mutation
+and is never silently truncated into a smaller transaction.
+
 ### Fixture `atomic-middle-failure`
 
 A batch contains three ordered commands. The first and third are individually
