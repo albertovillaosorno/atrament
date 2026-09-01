@@ -141,8 +141,13 @@ viewport height without document overflow. A 32-case Firefox matrix spanning
 320 through 1024 px widths, 225 through 576 px heights, split extremes, and 60%
 through 160% preview zoom completed without layout or reachability failures.
 With JavaScript disabled, the short-height warning stays visible without taking
-workspace flow, and Firefox requests only the document and stylesheet. The task
-stays open for backend-fed page navigation and stable semantic selection.
+workspace flow, and Firefox requests only the document and stylesheet. BiDi
+viewport emulation at 320 and 481 pixels confirms the static shell remains 50/50
+with an inert divider, scrollable source and preview panels, and no document
+overflow before `main.js` is available.
+
+The task stays open for backend-fed page navigation and stable semantic
+selection.
 
 ### TODO - Build the structured LLM editor
 
