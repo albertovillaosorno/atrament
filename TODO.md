@@ -487,7 +487,9 @@ fragments without a viewport-restoration failure.
 
 Unknown fragments remain untouched by the presentation adapter. This avoids
 preempting the runtime contract's in-memory session-secret handoff before the
-authenticated startup adapter exists.
+authenticated startup adapter exists. It is an interim shell behavior, not the
+final secret-handling guarantee: authenticated startup must consume an admitted
+secret in memory and remove it from the visible URL.
 
 Malformed or rejecting clipboard promises fail closed, and stale duplicate
 completions cannot unlock a newer write.
