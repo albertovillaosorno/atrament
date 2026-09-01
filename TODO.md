@@ -334,6 +334,32 @@ citation to the exact claim and source metadata the user must review.
 Exercise bilingual mathematics, physics, chemistry, biology, history, and
 language assignments with dense but readable page organization.
 
+### TODO - Freeze the semantic command-batch envelope
+
+Version the batch, base notebook revision, command identities, stable semantic
+targets or insertion anchors, preconditions, retry identity, and normalized
+application receipt without exposing storage paths as document semantics.
+
+### TODO - Implement atomic command validation and apply
+
+Validate the whole batch against one accepted snapshot, reject stale or invalid
+commands without partial mutation, and make retry behavior idempotent enough for
+CLI and MCP automation.
+
+### TODO - Implement impact-scoped recomputation
+
+Compute changed semantic identities and dependency-expanded invalidation so a
+small command does not regenerate unrelated notebook content, while every
+derived layout, handwriting, diagnostic, preview, export, or motion result that
+can change is recomputed.
+
+### TODO - Add clipboard command-mode round trips
+
+Let the backend present a self-contained command-mode prompt for an accepted
+revision and parse the pasted command envelope through the same untrusted raw
+response boundary. Show the semantic diff and diagnostics before interactive
+acceptance rather than parsing commands in TypeScript.
+
 ### TODO - Expose CLI parity for every application command
 
 Create, inspect, validate, transform, render, export, and plan hardware without

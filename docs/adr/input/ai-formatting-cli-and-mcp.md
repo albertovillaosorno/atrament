@@ -24,9 +24,13 @@ profiles, assets, layout constraints, diagnostics, previews, and exports.
 The first browser workflow requires no model account or embedded model API. A
 permanent Copy prompt button produces one self-contained request containing the
 task, paper and style constraints, backend-owned format, source rules, and
-required
-return envelope. The user pastes it once into a chat and pastes the response
-back into the LLM editor for validation and preview.
+required return envelope. The user pastes it once into a chat and pastes the
+response back into the LLM editor for validation and preview.
+
+Initial structuring may return a complete candidate notebook. Refinement of an
+accepted notebook may instead return a semantic command batch against stable
+identities and an explicit base revision, as frozen by the semantic-command
+batch decision.
 
 A repository-owned system instruction teaches agents to use semantic blocks,
 retain source facts, preserve mathematics, mark ambiguity, and validate before

@@ -42,6 +42,18 @@ The copied prompt includes the complete backend-owned return format, page
 constraints, source rules, style vocabulary, and return envelope. It never
 depends on hidden prior chat context.
 
+After a notebook is accepted, Atrament also supports a semantic command mode.
+Instead of regenerating the notebook, an LLM can return a versioned batch of
+typed operations against stable notebook identities and a specific base
+revision. The backend validates the complete batch atomically, applies only its
+accepted semantic effects, and recomputes only derived regions invalidated by
+those effects and their dependencies.
+
+The same command model is available through clipboard-assisted chat, CLI, and
+MCP. Clipboard responses remain untrusted until backend validation and review;
+an explicitly invoked CLI or MCP apply operation can automate the same validated
+transaction without requiring a browser click.
+
 ## What a notebook can contain
 
 The initial semantic vocabulary covers the material expected in serious school
