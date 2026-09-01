@@ -619,6 +619,8 @@ syncDividerAvailability();
 let previewZoom = 100;
 
 function setPreviewZoom(percent: number): void {
+    const previousZoom = previewZoom;
+    const focusedControl = document.activeElement;
     if (!supportsPreviewZoom) {
         previewZoom = 100;
         setTextIfChanged(zoomReset, "100%");
@@ -644,6 +646,18 @@ function setPreviewZoom(percent: number): void {
     zoomOut.disabled = previewZoom <= 60;
     zoomReset.disabled = previewZoom === 100;
     zoomIn.disabled = previewZoom >= 160;
+    if (
+        (focusedControl === zoomOut && zoomOut.disabled)
+        || (focusedControl === zoomIn && zoomIn.disabled)
+    ) {
+        zoomReset.focus();
+    } else if (focusedControl === zoomReset && zoomReset.disabled) {
+        if (previousZoom > 100) {
+            zoomIn.focus();
+        } else if (previousZoom < 100) {
+            zoomOut.focus();
+        }
+    }
 }
 
 zoomOut.addEventListener("click", (): void => {
