@@ -336,6 +336,20 @@ let wideEditorShare = 46;
 let activeDividerPointerId: number | null = null;
 let activeDividerPointerOffsetX = 0;
 
+function scrubBfcacheSubtree(root: HTMLElement): void {
+    const descendants = Array.from(root.querySelectorAll<Element>("*"));
+    for (const element of descendants.reverse()) {
+        for (const attribute of Array.from(element.attributes)) {
+            element.removeAttribute(attribute.name);
+        }
+        element.textContent = "";
+    }
+    for (const attribute of Array.from(root.attributes)) {
+        root.removeAttribute(attribute.name);
+    }
+    root.textContent = "";
+}
+
 function clearSessionText(): void {
     taskInput.defaultValue = "";
     taskInput.value = "";
@@ -364,7 +378,7 @@ window.addEventListener("pagehide", (event): void => {
     }
     clearSessionText();
     if (event.persisted) {
-        workspace.textContent = "";
+        scrubBfcacheSubtree(workspace);
     }
 });
 
