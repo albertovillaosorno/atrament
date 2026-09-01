@@ -443,10 +443,14 @@ compact breakpoint, focus moves to a source heading that is scrolled into view.
 Divider pointer gestures preserve grab offsets and tenth-point ratios that match
 measured panel geometry, and are serialized and released on cancellation,
 navigation, or compacting. If captured dragging is absent or fails, native touch
-defaults remain available and only a completed click changes the split. The
-inert compact divider restores native touch behavior without an overlapping hit
-target; backend-owned editing, import, export, diagnostic actions, and hardware
-actions still need complete no-pointer paths before this task closes.
+defaults remain available and only a completed click changes the split; an
+uncaptured pointerdown also preserves the prior keyboard focus. Broken modern or
+legacy media-query listeners fall back to viewport width plus resize without
+changing the compact splitter contract.
+
+The inert compact divider restores native touch behavior without an overlapping
+hit target. Backend-owned editing, import, export, diagnostic actions, and
+hardware actions still need complete no-pointer paths before this task closes.
 
 ### TODO - Prove localhost security and privacy
 
@@ -463,12 +467,12 @@ classes. Text, selection, and dynamic enabled-state restoration are disabled.
 With the browser adapter active, a fresh reload also resets nested workspace
 scrollports to their static pre-session origin.
 
-Before a bfcache snapshot, all four session text values are cleared before the
-disposable workspace DOM is removed; retained detached element references also
-measure empty. A real workspace → second-page → Back flow produced no
-intermediate workspace request, then forced one fresh reload where all four text
-surfaces and the three nested scrollports returned empty or at their static
-origin.
+Before a bfcache snapshot, all four session text values are cleared and their
+retained detached references return disabled with zero-length counters and the
+static prompt-copy state before the disposable workspace DOM is removed. A real
+workspace → second-page → Back flow produced no intermediate workspace request,
+then forced one fresh reload where those controls, counters, copy status, and
+the three nested scrollports returned to their static pre-session state.
 
 With bfcache disabled, the equivalent Back navigation performed a fresh
 `back_forward` document load and again restored all four text surfaces empty and
