@@ -521,6 +521,14 @@ window.addEventListener("blur", (): void => {
         releaseDividerPointer(activeDividerPointerId);
     }
 });
+document.addEventListener("visibilitychange", (): void => {
+    if (
+        document.visibilityState === "hidden"
+        && activeDividerPointerId !== null
+    ) {
+        releaseDividerPointer(activeDividerPointerId);
+    }
+});
 divider.addEventListener("lostpointercapture", (event): void => {
     if (activeDividerPointerId === event.pointerId) {
         activeDividerPointerId = null;
