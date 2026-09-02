@@ -229,9 +229,13 @@ bounded command context so stale copied requests cannot masquerade as current.
 
 A transport probe passed a command-like Unicode payload measuring 1,406,010
 UTF-8 bytes through the presented prompt, mocked clipboard `writeText`, and raw
-response surfaces with exact content equality and one write. That evidence shows
-the frontend path does not parse or truncate command text; it does not define a
-backend protocol limit or prove an operating-system clipboard capacity.
+response surfaces with exact content equality and one write. A separate newline
+probe showed that Firefox textareas normalize `CRLF` and lone `CR` to `LF`, so
+the frozen browser text contract now requires backend prompts to present
+canonical `LF` and treats line-ending representation as non-semantic. These
+probes do not define a backend protocol limit or prove operating-system
+clipboard
+capacity.
 
 A hostile-text transport probe placed script markup, a fetch expression,
 out-of-scope command prose, file-export prose, hardware-start prose, JSON-like

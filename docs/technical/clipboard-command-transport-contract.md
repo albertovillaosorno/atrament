@@ -41,15 +41,26 @@ or context identity required by that model workflow.
 The browser does not independently assemble semantic context or insert hidden
 command authority into the copied text.
 
-### Exact text preservation
+### Text preservation and newline canonicalization
 
 The browser transports the backend-presented prompt as text. It does not parse,
-normalize, reorder, truncate, reserialize, sanitize into another command format,
-or execute command-like content before writing it to the clipboard.
+reorder, truncate, reserialize, sanitize into another command format, or execute
+command-like content before writing it to the clipboard.
+
+Browser text controls normalize line endings. First-release text command
+transport therefore uses line feed (`LF`) as the canonical presented newline.
+The backend generates copied prompt text with canonical `LF` line endings and
+does not assign semantic meaning to a distinction between `CRLF`, lone `CR`,
+and `LF` in pasted model text.
+
+Inbound response parsing consumes the browser-observed text after ordinary text
+control newline normalization. A future protocol that requires byte-significant
+line endings must use another admitted transport rather than asking TypeScript
+to reconstruct line endings the browser did not preserve.
 
 Unicode, mathematics, JSON-like text, markup-looking text, and hostile-looking
-source prose remain literal text. Exact transport does not mean the content is
-trusted semantic input.
+source prose remain literal text apart from that declared newline
+canonicalization. Exact semantic transport does not make the content trusted.
 
 Backend-owned protocol and context limits determine whether a prompt or response
 is admissible. Browser textarea capacity or one successful clipboard probe does
@@ -199,10 +210,13 @@ through direct, CLI, or MCP paths.
 
 ## Verification
 
-An exact-copy fixture presents a backend-generated Unicode command prompt,
-performs one explicit Copy, and compares the browser value with the mocked
-clipboard write byte-for-byte or code-unit-for-code-unit as appropriate to the
-browser API. No semantic parser runs in TypeScript.
+An exact-copy fixture presents a backend-generated Unicode command prompt using
+canonical `LF`, performs one explicit Copy, and compares browser and mocked
+clipboard values code-unit-for-code-unit. No semantic parser runs in TypeScript.
+
+A newline fixture supplies `CRLF`, lone `CR`, and `LF` to a browser text control
+and records the browser normalization to `LF`. A canonical backend prompt using
+only `LF` remains unchanged through the same control and Copy path.
 
 A hostile-text fixture includes script markup, a network request string, file
 paths, hardware phrases, JSON-like commands, Unicode, and ordinary prose.

@@ -167,6 +167,21 @@ applying the batch a second time.
 Repeating the edit with a new retry identity is not the recovery procedure and
 is not used by this fixture.
 
+### Fixture `browser-newline-normalization`
+
+A backend command prompt is presented with canonical `LF` line endings and is
+copied through the browser text surface. The copied text preserves those `LF`
+code units exactly.
+
+A separate raw text-control fixture supplies equivalent line boundaries using
+`CRLF`, lone `CR`, and `LF`. Browser-observed text normalizes them to `LF`
+before
+backend parsing.
+
+Expected result: line-ending representation does not alter command semantics or
+create a retry conflict. The frontend does not attempt to reconstruct discarded
+carriage-return bytes or parse the command envelope.
+
 ### Fixture `equivalent-serialization-retry`
 
 Two transport envelopes differ only in representation details that the admitted

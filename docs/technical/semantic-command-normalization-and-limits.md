@@ -56,9 +56,15 @@ Application-significant input includes at least:
 - command preconditions and admitted dependencies;
 - revision-owned values requested by each command.
 
-Transport whitespace, object-member serialization order, adapter-local request
-IDs, UI labels, logging metadata, and receipt timestamps are not semantic merely
-because they appear in one transport representation.
+Transport whitespace, browser text-control newline representation,
+object-member serialization order, adapter-local request IDs, UI labels, logging
+metadata, and receipt timestamps are not semantic merely because they appear in
+one transport representation.
+
+For the first-release browser text path, backend-presented command prompts use
+canonical `LF` newlines. The final parser accepts the browser-observed
+normalized
+text without making `CRLF` versus `LF` a semantic batch distinction.
 
 A final wire contract may admit explicitly preserved extension data. That
 version must define whether an extension participates in normalized equality;
