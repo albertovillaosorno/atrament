@@ -410,11 +410,36 @@ pub enum EditableValuePreconditionOutcome {
     },
 }
 
+/// Semantic mutation families frozen by the command capability matrix.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub enum SemanticCommandFamily {
+    /// Attach, replace, or remove a reference to an already admitted asset.
+    AssetReference,
+    /// Insert or delete typed semantic block membership at admitted anchors.
+    BlockInsertionAndDeletion,
+    /// Change a notebook-wide or output-relevant accepted constraint.
+    DocumentConstraint,
+    /// Change semantic order or admitted grouping relationships.
+    OrderingAndGrouping,
+    /// Attach, correct, or remove semantic source and citation metadata.
+    Provenance,
+    /// Change typed placement, size, crop, anchor, alignment, or layer intent.
+    SpatialConstraint,
+    /// Change typed children while preserving their structured container.
+    StructuredContent,
+    /// Change admitted semantic style assignment or role.
+    StyleRole,
+    /// Change text owned by an existing semantic text identity.
+    TextContent,
+}
+
 /// Backend-derived local precondition material for one writable target.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CommandTargetMaterial {
     /// Current semantic kind and direct structural owner.
     pub descriptor: SemanticIdentityDescriptor<AcceptedIdentity>,
+    /// Currently executable direct-edit family for this target, if any.
+    pub direct_edit_family: Option<SemanticCommandFamily>,
     /// Exact established editable value when this target has direct-edit
     /// authority.
     pub editable_value: Option<EditableSemanticValue>,

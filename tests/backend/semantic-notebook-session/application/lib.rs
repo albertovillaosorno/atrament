@@ -50,7 +50,7 @@ use atrament_semantic_notebook_port::{
     EditableValuePreconditionOutcome, FormulaEditOutcome,
     IdentityInspectOutcome, IdentityKindInspectOutcome,
     IdentityOwnerExpectation, IdentityPrecondition,
-    IdentityPreconditionOutcome, PageProfileEditOutcome,
+    IdentityPreconditionOutcome, PageProfileEditOutcome, SemanticCommandFamily,
     SemanticNotebookSession, TableRowRoleEditOutcome, TextEditOutcome,
 };
 use atrament_semantic_notebook_session::SemanticNotebookSessionService;
@@ -566,6 +566,7 @@ fn command_target_material_combines_owner_and_editable_value_read_only() {
     let before = session.current().expect("accepted revision").clone();
     let expected_span = CommandTargetMaterialOutcome::Prepared {
         material: CommandTargetMaterial {
+            direct_edit_family: Some(SemanticCommandFamily::TextContent),
             descriptor: SemanticIdentityDescriptor {
                 kind: SemanticIdentityKind::InlineSpan,
                 owner: Some(block),
@@ -589,6 +590,7 @@ fn command_target_material_combines_owner_and_editable_value_read_only() {
         session.command_target_material(revision, block),
         CommandTargetMaterialOutcome::Prepared {
             material: CommandTargetMaterial {
+                direct_edit_family: None,
                 descriptor: SemanticIdentityDescriptor {
                     kind: SemanticIdentityKind::Block(
                         SemanticBlockKind::Paragraph,
@@ -602,6 +604,58 @@ fn command_target_material_combines_owner_and_editable_value_read_only() {
         },
     );
     assert_eq!(session.current(), Some(&before));
+}
+
+#[test]
+fn command_target_material_maps_current_direct_edit_families() {
+    let ids = IdentityAllocator::new();
+    let (formula_candidate, formula) =
+        candidate_math_notebook(&ids, "x^2", FormulaMode::Display);
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(formula_candidate)
+    else {
+        panic!("formula candidate must be accepted");
+    };
+    let formula = accepted_for(&mapping, formula);
+    let CommandTargetMaterialOutcome::Prepared { material } =
+        session.command_target_material(revision, formula)
+    else {
+        panic!("formula target material must be prepared");
+    };
+    assert_eq!(
+        material.direct_edit_family,
+        Some(SemanticCommandFamily::StructuredContent),
+    );
+
+    let (table_candidate, row, _) =
+        candidate_table_notebook(&ids, TableRowRole::Header);
+    let page_profile = table_candidate.page_profiles[0].id;
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(table_candidate)
+    else {
+        panic!("table candidate must be accepted");
+    };
+    let row = accepted_for(&mapping, row);
+    let page_profile = accepted_for(&mapping, page_profile);
+    let CommandTargetMaterialOutcome::Prepared { material } =
+        session.command_target_material(revision, row)
+    else {
+        panic!("row target material must be prepared");
+    };
+    assert_eq!(
+        material.direct_edit_family,
+        Some(SemanticCommandFamily::StructuredContent),
+    );
+    let CommandTargetMaterialOutcome::Prepared { material } =
+        session.command_target_material(revision, page_profile)
+    else {
+        panic!("page-profile target material must be prepared");
+    };
+    assert_eq!(
+        material.direct_edit_family,
+        Some(SemanticCommandFamily::DocumentConstraint),
+    );
 }
 
 #[test]

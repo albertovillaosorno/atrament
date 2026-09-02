@@ -53,7 +53,7 @@ use atrament_semantic_notebook_port::{
     EditableValuePreconditionOutcome, FormulaEditOutcome,
     IdentityInspectOutcome, IdentityKindInspectOutcome, IdentityMapping,
     IdentityOwnerExpectation, IdentityPrecondition,
-    IdentityPreconditionOutcome, PageProfileEditOutcome,
+    IdentityPreconditionOutcome, PageProfileEditOutcome, SemanticCommandFamily,
     SemanticNotebookSession, TableRowRoleEditOutcome, TextEditOutcome,
 };
 
@@ -297,8 +297,11 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
         };
         let editable_value =
             editable_semantic_value(&current.notebook, target, descriptor.kind);
+        let direct_edit_family =
+            editable_value.as_ref().map(direct_edit_family);
         CommandTargetMaterialOutcome::Prepared {
             material: CommandTargetMaterial {
+                direct_edit_family,
                 descriptor,
                 editable_value,
                 revision,
@@ -978,6 +981,21 @@ fn formula_content_value(
         | BlockContent::Paragraph(_)
         | BlockContent::Rule
         | BlockContent::Unresolved(_) => None,
+    }
+}
+
+const fn direct_edit_family(
+    value: &EditableSemanticValue,
+) -> SemanticCommandFamily {
+    match value {
+        EditableSemanticValue::Formula { .. }
+        | EditableSemanticValue::TableRowRole(_) => {
+            SemanticCommandFamily::StructuredContent
+        },
+        EditableSemanticValue::PageProfile(_) => {
+            SemanticCommandFamily::DocumentConstraint
+        },
+        EditableSemanticValue::Text(_) => SemanticCommandFamily::TextContent,
     }
 }
 
