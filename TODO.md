@@ -156,6 +156,24 @@ minimum size, collision policy, and explicit infeasibility diagnostics.
 Block export while fixed content crosses the writable region and identify the
 object, violated edge, amount, and valid move, crop, resize, or reflow choices.
 
+Current executable evidence checks solver-derived fixed rectangles only after
+binding them to an exact accepted revision, page, and semantic block. Writable
+bounds come only from the accepted page's referenced physical profile. Every
+crossed edge produces one complete blocking layout diagnostic with the semantic
+object and page locations plus exact physical overflow evidence; the frozen
+first-journey 6 mm bottom overflow is exercised directly.
+
+Stale placements, wrong page ownership, missing or invalid profiles, and
+unrepresentable coordinates fail before a diagnostic can be presented as
+current. Page-profile edits invalidate prior derived geometry, while nested
+semantic blocks retain their accepted page ownership. Overflow amounts retain
+the full physical `u64` range without diagnostic truncation.
+
+The task remains open until an explicit Export preflight consumes complete
+layout diagnostics and refuses success while overflow is blocking. Move, crop,
+resize, and reflow remediation classes also remain open until the owning fixed
+placement and asset semantics can prove which choices are valid.
+
 ### TODO - Implement mathematics as editable structure
 
 Parse and preserve TeX-compatible inline, displayed, aligned, matrix, unit, and
