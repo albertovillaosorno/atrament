@@ -4,6 +4,7 @@
   "type": "module",
   "packageManager": "pnpm@11.22.0",
   "scripts": {
+    "build:frontend": "pnpm --filter @atrament/frontend run build",
     "check:frontend": "pnpm --filter @atrament/frontend run check"
   },
   "devDependencies": {
