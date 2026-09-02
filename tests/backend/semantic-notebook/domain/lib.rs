@@ -310,6 +310,54 @@ fn semantic_identity_kind_reaches_nested_table_owners() {
 }
 
 #[test]
+fn semantic_identity_descriptor_handles_deep_nesting_iteratively() {
+    const DEPTH: u64 = 50_000;
+    const TARGET: u64 = u64::MAX;
+    let mut block = Block {
+        content: BlockContent::Rule,
+        extensions: vec![],
+        id: TARGET,
+        provenance: None,
+        style: None,
+    };
+    for offset in 0..DEPTH {
+        block = Block {
+            content: BlockContent::Callout(vec![block]),
+            extensions: vec![],
+            id: offset.saturating_add(1_000),
+            provenance: None,
+            style: None,
+        };
+    }
+    let notebook = Notebook {
+        assets: vec![],
+        constraints: vec![],
+        extensions: vec![],
+        id: 1,
+        output_profiles: vec![],
+        page_profiles: vec![],
+        pages: vec![Page {
+            flows: vec![Flow {
+                blocks: vec![block],
+                id: 3,
+            }],
+            id: 2,
+            page_profile: 4,
+        }],
+        provenance: vec![],
+        styles: vec![],
+    };
+    assert_eq!(
+        semantic_identity_descriptor(&notebook, TARGET),
+        Some(SemanticIdentityDescriptor {
+            kind: SemanticIdentityKind::Block(SemanticBlockKind::Rule),
+            owner: Some(1_000),
+        }),
+    );
+    std::mem::forget(notebook);
+}
+
+#[test]
 fn unresolved_semantics_and_extensions_are_preserved_exactly() {
     let identities = IdentityAllocator::new();
     let block_id = identities.allocate_candidate().expect("block id");

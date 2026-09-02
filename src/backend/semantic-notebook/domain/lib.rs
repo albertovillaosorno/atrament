@@ -513,6 +513,26 @@ pub enum UnresolvedReason {
     Unsupported,
 }
 
+#[derive(Clone, Copy)]
+enum SemanticDescriptorFrame<'notebook, Identity> {
+    Blocks {
+        blocks: &'notebook [Block<Identity>],
+        owner: Identity,
+    },
+    ListItems {
+        items: &'notebook [ListItem<Identity>],
+        owner: Identity,
+    },
+    TableCells {
+        cells: &'notebook [TableCell<Identity>],
+        owner: Identity,
+    },
+    TableRows {
+        owner: Identity,
+        rows: &'notebook [TableRow<Identity>],
+    },
+}
+
 /// Resolve one identity's semantic kind and direct structural owner.
 ///
 /// This is a read-only semantic inspection primitive. It exposes no serialized
@@ -632,39 +652,117 @@ const fn semantic_block_kind<Identity>(
 }
 
 fn semantic_blocks_descriptor<Identity>(
-    blocks: &[Block<Identity>],
+    root_blocks: &[Block<Identity>],
     target: Identity,
-    owner: Identity,
+    root_owner: Identity,
 ) -> Option<SemanticIdentityDescriptor<Identity>>
 where
     Identity: Copy + Eq,
 {
-    for block in blocks {
-        if block.id == target {
-            return Some(descriptor(
-                SemanticIdentityKind::Block(semantic_block_kind(
-                    &block.content,
-                )),
-                owner,
-            ));
-        }
-        if let Some(found) = semantic_content_descriptor(block, target) {
+    let mut stack = vec![SemanticDescriptorFrame::Blocks {
+        blocks: root_blocks,
+        owner: root_owner,
+    }];
+    while let Some(frame) = stack.pop() {
+        if let Some(found) =
+            semantic_descriptor_frame(frame, target, &mut stack)
+        {
             return Some(found);
         }
     }
     None
 }
 
-fn semantic_content_descriptor<Identity>(
-    block: &Block<Identity>,
+fn semantic_descriptor_frame<'notebook, Identity>(
+    frame: SemanticDescriptorFrame<'notebook, Identity>,
     target: Identity,
+    stack: &mut Vec<SemanticDescriptorFrame<'notebook, Identity>>,
+) -> Option<SemanticIdentityDescriptor<Identity>>
+where
+    Identity: Copy + Eq,
+{
+    match frame {
+        SemanticDescriptorFrame::Blocks {
+            blocks: current_blocks,
+            owner: current_owner,
+        } => semantic_block_frame_descriptor(
+            current_blocks,
+            target,
+            current_owner,
+            stack,
+        ),
+        SemanticDescriptorFrame::ListItems {
+            items: current_items,
+            owner: current_owner,
+        } => semantic_list_item_frame_descriptor(
+            current_items,
+            target,
+            current_owner,
+            stack,
+        ),
+        SemanticDescriptorFrame::TableCells {
+            cells: current_cells,
+            owner: current_owner,
+        } => semantic_table_cell_frame_descriptor(
+            current_cells,
+            target,
+            current_owner,
+            stack,
+        ),
+        SemanticDescriptorFrame::TableRows {
+            owner: current_owner,
+            rows: current_rows,
+        } => semantic_table_row_frame_descriptor(
+            current_rows,
+            target,
+            current_owner,
+            stack,
+        ),
+    }
+}
+
+fn semantic_block_frame_descriptor<'notebook, Identity>(
+    current_blocks: &'notebook [Block<Identity>],
+    target: Identity,
+    current_owner: Identity,
+    stack: &mut Vec<SemanticDescriptorFrame<'notebook, Identity>>,
+) -> Option<SemanticIdentityDescriptor<Identity>>
+where
+    Identity: Copy + Eq,
+{
+    let (block, remaining) = current_blocks.split_first()?;
+    if !remaining.is_empty() {
+        stack.push(SemanticDescriptorFrame::Blocks {
+            blocks: remaining,
+            owner: current_owner,
+        });
+    }
+    if block.id == target {
+        return Some(descriptor(
+            SemanticIdentityKind::Block(semantic_block_kind(&block.content)),
+            current_owner,
+        ));
+    }
+    semantic_block_content_descriptor(block, target, stack)
+}
+
+fn semantic_block_content_descriptor<'notebook, Identity>(
+    block: &'notebook Block<Identity>,
+    target: Identity,
+    stack: &mut Vec<SemanticDescriptorFrame<'notebook, Identity>>,
 ) -> Option<SemanticIdentityDescriptor<Identity>>
 where
     Identity: Copy + Eq,
 {
     match &block.content {
-        BlockContent::Callout(blocks) | BlockContent::Freeform(blocks) => {
-            semantic_blocks_descriptor(blocks, target, block.id)
+        BlockContent::Callout(children) | BlockContent::Freeform(children) => {
+            if !children.is_empty() {
+                stack.push(SemanticDescriptorFrame::Blocks {
+                    blocks: children,
+                    owner: block.id,
+                });
+            }
+            None
         },
         BlockContent::Date(spans)
         | BlockContent::Heading(spans)
@@ -684,58 +782,117 @@ where
             if list.id == target {
                 return Some(descriptor(SemanticIdentityKind::List, block.id));
             }
-            for item in &list.items {
-                if item.id == target {
-                    return Some(descriptor(
-                        SemanticIdentityKind::ListItem,
-                        list.id,
-                    ));
-                }
-                if let Some(found) =
-                    semantic_blocks_descriptor(&item.blocks, target, item.id)
-                {
-                    return Some(found);
-                }
+            if !list.items.is_empty() {
+                stack.push(SemanticDescriptorFrame::ListItems {
+                    items: &list.items,
+                    owner: list.id,
+                });
             }
             None
         },
-        BlockContent::Mathematics(formula) => {
-            (formula.id == target).then_some(SemanticIdentityDescriptor {
-                kind: SemanticIdentityKind::Formula,
-                owner: Some(block.id),
-            })
-        },
+        BlockContent::Mathematics(formula) => (formula.id == target)
+            .then_some(descriptor(SemanticIdentityKind::Formula, block.id)),
         BlockContent::Rule | BlockContent::Unresolved(_) => None,
         BlockContent::Table(table) => {
             if table.id == target {
                 return Some(descriptor(SemanticIdentityKind::Table, block.id));
             }
-            for row in &table.rows {
-                if row.id == target {
-                    return Some(descriptor(
-                        SemanticIdentityKind::TableRow,
-                        table.id,
-                    ));
-                }
-                for cell in &row.cells {
-                    if cell.id == target {
-                        return Some(descriptor(
-                            SemanticIdentityKind::TableCell,
-                            row.id,
-                        ));
-                    }
-                    if let Some(found) = semantic_blocks_descriptor(
-                        &cell.blocks,
-                        target,
-                        cell.id,
-                    ) {
-                        return Some(found);
-                    }
-                }
+            if !table.rows.is_empty() {
+                stack.push(SemanticDescriptorFrame::TableRows {
+                    owner: table.id,
+                    rows: &table.rows,
+                });
             }
             None
         },
     }
+}
+
+fn semantic_list_item_frame_descriptor<'notebook, Identity>(
+    current_items: &'notebook [ListItem<Identity>],
+    target: Identity,
+    current_owner: Identity,
+    stack: &mut Vec<SemanticDescriptorFrame<'notebook, Identity>>,
+) -> Option<SemanticIdentityDescriptor<Identity>>
+where
+    Identity: Copy + Eq,
+{
+    let (item, remaining) = current_items.split_first()?;
+    if !remaining.is_empty() {
+        stack.push(SemanticDescriptorFrame::ListItems {
+            items: remaining,
+            owner: current_owner,
+        });
+    }
+    if item.id == target {
+        return Some(descriptor(SemanticIdentityKind::ListItem, current_owner));
+    }
+    if !item.blocks.is_empty() {
+        stack.push(SemanticDescriptorFrame::Blocks {
+            blocks: &item.blocks,
+            owner: item.id,
+        });
+    }
+    None
+}
+
+fn semantic_table_cell_frame_descriptor<'notebook, Identity>(
+    current_cells: &'notebook [TableCell<Identity>],
+    target: Identity,
+    current_owner: Identity,
+    stack: &mut Vec<SemanticDescriptorFrame<'notebook, Identity>>,
+) -> Option<SemanticIdentityDescriptor<Identity>>
+where
+    Identity: Copy + Eq,
+{
+    let (cell, remaining) = current_cells.split_first()?;
+    if !remaining.is_empty() {
+        stack.push(SemanticDescriptorFrame::TableCells {
+            cells: remaining,
+            owner: current_owner,
+        });
+    }
+    if cell.id == target {
+        return Some(descriptor(
+            SemanticIdentityKind::TableCell,
+            current_owner,
+        ));
+    }
+    if !cell.blocks.is_empty() {
+        stack.push(SemanticDescriptorFrame::Blocks {
+            blocks: &cell.blocks,
+            owner: cell.id,
+        });
+    }
+    None
+}
+
+fn semantic_table_row_frame_descriptor<'notebook, Identity>(
+    current_rows: &'notebook [TableRow<Identity>],
+    target: Identity,
+    current_owner: Identity,
+    stack: &mut Vec<SemanticDescriptorFrame<'notebook, Identity>>,
+) -> Option<SemanticIdentityDescriptor<Identity>>
+where
+    Identity: Copy + Eq,
+{
+    let (row, remaining) = current_rows.split_first()?;
+    if !remaining.is_empty() {
+        stack.push(SemanticDescriptorFrame::TableRows {
+            owner: current_owner,
+            rows: remaining,
+        });
+    }
+    if row.id == target {
+        return Some(descriptor(SemanticIdentityKind::TableRow, current_owner));
+    }
+    if !row.cells.is_empty() {
+        stack.push(SemanticDescriptorFrame::TableCells {
+            cells: &row.cells,
+            owner: row.id,
+        });
+    }
+    None
 }
 
 fn semantic_spans_descriptor<Identity>(
