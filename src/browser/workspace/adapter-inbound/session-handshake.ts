@@ -31,6 +31,8 @@
 // - Defaults:
 //   - Requires the same six exact first-release versions as the backend.
 //
+import { parseDiagnosticMetadata } from "./session-diagnostic.js";
+
 const CAPABILITY_VERSION = "atrament.capability/1";
 const PRODUCT_VERSION = "0.1.0";
 const PROFILE_VERSION = "atrament.profile/1";
@@ -122,8 +124,9 @@ export function parseHandshakePayload(value: unknown): HandshakeOutcome {
         return { kind: "invalid" };
     }
     const diagnostic = value.diagnostic;
+    const metadata = parseDiagnosticMetadata(diagnostic);
     if (
-        diagnostic.code !== "atrament.handshake.version-mismatch"
+        metadata?.code !== "atrament.handshake.version-mismatch"
         || !isVersionDimension(diagnostic.dimension)
         || typeof diagnostic.expected !== "string"
     ) {

@@ -36,8 +36,11 @@ import test from "node:test";
 
 const GENERATED_ROOT =
     "../src/browser/workspace/adapter-inbound/generated/";
-const { draftMutationHeaders, draftMutationTarget } =
-    await import(`${GENERATED_ROOT}session-draft.js`);
+const {
+    draftMutationHeaders,
+    draftMutationTarget,
+    isResourceLimit,
+} = await import(`${GENERATED_ROOT}session-draft.js`);
 
 test("draft targets are same-origin and contain no credential", () => {
     const secret = "a".repeat(64);
@@ -55,4 +58,32 @@ test("draft headers carry only bearer credential and text media type", () => {
         Authorization: `Bearer ${secret}`,
         "Content-Type": "text/plain; charset=utf-8",
     });
+});
+
+test("draft resource limit requires current shared diagnostic metadata", () => {
+    const valid = {
+        error: "resource_limit",
+        diagnostic: {
+            version: "atrament.diagnostic/1",
+            code: "atrament.session-draft.resource-limit",
+        },
+    };
+    assert.equal(isResourceLimit(valid), true);
+    assert.equal(
+        isResourceLimit({
+            ...valid,
+            diagnostic: {
+                ...valid.diagnostic,
+                version: "atrament.diagnostic/0",
+            },
+        }),
+        false,
+    );
+    assert.equal(
+        isResourceLimit({
+            ...valid,
+            diagnostic: { ...valid.diagnostic, code: "unknown" },
+        }),
+        false,
+    );
 });

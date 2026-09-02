@@ -539,9 +539,23 @@ async function syncDraftField(
                 continue;
             }
             if (response.status === 413) {
+                let payload: unknown;
+                try {
+                    payload = await response.json();
+                } catch {
+                    setTextIfChanged(
+                        sessionStatus,
+                        "Invalid draft diagnostic",
+                    );
+                    return;
+                }
+                const resourceLimit =
+                    sessionDraft.isResourceLimit(payload);
                 setTextIfChanged(
                     sessionStatus,
-                    "Draft too large · reduce",
+                    resourceLimit
+                        ? "Draft too large · reduce"
+                        : "Invalid draft diagnostic",
                 );
                 return;
             }

@@ -70,6 +70,9 @@ const WORKSPACE_CSS: &[u8] =
 const MAIN_JAVASCRIPT: &[u8] = include_bytes!(
     "../../../browser/workspace/adapter-inbound/generated/main.js"
 );
+const SESSION_DIAGNOSTIC_JAVASCRIPT: &[u8] = include_bytes!(
+    "../../../browser/workspace/adapter-inbound/generated/session-diagnostic.js"
+);
 const SESSION_DRAFT_JAVASCRIPT: &[u8] = include_bytes!(
     "../../../browser/workspace/adapter-inbound/generated/session-draft.js"
 );
@@ -596,6 +599,45 @@ fn json_response(status: &str, body: &[u8]) -> Vec<u8> {
     response(status, JSON_CONTENT_TYPE, body)
 }
 
+fn public_get_response(target: &str) -> Option<Vec<u8>> {
+    match target {
+        "/" | "/index.html" => {
+            Some(response("200 OK", HTML_CONTENT_TYPE, INDEX_HTML))
+        },
+        "/generated/main.js" => {
+            Some(response("200 OK", JAVASCRIPT_CONTENT_TYPE, MAIN_JAVASCRIPT))
+        },
+        "/generated/session-diagnostic.js" => Some(response(
+            "200 OK",
+            JAVASCRIPT_CONTENT_TYPE,
+            SESSION_DIAGNOSTIC_JAVASCRIPT,
+        )),
+        "/generated/session-draft.js" => Some(response(
+            "200 OK",
+            JAVASCRIPT_CONTENT_TYPE,
+            SESSION_DRAFT_JAVASCRIPT,
+        )),
+        "/generated/session-fragment.js" => Some(response(
+            "200 OK",
+            JAVASCRIPT_CONTENT_TYPE,
+            SESSION_FRAGMENT_JAVASCRIPT,
+        )),
+        "/generated/session-handshake.js" => Some(response(
+            "200 OK",
+            JAVASCRIPT_CONTENT_TYPE,
+            SESSION_HANDSHAKE_JAVASCRIPT,
+        )),
+        "/health" => Some(json_response(
+            "200 OK",
+            br#"{"product":"atrament","state":"ready"}"#,
+        )),
+        "/workspace.css" => {
+            Some(response("200 OK", CSS_CONTENT_TYPE, WORKSPACE_CSS))
+        },
+        _ => None,
+    }
+}
+
 /// Route one parsed HTTP request after exact canonical `Host` admission.
 #[must_use]
 pub fn route_request(
@@ -619,35 +661,12 @@ pub fn route_request(
             br#"{"error":"invalid_host"}"#,
         );
     }
+    if method == "GET"
+        && let Some(public_response) = public_get_response(target)
+    {
+        return public_response;
+    }
     match (method, target) {
-        ("GET", "/" | "/index.html") => {
-            response("200 OK", HTML_CONTENT_TYPE, INDEX_HTML)
-        },
-        ("GET", "/generated/main.js") => {
-            response("200 OK", JAVASCRIPT_CONTENT_TYPE, MAIN_JAVASCRIPT)
-        },
-        ("GET", "/generated/session-draft.js") => response(
-            "200 OK",
-            JAVASCRIPT_CONTENT_TYPE,
-            SESSION_DRAFT_JAVASCRIPT,
-        ),
-        ("GET", "/generated/session-fragment.js") => response(
-            "200 OK",
-            JAVASCRIPT_CONTENT_TYPE,
-            SESSION_FRAGMENT_JAVASCRIPT,
-        ),
-        ("GET", "/generated/session-handshake.js") => response(
-            "200 OK",
-            JAVASCRIPT_CONTENT_TYPE,
-            SESSION_HANDSHAKE_JAVASCRIPT,
-        ),
-        ("GET", "/health") => json_response(
-            "200 OK",
-            br#"{"product":"atrament","state":"ready"}"#,
-        ),
-        ("GET", "/workspace.css") => {
-            response("200 OK", CSS_CONTENT_TYPE, WORKSPACE_CSS)
-        },
         ("GET", "/api/session/candidate") => route_draft_read(
             request,
             DraftField::Candidate,
