@@ -482,6 +482,11 @@ adapter admission, effect-class authorization, session-scoped recovery, no
 internal-file authority, and browser/CLI/MCP parity targets. Tool schemas,
 concrete stdio/loopback mechanism, and backend implementation remain open.
 
+Current design evidence freezes autonomous-agent loop stop conditions, typed
+progress versus non-progress, same-retry recovery, bounded automation budgets,
+and the separation between semantic completion, explicit output, and physical
+authority. Concrete MCP tools and backend execution remain open.
+
 ### TODO - Package self-contained agent instructions
 
 Allow a user to provide the repository or release bundle to an agent and have

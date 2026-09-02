@@ -137,6 +137,10 @@ read local release discovery
 Successful validation is not represented as a commit reservation. A caller that
 chooses Apply still follows revision, context, retry, and atomicity rules.
 
+Repeated automated refinement follows the frozen autonomous-agent loop
+contract. Instructions teach typed progress and stop conditions rather than
+unbounded "retry until success" behavior.
+
 ### Result and diagnostic handling
 
 Agent instructions reference machine-readable result classes and the shared

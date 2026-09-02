@@ -82,3 +82,6 @@ contracts:
   - id: atrament.technical.self-contained-agent-instruction-bundle
     status: frozen
     path: self-contained-agent-instruction-bundle-contract.md
+  - id: atrament.technical.autonomous-agent-loop
+    status: frozen
+    path: autonomous-agent-loop-contract.md

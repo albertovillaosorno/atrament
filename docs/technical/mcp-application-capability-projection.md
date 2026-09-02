@@ -176,8 +176,12 @@ The agent can perform the complete loop without opening a browser. Each step
 still has one declared effect class and one normalized receipt.
 
 A stale-base result returns to inspection. The agent does not receive an
-implicit
-rebase or silent retry against a newer revision.
+implicit rebase or silent retry against a newer revision.
+
+Repeated autonomous editing follows the frozen autonomous-agent loop contract.
+No-op, stable blocking diagnostics, unrepresentable intent, scope or capability
+rejection, retry conflict, and budget exhaustion keep their distinct stop or
+recovery semantics instead of becoming blind retry instructions.
 
 ### Bounded context and writable scope
 
