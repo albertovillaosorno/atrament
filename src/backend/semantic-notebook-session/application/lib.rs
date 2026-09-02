@@ -43,7 +43,7 @@ use atrament_semantic_notebook::{
     CandidateIdentity, Constraint, Figure, Flow, Formula, FormulaMode,
     IdentityAllocator, IdentityExhausted, InlineSpan, List, ListItem, Notebook,
     OutputProfile, Page, PaperProfile, Provenance, Style, Table, TableCell,
-    TableRow, TableRowRole,
+    TableRow, TableRowRole, semantic_identity_kind,
 };
 use atrament_semantic_notebook_port::{
     AcceptanceOutcome, CandidateGraphError, CandidateReferenceKind,
@@ -167,7 +167,7 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
             return FormulaEditOutcome::StaleBase { current: current.id };
         }
         let Some(existing) = formula_value(&current.notebook, target) else {
-            if notebook_contains_identity(&current.notebook, target) {
+            if semantic_identity_kind(&current.notebook, target).is_some() {
                 return FormulaEditOutcome::TargetNotFormula {
                     revision: current.id,
                     target,
@@ -231,7 +231,7 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
         }
         let Some(existing) = page_profile_value(&current.notebook, target)
         else {
-            if notebook_contains_identity(&current.notebook, target) {
+            if semantic_identity_kind(&current.notebook, target).is_some() {
                 return PageProfileEditOutcome::TargetNotPageProfile {
                     revision: current.id,
                     target,
@@ -288,7 +288,7 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
         }
         let Some(existing) = table_row_role_value(&current.notebook, target)
         else {
-            if notebook_contains_identity(&current.notebook, target) {
+            if semantic_identity_kind(&current.notebook, target).is_some() {
                 return TableRowRoleEditOutcome::TargetNotTableRow {
                     revision: current.id,
                     target,
@@ -335,7 +335,7 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
             return TextEditOutcome::StaleBase { current: current.id };
         }
         let Some(existing) = text_value(&current.notebook, target) else {
-            if notebook_contains_identity(&current.notebook, target) {
+            if semantic_identity_kind(&current.notebook, target).is_some() {
                 return TextEditOutcome::TargetNotText {
                     revision: current.id,
                     target,
@@ -714,54 +714,6 @@ fn accepted_reference(
         .transpose()
 }
 
-fn blocks_contain_identity(
-    blocks: &[Block<AcceptedIdentity>],
-    target: AcceptedIdentity,
-) -> bool {
-    blocks.iter().any(|block| {
-        block.id == target || content_contains_identity(&block.content, target)
-    })
-}
-
-fn content_contains_identity(
-    content: &BlockContent<AcceptedIdentity>,
-    target: AcceptedIdentity,
-) -> bool {
-    match content {
-        BlockContent::Callout(blocks) | BlockContent::Freeform(blocks) => {
-            blocks_contain_identity(blocks, target)
-        },
-        BlockContent::Date(spans)
-        | BlockContent::Heading(spans)
-        | BlockContent::Paragraph(spans) => {
-            spans.iter().any(|span| span.id == target)
-        },
-        BlockContent::Figure(figure) => {
-            figure.id == target
-                || figure.caption.iter().any(|span| span.id == target)
-        },
-        BlockContent::List(list) => {
-            list.id == target
-                || list.items.iter().any(|item| {
-                    item.id == target
-                        || blocks_contain_identity(&item.blocks, target)
-                })
-        },
-        BlockContent::Mathematics(formula) => formula.id == target,
-        BlockContent::Rule | BlockContent::Unresolved(_) => false,
-        BlockContent::Table(table) => {
-            table.id == target
-                || table.rows.iter().any(|row| {
-                    row.id == target
-                        || row.cells.iter().any(|cell| {
-                            cell.id == target
-                                || blocks_contain_identity(&cell.blocks, target)
-                        })
-                })
-        },
-    }
-}
-
 fn formula_blocks_value(
     blocks: &[Block<AcceptedIdentity>],
     target: AcceptedIdentity,
@@ -829,38 +781,6 @@ fn formula_value(
         }
     }
     None
-}
-
-fn notebook_contains_identity(
-    notebook: &Notebook<AcceptedIdentity>,
-    target: AcceptedIdentity,
-) -> bool {
-    notebook.id == target
-        || notebook.assets.iter().any(|asset| asset.id == target)
-        || notebook
-            .constraints
-            .iter()
-            .any(|constraint| constraint.id == target)
-        || notebook
-            .output_profiles
-            .iter()
-            .any(|profile| profile.id == target)
-        || notebook
-            .page_profiles
-            .iter()
-            .any(|profile| profile.id == target)
-        || notebook.pages.iter().any(|page| {
-            page.id == target
-                || page.flows.iter().any(|flow| {
-                    flow.id == target
-                        || blocks_contain_identity(&flow.blocks, target)
-                })
-        })
-        || notebook
-            .provenance
-            .iter()
-            .any(|provenance| provenance.id == target)
-        || notebook.styles.iter().any(|style| style.id == target)
 }
 
 fn page_profile_value(

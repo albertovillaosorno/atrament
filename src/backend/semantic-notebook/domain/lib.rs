@@ -427,6 +427,74 @@ pub struct UnresolvedBlock {
     pub source: String,
 }
 
+/// Semantic subtype owned by one block identity.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub enum SemanticBlockKind {
+    /// Callout block containing nested semantic blocks.
+    Callout,
+    /// Date block containing inline text spans.
+    Date,
+    /// Figure block with a figure identity and optional caption spans.
+    Figure,
+    /// Explicit freeform semantic region.
+    Freeform,
+    /// Heading block containing inline text spans.
+    Heading,
+    /// Structured semantic list block.
+    List,
+    /// Structured mathematical source block.
+    Mathematics,
+    /// Paragraph block containing inline text spans.
+    Paragraph,
+    /// Semantic rule or divider block.
+    Rule,
+    /// Structured semantic table block.
+    Table,
+    /// Unsupported or ambiguous semantic content block.
+    Unresolved,
+}
+
+/// Read-only semantic kind owned by one notebook identity.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub enum SemanticIdentityKind {
+    /// Session-owned semantic asset reference.
+    Asset,
+    /// Block identity with its semantic subtype.
+    Block(SemanticBlockKind),
+    /// Revision-owned semantic constraint.
+    Constraint,
+    /// Figure value nested inside a figure block.
+    Figure,
+    /// Ordered semantic flow.
+    Flow,
+    /// Structured mathematical source unit.
+    Formula,
+    /// Editable inline Unicode text span.
+    InlineSpan,
+    /// Structured semantic list.
+    List,
+    /// One semantic list item.
+    ListItem,
+    /// Complete semantic notebook authority.
+    Notebook,
+    /// Semantic output-profile reference.
+    OutputProfile,
+    /// Semantic notebook page.
+    Page,
+    /// Physical page profile owned by semantic authority.
+    PageProfile,
+    /// Semantic provenance record.
+    Provenance,
+    /// Reusable semantic style.
+    Style,
+    /// Structured semantic table.
+    Table,
+    /// Semantic table cell.
+    TableCell,
+    /// Semantic table row.
+    TableRow,
+}
+
 /// Reason semantic content remains unresolved.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum UnresolvedReason {
@@ -434,6 +502,188 @@ pub enum UnresolvedReason {
     Ambiguous,
     /// Source uses a semantic family unsupported by the active model version.
     Unsupported,
+}
+
+/// Resolve the semantic kind owned by one identity in a notebook snapshot.
+///
+/// This is a read-only semantic inspection primitive. It exposes no serialized
+/// offsets, memory addresses, storage paths, page pixels, or adapter state.
+#[must_use]
+pub fn semantic_identity_kind<Identity>(
+    notebook: &Notebook<Identity>,
+    target: Identity,
+) -> Option<SemanticIdentityKind>
+where
+    Identity: Copy + Eq,
+{
+    if notebook.id == target {
+        return Some(SemanticIdentityKind::Notebook);
+    }
+    for asset in &notebook.assets {
+        if asset.id == target {
+            return Some(SemanticIdentityKind::Asset);
+        }
+    }
+    for constraint in &notebook.constraints {
+        if constraint.id == target {
+            return Some(SemanticIdentityKind::Constraint);
+        }
+    }
+    for profile in &notebook.output_profiles {
+        if profile.id == target {
+            return Some(SemanticIdentityKind::OutputProfile);
+        }
+    }
+    for profile in &notebook.page_profiles {
+        if profile.id == target {
+            return Some(SemanticIdentityKind::PageProfile);
+        }
+    }
+    for page in &notebook.pages {
+        if page.id == target {
+            return Some(SemanticIdentityKind::Page);
+        }
+        for flow in &page.flows {
+            if flow.id == target {
+                return Some(SemanticIdentityKind::Flow);
+            }
+            if let Some(kind) =
+                semantic_blocks_identity_kind(&flow.blocks, target)
+            {
+                return Some(kind);
+            }
+        }
+    }
+    for provenance in &notebook.provenance {
+        if provenance.id == target {
+            return Some(SemanticIdentityKind::Provenance);
+        }
+    }
+    for style in &notebook.styles {
+        if style.id == target {
+            return Some(SemanticIdentityKind::Style);
+        }
+    }
+    None
+}
+
+const fn semantic_block_kind<Identity>(
+    content: &BlockContent<Identity>,
+) -> SemanticBlockKind {
+    match content {
+        BlockContent::Callout(_) => SemanticBlockKind::Callout,
+        BlockContent::Date(_) => SemanticBlockKind::Date,
+        BlockContent::Figure(_) => SemanticBlockKind::Figure,
+        BlockContent::Freeform(_) => SemanticBlockKind::Freeform,
+        BlockContent::Heading(_) => SemanticBlockKind::Heading,
+        BlockContent::List(_) => SemanticBlockKind::List,
+        BlockContent::Mathematics(_) => SemanticBlockKind::Mathematics,
+        BlockContent::Paragraph(_) => SemanticBlockKind::Paragraph,
+        BlockContent::Rule => SemanticBlockKind::Rule,
+        BlockContent::Table(_) => SemanticBlockKind::Table,
+        BlockContent::Unresolved(_) => SemanticBlockKind::Unresolved,
+    }
+}
+
+fn semantic_blocks_identity_kind<Identity>(
+    blocks: &[Block<Identity>],
+    target: Identity,
+) -> Option<SemanticIdentityKind>
+where
+    Identity: Copy + Eq,
+{
+    for block in blocks {
+        if block.id == target {
+            return Some(SemanticIdentityKind::Block(semantic_block_kind(
+                &block.content,
+            )));
+        }
+        if let Some(kind) =
+            semantic_content_identity_kind(&block.content, target)
+        {
+            return Some(kind);
+        }
+    }
+    None
+}
+
+fn semantic_content_identity_kind<Identity>(
+    content: &BlockContent<Identity>,
+    target: Identity,
+) -> Option<SemanticIdentityKind>
+where
+    Identity: Copy + Eq,
+{
+    match content {
+        BlockContent::Callout(blocks) | BlockContent::Freeform(blocks) => {
+            semantic_blocks_identity_kind(blocks, target)
+        },
+        BlockContent::Date(spans)
+        | BlockContent::Heading(spans)
+        | BlockContent::Paragraph(spans) => {
+            semantic_spans_identity_kind(spans, target)
+        },
+        BlockContent::Figure(figure) => {
+            if figure.id == target {
+                return Some(SemanticIdentityKind::Figure);
+            }
+            semantic_spans_identity_kind(&figure.caption, target)
+        },
+        BlockContent::List(list) => {
+            if list.id == target {
+                return Some(SemanticIdentityKind::List);
+            }
+            for item in &list.items {
+                if item.id == target {
+                    return Some(SemanticIdentityKind::ListItem);
+                }
+                if let Some(kind) =
+                    semantic_blocks_identity_kind(&item.blocks, target)
+                {
+                    return Some(kind);
+                }
+            }
+            None
+        },
+        BlockContent::Mathematics(formula) => {
+            (formula.id == target).then_some(SemanticIdentityKind::Formula)
+        },
+        BlockContent::Rule | BlockContent::Unresolved(_) => None,
+        BlockContent::Table(table) => {
+            if table.id == target {
+                return Some(SemanticIdentityKind::Table);
+            }
+            for row in &table.rows {
+                if row.id == target {
+                    return Some(SemanticIdentityKind::TableRow);
+                }
+                for cell in &row.cells {
+                    if cell.id == target {
+                        return Some(SemanticIdentityKind::TableCell);
+                    }
+                    if let Some(kind) =
+                        semantic_blocks_identity_kind(&cell.blocks, target)
+                    {
+                        return Some(kind);
+                    }
+                }
+            }
+            None
+        },
+    }
+}
+
+fn semantic_spans_identity_kind<Identity>(
+    spans: &[InlineSpan<Identity>],
+    target: Identity,
+) -> Option<SemanticIdentityKind>
+where
+    Identity: Copy + Eq,
+{
+    spans
+        .iter()
+        .any(|span| span.id == target)
+        .then_some(SemanticIdentityKind::InlineSpan)
 }
 
 fn allocate_next(

@@ -36,7 +36,9 @@ use atrament_physical_page_profile::{
 };
 use atrament_semantic_notebook::{
     Block, BlockContent, ExtensionData, Flow, IdentityAllocator, InlineSpan,
-    Notebook, Page, PaperProfile, UnresolvedBlock, UnresolvedReason,
+    Notebook, Page, PaperProfile, SemanticBlockKind, SemanticIdentityKind,
+    Table, TableCell, TableRow, TableRowRole, UnresolvedBlock,
+    UnresolvedReason, semantic_identity_kind,
 };
 
 fn physical_page_profile() -> PhysicalPageProfile {
@@ -130,6 +132,109 @@ fn cloned_semantic_state_preserves_stable_identity() {
     };
 
     assert_eq!(notebook.clone(), notebook);
+    assert_eq!(
+        semantic_identity_kind(&notebook, notebook_id),
+        Some(SemanticIdentityKind::Notebook),
+    );
+    assert_eq!(
+        semantic_identity_kind(&notebook, page_profile_id),
+        Some(SemanticIdentityKind::PageProfile),
+    );
+    assert_eq!(
+        semantic_identity_kind(&notebook, page_id),
+        Some(SemanticIdentityKind::Page),
+    );
+    assert_eq!(
+        semantic_identity_kind(&notebook, flow_id),
+        Some(SemanticIdentityKind::Flow),
+    );
+    assert_eq!(
+        semantic_identity_kind(&notebook, block_id),
+        Some(SemanticIdentityKind::Block(SemanticBlockKind::Paragraph)),
+    );
+    assert_eq!(
+        semantic_identity_kind(&notebook, span_id),
+        Some(SemanticIdentityKind::InlineSpan),
+    );
+}
+
+#[test]
+fn semantic_identity_kind_reaches_nested_table_owners() {
+    let identities = IdentityAllocator::new();
+    let notebook_id = identities.allocate_candidate().expect("notebook id");
+    let profile_id = identities.allocate_candidate().expect("profile id");
+    let page_id = identities.allocate_candidate().expect("page id");
+    let flow_id = identities.allocate_candidate().expect("flow id");
+    let block_id = identities.allocate_candidate().expect("block id");
+    let table_id = identities.allocate_candidate().expect("table id");
+    let row_id = identities.allocate_candidate().expect("row id");
+    let cell_id = identities.allocate_candidate().expect("cell id");
+    let child_id = identities.allocate_candidate().expect("child id");
+    let missing = identities.allocate_candidate().expect("missing id");
+    let notebook = Notebook {
+        assets: vec![],
+        constraints: vec![],
+        extensions: vec![],
+        id: notebook_id,
+        output_profiles: vec![],
+        page_profiles: vec![PaperProfile {
+            geometry: physical_page_profile(),
+            id: profile_id,
+        }],
+        pages: vec![Page {
+            flows: vec![Flow {
+                blocks: vec![Block {
+                    content: BlockContent::Table(Table {
+                        id: table_id,
+                        rows: vec![TableRow {
+                            cells: vec![TableCell {
+                                blocks: vec![Block {
+                                    content: BlockContent::Rule,
+                                    extensions: vec![],
+                                    id: child_id,
+                                    provenance: None,
+                                    style: None,
+                                }],
+                                id: cell_id,
+                            }],
+                            id: row_id,
+                            role: TableRowRole::Header,
+                        }],
+                    }),
+                    extensions: vec![],
+                    id: block_id,
+                    provenance: None,
+                    style: None,
+                }],
+                id: flow_id,
+            }],
+            id: page_id,
+            page_profile: profile_id,
+        }],
+        provenance: vec![],
+        styles: vec![],
+    };
+    assert_eq!(
+        semantic_identity_kind(&notebook, block_id),
+        Some(SemanticIdentityKind::Block(SemanticBlockKind::Table)),
+    );
+    assert_eq!(
+        semantic_identity_kind(&notebook, table_id),
+        Some(SemanticIdentityKind::Table),
+    );
+    assert_eq!(
+        semantic_identity_kind(&notebook, row_id),
+        Some(SemanticIdentityKind::TableRow),
+    );
+    assert_eq!(
+        semantic_identity_kind(&notebook, cell_id),
+        Some(SemanticIdentityKind::TableCell),
+    );
+    assert_eq!(
+        semantic_identity_kind(&notebook, child_id),
+        Some(SemanticIdentityKind::Block(SemanticBlockKind::Rule)),
+    );
+    assert_eq!(semantic_identity_kind(&notebook, missing), None);
 }
 
 #[test]
