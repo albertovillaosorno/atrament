@@ -53,6 +53,7 @@ const MAX_REQUEST_BODY_BYTES: usize = 2 * 1024 * 1024;
 const HTML_CONTENT_TYPE: &str = "text/html; charset=utf-8";
 const CSS_CONTENT_TYPE: &str = "text/css; charset=utf-8";
 const JAVASCRIPT_CONTENT_TYPE: &str = "text/javascript; charset=utf-8";
+const TEXT_CONTENT_TYPE: &str = "text/plain; charset=utf-8";
 const JSON_CONTENT_TYPE: &str = "application/json; charset=utf-8";
 const RESPONSE_TRAILERS: &str = concat!(
     "Cache-Control: no-store\r\n",
@@ -444,6 +445,32 @@ fn request_body(request: &[u8]) -> Option<&[u8]> {
     (body.len() == declared).then_some(body)
 }
 
+fn request_origin_is_admitted(request: &[u8], expected_origin: &str) -> bool {
+    if !header_is_present(request, "origin") {
+        return true;
+    }
+    request_has_exact_origin(request, expected_origin)
+}
+
+fn route_draft_read(
+    request: &[u8],
+    field: DraftField,
+    expected_origin: &str,
+    expected_secret: &str,
+    draft: &dyn SessionDraft,
+) -> Vec<u8> {
+    let credential_valid =
+        request_has_session_credential(request, expected_secret);
+    let origin_valid = request_origin_is_admitted(request, expected_origin);
+    if !credential_valid || !origin_valid {
+        return json_response(
+            "401 Unauthorized",
+            br#"{"error":"unauthenticated"}"#,
+        );
+    }
+    response("200 OK", TEXT_CONTENT_TYPE, draft.value(field).as_bytes())
+}
+
 fn route_draft_replace(
     request: &[u8],
     field: DraftField,
@@ -587,6 +614,27 @@ pub fn route_request(
         ("GET", "/workspace.css") => {
             response("200 OK", CSS_CONTENT_TYPE, WORKSPACE_CSS)
         },
+        ("GET", "/api/session/candidate") => route_draft_read(
+            request,
+            DraftField::Candidate,
+            expected_origin,
+            expected_secret,
+            draft,
+        ),
+        ("GET", "/api/session/source") => route_draft_read(
+            request,
+            DraftField::Source,
+            expected_origin,
+            expected_secret,
+            draft,
+        ),
+        ("GET", "/api/session/task") => route_draft_read(
+            request,
+            DraftField::Task,
+            expected_origin,
+            expected_secret,
+            draft,
+        ),
         ("POST", "/api/handshake") => route_handshake(
             request,
             expected_origin,

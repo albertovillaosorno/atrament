@@ -643,3 +643,100 @@ fn draft_resource_limit_rejects_without_truncating_current_value() {
     assert_eq!(status_line(&response), "HTTP/1.1 413 Content Too Large");
     assert_eq!(draft.value(DraftField::Candidate), "current");
 }
+
+fn draft_read_request(
+    target: &str,
+    authorization: Option<&str>,
+    origin: Option<&str>,
+) -> Vec<u8> {
+    let mut request =
+        format!("GET {target} HTTP/1.1\r\nHost: {EXPECTED_HOST}\r\n",);
+    if let Some(value) = authorization {
+        request.push_str(&format!("Authorization: {value}\r\n"));
+    }
+    if let Some(value) = origin {
+        request.push_str(&format!("Origin: {value}\r\n"));
+    }
+    request.push_str("\r\n");
+    request.into_bytes()
+}
+
+#[test]
+fn authenticated_draft_reads_return_exact_private_text() {
+    let authorization = format!("Bearer {EXPECTED_SECRET}");
+    let mut draft = SessionDraftService::default();
+    let cases = [
+        ("/api/session/task", DraftField::Task, "task α"),
+        ("/api/session/source", DraftField::Source, "fuente ñ"),
+        (
+            "/api/session/candidate",
+            DraftField::Candidate,
+            "respuesta π",
+        ),
+    ];
+    for (_, field, value) in cases {
+        assert_eq!(
+            draft.replace(field, String::from(value)),
+            atrament_session_draft_port::DraftMutation::Applied,
+        );
+    }
+    for (target, _, expected) in cases {
+        for origin in [None, Some(EXPECTED_ORIGIN)] {
+            let request =
+                draft_read_request(target, Some(&authorization), origin);
+            let response =
+                route_with_draft(&request, EXPECTED_HOST, &mut draft);
+            let (head, body) = response_parts(&response);
+            assert!(head.starts_with("HTTP/1.1 200 OK\r\n"));
+            assert!(head.contains("Content-Type: text/plain; charset=utf-8"));
+            assert!(head.contains("Cache-Control: no-store"));
+            assert!(!head.contains("Access-Control-Allow-Origin"));
+            assert_eq!(body, expected.as_bytes());
+        }
+    }
+}
+
+#[test]
+fn draft_read_admission_failure_is_uniform_and_private() {
+    let authorization = format!("Bearer {EXPECTED_SECRET}");
+    let wrong_authorization = format!("Bearer {}", "b".repeat(64));
+    let mut draft = SessionDraftService::default();
+    assert_eq!(
+        draft.replace(DraftField::Task, String::from("private task")),
+        atrament_session_draft_port::DraftMutation::Applied,
+    );
+    let requests = [
+        draft_read_request("/api/session/task", None, None),
+        draft_read_request(
+            "/api/session/task",
+            Some(&wrong_authorization),
+            None,
+        ),
+        draft_read_request(
+            "/api/session/task",
+            Some(&authorization),
+            Some("http://attacker.example"),
+        ),
+        {
+            let mut request = format!(
+                concat!(
+                    "GET /api/session/task HTTP/1.1\r\n",
+                    "Host: {}\r\n",
+                    "Authorization: {}\r\n",
+                    "Origin: {}\r\n",
+                    "Origin: http://attacker.example\r\n\r\n",
+                ),
+                EXPECTED_HOST, authorization, EXPECTED_ORIGIN,
+            );
+            request.shrink_to_fit();
+            request.into_bytes()
+        },
+    ];
+    let reference = route_with_draft(&requests[0], EXPECTED_HOST, &mut draft);
+    assert_eq!(status_line(&reference), "HTTP/1.1 401 Unauthorized");
+    assert!(!String::from_utf8_lossy(&reference).contains("private task"));
+    for request in requests.iter().skip(1) {
+        let response = route_with_draft(request, EXPECTED_HOST, &mut draft);
+        assert_eq!(response, reference);
+    }
+}
