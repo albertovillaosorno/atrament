@@ -89,6 +89,8 @@ fn health_requires_the_exact_canonical_host() {
         host,
     );
     assert_eq!(status_line(&accepted), "HTTP/1.1 200 OK");
+    let (_, health_body) = response_parts(&accepted);
+    assert_eq!(health_body, br#"{"product":"atrament","state":"ready"}"#,);
 
     let rejected_hosts = [
         "localhost:43123",
@@ -383,5 +385,80 @@ fn authenticated_version_mismatch_is_typed_and_blocking() {
     assert!(body.contains("atrament.handshake.version-mismatch"));
     assert!(body.contains("\"dimension\":\"prompt\""));
     assert!(body.contains(PROMPT_VERSION));
+    assert!(!body.contains("atrament.prompt/0"));
+}
+
+#[test]
+fn handshake_requires_post_method() {
+    let request = format!(
+        "GET /api/handshake HTTP/1.1\r\nHost: {EXPECTED_HOST}\r\n\r\n",
+    );
+    let response = route_runtime(request.as_bytes(), EXPECTED_HOST);
+    assert_eq!(status_line(&response), "HTTP/1.1 400 Bad Request");
+}
+
+#[test]
+fn missing_required_handshake_version_blocks_compatibility() {
+    let authorization = format!("Bearer {EXPECTED_SECRET}");
+    let request = format!(
+        concat!(
+            "POST /api/handshake HTTP/1.1\r\n",
+            "Host: {}\r\n",
+            "Authorization: {}\r\n",
+            "Origin: {}\r\n",
+            "X-Atrament-Capability-Version: {}\r\n",
+            "X-Atrament-Product-Version: {}\r\n",
+            "X-Atrament-Profile-Version: {}\r\n",
+            "X-Atrament-Protocol-Version: {}\r\n",
+            "X-Atrament-Renderer-Version: {}\r\n\r\n",
+        ),
+        EXPECTED_HOST,
+        authorization,
+        EXPECTED_ORIGIN,
+        CAPABILITY_VERSION,
+        PRODUCT_VERSION,
+        PROFILE_VERSION,
+        PROTOCOL_VERSION,
+        RENDERER_VERSION,
+    );
+    let response = route_runtime(request.as_bytes(), EXPECTED_HOST);
+    let (head, body) = response_parts(&response);
+    assert!(head.starts_with("HTTP/1.1 409 Conflict\r\n"));
+    let body = std::str::from_utf8(body).expect("handshake JSON is UTF-8");
+    assert!(body.contains("\"dimension\":\"prompt\""));
+}
+
+#[test]
+fn duplicate_required_handshake_version_blocks_compatibility() {
+    let authorization = format!("Bearer {EXPECTED_SECRET}");
+    let request = format!(
+        concat!(
+            "POST /api/handshake HTTP/1.1\r\n",
+            "Host: {}\r\n",
+            "Authorization: {}\r\n",
+            "Origin: {}\r\n",
+            "X-Atrament-Capability-Version: {}\r\n",
+            "X-Atrament-Product-Version: {}\r\n",
+            "X-Atrament-Profile-Version: {}\r\n",
+            "X-Atrament-Prompt-Version: {}\r\n",
+            "X-Atrament-Prompt-Version: atrament.prompt/0\r\n",
+            "X-Atrament-Protocol-Version: {}\r\n",
+            "X-Atrament-Renderer-Version: {}\r\n\r\n",
+        ),
+        EXPECTED_HOST,
+        authorization,
+        EXPECTED_ORIGIN,
+        CAPABILITY_VERSION,
+        PRODUCT_VERSION,
+        PROFILE_VERSION,
+        PROMPT_VERSION,
+        PROTOCOL_VERSION,
+        RENDERER_VERSION,
+    );
+    let response = route_runtime(request.as_bytes(), EXPECTED_HOST);
+    let (head, body) = response_parts(&response);
+    assert!(head.starts_with("HTTP/1.1 409 Conflict\r\n"));
+    let body = std::str::from_utf8(body).expect("handshake JSON is UTF-8");
+    assert!(body.contains("\"dimension\":\"prompt\""));
     assert!(!body.contains("atrament.prompt/0"));
 }
