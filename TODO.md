@@ -50,9 +50,8 @@ loopback listener, restart generates a fresh session credential, and a stale
 credential cannot authenticate to the new process. Process-level draft fixtures
 also write and read task, source, and raw-response text, then verify both
 orderly restart and forced process death yield empty fields in the fresh
-session. While
-private draft text is live, the runtime holds no writable regular-file
-descriptor and changes no declared repository runtime-root file.
+session. While private draft text is live, the runtime holds no writable
+regular-file descriptor and changes no declared repository runtime-root file.
 
 The task remains open until accepted notebook state and temporary media exist
 and fixtures also cover browser close, refresh, cancellation, media cleanup,
