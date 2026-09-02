@@ -47,8 +47,9 @@ use atrament_semantic_notebook::{
 };
 use atrament_semantic_notebook_port::{
     AcceptanceOutcome, CandidateGraphError, CandidateReferenceKind,
-    FormulaEditOutcome, IdentityMapping, PageProfileEditOutcome,
-    SemanticNotebookSession, TableRowRoleEditOutcome, TextEditOutcome,
+    FormulaEditOutcome, IdentityKindInspectOutcome, IdentityMapping,
+    PageProfileEditOutcome, SemanticNotebookSession, TableRowRoleEditOutcome,
+    TextEditOutcome,
 };
 
 #[derive(Debug, Default)]
@@ -151,6 +152,29 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
 
     fn current(&self) -> Option<&AcceptedRevision> {
         self.current.as_ref()
+    }
+
+    fn inspect_identity_kind(
+        &self,
+        revision: atrament_semantic_notebook::RevisionIdentity,
+        target: AcceptedIdentity,
+    ) -> IdentityKindInspectOutcome {
+        let Some(current) = self.current.as_ref() else {
+            return IdentityKindInspectOutcome::NoAcceptedRevision;
+        };
+        if current.id != revision {
+            return IdentityKindInspectOutcome::StaleBase {
+                current: current.id,
+            };
+        }
+        let Some(kind) = semantic_identity_kind(&current.notebook, target)
+        else {
+            return IdentityKindInspectOutcome::TargetNotFound {
+                revision,
+                target,
+            };
+        };
+        IdentityKindInspectOutcome::Inspected { kind, revision, target }
     }
 
     fn replace_formula(

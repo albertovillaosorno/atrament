@@ -39,13 +39,14 @@ use atrament_semantic_notebook::{
     Constraint, ConstraintKind, ExtensionData, Figure, Flow, Formula,
     FormulaMode, IdentityAllocator, InlineSpan, List, ListItem,
     MathSyntaxError, MathSyntaxErrorKind, Notebook, OutputProfile, Page,
-    PaperProfile, Provenance, ProvenanceKind, Style, Table, TableCell,
-    TableRow, TableRowRole, UnresolvedBlock, UnresolvedReason,
+    PaperProfile, Provenance, ProvenanceKind, SemanticIdentityKind, Style,
+    Table, TableCell, TableRow, TableRowRole, UnresolvedBlock,
+    UnresolvedReason,
 };
 use atrament_semantic_notebook_port::{
     AcceptanceOutcome, CandidateGraphError, CandidateReferenceKind,
-    FormulaEditOutcome, PageProfileEditOutcome, SemanticNotebookSession,
-    TableRowRoleEditOutcome, TextEditOutcome,
+    FormulaEditOutcome, IdentityKindInspectOutcome, PageProfileEditOutcome,
+    SemanticNotebookSession, TableRowRoleEditOutcome, TextEditOutcome,
 };
 use atrament_semantic_notebook_session::SemanticNotebookSessionService;
 
@@ -323,6 +324,75 @@ fn unsupported_mathematics_can_be_preserved_as_exact_unresolved_source() {
     };
     assert_eq!(unresolved.reason, UnresolvedReason::Unsupported);
     assert_eq!(unresolved.source, source);
+}
+
+#[test]
+fn exact_revision_identity_kind_inspection_is_read_only_and_typed() {
+    let ids = IdentityAllocator::new();
+    let (candidate, row, table) =
+        candidate_table_notebook(&ids, TableRowRole::Header);
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(candidate)
+    else {
+        panic!("table candidate must be accepted");
+    };
+    let row = accepted_for(&mapping, row);
+    let table = accepted_for(&mapping, table);
+    let before = session.current().expect("accepted revision").clone();
+    assert_eq!(
+        session.inspect_identity_kind(revision, row),
+        IdentityKindInspectOutcome::Inspected {
+            kind: SemanticIdentityKind::TableRow,
+            revision,
+            target: row,
+        },
+    );
+    assert_eq!(
+        session.inspect_identity_kind(revision, table),
+        IdentityKindInspectOutcome::Inspected {
+            kind: SemanticIdentityKind::Table,
+            revision,
+            target: table,
+        },
+    );
+    assert_eq!(session.current(), Some(&before));
+}
+
+#[test]
+fn identity_kind_inspection_rejects_stale_absent_and_empty_session() {
+    let ids = IdentityAllocator::new();
+    let (candidate, row, _) =
+        candidate_table_notebook(&ids, TableRowRole::Body);
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(candidate)
+    else {
+        panic!("table candidate must be accepted");
+    };
+    let row = accepted_for(&mapping, row);
+    let replacement = candidate_notebook(&ids, "replacement");
+    let AcceptanceOutcome::Accepted { revision: current, .. } =
+        session.accept(replacement)
+    else {
+        panic!("replacement must be accepted");
+    };
+    assert_eq!(
+        session.inspect_identity_kind(revision, row),
+        IdentityKindInspectOutcome::StaleBase { current },
+    );
+    assert_eq!(
+        session.inspect_identity_kind(current, row),
+        IdentityKindInspectOutcome::TargetNotFound {
+            revision: current,
+            target: row,
+        },
+    );
+    let empty = SemanticNotebookSessionService::default();
+    assert_eq!(
+        empty.inspect_identity_kind(current, row),
+        IdentityKindInspectOutcome::NoAcceptedRevision,
+    );
 }
 
 #[test]

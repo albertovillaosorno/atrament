@@ -36,7 +36,8 @@
 use atrament_semantic_notebook::{
     AcceptedIdentity, AcceptedRevision, CandidateIdentity, FormulaMode,
     IdentityExhausted, MathSyntaxError, Notebook, PhysicalPageProfile,
-    PhysicalPageProfileError, RevisionIdentity, TableRowRole,
+    PhysicalPageProfileError, RevisionIdentity, SemanticIdentityKind,
+    TableRowRole,
 };
 
 /// Result of one explicit candidate acceptance request.
@@ -333,6 +334,34 @@ pub enum TextEditOutcome {
     },
 }
 
+/// Result of one exact-revision, single-identity semantic kind inspection.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum IdentityKindInspectOutcome {
+    /// Requested identity exists in the named accepted revision.
+    Inspected {
+        /// Semantic kind owned by the requested identity.
+        kind: SemanticIdentityKind,
+        /// Accepted revision that was inspected without mutation.
+        revision: RevisionIdentity,
+        /// Requested accepted semantic identity.
+        target: AcceptedIdentity,
+    },
+    /// Session has no accepted semantic revision to inspect.
+    NoAcceptedRevision,
+    /// Caller names an accepted revision that is no longer current.
+    StaleBase {
+        /// Current accepted revision that rejected stale inspection.
+        current: RevisionIdentity,
+    },
+    /// Requested accepted identity is absent from the named revision.
+    TargetNotFound {
+        /// Accepted revision that was inspected without mutation.
+        revision: RevisionIdentity,
+        /// Requested identity absent from that revision.
+        target: AcceptedIdentity,
+    },
+}
+
 /// One candidate-local identity promoted to a new accepted semantic identity.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct IdentityMapping {
@@ -352,6 +381,13 @@ pub trait SemanticNotebookSession {
 
     /// Read the current accepted revision without creating another revision.
     fn current(&self) -> Option<&AcceptedRevision>;
+
+    /// Inspect one semantic identity kind against an exact accepted revision.
+    fn inspect_identity_kind(
+        &self,
+        revision: RevisionIdentity,
+        target: AcceptedIdentity,
+    ) -> IdentityKindInspectOutcome;
 
     /// Replace one mathematical source against an exact base revision.
     fn replace_formula(
