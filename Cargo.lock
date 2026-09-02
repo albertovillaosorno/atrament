@@ -11,6 +11,10 @@ name = "atrament_diagnostic"
 version = "0.1.0"
 
 [[package]]
+name = "atrament_physical_page_profile"
+version = "0.1.0"
+
+[[package]]
 name = "atrament_runtime_bootstrap"
 version = "0.1.0"
 dependencies = [

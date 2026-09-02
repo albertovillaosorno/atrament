@@ -1,0 +1,9 @@
+identity:
+  id: function:physical-page-profile
+  name: physical-page-profile
+  path: src/backend/physical-page-profile
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: domain
