@@ -84,8 +84,9 @@ The bundle points to the versioned schema or equivalent machine-readable
 contract for every implemented structured interface that requires one.
 
 It also makes the semantic behavior contracts discoverable, including command
-normalization, result taxonomy, diagnostics, Inspect/command context, review,
-history, Render, Export, Plan, and safety boundaries relevant to the shipped
+normalization, command and derived-output result taxonomies, diagnostics,
+Inspect/command context, review, history, application operation lifecycle,
+Render, Export, Plan, and safety boundaries relevant to the shipped
 capabilities.
 
 A schema describes transport shape. The semantic technical contracts continue
@@ -142,8 +143,13 @@ Agent instructions reference machine-readable result classes and the shared
 typed diagnostic envelope. They do not teach automation to branch on one English
 error sentence or terminal color.
 
+Render, Plan, and Export instructions use the frozen derived/output result
+classes rather than inferring success from progress, file-system prose, or one
+diagnostic severity. Optional operation progress remains observational.
+
 Lost mutation receipts use the owning same-retry recovery contract before the
-agent issues a new semantic intent.
+agent issues a new semantic intent. A cancellation request is not treated as an
+application rollback until the owning operation reports its final result.
 
 ### Clipboard versus native automation
 
