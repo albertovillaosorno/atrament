@@ -31,7 +31,7 @@
 // - Defaults:
 //   - Requires the same six exact first-release versions as the backend.
 //
-import { parseDiagnosticMetadata } from "./session-diagnostic.js";
+import { parseDiagnosticSet } from "./session-diagnostic.js";
 
 const CAPABILITY_VERSION = "atrament.capability/1";
 const PRODUCT_VERSION = "0.1.0";
@@ -120,13 +120,17 @@ export function parseHandshakePayload(value: unknown): HandshakeOutcome {
     ) {
         return { kind: "compatible" };
     }
-    if (value.result !== "incompatible" || !isRecord(value.diagnostic)) {
+    if (value.result !== "incompatible" || !isRecord(value.diagnostics)) {
         return { kind: "invalid" };
     }
-    const diagnostic = value.diagnostic;
-    const metadata = parseDiagnosticMetadata(diagnostic);
+    const metadata = parseDiagnosticSet(value.diagnostics);
+    if (metadata === null || metadata.items.length !== 1) {
+        return { kind: "invalid" };
+    }
+    const diagnostic = metadata.items[0];
     if (
-        metadata?.code !== "atrament.handshake.version-mismatch"
+        diagnostic === undefined
+        || diagnostic.code !== "atrament.handshake.version-mismatch"
         || !isVersionDimension(diagnostic.dimension)
         || typeof diagnostic.expected !== "string"
     ) {

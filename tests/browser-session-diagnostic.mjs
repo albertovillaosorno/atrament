@@ -34,32 +34,57 @@ import test from "node:test";
 
 const GENERATED_ROOT =
     "../src/browser/workspace/adapter-inbound/generated/";
-const { DIAGNOSTIC_VERSION, parseDiagnosticMetadata } =
+const { DIAGNOSTIC_VERSION, parseDiagnosticSet } =
     await import(`${GENERATED_ROOT}session-diagnostic.js`);
 
-test("diagnostic metadata admits current version and preserves code", () => {
+test("diagnostic set admits current version and explicit completeness", () => {
     assert.equal(DIAGNOSTIC_VERSION, "atrament.diagnostic/1");
     assert.deepEqual(
-        parseDiagnosticMetadata({
+        parseDiagnosticSet({
             version: DIAGNOSTIC_VERSION,
-            code: "atrament.example.condition",
+            completeness: "complete",
+            items: [{ code: "atrament.example.condition", detail: 42 }],
         }),
-        { code: "atrament.example.condition" },
+        {
+            completeness: "complete",
+            items: [{ code: "atrament.example.condition", detail: 42 }],
+        },
     );
 });
 
-test("diagnostic metadata rejects missing or drifted namespace", () => {
+test("diagnostic set rejects invalid namespace, completeness, or items", () => {
+    const validItem = { code: "atrament.example.condition" };
     for (const value of [
         null,
         {},
-        { code: "atrament.example.condition" },
+        { version: DIAGNOSTIC_VERSION, completeness: "complete", items: [] },
         {
             version: "atrament.diagnostic/0",
-            code: "atrament.example.condition",
+            completeness: "complete",
+            items: [validItem],
         },
-        { version: DIAGNOSTIC_VERSION, code: "" },
-        { version: DIAGNOSTIC_VERSION, code: 42 },
+        {
+            version: DIAGNOSTIC_VERSION,
+            completeness: "unknown",
+            items: [validItem],
+        },
+        {
+            version: DIAGNOSTIC_VERSION,
+            completeness: "complete",
+            items: [{ code: "" }],
+        },
     ]) {
-        assert.equal(parseDiagnosticMetadata(value), null);
+        const parsed = parseDiagnosticSet(value);
+        if (
+            value !== null
+            && typeof value === "object"
+            && "items" in value
+            && Array.isArray(value.items)
+            && value.items.length === 0
+        ) {
+            assert.deepEqual(parsed, { completeness: "complete", items: [] });
+        } else {
+            assert.equal(parsed, null);
+        }
     }
 });

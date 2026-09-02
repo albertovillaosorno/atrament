@@ -32,26 +32,47 @@
 //
 export const DIAGNOSTIC_VERSION = "atrament.diagnostic/1";
 
-export type DiagnosticMetadata = {
+export type DiagnosticCompleteness = "complete" | "incomplete";
+
+export type DiagnosticItem = Record<string, unknown> & {
     code: string;
+};
+
+export type DiagnosticSetMetadata = {
+    completeness: DiagnosticCompleteness;
+    items: DiagnosticItem[];
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
     return typeof value === "object" && value !== null;
 }
 
-export function parseDiagnosticMetadata(
+function isCompleteness(value: unknown): value is DiagnosticCompleteness {
+    return value === "complete" || value === "incomplete";
+}
+
+function isDiagnosticItem(value: unknown): value is DiagnosticItem {
+    return isRecord(value)
+        && typeof value.code === "string"
+        && value.code !== "";
+}
+
+export function parseDiagnosticSet(
     value: unknown,
-): DiagnosticMetadata | null {
+): DiagnosticSetMetadata | null {
     if (!isRecord(value)) {
         return null;
     }
     if (
         value.version !== DIAGNOSTIC_VERSION
-        || typeof value.code !== "string"
-        || value.code === ""
+        || !isCompleteness(value.completeness)
+        || !Array.isArray(value.items)
+        || !value.items.every(isDiagnosticItem)
     ) {
         return null;
     }
-    return { code: value.code };
+    return {
+        completeness: value.completeness,
+        items: value.items,
+    };
 }

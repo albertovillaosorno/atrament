@@ -43,7 +43,7 @@ use std::net::{Ipv4Addr, SocketAddr, TcpListener, TcpStream};
 use std::str;
 use std::time::Duration;
 
-use atrament_diagnostic::{DIAGNOSTIC_VERSION, DiagnosticCode, DiagnosticSet};
+use atrament_diagnostic::{Completeness, DIAGNOSTIC_VERSION, DiagnosticSet};
 use atrament_session_draft_port::{DraftField, DraftMutation, SessionDraft};
 use atrament_session_handshake_port::{
     HandshakeResult, SessionHandshake, VersionDimension, Versions,
@@ -376,26 +376,42 @@ const fn handshake_dimension_name(dimension: VersionDimension) -> &'static str {
     }
 }
 
+const fn completeness_name(completeness: Completeness) -> &'static str {
+    match completeness {
+        Completeness::Complete => "complete",
+        Completeness::Incomplete => "incomplete",
+    }
+}
+
+fn invalid_diagnostic_response() -> Vec<u8> {
+    json_response(
+        "500 Internal Server Error",
+        br#"{"error":"invalid_diagnostic"}"#,
+    )
+}
+
 fn handshake_incompatible_response(
     diagnostics: &DiagnosticSet,
     dimension: VersionDimension,
     expected: &str,
 ) -> Vec<u8> {
-    let code = diagnostics.diagnostics.first().map_or(
-        DiagnosticCode::HandshakeVersionMismatch.stable_name(),
-        |diagnostic| diagnostic.code.stable_name(),
-    );
+    let Some(diagnostic) = diagnostics.diagnostics.first() else {
+        return invalid_diagnostic_response();
+    };
     let body = format!(
         concat!(
             "{{\"result\":\"incompatible\",",
-            "\"diagnostic\":{{",
+            "\"diagnostics\":{{",
             "\"version\":\"{}\",",
+            "\"completeness\":\"{}\",",
+            "\"items\":[{{",
             "\"code\":\"{}\",",
             "\"dimension\":\"{}\",",
-            "\"expected\":\"{}\"}}}}",
+            "\"expected\":\"{}\"}}]}}}}",
         ),
         DIAGNOSTIC_VERSION,
-        code,
+        completeness_name(diagnostics.completeness),
+        diagnostic.code.stable_name(),
         handshake_dimension_name(dimension),
         expected,
     );
@@ -493,18 +509,20 @@ fn route_draft_read(
 }
 
 fn draft_resource_limit_response(diagnostics: &DiagnosticSet) -> Vec<u8> {
-    let code = diagnostics.diagnostics.first().map_or(
-        DiagnosticCode::SessionDraftResourceLimit.stable_name(),
-        |diagnostic| diagnostic.code.stable_name(),
-    );
+    let Some(diagnostic) = diagnostics.diagnostics.first() else {
+        return invalid_diagnostic_response();
+    };
     let body = format!(
         concat!(
             "{{\"error\":\"resource_limit\",",
-            "\"diagnostic\":{{",
+            "\"diagnostics\":{{",
             "\"version\":\"{}\",",
-            "\"code\":\"{}\"}}}}",
+            "\"completeness\":\"{}\",",
+            "\"items\":[{{\"code\":\"{}\"}}]}}}}",
         ),
-        DIAGNOSTIC_VERSION, code,
+        DIAGNOSTIC_VERSION,
+        completeness_name(diagnostics.completeness),
+        diagnostic.code.stable_name(),
     );
     json_response("413 Content Too Large", body.as_bytes())
 }

@@ -84,11 +84,14 @@ test("typed incompatibility requires the stable diagnostic shape", () => {
     assert.deepEqual(
         parseHandshakePayload({
             result: "incompatible",
-            diagnostic: {
+            diagnostics: {
                 version: "atrament.diagnostic/1",
-                code: "atrament.handshake.version-mismatch",
-                dimension: "prompt",
-                expected: CURRENT_VERSIONS.prompt,
+                completeness: "complete",
+                items: [{
+                    code: "atrament.handshake.version-mismatch",
+                    dimension: "prompt",
+                    expected: CURRENT_VERSIONS.prompt,
+                }],
             },
         }),
         {
@@ -100,11 +103,14 @@ test("typed incompatibility requires the stable diagnostic shape", () => {
     assert.deepEqual(
         parseHandshakePayload({
             result: "incompatible",
-            diagnostic: {
+            diagnostics: {
                 version: "atrament.diagnostic/1",
-                code: "unknown",
-                dimension: "prompt",
-                expected: CURRENT_VERSIONS.prompt,
+                completeness: "complete",
+                items: [{
+                    code: "unknown",
+                    dimension: "prompt",
+                    expected: CURRENT_VERSIONS.prompt,
+                }],
             },
         }),
         { kind: "invalid" },
@@ -115,11 +121,14 @@ test("typed incompatibility rejects diagnostic namespace drift", () => {
     assert.deepEqual(
         parseHandshakePayload({
             result: "incompatible",
-            diagnostic: {
+            diagnostics: {
                 version: "atrament.diagnostic/0",
-                code: "atrament.handshake.version-mismatch",
-                dimension: "prompt",
-                expected: CURRENT_VERSIONS.prompt,
+                completeness: "complete",
+                items: [{
+                    code: "atrament.handshake.version-mismatch",
+                    dimension: "prompt",
+                    expected: CURRENT_VERSIONS.prompt,
+                }],
             },
         }),
         { kind: "invalid" },

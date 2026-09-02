@@ -31,12 +31,15 @@
 //
 use std::net::{Ipv4Addr, SocketAddr};
 
-use atrament_diagnostic::DIAGNOSTIC_VERSION;
+use atrament_diagnostic::{Completeness, DIAGNOSTIC_VERSION, DiagnosticSet};
 use atrament_session_draft::{MAX_DRAFT_FIELD_BYTES, SessionDraftService};
-use atrament_session_draft_port::{DraftField, SessionDraft};
+use atrament_session_draft_port::{DraftField, DraftMutation, SessionDraft};
 use atrament_session_handshake::{
     CAPABILITY_VERSION, HandshakeService, PRODUCT_VERSION, PROFILE_VERSION,
     PROMPT_VERSION, PROTOCOL_VERSION, RENDERER_VERSION,
+};
+use atrament_session_handshake_port::{
+    HandshakeResult, SessionHandshake, VersionDimension, Versions,
 };
 
 const EXPECTED_HOST: &str = "127.0.0.1:43123";
@@ -754,4 +757,101 @@ fn draft_read_admission_failure_is_uniform_and_private() {
         let response = route_with_draft(request, EXPECTED_HOST, &mut draft);
         assert_eq!(response, reference);
     }
+}
+
+struct EmptyDiagnosticDraft;
+
+impl SessionDraft for EmptyDiagnosticDraft {
+    fn replace(&mut self, _field: DraftField, _value: String) -> DraftMutation {
+        DraftMutation::ResourceLimit {
+            diagnostics: DiagnosticSet {
+                completeness: Completeness::Complete,
+                diagnostics: vec![],
+            },
+        }
+    }
+
+    fn value(&self, _field: DraftField) -> &str {
+        ""
+    }
+}
+
+struct EmptyDiagnosticHandshake;
+
+impl SessionHandshake for EmptyDiagnosticHandshake {
+    fn evaluate<'version>(
+        &self,
+        versions: Versions<'version>,
+    ) -> HandshakeResult<'version> {
+        HandshakeResult::Incompatible {
+            diagnostics: DiagnosticSet {
+                completeness: Completeness::Complete,
+                diagnostics: vec![],
+            },
+            dimension: VersionDimension::Prompt,
+            expected: PROMPT_VERSION,
+            observed: versions.prompt,
+        }
+    }
+}
+
+#[test]
+fn adapter_never_invents_a_missing_application_diagnostic() {
+    let authorization = format!("Bearer {EXPECTED_SECRET}");
+    let handshake_request = format!(
+        concat!(
+            "POST /api/handshake HTTP/1.1\r\n",
+            "Host: {}\r\nAuthorization: {}\r\nOrigin: {}\r\n",
+            "X-Atrament-Capability-Version: {}\r\n",
+            "X-Atrament-Product-Version: {}\r\n",
+            "X-Atrament-Profile-Version: {}\r\n",
+            "X-Atrament-Prompt-Version: {}\r\n",
+            "X-Atrament-Protocol-Version: {}\r\n",
+            "X-Atrament-Renderer-Version: {}\r\n\r\n",
+        ),
+        EXPECTED_HOST,
+        authorization,
+        EXPECTED_ORIGIN,
+        CAPABILITY_VERSION,
+        PRODUCT_VERSION,
+        PROFILE_VERSION,
+        PROMPT_VERSION,
+        PROTOCOL_VERSION,
+        RENDERER_VERSION,
+    );
+    let mut ordinary_draft = SessionDraftService::default();
+    let response = runtime::route_request(
+        handshake_request.as_bytes(),
+        EXPECTED_HOST,
+        EXPECTED_ORIGIN,
+        EXPECTED_SECRET,
+        &EmptyDiagnosticHandshake,
+        &mut ordinary_draft,
+    );
+    let response_text = String::from_utf8(response).expect("response is UTF-8");
+    assert!(
+        response_text.starts_with("HTTP/1.1 500 Internal Server Error\r\n")
+    );
+    assert!(!response_text.contains("atrament.handshake.version-mismatch"));
+
+    let request = draft_replace_request(
+        "/api/session/task",
+        Some(&authorization),
+        Some(EXPECTED_ORIGIN),
+        b"ordinary text",
+    );
+    let mut empty_diagnostic_draft = EmptyDiagnosticDraft;
+    let response = runtime::route_request(
+        &request,
+        EXPECTED_HOST,
+        EXPECTED_ORIGIN,
+        EXPECTED_SECRET,
+        &HANDSHAKE,
+        &mut empty_diagnostic_draft,
+    );
+    let response_text = String::from_utf8(response).expect("response is UTF-8");
+    assert!(
+        response_text.starts_with("HTTP/1.1 500 Internal Server Error\r\n")
+    );
+    assert!(!response_text.contains("atrament.session-draft.resource-limit"));
 }

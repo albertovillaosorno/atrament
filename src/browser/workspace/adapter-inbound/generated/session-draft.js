@@ -32,7 +32,7 @@
 // - Defaults:
 //   - Uses text/plain UTF-8 bodies and no ambient browser credentials.
 //
-import { parseDiagnosticMetadata } from "./session-diagnostic.js";
+import { parseDiagnosticSet } from "./session-diagnostic.js";
 export function draftMutationHeaders(sessionSecret) {
     return {
         Authorization: `Bearer ${sessionSecret}`,
@@ -49,6 +49,9 @@ export function isResourceLimit(value) {
     if (!isRecord(value) || value.error !== "resource_limit") {
         return false;
     }
-    const metadata = parseDiagnosticMetadata(value.diagnostic);
-    return metadata?.code === "atrament.session-draft.resource-limit";
+    const metadata = parseDiagnosticSet(value.diagnostics);
+    return metadata !== null
+        && metadata.items.length === 1
+        && metadata.items[0]?.code
+            === "atrament.session-draft.resource-limit";
 }

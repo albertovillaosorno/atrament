@@ -63,17 +63,18 @@ test("draft headers carry only bearer credential and text media type", () => {
 test("draft resource limit requires current shared diagnostic metadata", () => {
     const valid = {
         error: "resource_limit",
-        diagnostic: {
+        diagnostics: {
             version: "atrament.diagnostic/1",
-            code: "atrament.session-draft.resource-limit",
+            completeness: "complete",
+            items: [{ code: "atrament.session-draft.resource-limit" }],
         },
     };
     assert.equal(isResourceLimit(valid), true);
     assert.equal(
         isResourceLimit({
             ...valid,
-            diagnostic: {
-                ...valid.diagnostic,
+            diagnostics: {
+                ...valid.diagnostics,
                 version: "atrament.diagnostic/0",
             },
         }),
@@ -82,7 +83,10 @@ test("draft resource limit requires current shared diagnostic metadata", () => {
     assert.equal(
         isResourceLimit({
             ...valid,
-            diagnostic: { ...valid.diagnostic, code: "unknown" },
+            diagnostics: {
+                ...valid.diagnostics,
+                items: [{ code: "unknown" }],
+            },
         }),
         false,
     );

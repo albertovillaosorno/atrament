@@ -34,14 +34,26 @@ export const DIAGNOSTIC_VERSION = "atrament.diagnostic/1";
 function isRecord(value) {
     return typeof value === "object" && value !== null;
 }
-export function parseDiagnosticMetadata(value) {
+function isCompleteness(value) {
+    return value === "complete" || value === "incomplete";
+}
+function isDiagnosticItem(value) {
+    return isRecord(value)
+        && typeof value.code === "string"
+        && value.code !== "";
+}
+export function parseDiagnosticSet(value) {
     if (!isRecord(value)) {
         return null;
     }
     if (value.version !== DIAGNOSTIC_VERSION
-        || typeof value.code !== "string"
-        || value.code === "") {
+        || !isCompleteness(value.completeness)
+        || !Array.isArray(value.items)
+        || !value.items.every(isDiagnosticItem)) {
         return null;
     }
-    return { code: value.code };
+    return {
+        completeness: value.completeness,
+        items: value.items,
+    };
 }
