@@ -1,0 +1,9 @@
+identity:
+  id: function:mathematics-source
+  name: mathematics-source
+  path: src/backend/mathematics-source
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: domain

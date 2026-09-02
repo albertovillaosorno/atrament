@@ -1,0 +1,12 @@
+[package]
+name = "atrament_mathematics_source"
+version = "0.1.0"
+edition = "2024"
+publish = false
+license = "MIT"
+
+[lib]
+path = "domain/lib.rs"
+
+[lints]
+workspace = true

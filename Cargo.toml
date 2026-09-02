@@ -5,6 +5,7 @@ members = [
     "src/backend/export-layout-preflight",
     "src/backend/fixed-region-bounds",
     "src/backend/flow-pagination",
+    "src/backend/mathematics-source",
     "src/backend/physical-page-profile",
     "src/backend/paper-mark-geometry",
     "src/backend/runtime-bootstrap",

@@ -33,6 +33,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "atrament_mathematics_source"
+version = "0.1.0"
+
+[[package]]
 name = "atrament_paper_mark_geometry"
 version = "0.1.0"
 dependencies = [
