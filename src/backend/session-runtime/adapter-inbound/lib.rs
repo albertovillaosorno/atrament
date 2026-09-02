@@ -11,10 +11,10 @@
 // - Owns:
 //   - Loopback listener, public resources, and credential header admission.
 // - Must-Not:
-//   - Bind non-loopback addresses or expose session-private application state.
+//   - Bind non-loopback addresses or own session-private application state.
 // - Allows:
 //   - Inputs: Local HTTP requests and in-memory expected session credentials.
-//   - Outputs: Public resources plus admitted handshake results.
+//   - Outputs: Public resources, handshake results, and draft mutation status.
 //   - Side effects: Loopback binding and HTTP response writes.
 // - Split-When:
 //   - Authenticated routing needs an independently testable adapter.
@@ -23,7 +23,8 @@
 // - Summary:
 //   - Starts the disposable Atrament localhost session runtime.
 // - Description:
-//   - Owns exact loopback endpoint admission before application services exist.
+//   - Enforces loopback and HTTP admission before invoking application
+//     services.
 // - Usage:
 //   - Run the atrament binary to serve the browser shell on one loopback
 //     endpoint.
@@ -34,19 +35,21 @@
 //! Disposable loopback transport for the Atrament browser session runtime.
 //!
 //! This adapter owns listener admission, public frontend resources, health
-//! routing, and authenticated handshake transport. Later runtime slices reuse
-//! these admission checks without widening this transport boundary.
+//! routing, authenticated handshake transport, and protected draft mutation
+//! transport without owning the application state those routes mutate.
 
 use std::io::{self, Read as _, Write as _};
 use std::net::{Ipv4Addr, SocketAddr, TcpListener, TcpStream};
 use std::str;
 
+use atrament_session_draft_port::{DraftField, DraftMutation, SessionDraft};
 use atrament_session_handshake_port::{
     HandshakeResult, SessionHandshake, VersionDimension, Versions,
 };
 
 const ENCODED_SECRET_BYTES: usize = 64;
 const MAX_HEADER_BYTES: usize = 16 * 1024;
+const MAX_REQUEST_BODY_BYTES: usize = 2 * 1024 * 1024;
 const HTML_CONTENT_TYPE: &str = "text/html; charset=utf-8";
 const CSS_CONTENT_TYPE: &str = "text/css; charset=utf-8";
 const JAVASCRIPT_CONTENT_TYPE: &str = "text/javascript; charset=utf-8";
@@ -128,6 +131,7 @@ impl Runtime {
         self,
         expected_secret: &str,
         handshake: &dyn SessionHandshake,
+        draft: &mut dyn SessionDraft,
     ) {
         for incoming in self.listener.incoming() {
             match incoming {
@@ -138,6 +142,7 @@ impl Runtime {
                         &self.origin,
                         expected_secret,
                         handshake,
+                        draft,
                     ));
                 },
                 Err(_) => break,
@@ -146,13 +151,73 @@ impl Runtime {
     }
 }
 
-fn read_request_head(stream: &mut TcpStream) -> io::Result<Vec<u8>> {
+fn request_head_end(request: &[u8]) -> Option<usize> {
+    request
+        .windows(4)
+        .position(|window| window == b"\r\n\r\n")
+        .and_then(|index| index.checked_add(4))
+}
+
+fn header_is_present(request_head: &[u8], expected_name: &str) -> bool {
+    let Ok(text) = str::from_utf8(request_head) else {
+        return false;
+    };
+    text.split("\r\n")
+        .skip(1)
+        .take_while(|line| !line.is_empty())
+        .any(|line| {
+            line.split_once(':').is_some_and(|(name, _)| {
+                name.eq_ignore_ascii_case(expected_name)
+            })
+        })
+}
+
+fn declared_content_length(request_head: &[u8]) -> io::Result<usize> {
+    if header_is_present(request_head, "transfer-encoding") {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "request transfer encoding is not admitted",
+        ));
+    }
+    if !header_is_present(request_head, "content-length") {
+        return Ok(0);
+    }
+    let Some(value) = single_header_value(request_head, "content-length")
+    else {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "request content length is malformed or duplicated",
+        ));
+    };
+    let length = value.parse::<usize>().map_err(|_parse_error| {
+        io::Error::new(
+            io::ErrorKind::InvalidData,
+            "request content length is not a decimal byte count",
+        )
+    })?;
+    if length > MAX_REQUEST_BODY_BYTES {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "request body exceeds runtime transport limit",
+        ));
+    }
+    Ok(length)
+}
+
+fn read_request(stream: &mut TcpStream) -> io::Result<Vec<u8>> {
     let mut bytes = Vec::with_capacity(1024);
     let mut chunk = [0u8; 1024];
+    let mut expected_total = None;
     loop {
         let read = stream.read(&mut chunk)?;
         if read == 0 {
-            break;
+            if expected_total.is_some_and(|total| bytes.len() < total) {
+                return Err(io::Error::new(
+                    io::ErrorKind::UnexpectedEof,
+                    "request body ended before declared content length",
+                ));
+            }
+            return Ok(bytes);
         }
         let Some(read_bytes) = chunk.get(..read) else {
             return Err(io::Error::new(
@@ -161,17 +226,48 @@ fn read_request_head(stream: &mut TcpStream) -> io::Result<Vec<u8>> {
             ));
         };
         bytes.extend_from_slice(read_bytes);
-        if bytes.len() > MAX_HEADER_BYTES {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "request headers exceed runtime limit",
-            ));
+        if expected_total.is_none() {
+            if let Some(head_end) = request_head_end(&bytes) {
+                if head_end > MAX_HEADER_BYTES {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        "request headers exceed runtime limit",
+                    ));
+                }
+                let Some(request_head) = bytes.get(..head_end) else {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        "request header boundary is invalid",
+                    ));
+                };
+                let content_length = declared_content_length(request_head)?;
+                expected_total = Some(
+                    head_end.checked_add(content_length).ok_or_else(|| {
+                        io::Error::new(
+                            io::ErrorKind::InvalidData,
+                            "request byte length overflowed",
+                        )
+                    })?,
+                );
+            } else if bytes.len() > MAX_HEADER_BYTES {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "request headers exceed runtime limit",
+                ));
+            }
         }
-        if bytes.windows(4).any(|window| window == b"\r\n\r\n") {
-            return Ok(bytes);
+        if let Some(total) = expected_total {
+            if bytes.len() > total {
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "request exceeds its declared content length",
+                ));
+            }
+            if bytes.len() == total {
+                return Ok(bytes);
+            }
         }
     }
-    Ok(bytes)
 }
 
 fn single_header_value<'request>(
@@ -330,6 +426,58 @@ fn route_handshake(
     }
 }
 
+fn request_body(request: &[u8]) -> Option<&[u8]> {
+    let head_end = request_head_end(request)?;
+    let request_head = request.get(..head_end)?;
+    if header_is_present(request_head, "transfer-encoding")
+        || !header_is_present(request_head, "content-length")
+    {
+        return None;
+    }
+    let declared = single_header_value(request_head, "content-length")?
+        .parse::<usize>()
+        .ok()?;
+    let body = request.get(head_end..)?;
+    (body.len() == declared).then_some(body)
+}
+
+fn route_draft_replace(
+    request: &[u8],
+    field: DraftField,
+    expected_origin: &str,
+    expected_secret: &str,
+    draft: &mut dyn SessionDraft,
+) -> Vec<u8> {
+    let credential_valid =
+        request_has_session_credential(request, expected_secret);
+    let origin_valid = request_has_exact_origin(request, expected_origin);
+    if !credential_valid || !origin_valid {
+        return json_response(
+            "401 Unauthorized",
+            br#"{"error":"unauthenticated"}"#,
+        );
+    }
+    let Some(body) = request_body(request) else {
+        return json_response(
+            "400 Bad Request",
+            br#"{"error":"invalid_request"}"#,
+        );
+    };
+    let Ok(value) = str::from_utf8(body) else {
+        return json_response(
+            "400 Bad Request",
+            br#"{"error":"invalid_request"}"#,
+        );
+    };
+    match draft.replace(field, value.to_owned()) {
+        DraftMutation::Applied => empty_response("204 No Content"),
+        DraftMutation::ResourceLimit => json_response(
+            "413 Content Too Large",
+            br#"{"error":"resource_limit"}"#,
+        ),
+    }
+}
+
 fn request_method_host_and_target(
     request: &[u8],
 ) -> Option<(&str, &str, &str)> {
@@ -375,6 +523,11 @@ fn response(status: &str, content_type: &str, body: &[u8]) -> Vec<u8> {
     response
 }
 
+fn empty_response(status: &str) -> Vec<u8> {
+    format!("HTTP/1.1 {status}\r\nContent-Length: 0\r\n{RESPONSE_TRAILERS}")
+        .into_bytes()
+}
+
 fn json_response(status: &str, body: &[u8]) -> Vec<u8> {
     response(status, JSON_CONTENT_TYPE, body)
 }
@@ -387,6 +540,7 @@ pub fn route_request(
     expected_origin: &str,
     expected_secret: &str,
     handshake: &dyn SessionHandshake,
+    draft: &mut dyn SessionDraft,
 ) -> Vec<u8> {
     let Some((method, host, target)) = request_method_host_and_target(request)
     else {
@@ -431,6 +585,27 @@ pub fn route_request(
             expected_secret,
             handshake,
         ),
+        ("POST", "/api/session/candidate") => route_draft_replace(
+            request,
+            DraftField::Candidate,
+            expected_origin,
+            expected_secret,
+            draft,
+        ),
+        ("POST", "/api/session/source") => route_draft_replace(
+            request,
+            DraftField::Source,
+            expected_origin,
+            expected_secret,
+            draft,
+        ),
+        ("POST", "/api/session/task") => route_draft_replace(
+            request,
+            DraftField::Task,
+            expected_origin,
+            expected_secret,
+            draft,
+        ),
         ("POST", _) | ("GET", "/api/handshake") => {
             json_response("400 Bad Request", br#"{"error":"invalid_request"}"#)
         },
@@ -449,14 +624,16 @@ fn serve_connection(
     expected_origin: &str,
     expected_secret: &str,
     handshake: &dyn SessionHandshake,
+    draft: &mut dyn SessionDraft,
 ) -> io::Result<()> {
-    let request = read_request_head(stream)?;
+    let request = read_request(stream)?;
     let response = route_request(
         &request,
         expected_host,
         expected_origin,
         expected_secret,
         handshake,
+        draft,
     );
     stream.write_all(&response)?;
     stream.flush()

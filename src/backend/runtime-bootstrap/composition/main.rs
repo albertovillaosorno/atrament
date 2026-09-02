@@ -38,6 +38,7 @@
 use std::io::{self, Write as _};
 
 use atrament_browser_launch as browser_launch;
+use atrament_session_draft::SessionDraftService;
 use atrament_session_handshake::{
     HandshakeService, PRODUCT_VERSION, PROTOCOL_VERSION,
 };
@@ -96,6 +97,7 @@ fn new_session_secret() -> io::Result<SessionSecret> {
 
 fn main() -> io::Result<()> {
     publish_startup("starting", None)?;
+    let mut draft = SessionDraftService::default();
     let handshake = HandshakeService;
     let secret = new_session_secret()?;
     let runtime = bind_runtime()?;
@@ -105,6 +107,6 @@ fn main() -> io::Result<()> {
         report_launch_failure(&error, runtime.origin())?;
     }
     publish_startup("ready", Some(runtime.origin()))?;
-    runtime.serve(secret.encoded(), &handshake);
+    runtime.serve(secret.encoded(), &handshake, &mut draft);
     Ok(())
 }

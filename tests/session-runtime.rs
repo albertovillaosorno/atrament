@@ -31,6 +31,8 @@
 //
 use std::net::{Ipv4Addr, SocketAddr};
 
+use atrament_session_draft::{MAX_DRAFT_FIELD_BYTES, SessionDraftService};
+use atrament_session_draft_port::{DraftField, SessionDraft};
 use atrament_session_handshake::{
     CAPABILITY_VERSION, HandshakeService, PRODUCT_VERSION, PROFILE_VERSION,
     PROMPT_VERSION, PROTOCOL_VERSION, RENDERER_VERSION,
@@ -47,14 +49,24 @@ static HANDSHAKE: HandshakeService = HandshakeService;
 #[path = "../src/backend/session-runtime/adapter-inbound/lib.rs"]
 mod runtime;
 
-fn route_runtime(request: &[u8], host: &str) -> Vec<u8> {
+fn route_with_draft(
+    request: &[u8],
+    host: &str,
+    draft: &mut dyn SessionDraft,
+) -> Vec<u8> {
     runtime::route_request(
         request,
         host,
         EXPECTED_ORIGIN,
         EXPECTED_SECRET,
         &HANDSHAKE,
+        draft,
     )
+}
+
+fn route_runtime(request: &[u8], host: &str) -> Vec<u8> {
+    let mut draft = SessionDraftService::default();
+    route_with_draft(request, host, &mut draft)
 }
 
 fn status_line(response: &[u8]) -> &str {
@@ -475,4 +487,151 @@ fn duplicate_required_handshake_version_blocks_compatibility() {
     let body = std::str::from_utf8(body).expect("handshake JSON is UTF-8");
     assert!(body.contains("\"dimension\":\"prompt\""));
     assert!(!body.contains("atrament.prompt/0"));
+}
+
+fn draft_replace_request(
+    target: &str,
+    authorization: Option<&str>,
+    origin: Option<&str>,
+    body: &[u8],
+) -> Vec<u8> {
+    let mut request =
+        format!("POST {target} HTTP/1.1\r\nHost: {EXPECTED_HOST}\r\n",);
+    if let Some(value) = authorization {
+        request.push_str(&format!("Authorization: {value}\r\n"));
+    }
+    if let Some(value) = origin {
+        request.push_str(&format!("Origin: {value}\r\n"));
+    }
+    request.push_str(&format!("Content-Length: {}\r\n\r\n", body.len()));
+    let mut bytes = request.into_bytes();
+    bytes.extend_from_slice(body);
+    bytes
+}
+
+#[test]
+fn authenticated_draft_mutations_replace_only_requested_field() {
+    let authorization = format!("Bearer {EXPECTED_SECRET}");
+    let cases = [
+        ("/api/session/task", DraftField::Task, "format these notes"),
+        ("/api/session/source", DraftField::Source, "área = πr²"),
+        (
+            "/api/session/candidate",
+            DraftField::Candidate,
+            "untrusted model response",
+        ),
+    ];
+    let mut draft = SessionDraftService::default();
+    for (target, field, value) in cases {
+        let request = draft_replace_request(
+            target,
+            Some(&authorization),
+            Some(EXPECTED_ORIGIN),
+            value.as_bytes(),
+        );
+        let response = route_with_draft(&request, EXPECTED_HOST, &mut draft);
+        let (head, body) = response_parts(&response);
+        assert!(head.starts_with("HTTP/1.1 204 No Content\r\n"));
+        assert!(!head.contains("Access-Control-Allow-Origin"));
+        assert!(body.is_empty());
+        assert_eq!(draft.value(field), value);
+    }
+}
+
+#[test]
+fn browser_forgery_cannot_mutate_session_draft_state() {
+    let authorization = format!("Bearer {EXPECTED_SECRET}");
+    let wrong_authorization = format!("Bearer {}", "b".repeat(64));
+    let cases = [
+        (None, Some(EXPECTED_ORIGIN)),
+        (Some(wrong_authorization.as_str()), Some(EXPECTED_ORIGIN)),
+        (Some(authorization.as_str()), None),
+        (
+            Some(authorization.as_str()),
+            Some("http://attacker.example"),
+        ),
+        (Some(authorization.as_str()), Some("http://localhost:43123")),
+    ];
+    let mut draft = SessionDraftService::default();
+    assert_eq!(
+        draft.replace(DraftField::Task, String::from("trusted current")),
+        atrament_session_draft_port::DraftMutation::Applied,
+    );
+    let mut reference_response = None;
+    for (credential, origin) in cases {
+        let request = draft_replace_request(
+            "/api/session/task",
+            credential,
+            origin,
+            b"attacker replacement",
+        );
+        let response = route_with_draft(&request, EXPECTED_HOST, &mut draft);
+        assert_eq!(status_line(&response), "HTTP/1.1 401 Unauthorized");
+        assert_eq!(draft.value(DraftField::Task), "trusted current");
+        if let Some(reference) = &reference_response {
+            assert_eq!(&response, reference);
+        } else {
+            reference_response = Some(response);
+        }
+    }
+}
+
+#[test]
+fn malformed_draft_body_framing_never_mutates_state() {
+    let authorization = format!("Bearer {EXPECTED_SECRET}");
+    let prefix = format!(
+        concat!(
+            "POST /api/session/source HTTP/1.1\r\n",
+            "Host: {}\r\n",
+            "Authorization: {}\r\n",
+            "Origin: {}\r\n",
+        ),
+        EXPECTED_HOST, authorization, EXPECTED_ORIGIN,
+    );
+    let malformed = [
+        format!("{prefix}\r\nbody").into_bytes(),
+        format!("{prefix}Content-Length: 3\r\n\r\nbody").into_bytes(),
+        format!("{prefix}Content-Length: 4\r\nContent-Length: 4\r\n\r\nbody",)
+            .into_bytes(),
+        format!(
+            "{prefix}Transfer-Encoding: chunked\r\n\r\n4\r\nbody\r\n0\r\n\r\n",
+        )
+        .into_bytes(),
+    ];
+    let mut draft = SessionDraftService::default();
+    for request in malformed {
+        let response = route_with_draft(&request, EXPECTED_HOST, &mut draft);
+        assert_eq!(status_line(&response), "HTTP/1.1 400 Bad Request");
+        assert_eq!(draft.value(DraftField::Source), "");
+    }
+
+    let invalid_utf8 = draft_replace_request(
+        "/api/session/source",
+        Some(&authorization),
+        Some(EXPECTED_ORIGIN),
+        &[0xff, 0xfe],
+    );
+    let response = route_with_draft(&invalid_utf8, EXPECTED_HOST, &mut draft);
+    assert_eq!(status_line(&response), "HTTP/1.1 400 Bad Request");
+    assert_eq!(draft.value(DraftField::Source), "");
+}
+
+#[test]
+fn draft_resource_limit_rejects_without_truncating_current_value() {
+    let authorization = format!("Bearer {EXPECTED_SECRET}");
+    let mut draft = SessionDraftService::default();
+    assert_eq!(
+        draft.replace(DraftField::Candidate, String::from("current")),
+        atrament_session_draft_port::DraftMutation::Applied,
+    );
+    let body = vec![b'a'; MAX_DRAFT_FIELD_BYTES + 1];
+    let request = draft_replace_request(
+        "/api/session/candidate",
+        Some(&authorization),
+        Some(EXPECTED_ORIGIN),
+        &body,
+    );
+    let response = route_with_draft(&request, EXPECTED_HOST, &mut draft);
+    assert_eq!(status_line(&response), "HTTP/1.1 413 Content Too Large");
+    assert_eq!(draft.value(DraftField::Candidate), "current");
 }
