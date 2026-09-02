@@ -80,6 +80,8 @@ pub struct Diagnostic {
 pub enum DiagnosticCode {
     /// A browser/backend required-version identity does not match.
     HandshakeVersionMismatch,
+    /// One placed fixed region crosses an accepted writable page boundary.
+    LayoutFixedRegionOverflow,
     /// One complete session draft field exceeds its admitted byte limit.
     SessionDraftResourceLimit,
 }
@@ -98,6 +100,9 @@ impl DiagnosticCode {
     #[must_use]
     pub const fn stable_name(self) -> &'static str {
         match self {
+            Self::LayoutFixedRegionOverflow => {
+                "atrament.layout.fixed-region-overflow"
+            },
             Self::HandshakeVersionMismatch => {
                 "atrament.handshake.version-mismatch"
             },
@@ -119,6 +124,11 @@ pub enum Evidence {
         observed: u64,
         /// Unit shared by maximum and observed values.
         unit: EvidenceUnit,
+    },
+    /// Physical writable-region edge crossed by derived geometry.
+    PhysicalBoundary {
+        /// Exact physical boundary that was crossed.
+        edge: PhysicalBoundaryEdge,
     },
     /// Exact physical length represented in canonical micrometres.
     PhysicalLength {
@@ -180,6 +190,8 @@ pub enum Operation {
     HistoryTraversal,
     /// Bounded semantic inspection or context generation.
     Inspect,
+    /// Deterministic semantic page-layout validation.
+    Layout,
     /// Device-neutral live plan compilation.
     Plan,
     /// Deterministic preview or output rendering.
@@ -233,6 +245,19 @@ pub enum OperationContextKind {
     PlanCapabilityProfile,
     /// Deterministic render-input identity.
     RenderInput,
+}
+
+/// Physical page boundary used as typed geometry evidence.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub enum PhysicalBoundaryEdge {
+    /// Bottom writable-region boundary.
+    Bottom,
+    /// Left writable-region boundary.
+    Left,
+    /// Right writable-region boundary.
+    Right,
+    /// Top writable-region boundary.
+    Top,
 }
 
 /// Typed physical length meaning used as diagnostic evidence.

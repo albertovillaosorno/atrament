@@ -35,8 +35,8 @@ use diagnostic::{
     BlockingDisposition, Completeness, Diagnostic, DiagnosticCode,
     DiagnosticSet, Evidence, EvidenceUnit, LocationKind, LocationRole,
     Operation, OperationBinding, OperationContext, OperationContextKind,
-    PhysicalLengthQuantity, RelationshipKind, Remediation, SemanticLocation,
-    Severity,
+    PhysicalBoundaryEdge, PhysicalLengthQuantity, RelationshipKind,
+    Remediation, SemanticLocation, Severity,
 };
 
 #[allow(dead_code)]
@@ -46,6 +46,10 @@ mod diagnostic;
 #[test]
 fn namespace_and_condition_codes_are_stable() {
     assert_eq!(diagnostic::DIAGNOSTIC_VERSION, "atrament.diagnostic/1");
+    assert_eq!(
+        DiagnosticCode::LayoutFixedRegionOverflow.stable_name(),
+        "atrament.layout.fixed-region-overflow",
+    );
     assert_eq!(
         DiagnosticCode::HandshakeVersionMismatch.stable_name(),
         "atrament.handshake.version-mismatch",
@@ -132,4 +136,35 @@ fn operation_context_and_relational_locations_keep_semantic_owners() {
     };
     assert_eq!(set.completeness, Completeness::Incomplete);
     assert_eq!(set.diagnostics.len(), 1);
+}
+
+#[test]
+fn layout_overflow_has_typed_edge_and_physical_amount_evidence() {
+    let diagnostic = Diagnostic {
+        code: DiagnosticCode::LayoutFixedRegionOverflow,
+        disposition: BlockingDisposition::Blocking,
+        evidence: vec![
+            Evidence::PhysicalBoundary {
+                edge: PhysicalBoundaryEdge::Bottom,
+            },
+            Evidence::PhysicalLength {
+                micrometres: 6_000,
+                quantity: PhysicalLengthQuantity::Overflow,
+            },
+        ],
+        locations: vec![],
+        operation: OperationBinding {
+            contexts: vec![OperationContext {
+                identity: String::from("revision:7"),
+                kind: OperationContextKind::AcceptedRevision,
+            }],
+            operation: Operation::Layout,
+        },
+        remediations: vec![Remediation::ChangeConstraint],
+        severity: Severity::Error,
+    };
+    assert_eq!(diagnostic.evidence[0], Evidence::PhysicalBoundary {
+        edge: PhysicalBoundaryEdge::Bottom,
+    },);
+    assert_eq!(diagnostic.operation.operation, Operation::Layout);
 }
