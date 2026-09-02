@@ -39,6 +39,7 @@ use std::io::{self, Write as _};
 
 use atrament_browser_launch as browser_launch;
 use atrament_session_runtime::Runtime;
+use atrament_session_secret::SessionSecret;
 
 const PROCESS_VERSION: &str = match option_env!("CARGO_PKG_VERSION") {
     Some(version) => version,
@@ -84,11 +85,25 @@ fn bind_runtime() -> io::Result<Runtime> {
     })
 }
 
+fn launch_url(origin: &str, secret: &SessionSecret) -> String {
+    format!("{origin}#session={}", secret.encoded())
+}
+
+fn new_session_secret() -> io::Result<SessionSecret> {
+    SessionSecret::generate().map_err(|error| {
+        io::Error::other(format!(
+            "Atrament session credential generation failed: {error}",
+        ))
+    })
+}
+
 fn main() -> io::Result<()> {
     publish_startup("starting", None)?;
+    let secret = new_session_secret()?;
     let runtime = bind_runtime()?;
     publish_startup("listening", Some(runtime.origin()))?;
-    if let Err(error) = browser_launch::launch(runtime.origin()) {
+    let initial_browser_url = launch_url(runtime.origin(), &secret);
+    if let Err(error) = browser_launch::launch(&initial_browser_url) {
         report_launch_failure(&error, runtime.origin())?;
     }
     runtime.serve();

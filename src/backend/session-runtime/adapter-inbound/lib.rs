@@ -59,6 +59,9 @@ const WORKSPACE_CSS: &[u8] =
 const MAIN_JAVASCRIPT: &[u8] = include_bytes!(
     "../../../browser/workspace/adapter-inbound/generated/main.js"
 );
+const SESSION_FRAGMENT_JAVASCRIPT: &[u8] = include_bytes!(
+    "../../../browser/workspace/adapter-inbound/generated/session-fragment.js"
+);
 
 /// A listener bound to one operating-system-assigned IPv4 loopback endpoint.
 #[derive(Debug)]
@@ -223,6 +226,11 @@ pub fn route_request(request: &[u8], expected_host: &str) -> Vec<u8> {
         "/generated/main.js" => {
             response("200 OK", JAVASCRIPT_CONTENT_TYPE, MAIN_JAVASCRIPT)
         },
+        "/generated/session-fragment.js" => response(
+            "200 OK",
+            JAVASCRIPT_CONTENT_TYPE,
+            SESSION_FRAGMENT_JAVASCRIPT,
+        ),
         "/health" => json_response(
             "200 OK",
             br#"{"product":"atrament","state":"listening"}"#,

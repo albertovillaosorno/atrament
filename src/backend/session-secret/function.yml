@@ -1,0 +1,9 @@
+identity:
+  id: function:session-secret
+  name: session-secret
+  path: src/backend/session-secret
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: adapter-outbound

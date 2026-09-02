@@ -31,6 +31,27 @@
 // - Defaults:
 //   - Performs no network request and persists no browser state.
 //
+import { sessionSecretFromFragment } from "./session-fragment.js";
+function fragmentFreeLocalUrl() {
+    return `${window.location.pathname}${window.location.search}`;
+}
+function consumeSessionSecretFragment() {
+    const hash = window.location.hash;
+    const sessionSecret = sessionSecretFromFragment(hash);
+    if (sessionSecret === null && !hash.startsWith("#session=")) {
+        return null;
+    }
+    const localUrl = fragmentFreeLocalUrl();
+    try {
+        window.history.replaceState(window.history.state, "", localUrl);
+    }
+    catch {
+        window.location.replace(localUrl);
+        return null;
+    }
+    return sessionSecret;
+}
+let sessionSecret = consumeSessionSecretFragment();
 function requireElement(selector) {
     const element = document.querySelector(selector);
     if (element === null) {
@@ -318,6 +339,7 @@ function clearSessionText() {
     updateCharacterCount(candidateInput, candidateCount);
 }
 window.addEventListener("pagehide", (event) => {
+    sessionSecret = null;
     invalidateClipboardRequests();
     if (activeDividerPointerId !== null) {
         releaseDividerPointer(activeDividerPointerId);
@@ -351,9 +373,7 @@ function discardLocalNavigationFragment() {
         return false;
     }
     try {
-        const currentPath = window.location.pathname;
-        const currentSearch = window.location.search;
-        const localUrl = `${currentPath}${currentSearch}`;
+        const localUrl = fragmentFreeLocalUrl();
         window.history.replaceState(window.history.state, "", localUrl);
     }
     catch {
@@ -597,5 +617,7 @@ zoomIn.addEventListener("click", () => {
     setPreviewZoom(previewZoom + 10);
 });
 setPreviewZoom(100);
-setTextIfChanged(sessionStatus, "Frontend ready · waiting for backend session");
-export {};
+const sessionMessage = sessionSecret === null
+    ? "Frontend ready · session credential unavailable"
+    : "Session credential received · waiting for backend handshake";
+setTextIfChanged(sessionStatus, sessionMessage);

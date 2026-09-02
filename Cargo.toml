@@ -3,6 +3,7 @@ members = [
     "src/backend/browser-launch",
     "src/backend/runtime-bootstrap",
     "src/backend/session-runtime",
+    "src/backend/session-secret",
 ]
 resolver = "3"
 

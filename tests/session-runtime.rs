@@ -135,6 +135,9 @@ const WORKSPACE_CSS: &[u8] =
 const MAIN_JAVASCRIPT: &[u8] = include_bytes!(
     "../src/browser/workspace/adapter-inbound/generated/main.js"
 );
+const SESSION_FRAGMENT_JAVASCRIPT: &[u8] = include_bytes!(
+    "../src/browser/workspace/adapter-inbound/generated/session-fragment.js"
+);
 
 fn response_parts(response: &[u8]) -> (&str, &[u8]) {
     let split = response
@@ -163,6 +166,11 @@ fn serves_embedded_frontend_resources_without_caching() {
             "/generated/main.js",
             "text/javascript; charset=utf-8",
             MAIN_JAVASCRIPT,
+        ),
+        (
+            "/generated/session-fragment.js",
+            "text/javascript; charset=utf-8",
+            SESSION_FRAGMENT_JAVASCRIPT,
         ),
     ];
 

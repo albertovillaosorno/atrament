@@ -31,6 +31,30 @@
 // - Defaults:
 //   - Performs no network request and persists no browser state.
 //
+import { sessionSecretFromFragment } from "./session-fragment.js";
+
+function fragmentFreeLocalUrl(): string {
+    return `${window.location.pathname}${window.location.search}`;
+}
+
+function consumeSessionSecretFragment(): string | null {
+    const hash = window.location.hash;
+    const sessionSecret = sessionSecretFromFragment(hash);
+    if (sessionSecret === null && !hash.startsWith("#session=")) {
+        return null;
+    }
+    const localUrl = fragmentFreeLocalUrl();
+    try {
+        window.history.replaceState(window.history.state, "", localUrl);
+    } catch {
+        window.location.replace(localUrl);
+        return null;
+    }
+    return sessionSecret;
+}
+
+let sessionSecret = consumeSessionSecretFragment();
+
 function requireElement<T extends Element>(selector: string): T {
     const element = document.querySelector<T>(selector);
     if (element === null) {
@@ -381,6 +405,7 @@ function clearSessionText(): void {
 }
 
 window.addEventListener("pagehide", (event): void => {
+    sessionSecret = null;
     invalidateClipboardRequests();
     if (activeDividerPointerId !== null) {
         releaseDividerPointer(activeDividerPointerId);
@@ -415,9 +440,7 @@ function discardLocalNavigationFragment(): boolean {
         return false;
     }
     try {
-        const currentPath = window.location.pathname;
-        const currentSearch = window.location.search;
-        const localUrl = `${currentPath}${currentSearch}`;
+        const localUrl = fragmentFreeLocalUrl();
         window.history.replaceState(window.history.state, "", localUrl);
     } catch {
         // The delayed reset below still contains late fragment scrolling.
@@ -687,4 +710,7 @@ zoomIn.addEventListener("click", (): void => {
 });
 
 setPreviewZoom(100);
-setTextIfChanged(sessionStatus, "Frontend ready · waiting for backend session");
+const sessionMessage = sessionSecret === null
+    ? "Frontend ready · session credential unavailable"
+    : "Session credential received · waiting for backend handshake";
+setTextIfChanged(sessionStatus, sessionMessage);
