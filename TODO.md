@@ -126,6 +126,26 @@ profile-specific visual appearance, and renderer or live-output consumption.
 Wrap paragraphs, lists, quotations, and citations from actual handwriting
 metrics and move complete semantic fragments to following pages predictably.
 
+Current executable evidence paginates already-measured top-level flow blocks in
+semantic order over exact writable regions derived from accepted page profiles.
+Measurements bind to one accepted revision and one accepted flow; stale,
+incomplete, reordered, unknown-flow, and out-of-flow measurements reject before
+layout. Repeated measured fragments may retain one block owner, and no fragment
+is split by pagination.
+
+Keep-together groups move intact when a current or later page can contain them.
+Groups too tall for any one remaining page fall back only to measured-fragment
+boundaries, while exact-bottom fits do not manufacture page breaks. A page
+profile edit invalidates old measurements, and fresh measurements reflow
+deterministically against the new accepted writable geometry without backfilling
+pages
+before the selected flow's owning page.
+
+The task remains open for real handwriting and formula measurement, grapheme-
+aware line breaking and paragraph wrapping, quotation and citation measurement,
+column-flow policy, measurement diagnostics, and render or live-output
+consumption.
+
 ### TODO - Implement fixed-region constraint solving
 
 Place titles, figures, callouts, and freeform regions with anchors, alignment,
