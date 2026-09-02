@@ -1,0 +1,9 @@
+identity:
+  id: function:semantic-notebook
+  name: semantic-notebook
+  path: src/backend/semantic-notebook
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: domain
