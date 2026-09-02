@@ -1,0 +1,9 @@
+identity:
+  id: function:session-handshake-port
+  name: session-handshake-port
+  path: src/backend/session-handshake-port
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: port-inbound

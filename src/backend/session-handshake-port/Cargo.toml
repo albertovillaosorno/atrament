@@ -1,0 +1,12 @@
+[package]
+name = "atrament_session_handshake_port"
+version = "0.1.0"
+edition = "2024"
+publish = false
+license = "MIT"
+
+[lib]
+path = "port-inbound/lib.rs"
+
+[lints]
+workspace = true

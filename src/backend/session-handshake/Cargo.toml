@@ -1,5 +1,5 @@
 [package]
-name = "atrament_session_runtime"
+name = "atrament_session_handshake"
 version = "0.1.0"
 edition = "2024"
 publish = false
@@ -9,7 +9,7 @@ license = "MIT"
 atrament_session_handshake_port = { path = "../session-handshake-port" }
 
 [lib]
-path = "adapter-inbound/lib.rs"
+path = "application/lib.rs"
 
 [lints]
 workspace = true

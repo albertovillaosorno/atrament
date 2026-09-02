@@ -14,9 +14,8 @@
 //   - Bind non-loopback addresses or expose session-private application state.
 // - Allows:
 //   - Inputs: Local HTTP requests and in-memory expected session credentials.
-//   - Outputs: Public frontend resources and health responses.
-//   - Side effects: Loopback binding, startup and recovery publication, and
-//     HTTP response writes.
+//   - Outputs: Public resources plus admitted handshake results.
+//   - Side effects: Loopback binding and HTTP response writes.
 // - Split-When:
 //   - Authenticated routing needs an independently testable adapter.
 // - Merge-When:
@@ -35,12 +34,16 @@
 //! Disposable loopback transport for the Atrament browser session runtime.
 //!
 //! This adapter owns listener admission, public frontend resources, health
-//! routing, and fixed-work credential checks. Later runtime slices apply these
-//! checks to authenticated services without widening this transport boundary.
+//! routing, and authenticated handshake transport. Later runtime slices reuse
+//! these admission checks without widening this transport boundary.
 
 use std::io::{self, Read as _, Write as _};
 use std::net::{Ipv4Addr, SocketAddr, TcpListener, TcpStream};
 use std::str;
+
+use atrament_session_handshake_port::{
+    HandshakeResult, SessionHandshake, VersionDimension, Versions,
+};
 
 const ENCODED_SECRET_BYTES: usize = 64;
 const MAX_HEADER_BYTES: usize = 16 * 1024;
@@ -118,13 +121,20 @@ impl Runtime {
     }
 
     /// Serve admitted HTTP requests until listener acceptance stops.
-    pub fn serve(self) {
+    pub fn serve(
+        self,
+        expected_secret: &str,
+        handshake: &dyn SessionHandshake,
+    ) {
         for incoming in self.listener.incoming() {
             match incoming {
                 Ok(mut connection) => {
                     drop(serve_connection(
                         &mut connection,
                         &self.expected_host,
+                        &self.origin,
+                        expected_secret,
+                        handshake,
                     ));
                 },
                 Err(_) => break,
@@ -222,7 +232,104 @@ pub fn request_has_session_credential(
     fixed_work_secret_match(expected_secret, candidate)
 }
 
-fn request_host_and_target(request: &[u8]) -> Option<(&str, &str)> {
+fn handshake_versions(request: &[u8]) -> Versions<'_> {
+    Versions {
+        capability: single_header_value(
+            request,
+            "x-atrament-capability-version",
+        )
+        .unwrap_or(""),
+        product: single_header_value(request, "x-atrament-product-version")
+            .unwrap_or(""),
+        profile: single_header_value(request, "x-atrament-profile-version")
+            .unwrap_or(""),
+        prompt: single_header_value(request, "x-atrament-prompt-version")
+            .unwrap_or(""),
+        protocol: single_header_value(request, "x-atrament-protocol-version")
+            .unwrap_or(""),
+        renderer: single_header_value(request, "x-atrament-renderer-version")
+            .unwrap_or(""),
+    }
+}
+
+const fn handshake_dimension_name(dimension: VersionDimension) -> &'static str {
+    match dimension {
+        VersionDimension::Capability => "capability",
+        VersionDimension::Product => "product",
+        VersionDimension::Profile => "profile",
+        VersionDimension::Prompt => "prompt",
+        VersionDimension::Protocol => "protocol",
+        VersionDimension::Renderer => "renderer",
+    }
+}
+
+fn handshake_incompatible_response(
+    dimension: VersionDimension,
+    expected: &str,
+) -> Vec<u8> {
+    let body = format!(
+        concat!(
+            "{{\"result\":\"incompatible\",",
+            "\"diagnostic\":{{",
+            "\"code\":\"atrament.handshake.version-mismatch\",",
+            "\"dimension\":\"{}\",",
+            "\"expected\":\"{}\"}}}}",
+        ),
+        handshake_dimension_name(dimension),
+        expected,
+    );
+    response("409 Conflict", JSON_CONTENT_TYPE, body.as_bytes())
+}
+
+fn handshake_success_response(versions: Versions<'_>) -> Vec<u8> {
+    let body = format!(
+        concat!(
+            "{{\"result\":\"compatible\",\"versions\":{{",
+            "\"capability\":\"{}\",",
+            "\"product\":\"{}\",",
+            "\"profile\":\"{}\",",
+            "\"prompt\":\"{}\",",
+            "\"protocol\":\"{}\",",
+            "\"renderer\":\"{}\"}}}}",
+        ),
+        versions.capability,
+        versions.product,
+        versions.profile,
+        versions.prompt,
+        versions.protocol,
+        versions.renderer,
+    );
+    response("200 OK", JSON_CONTENT_TYPE, body.as_bytes())
+}
+
+fn route_handshake(
+    request: &[u8],
+    expected_origin: &str,
+    expected_secret: &str,
+    handshake: &dyn SessionHandshake,
+) -> Vec<u8> {
+    let credential_valid =
+        request_has_session_credential(request, expected_secret);
+    let origin_valid = request_has_exact_origin(request, expected_origin);
+    if !credential_valid || !origin_valid {
+        return json_response(
+            "401 Unauthorized",
+            br#"{"error":"unauthenticated"}"#,
+        );
+    }
+    match handshake.evaluate(handshake_versions(request)) {
+        HandshakeResult::Compatible { versions } => {
+            handshake_success_response(versions)
+        },
+        HandshakeResult::Incompatible { dimension, expected, .. } => {
+            handshake_incompatible_response(dimension, expected)
+        },
+    }
+}
+
+fn request_method_host_and_target(
+    request: &[u8],
+) -> Option<(&str, &str, &str)> {
     let text = str::from_utf8(request).ok()?;
     let mut lines = text.split("\r\n");
     let request_line = lines.next()?;
@@ -231,7 +338,10 @@ fn request_host_and_target(request: &[u8]) -> Option<(&str, &str)> {
     let target = request_parts.next()?;
     let version = request_parts.next()?;
     let extra_part = request_parts.next();
-    if method != "GET" || version != "HTTP/1.1" || extra_part.is_some() {
+    if !matches!(method, "GET" | "POST")
+        || version != "HTTP/1.1"
+        || extra_part.is_some()
+    {
         return None;
     }
 
@@ -248,7 +358,7 @@ fn request_host_and_target(request: &[u8]) -> Option<(&str, &str)> {
             host = Some(value.trim());
         }
     }
-    Some((host?, target))
+    Some((method, host?, target))
 }
 
 fn response(status: &str, content_type: &str, body: &[u8]) -> Vec<u8> {
@@ -262,14 +372,21 @@ fn response(status: &str, content_type: &str, body: &[u8]) -> Vec<u8> {
     response
 }
 
-fn json_response(status: &str, body: &'static [u8]) -> Vec<u8> {
+fn json_response(status: &str, body: &[u8]) -> Vec<u8> {
     response(status, JSON_CONTENT_TYPE, body)
 }
 
 /// Route one parsed HTTP request after exact canonical `Host` admission.
 #[must_use]
-pub fn route_request(request: &[u8], expected_host: &str) -> Vec<u8> {
-    let Some((host, target)) = request_host_and_target(request) else {
+pub fn route_request(
+    request: &[u8],
+    expected_host: &str,
+    expected_origin: &str,
+    expected_secret: &str,
+    handshake: &dyn SessionHandshake,
+) -> Vec<u8> {
+    let Some((method, host, target)) = request_method_host_and_target(request)
+    else {
         return json_response(
             "400 Bad Request",
             br#"{"error":"invalid_request"}"#,
@@ -281,33 +398,58 @@ pub fn route_request(request: &[u8], expected_host: &str) -> Vec<u8> {
             br#"{"error":"invalid_host"}"#,
         );
     }
-    match target {
-        "/" | "/index.html" => {
+    match (method, target) {
+        ("GET", "/" | "/index.html") => {
             response("200 OK", HTML_CONTENT_TYPE, INDEX_HTML)
         },
-        "/generated/main.js" => {
+        ("GET", "/generated/main.js") => {
             response("200 OK", JAVASCRIPT_CONTENT_TYPE, MAIN_JAVASCRIPT)
         },
-        "/generated/session-fragment.js" => response(
+        ("GET", "/generated/session-fragment.js") => response(
             "200 OK",
             JAVASCRIPT_CONTENT_TYPE,
             SESSION_FRAGMENT_JAVASCRIPT,
         ),
-        "/health" => json_response(
+        ("GET", "/health") => json_response(
             "200 OK",
             br#"{"product":"atrament","state":"listening"}"#,
         ),
-        "/workspace.css" => response("200 OK", CSS_CONTENT_TYPE, WORKSPACE_CSS),
-        _ => json_response("404 Not Found", br#"{"error":"not_found"}"#),
+        ("GET", "/workspace.css") => {
+            response("200 OK", CSS_CONTENT_TYPE, WORKSPACE_CSS)
+        },
+        ("POST", "/api/handshake") => route_handshake(
+            request,
+            expected_origin,
+            expected_secret,
+            handshake,
+        ),
+        ("POST", _) | ("GET", "/api/handshake") => {
+            json_response("400 Bad Request", br#"{"error":"invalid_request"}"#)
+        },
+        ("GET", _) => {
+            json_response("404 Not Found", br#"{"error":"not_found"}"#)
+        },
+        _ => {
+            json_response("400 Bad Request", br#"{"error":"invalid_request"}"#)
+        },
     }
 }
 
 fn serve_connection(
     stream: &mut TcpStream,
     expected_host: &str,
+    expected_origin: &str,
+    expected_secret: &str,
+    handshake: &dyn SessionHandshake,
 ) -> io::Result<()> {
     let request = read_request_head(stream)?;
-    let response = route_request(&request, expected_host);
+    let response = route_request(
+        &request,
+        expected_host,
+        expected_origin,
+        expected_secret,
+        handshake,
+    );
     stream.write_all(&response)?;
     stream.flush()
 }

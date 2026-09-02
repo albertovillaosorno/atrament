@@ -38,14 +38,11 @@
 use std::io::{self, Write as _};
 
 use atrament_browser_launch as browser_launch;
+use atrament_session_handshake::{
+    HandshakeService, PRODUCT_VERSION, PROTOCOL_VERSION,
+};
 use atrament_session_runtime::Runtime;
 use atrament_session_secret::SessionSecret;
-
-const PROCESS_VERSION: &str = match option_env!("CARGO_PKG_VERSION") {
-    Some(version) => version,
-    None => "0.1.0",
-};
-const PROTOCOL_VERSION: &str = "atrament.runtime/1";
 
 fn publish_startup(state: &str, origin: Option<&str>) -> io::Result<()> {
     let origin_json = origin
@@ -60,7 +57,7 @@ fn publish_startup(state: &str, origin: Option<&str>) -> io::Result<()> {
             "\"protocol_version\":\"{}\",",
             "\"origin\":{},\"state\":\"{}\"}}",
         ),
-        PROCESS_VERSION, PROTOCOL_VERSION, origin_json, state,
+        PRODUCT_VERSION, PROTOCOL_VERSION, origin_json, state,
     )?;
     output.flush()
 }
@@ -99,6 +96,7 @@ fn new_session_secret() -> io::Result<SessionSecret> {
 
 fn main() -> io::Result<()> {
     publish_startup("starting", None)?;
+    let handshake = HandshakeService;
     let secret = new_session_secret()?;
     let runtime = bind_runtime()?;
     publish_startup("listening", Some(runtime.origin()))?;
@@ -106,6 +104,7 @@ fn main() -> io::Result<()> {
     if let Err(error) = browser_launch::launch(&initial_browser_url) {
         report_launch_failure(&error, runtime.origin())?;
     }
-    runtime.serve();
+    publish_startup("ready", Some(runtime.origin()))?;
+    runtime.serve(secret.encoded(), &handshake);
     Ok(())
 }

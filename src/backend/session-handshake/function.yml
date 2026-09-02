@@ -1,0 +1,9 @@
+identity:
+  id: function:session-handshake
+  name: session-handshake
+  path: src/backend/session-handshake
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: application

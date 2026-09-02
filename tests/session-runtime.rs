@@ -31,9 +31,31 @@
 //
 use std::net::{Ipv4Addr, SocketAddr};
 
+use atrament_session_handshake::{
+    CAPABILITY_VERSION, HandshakeService, PRODUCT_VERSION, PROFILE_VERSION,
+    PROMPT_VERSION, PROTOCOL_VERSION, RENDERER_VERSION,
+};
+
+const EXPECTED_HOST: &str = "127.0.0.1:43123";
+const EXPECTED_ORIGIN: &str = "http://127.0.0.1:43123";
+const EXPECTED_SECRET: &str =
+    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+
+static HANDSHAKE: HandshakeService = HandshakeService;
+
 #[allow(dead_code)]
 #[path = "../src/backend/session-runtime/adapter-inbound/lib.rs"]
 mod runtime;
+
+fn route_runtime(request: &[u8], host: &str) -> Vec<u8> {
+    runtime::route_request(
+        request,
+        host,
+        EXPECTED_ORIGIN,
+        EXPECTED_SECRET,
+        &HANDSHAKE,
+    )
+}
 
 fn status_line(response: &[u8]) -> &str {
     std::str::from_utf8(response)
@@ -62,7 +84,7 @@ fn binds_ipv4_loopback_on_an_os_assigned_port() {
 #[test]
 fn health_requires_the_exact_canonical_host() {
     let host = "127.0.0.1:43123";
-    let accepted = runtime::route_request(
+    let accepted = route_runtime(
         b"GET /health HTTP/1.1\r\nHost: 127.0.0.1:43123\r\n\r\n",
         host,
     );
@@ -78,7 +100,7 @@ fn health_requires_the_exact_canonical_host() {
         let request =
             format!("GET /health HTTP/1.1\r\nHost: {rejected_host}\r\n\r\n",);
         assert_eq!(
-            status_line(&runtime::route_request(request.as_bytes(), host)),
+            status_line(&route_runtime(request.as_bytes(), host)),
             "HTTP/1.1 421 Misdirected Request",
         );
     }
@@ -99,7 +121,7 @@ fn malformed_or_missing_host_is_rejected_before_routing() {
     ];
     for request in rejected {
         assert_eq!(
-            status_line(&runtime::route_request(request.as_bytes(), host)),
+            status_line(&route_runtime(request.as_bytes(), host)),
             "HTTP/1.1 400 Bad Request",
         );
     }
@@ -107,9 +129,9 @@ fn malformed_or_missing_host_is_rejected_before_routing() {
 
 #[test]
 fn unrelated_paths_do_not_expose_runtime_state() {
-    let response = runtime::route_request(
+    let response = route_runtime(
         b"GET /session HTTP/1.1\r\nHost: 127.0.0.1:43123\r\n\r\n",
-        "127.0.0.1:43123",
+        EXPECTED_HOST,
     );
     assert_eq!(status_line(&response), "HTTP/1.1 404 Not Found");
     assert!(
@@ -152,7 +174,45 @@ fn response_parts(response: &[u8]) -> (&str, &[u8]) {
 
 fn request(target: &str, host: &str) -> Vec<u8> {
     let request = format!("GET {target} HTTP/1.1\r\nHost: {host}\r\n\r\n");
-    runtime::route_request(request.as_bytes(), host)
+    route_runtime(request.as_bytes(), host)
+}
+
+fn handshake_request(
+    authorization: Option<&str>,
+    origin: Option<&str>,
+    prompt_version: &str,
+) -> Vec<u8> {
+    let mut request = String::from("POST /api/handshake HTTP/1.1\r\n");
+    request.push_str(&format!("Host: {}\r\n", EXPECTED_HOST));
+    if let Some(value) = authorization {
+        request.push_str(&format!("Authorization: {value}\r\n"));
+    }
+    if let Some(value) = origin {
+        request.push_str(&format!("Origin: {value}\r\n"));
+    }
+    request.push_str(&format!(
+        "X-Atrament-Capability-Version: {}\r\n",
+        CAPABILITY_VERSION,
+    ));
+    request.push_str(&format!(
+        "X-Atrament-Product-Version: {}\r\n",
+        PRODUCT_VERSION,
+    ));
+    request.push_str(&format!(
+        "X-Atrament-Profile-Version: {}\r\n",
+        PROFILE_VERSION,
+    ));
+    request
+        .push_str(&format!("X-Atrament-Prompt-Version: {prompt_version}\r\n",));
+    request.push_str(&format!(
+        "X-Atrament-Protocol-Version: {}\r\n",
+        PROTOCOL_VERSION,
+    ));
+    request.push_str(&format!(
+        "X-Atrament-Renderer-Version: {}\r\n\r\n",
+        RENDERER_VERSION,
+    ));
+    route_runtime(request.as_bytes(), EXPECTED_HOST)
 }
 
 #[test]
@@ -250,4 +310,70 @@ fn browser_origin_requires_one_exact_canonical_value() {
             origin,
         ));
     }
+}
+
+#[test]
+fn authenticated_handshake_returns_current_version_set() {
+    let authorization = format!("Bearer {EXPECTED_SECRET}");
+    let response = handshake_request(
+        Some(&authorization),
+        Some(EXPECTED_ORIGIN),
+        PROMPT_VERSION,
+    );
+    let (head, body) = response_parts(&response);
+    assert!(head.starts_with("HTTP/1.1 200 OK\r\n"));
+    assert!(!head.contains("Access-Control-Allow-Origin"));
+    let body = std::str::from_utf8(body).expect("handshake JSON is UTF-8");
+    assert!(body.contains("\"result\":\"compatible\""));
+    for version in [
+        CAPABILITY_VERSION,
+        PRODUCT_VERSION,
+        PROFILE_VERSION,
+        PROMPT_VERSION,
+        PROTOCOL_VERSION,
+        RENDERER_VERSION,
+    ] {
+        assert!(body.contains(version));
+    }
+}
+
+#[test]
+fn handshake_admission_failures_share_one_unauthenticated_response() {
+    let authorization = format!("Bearer {EXPECTED_SECRET}");
+    let wrong_authorization = format!("Bearer {}", "b".repeat(64));
+    let responses = [
+        handshake_request(None, Some(EXPECTED_ORIGIN), PROMPT_VERSION),
+        handshake_request(
+            Some(&wrong_authorization),
+            Some(EXPECTED_ORIGIN),
+            PROMPT_VERSION,
+        ),
+        handshake_request(Some(&authorization), None, PROMPT_VERSION),
+        handshake_request(
+            Some(&authorization),
+            Some("http://localhost:43123"),
+            PROMPT_VERSION,
+        ),
+    ];
+    for response in &responses {
+        assert_eq!(status_line(response), "HTTP/1.1 401 Unauthorized");
+        assert_eq!(response, &responses[0]);
+    }
+}
+
+#[test]
+fn authenticated_version_mismatch_is_typed_and_blocking() {
+    let authorization = format!("Bearer {EXPECTED_SECRET}");
+    let response = handshake_request(
+        Some(&authorization),
+        Some(EXPECTED_ORIGIN),
+        "atrament.prompt/0",
+    );
+    let (head, body) = response_parts(&response);
+    assert!(head.starts_with("HTTP/1.1 409 Conflict\r\n"));
+    let body = std::str::from_utf8(body).expect("handshake JSON is UTF-8");
+    assert!(body.contains("atrament.handshake.version-mismatch"));
+    assert!(body.contains("\"dimension\":\"prompt\""));
+    assert!(body.contains(PROMPT_VERSION));
+    assert!(!body.contains("atrament.prompt/0"));
 }

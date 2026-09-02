@@ -5,10 +5,16 @@ schema_version = 1
 depends_on = []
 
 [component.atrament_runtime_bootstrap]
-depends_on = ["atrament_browser_launch", "atrament_session_runtime", "atrament_session_secret"]
+depends_on = ["atrament_browser_launch", "atrament_session_handshake", "atrament_session_runtime", "atrament_session_secret"]
+
+[component.atrament_session_handshake]
+depends_on = ["atrament_session_handshake_port"]
+
+[component.atrament_session_handshake_port]
+depends_on = []
 
 [component.atrament_session_runtime]
-depends_on = []
+depends_on = ["atrament_session_handshake_port"]
 
 [component.atrament_session_secret]
 depends_on = []

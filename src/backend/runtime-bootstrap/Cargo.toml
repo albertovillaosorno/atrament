@@ -7,6 +7,7 @@ license = "MIT"
 
 [dependencies]
 atrament_browser_launch = { path = "../browser-launch" }
+atrament_session_handshake = { path = "../session-handshake" }
 atrament_session_runtime = { path = "../session-runtime" }
 atrament_session_secret = { path = "../session-secret" }
 

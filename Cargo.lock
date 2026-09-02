@@ -11,13 +11,28 @@ name = "atrament_runtime_bootstrap"
 version = "0.1.0"
 dependencies = [
  "atrament_browser_launch",
+ "atrament_session_handshake",
  "atrament_session_runtime",
  "atrament_session_secret",
 ]
 
 [[package]]
+name = "atrament_session_handshake"
+version = "0.1.0"
+dependencies = [
+ "atrament_session_handshake_port",
+]
+
+[[package]]
+name = "atrament_session_handshake_port"
+version = "0.1.0"
+
+[[package]]
 name = "atrament_session_runtime"
 version = "0.1.0"
+dependencies = [
+ "atrament_session_handshake_port",
+]
 
 [[package]]
 name = "atrament_session_secret"
