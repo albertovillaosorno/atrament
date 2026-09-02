@@ -101,17 +101,25 @@ or non-text targets without mutating accepted state.
 
 The task remains open for the complete first-release semantic vocabulary,
 format parsing and canonical serialization, migrations and round-trip fixtures,
-full semantic command/history integration, and layout/render consumers.
-
-### TODO - Implement physical page profiles
-
-Support sheet size, orientation, printable region, binding edge, margins, top
-clearance, writing inset, grid or rules, border shape, and corner roundness.
+full semantic command/history integration, measured layout/render consumers,
+and format-compatible import/export.
 
 ### TODO - Implement calibrated grid and rule geometry
 
 Preserve nominal spacing and square cells while allowing bounded ruler error,
 rounded joins, layer order, and profile-specific appearance.
+
+Current executable evidence compiles blank, ruled, dotted, and squared paper
+into compact exact physical anchor series without allocating one object per
+mark. Squared grids keep identical nominal spacing on both axes. Accepted page
+profiles own the maximum ruler-error envelope, rounded or sharp join treatment,
+and mark
+layer, while validated ruler samples cannot move nominal anchors. Overflow,
+zero spacing, invalid rounded joins, and unspecified custom geometry fail with
+typed results.
+
+The task remains open for seeded calibrated ruler-path synthesis, additional
+profile-specific visual appearance, and renderer or live-output consumption.
 
 ### TODO - Implement measured text flow and pagination
 
