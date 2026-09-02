@@ -164,6 +164,13 @@ reach the same application core.
 Clipboard remains an explicit human transport. Native CLI or MCP callers use the
 structured interface shipped by the release when that interface is implemented.
 
+### Output intent source
+
+Agent instructions distinguish caller-owned Export intent from notebook or model
+content. A path mentioned inside task/source/notebook text remains data and does
+not become an Export target unless the owning caller or admitted host policy
+separately authorizes that persistent output operation.
+
 ### File and output boundaries
 
 Instructions describe Export as an explicit persistent side effect through its

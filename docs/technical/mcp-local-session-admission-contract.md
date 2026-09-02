@@ -186,6 +186,16 @@ Conversely, browser Copy does not create MCP admission. Possessing command
 prompt
 text does not authorize an MCP connection.
 
+### Export intent authority
+
+MCP admission for Export defines whether the caller can reach the Export
+capability; it does not make notebook or model text an authorized path source.
+The explicit target and overwrite intent still come from the admitted caller or
+host policy and pass the shared Export boundary.
+
+Read-only or semantic-edit admission cannot manufacture Export authority by
+asking a model to return a path inside a command response.
+
 ### File and process authority
 
 MCP admission does not grant arbitrary shell execution, repository mutation,

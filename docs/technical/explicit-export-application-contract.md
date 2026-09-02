@@ -58,6 +58,27 @@ manifest according to their owning renderer and format contracts.
 Browser UI labels, current working directory accidents, window state, and
 clipboard content are not export inputs.
 
+### Export intent provenance
+
+Persistent output intent comes from the application caller or an explicitly
+admitted host automation policy for that Export operation. It does not become
+file authority merely because notebook, task, source, diagnostic, clipboard, or
+model-response text contains a path-like string.
+
+A semantic command batch cannot smuggle Export, target path, or overwrite intent
+inside revision-owned edits. The agent-facing command context treats such text
+as data unless the owning caller separately requested an Export capability.
+
+An automated host may pre-authorize a bounded export goal, path policy, or
+target
+selection rule when its admission contract permits that behavior. The resulting
+Export request still passes the ordinary path, overwrite, format, revision, and
+retry checks.
+
+The backend does not infer persistent-output permission from an LLM saying that
+a file should be saved, from a source document naming a directory, or from a
+previous successful Export.
+
 ### Explicit path boundary
 
 The caller supplies or deliberately selects the target path through the owning

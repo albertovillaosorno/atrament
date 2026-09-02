@@ -52,7 +52,10 @@ active session with no database, autosave, hidden recovery file, or cloud copy.
 ### TODO - Implement explicit import and export
 
 Allow deliberate notebook bundle and `.atrament` profile reads or writes at
-user-selected paths without converting them into background persistence.
+caller-selected or explicitly host-policy-admitted paths without converting them
+into background persistence. Keep paths mentioned only in notebook, source,
+diagnostic, clipboard, or model-response text as data rather than Export
+authority.
 
 Current export design evidence freezes accepted-revision binding, explicit path
 and overwrite intent, blocking validation, temporary cleanup, complete file

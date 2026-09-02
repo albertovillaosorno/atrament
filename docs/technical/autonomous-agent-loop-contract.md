@@ -158,6 +158,18 @@ Exhausting an automation budget stops further autonomous mutation. It does not
 weaken validation, auto-accept a partial result, widen scope, or authorize file
 or physical side effects.
 
+### Persistent output intent
+
+An autonomous edit goal does not acquire Export authority from model-generated
+or notebook-provided prose. Persistent output must be part of the caller's
+explicit goal or an admitted host policy independent from the untrusted semantic
+content being edited.
+
+When automatic Export is admitted, the agent forms a request within that path
+and overwrite policy and still uses the frozen Export validation boundary. It
+does not copy a path from notebook prose into file authority merely because it
+looks operational.
+
 ### Output chaining
 
 After the desired accepted semantic state is reached, Render, Export, or Plan
