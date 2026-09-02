@@ -96,3 +96,23 @@ fn replacement_uses_utf8_byte_limit_without_truncation() {
         draft::MAX_DRAFT_FIELD_BYTES,
     );
 }
+
+#[test]
+fn debug_output_never_exposes_private_draft_text() {
+    let mut service = draft::SessionDraftService::default();
+    for (field, value) in [
+        (DraftField::Task, "private task"),
+        (DraftField::Source, "private source"),
+        (DraftField::Candidate, "private response"),
+    ] {
+        assert_eq!(
+            service.replace(field, String::from(value)),
+            DraftMutation::Applied,
+        );
+    }
+    let debug = format!("{service:?}");
+    assert!(debug.contains("SessionDraftService"));
+    for private in ["private task", "private source", "private response"] {
+        assert!(!debug.contains(private));
+    }
+}

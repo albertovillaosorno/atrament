@@ -33,17 +33,26 @@
 
 //! Process-local pre-acceptance draft state for one Atrament session.
 
+use std::fmt;
+
 use atrament_session_draft_port::{DraftField, DraftMutation, SessionDraft};
 
 /// Maximum admitted UTF-8 byte length of one complete draft text field.
 pub const MAX_DRAFT_FIELD_BYTES: usize = 1_048_576;
 
 /// Mutable pre-acceptance text retained only for the active process lifetime.
-#[derive(Debug, Default)]
+#[derive(Default)]
 pub struct SessionDraftService {
     candidate: String,
     source: String,
     task: String,
+}
+
+impl fmt::Debug for SessionDraftService {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("SessionDraftService")
+            .finish_non_exhaustive()
+    }
 }
 
 impl SessionDraft for SessionDraftService {
