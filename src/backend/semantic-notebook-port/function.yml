@@ -1,0 +1,9 @@
+identity:
+  id: function:semantic-notebook-port
+  name: semantic-notebook-port
+  path: src/backend/semantic-notebook-port
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: port-inbound

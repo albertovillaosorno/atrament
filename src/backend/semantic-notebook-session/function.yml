@@ -1,0 +1,9 @@
+identity:
+  id: function:semantic-notebook-session
+  name: semantic-notebook-session
+  path: src/backend/semantic-notebook-session
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: application

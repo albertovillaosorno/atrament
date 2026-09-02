@@ -26,6 +26,21 @@ name = "atrament_semantic_notebook"
 version = "0.1.0"
 
 [[package]]
+name = "atrament_semantic_notebook_port"
+version = "0.1.0"
+dependencies = [
+ "atrament_semantic_notebook",
+]
+
+[[package]]
+name = "atrament_semantic_notebook_session"
+version = "0.1.0"
+dependencies = [
+ "atrament_semantic_notebook",
+ "atrament_semantic_notebook_port",
+]
+
+[[package]]
 name = "atrament_session_draft"
 version = "0.1.0"
 dependencies = [

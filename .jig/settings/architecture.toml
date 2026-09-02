@@ -10,6 +10,12 @@ depends_on = []
 [component.atrament_semantic_notebook]
 depends_on = []
 
+[component.atrament_semantic_notebook_port]
+depends_on = ["atrament_semantic_notebook"]
+
+[component.atrament_semantic_notebook_session]
+depends_on = ["atrament_semantic_notebook", "atrament_semantic_notebook_port"]
+
 [component.atrament_runtime_bootstrap]
 depends_on = ["atrament_browser_launch", "atrament_session_draft", "atrament_session_handshake", "atrament_session_runtime", "atrament_session_secret"]
 
