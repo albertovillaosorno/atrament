@@ -36,8 +36,8 @@
 use atrament_semantic_notebook::{
     AcceptedIdentity, AcceptedRevision, CandidateIdentity, FormulaMode,
     IdentityExhausted, MathSyntaxError, Notebook, PhysicalPageProfile,
-    PhysicalPageProfileError, RevisionIdentity, SemanticIdentityKind,
-    TableRowRole,
+    PhysicalPageProfileError, RevisionIdentity, SemanticIdentityDescriptor,
+    SemanticIdentityKind, TableRowRole,
 };
 
 /// Result of one explicit candidate acceptance request.
@@ -334,6 +334,35 @@ pub enum TextEditOutcome {
     },
 }
 
+/// Result of one exact-revision, single-identity semantic inspection.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum IdentityInspectOutcome {
+    /// Requested identity exists in the named accepted revision.
+    Inspected {
+        /// Semantic kind and direct structural owner for the requested
+        /// identity.
+        descriptor: SemanticIdentityDescriptor<AcceptedIdentity>,
+        /// Accepted revision that was inspected without mutation.
+        revision: RevisionIdentity,
+        /// Requested accepted semantic identity.
+        target: AcceptedIdentity,
+    },
+    /// Session has no accepted semantic revision to inspect.
+    NoAcceptedRevision,
+    /// Caller names an accepted revision that is no longer current.
+    StaleBase {
+        /// Current accepted revision that rejected stale inspection.
+        current: RevisionIdentity,
+    },
+    /// Requested accepted identity is absent from the named revision.
+    TargetNotFound {
+        /// Accepted revision that was inspected without mutation.
+        revision: RevisionIdentity,
+        /// Requested identity absent from that revision.
+        target: AcceptedIdentity,
+    },
+}
+
 /// Result of one exact-revision, single-identity semantic kind inspection.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum IdentityKindInspectOutcome {
@@ -381,6 +410,13 @@ pub trait SemanticNotebookSession {
 
     /// Read the current accepted revision without creating another revision.
     fn current(&self) -> Option<&AcceptedRevision>;
+
+    /// Inspect one semantic identity against an exact accepted revision.
+    fn inspect_identity(
+        &self,
+        revision: RevisionIdentity,
+        target: AcceptedIdentity,
+    ) -> IdentityInspectOutcome;
 
     /// Inspect one semantic identity kind against an exact accepted revision.
     fn inspect_identity_kind(

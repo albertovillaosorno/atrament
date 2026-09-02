@@ -43,13 +43,14 @@ use atrament_semantic_notebook::{
     CandidateIdentity, Constraint, Figure, Flow, Formula, FormulaMode,
     IdentityAllocator, IdentityExhausted, InlineSpan, List, ListItem, Notebook,
     OutputProfile, Page, PaperProfile, Provenance, Style, Table, TableCell,
-    TableRow, TableRowRole, semantic_identity_kind,
+    TableRow, TableRowRole, semantic_identity_descriptor,
+    semantic_identity_kind,
 };
 use atrament_semantic_notebook_port::{
     AcceptanceOutcome, CandidateGraphError, CandidateReferenceKind,
-    FormulaEditOutcome, IdentityKindInspectOutcome, IdentityMapping,
-    PageProfileEditOutcome, SemanticNotebookSession, TableRowRoleEditOutcome,
-    TextEditOutcome,
+    FormulaEditOutcome, IdentityInspectOutcome, IdentityKindInspectOutcome,
+    IdentityMapping, PageProfileEditOutcome, SemanticNotebookSession,
+    TableRowRoleEditOutcome, TextEditOutcome,
 };
 
 #[derive(Debug, Default)]
@@ -154,27 +155,58 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
         self.current.as_ref()
     }
 
+    fn inspect_identity(
+        &self,
+        revision: atrament_semantic_notebook::RevisionIdentity,
+        target: AcceptedIdentity,
+    ) -> IdentityInspectOutcome {
+        let Some(current) = self.current.as_ref() else {
+            return IdentityInspectOutcome::NoAcceptedRevision;
+        };
+        if current.id != revision {
+            return IdentityInspectOutcome::StaleBase { current: current.id };
+        }
+        let Some(descriptor) =
+            semantic_identity_descriptor(&current.notebook, target)
+        else {
+            return IdentityInspectOutcome::TargetNotFound { revision, target };
+        };
+        IdentityInspectOutcome::Inspected {
+            descriptor,
+            revision,
+            target,
+        }
+    }
+
     fn inspect_identity_kind(
         &self,
         revision: atrament_semantic_notebook::RevisionIdentity,
         target: AcceptedIdentity,
     ) -> IdentityKindInspectOutcome {
-        let Some(current) = self.current.as_ref() else {
-            return IdentityKindInspectOutcome::NoAcceptedRevision;
-        };
-        if current.id != revision {
-            return IdentityKindInspectOutcome::StaleBase {
-                current: current.id,
-            };
+        match self.inspect_identity(revision, target) {
+            IdentityInspectOutcome::Inspected {
+                descriptor,
+                revision: inspected_revision,
+                target: inspected_target,
+            } => IdentityKindInspectOutcome::Inspected {
+                kind: descriptor.kind,
+                revision: inspected_revision,
+                target: inspected_target,
+            },
+            IdentityInspectOutcome::NoAcceptedRevision => {
+                IdentityKindInspectOutcome::NoAcceptedRevision
+            },
+            IdentityInspectOutcome::StaleBase { current } => {
+                IdentityKindInspectOutcome::StaleBase { current }
+            },
+            IdentityInspectOutcome::TargetNotFound {
+                revision: inspected_revision,
+                target: missing_target,
+            } => IdentityKindInspectOutcome::TargetNotFound {
+                revision: inspected_revision,
+                target: missing_target,
+            },
         }
-        let Some(kind) = semantic_identity_kind(&current.notebook, target)
-        else {
-            return IdentityKindInspectOutcome::TargetNotFound {
-                revision,
-                target,
-            };
-        };
-        IdentityKindInspectOutcome::Inspected { kind, revision, target }
     }
 
     fn replace_formula(

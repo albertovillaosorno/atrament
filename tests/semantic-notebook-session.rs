@@ -39,14 +39,15 @@ use atrament_semantic_notebook::{
     Constraint, ConstraintKind, ExtensionData, Figure, Flow, Formula,
     FormulaMode, IdentityAllocator, InlineSpan, List, ListItem,
     MathSyntaxError, MathSyntaxErrorKind, Notebook, OutputProfile, Page,
-    PaperProfile, Provenance, ProvenanceKind, SemanticIdentityKind, Style,
-    Table, TableCell, TableRow, TableRowRole, UnresolvedBlock,
-    UnresolvedReason,
+    PaperProfile, Provenance, ProvenanceKind, SemanticBlockKind,
+    SemanticIdentityDescriptor, SemanticIdentityKind, Style, Table, TableCell,
+    TableRow, TableRowRole, UnresolvedBlock, UnresolvedReason,
 };
 use atrament_semantic_notebook_port::{
     AcceptanceOutcome, CandidateGraphError, CandidateReferenceKind,
-    FormulaEditOutcome, IdentityKindInspectOutcome, PageProfileEditOutcome,
-    SemanticNotebookSession, TableRowRoleEditOutcome, TextEditOutcome,
+    FormulaEditOutcome, IdentityInspectOutcome, IdentityKindInspectOutcome,
+    PageProfileEditOutcome, SemanticNotebookSession, TableRowRoleEditOutcome,
+    TextEditOutcome,
 };
 use atrament_semantic_notebook_session::SemanticNotebookSessionService;
 
@@ -327,33 +328,75 @@ fn unsupported_mathematics_can_be_preserved_as_exact_unresolved_source() {
 }
 
 #[test]
-fn exact_revision_identity_kind_inspection_is_read_only_and_typed() {
+fn exact_revision_identity_inspection_exposes_kind_and_structural_owner() {
     let ids = IdentityAllocator::new();
     let (candidate, row, table) =
         candidate_table_notebook(&ids, TableRowRole::Header);
+    let notebook = candidate.id;
+    let flow = candidate.pages[0].flows[0].id;
+    let block = candidate.pages[0].flows[0].blocks[0].id;
     let mut session = SemanticNotebookSessionService::default();
     let AcceptanceOutcome::Accepted { mapping, revision } =
         session.accept(candidate)
     else {
         panic!("table candidate must be accepted");
     };
+    let notebook = accepted_for(&mapping, notebook);
+    let flow = accepted_for(&mapping, flow);
+    let block = accepted_for(&mapping, block);
     let row = accepted_for(&mapping, row);
     let table = accepted_for(&mapping, table);
     let before = session.current().expect("accepted revision").clone();
+    assert_eq!(
+        session.inspect_identity(revision, notebook),
+        IdentityInspectOutcome::Inspected {
+            descriptor: SemanticIdentityDescriptor {
+                kind: SemanticIdentityKind::Notebook,
+                owner: None,
+            },
+            revision,
+            target: notebook,
+        },
+    );
+    assert_eq!(
+        session.inspect_identity(revision, block),
+        IdentityInspectOutcome::Inspected {
+            descriptor: SemanticIdentityDescriptor {
+                kind: SemanticIdentityKind::Block(SemanticBlockKind::Table),
+                owner: Some(flow),
+            },
+            revision,
+            target: block,
+        },
+    );
+    assert_eq!(
+        session.inspect_identity(revision, table),
+        IdentityInspectOutcome::Inspected {
+            descriptor: SemanticIdentityDescriptor {
+                kind: SemanticIdentityKind::Table,
+                owner: Some(block),
+            },
+            revision,
+            target: table,
+        },
+    );
+    assert_eq!(
+        session.inspect_identity(revision, row),
+        IdentityInspectOutcome::Inspected {
+            descriptor: SemanticIdentityDescriptor {
+                kind: SemanticIdentityKind::TableRow,
+                owner: Some(table),
+            },
+            revision,
+            target: row,
+        },
+    );
     assert_eq!(
         session.inspect_identity_kind(revision, row),
         IdentityKindInspectOutcome::Inspected {
             kind: SemanticIdentityKind::TableRow,
             revision,
             target: row,
-        },
-    );
-    assert_eq!(
-        session.inspect_identity_kind(revision, table),
-        IdentityKindInspectOutcome::Inspected {
-            kind: SemanticIdentityKind::Table,
-            revision,
-            target: table,
         },
     );
     assert_eq!(session.current(), Some(&before));
@@ -378,8 +421,19 @@ fn identity_kind_inspection_rejects_stale_absent_and_empty_session() {
         panic!("replacement must be accepted");
     };
     assert_eq!(
+        session.inspect_identity(revision, row),
+        IdentityInspectOutcome::StaleBase { current },
+    );
+    assert_eq!(
         session.inspect_identity_kind(revision, row),
         IdentityKindInspectOutcome::StaleBase { current },
+    );
+    assert_eq!(
+        session.inspect_identity(current, row),
+        IdentityInspectOutcome::TargetNotFound {
+            revision: current,
+            target: row,
+        },
     );
     assert_eq!(
         session.inspect_identity_kind(current, row),
@@ -389,6 +443,10 @@ fn identity_kind_inspection_rejects_stale_absent_and_empty_session() {
         },
     );
     let empty = SemanticNotebookSessionService::default();
+    assert_eq!(
+        empty.inspect_identity(current, row),
+        IdentityInspectOutcome::NoAcceptedRevision,
+    );
     assert_eq!(
         empty.inspect_identity_kind(current, row),
         IdentityKindInspectOutcome::NoAcceptedRevision,
