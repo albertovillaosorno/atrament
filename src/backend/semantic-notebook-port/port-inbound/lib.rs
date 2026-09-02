@@ -33,10 +33,9 @@
 
 //! Inbound application port for transactional semantic candidate acceptance.
 
-use atrament_physical_page_profile::PageProfileError;
 use atrament_semantic_notebook::{
     AcceptedIdentity, AcceptedRevision, CandidateIdentity, IdentityExhausted,
-    Notebook, RevisionIdentity,
+    Notebook, PhysicalPageProfile, PhysicalPageProfileError, RevisionIdentity,
 };
 
 /// Result of one explicit candidate acceptance request.
@@ -74,7 +73,7 @@ pub enum CandidateGraphError {
         /// Candidate-local profile identity whose geometry is invalid.
         candidate: CandidateIdentity,
         /// Typed physical geometry validation failure.
-        reason: PageProfileError,
+        reason: PhysicalPageProfileError,
     },
     /// One candidate semantic reference does not name an owned candidate
     /// object.
@@ -104,6 +103,63 @@ pub enum CandidateReferenceKind {
     Semantic,
     /// Reference must identify a semantic style.
     Style,
+}
+
+/// Result of replacing one accepted physical page profile.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PageProfileEditOutcome {
+    /// Physical profile changed and one new accepted revision committed.
+    Applied {
+        /// Accepted revision used as the edit precondition.
+        base: RevisionIdentity,
+        /// New accepted revision produced by the edit.
+        revision: RevisionIdentity,
+        /// Existing physical page-profile identity whose value changed.
+        target: AcceptedIdentity,
+    },
+    /// Revision identity allocation exhausted before commit.
+    IdentityExhausted {
+        /// Identity sequence that could not allocate another value.
+        sequence: IdentityExhausted,
+    },
+    /// Replacement physical profile is invalid and no mutation occurred.
+    InvalidProfile {
+        /// Typed physical geometry validation failure.
+        reason: PhysicalPageProfileError,
+        /// Unchanged current revision identity.
+        revision: RevisionIdentity,
+        /// Existing physical page-profile identity that rejected replacement.
+        target: AcceptedIdentity,
+    },
+    /// Session has no accepted semantic revision to edit.
+    NoAcceptedRevision,
+    /// Replacement equals current profile; no revision churn occurred.
+    NoOp {
+        /// Unchanged current revision identity.
+        revision: RevisionIdentity,
+        /// Existing physical page-profile identity whose value already
+        /// matched.
+        target: AcceptedIdentity,
+    },
+    /// Caller precondition names a revision that is no longer current.
+    StaleBase {
+        /// Current accepted revision identity that rejected the stale edit.
+        current: RevisionIdentity,
+    },
+    /// Requested accepted identity is absent from the current revision.
+    TargetNotFound {
+        /// Unchanged current revision identity.
+        revision: RevisionIdentity,
+        /// Requested semantic identity absent from the current revision.
+        target: AcceptedIdentity,
+    },
+    /// Requested accepted identity exists but is not a physical page profile.
+    TargetNotPageProfile {
+        /// Unchanged current revision identity.
+        revision: RevisionIdentity,
+        /// Existing non-profile semantic identity that rejected replacement.
+        target: AcceptedIdentity,
+    },
 }
 
 /// Result of one direct accepted semantic text replacement.
@@ -173,6 +229,14 @@ pub trait SemanticNotebookSession {
 
     /// Read the current accepted revision without creating another revision.
     fn current(&self) -> Option<&AcceptedRevision>;
+
+    /// Replace one physical page profile against an exact base revision.
+    fn replace_page_profile(
+        &mut self,
+        base: RevisionIdentity,
+        target: AcceptedIdentity,
+        geometry: PhysicalPageProfile,
+    ) -> PageProfileEditOutcome;
 
     /// Replace one existing inline text identity against an exact base
     /// revision.

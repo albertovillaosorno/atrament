@@ -45,7 +45,8 @@ use atrament_semantic_notebook::{
 };
 use atrament_semantic_notebook_port::{
     AcceptanceOutcome, CandidateGraphError, CandidateReferenceKind,
-    IdentityMapping, SemanticNotebookSession, TextEditOutcome,
+    IdentityMapping, PageProfileEditOutcome, SemanticNotebookSession,
+    TextEditOutcome,
 };
 
 #[derive(Debug, Default)]
@@ -148,6 +149,63 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
 
     fn current(&self) -> Option<&AcceptedRevision> {
         self.current.as_ref()
+    }
+
+    fn replace_page_profile(
+        &mut self,
+        base: atrament_semantic_notebook::RevisionIdentity,
+        target: AcceptedIdentity,
+        geometry: atrament_semantic_notebook::PhysicalPageProfile,
+    ) -> PageProfileEditOutcome {
+        let Some(current) = self.current.as_ref() else {
+            return PageProfileEditOutcome::NoAcceptedRevision;
+        };
+        if current.id != base {
+            return PageProfileEditOutcome::StaleBase { current: current.id };
+        }
+        let Some(existing) = page_profile_value(&current.notebook, target)
+        else {
+            if notebook_contains_identity(&current.notebook, target) {
+                return PageProfileEditOutcome::TargetNotPageProfile {
+                    revision: current.id,
+                    target,
+                };
+            }
+            return PageProfileEditOutcome::TargetNotFound {
+                revision: current.id,
+                target,
+            };
+        };
+        if let Err(reason) = geometry.validate() {
+            return PageProfileEditOutcome::InvalidProfile {
+                reason,
+                revision: current.id,
+                target,
+            };
+        }
+        if existing == geometry {
+            return PageProfileEditOutcome::NoOp {
+                revision: current.id,
+                target,
+            };
+        }
+        let mut notebook = current.notebook.clone();
+        let changed =
+            replace_page_profile_value(&mut notebook, target, geometry);
+        if !changed {
+            return PageProfileEditOutcome::TargetNotFound {
+                revision: current.id,
+                target,
+            };
+        }
+        let revision = match self.identities.allocate_revision() {
+            Ok(revision) => revision,
+            Err(sequence) => {
+                return PageProfileEditOutcome::IdentityExhausted { sequence };
+            },
+        };
+        self.current = Some(AcceptedRevision { id: revision, notebook });
+        PageProfileEditOutcome::Applied { base, revision, target }
     }
 
     fn replace_text(
@@ -618,6 +676,33 @@ fn notebook_contains_identity(
             .iter()
             .any(|provenance| provenance.id == target)
         || notebook.styles.iter().any(|style| style.id == target)
+}
+
+fn page_profile_value(
+    notebook: &Notebook<AcceptedIdentity>,
+    target: AcceptedIdentity,
+) -> Option<atrament_semantic_notebook::PhysicalPageProfile> {
+    notebook
+        .page_profiles
+        .iter()
+        .find(|profile| profile.id == target)
+        .map(|profile| profile.geometry)
+}
+
+fn replace_page_profile_value(
+    notebook: &mut Notebook<AcceptedIdentity>,
+    target: AcceptedIdentity,
+    geometry: atrament_semantic_notebook::PhysicalPageProfile,
+) -> bool {
+    let Some(profile) = notebook
+        .page_profiles
+        .iter_mut()
+        .find(|profile| profile.id == target)
+    else {
+        return false;
+    };
+    profile.geometry = geometry;
+    true
 }
 
 fn replace_text_blocks(

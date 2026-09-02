@@ -37,6 +37,11 @@
 use std::cell::Cell;
 use std::num::NonZeroU64;
 
+pub use atrament_physical_page_profile::{
+    PageProfile as PhysicalPageProfile,
+    PageProfileError as PhysicalPageProfileError,
+};
+
 /// Opaque semantic identity admitted only after an application commit.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub struct AcceptedIdentity(NonZeroU64);
@@ -325,7 +330,7 @@ pub struct Page<Identity> {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PaperProfile<Identity> {
     /// Exact validated physical paper geometry and page-mark intent.
-    pub geometry: atrament_physical_page_profile::PageProfile,
+    pub geometry: PhysicalPageProfile,
     /// Stable or candidate-local semantic identity.
     pub id: Identity,
 }

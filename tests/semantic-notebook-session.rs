@@ -43,7 +43,7 @@ use atrament_semantic_notebook::{
 };
 use atrament_semantic_notebook_port::{
     AcceptanceOutcome, CandidateGraphError, CandidateReferenceKind,
-    SemanticNotebookSession, TextEditOutcome,
+    PageProfileEditOutcome, SemanticNotebookSession, TextEditOutcome,
 };
 use atrament_semantic_notebook_session::SemanticNotebookSessionService;
 
@@ -915,4 +915,199 @@ fn direct_text_edit_absent_identity_is_distinct_from_non_text_owner() {
         },
     );
     assert_eq!(session.current(), Some(&before));
+}
+
+#[test]
+fn direct_page_profile_edit_preserves_profile_and_page_identity() {
+    let candidate_ids = IdentityAllocator::new();
+    let candidate = candidate_notebook(&candidate_ids, "paper edit");
+    let candidate_profile = candidate.page_profiles[0].id;
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision: base } =
+        session.accept(candidate)
+    else {
+        panic!("candidate must be accepted");
+    };
+    let target = accepted_for(&mapping, candidate_profile);
+    let before = session.current().expect("base revision").clone();
+    let mut geometry = physical_page_profile();
+    geometry.outer_margin = Length::from_micrometres(25_000);
+
+    let outcome = session.replace_page_profile(base, target, geometry);
+    let PageProfileEditOutcome::Applied {
+        base: actual_base,
+        revision,
+        target: actual_target,
+    } = outcome
+    else {
+        panic!("changed physical profile must create a revision");
+    };
+    assert_eq!(actual_base, base);
+    assert_eq!(actual_target, target);
+    assert_ne!(revision, base);
+    let after = session.current().expect("profile-edited revision");
+    assert_eq!(after.id, revision);
+    assert_eq!(after.notebook.id, before.notebook.id);
+    assert_eq!(after.notebook.pages[0].id, before.notebook.pages[0].id);
+    assert_eq!(after.notebook.page_profiles[0].id, target);
+    assert_eq!(after.notebook.pages[0].page_profile, target);
+    assert_eq!(after.notebook.page_profiles[0].geometry, geometry);
+    assert_eq!(
+        after.notebook.pages[0].flows,
+        before.notebook.pages[0].flows,
+    );
+}
+
+#[test]
+fn direct_page_profile_edit_same_value_is_noop() {
+    let candidate_ids = IdentityAllocator::new();
+    let candidate = candidate_notebook(&candidate_ids, "paper no-op");
+    let candidate_profile = candidate.page_profiles[0].id;
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(candidate)
+    else {
+        panic!("candidate must be accepted");
+    };
+    let target = accepted_for(&mapping, candidate_profile);
+    let before = session.current().expect("base revision").clone();
+
+    assert_eq!(
+        session.replace_page_profile(revision, target, physical_page_profile()),
+        PageProfileEditOutcome::NoOp { revision, target },
+    );
+    assert_eq!(session.current(), Some(&before));
+}
+
+#[test]
+fn direct_page_profile_edit_invalid_geometry_is_no_effect() {
+    let candidate_ids = IdentityAllocator::new();
+    let candidate = candidate_notebook(&candidate_ids, "paper invalid");
+    let candidate_profile = candidate.page_profiles[0].id;
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(candidate)
+    else {
+        panic!("candidate must be accepted");
+    };
+    let target = accepted_for(&mapping, candidate_profile);
+    let before = session.current().expect("base revision").clone();
+    let mut invalid = physical_page_profile();
+    invalid.paper_pattern = PaperPattern::Ruled { spacing: Length::ZERO };
+
+    assert_eq!(
+        session.replace_page_profile(revision, target, invalid),
+        PageProfileEditOutcome::InvalidProfile {
+            reason: PageProfileError::PatternSpacingIsZero,
+            revision,
+            target,
+        },
+    );
+    assert_eq!(session.current(), Some(&before));
+}
+
+#[test]
+fn direct_page_profile_edit_stale_base_rejects_without_mutation() {
+    let candidate_ids = IdentityAllocator::new();
+    let candidate = candidate_notebook(&candidate_ids, "paper stale");
+    let candidate_profile = candidate.page_profiles[0].id;
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted {
+        mapping,
+        revision: stale_base,
+    } = session.accept(candidate)
+    else {
+        panic!("candidate must be accepted");
+    };
+    let target = accepted_for(&mapping, candidate_profile);
+    let mut geometry = physical_page_profile();
+    geometry.outer_margin = Length::from_micrometres(25_000);
+    let PageProfileEditOutcome::Applied { revision: current, .. } =
+        session.replace_page_profile(stale_base, target, geometry)
+    else {
+        panic!("first profile edit must apply");
+    };
+    let before = session.current().expect("current revision").clone();
+    geometry.outer_margin = Length::from_micrometres(30_000);
+
+    assert_eq!(
+        session.replace_page_profile(stale_base, target, geometry),
+        PageProfileEditOutcome::StaleBase { current },
+    );
+    assert_eq!(session.current(), Some(&before));
+}
+
+#[test]
+fn direct_page_profile_edit_nonprofile_identity_rejects_without_mutation() {
+    let candidate_ids = IdentityAllocator::new();
+    let candidate = candidate_notebook(&candidate_ids, "paper target");
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { revision, .. } =
+        session.accept(candidate)
+    else {
+        panic!("candidate must be accepted");
+    };
+    let before = session.current().expect("base revision").clone();
+    let page_target = before.notebook.pages[0].id;
+
+    assert_eq!(
+        session.replace_page_profile(
+            revision,
+            page_target,
+            physical_page_profile(),
+        ),
+        PageProfileEditOutcome::TargetNotPageProfile {
+            revision,
+            target: page_target,
+        },
+    );
+    assert_eq!(session.current(), Some(&before));
+}
+
+#[test]
+fn direct_page_profile_edit_absent_prior_profile_is_not_found() {
+    let candidate_ids = IdentityAllocator::new();
+    let first = candidate_notebook(&candidate_ids, "first paper");
+    let first_profile = first.page_profiles[0].id;
+    let second = candidate_notebook(&candidate_ids, "second paper");
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted {
+        mapping: first_mapping, ..
+    } = session.accept(first)
+    else {
+        panic!("first candidate must be accepted");
+    };
+    let absent_target = accepted_for(&first_mapping, first_profile);
+    let AcceptanceOutcome::Accepted { revision, .. } = session.accept(second)
+    else {
+        panic!("second candidate must be accepted");
+    };
+    let before = session.current().expect("second revision").clone();
+
+    assert_eq!(
+        session.replace_page_profile(
+            revision,
+            absent_target,
+            physical_page_profile(),
+        ),
+        PageProfileEditOutcome::TargetNotFound {
+            revision,
+            target: absent_target,
+        },
+    );
+    assert_eq!(session.current(), Some(&before));
+}
+
+#[test]
+fn direct_page_profile_edit_without_accepted_revision_is_typed_no_effect() {
+    let ids = IdentityAllocator::new();
+    let base = ids.allocate_revision().expect("synthetic revision");
+    let target = ids.allocate_accepted().expect("synthetic accepted id");
+    let mut session = SemanticNotebookSessionService::default();
+
+    assert_eq!(
+        session.replace_page_profile(base, target, physical_page_profile()),
+        PageProfileEditOutcome::NoAcceptedRevision,
+    );
+    assert!(session.current().is_none());
 }
