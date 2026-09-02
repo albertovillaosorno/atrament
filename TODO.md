@@ -93,11 +93,15 @@ non-recycling active-session allocation, unresolved semantic blocks, and exact
 extension-data preservation. Explicit candidate acceptance validates duplicate,
 dangling, and wrong-kind references before mutation, promotes candidate-local
 identities through one backend-owned mapping, and commits one new accepted
-revision atomically while preserving nested semantic references.
+revision atomically while preserving nested semantic references. A direct
+accepted-text edit now preconditions the exact current revision, preserves all
+semantic identities while replacing one admitted inline text identity, creates
+one new revision only for a real change, and rejects no-op, stale, unavailable,
+or non-text targets without mutating accepted state.
 
 The task remains open for the complete first-release semantic vocabulary,
 format parsing and canonical serialization, migrations and round-trip fixtures,
-accepted semantic editing/history integration, and layout/render consumers.
+full semantic command/history integration, and layout/render consumers.
 
 ### TODO - Implement physical page profiles
 
