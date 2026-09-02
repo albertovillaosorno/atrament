@@ -59,6 +59,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "atrament_semantic_command_graph"
+version = "0.1.0"
+
+[[package]]
 name = "atrament_semantic_fixed_region_layout"
 version = "0.1.0"
 dependencies = [

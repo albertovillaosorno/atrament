@@ -1,0 +1,9 @@
+identity:
+  id: function:semantic-command-graph
+  name: semantic-command-graph
+  path: src/backend/semantic-command-graph
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: domain
