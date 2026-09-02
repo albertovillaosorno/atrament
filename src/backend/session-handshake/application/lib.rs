@@ -36,6 +36,11 @@
 
 //! First-release Atrament browser/backend compatibility handshake.
 
+use atrament_diagnostic::{
+    BlockingDisposition, Completeness, Diagnostic, DiagnosticCode,
+    DiagnosticSet, Evidence, LocationKind, LocationRole, Operation,
+    OperationBinding, Remediation, SemanticLocation, Severity,
+};
 use atrament_session_handshake_port::{
     HandshakeResult, SessionHandshake, VersionDimension, Versions,
 };
@@ -104,6 +109,7 @@ impl SessionHandshake for HandshakeService {
         for (dimension, expected, observed) in checks {
             if expected != observed {
                 return HandshakeResult::Incompatible {
+                    diagnostics: mismatch_diagnostics(dimension, expected),
                     dimension,
                     expected,
                     observed,
@@ -111,5 +117,48 @@ impl SessionHandshake for HandshakeService {
             }
         }
         HandshakeResult::Compatible { versions: current }
+    }
+}
+
+const fn version_dimension_name(dimension: VersionDimension) -> &'static str {
+    match dimension {
+        VersionDimension::Capability => "capability",
+        VersionDimension::Product => "product",
+        VersionDimension::Profile => "profile",
+        VersionDimension::Prompt => "prompt",
+        VersionDimension::Protocol => "protocol",
+        VersionDimension::Renderer => "renderer",
+    }
+}
+
+fn mismatch_diagnostics(
+    dimension: VersionDimension,
+    expected: &'static str,
+) -> DiagnosticSet {
+    DiagnosticSet {
+        completeness: Completeness::Complete,
+        diagnostics: vec![Diagnostic {
+            code: DiagnosticCode::HandshakeVersionMismatch,
+            disposition: BlockingDisposition::Blocking,
+            evidence: vec![Evidence::RequiredVersion {
+                dimension: version_dimension_name(dimension),
+                expected,
+            }],
+            locations: vec![SemanticLocation {
+                identity: format!(
+                    "handshake:{}",
+                    version_dimension_name(dimension)
+                ),
+                kind: LocationKind::Capability,
+                relationship: None,
+                role: LocationRole::Primary,
+            }],
+            operation: OperationBinding {
+                contexts: vec![],
+                operation: Operation::SessionHandshake,
+            },
+            remediations: vec![Remediation::UseCompatibleClient],
+            severity: Severity::Error,
+        }],
     }
 }

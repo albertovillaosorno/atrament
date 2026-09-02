@@ -33,6 +33,8 @@
 
 //! Inbound application port for pre-acceptance Atrament session draft text.
 
+use atrament_diagnostic::DiagnosticSet;
+
 /// One editable pre-acceptance text field in the first user journey.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum DraftField {
@@ -45,12 +47,15 @@ pub enum DraftField {
 }
 
 /// Result of replacing one complete session draft field.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum DraftMutation {
     /// The complete replacement became current session draft state.
     Applied,
     /// The replacement exceeded the backend-owned field resource limit.
-    ResourceLimit,
+    ResourceLimit {
+        /// Shared semantic diagnostic explaining the rejected replacement.
+        diagnostics: DiagnosticSet,
+    },
 }
 
 /// Application service owning disposable pre-acceptance draft text.

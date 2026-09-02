@@ -31,6 +31,7 @@
 //
 use std::net::{Ipv4Addr, SocketAddr};
 
+use atrament_diagnostic::DIAGNOSTIC_VERSION;
 use atrament_session_draft::{MAX_DRAFT_FIELD_BYTES, SessionDraftService};
 use atrament_session_draft_port::{DraftField, SessionDraft};
 use atrament_session_handshake::{
@@ -417,6 +418,7 @@ fn authenticated_version_mismatch_is_typed_and_blocking() {
     assert!(head.starts_with("HTTP/1.1 409 Conflict\r\n"));
     let body = std::str::from_utf8(body).expect("handshake JSON is UTF-8");
     assert!(body.contains("atrament.handshake.version-mismatch"));
+    assert!(body.contains(DIAGNOSTIC_VERSION));
     assert!(body.contains("\"dimension\":\"prompt\""));
     assert!(body.contains(PROMPT_VERSION));
     assert!(!body.contains("atrament.prompt/0"));
@@ -641,6 +643,11 @@ fn draft_resource_limit_rejects_without_truncating_current_value() {
     );
     let response = route_with_draft(&request, EXPECTED_HOST, &mut draft);
     assert_eq!(status_line(&response), "HTTP/1.1 413 Content Too Large");
+    let (_, response_body) = response_parts(&response);
+    let response_body =
+        std::str::from_utf8(response_body).expect("resource JSON is UTF-8");
+    assert!(response_body.contains(DIAGNOSTIC_VERSION));
+    assert!(response_body.contains("atrament.session-draft.resource-limit"));
     assert_eq!(draft.value(DraftField::Candidate), "current");
 }
 

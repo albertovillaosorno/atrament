@@ -25,28 +25,37 @@ dependencies = [
 name = "atrament_session_draft"
 version = "0.1.0"
 dependencies = [
+ "atrament_diagnostic",
  "atrament_session_draft_port",
 ]
 
 [[package]]
 name = "atrament_session_draft_port"
 version = "0.1.0"
+dependencies = [
+ "atrament_diagnostic",
+]
 
 [[package]]
 name = "atrament_session_handshake"
 version = "0.1.0"
 dependencies = [
+ "atrament_diagnostic",
  "atrament_session_handshake_port",
 ]
 
 [[package]]
 name = "atrament_session_handshake_port"
 version = "0.1.0"
+dependencies = [
+ "atrament_diagnostic",
+]
 
 [[package]]
 name = "atrament_session_runtime"
 version = "0.1.0"
 dependencies = [
+ "atrament_diagnostic",
  "atrament_session_draft_port",
  "atrament_session_handshake_port",
 ]

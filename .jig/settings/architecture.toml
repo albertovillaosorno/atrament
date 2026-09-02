@@ -11,19 +11,19 @@ depends_on = []
 depends_on = ["atrament_browser_launch", "atrament_session_draft", "atrament_session_handshake", "atrament_session_runtime", "atrament_session_secret"]
 
 [component.atrament_session_draft]
-depends_on = ["atrament_session_draft_port"]
+depends_on = ["atrament_diagnostic", "atrament_session_draft_port"]
 
 [component.atrament_session_draft_port]
-depends_on = []
+depends_on = ["atrament_diagnostic"]
 
 [component.atrament_session_handshake]
-depends_on = ["atrament_session_handshake_port"]
+depends_on = ["atrament_diagnostic", "atrament_session_handshake_port"]
 
 [component.atrament_session_handshake_port]
-depends_on = []
+depends_on = ["atrament_diagnostic"]
 
 [component.atrament_session_runtime]
-depends_on = ["atrament_session_draft_port", "atrament_session_handshake_port"]
+depends_on = ["atrament_diagnostic", "atrament_session_draft_port", "atrament_session_handshake_port"]
 
 [component.atrament_session_secret]
 depends_on = []

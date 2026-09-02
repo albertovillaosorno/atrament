@@ -61,8 +61,6 @@ pub enum Completeness {
 pub struct Diagnostic {
     /// Stable condition identity.
     pub code: DiagnosticCode,
-    /// Explicit completeness of this diagnostic representation.
-    pub completeness: Completeness,
     /// Capability-specific blocking disposition.
     pub disposition: BlockingDisposition,
     /// Typed evidence used to explain the condition.
@@ -84,6 +82,15 @@ pub enum DiagnosticCode {
     HandshakeVersionMismatch,
     /// One complete session draft field exceeds its admitted byte limit.
     SessionDraftResourceLimit,
+}
+
+/// Diagnostics returned with one application result plus set completeness.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct DiagnosticSet {
+    /// Explicit completeness of the complete operation diagnostic set.
+    pub completeness: Completeness,
+    /// Ordered diagnostics admitted for the operation result.
+    pub diagnostics: Vec<Diagnostic>,
 }
 
 impl DiagnosticCode {

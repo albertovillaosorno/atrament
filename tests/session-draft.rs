@@ -32,11 +32,53 @@
 // - Defaults:
 //   - Starts from an empty disposable session draft.
 //
+use atrament_diagnostic::{
+    BlockingDisposition, Completeness, DiagnosticCode, Evidence, EvidenceUnit,
+    LocationKind, LocationRole, Operation, Remediation, Severity,
+};
 use atrament_session_draft_port::{DraftField, DraftMutation, SessionDraft};
 
 #[allow(dead_code)]
 #[path = "../src/backend/session-draft/application/lib.rs"]
 mod draft;
+
+fn assert_resource_limit(
+    result: DraftMutation,
+    expected_identity: &str,
+    observed: u64,
+) {
+    let DraftMutation::ResourceLimit { diagnostics } = result else {
+        panic!("over-limit draft replacement must remain ResourceLimit");
+    };
+    assert_eq!(diagnostics.completeness, Completeness::Complete);
+    let [diagnostic] = diagnostics.diagnostics.as_slice() else {
+        panic!("resource limit must return one diagnostic");
+    };
+    assert_eq!(diagnostic.code, DiagnosticCode::SessionDraftResourceLimit);
+    assert_eq!(diagnostic.disposition, BlockingDisposition::Blocking);
+    assert_eq!(
+        diagnostic.operation.operation,
+        Operation::SessionDraftReplace
+    );
+    assert_eq!(diagnostic.remediations, [Remediation::ReduceInput]);
+    assert_eq!(diagnostic.severity, Severity::Error);
+    assert!(matches!(
+        diagnostic.evidence.as_slice(),
+        [Evidence::LimitExceeded {
+            maximum: 1_048_576,
+            observed: actual,
+            unit: EvidenceUnit::Bytes,
+        }] if *actual == observed
+    ));
+    assert!(matches!(
+        diagnostic.locations.as_slice(),
+        [location]
+            if location.identity == expected_identity
+                && location.kind == LocationKind::Field
+                && location.role == LocationRole::Primary
+                && location.relationship.is_none()
+    ));
+}
 
 #[test]
 fn draft_fields_start_empty_and_replace_independently() {
@@ -70,10 +112,8 @@ fn over_limit_replacement_does_not_change_current_value() {
         DraftMutation::Applied,
     );
     let over_limit = "a".repeat(draft::MAX_DRAFT_FIELD_BYTES + 1);
-    assert_eq!(
-        service.replace(DraftField::Source, over_limit),
-        DraftMutation::ResourceLimit,
-    );
+    let result = service.replace(DraftField::Source, over_limit);
+    assert_resource_limit(result, "session-draft:source", 1_048_577);
     assert_eq!(service.value(DraftField::Source), "accepted draft");
 }
 
@@ -87,10 +127,8 @@ fn replacement_uses_utf8_byte_limit_without_truncation() {
         DraftMutation::Applied,
     );
     let over_limit = "á".repeat((draft::MAX_DRAFT_FIELD_BYTES / 2) + 1);
-    assert_eq!(
-        service.replace(DraftField::Candidate, over_limit),
-        DraftMutation::ResourceLimit,
-    );
+    let result = service.replace(DraftField::Candidate, over_limit);
+    assert_resource_limit(result, "session-draft:candidate", 1_048_578);
     assert_eq!(
         service.value(DraftField::Candidate).len(),
         draft::MAX_DRAFT_FIELD_BYTES,

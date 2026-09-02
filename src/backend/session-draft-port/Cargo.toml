@@ -5,6 +5,9 @@ edition = "2024"
 publish = false
 license = "MIT"
 
+[dependencies]
+atrament_diagnostic = { path = "../diagnostic" }
+
 [lib]
 path = "port-inbound/lib.rs"
 

@@ -43,6 +43,7 @@ use std::net::{Ipv4Addr, SocketAddr, TcpListener, TcpStream};
 use std::str;
 use std::time::Duration;
 
+use atrament_diagnostic::{DIAGNOSTIC_VERSION, DiagnosticCode, DiagnosticSet};
 use atrament_session_draft_port::{DraftField, DraftMutation, SessionDraft};
 use atrament_session_handshake_port::{
     HandshakeResult, SessionHandshake, VersionDimension, Versions,
@@ -373,17 +374,25 @@ const fn handshake_dimension_name(dimension: VersionDimension) -> &'static str {
 }
 
 fn handshake_incompatible_response(
+    diagnostics: &DiagnosticSet,
     dimension: VersionDimension,
     expected: &str,
 ) -> Vec<u8> {
+    let code = diagnostics.diagnostics.first().map_or(
+        DiagnosticCode::HandshakeVersionMismatch.stable_name(),
+        |diagnostic| diagnostic.code.stable_name(),
+    );
     let body = format!(
         concat!(
             "{{\"result\":\"incompatible\",",
             "\"diagnostic\":{{",
-            "\"code\":\"atrament.handshake.version-mismatch\",",
+            "\"version\":\"{}\",",
+            "\"code\":\"{}\",",
             "\"dimension\":\"{}\",",
             "\"expected\":\"{}\"}}}}",
         ),
+        DIAGNOSTIC_VERSION,
+        code,
         handshake_dimension_name(dimension),
         expected,
     );
@@ -430,9 +439,12 @@ fn route_handshake(
         HandshakeResult::Compatible { versions } => {
             handshake_success_response(versions)
         },
-        HandshakeResult::Incompatible { dimension, expected, .. } => {
-            handshake_incompatible_response(dimension, expected)
-        },
+        HandshakeResult::Incompatible {
+            diagnostics,
+            dimension,
+            expected,
+            ..
+        } => handshake_incompatible_response(&diagnostics, dimension, expected),
     }
 }
 
@@ -477,6 +489,23 @@ fn route_draft_read(
     response("200 OK", TEXT_CONTENT_TYPE, draft.value(field).as_bytes())
 }
 
+fn draft_resource_limit_response(diagnostics: &DiagnosticSet) -> Vec<u8> {
+    let code = diagnostics.diagnostics.first().map_or(
+        DiagnosticCode::SessionDraftResourceLimit.stable_name(),
+        |diagnostic| diagnostic.code.stable_name(),
+    );
+    let body = format!(
+        concat!(
+            "{{\"error\":\"resource_limit\",",
+            "\"diagnostic\":{{",
+            "\"version\":\"{}\",",
+            "\"code\":\"{}\"}}}}",
+        ),
+        DIAGNOSTIC_VERSION, code,
+    );
+    json_response("413 Content Too Large", body.as_bytes())
+}
+
 fn route_draft_replace(
     request: &[u8],
     field: DraftField,
@@ -507,10 +536,9 @@ fn route_draft_replace(
     };
     match draft.replace(field, value.to_owned()) {
         DraftMutation::Applied => empty_response("204 No Content"),
-        DraftMutation::ResourceLimit => json_response(
-            "413 Content Too Large",
-            br#"{"error":"resource_limit"}"#,
-        ),
+        DraftMutation::ResourceLimit { diagnostics } => {
+            draft_resource_limit_response(&diagnostics)
+        },
     }
 }
 

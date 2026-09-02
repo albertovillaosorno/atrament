@@ -6,6 +6,7 @@ publish = false
 license = "MIT"
 
 [dependencies]
+atrament_diagnostic = { path = "../diagnostic" }
 atrament_session_handshake_port = { path = "../session-handshake-port" }
 
 [lib]

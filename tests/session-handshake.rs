@@ -29,6 +29,10 @@
 // - Defaults:
 //   - Requires exact equality across all six required version identities.
 //
+use atrament_diagnostic::{
+    BlockingDisposition, Completeness, DiagnosticCode, Evidence, LocationKind,
+    LocationRole, Operation, Remediation, Severity,
+};
 use atrament_session_handshake_port::{
     HandshakeResult, SessionHandshake, VersionDimension, Versions,
 };
@@ -81,12 +85,51 @@ fn every_required_version_mismatch_blocks_with_its_dimension() {
 
     for (dimension, versions) in cases {
         let result = service.evaluate(versions);
+        let HandshakeResult::Incompatible {
+            diagnostics,
+            dimension: actual,
+            expected,
+            observed,
+        } = result
+        else {
+            panic!("mismatched version must remain an incompatible result");
+        };
+        assert_eq!(actual, dimension);
+        assert_ne!(expected, observed);
+        assert_eq!(diagnostics.completeness, Completeness::Complete);
+        let [diagnostic] = diagnostics.diagnostics.as_slice() else {
+            panic!("version mismatch must return one diagnostic");
+        };
+        assert_eq!(diagnostic.code, DiagnosticCode::HandshakeVersionMismatch);
+        assert_eq!(diagnostic.disposition, BlockingDisposition::Blocking);
+        assert_eq!(diagnostic.operation.operation, Operation::SessionHandshake);
+        assert_eq!(diagnostic.remediations, [Remediation::UseCompatibleClient]);
+        assert_eq!(diagnostic.severity, Severity::Error);
         assert!(matches!(
-            result,
-            HandshakeResult::Incompatible {
-                dimension: actual,
-                ..
-            } if actual == dimension
+            diagnostic.evidence.as_slice(),
+            [Evidence::RequiredVersion {
+                dimension: evidence_dimension,
+                expected: evidence_expected,
+            }] if *evidence_dimension == version_dimension_name(dimension)
+                && *evidence_expected == expected
         ));
+        assert!(matches!(
+            diagnostic.locations.as_slice(),
+            [location]
+                if location.kind == LocationKind::Capability
+                    && location.role == LocationRole::Primary
+                    && location.relationship.is_none()
+        ));
+    }
+}
+
+const fn version_dimension_name(dimension: VersionDimension) -> &'static str {
+    match dimension {
+        VersionDimension::Capability => "capability",
+        VersionDimension::Product => "product",
+        VersionDimension::Profile => "profile",
+        VersionDimension::Prompt => "prompt",
+        VersionDimension::Protocol => "protocol",
+        VersionDimension::Renderer => "renderer",
     }
 }

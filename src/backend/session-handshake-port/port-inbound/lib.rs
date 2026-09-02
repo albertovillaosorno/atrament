@@ -32,8 +32,10 @@
 
 //! Inbound application port for Atrament session version compatibility.
 
+use atrament_diagnostic::DiagnosticSet;
+
 /// Result of comparing one browser version set with the current backend.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum HandshakeResult<'version> {
     /// Every required version identity is compatible.
     Compatible {
@@ -42,6 +44,8 @@ pub enum HandshakeResult<'version> {
     },
     /// One required version identity is incompatible.
     Incompatible {
+        /// Shared semantic diagnostic explaining the incompatibility.
+        diagnostics: DiagnosticSet,
         /// Version dimension that blocked the handshake.
         dimension: VersionDimension,
         /// Version identity required by the backend.

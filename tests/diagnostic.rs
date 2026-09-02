@@ -32,10 +32,11 @@
 //   - Uses no adapter serialization or presentation strings.
 //
 use diagnostic::{
-    BlockingDisposition, Completeness, Diagnostic, DiagnosticCode, Evidence,
-    EvidenceUnit, LocationKind, LocationRole, Operation, OperationBinding,
-    OperationContext, OperationContextKind, PhysicalLengthQuantity,
-    RelationshipKind, Remediation, SemanticLocation, Severity,
+    BlockingDisposition, Completeness, Diagnostic, DiagnosticCode,
+    DiagnosticSet, Evidence, EvidenceUnit, LocationKind, LocationRole,
+    Operation, OperationBinding, OperationContext, OperationContextKind,
+    PhysicalLengthQuantity, RelationshipKind, Remediation, SemanticLocation,
+    Severity,
 };
 
 #[allow(dead_code)]
@@ -59,7 +60,6 @@ fn namespace_and_condition_codes_are_stable() {
 fn severity_and_blocking_are_independent_typed_dimensions() {
     let diagnostic = Diagnostic {
         code: DiagnosticCode::HandshakeVersionMismatch,
-        completeness: Completeness::Complete,
         disposition: BlockingDisposition::Blocking,
         evidence: vec![Evidence::RequiredVersion {
             dimension: "protocol",
@@ -81,7 +81,6 @@ fn severity_and_blocking_are_independent_typed_dimensions() {
 fn operation_context_and_relational_locations_keep_semantic_owners() {
     let diagnostic = Diagnostic {
         code: DiagnosticCode::SessionDraftResourceLimit,
-        completeness: Completeness::Incomplete,
         disposition: BlockingDisposition::Advisory,
         evidence: vec![
             Evidence::LimitExceeded {
@@ -127,5 +126,10 @@ fn operation_context_and_relational_locations_keep_semantic_owners() {
         Some(RelationshipKind::Collision),
     );
     assert_eq!(diagnostic.operation.contexts.len(), 1);
-    assert_eq!(diagnostic.completeness, Completeness::Incomplete);
+    let set = DiagnosticSet {
+        completeness: Completeness::Incomplete,
+        diagnostics: vec![diagnostic],
+    };
+    assert_eq!(set.completeness, Completeness::Incomplete);
+    assert_eq!(set.diagnostics.len(), 1);
 }
