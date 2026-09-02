@@ -118,14 +118,27 @@ State: `human-corrected`.
 
 ### Equivalent command-mode refinement
 
-A parity test may start again from `candidate-accepted` and request the same
-`Idea` correction through semantic command mode. The returned batch targets the
-stable paragraph identity and the exact accepted base revision rather than
-returning a replacement notebook.
+A parity test may start again from `candidate-accepted`. Its caller-owned
+refinement intent is exactly: remove the word `entonces` from the `Idea`
+paragraph without changing the formulas, examples, or other sections.
 
-Interactive paste validates the complete batch and shows its semantic diff
-before acceptance. An explicitly invoked MCP apply capability may perform the
-same validated transaction without a browser click.
+The backend resolves that intent into one command context. Neighboring sections
+may be readable evidence, but the accepted `Idea` paragraph is the only writable
+semantic target for this bounded correction.
+
+In the browser-assisted path, the backend presents the resulting self-contained
+Model prompt and the user moves it through Copy/paste transport. In the MCP
+path,
+the admitted agent obtains the equivalent structured command context directly;
+neither adapter asks the model to choose its own base revision or writable
+scope.
+
+The returned batch targets the stable paragraph identity and exact accepted base
+revision rather than returning a replacement notebook.
+
+Interactive paste validates the complete batch and shows its semantic review
+projection before acceptance. An explicitly invoked MCP Apply capability may
+perform the same validated transaction without a browser click.
 
 Both paths must produce the same corrected paragraph content as the human edit.
 Unrelated semantic identities remain unchanged, while downstream derived layout

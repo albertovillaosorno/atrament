@@ -28,8 +28,12 @@ Base: accepted `sober-single-pen` before the human correction frozen in the
 first
 complete user journey.
 
-Intent: remove `entonces` from the `Idea` paragraph while preserving the exact
-remaining Spanish text and every formula.
+Caller-owned intent: remove `entonces` only from the `Idea` paragraph while
+preserving the exact remaining Spanish text, every formula, examples, and other
+sections.
+
+The backend-generated command context may expose neighboring sections as
+readable evidence while admitting only the `Idea` paragraph as writable scope.
 
 Expected semantic result:
 
