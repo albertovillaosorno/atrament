@@ -33,6 +33,7 @@
 
 //! Inbound application port for transactional semantic candidate acceptance.
 
+use atrament_physical_page_profile::PageProfileError;
 use atrament_semantic_notebook::{
     AcceptedIdentity, AcceptedRevision, CandidateIdentity, IdentityExhausted,
     Notebook, RevisionIdentity,
@@ -68,6 +69,13 @@ pub enum CandidateGraphError {
         /// Reused candidate-local identity.
         candidate: CandidateIdentity,
     },
+    /// One owned physical page profile has invalid exact geometry.
+    InvalidPageProfile {
+        /// Candidate-local profile identity whose geometry is invalid.
+        candidate: CandidateIdentity,
+        /// Typed physical geometry validation failure.
+        reason: PageProfileError,
+    },
     /// One candidate semantic reference does not name an owned candidate
     /// object.
     MissingReference {
@@ -88,6 +96,8 @@ pub enum CandidateGraphError {
 pub enum CandidateReferenceKind {
     /// Reference must identify a semantic asset.
     Asset,
+    /// Reference must identify a physical page profile.
+    PageProfile,
     /// Reference must identify a provenance record.
     Provenance,
     /// Reference may identify any owned semantic object.

@@ -291,6 +291,8 @@ pub struct Notebook<Identity> {
     pub id: Identity,
     /// Output-profile semantic references.
     pub output_profiles: Vec<OutputProfile<Identity>>,
+    /// Physical page profiles owned by this accepted semantic revision.
+    pub page_profiles: Vec<PaperProfile<Identity>>,
     /// Pages in semantic notebook order.
     pub pages: Vec<Page<Identity>>,
     /// Provenance records referenced by semantic content.
@@ -313,6 +315,17 @@ pub struct OutputProfile<Identity> {
 pub struct Page<Identity> {
     /// Semantic flows in page-owned reading order.
     pub flows: Vec<Flow<Identity>>,
+    /// Stable or candidate-local semantic identity.
+    pub id: Identity,
+    /// Physical page-profile identity used by this page.
+    pub page_profile: Identity,
+}
+
+/// One semantic identity owning a complete physical page profile.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct PaperProfile<Identity> {
+    /// Exact validated physical paper geometry and page-mark intent.
+    pub geometry: atrament_physical_page_profile::PageProfile,
     /// Stable or candidate-local semantic identity.
     pub id: Identity,
 }

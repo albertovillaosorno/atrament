@@ -41,7 +41,7 @@ use atrament_semantic_notebook::{
     AcceptedIdentity, AcceptedRevision, Asset, Block, BlockContent,
     CandidateIdentity, Constraint, Figure, Flow, Formula, IdentityAllocator,
     IdentityExhausted, InlineSpan, List, ListItem, Notebook, OutputProfile,
-    Page, Provenance, Style, Table, TableCell, TableRow,
+    Page, PaperProfile, Provenance, Style, Table, TableCell, TableRow,
 };
 use atrament_semantic_notebook_port::{
     AcceptanceOutcome, CandidateGraphError, CandidateReferenceKind,
@@ -387,6 +387,11 @@ fn accept_notebook(
             .into_iter()
             .map(|profile| accept_output_profile(profile, identities))
             .collect::<Result<Vec<_>, _>>()?,
+        page_profiles: notebook
+            .page_profiles
+            .iter()
+            .map(|profile| accept_paper_profile(profile, identities))
+            .collect::<Result<Vec<_>, _>>()?,
         pages: notebook
             .pages
             .into_iter()
@@ -426,6 +431,17 @@ fn accept_page(
             .map(|flow| accept_flow(flow, identities))
             .collect::<Result<Vec<_>, _>>()?,
         id: accepted_id(page.id, identities)?,
+        page_profile: accepted_id(page.page_profile, identities)?,
+    })
+}
+
+fn accept_paper_profile(
+    profile: &PaperProfile<CandidateIdentity>,
+    identities: &BTreeMap<CandidateIdentity, AcceptedIdentity>,
+) -> Result<PaperProfile<AcceptedIdentity>, CandidateGraphError> {
+    Ok(PaperProfile {
+        geometry: profile.geometry,
+        id: accepted_id(profile.id, identities)?,
     })
 }
 
@@ -584,6 +600,10 @@ fn notebook_contains_identity(
             .any(|constraint| constraint.id == target)
         || notebook
             .output_profiles
+            .iter()
+            .any(|profile| profile.id == target)
+        || notebook
+            .page_profiles
             .iter()
             .any(|profile| profile.id == target)
         || notebook.pages.iter().any(|page| {
@@ -838,6 +858,15 @@ fn candidate_identities(
     for profile in &notebook.output_profiles {
         graph.register(profile.id, CandidateReferenceKind::Semantic)?;
     }
+    for profile in &notebook.page_profiles {
+        graph.register(profile.id, CandidateReferenceKind::PageProfile)?;
+        if let Err(reason) = profile.geometry.validate() {
+            return Err(CandidateGraphError::InvalidPageProfile {
+                candidate: profile.id,
+                reason,
+            });
+        }
+    }
     for page in &notebook.pages {
         candidate_page(page, &mut graph)?;
     }
@@ -867,6 +896,10 @@ fn candidate_page(
     graph: &mut CandidateGraph,
 ) -> Result<(), CandidateGraphError> {
     graph.register(page.id, CandidateReferenceKind::Semantic)?;
+    graph.reference(
+        Some(page.page_profile),
+        CandidateReferenceKind::PageProfile,
+    );
     for flow in &page.flows {
         candidate_flow(flow, graph)?;
     }

@@ -28,11 +28,15 @@ dependencies = [
 [[package]]
 name = "atrament_semantic_notebook"
 version = "0.1.0"
+dependencies = [
+ "atrament_physical_page_profile",
+]
 
 [[package]]
 name = "atrament_semantic_notebook_port"
 version = "0.1.0"
 dependencies = [
+ "atrament_physical_page_profile",
  "atrament_semantic_notebook",
 ]
 

@@ -29,18 +29,49 @@
 // - Defaults:
 //   - Rejected candidates leave the previously accepted revision unchanged.
 //
+use atrament_physical_page_profile::{
+    BindingEdge, BorderShape, Length, Orientation,
+    PageProfile as PhysicalPageProfile, PageProfileError, PaperMarkLayer,
+    PaperPattern, Rect, SheetSize,
+};
 use atrament_semantic_notebook::{
     AcceptedIdentity, Asset, Block, BlockContent, CandidateIdentity,
     Constraint, ConstraintKind, ExtensionData, Figure, Flow, Formula,
     IdentityAllocator, InlineSpan, List, ListItem, Notebook, OutputProfile,
-    Page, Provenance, ProvenanceKind, Style, Table, TableCell, TableRow,
-    UnresolvedBlock, UnresolvedReason,
+    Page, PaperProfile, Provenance, ProvenanceKind, Style, Table, TableCell,
+    TableRow, UnresolvedBlock, UnresolvedReason,
 };
 use atrament_semantic_notebook_port::{
     AcceptanceOutcome, CandidateGraphError, CandidateReferenceKind,
     SemanticNotebookSession, TextEditOutcome,
 };
 use atrament_semantic_notebook_session::SemanticNotebookSessionService;
+
+fn physical_page_profile() -> PhysicalPageProfile {
+    PhysicalPageProfile {
+        binding_edge: BindingEdge::Left,
+        border_shape: BorderShape::RoundedRectangle,
+        corner_roundness: Length::from_micrometres(5_000),
+        orientation: Orientation::Portrait,
+        outer_margin: Length::from_micrometres(20_000),
+        paper_mark_layer: PaperMarkLayer::BelowInk,
+        paper_pattern: PaperPattern::Squared {
+            spacing: Length::from_micrometres(5_000),
+        },
+        printable_region: Rect {
+            height: Length::from_micrometres(277_000),
+            width: Length::from_micrometres(190_000),
+            x: Length::from_micrometres(10_000),
+            y: Length::from_micrometres(10_000),
+        },
+        sheet: SheetSize {
+            height: Length::from_micrometres(297_000),
+            width: Length::from_micrometres(210_000),
+        },
+        top_clearance: Length::from_micrometres(10_000),
+        writing_inset: Length::from_micrometres(5_000),
+    }
+}
 
 fn accepted_for(
     mapping: &[atrament_semantic_notebook_port::IdentityMapping],
@@ -70,6 +101,8 @@ fn candidate_notebook_with_span(
 ) -> (Notebook<CandidateIdentity>, CandidateIdentity) {
     let notebook_id = identities.allocate_candidate().expect("notebook id");
     let page_id = identities.allocate_candidate().expect("page id");
+    let page_profile_id =
+        identities.allocate_candidate().expect("page profile id");
     let flow_id = identities.allocate_candidate().expect("flow id");
     let block_id = identities.allocate_candidate().expect("block id");
     let span_id = identities.allocate_candidate().expect("span id");
@@ -82,6 +115,10 @@ fn candidate_notebook_with_span(
         }],
         id: notebook_id,
         output_profiles: vec![],
+        page_profiles: vec![PaperProfile {
+            geometry: physical_page_profile(),
+            id: page_profile_id,
+        }],
         pages: vec![Page {
             flows: vec![Flow {
                 blocks: vec![Block {
@@ -99,6 +136,7 @@ fn candidate_notebook_with_span(
                 id: flow_id,
             }],
             id: page_id,
+            page_profile: page_profile_id,
         }],
         provenance: vec![],
         styles: vec![],
@@ -117,10 +155,19 @@ fn first_candidate_acceptance_commits_one_revision_and_identity_mapping() {
     let AcceptanceOutcome::Accepted { mapping, revision } = outcome else {
         panic!("valid candidate must be accepted");
     };
-    assert_eq!(mapping.len(), 5);
+    assert_eq!(mapping.len(), 6);
     let current = session.current().expect("accepted revision");
     assert_eq!(current.id, revision);
     assert_eq!(current.notebook.extensions[0].payload, [4, 2]);
+    assert_eq!(current.notebook.page_profiles.len(), 1);
+    assert_eq!(
+        current.notebook.page_profiles[0].geometry,
+        physical_page_profile()
+    );
+    assert_eq!(
+        current.notebook.pages[0].page_profile,
+        current.notebook.page_profiles[0].id,
+    );
 }
 
 #[test]
@@ -196,6 +243,48 @@ fn dangling_candidate_reference_rejects_without_changing_current_revision() {
 }
 
 #[test]
+fn invalid_page_profile_rejects_without_changing_current_revision() {
+    let candidate_ids = IdentityAllocator::new();
+    let valid = candidate_notebook(&candidate_ids, "accepted");
+    let mut invalid = candidate_notebook(&candidate_ids, "invalid paper");
+    invalid.page_profiles[0].geometry.printable_region.width = Length::ZERO;
+    let invalid_profile = invalid.page_profiles[0].id;
+    let mut session = SemanticNotebookSessionService::default();
+    let _ = session.accept(valid);
+    let before = session.current().expect("accepted revision").clone();
+
+    let outcome = session.accept(invalid);
+    assert_eq!(outcome, AcceptanceOutcome::InvalidCandidate {
+        reason: CandidateGraphError::InvalidPageProfile {
+            candidate: invalid_profile,
+            reason: PageProfileError::PrintableRegionIsEmpty,
+        },
+    },);
+    assert_eq!(session.current(), Some(&before));
+}
+
+#[test]
+fn page_profile_reference_kind_rejects_without_changing_current_revision() {
+    let candidate_ids = IdentityAllocator::new();
+    let valid = candidate_notebook(&candidate_ids, "accepted");
+    let mut invalid = candidate_notebook(&candidate_ids, "wrong paper owner");
+    invalid.pages[0].page_profile = invalid.pages[0].id;
+    let wrong_owner = invalid.pages[0].id;
+    let mut session = SemanticNotebookSessionService::default();
+    let _ = session.accept(valid);
+    let before = session.current().expect("accepted revision").clone();
+
+    let outcome = session.accept(invalid);
+    assert_eq!(outcome, AcceptanceOutcome::InvalidCandidate {
+        reason: CandidateGraphError::ReferenceKindMismatch {
+            candidate: wrong_owner,
+            expected: CandidateReferenceKind::PageProfile,
+        },
+    },);
+    assert_eq!(session.current(), Some(&before));
+}
+
+#[test]
 fn debug_output_never_exposes_accepted_notebook_text() {
     let candidate_ids = IdentityAllocator::new();
     let candidate = candidate_notebook(
@@ -233,6 +322,7 @@ fn nested_semantic_families_promote_all_owned_and_referenced_identities() {
     let list_span_id = candidate_id(&ids);
     let notebook_id = candidate_id(&ids);
     let page_id = candidate_id(&ids);
+    let page_profile_id = candidate_id(&ids);
     let profile_id = candidate_id(&ids);
     let provenance_id = candidate_id(&ids);
     let style_id = candidate_id(&ids);
@@ -257,6 +347,10 @@ fn nested_semantic_families_promote_all_owned_and_referenced_identities() {
         output_profiles: vec![OutputProfile {
             id: profile_id,
             name: String::from("digital"),
+        }],
+        page_profiles: vec![PaperProfile {
+            geometry: physical_page_profile(),
+            id: page_profile_id,
         }],
         pages: vec![Page {
             flows: vec![Flow {
@@ -379,6 +473,7 @@ fn nested_semantic_families_promote_all_owned_and_referenced_identities() {
                 id: flow_id,
             }],
             id: page_id,
+            page_profile: page_profile_id,
         }],
         provenance: vec![Provenance {
             id: provenance_id,
@@ -423,6 +518,14 @@ fn nested_semantic_families_promote_all_owned_and_referenced_identities() {
     assert_eq!(
         current.notebook.output_profiles[0].id,
         accepted_for(&mapping, profile_id),
+    );
+    assert_eq!(
+        current.notebook.page_profiles[0].id,
+        accepted_for(&mapping, page_profile_id),
+    );
+    assert_eq!(
+        current.notebook.pages[0].page_profile,
+        accepted_for(&mapping, page_profile_id),
     );
 }
 
@@ -622,6 +725,7 @@ fn direct_text_edit_reaches_nested_text_families_across_revisions() {
     let ids = IdentityAllocator::new();
     let notebook_id = candidate_id(&ids);
     let page_id = candidate_id(&ids);
+    let page_profile_id = candidate_id(&ids);
     let flow_id = candidate_id(&ids);
     let callout_id = candidate_id(&ids);
     let callout_child_id = candidate_id(&ids);
@@ -646,6 +750,10 @@ fn direct_text_edit_reaches_nested_text_families_across_revisions() {
         extensions: vec![],
         id: notebook_id,
         output_profiles: vec![],
+        page_profiles: vec![PaperProfile {
+            geometry: physical_page_profile(),
+            id: page_profile_id,
+        }],
         pages: vec![Page {
             flows: vec![Flow {
                 blocks: vec![
@@ -745,6 +853,7 @@ fn direct_text_edit_reaches_nested_text_families_across_revisions() {
                 id: flow_id,
             }],
             id: page_id,
+            page_profile: page_profile_id,
         }],
         provenance: vec![],
         styles: vec![],

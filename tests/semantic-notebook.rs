@@ -29,10 +29,41 @@
 // - Defaults:
 //   - Treats serialization syntax as intentionally unspecified.
 //
+use atrament_physical_page_profile::{
+    BindingEdge, BorderShape, Length, Orientation,
+    PageProfile as PhysicalPageProfile, PaperMarkLayer, PaperPattern, Rect,
+    SheetSize,
+};
 use atrament_semantic_notebook::{
     Block, BlockContent, ExtensionData, Flow, IdentityAllocator, InlineSpan,
-    Notebook, Page, UnresolvedBlock, UnresolvedReason,
+    Notebook, Page, PaperProfile, UnresolvedBlock, UnresolvedReason,
 };
+
+fn physical_page_profile() -> PhysicalPageProfile {
+    PhysicalPageProfile {
+        binding_edge: BindingEdge::Left,
+        border_shape: BorderShape::RoundedRectangle,
+        corner_roundness: Length::from_micrometres(5_000),
+        orientation: Orientation::Portrait,
+        outer_margin: Length::from_micrometres(20_000),
+        paper_mark_layer: PaperMarkLayer::BelowInk,
+        paper_pattern: PaperPattern::Squared {
+            spacing: Length::from_micrometres(5_000),
+        },
+        printable_region: Rect {
+            height: Length::from_micrometres(277_000),
+            width: Length::from_micrometres(190_000),
+            x: Length::from_micrometres(10_000),
+            y: Length::from_micrometres(10_000),
+        },
+        sheet: SheetSize {
+            height: Length::from_micrometres(297_000),
+            width: Length::from_micrometres(210_000),
+        },
+        top_clearance: Length::from_micrometres(10_000),
+        writing_inset: Length::from_micrometres(5_000),
+    }
+}
 
 #[test]
 fn accepted_candidate_and_revision_sequences_never_reuse_within_authority() {
@@ -54,6 +85,8 @@ fn cloned_semantic_state_preserves_stable_identity() {
     let identities = IdentityAllocator::new();
     let notebook_id = identities.allocate_accepted().expect("notebook id");
     let page_id = identities.allocate_accepted().expect("page id");
+    let page_profile_id =
+        identities.allocate_accepted().expect("page profile id");
     let flow_id = identities.allocate_accepted().expect("flow id");
     let block_id = identities.allocate_accepted().expect("block id");
     let span_id = identities.allocate_accepted().expect("span id");
@@ -63,6 +96,10 @@ fn cloned_semantic_state_preserves_stable_identity() {
         extensions: vec![],
         id: notebook_id,
         output_profiles: vec![],
+        page_profiles: vec![PaperProfile {
+            geometry: physical_page_profile(),
+            id: page_profile_id,
+        }],
         pages: vec![Page {
             flows: vec![Flow {
                 blocks: vec![Block {
@@ -80,6 +117,7 @@ fn cloned_semantic_state_preserves_stable_identity() {
                 id: flow_id,
             }],
             id: page_id,
+            page_profile: page_profile_id,
         }],
         provenance: vec![],
         styles: vec![],
