@@ -212,27 +212,37 @@ fn validate_measurement_blocks(
     blocks: &[Block<AcceptedIdentity>],
     measurement: &RevisionFlowMeasurement,
 ) -> Result<(), SemanticPaginationError> {
-    let expected = blocks.iter().map(|block| block.id).collect::<Vec<_>>();
     let measured = measured_owner_runs(measurement);
-    for owner in &measured {
-        if !expected.contains(owner) {
-            return Err(SemanticPaginationError::MeasuredBlockNotInFlow {
-                flow: measurement.flow,
-                owner: *owner,
-            });
+    for (index, owner) in measured.iter().enumerate() {
+        let Some(expected) = blocks.get(index) else {
+            return if blocks.iter().any(|block| block.id == *owner) {
+                Err(SemanticPaginationError::MeasurementBlockSequenceMismatch {
+                    flow: measurement.flow,
+                })
+            } else {
+                Err(SemanticPaginationError::MeasuredBlockNotInFlow {
+                    flow: measurement.flow,
+                    owner: *owner,
+                })
+            };
+        };
+        if expected.id == *owner {
+            continue;
         }
-    }
-    for (expected_owner, measured_owner) in expected.iter().zip(&measured) {
-        if expected_owner != measured_owner {
+        if blocks.iter().any(|block| block.id == *owner) {
             return Err(
                 SemanticPaginationError::MeasurementBlockSequenceMismatch {
                     flow: measurement.flow,
                 },
             );
         }
+        return Err(SemanticPaginationError::MeasuredBlockNotInFlow {
+            flow: measurement.flow,
+            owner: *owner,
+        });
     }
-    if measured.len() < expected.len() {
-        let Some(missing) = expected.get(measured.len()) else {
+    if measured.len() < blocks.len() {
+        let Some(missing) = blocks.get(measured.len()) else {
             return Err(
                 SemanticPaginationError::MeasurementBlockSequenceMismatch {
                     flow: measurement.flow,
@@ -241,15 +251,8 @@ fn validate_measurement_blocks(
         };
         return Err(SemanticPaginationError::MeasurementIncomplete {
             flow: measurement.flow,
-            missing: *missing,
+            missing: missing.id,
         });
-    }
-    if measured.len() > expected.len() {
-        return Err(
-            SemanticPaginationError::MeasurementBlockSequenceMismatch {
-                flow: measurement.flow,
-            },
-        );
     }
     Ok(())
 }
