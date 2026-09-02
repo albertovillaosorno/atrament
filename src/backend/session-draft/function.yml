@@ -1,0 +1,9 @@
+identity:
+  id: function:session-draft
+  name: session-draft
+  path: src/backend/session-draft
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: application

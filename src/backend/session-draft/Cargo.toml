@@ -1,0 +1,15 @@
+[package]
+name = "atrament_session_draft"
+version = "0.1.0"
+edition = "2024"
+publish = false
+license = "MIT"
+
+[dependencies]
+atrament_session_draft_port = { path = "../session-draft-port" }
+
+[lib]
+path = "application/lib.rs"
+
+[lints]
+workspace = true

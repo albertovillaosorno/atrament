@@ -2,6 +2,8 @@
 members = [
     "src/backend/browser-launch",
     "src/backend/runtime-bootstrap",
+    "src/backend/session-draft",
+    "src/backend/session-draft-port",
     "src/backend/session-handshake",
     "src/backend/session-handshake-port",
     "src/backend/session-runtime",

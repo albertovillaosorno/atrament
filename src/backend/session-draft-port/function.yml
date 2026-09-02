@@ -1,0 +1,9 @@
+identity:
+  id: function:session-draft-port
+  name: session-draft-port
+  path: src/backend/session-draft-port
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: port-inbound

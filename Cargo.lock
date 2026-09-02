@@ -17,6 +17,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "atrament_session_draft"
+version = "0.1.0"
+dependencies = [
+ "atrament_session_draft_port",
+]
+
+[[package]]
+name = "atrament_session_draft_port"
+version = "0.1.0"
+
+[[package]]
 name = "atrament_session_handshake"
 version = "0.1.0"
 dependencies = [
