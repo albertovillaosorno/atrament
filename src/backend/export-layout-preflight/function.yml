@@ -1,0 +1,9 @@
+identity:
+  id: function:export-layout-preflight
+  name: export-layout-preflight
+  path: src/backend/export-layout-preflight
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: application

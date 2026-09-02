@@ -11,6 +11,14 @@ name = "atrament_diagnostic"
 version = "0.1.0"
 
 [[package]]
+name = "atrament_export_layout_preflight"
+version = "0.1.0"
+dependencies = [
+ "atrament_diagnostic",
+ "atrament_semantic_notebook",
+]
+
+[[package]]
 name = "atrament_fixed_region_bounds"
 version = "0.1.0"
 dependencies = [

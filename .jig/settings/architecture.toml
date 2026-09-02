@@ -7,6 +7,9 @@ depends_on = []
 [component.atrament_diagnostic]
 depends_on = []
 
+[component.atrament_export_layout_preflight]
+depends_on = ["atrament_diagnostic", "atrament_semantic_notebook"]
+
 [component.atrament_fixed_region_bounds]
 depends_on = ["atrament_physical_page_profile"]
 

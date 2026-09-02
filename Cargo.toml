@@ -2,6 +2,7 @@
 members = [
     "src/backend/browser-launch",
     "src/backend/diagnostic",
+    "src/backend/export-layout-preflight",
     "src/backend/fixed-region-bounds",
     "src/backend/flow-pagination",
     "src/backend/physical-page-profile",

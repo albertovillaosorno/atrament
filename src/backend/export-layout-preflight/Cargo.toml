@@ -1,0 +1,16 @@
+[package]
+name = "atrament_export_layout_preflight"
+version = "0.1.0"
+edition = "2024"
+publish = false
+license = "MIT"
+
+[dependencies]
+atrament_diagnostic = { path = "../diagnostic" }
+atrament_semantic_notebook = { path = "../semantic-notebook" }
+
+[lib]
+path = "application/lib.rs"
+
+[lints]
+workspace = true
