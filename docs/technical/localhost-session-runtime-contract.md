@@ -157,6 +157,28 @@ Refreshing the browser does not create a new backend session. A refresh may
 rejoin the current process only when it still possesses the in-memory session
 secret and completes the handshake again.
 
+### Pre-acceptance draft mutation
+
+The first mutable browser application state is source-preparation draft text,
+not an accepted notebook revision. Task text, source material, and the raw
+external-model response remain separate complete fields in backend process
+memory. Replacing one field cannot implicitly accept, parse, or apply another.
+
+The first-release browser replaces those fields with authenticated same-origin
+`POST` requests to `/api/session/task`, `/api/session/source`, and
+`/api/session/candidate`. Bodies are UTF-8 text with one explicit
+`Content-Length`; transfer encoding, malformed framing, and invalid UTF-8 are
+rejected before mutation. Each field has a backend-owned one-mebibyte limit, and
+over-limit input returns `413` without truncating or changing the current field.
+A successful whole-field replacement returns `204`.
+
+The browser coalesces rapid edits per field: it may skip obsolete intermediate
+values but sends only complete field values, never browser-authored patches.
+Pending draft synchronization is invalidated when the page leaves the active
+session. Draft requests carry the in-memory Bearer credential and rely on the
+browser-provided exact `Origin`; rejected authentication or origin admission
+never invokes the draft application service.
+
 ### In-memory authority
 
 Notebook documents, imported asset bytes, undo history, previews, diagnostics,

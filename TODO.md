@@ -12,23 +12,17 @@ screenshots are never a substitute for semantic or geometric correctness.
 
 ## P1 — Localhost runtime and ephemeral session
 
-### TODO - Authenticate the browser session locally
-
-Issue an unguessable session token at startup, require it on mutating requests,
-and prevent another local page from controlling an active notebook.
-
-Current evidence generates 256 bits from the operating-system random source,
-hands the credential to the launched browser only through a scrubbed fragment,
-and requires exact Host, Origin, and fixed-work Bearer admission for the
-authenticated version handshake. Missing, malformed, stale-shaped, and wrong
-credentials share one unauthenticated response shape. The task remains open
-until the first notebook mutation endpoint uses the same admission boundary and
-a browser-forgery fixture proves an unrelated page cannot mutate session state.
-
 ### TODO - Keep all notebook state in memory
 
 Hold documents, assets, undo history, previews, and derived plans only for the
 active session with no database, autosave, hidden recovery file, or cloud copy.
+
+Current executable evidence keeps source-preparation task text, source material,
+and raw model-response text in one backend application object owned by the
+active process. Browser edits send complete authenticated replacements and no
+browser persistence API is used. The task remains open until accepted semantic
+revisions, assets, history, previews, diagnostics, renders, and plans exist and
+the same lifecycle invariant is executable for those authorities.
 
 ### TODO - Implement explicit import and export
 
