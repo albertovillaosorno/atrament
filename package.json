@@ -5,7 +5,8 @@
   "packageManager": "pnpm@11.22.0",
   "scripts": {
     "build:frontend": "pnpm --filter @atrament/frontend run build",
-    "check:frontend": "pnpm --filter @atrament/frontend run check"
+    "check:frontend": "pnpm --filter @atrament/frontend run check",
+    "test:frontend": "node --test tests/browser-session-*.mjs"
   },
   "devDependencies": {
     "typescript": "7.0.2"
