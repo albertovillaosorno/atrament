@@ -172,6 +172,12 @@ rejected before mutation. Each field has a backend-owned one-mebibyte limit, and
 over-limit input returns `413` without truncating or changing the current field.
 A successful whole-field replacement returns `204`.
 
+Authenticated `GET` requests to the same three field paths return the exact
+current UTF-8 field as uncached plain text. A read always requires the Bearer
+credential. When the browser or another admitted client supplies `Origin`, it
+must equal the startup origin. An absent `Origin` does not replace credential
+authentication with ambient trust.
+
 The browser coalesces rapid edits per field: it may skip obsolete intermediate
 values but sends only complete field values, never browser-authored patches.
 Pending draft synchronization is invalidated when the page leaves the active
