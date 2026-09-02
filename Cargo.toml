@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "src/backend/browser-launch",
+    "src/backend/diagnostic",
     "src/backend/runtime-bootstrap",
     "src/backend/session-draft",
     "src/backend/session-draft-port",

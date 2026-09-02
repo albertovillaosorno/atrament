@@ -1,0 +1,9 @@
+identity:
+  id: function:diagnostic
+  name: diagnostic
+  path: src/backend/diagnostic
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: domain
