@@ -843,6 +843,155 @@ fn direct_table_row_role_without_accepted_revision_is_typed_no_effect() {
     );
 }
 
+fn candidate_table_block(
+    identities: &IdentityAllocator,
+    role: TableRowRole,
+) -> (Block<CandidateIdentity>, CandidateIdentity) {
+    let block_id = candidate_id(identities);
+    let table_id = candidate_id(identities);
+    let row_id = candidate_id(identities);
+    let cell_id = candidate_id(identities);
+    let child_id = candidate_id(identities);
+    (
+        Block {
+            content: BlockContent::Table(Table {
+                id: table_id,
+                rows: vec![TableRow {
+                    cells: vec![TableCell {
+                        blocks: vec![Block {
+                            content: BlockContent::Rule,
+                            extensions: vec![],
+                            id: child_id,
+                            provenance: None,
+                            style: None,
+                        }],
+                        id: cell_id,
+                    }],
+                    id: row_id,
+                    role,
+                }],
+            }),
+            extensions: vec![],
+            id: block_id,
+            provenance: None,
+            style: None,
+        },
+        row_id,
+    )
+}
+
+#[test]
+fn direct_table_row_role_edit_reaches_nested_structures_across_revisions() {
+    let ids = IdentityAllocator::new();
+    let mut candidate = candidate_notebook(&ids, "discarded seed");
+    let (callout_table, callout_row) =
+        candidate_table_block(&ids, TableRowRole::Body);
+    let (list_table, list_row) =
+        candidate_table_block(&ids, TableRowRole::Body);
+    let (cell_table, cell_row) =
+        candidate_table_block(&ids, TableRowRole::Body);
+    let callout_id = candidate_id(&ids);
+    let list_block_id = candidate_id(&ids);
+    let list_id = candidate_id(&ids);
+    let list_item_id = candidate_id(&ids);
+    let outer_table_block_id = candidate_id(&ids);
+    let outer_table_id = candidate_id(&ids);
+    let outer_row_id = candidate_id(&ids);
+    let outer_cell_id = candidate_id(&ids);
+    candidate.pages[0].flows[0].blocks = vec![
+        Block {
+            content: BlockContent::Callout(vec![callout_table]),
+            extensions: vec![],
+            id: callout_id,
+            provenance: None,
+            style: None,
+        },
+        Block {
+            content: BlockContent::List(List {
+                id: list_id,
+                items: vec![ListItem {
+                    blocks: vec![list_table],
+                    id: list_item_id,
+                }],
+                ordered: false,
+            }),
+            extensions: vec![],
+            id: list_block_id,
+            provenance: None,
+            style: None,
+        },
+        Block {
+            content: BlockContent::Table(Table {
+                id: outer_table_id,
+                rows: vec![TableRow {
+                    cells: vec![TableCell {
+                        blocks: vec![cell_table],
+                        id: outer_cell_id,
+                    }],
+                    id: outer_row_id,
+                    role: TableRowRole::Body,
+                }],
+            }),
+            extensions: vec![],
+            id: outer_table_block_id,
+            provenance: None,
+            style: None,
+        },
+    ];
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, mut revision } =
+        session.accept(candidate)
+    else {
+        panic!("nested table candidate must be accepted");
+    };
+    for candidate_row in [callout_row, list_row, cell_row] {
+        let target = accepted_for(&mapping, candidate_row);
+        let TableRowRoleEditOutcome::Applied {
+            revision: next,
+            target: actual_target,
+            ..
+        } = session.replace_table_row_role(
+            revision,
+            target,
+            TableRowRole::Header,
+        )
+        else {
+            panic!("nested row-role edit must apply");
+        };
+        assert_eq!(actual_target, target);
+        assert_ne!(next, revision);
+        revision = next;
+    }
+    let current = session.current().expect("nested row-role revision");
+    let blocks = &current.notebook.pages[0].flows[0].blocks;
+    let BlockContent::Callout(callout) = &blocks[0].content else {
+        panic!("first block must remain callout");
+    };
+    let BlockContent::Table(callout_table) = &callout[0].content else {
+        panic!("callout child must remain table");
+    };
+    assert_eq!(callout_table.rows[0].role, TableRowRole::Header);
+    let BlockContent::List(list) = &blocks[1].content else {
+        panic!("second block must remain list");
+    };
+    let BlockContent::Table(list_table) = &list.items[0].blocks[0].content
+    else {
+        panic!("list child must remain table");
+    };
+    assert_eq!(list_table.rows[0].role, TableRowRole::Header);
+    let BlockContent::Table(outer_table) = &blocks[2].content else {
+        panic!("third block must remain table");
+    };
+    let BlockContent::Table(cell_table) =
+        &outer_table.rows[0].cells[0].blocks[0].content
+    else {
+        panic!("table-cell child must remain table");
+    };
+    assert_eq!(cell_table.rows[0].role, TableRowRole::Header);
+    assert_eq!(outer_table.rows[0].role, TableRowRole::Body);
+    assert_eq!(current.id, revision);
+}
+
 #[test]
 fn first_candidate_acceptance_commits_one_revision_and_identity_mapping() {
     let candidate_ids = IdentityAllocator::new();
