@@ -185,7 +185,7 @@ The browser may display or copy a backend-generated command context. It does not
 parse semantic authority, widen scope, paginate notebook state independently, or
 construct a second command-context implementation in TypeScript.
 
-## Implementation evidence
+### Implementation evidence
 
 The semantic notebook domain now exposes a read-only identity-kind projection
 covering notebook, page, flow, block subtype, inline span, formula, list and

@@ -35,7 +35,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 const GENERATED_ROOT =
-    "../src/browser/workspace/adapter-inbound/generated/";
+    "../../../../src/browser/workspace/adapter-inbound/generated/";
 const {
     draftMutationHeaders,
     draftMutationTarget,

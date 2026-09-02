@@ -34,7 +34,7 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 const MAIN_MODULE = new URL(
-    "../src/browser/workspace/adapter-inbound/generated/main.js",
+    "../../../../src/browser/workspace/adapter-inbound/generated/main.js",
     import.meta.url,
 );
 

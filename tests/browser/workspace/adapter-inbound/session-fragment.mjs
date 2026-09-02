@@ -32,9 +32,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import {
-    sessionSecretFromFragment,
-} from "../src/browser/workspace/adapter-inbound/generated/session-fragment.js";
+const GENERATED_ROOT =
+    "../../../../src/browser/workspace/adapter-inbound/generated/";
+const { sessionSecretFromFragment } =
+    await import(`${GENERATED_ROOT}session-fragment.js`);
 
 test("session fragment accepts one exact lowercase credential", () => {
     const secret = "a".repeat(64);

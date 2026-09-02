@@ -99,13 +99,15 @@ non-recycling active-session allocation, unresolved semantic blocks, and exact
 extension-data preservation. Explicit candidate acceptance validates duplicate,
 dangling, and wrong-kind references before mutation, promotes candidate-local
 identities through one backend-owned mapping, and commits one new accepted
-revision atomically while preserving nested semantic references. A direct
-accepted-text edit now preconditions the exact current revision, preserves all
-semantic identities while replacing one admitted inline text identity, creates
-one new revision only for a real change, and rejects no-op, stale, unavailable,
-or non-text targets without mutating accepted state. Mathematical blocks now
-carry an explicit inline, display, or aligned mode and exact authored source;
-candidate acceptance validates that source before allocating accepted authority.
+revision atomically while preserving nested semantic references.
+
+A direct accepted-text edit now preconditions the exact current revision,
+preserves all semantic identities while replacing one admitted inline text
+identity, creates one new revision only for a real change, and rejects no-op,
+stale, unavailable, or non-text targets without mutating accepted state.
+Mathematical blocks now carry an explicit inline, display, or aligned mode and
+exact authored source; candidate acceptance validates that source before
+allocating accepted authority.
 A read-only semantic-kind projection now classifies stable identities, including
 block subtype and nested structured owners, without exposing storage or wire
 shape. The session can inspect one accepted identity kind against an exact
