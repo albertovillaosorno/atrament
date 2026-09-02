@@ -31,7 +31,8 @@
 //
 use atrament_physical_page_profile::{
     BindingEdge, BorderShape, Length, Orientation, PageProfile,
-    PageProfileError, PaperMarkLayer, PaperPattern, Rect, SheetSize,
+    PageProfileError, PaperMarkAppearance, PaperMarkJoin, PaperMarkLayer,
+    PaperPattern, Rect, SheetSize,
 };
 
 const A4_HEIGHT: Length = Length::from_micrometres(297_000);
@@ -47,6 +48,12 @@ fn base_profile(binding_edge: BindingEdge) -> PageProfile {
         corner_roundness: FIVE_MM,
         orientation: Orientation::Portrait,
         outer_margin: TWENTY_MM,
+        paper_mark_appearance: PaperMarkAppearance {
+            join: PaperMarkJoin::Rounded {
+                radius: Length::from_micrometres(250),
+            },
+            maximum_ruler_error: Length::from_micrometres(200),
+        },
         paper_mark_layer: PaperMarkLayer::BelowInk,
         paper_pattern: PaperPattern::Squared { spacing: FIVE_MM },
         printable_region: Rect {
@@ -242,4 +249,18 @@ fn nonrounded_border_rejects_nonzero_corner_roundness() {
         profile.corner_roundness = Length::ZERO;
         assert_eq!(profile.validate(), Ok(profile));
     }
+}
+
+#[test]
+fn rounded_paper_mark_join_requires_positive_radius() {
+    let mut profile = base_profile(BindingEdge::Left);
+    profile.paper_mark_appearance.join =
+        PaperMarkJoin::Rounded { radius: Length::ZERO };
+    assert_eq!(
+        profile.validate(),
+        Err(PageProfileError::PaperMarkRoundedJoinRadiusIsZero),
+    );
+
+    profile.paper_mark_appearance.join = PaperMarkJoin::Sharp;
+    assert_eq!(profile.validate(), Ok(profile));
 }

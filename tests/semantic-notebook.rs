@@ -31,8 +31,8 @@
 //
 use atrament_physical_page_profile::{
     BindingEdge, BorderShape, Length, Orientation,
-    PageProfile as PhysicalPageProfile, PaperMarkLayer, PaperPattern, Rect,
-    SheetSize,
+    PageProfile as PhysicalPageProfile, PaperMarkAppearance, PaperMarkJoin,
+    PaperMarkLayer, PaperPattern, Rect, SheetSize,
 };
 use atrament_semantic_notebook::{
     Block, BlockContent, ExtensionData, Flow, IdentityAllocator, InlineSpan,
@@ -46,6 +46,12 @@ fn physical_page_profile() -> PhysicalPageProfile {
         corner_roundness: Length::from_micrometres(5_000),
         orientation: Orientation::Portrait,
         outer_margin: Length::from_micrometres(20_000),
+        paper_mark_appearance: PaperMarkAppearance {
+            join: PaperMarkJoin::Rounded {
+                radius: Length::from_micrometres(250),
+            },
+            maximum_ruler_error: Length::from_micrometres(200),
+        },
         paper_mark_layer: PaperMarkLayer::BelowInk,
         paper_pattern: PaperPattern::Squared {
             spacing: Length::from_micrometres(5_000),

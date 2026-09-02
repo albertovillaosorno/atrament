@@ -3,6 +3,7 @@ members = [
     "src/backend/browser-launch",
     "src/backend/diagnostic",
     "src/backend/physical-page-profile",
+    "src/backend/paper-mark-geometry",
     "src/backend/runtime-bootstrap",
     "src/backend/semantic-notebook",
     "src/backend/semantic-notebook-port",

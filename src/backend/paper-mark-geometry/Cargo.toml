@@ -1,0 +1,15 @@
+[package]
+name = "atrament_paper_mark_geometry"
+version = "0.1.0"
+edition = "2024"
+publish = false
+license = "MIT"
+
+[dependencies]
+atrament_physical_page_profile = { path = "../physical-page-profile" }
+
+[lib]
+path = "domain/lib.rs"
+
+[lints]
+workspace = true

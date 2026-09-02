@@ -10,6 +10,9 @@ depends_on = []
 [component.atrament_physical_page_profile]
 depends_on = []
 
+[component.atrament_paper_mark_geometry]
+depends_on = ["atrament_physical_page_profile"]
+
 [component.atrament_semantic_notebook]
 depends_on = ["atrament_physical_page_profile"]
 

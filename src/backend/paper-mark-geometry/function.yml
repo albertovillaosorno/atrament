@@ -1,0 +1,9 @@
+identity:
+  id: function:paper-mark-geometry
+  name: paper-mark-geometry
+  path: src/backend/paper-mark-geometry
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: domain

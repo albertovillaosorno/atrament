@@ -110,6 +110,27 @@ pub enum PaperPattern {
     },
 }
 
+/// Profile-owned appearance bounds for repeated paper marks.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct PaperMarkAppearance {
+    /// Grid-intersection treatment independent from nominal anchor positions.
+    pub join: PaperMarkJoin,
+    /// Maximum absolute normal displacement of ruler-style mark strokes.
+    pub maximum_ruler_error: Length,
+}
+
+/// Grid-intersection treatment independent from nominal anchor positions.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PaperMarkJoin {
+    /// Slightly rounded visual intersection with a physical radius.
+    Rounded {
+        /// Presentation-only corner radius around the nominal intersection.
+        radius: Length,
+    },
+    /// Geometrically sharp nominal intersection.
+    Sharp,
+}
+
 /// Whether page marks are composited below or above simulated ink.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum PaperMarkLayer {
@@ -132,6 +153,8 @@ pub struct PageProfile {
     pub orientation: Orientation,
     /// Distance from binding edge to the notebook margin reference.
     pub outer_margin: Length,
+    /// Profile-owned ruler deviation and intersection treatment.
+    pub paper_mark_appearance: PaperMarkAppearance,
     /// Page-mark compositing relationship to simulated ink.
     pub paper_mark_layer: PaperMarkLayer,
     /// Nominal page-mark family.
@@ -156,6 +179,8 @@ pub enum PageProfileError {
     CornerRoundnessExceedsPrintableRegion,
     /// Nonzero corner radius was supplied for a non-rounded border.
     CornerRoundnessRequiresRoundedBorder,
+    /// Rounded page-mark join was requested with a zero physical radius.
+    PaperMarkRoundedJoinRadiusIsZero,
     /// A repeated paper pattern has zero physical spacing.
     PatternSpacingIsZero,
     /// Printable rectangle is empty.
@@ -220,6 +245,7 @@ impl PageProfile {
     pub fn validate(self) -> Result<Self, PageProfileError> {
         let oriented = self.oriented_sheet()?;
         validate_rect_inside(self.printable_region, oriented)?;
+        validate_paper_mark_appearance(self.paper_mark_appearance)?;
         validate_pattern(self.paper_pattern)?;
         validate_corner_roundness(
             self.border_shape,
@@ -373,6 +399,17 @@ fn validate_corner_roundness(
         || doubled > printable.height.micrometres()
     {
         return Err(PageProfileError::CornerRoundnessExceedsPrintableRegion);
+    }
+    Ok(())
+}
+
+fn validate_paper_mark_appearance(
+    appearance: PaperMarkAppearance,
+) -> Result<(), PageProfileError> {
+    if let PaperMarkJoin::Rounded { radius } = appearance.join
+        && radius == Length::ZERO
+    {
+        return Err(PageProfileError::PaperMarkRoundedJoinRadiusIsZero);
     }
     Ok(())
 }
