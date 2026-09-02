@@ -750,10 +750,8 @@ fn direct_text_edit_reaches_nested_text_families_across_revisions() {
         styles: vec![],
     };
     let mut session = SemanticNotebookSessionService::default();
-    let AcceptanceOutcome::Accepted {
-        mapping,
-        revision: mut revision,
-    } = session.accept(candidate)
+    let AcceptanceOutcome::Accepted { mapping, mut revision } =
+        session.accept(candidate)
     else {
         panic!("nested candidate must be accepted");
     };
