@@ -31,36 +31,27 @@
 // - Defaults:
 //   - Performs no network request and persists no browser state.
 //
-function requireElement<T extends Element>(selector: string): T {
-    const element = document.querySelector<T>(selector);
+function requireElement(selector) {
+    const element = document.querySelector(selector);
     if (element === null) {
         throw new Error(`Missing required workspace element: ${selector}`);
     }
     return element;
 }
-
-function createGraphemeSegmenter(): Intl.Segmenter | null {
+function createGraphemeSegmenter() {
     try {
-        if (
-            typeof Intl === "undefined"
-            || typeof Intl.Segmenter !== "function"
-        ) {
+        if (typeof Intl === "undefined"
+            || typeof Intl.Segmenter !== "function") {
             return null;
         }
         return new Intl.Segmenter(undefined, { granularity: "grapheme" });
-    } catch {
+    }
+    catch {
         return null;
     }
 }
-
 let graphemeSegmenter = createGraphemeSegmenter();
-
-type TextCount = {
-    count: number;
-    unit: "character" | "code point";
-};
-
-function countText(value: string): TextCount {
+function countText(value) {
     if (graphemeSegmenter !== null) {
         try {
             let count = 0;
@@ -68,7 +59,8 @@ function countText(value: string): TextCount {
                 count += 1;
             }
             return { count, unit: "character" };
-        } catch {
+        }
+        catch {
             graphemeSegmenter = null;
             // Fall through to the code-point count below.
         }
@@ -79,68 +71,43 @@ function countText(value: string): TextCount {
     }
     return { count, unit: "code point" };
 }
-
-function setTextIfChanged(element: HTMLElement, value: string): void {
+function setTextIfChanged(element, value) {
     if (element.textContent?.trim() !== value) {
         element.textContent = value;
     }
 }
-
-function setAttributeIfChanged(
-    element: Element,
-    name: string,
-    value: string,
-): void {
+function setAttributeIfChanged(element, name, value) {
     if (element.getAttribute(name) !== value) {
         element.setAttribute(name, value);
     }
 }
-
-function updateCharacterCount(
-    input: HTMLTextAreaElement,
-    output: HTMLElement,
-): void {
+function updateCharacterCount(input, output) {
     const { count, unit } = countText(input.value);
     const suffix = count === 1 ? unit : `${unit}s`;
     setTextIfChanged(output, `${count} ${suffix}`);
 }
-
-function bindCharacterCount(
-    input: HTMLTextAreaElement,
-    output: HTMLElement,
-): void {
-    input.addEventListener("input", (): void => {
+function bindCharacterCount(input, output) {
+    input.addEventListener("input", () => {
         updateCharacterCount(input, output);
     });
     updateCharacterCount(input, output);
 }
-
-const taskInput = requireElement<HTMLTextAreaElement>("#task-input");
-const sourceInput = requireElement<HTMLTextAreaElement>("#source-input");
-const candidateInput = requireElement<HTMLTextAreaElement>("#candidate-input");
-const taskCount = requireElement<HTMLElement>("#task-count");
-const sourceCount = requireElement<HTMLElement>("#source-count");
-const candidateCount = requireElement<HTMLElement>("#candidate-count");
-const promptOutput = requireElement<HTMLTextAreaElement>("#prompt-output");
-const copyPrompt = requireElement<HTMLButtonElement>("#copy-prompt");
-const copyStatus = requireElement<HTMLElement>("#copy-status");
-const sessionStatus = requireElement<HTMLElement>("#session-status");
-
-type ClipboardWrite = (text: string) => unknown;
-
-type ClipboardRequest = {
-    generation: number;
-    prompt: string;
-    write: ClipboardWrite;
-};
-
+const taskInput = requireElement("#task-input");
+const sourceInput = requireElement("#source-input");
+const candidateInput = requireElement("#candidate-input");
+const taskCount = requireElement("#task-count");
+const sourceCount = requireElement("#source-count");
+const candidateCount = requireElement("#candidate-count");
+const promptOutput = requireElement("#prompt-output");
+const copyPrompt = requireElement("#copy-prompt");
+const copyStatus = requireElement("#copy-status");
+const sessionStatus = requireElement("#session-status");
 let copyGeneration = 0;
 let clipboardWriteInFlight = false;
-let activeClipboardWrite: ClipboardRequest | null = null;
-let pendingClipboardWrite: ClipboardRequest | null = null;
+let activeClipboardWrite = null;
+let pendingClipboardWrite = null;
 let presentedPromptValue = promptOutput.value;
-
-function getClipboardWrite(): ClipboardWrite | null {
+function getClipboardWrite() {
     try {
         const clipboard = navigator.clipboard;
         const writeText = clipboard?.writeText;
@@ -148,16 +115,15 @@ function getClipboardWrite(): ClipboardWrite | null {
             return null;
         }
         return writeText.bind(clipboard);
-    } catch {
+    }
+    catch {
         return null;
     }
 }
-
 bindCharacterCount(taskInput, taskCount);
 bindCharacterCount(sourceInput, sourceCount);
 bindCharacterCount(candidateInput, candidateCount);
-
-function invalidateClipboardRequests(): number {
+function invalidateClipboardRequests() {
     copyGeneration += 1;
     pendingClipboardWrite = null;
     if (activeClipboardWrite !== null) {
@@ -165,8 +131,7 @@ function invalidateClipboardRequests(): number {
     }
     return copyGeneration;
 }
-
-function syncPromptCopyState(): void {
+function syncPromptCopyState() {
     const prompt = promptOutput.value;
     const changed = prompt !== presentedPromptValue;
     if (changed) {
@@ -178,27 +143,21 @@ function syncPromptCopyState(): void {
     copyPrompt.disabled = !available;
     if (!available) {
         setTextIfChanged(copyStatus, "Waiting for a prompt from the backend.");
-    } else if (changed) {
+    }
+    else if (changed) {
         setTextIfChanged(copyStatus, "");
     }
 }
-
 promptOutput.addEventListener("input", syncPromptCopyState);
 syncPromptCopyState();
-
-function finishClipboardWrite(
-    request: ClipboardRequest,
-    succeeded: boolean,
-): void {
+function finishClipboardWrite(request, succeeded) {
     if (activeClipboardWrite !== request) {
         return;
     }
     clipboardWriteInFlight = false;
     activeClipboardWrite = null;
-    if (
-        request.generation === copyGeneration
-        && promptOutput.value === request.prompt
-    ) {
+    if (request.generation === copyGeneration
+        && promptOutput.value === request.prompt) {
         const resultMessage = succeeded
             ? "Prompt copied."
             : "Clipboard write failed.";
@@ -206,70 +165,57 @@ function finishClipboardWrite(
     }
     drainClipboardWrite();
 }
-
-function drainClipboardWrite(): void {
+function drainClipboardWrite() {
     if (clipboardWriteInFlight || pendingClipboardWrite === null) {
         return;
     }
     const request = pendingClipboardWrite;
     pendingClipboardWrite = null;
-    if (
-        request.generation !== copyGeneration
-        || promptOutput.value !== request.prompt
-    ) {
+    if (request.generation !== copyGeneration
+        || promptOutput.value !== request.prompt) {
         drainClipboardWrite();
         return;
     }
-
     clipboardWriteInFlight = true;
     activeClipboardWrite = request;
     try {
         const write = request.write(request.prompt);
-        if (
-            write === null
-            || (typeof write !== "object" && typeof write !== "function")
-        ) {
+        if (write === null
+            || (typeof write !== "object" && typeof write !== "function")) {
             finishClipboardWrite(request, false);
             return;
         }
-        const then = (write as { then?: unknown }).then;
+        const then = write.then;
         if (typeof then !== "function") {
             finishClipboardWrite(request, false);
             return;
         }
-        const onSuccess = (): void => {
+        const onSuccess = () => {
             finishClipboardWrite(request, true);
         };
-        const onFailure = (): void => {
+        const onFailure = () => {
             finishClipboardWrite(request, false);
         };
         then.call(write, onSuccess, onFailure);
-    } catch {
+    }
+    catch {
         finishClipboardWrite(request, false);
     }
 }
-
-copyPrompt.addEventListener("click", (): void => {
+copyPrompt.addEventListener("click", () => {
     const prompt = promptOutput.value;
     if (prompt.length === 0) {
         pendingClipboardWrite = null;
         setTextIfChanged(copyStatus, "Waiting for a prompt from the backend.");
         return;
     }
-    if (
-        (
-            activeClipboardWrite?.generation === copyGeneration
-            && activeClipboardWrite.prompt === prompt
-        )
-        || (
-            pendingClipboardWrite?.generation === copyGeneration
-            && pendingClipboardWrite.prompt === prompt
-        )
-    ) {
+    if ((activeClipboardWrite?.generation === copyGeneration
+        && activeClipboardWrite.prompt === prompt)
+        || (pendingClipboardWrite?.generation === copyGeneration
+            && pendingClipboardWrite.prompt === prompt)) {
         setTextIfChanged(copyStatus, "Copying prompt…");
         return;
     }
-
     const generation = invalidateClipboardRequests();
     const writeClipboard = getClipboardWrite();
     if (writeClipboard === null) {
@@ -277,7 +223,6 @@ copyPrompt.addEventListener("click", (): void => {
         setTextIfChanged(copyStatus, "Clipboard access is unavailable.");
         return;
     }
-
     setTextIfChanged(copyStatus, "Copying prompt…");
     pendingClipboardWrite = {
         generation,
@@ -286,59 +231,54 @@ copyPrompt.addEventListener("click", (): void => {
     };
     drainClipboardWrite();
 });
-
-
-const divider = requireElement<HTMLElement>("#workspace-divider");
-
-function browserSupportsDividerPointerCapture(): boolean {
+const divider = requireElement("#workspace-divider");
+function browserSupportsDividerPointerCapture() {
     try {
         return typeof divider.setPointerCapture === "function"
             && typeof divider.hasPointerCapture === "function"
             && typeof divider.releasePointerCapture === "function";
-    } catch {
+    }
+    catch {
         return false;
     }
 }
-
 let dividerPointerCaptureAvailable = browserSupportsDividerPointerCapture();
-
-function syncDividerPointerCapability(): void {
+function syncDividerPointerCapability() {
     if (dividerPointerCaptureAvailable) {
         divider.setAttribute("data-pointer-drag", "");
-    } else {
+    }
+    else {
         divider.removeAttribute("data-pointer-drag");
     }
 }
-
 syncDividerPointerCapability();
-const zoomOut = requireElement<HTMLButtonElement>("#zoom-out");
-const zoomReset = requireElement<HTMLButtonElement>("#zoom-reset");
-const zoomIn = requireElement<HTMLButtonElement>("#zoom-in");
-const zoomStatus = requireElement<HTMLOutputElement>("#zoom-status");
-const previewScale = requireElement<HTMLElement>("#preview-scale");
-const sourceEditorTitle = requireElement<HTMLElement>("#llm-editor-title");
-const sourcePanel = requireElement<HTMLElement>("#source-panel");
-const previewPanel = requireElement<HTMLElement>("#preview-panel");
-const pageStage = requireElement<HTMLElement>("#page-stage");
-const workspace = requireElement<HTMLElement>(".workspace-grid");
-function browserSupportsPreviewZoom(): boolean {
+const zoomOut = requireElement("#zoom-out");
+const zoomReset = requireElement("#zoom-reset");
+const zoomIn = requireElement("#zoom-in");
+const zoomStatus = requireElement("#zoom-status");
+const previewScale = requireElement("#preview-scale");
+const sourceEditorTitle = requireElement("#llm-editor-title");
+const sourcePanel = requireElement("#source-panel");
+const previewPanel = requireElement("#preview-panel");
+const pageStage = requireElement("#page-stage");
+const workspace = requireElement(".workspace-grid");
+function browserSupportsPreviewZoom() {
     if (typeof CSS === "undefined") {
         return false;
     }
     try {
         return typeof CSS.supports === "function"
             && CSS.supports("zoom", "1.1");
-    } catch {
+    }
+    catch {
         return false;
     }
 }
-
 const supportsPreviewZoom = browserSupportsPreviewZoom();
 let wideEditorShare = 46;
-let activeDividerPointerId: number | null = null;
+let activeDividerPointerId = null;
 let activeDividerPointerOffsetX = 0;
-
-function scrubBfcacheElement(element: Element): void {
+function scrubBfcacheElement(element) {
     for (const child of Array.from(element.childNodes)) {
         if (child.nodeType !== Node.ELEMENT_NODE) {
             child.textContent = "";
@@ -350,16 +290,14 @@ function scrubBfcacheElement(element: Element): void {
     }
     element.textContent = "";
 }
-
-function scrubBfcacheSubtree(root: HTMLElement): void {
-    const descendants = Array.from(root.querySelectorAll<Element>("*"));
+function scrubBfcacheSubtree(root) {
+    const descendants = Array.from(root.querySelectorAll("*"));
     for (const element of descendants.reverse()) {
         scrubBfcacheElement(element);
     }
     scrubBfcacheElement(root);
 }
-
-function clearSessionText(): void {
+function clearSessionText() {
     taskInput.defaultValue = "";
     taskInput.value = "";
     sourceInput.defaultValue = "";
@@ -379,8 +317,7 @@ function clearSessionText(): void {
     updateCharacterCount(sourceInput, sourceCount);
     updateCharacterCount(candidateInput, candidateCount);
 }
-
-window.addEventListener("pagehide", (event): void => {
+window.addEventListener("pagehide", (event) => {
     invalidateClipboardRequests();
     if (activeDividerPointerId !== null) {
         releaseDividerPointer(activeDividerPointerId);
@@ -390,8 +327,7 @@ window.addEventListener("pagehide", (event): void => {
         scrubBfcacheSubtree(workspace);
     }
 });
-
-function resetLocalViewportState(): void {
+function resetLocalViewportState() {
     sourcePanel.scrollTop = 0;
     sourcePanel.scrollLeft = 0;
     previewPanel.scrollTop = 0;
@@ -399,16 +335,16 @@ function resetLocalViewportState(): void {
     pageStage.scrollTop = 0;
     pageStage.scrollLeft = 0;
 }
-
-function discardLocalNavigationFragment(): boolean {
+function discardLocalNavigationFragment() {
     const hash = window.location.hash;
     if (hash === "") {
         return false;
     }
-    let targetId: string;
+    let targetId;
     try {
         targetId = decodeURIComponent(hash.slice(1));
-    } catch {
+    }
+    catch {
         return false;
     }
     if (document.getElementById(targetId) === null) {
@@ -419,13 +355,13 @@ function discardLocalNavigationFragment(): boolean {
         const currentSearch = window.location.search;
         const localUrl = `${currentPath}${currentSearch}`;
         window.history.replaceState(window.history.state, "", localUrl);
-    } catch {
+    }
+    catch {
         // The delayed reset below still contains late fragment scrolling.
     }
     return true;
 }
-
-window.addEventListener("pageshow", (event): void => {
+window.addEventListener("pageshow", (event) => {
     if (event.persisted) {
         window.location.reload();
         return;
@@ -436,12 +372,10 @@ window.addEventListener("pageshow", (event): void => {
         window.setTimeout(resetLocalViewportState, 0);
     }
 });
-
-function isCompactWorkspace(): boolean {
+function isCompactWorkspace() {
     return window.innerWidth <= 480;
 }
-
-function setEditorShare(percent: number): void {
+function setEditorShare(percent) {
     const compact = isCompactWorkspace();
     const minimum = compact ? 50 : 35;
     const maximum = compact ? 50 : 65;
@@ -458,30 +392,29 @@ function setEditorShare(percent: number): void {
     const dividerValue = `${share}% source, ${previewShare}% preview`;
     setAttributeIfChanged(divider, "aria-valuetext", dividerValue);
 }
-
-function disableDividerPointerCapture(): void {
+function disableDividerPointerCapture() {
     dividerPointerCaptureAvailable = false;
     syncDividerPointerCapability();
 }
-
-function dividerHasPointerCapture(pointerId: number): boolean {
+function dividerHasPointerCapture(pointerId) {
     if (!dividerPointerCaptureAvailable) {
         return false;
     }
     try {
         return divider.hasPointerCapture(pointerId);
-    } catch {
+    }
+    catch {
         disableDividerPointerCapture();
         return false;
     }
 }
-
-function releaseDividerPointer(pointerId: number): void {
+function releaseDividerPointer(pointerId) {
     try {
         if (dividerHasPointerCapture(pointerId)) {
             divider.releasePointerCapture(pointerId);
         }
-    } catch {
+    }
+    catch {
         disableDividerPointerCapture();
     }
     if (activeDividerPointerId === pointerId) {
@@ -489,8 +422,7 @@ function releaseDividerPointer(pointerId: number): void {
         activeDividerPointerOffsetX = 0;
     }
 }
-
-function syncDividerAvailability(): void {
+function syncDividerAvailability() {
     if (isCompactWorkspace()) {
         if (activeDividerPointerId !== null) {
             releaseDividerPointer(activeDividerPointerId);
@@ -505,29 +437,24 @@ function syncDividerAvailability(): void {
         }
         return;
     }
-
     setAttributeIfChanged(divider, "aria-valuemin", "35");
     setAttributeIfChanged(divider, "aria-valuemax", "65");
     divider.removeAttribute("aria-disabled");
     setAttributeIfChanged(divider, "tabindex", "0");
     setEditorShare(wideEditorShare);
 }
-
-function shareFromPointer(clientX: number): number {
+function shareFromPointer(clientX) {
     const workspaceBounds = workspace.getBoundingClientRect();
     const dividerWidth = divider.getBoundingClientRect().width;
     const panelWidth = workspaceBounds.width - dividerWidth;
     const sourceWidth = clientX - workspaceBounds.left - dividerWidth / 2;
     return (sourceWidth / panelWidth) * 100;
 }
-
-divider.addEventListener("pointerdown", (event): void => {
-    if (
-        divider.getAttribute("aria-disabled") === "true"
+divider.addEventListener("pointerdown", (event) => {
+    if (divider.getAttribute("aria-disabled") === "true"
         || activeDividerPointerId !== null
         || !event.isPrimary
-        || event.button !== 0
-    ) {
+        || event.button !== 0) {
         return;
     }
     if (!dividerPointerCaptureAvailable) {
@@ -538,7 +465,8 @@ divider.addEventListener("pointerdown", (event): void => {
     activeDividerPointerOffsetX = event.clientX - dividerCenter;
     try {
         divider.setPointerCapture(event.pointerId);
-    } catch {
+    }
+    catch {
         disableDividerPointerCapture();
         return;
     }
@@ -551,98 +479,85 @@ divider.addEventListener("pointerdown", (event): void => {
     event.preventDefault();
     activeDividerPointerId = event.pointerId;
 });
-
-divider.addEventListener("click", (event): void => {
-    if (
-        dividerPointerCaptureAvailable
+divider.addEventListener("click", (event) => {
+    if (dividerPointerCaptureAvailable
         || divider.getAttribute("aria-disabled") === "true"
-        || event.detail === 0
-    ) {
+        || event.detail === 0) {
         return;
     }
     divider.focus();
     setEditorShare(shareFromPointer(event.clientX));
 });
-
-divider.addEventListener("pointermove", (event): void => {
+divider.addEventListener("pointermove", (event) => {
     if (dividerHasPointerCapture(event.pointerId)) {
         const pointerX = event.clientX - activeDividerPointerOffsetX;
         setEditorShare(shareFromPointer(pointerX));
     }
 });
-
-function finishDividerPointer(event: PointerEvent): void {
+function finishDividerPointer(event) {
     releaseDividerPointer(event.pointerId);
 }
-
 divider.addEventListener("pointerup", finishDividerPointer);
 divider.addEventListener("pointercancel", finishDividerPointer);
-window.addEventListener("blur", (): void => {
+window.addEventListener("blur", () => {
     if (activeDividerPointerId !== null) {
         releaseDividerPointer(activeDividerPointerId);
     }
 });
-document.addEventListener("visibilitychange", (): void => {
-    if (
-        document.visibilityState === "hidden"
-        && activeDividerPointerId !== null
-    ) {
+document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden"
+        && activeDividerPointerId !== null) {
         releaseDividerPointer(activeDividerPointerId);
     }
 });
-divider.addEventListener("lostpointercapture", (event): void => {
+divider.addEventListener("lostpointercapture", (event) => {
     if (activeDividerPointerId === event.pointerId) {
         activeDividerPointerId = null;
         activeDividerPointerOffsetX = 0;
     }
 });
-
-divider.addEventListener("keydown", (event): void => {
-    if (
-        divider.getAttribute("aria-disabled") === "true"
+divider.addEventListener("keydown", (event) => {
+    if (divider.getAttribute("aria-disabled") === "true"
         || event.altKey
         || event.ctrlKey
         || event.metaKey
-        || event.shiftKey
-    ) {
+        || event.shiftKey) {
         return;
     }
     const current = Number(divider.getAttribute("aria-valuenow") ?? "46");
     if (event.key === "ArrowLeft") {
         event.preventDefault();
         setEditorShare(current - 2);
-    } else if (event.key === "ArrowRight") {
+    }
+    else if (event.key === "ArrowRight") {
         event.preventDefault();
         setEditorShare(current + 2);
-    } else if (event.key === "Home") {
+    }
+    else if (event.key === "Home") {
         event.preventDefault();
         setEditorShare(35);
-    } else if (event.key === "End") {
+    }
+    else if (event.key === "End") {
         event.preventDefault();
         setEditorShare(65);
     }
 });
-
-function handleViewportResize(): void {
+function handleViewportResize() {
     if (activeDividerPointerId !== null) {
         releaseDividerPointer(activeDividerPointerId);
     }
     syncDividerAvailability();
 }
-
 window.addEventListener("resize", handleViewportResize);
 syncDividerAvailability();
-
 let previewZoom = 100;
-
-function setPreviewZoom(percent: number): void {
+function setPreviewZoom(percent) {
     const previousZoom = previewZoom;
     const focusedControl = document.activeElement;
     if (!supportsPreviewZoom) {
         previewZoom = 100;
         setTextIfChanged(zoomReset, "100%");
-        const unavailableMessage =
-            "Preview zoom unavailable in this browser.";
+        const unavailableMessage = "Preview zoom unavailable in this browser.";
         setTextIfChanged(zoomStatus, unavailableMessage);
         setTextIfChanged(previewScale, "Preview · 100%");
         zoomOut.disabled = true;
@@ -650,7 +565,6 @@ function setPreviewZoom(percent: number): void {
         zoomIn.disabled = true;
         return;
     }
-
     previewZoom = Math.min(160, Math.max(60, percent));
     const rootStyle = document.documentElement.style;
     rootStyle.setProperty("--preview-zoom", String(previewZoom / 100));
@@ -660,31 +574,28 @@ function setPreviewZoom(percent: number): void {
     zoomOut.disabled = previewZoom <= 60;
     zoomReset.disabled = previewZoom === 100;
     zoomIn.disabled = previewZoom >= 160;
-    if (
-        (focusedControl === zoomOut && zoomOut.disabled)
-        || (focusedControl === zoomIn && zoomIn.disabled)
-    ) {
+    if ((focusedControl === zoomOut && zoomOut.disabled)
+        || (focusedControl === zoomIn && zoomIn.disabled)) {
         zoomReset.focus();
-    } else if (focusedControl === zoomReset && zoomReset.disabled) {
+    }
+    else if (focusedControl === zoomReset && zoomReset.disabled) {
         if (previousZoom > 100) {
             zoomIn.focus();
-        } else if (previousZoom < 100) {
+        }
+        else if (previousZoom < 100) {
             zoomOut.focus();
         }
     }
 }
-
-zoomOut.addEventListener("click", (): void => {
+zoomOut.addEventListener("click", () => {
     setPreviewZoom(previewZoom - 10);
 });
-
-zoomReset.addEventListener("click", (): void => {
+zoomReset.addEventListener("click", () => {
     setPreviewZoom(100);
 });
-
-zoomIn.addEventListener("click", (): void => {
+zoomIn.addEventListener("click", () => {
     setPreviewZoom(previewZoom + 10);
 });
-
 setPreviewZoom(100);
 setTextIfChanged(sessionStatus, "Frontend ready · waiting for backend session");
+export {};

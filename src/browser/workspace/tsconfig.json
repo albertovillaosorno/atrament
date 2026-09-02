@@ -9,7 +9,7 @@
     "strict": true,
     "target": "ES2024",
     "rootDir": "adapter-inbound",
-    "outDir": "../../../.cache/frontend"
+    "outDir": "adapter-inbound/generated"
   },
   "include": [
     "adapter-inbound/**/*.ts"
