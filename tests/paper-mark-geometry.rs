@@ -33,14 +33,44 @@
 //   - Region origin is the first nominal mark anchor in each active axis.
 //
 use atrament_paper_mark_geometry::{
-    GeometryError, PaperMarkGeometry, RulerOffset, RulerSample,
-    RulerSampleError, compile_nominal_marks, validate_ruler_sample,
+    GeometryError, PaperMarkGeometry, ProfilePaperMarksError, RulerOffset,
+    RulerSample, RulerSampleError, compile_nominal_marks,
+    compile_profile_marks, validate_ruler_sample,
 };
 use atrament_physical_page_profile::{
-    Length, PaperMarkAppearance, PaperMarkJoin, PaperPattern, Rect,
+    BindingEdge, BorderShape, Length, Orientation, PageProfile,
+    PageProfileError, PaperMarkAppearance, PaperMarkJoin, PaperMarkLayer,
+    PaperPattern, Rect, SheetSize,
 };
 
 const FIVE_MM: Length = Length::from_micrometres(5_000);
+
+fn page_profile() -> PageProfile {
+    PageProfile {
+        binding_edge: BindingEdge::Left,
+        border_shape: BorderShape::Rectangle,
+        corner_roundness: Length::ZERO,
+        orientation: Orientation::Portrait,
+        outer_margin: Length::from_micrometres(20_000),
+        paper_mark_appearance: rounded_appearance(Length::from_micrometres(
+            200,
+        )),
+        paper_mark_layer: PaperMarkLayer::BelowInk,
+        paper_pattern: PaperPattern::Squared { spacing: FIVE_MM },
+        printable_region: Rect {
+            height: Length::from_micrometres(277_000),
+            width: Length::from_micrometres(190_000),
+            x: Length::from_micrometres(10_000),
+            y: Length::from_micrometres(10_000),
+        },
+        sheet: SheetSize {
+            height: Length::from_micrometres(297_000),
+            width: Length::from_micrometres(210_000),
+        },
+        top_clearance: Length::from_micrometres(10_000),
+        writing_inset: Length::from_micrometres(5_000),
+    }
+}
 
 fn region() -> Rect {
     Rect {
@@ -261,5 +291,58 @@ fn compact_series_reports_unrepresentable_anchor_count_instead_of_allocating() {
             spacing: Length::from_micrometres(1),
         },),
         Err(GeometryError::RegionOverflow),
+    );
+}
+
+#[test]
+fn profile_plan_keeps_pattern_appearance_and_layer_from_one_profile() {
+    let profile = page_profile();
+    let plan = compile_profile_marks(region(), profile).expect("profile marks");
+    assert_eq!(plan.appearance, profile.paper_mark_appearance);
+    assert_eq!(plan.layer, profile.paper_mark_layer);
+    let PaperMarkGeometry::Squared { horizontal, vertical, .. } = plan.geometry
+    else {
+        panic!("profile pattern must compile as squared geometry");
+    };
+    assert_eq!(horizontal.spacing, FIVE_MM);
+    assert_eq!(vertical.spacing, FIVE_MM);
+}
+
+#[test]
+fn profile_plan_rejects_invalid_complete_page_profile_before_marks() {
+    let mut profile = page_profile();
+    profile.sheet.width = Length::ZERO;
+    assert_eq!(
+        compile_profile_marks(region(), profile),
+        Err(ProfilePaperMarksError::InvalidProfile(
+            PageProfileError::SheetDimensionIsZero,
+        )),
+    );
+}
+
+#[test]
+fn profile_plan_preserves_explicit_custom_geometry_requirement() {
+    let mut profile = page_profile();
+    profile.paper_pattern = PaperPattern::Custom;
+    assert_eq!(
+        compile_profile_marks(region(), profile),
+        Err(ProfilePaperMarksError::Geometry(
+            GeometryError::CustomGeometryRequired,
+        )),
+    );
+}
+
+#[test]
+fn profile_plan_rejects_mark_region_outside_oriented_sheet() {
+    let profile = page_profile();
+    let outside = Rect {
+        height: Length::from_micrometres(10_000),
+        width: Length::from_micrometres(10_000),
+        x: Length::from_micrometres(205_000),
+        y: Length::from_micrometres(10_000),
+    };
+    assert_eq!(
+        compile_profile_marks(outside, profile),
+        Err(ProfilePaperMarksError::RegionOutsideSheet),
     );
 }

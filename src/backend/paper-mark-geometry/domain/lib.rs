@@ -34,7 +34,8 @@
 //! Exact nominal paper-mark geometry with bounded ruler-style deviations.
 
 use atrament_physical_page_profile::{
-    Length, PaperMarkAppearance, PaperPattern, Rect,
+    Length, PageProfile, PageProfileError, PaperMarkAppearance, PaperMarkLayer,
+    PaperPattern, Rect,
 };
 
 /// One compact arithmetic series of exact physical mark coordinates.
@@ -106,6 +107,28 @@ pub enum PaperMarkGeometry {
         /// Exact vertical physical span for vertical grid lines.
         vertical_span: Span,
     },
+}
+
+/// One complete profile-owned nominal paper-mark plan.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ProfilePaperMarks {
+    /// Profile-owned ruler deviation and intersection treatment.
+    pub appearance: PaperMarkAppearance,
+    /// Exact nominal physical mark geometry.
+    pub geometry: PaperMarkGeometry,
+    /// Profile-owned compositing relationship to simulated ink.
+    pub layer: PaperMarkLayer,
+}
+
+/// Typed failure to compile marks from one complete physical page profile.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ProfilePaperMarksError {
+    /// Nominal mark geometry could not be compiled for the selected region.
+    Geometry(GeometryError),
+    /// The complete physical page profile is invalid.
+    InvalidProfile(PageProfileError),
+    /// Explicit mark region extends outside the oriented physical sheet.
+    RegionOutsideSheet,
 }
 
 /// One signed presentation displacement in canonical micrometres.
@@ -196,6 +219,43 @@ pub fn compile_nominal_marks(
             })
         },
     }
+}
+
+/// Compile one explicit physical mark region using profile-owned paper state.
+///
+/// The caller still selects the physical mark region; this function ensures the
+/// pattern, ruler appearance, and layer all come from one validated profile.
+///
+/// # Errors
+///
+/// Returns a typed profile or nominal geometry failure without partial output.
+pub fn compile_profile_marks(
+    region: Rect,
+    profile: PageProfile,
+) -> Result<ProfilePaperMarks, ProfilePaperMarksError> {
+    let valid = profile
+        .validate()
+        .map_err(ProfilePaperMarksError::InvalidProfile)?;
+    validate_region(region).map_err(ProfilePaperMarksError::Geometry)?;
+    let sheet = valid
+        .oriented_sheet()
+        .map_err(ProfilePaperMarksError::InvalidProfile)?;
+    let right = horizontal_span(region)
+        .map_err(ProfilePaperMarksError::Geometry)?
+        .end;
+    let bottom = vertical_span(region)
+        .map_err(ProfilePaperMarksError::Geometry)?
+        .end;
+    if right > sheet.width || bottom > sheet.height {
+        return Err(ProfilePaperMarksError::RegionOutsideSheet);
+    }
+    let geometry = compile_nominal_marks(region, valid.paper_pattern)
+        .map_err(ProfilePaperMarksError::Geometry)?;
+    Ok(ProfilePaperMarks {
+        appearance: valid.paper_mark_appearance,
+        geometry,
+        layer: valid.paper_mark_layer,
+    })
 }
 
 /// Validate one ruler-style sample against explicit appearance bounds.

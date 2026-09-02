@@ -113,10 +113,10 @@ Current executable evidence compiles blank, ruled, dotted, and squared paper
 into compact exact physical anchor series without allocating one object per
 mark. Squared grids keep identical nominal spacing on both axes. Accepted page
 profiles own the maximum ruler-error envelope, rounded or sharp join treatment,
-and mark
-layer, while validated ruler samples cannot move nominal anchors. Overflow,
-zero spacing, invalid rounded joins, and unspecified custom geometry fail with
-typed results.
+and mark layer.
+
+Validated ruler samples cannot move nominal anchors. Overflow, zero spacing,
+invalid rounded joins, and unspecified custom geometry fail with typed results.
 
 The task remains open for seeded calibrated ruler-path synthesis, additional
 profile-specific visual appearance, and renderer or live-output consumption.
