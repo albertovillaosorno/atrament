@@ -66,6 +66,9 @@ const WORKSPACE_CSS: &[u8] =
 const MAIN_JAVASCRIPT: &[u8] = include_bytes!(
     "../../../browser/workspace/adapter-inbound/generated/main.js"
 );
+const SESSION_DRAFT_JAVASCRIPT: &[u8] = include_bytes!(
+    "../../../browser/workspace/adapter-inbound/generated/session-draft.js"
+);
 const SESSION_FRAGMENT_JAVASCRIPT: &[u8] = include_bytes!(
     "../../../browser/workspace/adapter-inbound/generated/session-fragment.js"
 );
@@ -562,6 +565,11 @@ pub fn route_request(
         ("GET", "/generated/main.js") => {
             response("200 OK", JAVASCRIPT_CONTENT_TYPE, MAIN_JAVASCRIPT)
         },
+        ("GET", "/generated/session-draft.js") => response(
+            "200 OK",
+            JAVASCRIPT_CONTENT_TYPE,
+            SESSION_DRAFT_JAVASCRIPT,
+        ),
         ("GET", "/generated/session-fragment.js") => response(
             "200 OK",
             JAVASCRIPT_CONTENT_TYPE,

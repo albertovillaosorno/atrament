@@ -9,15 +9,15 @@
 //
 // Boundary-Contract:
 // - Owns:
-//   - Browser-only workspace interaction and clipboard presentation.
+//   - Browser workspace interaction and admitted localhost session transport.
 // - Must-Not:
 //   - Validate or reinterpret backend-owned notebook data.
 //   - Implement layout, rendering, diagnostics, or output compilation.
 // - Allows:
-//   - Inputs: User text entry and backend-presented prompt text.
-//   - Outputs: Character counts, local viewport controls, and clipboard writes.
-//   - Side effects: DOM updates, pointer capture, clipboard writes, and
-//     bfcache reloads.
+//   - Inputs: User text, in-memory session credential, and backend responses.
+//   - Outputs: UI updates, clipboard writes, and complete draft replacements.
+//   - Side effects: DOM updates, authenticated same-origin requests, clipboard
+//     writes, pointer capture, and bfcache reloads.
 // - Split-When:
 //   - Backend transport wiring needs an independently testable adapter.
 // - Merge-When:
@@ -29,8 +29,9 @@
 // - Usage:
 //   - Loaded by the localhost workspace document.
 // - Defaults:
-//   - Performs no network request and persists no browser state.
+//   - Uses only same-origin session APIs and persists no browser state.
 //
+import * as sessionDraft from "./session-draft.js";
 import * as sessionHandshake from "./session-handshake.js";
 import { sessionSecretFromFragment } from "./session-fragment.js";
 function fragmentFreeLocalUrl() {
@@ -378,7 +379,7 @@ async function completeSessionHandshake(secret) {
     const outcome = sessionHandshake.parseHandshakePayload(payload);
     if (response.status === 200 && outcome.kind === "compatible") {
         enableCompatibleEditing();
-        setTextIfChanged(sessionStatus, "Session ready · backend compatible");
+        setTextIfChanged(sessionStatus, "Session ready");
         return;
     }
     if (response.status === 409 && outcome.kind === "incompatible") {
@@ -393,16 +394,104 @@ async function completeSessionHandshake(secret) {
     }
     if (response.status === 401) {
         sessionSecret = null;
-        const authorizationMessage = "Authorization failed · reopen launcher";
+        const authorizationMessage = "Authorization failed";
         setTextIfChanged(sessionStatus, authorizationMessage);
         return;
     }
     const invalidMessage = "Invalid backend handshake · editing disabled";
     setTextIfChanged(sessionStatus, invalidMessage);
 }
+const syncingDraftFields = new Set();
+let draftSyncGeneration = 0;
+function invalidateDraftSync() {
+    draftSyncGeneration += 1;
+    syncingDraftFields.clear();
+    return draftSyncGeneration;
+}
+function disableDraftEditing() {
+    taskInput.disabled = true;
+    sourceInput.disabled = true;
+    candidateInput.disabled = true;
+}
+async function syncDraftField(field, input, secret) {
+    if (syncingDraftFields.has(field)) {
+        return;
+    }
+    syncingDraftFields.add(field);
+    const generation = draftSyncGeneration;
+    let attemptedValue = input.value;
+    try {
+        while (sessionSecret === secret
+            && draftSyncGeneration === generation) {
+            attemptedValue = input.value;
+            let response;
+            try {
+                const target = sessionDraft.draftMutationTarget(field);
+                response = await fetch(target, {
+                    method: "POST",
+                    headers: sessionDraft.draftMutationHeaders(secret),
+                    body: attemptedValue,
+                    cache: "no-store",
+                    credentials: "omit",
+                    mode: "same-origin",
+                    redirect: "error",
+                    referrerPolicy: "no-referrer",
+                });
+            }
+            catch {
+                setTextIfChanged(sessionStatus, "Draft offline · retry edit");
+                return;
+            }
+            if (sessionSecret !== secret
+                || draftSyncGeneration !== generation) {
+                return;
+            }
+            if (response.status === 204) {
+                setTextIfChanged(sessionStatus, "Session ready");
+                if (input.value === attemptedValue) {
+                    return;
+                }
+                continue;
+            }
+            if (response.status === 413) {
+                setTextIfChanged(sessionStatus, "Draft too large · reduce");
+                return;
+            }
+            if (response.status === 401) {
+                sessionSecret = null;
+                invalidateDraftSync();
+                disableDraftEditing();
+                setTextIfChanged(sessionStatus, "Authorization failed");
+                return;
+            }
+            setTextIfChanged(sessionStatus, "Draft sync rejected · retry edit");
+            return;
+        }
+    }
+    finally {
+        syncingDraftFields.delete(field);
+        if (sessionSecret === secret
+            && draftSyncGeneration === generation
+            && input.value !== attemptedValue) {
+            void syncDraftField(field, input, secret);
+        }
+    }
+}
+function bindDraftSync(field, input) {
+    input.addEventListener("input", () => {
+        const secret = sessionSecret;
+        if (secret !== null) {
+            void syncDraftField(field, input, secret);
+        }
+    });
+}
+bindDraftSync("task", taskInput);
+bindDraftSync("source", sourceInput);
+bindDraftSync("candidate", candidateInput);
 window.addEventListener("pagehide", (event) => {
     sessionSecret = null;
     invalidateClipboardRequests();
+    invalidateDraftSync();
     if (activeDividerPointerId !== null) {
         releaseDividerPointer(activeDividerPointerId);
     }
