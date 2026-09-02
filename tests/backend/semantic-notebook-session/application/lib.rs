@@ -638,6 +638,42 @@ fn command_target_preconditions_cover_local_mismatch_fixture_read_only() {
 }
 
 #[test]
+fn command_target_preconditions_do_not_invent_unicode_normalization() {
+    let ids = IdentityAllocator::new();
+    let nfc = "caf\u{e9}";
+    let nfd = "cafe\u{301}";
+    let (candidate, span) = candidate_notebook_with_span(&ids, nfc);
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(candidate)
+    else {
+        panic!("Unicode text candidate must be accepted");
+    };
+    let span = accepted_for(&mapping, span);
+    let preconditions = CommandTargetPreconditions {
+        expected_value: Some(EditableSemanticValue::Text(nfd.to_owned())),
+        identity: IdentityPrecondition {
+            expected_kind: Some(SemanticIdentityKind::InlineSpan),
+            expected_owner: IdentityOwnerExpectation::Any,
+        },
+        requested_family: SemanticCommandFamily::TextContent,
+    };
+    assert_eq!(
+        session.check_command_target_preconditions(
+            revision,
+            span,
+            preconditions,
+        ),
+        CommandTargetPreconditionOutcome::ValueMismatch {
+            actual: EditableSemanticValue::Text(nfc.to_owned()),
+            expected: EditableSemanticValue::Text(nfd.to_owned()),
+            revision,
+            target: span,
+        },
+    );
+}
+
+#[test]
 fn command_target_preconditions_stale_base_wins_before_local_checks() {
     let ids = IdentityAllocator::new();
     let (candidate, span) = candidate_notebook_with_span(&ids, "old base");
