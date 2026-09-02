@@ -106,6 +106,10 @@ one new revision only for a real change, and rejects no-op, stale, unavailable,
 or non-text targets without mutating accepted state. Mathematical blocks now
 carry an explicit inline, display, or aligned mode and exact authored source;
 candidate acceptance validates that source before allocating accepted authority.
+A read-only semantic-kind projection now classifies stable identities, including
+block subtype and nested structured owners, without exposing storage or wire
+shape. The session can inspect one accepted identity kind against an exact
+revision with typed stale, missing, and empty-session outcomes and no mutation.
 
 The task remains open for the complete first-release semantic vocabulary,
 format parsing and canonical serialization, migrations and round-trip fixtures,

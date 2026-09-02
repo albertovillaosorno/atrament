@@ -185,6 +185,25 @@ The browser may display or copy a backend-generated command context. It does not
 parse semantic authority, widen scope, paginate notebook state independently, or
 construct a second command-context implementation in TypeScript.
 
+## Implementation evidence
+
+The semantic notebook domain now exposes a read-only identity-kind projection
+covering notebook, page, flow, block subtype, inline span, formula, list and
+item, figure, table, row, cell, page profile, asset, constraint, output profile,
+provenance, and style ownership. Nested semantic content is resolved by stable
+identity rather than serialized offsets or page coordinates.
+
+The current session application also admits one deliberately narrow Inspect
+foundation: inspect one accepted identity kind against one exact revision. A
+successful read returns the named revision, target identity, and semantic kind
+without changing accepted state. Stale revisions, missing targets, and an empty
+session return typed read-only outcomes.
+
+This is not the complete first-release Inspect protocol. Bounded multi-object
+selectors, completeness and continuation semantics, capability snapshots,
+diagnostics, provenance projection, command-context generation, context
+identity, resource limits, and direct/CLI/browser/MCP parity remain open.
+
 ## Failure Modes
 
 The contract fails if Inspect mutates accepted state, silently mixes revisions,
