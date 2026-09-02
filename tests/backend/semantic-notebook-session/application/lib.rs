@@ -49,10 +49,10 @@ use atrament_semantic_notebook_port::{
     CommandCapabilityCompatibilityOutcome, CommandFamilyAdmissionOutcome,
     CommandFamilyCapability, CommandResourceLimits, CommandTargetMaterial,
     CommandTargetMaterialOutcome, CommandTargetPreconditionOutcome,
-    CommandTargetPreconditions, DirectEditSimulationOutcome,
-    EditableSemanticValue, EditableSemanticValueKind,
-    EditableValuePreconditionOutcome, FormulaEditOutcome,
-    IdentityInspectOutcome, IdentityKindInspectOutcome,
+    CommandTargetPreconditions, DirectEditProposal, DirectEditProposalOutcome,
+    DirectEditSimulationOutcome, EditableSemanticValue,
+    EditableSemanticValueKind, EditableValuePreconditionOutcome,
+    FormulaEditOutcome, IdentityInspectOutcome, IdentityKindInspectOutcome,
     IdentityOwnerExpectation, IdentityPrecondition,
     IdentityPreconditionOutcome, PageProfileEditOutcome, SemanticCommandFamily,
     SemanticNotebookSession, TableRowRoleEditOutcome, TextEditOutcome,
@@ -1421,6 +1421,168 @@ fn editable_value_precondition_stale_missing_and_empty_are_typed() {
         empty.check_editable_value_precondition(current, span, expected),
         EditableValuePreconditionOutcome::NoAcceptedRevision,
     );
+}
+
+#[test]
+fn direct_edit_proposal_binds_capability_preconditions_and_simulation() {
+    let ids = IdentityAllocator::new();
+    let (candidate, span) = candidate_notebook_with_span(&ids, "Idea base");
+    let block = candidate.pages[0].flows[0].blocks[0].id;
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(candidate)
+    else {
+        panic!("text candidate must be accepted");
+    };
+    let block = accepted_for(&mapping, block);
+    let span = accepted_for(&mapping, span);
+    let before = session.current().expect("accepted revision").clone();
+    let preconditions = CommandTargetPreconditions {
+        expected_value: Some(EditableSemanticValue::Text(String::from(
+            "Idea base",
+        ))),
+        identity: IdentityPrecondition {
+            expected_kind: Some(SemanticIdentityKind::InlineSpan),
+            expected_owner: IdentityOwnerExpectation::Direct(block),
+        },
+        requested_family: SemanticCommandFamily::TextContent,
+    };
+    let requested = EditableSemanticValue::Text(String::from("Idea final"));
+    assert_eq!(
+        session.simulate_direct_edit_proposal(DirectEditProposal {
+            capability_version: CommandBehaviorVersion(1),
+            preconditions: preconditions.clone(),
+            requested: requested.clone(),
+            revision,
+            target: span,
+        }),
+        DirectEditProposalOutcome::Simulated {
+            outcome: DirectEditSimulationOutcome::Applicable {
+                family: SemanticCommandFamily::TextContent,
+                requested,
+                revision,
+                target: span,
+            },
+        },
+    );
+
+    let mut wrong_value = preconditions.clone();
+    wrong_value.expected_value =
+        Some(EditableSemanticValue::Text(String::from("wrong base")));
+    assert_eq!(
+        session.simulate_direct_edit_proposal(DirectEditProposal {
+            capability_version: CommandBehaviorVersion(1),
+            preconditions: wrong_value,
+            requested: EditableSemanticValue::Text(String::from("Idea final")),
+            revision,
+            target: span,
+        }),
+        DirectEditProposalOutcome::PreconditionRejected {
+            outcome: CommandTargetPreconditionOutcome::ValueMismatch {
+                actual: EditableSemanticValue::Text(String::from("Idea base")),
+                expected: EditableSemanticValue::Text(String::from(
+                    "wrong base",
+                )),
+                revision,
+                target: span,
+            },
+        },
+    );
+
+    let mut wrong_family = preconditions.clone();
+    wrong_family.requested_family = SemanticCommandFamily::StructuredContent;
+    assert_eq!(
+        session.simulate_direct_edit_proposal(DirectEditProposal {
+            capability_version: CommandBehaviorVersion(1),
+            preconditions: wrong_family,
+            requested: EditableSemanticValue::Text(String::from("Idea final")),
+            revision,
+            target: span,
+        }),
+        DirectEditProposalOutcome::PreconditionRejected {
+            outcome: CommandTargetPreconditionOutcome::FamilyNotExecutable {
+                available: Some(SemanticCommandFamily::TextContent),
+                requested: SemanticCommandFamily::StructuredContent,
+                revision,
+                target: span,
+            },
+        },
+    );
+
+    assert_eq!(
+        session.simulate_direct_edit_proposal(DirectEditProposal {
+            capability_version: CommandBehaviorVersion(1),
+            preconditions: preconditions.clone(),
+            requested: EditableSemanticValue::TableRowRole(TableRowRole::Body),
+            revision,
+            target: span,
+        }),
+        DirectEditProposalOutcome::Simulated {
+            outcome: DirectEditSimulationOutcome::ValueFamilyMismatch {
+                actual: EditableSemanticValueKind::Text,
+                requested: EditableSemanticValueKind::TableRowRole,
+                revision,
+                target: span,
+            },
+        },
+    );
+
+    assert_eq!(
+        session.simulate_direct_edit_proposal(DirectEditProposal {
+            capability_version: CommandBehaviorVersion(0),
+            preconditions,
+            requested: EditableSemanticValue::Text(String::from("Idea final")),
+            revision,
+            target: span,
+        }),
+        DirectEditProposalOutcome::CapabilityMismatch {
+            current: CommandBehaviorVersion(1),
+            expected: CommandBehaviorVersion(0),
+        },
+    );
+    assert_eq!(session.current(), Some(&before));
+}
+
+#[test]
+fn direct_edit_proposal_stale_base_precedes_local_simulation() {
+    let ids = IdentityAllocator::new();
+    let (candidate, span) = candidate_notebook_with_span(&ids, "base");
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(candidate)
+    else {
+        panic!("text candidate must be accepted");
+    };
+    let span = accepted_for(&mapping, span);
+    let replacement = candidate_notebook(&ids, "replacement");
+    let AcceptanceOutcome::Accepted { revision: current, .. } =
+        session.accept(replacement)
+    else {
+        panic!("replacement candidate must be accepted");
+    };
+    let before = session.current().expect("current revision").clone();
+    assert_eq!(
+        session.simulate_direct_edit_proposal(DirectEditProposal {
+            capability_version: CommandBehaviorVersion(1),
+            preconditions: CommandTargetPreconditions {
+                expected_value: Some(EditableSemanticValue::Text(
+                    String::from("base",)
+                )),
+                identity: IdentityPrecondition {
+                    expected_kind: Some(SemanticIdentityKind::InlineSpan),
+                    expected_owner: IdentityOwnerExpectation::Any,
+                },
+                requested_family: SemanticCommandFamily::TextContent,
+            },
+            requested: EditableSemanticValue::Text(String::from("after")),
+            revision,
+            target: span,
+        }),
+        DirectEditProposalOutcome::PreconditionRejected {
+            outcome: CommandTargetPreconditionOutcome::StaleBase { current },
+        },
+    );
+    assert_eq!(session.current(), Some(&before));
 }
 
 #[test]

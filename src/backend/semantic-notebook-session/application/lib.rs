@@ -51,11 +51,11 @@ use atrament_semantic_notebook_port::{
     CommandCapabilityCompatibilityOutcome, CommandFamilyAdmissionOutcome,
     CommandFamilyCapability, CommandResourceLimits, CommandTargetMaterial,
     CommandTargetMaterialOutcome, CommandTargetPreconditionOutcome,
-    CommandTargetPreconditions, DirectEditSimulationOutcome,
-    EditableSemanticValue, EditableSemanticValueKind,
-    EditableValuePreconditionOutcome, FormulaEditOutcome,
-    IdentityInspectOutcome, IdentityKindInspectOutcome, IdentityMapping,
-    IdentityOwnerExpectation, IdentityPrecondition,
+    CommandTargetPreconditions, DirectEditProposal, DirectEditProposalOutcome,
+    DirectEditSimulationOutcome, EditableSemanticValue,
+    EditableSemanticValueKind, EditableValuePreconditionOutcome,
+    FormulaEditOutcome, IdentityInspectOutcome, IdentityKindInspectOutcome,
+    IdentityMapping, IdentityOwnerExpectation, IdentityPrecondition,
     IdentityPreconditionOutcome, PageProfileEditOutcome,
     SemanticCommandCapabilitySnapshot, SemanticCommandFamily,
     SemanticNotebookSession, TableRowRoleEditOutcome, TextEditOutcome,
@@ -950,6 +950,45 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
             requested,
             revision,
             target,
+        }
+    }
+
+    fn simulate_direct_edit_proposal(
+        &self,
+        proposal: DirectEditProposal,
+    ) -> DirectEditProposalOutcome {
+        let compatibility = self.check_command_capability_compatibility(
+            proposal.capability_version,
+        );
+        if let CommandCapabilityCompatibilityOutcome::Mismatch {
+            current,
+            expected,
+        } = compatibility
+        {
+            return DirectEditProposalOutcome::CapabilityMismatch {
+                current,
+                expected,
+            };
+        }
+        let preconditions = self.check_command_target_preconditions(
+            proposal.revision,
+            proposal.target,
+            proposal.preconditions,
+        );
+        if !matches!(
+            preconditions,
+            CommandTargetPreconditionOutcome::Satisfied { .. }
+        ) {
+            return DirectEditProposalOutcome::PreconditionRejected {
+                outcome: preconditions,
+            };
+        }
+        DirectEditProposalOutcome::Simulated {
+            outcome: self.simulate_direct_edit(
+                proposal.revision,
+                proposal.target,
+                proposal.requested,
+            ),
         }
     }
 }

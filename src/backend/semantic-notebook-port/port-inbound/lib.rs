@@ -375,6 +375,43 @@ pub enum EditableSemanticValue {
     Text(String),
 }
 
+/// One version-bound single-target direct-edit proposal.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct DirectEditProposal {
+    /// Capability behavior version used when the proposal was constructed.
+    pub capability_version: CommandBehaviorVersion,
+    /// Complete local target preconditions supplied by the caller.
+    pub preconditions: CommandTargetPreconditions,
+    /// Exact requested replacement semantic value.
+    pub requested: EditableSemanticValue,
+    /// Accepted revision the proposal requires as its base.
+    pub revision: RevisionIdentity,
+    /// Existing semantic identity the proposal targets.
+    pub target: AcceptedIdentity,
+}
+
+/// Read-only result of checking and simulating one direct-edit proposal.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum DirectEditProposalOutcome {
+    /// Bound capability behavior no longer matches the backend.
+    CapabilityMismatch {
+        /// Current backend-owned capability behavior version.
+        current: CommandBehaviorVersion,
+        /// Capability behavior version bound by the proposal.
+        expected: CommandBehaviorVersion,
+    },
+    /// One local target precondition rejected before replacement simulation.
+    PreconditionRejected {
+        /// Typed local precondition result that rejected the proposal.
+        outcome: CommandTargetPreconditionOutcome,
+    },
+    /// Capability and local preconditions passed; replacement was simulated.
+    Simulated {
+        /// Read-only replacement simulation result.
+        outcome: DirectEditSimulationOutcome,
+    },
+}
+
 /// Read-only semantic simulation result for one established direct edit.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum DirectEditSimulationOutcome {
@@ -1022,4 +1059,10 @@ pub trait SemanticNotebookSession {
         target: AcceptedIdentity,
         requested: EditableSemanticValue,
     ) -> DirectEditSimulationOutcome;
+
+    /// Check capability and local preconditions, then simulate one proposal.
+    fn simulate_direct_edit_proposal(
+        &self,
+        proposal: DirectEditProposal,
+    ) -> DirectEditProposalOutcome;
 }
