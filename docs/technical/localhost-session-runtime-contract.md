@@ -172,6 +172,11 @@ rejected before mutation. Each field has a backend-owned one-mebibyte limit, and
 over-limit input returns `413` without truncating or changing the current field.
 A successful whole-field replacement returns `204`.
 
+Framing failures that can be classified after connection admission return `400`
+without invoking draft mutation. Incomplete request bodies are bounded by the
+localhost connection timeout and return `408` rather than holding the listener
+indefinitely.
+
 Authenticated `GET` requests to the same three field paths return the exact
 current UTF-8 field as uncached plain text. A read always requires the Bearer
 credential. When the browser or another admitted client supplies `Origin`, it
