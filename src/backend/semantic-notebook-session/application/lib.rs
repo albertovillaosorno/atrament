@@ -711,33 +711,58 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
         target: AcceptedIdentity,
         value: String,
     ) -> TextEditOutcome {
+        let simulation = self.simulate_direct_edit(
+            base,
+            target,
+            EditableSemanticValue::Text(value),
+        );
+        let replacement = match simulation {
+            DirectEditSimulationOutcome::Applicable {
+                requested: EditableSemanticValue::Text(requested_text),
+                ..
+            } => requested_text,
+            DirectEditSimulationOutcome::Applicable { .. }
+            | DirectEditSimulationOutcome::InvalidMathematics { .. }
+            | DirectEditSimulationOutcome::InvalidPageProfile { .. }
+            | DirectEditSimulationOutcome::TargetNotEditableValue { .. }
+            | DirectEditSimulationOutcome::UnsupportedMathematics { .. }
+            | DirectEditSimulationOutcome::ValueFamilyMismatch { .. } => {
+                return TextEditOutcome::TargetNotText {
+                    revision: base,
+                    target,
+                };
+            },
+            DirectEditSimulationOutcome::NoAcceptedRevision => {
+                return TextEditOutcome::NoAcceptedRevision;
+            },
+            DirectEditSimulationOutcome::NoOp {
+                revision,
+                target: simulated_target,
+                ..
+            } => {
+                return TextEditOutcome::NoOp {
+                    revision,
+                    target: simulated_target,
+                };
+            },
+            DirectEditSimulationOutcome::StaleBase { current } => {
+                return TextEditOutcome::StaleBase { current };
+            },
+            DirectEditSimulationOutcome::TargetNotFound {
+                revision,
+                target: missing_target,
+            } => {
+                return TextEditOutcome::TargetNotFound {
+                    revision,
+                    target: missing_target,
+                };
+            },
+        };
         let Some(current) = self.current.as_ref() else {
             return TextEditOutcome::NoAcceptedRevision;
         };
-        if current.id != base {
-            return TextEditOutcome::StaleBase { current: current.id };
-        }
-        let Some(existing) = text_value(&current.notebook, target) else {
-            if semantic_identity_kind(&current.notebook, target).is_some() {
-                return TextEditOutcome::TargetNotText {
-                    revision: current.id,
-                    target,
-                };
-            }
-            return TextEditOutcome::TargetNotFound {
-                revision: current.id,
-                target,
-            };
-        };
-        if existing == value {
-            return TextEditOutcome::NoOp {
-                revision: current.id,
-                target,
-            };
-        }
         let mut notebook = current.notebook.clone();
-        let edited = replace_text_value(&mut notebook, target, value);
-        if !edited {
+        if !replace_text_value(&mut notebook, target, replacement) {
             return TextEditOutcome::TargetNotFound {
                 revision: current.id,
                 target,
