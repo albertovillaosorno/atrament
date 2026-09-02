@@ -48,12 +48,15 @@ state and media intermediates disappear while explicit exports remain intact.
 Current runtime evidence proves orderly process termination releases the old
 loopback listener, restart generates a fresh session credential, and a stale
 credential cannot authenticate to the new process. Process-level draft fixtures
-also write and read task, source, and raw-response text, restart the runtime,
-and
-observe all three fields empty in the fresh session. The task remains open until
-accepted notebook state and temporary media exist and fixtures also cover
-browser close, refresh, cancellation, crash, intermediate cleanup, and
-explicit-export survival.
+also write and read task, source, and raw-response text, then verify both
+orderly restart and forced process death yield empty fields in the fresh
+session. While
+private draft text is live, the runtime holds no writable regular-file
+descriptor and changes no declared repository runtime-root file.
+
+The task remains open until accepted notebook state and temporary media exist
+and fixtures also cover browser close, refresh, cancellation, media cleanup,
+and explicit-export survival.
 
 ### TODO - Define one typed diagnostic envelope
 
