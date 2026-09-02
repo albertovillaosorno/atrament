@@ -98,6 +98,12 @@ required by the physical-writing ADR, such as:
 The plan contains no vendor-specific command stream, device file descriptor,
 USB endpoint, shell command, or browser presentation coordinate as authority.
 
+### Result semantics
+
+Plan returns result classes from the frozen derived/output result taxonomy. A
+successful plan is distinguishable from stale revision, capability or validation
+rejection, cancellation, and known-no-result failure without parsing prose.
+
 ### Diagnostics and refusal
 
 Planning validates every semantic object against the selected live capability

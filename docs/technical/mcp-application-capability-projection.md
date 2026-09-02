@@ -224,6 +224,16 @@ what is implemented rather than making an agent probe lifecycle behavior.
 A transport cancellation is not an application rollback result. Mutating
 unknown outcomes still use the owning same-retry recovery contract.
 
+### Derived and output result projection
+
+Implemented Render, Plan, and Export MCP capabilities project the frozen
+derived/output result classes in machine-readable form. Diagnostics remain the
+separate shared explanation envelope.
+
+An MCP agent does not parse file-system prose to distinguish Exported from path,
+overwrite, retry, or target-drift conflict, and it does not treat a Render or
+Plan diagnostic as the operation result itself.
+
 ### Result-class projection
 
 MCP exposes the semantic application result class frozen by the command result

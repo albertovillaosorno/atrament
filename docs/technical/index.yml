@@ -61,6 +61,9 @@ contracts:
   - id: atrament.technical.application-operation-lifecycle
     status: frozen
     path: application-operation-lifecycle-contract.md
+  - id: atrament.technical.derived-output-result-taxonomy
+    status: frozen
+    path: derived-output-result-taxonomy.md
   - id: atrament.technical.render-application-contract
     status: frozen
     path: render-application-contract.md

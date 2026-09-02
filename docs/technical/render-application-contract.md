@@ -113,6 +113,13 @@ Their successful Render does not imply that a live single-pen Plan can represent
 them. Render and Plan validate against different explicit output capability
 profiles while sharing one semantic notebook authority.
 
+### Result semantics
+
+Render returns result classes from the frozen derived/output result taxonomy. A
+successful projection is distinguishable from stale revision, capability or
+validation rejection, cancellation, and known-no-result failure without parsing
+diagnostic prose.
+
 ### Diagnostics
 
 Render returns diagnostics through the frozen typed diagnostic envelope

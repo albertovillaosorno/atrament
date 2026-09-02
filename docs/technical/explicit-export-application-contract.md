@@ -184,6 +184,13 @@ paths may proceed independently when their output dependencies allow it.
 
 Semantic notebook mutation remains separate from this file-side concurrency.
 
+### Result semantics
+
+Export returns result classes from the frozen derived/output result taxonomy.
+Automation can distinguish file commit, idempotent replay, stale input, path or
+overwrite rejection, retry conflict, external target drift, cancellation, and
+known-no-effect failure without matching diagnostic prose.
+
 ### Receipt
 
 A successful export receipt identifies at least the consumed accepted revision,
