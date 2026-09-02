@@ -96,6 +96,46 @@ pub enum CandidateReferenceKind {
     Style,
 }
 
+/// Result of one direct accepted semantic text replacement.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum TextEditOutcome {
+    /// Text changed and one new accepted revision committed.
+    Applied {
+        /// Accepted revision used as the edit precondition.
+        base: RevisionIdentity,
+        /// New accepted revision produced by the edit.
+        revision: RevisionIdentity,
+        /// Existing semantic text identity whose content changed.
+        target: AcceptedIdentity,
+    },
+    /// Revision identity allocation exhausted before commit.
+    IdentityExhausted {
+        /// Identity sequence that could not allocate another value.
+        sequence: IdentityExhausted,
+    },
+    /// Session has no accepted semantic revision to edit.
+    NoAcceptedRevision,
+    /// Replacement equals current text; no revision churn occurred.
+    NoOp {
+        /// Unchanged current revision identity.
+        revision: RevisionIdentity,
+        /// Existing semantic text identity whose content already matched.
+        target: AcceptedIdentity,
+    },
+    /// Caller precondition names a revision that is no longer current.
+    StaleBase {
+        /// Current accepted revision identity that rejected the stale edit.
+        current: RevisionIdentity,
+    },
+    /// Requested accepted identity does not own editable inline text.
+    TargetNotFound {
+        /// Unchanged current revision identity.
+        revision: RevisionIdentity,
+        /// Requested semantic identity absent from editable inline text.
+        target: AcceptedIdentity,
+    },
+}
+
 /// One candidate-local identity promoted to a new accepted semantic identity.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct IdentityMapping {
@@ -115,4 +155,13 @@ pub trait SemanticNotebookSession {
 
     /// Read the current accepted revision without creating another revision.
     fn current(&self) -> Option<&AcceptedRevision>;
+
+    /// Replace one existing inline text identity against an exact base
+    /// revision.
+    fn replace_text(
+        &mut self,
+        base: RevisionIdentity,
+        target: AcceptedIdentity,
+        value: String,
+    ) -> TextEditOutcome;
 }

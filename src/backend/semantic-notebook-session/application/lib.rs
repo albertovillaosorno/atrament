@@ -45,7 +45,7 @@ use atrament_semantic_notebook::{
 };
 use atrament_semantic_notebook_port::{
     AcceptanceOutcome, CandidateGraphError, CandidateReferenceKind,
-    IdentityMapping, SemanticNotebookSession,
+    IdentityMapping, SemanticNotebookSession, TextEditOutcome,
 };
 
 #[derive(Debug, Default)]
@@ -148,6 +148,48 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
 
     fn current(&self) -> Option<&AcceptedRevision> {
         self.current.as_ref()
+    }
+
+    fn replace_text(
+        &mut self,
+        base: atrament_semantic_notebook::RevisionIdentity,
+        target: AcceptedIdentity,
+        value: String,
+    ) -> TextEditOutcome {
+        let Some(current) = self.current.as_ref() else {
+            return TextEditOutcome::NoAcceptedRevision;
+        };
+        if current.id != base {
+            return TextEditOutcome::StaleBase { current: current.id };
+        }
+        let Some(existing) = text_value(&current.notebook, target) else {
+            return TextEditOutcome::TargetNotFound {
+                revision: current.id,
+                target,
+            };
+        };
+        if existing == value {
+            return TextEditOutcome::NoOp {
+                revision: current.id,
+                target,
+            };
+        }
+        let mut notebook = current.notebook.clone();
+        let edited = replace_text_value(&mut notebook, target, value);
+        if !edited {
+            return TextEditOutcome::TargetNotFound {
+                revision: current.id,
+                target,
+            };
+        }
+        let revision = match self.identities.allocate_revision() {
+            Ok(revision) => revision,
+            Err(sequence) => {
+                return TextEditOutcome::IdentityExhausted { sequence };
+            },
+        };
+        self.current = Some(AcceptedRevision { id: revision, notebook });
+        TextEditOutcome::Applied { base, revision, target }
     }
 }
 
@@ -474,6 +516,168 @@ fn accepted_reference(
     candidate
         .map(|identity| accepted_id(identity, identities))
         .transpose()
+}
+
+fn replace_text_blocks(
+    blocks: &mut [Block<AcceptedIdentity>],
+    target: AcceptedIdentity,
+    value: &mut Option<String>,
+) -> bool {
+    for block in blocks {
+        if replace_text_content(&mut block.content, target, value) {
+            return true;
+        }
+    }
+    false
+}
+
+fn replace_text_content(
+    content: &mut BlockContent<AcceptedIdentity>,
+    target: AcceptedIdentity,
+    value: &mut Option<String>,
+) -> bool {
+    match content {
+        BlockContent::Callout(blocks) | BlockContent::Freeform(blocks) => {
+            replace_text_blocks(blocks, target, value)
+        },
+        BlockContent::Date(spans)
+        | BlockContent::Heading(spans)
+        | BlockContent::Paragraph(spans) => {
+            replace_text_spans(spans, target, value)
+        },
+        BlockContent::Figure(figure) => {
+            replace_text_spans(&mut figure.caption, target, value)
+        },
+        BlockContent::List(list) => {
+            for item in &mut list.items {
+                if replace_text_blocks(&mut item.blocks, target, value) {
+                    return true;
+                }
+            }
+            false
+        },
+        BlockContent::Mathematics(_)
+        | BlockContent::Rule
+        | BlockContent::Unresolved(_) => false,
+        BlockContent::Table(table) => {
+            for row in &mut table.rows {
+                for cell in &mut row.cells {
+                    if replace_text_blocks(&mut cell.blocks, target, value) {
+                        return true;
+                    }
+                }
+            }
+            false
+        },
+    }
+}
+
+fn replace_text_spans(
+    spans: &mut [InlineSpan<AcceptedIdentity>],
+    target: AcceptedIdentity,
+    value: &mut Option<String>,
+) -> bool {
+    for span in spans {
+        if span.id == target {
+            let Some(replacement) = value.take() else {
+                return false;
+            };
+            span.text = replacement;
+            return true;
+        }
+    }
+    false
+}
+
+fn replace_text_value(
+    notebook: &mut Notebook<AcceptedIdentity>,
+    target: AcceptedIdentity,
+    value: String,
+) -> bool {
+    let mut replacement = Some(value);
+    for page in &mut notebook.pages {
+        for flow in &mut page.flows {
+            if replace_text_blocks(&mut flow.blocks, target, &mut replacement) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+fn text_blocks_value(
+    blocks: &[Block<AcceptedIdentity>],
+    target: AcceptedIdentity,
+) -> Option<&str> {
+    for block in blocks {
+        if let Some(value) = text_content_value(&block.content, target) {
+            return Some(value);
+        }
+    }
+    None
+}
+
+fn text_content_value(
+    content: &BlockContent<AcceptedIdentity>,
+    target: AcceptedIdentity,
+) -> Option<&str> {
+    match content {
+        BlockContent::Callout(blocks) | BlockContent::Freeform(blocks) => {
+            text_blocks_value(blocks, target)
+        },
+        BlockContent::Date(spans)
+        | BlockContent::Heading(spans)
+        | BlockContent::Paragraph(spans) => text_spans_value(spans, target),
+        BlockContent::Figure(figure) => {
+            text_spans_value(&figure.caption, target)
+        },
+        BlockContent::List(list) => {
+            for item in &list.items {
+                if let Some(value) = text_blocks_value(&item.blocks, target) {
+                    return Some(value);
+                }
+            }
+            None
+        },
+        BlockContent::Mathematics(_)
+        | BlockContent::Rule
+        | BlockContent::Unresolved(_) => None,
+        BlockContent::Table(table) => {
+            for row in &table.rows {
+                for cell in &row.cells {
+                    if let Some(value) = text_blocks_value(&cell.blocks, target)
+                    {
+                        return Some(value);
+                    }
+                }
+            }
+            None
+        },
+    }
+}
+
+fn text_spans_value(
+    spans: &[InlineSpan<AcceptedIdentity>],
+    target: AcceptedIdentity,
+) -> Option<&str> {
+    spans
+        .iter()
+        .find(|span| span.id == target)
+        .map(|span| span.text.as_str())
+}
+
+fn text_value(
+    notebook: &Notebook<AcceptedIdentity>,
+    target: AcceptedIdentity,
+) -> Option<&str> {
+    for page in &notebook.pages {
+        for flow in &page.flows {
+            if let Some(value) = text_blocks_value(&flow.blocks, target) {
+                return Some(value);
+            }
+        }
+    }
+    None
 }
 
 fn candidate_block(

@@ -38,7 +38,7 @@ use atrament_semantic_notebook::{
 };
 use atrament_semantic_notebook_port::{
     AcceptanceOutcome, CandidateGraphError, CandidateReferenceKind,
-    SemanticNotebookSession,
+    SemanticNotebookSession, TextEditOutcome,
 };
 use atrament_semantic_notebook_session::SemanticNotebookSessionService;
 
@@ -60,13 +60,20 @@ fn candidate_id(identities: &IdentityAllocator) -> CandidateIdentity {
 fn candidate_notebook(
     identities: &IdentityAllocator,
     text: &str,
-) -> Notebook<atrament_semantic_notebook::CandidateIdentity> {
+) -> Notebook<CandidateIdentity> {
+    candidate_notebook_with_span(identities, text).0
+}
+
+fn candidate_notebook_with_span(
+    identities: &IdentityAllocator,
+    text: &str,
+) -> (Notebook<CandidateIdentity>, CandidateIdentity) {
     let notebook_id = identities.allocate_candidate().expect("notebook id");
     let page_id = identities.allocate_candidate().expect("page id");
     let flow_id = identities.allocate_candidate().expect("flow id");
     let block_id = identities.allocate_candidate().expect("block id");
     let span_id = identities.allocate_candidate().expect("span id");
-    Notebook {
+    let notebook = Notebook {
         assets: vec![],
         constraints: vec![],
         extensions: vec![ExtensionData {
@@ -95,7 +102,8 @@ fn candidate_notebook(
         }],
         provenance: vec![],
         styles: vec![],
-    }
+    };
+    (notebook, span_id)
 }
 
 #[test]
@@ -460,4 +468,151 @@ fn dropped_semantic_session_does_not_seed_a_fresh_service() {
 
     let fresh = SemanticNotebookSessionService::default();
     assert!(fresh.current().is_none());
+}
+
+#[test]
+fn direct_text_edit_changes_one_span_and_preserves_all_semantic_identities() {
+    let candidate_ids = IdentityAllocator::new();
+    let original = concat!(
+        "Si y = f(g(x)), entonces la derivada exterior se evalúa en g(x) y ",
+        "se multiplica por la derivada interior.",
+    );
+    let corrected = concat!(
+        "Si y = f(g(x)), la derivada exterior se evalúa en g(x) y se ",
+        "multiplica por la derivada interior.",
+    );
+    let (candidate, candidate_span) =
+        candidate_notebook_with_span(&candidate_ids, original);
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision: base } =
+        session.accept(candidate)
+    else {
+        panic!("candidate must be accepted");
+    };
+    let target = accepted_for(&mapping, candidate_span);
+    let before = session.current().expect("base revision").clone();
+
+    let outcome = session.replace_text(base, target, String::from(corrected));
+    let TextEditOutcome::Applied {
+        base: actual_base,
+        revision,
+        target: actual_target,
+    } = outcome
+    else {
+        panic!("changed text must create a new revision");
+    };
+    assert_eq!(actual_base, base);
+    assert_eq!(actual_target, target);
+    assert_ne!(revision, base);
+
+    let after = session.current().expect("edited revision");
+    assert_eq!(after.id, revision);
+    assert_eq!(after.notebook.id, before.notebook.id);
+    assert_eq!(after.notebook.pages[0].id, before.notebook.pages[0].id);
+    assert_eq!(
+        after.notebook.pages[0].flows[0].id,
+        before.notebook.pages[0].flows[0].id,
+    );
+    let before_block = &before.notebook.pages[0].flows[0].blocks[0];
+    let after_block = &after.notebook.pages[0].flows[0].blocks[0];
+    assert_eq!(after_block.id, before_block.id);
+    let BlockContent::Paragraph(before_spans) = &before_block.content else {
+        panic!("base block must be paragraph");
+    };
+    let BlockContent::Paragraph(after_spans) = &after_block.content else {
+        panic!("edited block must remain paragraph");
+    };
+    assert_eq!(before_spans[0].id, target);
+    assert_eq!(after_spans[0].id, target);
+    assert_eq!(before_spans[0].text, original);
+    assert_eq!(after_spans[0].text, corrected);
+    assert_eq!(after_spans[0].provenance, before_spans[0].provenance);
+    assert_eq!(after_spans[0].style, before_spans[0].style);
+    assert_eq!(after.notebook.extensions, before.notebook.extensions);
+}
+
+#[test]
+fn direct_text_edit_same_value_is_noop_without_revision_churn() {
+    let candidate_ids = IdentityAllocator::new();
+    let (candidate, candidate_span) =
+        candidate_notebook_with_span(&candidate_ids, "same text");
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(candidate)
+    else {
+        panic!("candidate must be accepted");
+    };
+    let target = accepted_for(&mapping, candidate_span);
+    let before = session.current().expect("base revision").clone();
+
+    assert_eq!(
+        session.replace_text(revision, target, String::from("same text")),
+        TextEditOutcome::NoOp { revision, target },
+    );
+    assert_eq!(session.current(), Some(&before));
+}
+
+#[test]
+fn direct_text_edit_stale_base_rejects_without_mutation() {
+    let candidate_ids = IdentityAllocator::new();
+    let (candidate, candidate_span) =
+        candidate_notebook_with_span(&candidate_ids, "base text");
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted {
+        mapping,
+        revision: stale_base,
+    } = session.accept(candidate)
+    else {
+        panic!("candidate must be accepted");
+    };
+    let target = accepted_for(&mapping, candidate_span);
+    let TextEditOutcome::Applied { revision: current, .. } =
+        session.replace_text(stale_base, target, String::from("current text"))
+    else {
+        panic!("first edit must apply");
+    };
+    let before = session.current().expect("current revision").clone();
+
+    assert_eq!(
+        session.replace_text(stale_base, target, String::from("stale text")),
+        TextEditOutcome::StaleBase { current },
+    );
+    assert_eq!(session.current(), Some(&before));
+}
+
+#[test]
+fn direct_text_edit_non_text_identity_rejects_without_mutation() {
+    let candidate_ids = IdentityAllocator::new();
+    let candidate = candidate_notebook(&candidate_ids, "base text");
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { revision, .. } =
+        session.accept(candidate)
+    else {
+        panic!("candidate must be accepted");
+    };
+    let before = session.current().expect("base revision").clone();
+    let page_target = before.notebook.pages[0].id;
+
+    assert_eq!(
+        session.replace_text(revision, page_target, String::from("invalid")),
+        TextEditOutcome::TargetNotFound {
+            revision,
+            target: page_target,
+        },
+    );
+    assert_eq!(session.current(), Some(&before));
+}
+
+#[test]
+fn direct_text_edit_without_accepted_revision_is_typed_no_effect() {
+    let ids = IdentityAllocator::new();
+    let base = ids.allocate_revision().expect("synthetic revision");
+    let target = ids.allocate_accepted().expect("synthetic accepted id");
+    let mut session = SemanticNotebookSessionService::default();
+
+    assert_eq!(
+        session.replace_text(base, target, String::from("unavailable")),
+        TextEditOutcome::NoAcceptedRevision,
+    );
+    assert!(session.current().is_none());
 }
