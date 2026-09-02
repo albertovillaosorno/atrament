@@ -489,6 +489,13 @@ Command-mode instructions must distinguish readable context from writable scope,
 forbid agent-allocated accepted IDs and embedded adapter effects, and use an
 admitted unresolved response when the requested edit cannot be represented.
 
+Current design evidence freezes offline release discovery, truthful implemented
+versus design-only capability status, live capability-snapshot negotiation,
+local schema/contract/example discovery, typed result and diagnostic handling,
+clipboard/native automation separation, credential exclusion, version mismatch,
+and physical-safety boundaries. The concrete discovery filename, generated
+schemas, CLI/MCP executables, and packaging integration remain open.
+
 ### TODO - Implement optional audio and video transcription
 
 Normalize supported media to bounded temporary audio, invoke the admitted

@@ -70,3 +70,6 @@ contracts:
   - id: atrament.technical.mcp-application-capability-projection
     status: frozen
     path: mcp-application-capability-projection.md
+  - id: atrament.technical.self-contained-agent-instruction-bundle
+    status: frozen
+    path: self-contained-agent-instruction-bundle-contract.md
