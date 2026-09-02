@@ -58,6 +58,23 @@ fn unicode_school_formula_is_preserved_byte_for_byte() {
 }
 
 #[test]
+fn escaped_braces_do_not_corrupt_required_group_indexing() {
+    let source = r"\frac{\{x\}}{2}";
+    let analyzed = analyze(source, FormulaMode::Display)
+        .expect("escaped brace commands remain balanced unsupported input");
+    assert!(!analyzed.is_supported());
+    assert_eq!(reconstructed(&analyzed), source);
+    assert_eq!(
+        analyzed
+            .unsupported
+            .iter()
+            .map(|item| item.name.as_str())
+            .collect::<Vec<_>>(),
+        vec![r"\{", r"\}"],
+    );
+}
+
+#[test]
 fn fraction_scripts_and_roman_units_are_structural_without_rewriting() {
     let source = r"E = \frac{1}{2}mv^2\mathrm{m/s^2}";
     let analyzed =

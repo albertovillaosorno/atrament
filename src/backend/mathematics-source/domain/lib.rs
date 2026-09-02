@@ -116,6 +116,11 @@ pub enum MathTokenKind {
     Superscript,
 }
 
+#[derive(Debug)]
+struct GroupIndex {
+    pairs: Vec<(usize, usize)>,
+}
+
 #[derive(Clone, Copy)]
 struct ScanState {
     group_depth: usize,
@@ -193,6 +198,7 @@ pub fn analyze(
     source: &str,
     mode: FormulaMode,
 ) -> Result<AnalyzedFormula, MathSyntaxError> {
+    let group_index = build_group_index(source);
     let mut state = ScanState {
         group_depth: 0,
         index: 0,
@@ -217,6 +223,7 @@ pub fn analyze(
             source,
             mode,
             character,
+            &group_index,
             &mut state,
             &mut tokens,
             &mut unsupported,
@@ -235,6 +242,34 @@ pub fn analyze(
         tokens,
         unsupported,
     })
+}
+
+fn build_group_index(source: &str) -> GroupIndex {
+    let mut pairs = Vec::new();
+    let mut slash_run = 0usize;
+    let mut stack = Vec::new();
+    for (index, byte) in source.as_bytes().iter().copied().enumerate() {
+        if byte == b'\\' {
+            slash_run = slash_run.saturating_add(1);
+            continue;
+        }
+        let escaped = slash_run & 1 == 1;
+        slash_run = 0;
+        if escaped {
+            continue;
+        }
+        match byte {
+            b'{' => stack.push(index),
+            b'}' => {
+                if let Some(open) = stack.pop() {
+                    pairs.push((open, index.saturating_add(1)));
+                }
+            },
+            _ => {},
+        }
+    }
+    pairs.sort_unstable_by_key(|(open, _)| *open);
+    GroupIndex { pairs }
 }
 
 fn command_matches(source: &str, start: usize, spelling: &str) -> bool {
@@ -264,26 +299,20 @@ const fn is_structural(character: char) -> bool {
 }
 
 fn matching_group_end(
-    source: &str,
+    groups: &GroupIndex,
+    source_len: usize,
     open: usize,
 ) -> Result<usize, MathSyntaxError> {
-    let Some(bytes) = source.as_bytes().get(open..) else {
-        return Err(error(open, MathSyntaxErrorKind::MissingRequiredGroup));
+    let Ok(index) = groups
+        .pairs
+        .binary_search_by_key(&open, |(start, _)| *start)
+    else {
+        return Err(error(source_len, MathSyntaxErrorKind::UnclosedGroup));
     };
-    let mut depth = 0usize;
-    for (offset, byte) in bytes.iter().copied().enumerate() {
-        match byte {
-            b'{' => depth = depth.saturating_add(1),
-            b'}' => {
-                depth = depth.saturating_sub(1);
-                if depth == 0 {
-                    return Ok(open.saturating_add(offset).saturating_add(1));
-                }
-            },
-            _ => {},
-        }
-    }
-    Err(error(source.len(), MathSyntaxErrorKind::UnclosedGroup))
+    let Some((_, end)) = groups.pairs.get(index) else {
+        return Err(error(source_len, MathSyntaxErrorKind::UnclosedGroup));
+    };
+    Ok(*end)
 }
 
 fn push_literal(tokens: &mut Vec<MathToken>, start: usize, end: usize) {
@@ -339,6 +368,7 @@ fn scan_structural(
     source: &str,
     mode: FormulaMode,
     character: char,
+    groups: &GroupIndex,
     state: &mut ScanState,
     tokens: &mut Vec<MathToken>,
     unsupported: &mut Vec<UnsupportedConstruct>,
@@ -360,7 +390,7 @@ fn scan_structural(
             Ok(())
         },
         '}' => scan_group_close(state, tokens, width),
-        '\\' => scan_slash(source, mode, state, tokens, unsupported),
+        '\\' => scan_slash(source, groups, mode, state, tokens, unsupported),
         _ => {
             state.index = state.index.saturating_add(width);
             Ok(())
@@ -410,6 +440,7 @@ fn scan_marker(
 
 fn scan_slash(
     source: &str,
+    groups: &GroupIndex,
     mode: FormulaMode,
     state: &mut ScanState,
     tokens: &mut Vec<MathToken>,
@@ -431,7 +462,9 @@ fn scan_slash(
             ));
         },
         ScannedCommandKind::Supported(supported) => {
-            scan_supported_command(source, state, tokens, command, supported)?;
+            scan_supported_command(
+                source, groups, state, tokens, command, supported,
+            )?;
         },
         ScannedCommandKind::Unsupported => {
             tokens.push(token(
@@ -455,6 +488,7 @@ fn scan_slash(
 
 fn scan_supported_command(
     source: &str,
+    groups: &GroupIndex,
     state: &mut ScanState,
     tokens: &mut Vec<MathToken>,
     command: ScannedCommand,
@@ -474,7 +508,7 @@ fn scan_supported_command(
         command.end,
         MathTokenKind::Command(supported),
     ));
-    validate_command_groups(source, command.end, supported)?;
+    validate_command_groups(source, groups, command.end, supported)?;
     if supported == SupportedCommand::BeginMatrix {
         state.matrix_depth = state.matrix_depth.saturating_add(1);
     }
@@ -504,6 +538,7 @@ fn token_coverage(tokens: &[MathToken]) -> usize {
 
 fn validate_command_groups(
     source: &str,
+    groups: &GroupIndex,
     command_end: usize,
     command: SupportedCommand,
 ) -> Result<(), MathSyntaxError> {
@@ -521,7 +556,7 @@ fn validate_command_groups(
                 MathSyntaxErrorKind::MissingRequiredGroup,
             ));
         }
-        cursor = matching_group_end(source, cursor)?;
+        cursor = matching_group_end(groups, source.len(), cursor)?;
     }
     Ok(())
 }
