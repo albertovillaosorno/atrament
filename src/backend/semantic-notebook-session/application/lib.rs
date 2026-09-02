@@ -44,7 +44,6 @@ use atrament_semantic_notebook::{
     IdentityAllocator, IdentityExhausted, InlineSpan, List, ListItem, Notebook,
     OutputProfile, Page, PaperProfile, Provenance, Style, Table, TableCell,
     TableRow, TableRowRole, semantic_identity_descriptor,
-    semantic_identity_kind,
 };
 use atrament_semantic_notebook_port::{
     AcceptanceOutcome, CANDIDATE_BLOCK_NESTING_LIMIT, CandidateGraphError,
@@ -643,42 +642,68 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
         target: AcceptedIdentity,
         geometry: atrament_semantic_notebook::PhysicalPageProfile,
     ) -> PageProfileEditOutcome {
+        let simulation = self.simulate_direct_edit(
+            base,
+            target,
+            EditableSemanticValue::PageProfile(geometry),
+        );
+        let replacement = match simulation {
+            DirectEditSimulationOutcome::Applicable {
+                requested: EditableSemanticValue::PageProfile(requested),
+                ..
+            } => requested,
+            DirectEditSimulationOutcome::Applicable { .. }
+            | DirectEditSimulationOutcome::InvalidMathematics { .. }
+            | DirectEditSimulationOutcome::TargetNotEditableValue { .. }
+            | DirectEditSimulationOutcome::UnsupportedMathematics { .. }
+            | DirectEditSimulationOutcome::ValueFamilyMismatch { .. } => {
+                return PageProfileEditOutcome::TargetNotPageProfile {
+                    revision: base,
+                    target,
+                };
+            },
+            DirectEditSimulationOutcome::InvalidPageProfile {
+                reason,
+                revision,
+                target: simulated_target,
+            } => {
+                return PageProfileEditOutcome::InvalidProfile {
+                    reason,
+                    revision,
+                    target: simulated_target,
+                };
+            },
+            DirectEditSimulationOutcome::NoAcceptedRevision => {
+                return PageProfileEditOutcome::NoAcceptedRevision;
+            },
+            DirectEditSimulationOutcome::NoOp {
+                revision,
+                target: simulated_target,
+                ..
+            } => {
+                return PageProfileEditOutcome::NoOp {
+                    revision,
+                    target: simulated_target,
+                };
+            },
+            DirectEditSimulationOutcome::StaleBase { current } => {
+                return PageProfileEditOutcome::StaleBase { current };
+            },
+            DirectEditSimulationOutcome::TargetNotFound {
+                revision,
+                target: missing_target,
+            } => {
+                return PageProfileEditOutcome::TargetNotFound {
+                    revision,
+                    target: missing_target,
+                };
+            },
+        };
         let Some(current) = self.current.as_ref() else {
             return PageProfileEditOutcome::NoAcceptedRevision;
         };
-        if current.id != base {
-            return PageProfileEditOutcome::StaleBase { current: current.id };
-        }
-        let Some(existing) = page_profile_value(&current.notebook, target)
-        else {
-            if semantic_identity_kind(&current.notebook, target).is_some() {
-                return PageProfileEditOutcome::TargetNotPageProfile {
-                    revision: current.id,
-                    target,
-                };
-            }
-            return PageProfileEditOutcome::TargetNotFound {
-                revision: current.id,
-                target,
-            };
-        };
-        if let Err(reason) = geometry.validate() {
-            return PageProfileEditOutcome::InvalidProfile {
-                reason,
-                revision: current.id,
-                target,
-            };
-        }
-        if existing == geometry {
-            return PageProfileEditOutcome::NoOp {
-                revision: current.id,
-                target,
-            };
-        }
         let mut notebook = current.notebook.clone();
-        let changed =
-            replace_page_profile_value(&mut notebook, target, geometry);
-        if !changed {
+        if !replace_page_profile_value(&mut notebook, target, replacement) {
             return PageProfileEditOutcome::TargetNotFound {
                 revision: current.id,
                 target,
