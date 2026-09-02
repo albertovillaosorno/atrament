@@ -71,3 +71,12 @@ revision while retaining their stable semantic identity.
 Expression-tree completeness, component-level formula editing, canonical
 serialization/migration round trips, formula measurement, glyph geometry,
 math-specific diagnostics, and output consumption remain future verification.
+
+Table rows now retain an explicit semantic `Header` or `Body` role through
+candidate acceptance. The accepted application boundary can replace that role
+against an exact base revision without changing the row identity or cell
+contents, including rows inside callouts, list items, and nested table cells.
+
+Merged-cell span representation, cell alignment and wrapping, ruler-like border
+geometry, table measurement, and output consumption remain future verification;
+those details are not inferred from the current representative fixture.

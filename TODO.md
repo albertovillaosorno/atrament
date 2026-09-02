@@ -223,6 +223,20 @@ math-specific diagnostics, and render/live-output consumption.
 Support merged cells, headers, alignment, wrapping, ruler-like borders, boxes,
 dividers, arrows, labels, definitions, and page references.
 
+Current executable evidence makes table header rows semantically distinct from
+ordinary body rows without coupling that meaning to visual styling. Candidate
+acceptance preserves the row role and stable row identity together with nested
+cell content. An exact-base accepted edit can change only one row role and keeps
+row identity and cells unchanged, creates one revision only for a real change,
+and treats no-op, stale, absent, non-row, and empty-session requests as typed
+no-effects. Nested tables remain addressable through callouts, list items, and
+table cells across successive revisions.
+
+The task remains open for a frozen merged-cell span model, cell alignment and
+wrapping semantics, ruler-like border geometry, table measurement/layout,
+component-level cell content commands, and the remaining structured educational
+block families.
+
 ### TODO - Implement English and Spanish text behavior
 
 Normalize Unicode, edit by grapheme, apply language-aware punctuation and
