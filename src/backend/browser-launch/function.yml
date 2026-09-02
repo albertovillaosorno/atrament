@@ -1,0 +1,9 @@
+identity:
+  id: function:browser-launch
+  name: browser-launch
+  path: src/backend/browser-launch
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: adapter-outbound

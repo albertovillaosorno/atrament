@@ -1,0 +1,17 @@
+[package]
+name = "atrament_runtime_bootstrap"
+version = "0.1.0"
+edition = "2024"
+publish = false
+license = "MIT"
+
+[dependencies]
+atrament_browser_launch = { path = "../browser-launch" }
+atrament_session_runtime = { path = "../session-runtime" }
+
+[[bin]]
+name = "atrament"
+path = "composition/main.rs"
+
+[lints]
+workspace = true

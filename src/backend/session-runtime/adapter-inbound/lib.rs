@@ -14,8 +14,8 @@
 //   - Bind non-loopback addresses or expose session-private application state.
 // - Allows:
 //   - Inputs: Local HTTP requests addressed to the canonical startup endpoint.
-//   - Outputs: Secret-free startup, frontend resources, and public health.
-//   - Side effects: Loopback socket binding, stdout startup publication, and
+//   - Outputs: Public frontend resources and health responses.
+//   - Side effects: Loopback binding, startup and recovery publication, and
 //     HTTP response writes.
 // - Split-When:
 //   - Authenticated routing needs an independently testable adapter.
@@ -34,7 +34,7 @@
 
 //! Disposable loopback transport for the Atrament browser session runtime.
 //!
-//! This binary owns pre-authentication listener admission, public frontend
+//! This adapter owns pre-authentication listener admission, public frontend
 //! resources, and health routing. Later runtime slices add authenticated
 //! session services without widening this transport boundary.
 
@@ -43,11 +43,6 @@ use std::net::{Ipv4Addr, SocketAddr, TcpListener, TcpStream};
 use std::str;
 
 const MAX_HEADER_BYTES: usize = 16 * 1024;
-const PROCESS_VERSION: &str = match option_env!("CARGO_PKG_VERSION") {
-    Some(version) => version,
-    None => "0.1.0",
-};
-const PROTOCOL_VERSION: &str = "atrament.runtime/1";
 const HTML_CONTENT_TYPE: &str = "text/html; charset=utf-8";
 const CSS_CONTENT_TYPE: &str = "text/css; charset=utf-8";
 const JAVASCRIPT_CONTENT_TYPE: &str = "text/javascript; charset=utf-8";
@@ -118,7 +113,8 @@ impl Runtime {
         &self.origin
     }
 
-    fn serve(self) {
+    /// Serve admitted HTTP requests until listener acceptance stops.
+    pub fn serve(self) {
         for incoming in self.listener.incoming() {
             match incoming {
                 Ok(mut connection) => {
@@ -131,24 +127,6 @@ impl Runtime {
             }
         }
     }
-}
-
-fn publish_startup(state: &str, origin: Option<&str>) -> io::Result<()> {
-    let origin_json = origin
-        .map_or_else(|| String::from("null"), |value| format!("\"{value}\""));
-    let stdout = io::stdout();
-    let mut output = stdout.lock();
-    writeln!(
-        output,
-        concat!(
-            "{{\"product\":\"atrament\",",
-            "\"process_version\":\"{}\",",
-            "\"protocol_version\":\"{}\",",
-            "\"origin\":{},\"state\":\"{}\"}}",
-        ),
-        PROCESS_VERSION, PROTOCOL_VERSION, origin_json, state,
-    )?;
-    output.flush()
 }
 
 fn read_request_head(stream: &mut TcpStream) -> io::Result<Vec<u8>> {
@@ -262,12 +240,4 @@ fn serve_connection(
     let response = route_request(&request, expected_host);
     stream.write_all(&response)?;
     stream.flush()
-}
-
-fn main() -> io::Result<()> {
-    publish_startup("starting", None)?;
-    let runtime = Runtime::bind()?;
-    publish_startup("listening", Some(runtime.origin()))?;
-    runtime.serve();
-    Ok(())
 }

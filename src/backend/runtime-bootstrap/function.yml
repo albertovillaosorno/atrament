@@ -1,0 +1,9 @@
+identity:
+  id: function:runtime-bootstrap
+  name: runtime-bootstrap
+  path: src/backend/runtime-bootstrap
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: composition

@@ -1,12 +1,12 @@
 [package]
-name = "atrament_session_runtime"
+name = "atrament_browser_launch"
 version = "0.1.0"
 edition = "2024"
 publish = false
 license = "MIT"
 
 [lib]
-path = "adapter-inbound/lib.rs"
+path = "adapter-outbound/lib.rs"
 
 [lints]
 workspace = true

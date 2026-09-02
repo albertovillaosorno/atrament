@@ -3,5 +3,17 @@
 version = 4
 
 [[package]]
+name = "atrament_browser_launch"
+version = "0.1.0"
+
+[[package]]
+name = "atrament_runtime_bootstrap"
+version = "0.1.0"
+dependencies = [
+ "atrament_browser_launch",
+ "atrament_session_runtime",
+]
+
+[[package]]
 name = "atrament_session_runtime"
 version = "0.1.0"

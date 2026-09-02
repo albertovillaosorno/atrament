@@ -32,7 +32,7 @@
 use std::net::{Ipv4Addr, SocketAddr};
 
 #[allow(dead_code)]
-#[path = "../src/backend/session-runtime/adapter-inbound/main.rs"]
+#[path = "../src/backend/session-runtime/adapter-inbound/lib.rs"]
 mod runtime;
 
 fn status_line(response: &[u8]) -> &str {

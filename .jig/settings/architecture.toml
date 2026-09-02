@@ -1,5 +1,11 @@
 domain = "architecture"
 schema_version = 1
 
+[component.atrament_browser_launch]
+depends_on = []
+
+[component.atrament_runtime_bootstrap]
+depends_on = ["atrament_browser_launch", "atrament_session_runtime"]
+
 [component.atrament_session_runtime]
 depends_on = []
