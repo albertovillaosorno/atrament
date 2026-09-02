@@ -334,6 +334,72 @@ pub enum TextEditOutcome {
     },
 }
 
+/// Accepted semantic value families with established direct-edit authority.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum EditableSemanticValue {
+    /// Structured mathematical source and presentation family.
+    Formula {
+        /// Semantic mathematical presentation family.
+        mode: FormulaMode,
+        /// Exact accepted authored source.
+        source: String,
+    },
+    /// Complete exact physical page-profile geometry.
+    PageProfile(PhysicalPageProfile),
+    /// Semantic table-row header/body role.
+    TableRowRole(TableRowRole),
+    /// Exact accepted authored inline Unicode text.
+    Text(String),
+}
+
+/// Result of comparing one established editable value against an exact base.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum EditableValuePreconditionOutcome {
+    /// Session has no accepted semantic revision to check.
+    NoAcceptedRevision,
+    /// Current semantic value exactly matches the expected base value.
+    Satisfied {
+        /// Current accepted semantic value.
+        actual: EditableSemanticValue,
+        /// Accepted revision checked without mutation.
+        revision: RevisionIdentity,
+        /// Existing target satisfying the value precondition.
+        target: AcceptedIdentity,
+    },
+    /// Caller names an accepted revision that is no longer current.
+    StaleBase {
+        /// Current accepted revision that rejected the stale check.
+        current: RevisionIdentity,
+    },
+    /// Target exists but has no established direct-edit value projection.
+    TargetNotEditableValue {
+        /// Semantic kind owned by the existing target.
+        kind: SemanticIdentityKind,
+        /// Accepted revision checked without mutation.
+        revision: RevisionIdentity,
+        /// Existing target with no admitted editable-value projection.
+        target: AcceptedIdentity,
+    },
+    /// Requested target is absent from the named accepted revision.
+    TargetNotFound {
+        /// Accepted revision checked without mutation.
+        revision: RevisionIdentity,
+        /// Requested identity absent from that revision.
+        target: AcceptedIdentity,
+    },
+    /// Current semantic value differs from the expected base value.
+    ValueMismatch {
+        /// Current accepted semantic value.
+        actual: EditableSemanticValue,
+        /// Semantic base value required by the precondition.
+        expected: EditableSemanticValue,
+        /// Accepted revision checked without mutation.
+        revision: RevisionIdentity,
+        /// Existing target that failed the value precondition.
+        target: AcceptedIdentity,
+    },
+}
+
 /// Expected direct owner for one local semantic identity precondition.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum IdentityOwnerExpectation {
@@ -477,6 +543,14 @@ pub trait SemanticNotebookSession {
         &mut self,
         candidate: Notebook<CandidateIdentity>,
     ) -> AcceptanceOutcome;
+
+    /// Compare one established editable semantic value against an exact base.
+    fn check_editable_value_precondition(
+        &self,
+        revision: RevisionIdentity,
+        target: AcceptedIdentity,
+        expected: EditableSemanticValue,
+    ) -> EditableValuePreconditionOutcome;
 
     /// Check local semantic kind and owner preconditions read-only.
     fn check_identity_precondition(

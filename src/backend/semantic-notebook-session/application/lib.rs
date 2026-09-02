@@ -48,6 +48,7 @@ use atrament_semantic_notebook::{
 };
 use atrament_semantic_notebook_port::{
     AcceptanceOutcome, CandidateGraphError, CandidateReferenceKind,
+    EditableSemanticValue, EditableValuePreconditionOutcome,
     FormulaEditOutcome, IdentityInspectOutcome, IdentityKindInspectOutcome,
     IdentityMapping, IdentityOwnerExpectation, IdentityPrecondition,
     IdentityPreconditionOutcome, PageProfileEditOutcome,
@@ -150,6 +151,48 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
         };
         self.current = Some(AcceptedRevision { id: revision, notebook });
         AcceptanceOutcome::Accepted { mapping, revision }
+    }
+
+    fn check_editable_value_precondition(
+        &self,
+        revision: atrament_semantic_notebook::RevisionIdentity,
+        target: AcceptedIdentity,
+        expected: EditableSemanticValue,
+    ) -> EditableValuePreconditionOutcome {
+        let Some(current) = self.current.as_ref() else {
+            return EditableValuePreconditionOutcome::NoAcceptedRevision;
+        };
+        if current.id != revision {
+            return EditableValuePreconditionOutcome::StaleBase {
+                current: current.id,
+            };
+        }
+        let Some(descriptor) =
+            semantic_identity_descriptor(&current.notebook, target)
+        else {
+            return EditableValuePreconditionOutcome::TargetNotFound {
+                revision,
+                target,
+            };
+        };
+        let Some(actual) =
+            editable_semantic_value(&current.notebook, target, descriptor.kind)
+        else {
+            return EditableValuePreconditionOutcome::TargetNotEditableValue {
+                kind: descriptor.kind,
+                revision,
+                target,
+            };
+        };
+        if actual != expected {
+            return EditableValuePreconditionOutcome::ValueMismatch {
+                actual,
+                expected,
+                revision,
+                target,
+            };
+        }
+        EditableValuePreconditionOutcome::Satisfied { actual, revision, target }
     }
 
     fn check_identity_precondition(
@@ -879,6 +922,49 @@ fn formula_content_value(
         | BlockContent::Paragraph(_)
         | BlockContent::Rule
         | BlockContent::Unresolved(_) => None,
+    }
+}
+
+fn editable_semantic_value(
+    notebook: &Notebook<AcceptedIdentity>,
+    target: AcceptedIdentity,
+    kind: atrament_semantic_notebook::SemanticIdentityKind,
+) -> Option<EditableSemanticValue> {
+    match kind {
+        atrament_semantic_notebook::SemanticIdentityKind::Formula => {
+            formula_value(notebook, target).map(|formula| {
+                EditableSemanticValue::Formula {
+                    mode: formula.mode,
+                    source: formula.source.clone(),
+                }
+            })
+        },
+        atrament_semantic_notebook::SemanticIdentityKind::InlineSpan => {
+            text_value(notebook, target)
+                .map(|value| EditableSemanticValue::Text(value.to_owned()))
+        },
+        atrament_semantic_notebook::SemanticIdentityKind::PageProfile => {
+            page_profile_value(notebook, target)
+                .map(EditableSemanticValue::PageProfile)
+        },
+        atrament_semantic_notebook::SemanticIdentityKind::TableRow => {
+            table_row_role_value(notebook, target)
+                .map(EditableSemanticValue::TableRowRole)
+        },
+        atrament_semantic_notebook::SemanticIdentityKind::Asset
+        | atrament_semantic_notebook::SemanticIdentityKind::Block(_)
+        | atrament_semantic_notebook::SemanticIdentityKind::Constraint
+        | atrament_semantic_notebook::SemanticIdentityKind::Figure
+        | atrament_semantic_notebook::SemanticIdentityKind::Flow
+        | atrament_semantic_notebook::SemanticIdentityKind::List
+        | atrament_semantic_notebook::SemanticIdentityKind::ListItem
+        | atrament_semantic_notebook::SemanticIdentityKind::Notebook
+        | atrament_semantic_notebook::SemanticIdentityKind::OutputProfile
+        | atrament_semantic_notebook::SemanticIdentityKind::Page
+        | atrament_semantic_notebook::SemanticIdentityKind::Provenance
+        | atrament_semantic_notebook::SemanticIdentityKind::Style
+        | atrament_semantic_notebook::SemanticIdentityKind::Table
+        | atrament_semantic_notebook::SemanticIdentityKind::TableCell => None,
     }
 }
 

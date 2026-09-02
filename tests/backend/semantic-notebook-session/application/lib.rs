@@ -45,6 +45,7 @@ use atrament_semantic_notebook::{
 };
 use atrament_semantic_notebook_port::{
     AcceptanceOutcome, CandidateGraphError, CandidateReferenceKind,
+    EditableSemanticValue, EditableValuePreconditionOutcome,
     FormulaEditOutcome, IdentityInspectOutcome, IdentityKindInspectOutcome,
     IdentityOwnerExpectation, IdentityPrecondition,
     IdentityPreconditionOutcome, PageProfileEditOutcome,
@@ -643,6 +644,201 @@ fn local_identity_precondition_stale_missing_and_empty_are_typed() {
     assert_eq!(
         empty.check_identity_precondition(current, row, any),
         IdentityPreconditionOutcome::NoAcceptedRevision,
+    );
+}
+
+#[test]
+fn editable_value_precondition_accepts_exact_text_and_formula_read_only() {
+    let ids = IdentityAllocator::new();
+    let (text_candidate, span) =
+        candidate_notebook_with_span(&ids, "energía cinética");
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(text_candidate)
+    else {
+        panic!("text candidate must be accepted");
+    };
+    let span = accepted_for(&mapping, span);
+    let before = session.current().expect("accepted revision").clone();
+    let text = EditableSemanticValue::Text(String::from("energía cinética"));
+    assert_eq!(
+        session
+            .check_editable_value_precondition(revision, span, text.clone(),),
+        EditableValuePreconditionOutcome::Satisfied {
+            actual: text,
+            revision,
+            target: span,
+        },
+    );
+    assert_eq!(session.current(), Some(&before));
+
+    let source = r"E &= K + U \\ K &= \frac{1}{2}mv^2";
+    let (formula_candidate, formula) =
+        candidate_math_notebook(&ids, source, FormulaMode::Aligned);
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(formula_candidate)
+    else {
+        panic!("formula candidate must be accepted");
+    };
+    let formula = accepted_for(&mapping, formula);
+    let before = session.current().expect("accepted revision").clone();
+    let expected = EditableSemanticValue::Formula {
+        mode: FormulaMode::Aligned,
+        source: source.to_owned(),
+    };
+    assert_eq!(
+        session.check_editable_value_precondition(
+            revision,
+            formula,
+            expected.clone(),
+        ),
+        EditableValuePreconditionOutcome::Satisfied {
+            actual: expected,
+            revision,
+            target: formula,
+        },
+    );
+    assert_eq!(session.current(), Some(&before));
+}
+
+#[test]
+fn editable_value_precondition_accepts_row_role_and_page_profile() {
+    let ids = IdentityAllocator::new();
+    let (candidate, row, _) =
+        candidate_table_notebook(&ids, TableRowRole::Header);
+    let page_profile = candidate.page_profiles[0].id;
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(candidate)
+    else {
+        panic!("table candidate must be accepted");
+    };
+    let row = accepted_for(&mapping, row);
+    let page_profile = accepted_for(&mapping, page_profile);
+    let before = session.current().expect("accepted revision").clone();
+    let role = EditableSemanticValue::TableRowRole(TableRowRole::Header);
+    assert_eq!(
+        session.check_editable_value_precondition(revision, row, role.clone(),),
+        EditableValuePreconditionOutcome::Satisfied {
+            actual: role,
+            revision,
+            target: row,
+        },
+    );
+    let geometry = EditableSemanticValue::PageProfile(physical_page_profile());
+    assert_eq!(
+        session.check_editable_value_precondition(
+            revision,
+            page_profile,
+            geometry.clone(),
+        ),
+        EditableValuePreconditionOutcome::Satisfied {
+            actual: geometry,
+            revision,
+            target: page_profile,
+        },
+    );
+    assert_eq!(session.current(), Some(&before));
+}
+
+#[test]
+fn editable_value_precondition_reports_mismatch_and_noneditable_target() {
+    let ids = IdentityAllocator::new();
+    let (candidate, span) = candidate_notebook_with_span(&ids, "base text");
+    let notebook = candidate.id;
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(candidate)
+    else {
+        panic!("text candidate must be accepted");
+    };
+    let span = accepted_for(&mapping, span);
+    let notebook = accepted_for(&mapping, notebook);
+    let before = session.current().expect("accepted revision").clone();
+    let expected = EditableSemanticValue::Text(String::from("other text"));
+    assert_eq!(
+        session.check_editable_value_precondition(
+            revision,
+            span,
+            expected.clone(),
+        ),
+        EditableValuePreconditionOutcome::ValueMismatch {
+            actual: EditableSemanticValue::Text(String::from("base text")),
+            expected,
+            revision,
+            target: span,
+        },
+    );
+    let wrong_family = EditableSemanticValue::TableRowRole(TableRowRole::Body);
+    assert_eq!(
+        session.check_editable_value_precondition(
+            revision,
+            span,
+            wrong_family.clone(),
+        ),
+        EditableValuePreconditionOutcome::ValueMismatch {
+            actual: EditableSemanticValue::Text(String::from("base text")),
+            expected: wrong_family,
+            revision,
+            target: span,
+        },
+    );
+    assert_eq!(
+        session.check_editable_value_precondition(
+            revision,
+            notebook,
+            EditableSemanticValue::Text(String::new()),
+        ),
+        EditableValuePreconditionOutcome::TargetNotEditableValue {
+            kind: SemanticIdentityKind::Notebook,
+            revision,
+            target: notebook,
+        },
+    );
+    assert_eq!(session.current(), Some(&before));
+}
+
+#[test]
+fn editable_value_precondition_stale_missing_and_empty_are_typed() {
+    let ids = IdentityAllocator::new();
+    let (candidate, span) = candidate_notebook_with_span(&ids, "base text");
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(candidate)
+    else {
+        panic!("text candidate must be accepted");
+    };
+    let span = accepted_for(&mapping, span);
+    let replacement = candidate_notebook(&ids, "replacement");
+    let AcceptanceOutcome::Accepted { revision: current, .. } =
+        session.accept(replacement)
+    else {
+        panic!("replacement candidate must be accepted");
+    };
+    let expected = EditableSemanticValue::Text(String::from("base text"));
+    assert_eq!(
+        session.check_editable_value_precondition(
+            revision,
+            span,
+            expected.clone(),
+        ),
+        EditableValuePreconditionOutcome::StaleBase { current },
+    );
+    assert_eq!(
+        session.check_editable_value_precondition(
+            current,
+            span,
+            expected.clone(),
+        ),
+        EditableValuePreconditionOutcome::TargetNotFound {
+            revision: current,
+            target: span,
+        },
+    );
+    let empty = SemanticNotebookSessionService::default();
+    assert_eq!(
+        empty.check_editable_value_precondition(current, span, expected),
+        EditableValuePreconditionOutcome::NoAcceptedRevision,
     );
 }
 
