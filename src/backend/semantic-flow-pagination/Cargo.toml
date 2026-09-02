@@ -1,0 +1,16 @@
+[package]
+name = "atrament_semantic_flow_pagination"
+version = "0.1.0"
+edition = "2024"
+publish = false
+license = "MIT"
+
+[dependencies]
+atrament_flow_pagination = { path = "../flow-pagination" }
+atrament_semantic_notebook = { path = "../semantic-notebook" }
+
+[lib]
+path = "application/lib.rs"
+
+[lints]
+workspace = true

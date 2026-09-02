@@ -40,6 +40,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "atrament_semantic_flow_pagination"
+version = "0.1.0"
+dependencies = [
+ "atrament_flow_pagination",
+ "atrament_semantic_notebook",
+]
+
+[[package]]
 name = "atrament_semantic_notebook"
 version = "0.1.0"
 dependencies = [

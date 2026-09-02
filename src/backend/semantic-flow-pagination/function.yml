@@ -1,0 +1,9 @@
+identity:
+  id: function:semantic-flow-pagination
+  name: semantic-flow-pagination
+  path: src/backend/semantic-flow-pagination
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: application
