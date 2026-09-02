@@ -509,6 +509,175 @@ fn formula_value_for_test(
 }
 
 #[test]
+fn direct_formula_edit_reaches_nested_structures_across_revisions() {
+    let ids = IdentityAllocator::new();
+    let notebook_id = candidate_id(&ids);
+    let profile_id = candidate_id(&ids);
+    let page_id = candidate_id(&ids);
+    let flow_id = candidate_id(&ids);
+    let callout_owner = candidate_id(&ids);
+    let callout_block = candidate_id(&ids);
+    let callout_formula = candidate_id(&ids);
+    let list_owner = candidate_id(&ids);
+    let list_id = candidate_id(&ids);
+    let list_item = candidate_id(&ids);
+    let list_block = candidate_id(&ids);
+    let list_formula = candidate_id(&ids);
+    let table_owner = candidate_id(&ids);
+    let table_id = candidate_id(&ids);
+    let table_row = candidate_id(&ids);
+    let table_cell = candidate_id(&ids);
+    let table_block = candidate_id(&ids);
+    let table_formula = candidate_id(&ids);
+    let candidate = Notebook {
+        assets: vec![],
+        constraints: vec![],
+        extensions: vec![],
+        id: notebook_id,
+        output_profiles: vec![],
+        page_profiles: vec![PaperProfile {
+            geometry: physical_page_profile(),
+            id: profile_id,
+        }],
+        pages: vec![Page {
+            flows: vec![Flow {
+                blocks: vec![
+                    Block {
+                        content: BlockContent::Callout(vec![Block {
+                            content: BlockContent::Mathematics(Formula {
+                                id: callout_formula,
+                                mode: FormulaMode::Display,
+                                source: String::from("a = 1"),
+                            }),
+                            extensions: vec![],
+                            id: callout_block,
+                            provenance: None,
+                            style: None,
+                        }]),
+                        extensions: vec![],
+                        id: callout_owner,
+                        provenance: None,
+                        style: None,
+                    },
+                    Block {
+                        content: BlockContent::List(List {
+                            id: list_id,
+                            items: vec![ListItem {
+                                blocks: vec![Block {
+                                    content: BlockContent::Mathematics(
+                                        Formula {
+                                            id: list_formula,
+                                            mode: FormulaMode::Inline,
+                                            source: String::from("b = 2"),
+                                        },
+                                    ),
+                                    extensions: vec![],
+                                    id: list_block,
+                                    provenance: None,
+                                    style: None,
+                                }],
+                                id: list_item,
+                            }],
+                            ordered: false,
+                        }),
+                        extensions: vec![],
+                        id: list_owner,
+                        provenance: None,
+                        style: None,
+                    },
+                    Block {
+                        content: BlockContent::Table(Table {
+                            id: table_id,
+                            rows: vec![TableRow {
+                                cells: vec![TableCell {
+                                    blocks: vec![Block {
+                                        content: BlockContent::Mathematics(
+                                            Formula {
+                                                id: table_formula,
+                                                mode: FormulaMode::Display,
+                                                source: String::from("c = 3"),
+                                            },
+                                        ),
+                                        extensions: vec![],
+                                        id: table_block,
+                                        provenance: None,
+                                        style: None,
+                                    }],
+                                    id: table_cell,
+                                }],
+                                id: table_row,
+                            }],
+                        }),
+                        extensions: vec![],
+                        id: table_owner,
+                        provenance: None,
+                        style: None,
+                    },
+                ],
+                id: flow_id,
+            }],
+            id: page_id,
+            page_profile: profile_id,
+        }],
+        provenance: vec![],
+        styles: vec![],
+    };
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, mut revision } =
+        session.accept(candidate)
+    else {
+        panic!("nested formula candidate must be accepted");
+    };
+    for (candidate_formula, source) in [
+        (callout_formula, "a = 10"),
+        (list_formula, "b = 20"),
+        (table_formula, "c = 30"),
+    ] {
+        let target = accepted_for(&mapping, candidate_formula);
+        let FormulaEditOutcome::Applied { revision: next, .. } = session
+            .replace_formula(
+                revision,
+                target,
+                FormulaMode::Display,
+                source.to_owned(),
+            )
+        else {
+            panic!("nested formula edit must apply");
+        };
+        assert_ne!(next, revision);
+        revision = next;
+    }
+    let current = session.current().expect("nested formula revision");
+    let blocks = &current.notebook.pages[0].flows[0].blocks;
+    let BlockContent::Callout(callout) = &blocks[0].content else {
+        panic!("callout must remain a callout");
+    };
+    let BlockContent::Mathematics(callout_math) = &callout[0].content else {
+        panic!("callout child must remain mathematics");
+    };
+    assert_eq!(callout_math.source, "a = 10");
+    let BlockContent::List(list) = &blocks[1].content else {
+        panic!("list must remain a list");
+    };
+    let BlockContent::Mathematics(list_math) = &list.items[0].blocks[0].content
+    else {
+        panic!("list child must remain mathematics");
+    };
+    assert_eq!(list_math.mode, FormulaMode::Display);
+    assert_eq!(list_math.source, "b = 20");
+    let BlockContent::Table(table) = &blocks[2].content else {
+        panic!("table must remain a table");
+    };
+    let BlockContent::Mathematics(table_math) =
+        &table.rows[0].cells[0].blocks[0].content
+    else {
+        panic!("table child must remain mathematics");
+    };
+    assert_eq!(table_math.source, "c = 30");
+    assert_eq!(current.id, revision);
+}
+
+#[test]
 fn first_candidate_acceptance_commits_one_revision_and_identity_mapping() {
     let candidate_ids = IdentityAllocator::new();
     let candidate = candidate_notebook(&candidate_ids, "candidate text");
