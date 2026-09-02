@@ -37,6 +37,9 @@
 use std::cell::Cell;
 use std::num::NonZeroU64;
 
+pub use atrament_mathematics_source::{
+    FormulaMode, MathSyntaxError, MathSyntaxErrorKind,
+};
 pub use atrament_physical_page_profile::{
     PageProfile as PhysicalPageProfile,
     PageProfileError as PhysicalPageProfileError,
@@ -170,7 +173,9 @@ pub struct Flow<Identity> {
 pub struct Formula<Identity> {
     /// Stable or candidate-local semantic identity.
     pub id: Identity,
-    /// Exact authored mathematical source retained for later parsing.
+    /// Semantic presentation family for this mathematical unit.
+    pub mode: FormulaMode,
+    /// Exact authored mathematical source retained without rewriting.
     pub source: String,
 }
 

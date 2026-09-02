@@ -37,8 +37,9 @@ use atrament_physical_page_profile::{
 use atrament_semantic_notebook::{
     AcceptedIdentity, Asset, Block, BlockContent, CandidateIdentity,
     Constraint, ConstraintKind, ExtensionData, Figure, Flow, Formula,
-    IdentityAllocator, InlineSpan, List, ListItem, Notebook, OutputProfile,
-    Page, PaperProfile, Provenance, ProvenanceKind, Style, Table, TableCell,
+    FormulaMode, IdentityAllocator, InlineSpan, List, ListItem,
+    MathSyntaxError, MathSyntaxErrorKind, Notebook, OutputProfile, Page,
+    PaperProfile, Provenance, ProvenanceKind, Style, Table, TableCell,
     TableRow, UnresolvedBlock, UnresolvedReason,
 };
 use atrament_semantic_notebook_port::{
@@ -148,6 +149,143 @@ fn candidate_notebook_with_span(
         styles: vec![],
     };
     (notebook, span_id)
+}
+
+fn candidate_math_notebook(
+    identities: &IdentityAllocator,
+    source: &str,
+    mode: FormulaMode,
+) -> (Notebook<CandidateIdentity>, CandidateIdentity) {
+    let notebook_id = candidate_id(identities);
+    let page_id = candidate_id(identities);
+    let page_profile_id = candidate_id(identities);
+    let flow_id = candidate_id(identities);
+    let block_id = candidate_id(identities);
+    let formula_id = candidate_id(identities);
+    let notebook = Notebook {
+        assets: vec![],
+        constraints: vec![],
+        extensions: vec![],
+        id: notebook_id,
+        output_profiles: vec![],
+        page_profiles: vec![PaperProfile {
+            geometry: physical_page_profile(),
+            id: page_profile_id,
+        }],
+        pages: vec![Page {
+            flows: vec![Flow {
+                blocks: vec![Block {
+                    content: BlockContent::Mathematics(Formula {
+                        id: formula_id,
+                        mode,
+                        source: source.to_owned(),
+                    }),
+                    extensions: vec![],
+                    id: block_id,
+                    provenance: None,
+                    style: None,
+                }],
+                id: flow_id,
+            }],
+            id: page_id,
+            page_profile: page_profile_id,
+        }],
+        provenance: vec![],
+        styles: vec![],
+    };
+    (notebook, formula_id)
+}
+
+#[test]
+fn accepted_aligned_mathematics_preserves_exact_source_and_mode() {
+    let ids = IdentityAllocator::new();
+    let source = r"y &= (3x^2 + 1)^5 \\ y' &= 30x(3x^2 + 1)^4";
+    let (candidate, formula) =
+        candidate_math_notebook(&ids, source, FormulaMode::Aligned);
+    let mut session = SemanticNotebookSessionService::default();
+    let outcome = session.accept(candidate);
+    let AcceptanceOutcome::Accepted { mapping, .. } = outcome else {
+        panic!("supported aligned formula must be accepted: {outcome:?}");
+    };
+    let accepted_formula = accepted_for(&mapping, formula);
+    let current = session.current().expect("accepted revision");
+    let BlockContent::Mathematics(stored) =
+        &current.notebook.pages[0].flows[0].blocks[0].content
+    else {
+        panic!("formula block must remain mathematics");
+    };
+    assert_eq!(stored.id, accepted_formula);
+    assert_eq!(stored.mode, FormulaMode::Aligned);
+    assert_eq!(stored.source, source);
+}
+
+#[test]
+fn unsupported_mathematics_rejects_atomically_instead_of_substituting() {
+    let ids = IdentityAllocator::new();
+    let valid = candidate_notebook(&ids, "accepted text");
+    let (unsupported, formula) =
+        candidate_math_notebook(&ids, r"x + \mystery{y}", FormulaMode::Display);
+    let mut session = SemanticNotebookSessionService::default();
+    let _ = session.accept(valid);
+    let before = session.current().expect("accepted revision").clone();
+    assert_eq!(
+        session.accept(unsupported),
+        AcceptanceOutcome::InvalidCandidate {
+            reason: CandidateGraphError::UnsupportedMathematics {
+                candidate: formula,
+            },
+        },
+    );
+    assert_eq!(session.current(), Some(&before));
+}
+
+#[test]
+fn malformed_mathematics_rejects_atomically_with_typed_syntax_failure() {
+    let ids = IdentityAllocator::new();
+    let valid = candidate_notebook(&ids, "accepted text");
+    let (malformed, formula) =
+        candidate_math_notebook(&ids, r"\frac{1}", FormulaMode::Display);
+    let mut session = SemanticNotebookSessionService::default();
+    let _ = session.accept(valid);
+    let before = session.current().expect("accepted revision").clone();
+    assert_eq!(
+        session.accept(malformed),
+        AcceptanceOutcome::InvalidCandidate {
+            reason: CandidateGraphError::InvalidMathematics {
+                candidate: formula,
+                reason: MathSyntaxError {
+                    byte_offset: 8,
+                    kind: MathSyntaxErrorKind::MissingRequiredGroup,
+                },
+            },
+        },
+    );
+    assert_eq!(session.current(), Some(&before));
+}
+
+#[test]
+fn unsupported_mathematics_can_be_preserved_as_exact_unresolved_source() {
+    let ids = IdentityAllocator::new();
+    let mut candidate = candidate_notebook(&ids, "placeholder");
+    let source = r"x + \mystery{y}";
+    candidate.pages[0].flows[0].blocks[0].content =
+        BlockContent::Unresolved(UnresolvedBlock {
+            extensions: vec![],
+            reason: UnresolvedReason::Unsupported,
+            source: source.to_owned(),
+        });
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { .. } = session.accept(candidate) else {
+        panic!("typed unresolved source must remain admissible");
+    };
+    let current = session.current().expect("accepted revision");
+    let BlockContent::Unresolved(unresolved) =
+        &current.notebook.pages[0].flows[0].blocks[0].content
+    else {
+        panic!("unsupported source must remain unresolved");
+    };
+    assert_eq!(unresolved.reason, UnresolvedReason::Unsupported);
+    assert_eq!(unresolved.source, source);
 }
 
 #[test]
@@ -380,6 +518,7 @@ fn nested_semantic_families_promote_all_owned_and_referenced_identities() {
                     Block {
                         content: BlockContent::Mathematics(Formula {
                             id: formula_id,
+                            mode: FormulaMode::Display,
                             source: String::from("E = mc^2"),
                         }),
                         extensions: vec![],

@@ -37,6 +37,7 @@
 use std::collections::BTreeMap;
 use std::fmt;
 
+use atrament_mathematics_source::analyze;
 use atrament_semantic_notebook::{
     AcceptedIdentity, AcceptedRevision, Asset, Block, BlockContent,
     CandidateIdentity, Constraint, Figure, Flow, Formula, IdentityAllocator,
@@ -393,6 +394,7 @@ fn accept_formula(
 ) -> Result<Formula<AcceptedIdentity>, CandidateGraphError> {
     Ok(Formula {
         id: accepted_id(formula.id, identities)?,
+        mode: formula.mode,
         source: formula.source,
     })
 }
@@ -891,6 +893,18 @@ fn candidate_block_content(
         BlockContent::Figure(figure) => candidate_figure(figure, graph),
         BlockContent::List(list) => candidate_list(list, graph),
         BlockContent::Mathematics(formula) => {
+            let analyzed =
+                analyze(&formula.source, formula.mode).map_err(|reason| {
+                    CandidateGraphError::InvalidMathematics {
+                        candidate: formula.id,
+                        reason,
+                    }
+                })?;
+            if !analyzed.is_supported() {
+                return Err(CandidateGraphError::UnsupportedMathematics {
+                    candidate: formula.id,
+                });
+            }
             graph.register(formula.id, CandidateReferenceKind::Semantic)
         },
         BlockContent::Rule | BlockContent::Unresolved(_) => Ok(()),

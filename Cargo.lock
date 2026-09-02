@@ -80,6 +80,7 @@ dependencies = [
 name = "atrament_semantic_notebook"
 version = "0.1.0"
 dependencies = [
+ "atrament_mathematics_source",
  "atrament_physical_page_profile",
 ]
 
@@ -94,6 +95,7 @@ dependencies = [
 name = "atrament_semantic_notebook_session"
 version = "0.1.0"
 dependencies = [
+ "atrament_mathematics_source",
  "atrament_semantic_notebook",
  "atrament_semantic_notebook_port",
 ]

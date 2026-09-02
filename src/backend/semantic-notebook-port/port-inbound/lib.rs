@@ -35,7 +35,8 @@
 
 use atrament_semantic_notebook::{
     AcceptedIdentity, AcceptedRevision, CandidateIdentity, IdentityExhausted,
-    Notebook, PhysicalPageProfile, PhysicalPageProfileError, RevisionIdentity,
+    MathSyntaxError, Notebook, PhysicalPageProfile, PhysicalPageProfileError,
+    RevisionIdentity,
 };
 
 /// Result of one explicit candidate acceptance request.
@@ -68,6 +69,13 @@ pub enum CandidateGraphError {
         /// Reused candidate-local identity.
         candidate: CandidateIdentity,
     },
+    /// One mathematical source is structurally malformed for its declared mode.
+    InvalidMathematics {
+        /// Candidate-local formula identity whose source is malformed.
+        candidate: CandidateIdentity,
+        /// Typed mathematical source-shape failure.
+        reason: MathSyntaxError,
+    },
     /// One owned physical page profile has invalid exact geometry.
     InvalidPageProfile {
         /// Candidate-local profile identity whose geometry is invalid.
@@ -87,6 +95,11 @@ pub enum CandidateGraphError {
         candidate: CandidateIdentity,
         /// Semantic owner class required at this reference site.
         expected: CandidateReferenceKind,
+    },
+    /// One balanced mathematical source uses unsupported TeX-like constructs.
+    UnsupportedMathematics {
+        /// Candidate-local formula identity requiring unresolved treatment.
+        candidate: CandidateIdentity,
     },
 }
 
