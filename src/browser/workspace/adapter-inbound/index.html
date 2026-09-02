@@ -65,6 +65,7 @@
             id="copy-prompt"
             type="button"
             autocomplete="off"
+            aria-describedby="clipboard-help"
             disabled
           >
             Copy prompt
@@ -149,12 +150,16 @@
             disabled
             autocomplete="off"
             aria-labelledby="prompt-title"
-            aria-describedby="copy-status"
+            aria-describedby="clipboard-help copy-status"
             spellcheck="false"
             rows="5"
             readonly
             placeholder="The backend-produced prompt appears here."
           ></textarea>
+          <p class="field-help" id="clipboard-help">
+            Copy writes this prompt to your system clipboard; that copy can
+            outlive this Atrament session.
+          </p>
           <p
             class="action-status"
             id="copy-status"
