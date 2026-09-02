@@ -74,6 +74,26 @@ pub enum CandidateGraphError {
         /// Candidate-local identity that could not be resolved.
         candidate: CandidateIdentity,
     },
+    /// One reference resolves to an owner of the wrong semantic class.
+    ReferenceKindMismatch {
+        /// Candidate-local identity resolving to the wrong owner class.
+        candidate: CandidateIdentity,
+        /// Semantic owner class required at this reference site.
+        expected: CandidateReferenceKind,
+    },
+}
+
+/// Semantic owner class required by one candidate identity reference.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub enum CandidateReferenceKind {
+    /// Reference must identify a semantic asset.
+    Asset,
+    /// Reference must identify a provenance record.
+    Provenance,
+    /// Reference may identify any owned semantic object.
+    Semantic,
+    /// Reference must identify a semantic style.
+    Style,
 }
 
 /// One candidate-local identity promoted to a new accepted semantic identity.

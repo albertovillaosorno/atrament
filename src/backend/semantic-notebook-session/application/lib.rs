@@ -34,7 +34,7 @@
 
 //! Atomic in-memory acceptance of complete semantic notebook candidates.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 use std::fmt;
 
 use atrament_semantic_notebook::{
@@ -44,40 +44,54 @@ use atrament_semantic_notebook::{
     Page, Provenance, Style, Table, TableCell, TableRow,
 };
 use atrament_semantic_notebook_port::{
-    AcceptanceOutcome, CandidateGraphError, IdentityMapping,
-    SemanticNotebookSession,
+    AcceptanceOutcome, CandidateGraphError, CandidateReferenceKind,
+    IdentityMapping, SemanticNotebookSession,
 };
 
 #[derive(Debug, Default)]
 struct CandidateGraph {
     owners: Vec<CandidateIdentity>,
-    references: Vec<CandidateIdentity>,
-    seen: BTreeSet<CandidateIdentity>,
+    references: Vec<(CandidateIdentity, CandidateReferenceKind)>,
+    seen: BTreeMap<CandidateIdentity, CandidateReferenceKind>,
 }
 
 impl CandidateGraph {
     fn finish(self) -> Result<Vec<CandidateIdentity>, CandidateGraphError> {
-        for reference in self.references {
-            if !self.seen.contains(&reference) {
+        for (reference, expected) in self.references {
+            let Some(observed) = self.seen.get(&reference) else {
                 return Err(CandidateGraphError::MissingReference {
                     candidate: reference,
+                });
+            };
+            if expected != CandidateReferenceKind::Semantic
+                && *observed != expected
+            {
+                return Err(CandidateGraphError::ReferenceKindMismatch {
+                    candidate: reference,
+                    expected,
                 });
             }
         }
         Ok(self.owners)
     }
 
-    fn reference(&mut self, identity: Option<CandidateIdentity>) {
+    fn reference(
+        &mut self,
+        identity: Option<CandidateIdentity>,
+        kind: CandidateReferenceKind,
+    ) {
         if let Some(reference) = identity {
-            self.references.push(reference);
+            self.references.push((reference, kind));
         }
     }
 
     fn register(
         &mut self,
         identity: CandidateIdentity,
+        kind: CandidateReferenceKind,
     ) -> Result<(), CandidateGraphError> {
-        if !self.seen.insert(identity) {
+        let previous = self.seen.insert(identity, kind);
+        if previous.is_some() {
             return Err(CandidateGraphError::Duplicate { candidate: identity });
         }
         self.owners.push(identity);
@@ -466,9 +480,9 @@ fn candidate_block(
     block: &Block<CandidateIdentity>,
     graph: &mut CandidateGraph,
 ) -> Result<(), CandidateGraphError> {
-    graph.register(block.id)?;
-    graph.reference(block.provenance);
-    graph.reference(block.style);
+    graph.register(block.id, CandidateReferenceKind::Semantic)?;
+    graph.reference(block.provenance, CandidateReferenceKind::Provenance);
+    graph.reference(block.style, CandidateReferenceKind::Style);
     candidate_block_content(&block.content, graph)
 }
 
@@ -485,7 +499,9 @@ fn candidate_block_content(
         | BlockContent::Paragraph(spans) => candidate_spans(spans, graph),
         BlockContent::Figure(figure) => candidate_figure(figure, graph),
         BlockContent::List(list) => candidate_list(list, graph),
-        BlockContent::Mathematics(formula) => graph.register(formula.id),
+        BlockContent::Mathematics(formula) => {
+            graph.register(formula.id, CandidateReferenceKind::Semantic)
+        },
         BlockContent::Rule | BlockContent::Unresolved(_) => Ok(()),
         BlockContent::Table(table) => candidate_table(table, graph),
     }
@@ -505,8 +521,8 @@ fn candidate_figure(
     figure: &Figure<CandidateIdentity>,
     graph: &mut CandidateGraph,
 ) -> Result<(), CandidateGraphError> {
-    graph.register(figure.id)?;
-    graph.reference(figure.asset);
+    graph.register(figure.id, CandidateReferenceKind::Semantic)?;
+    graph.reference(figure.asset, CandidateReferenceKind::Asset);
     candidate_spans(&figure.caption, graph)
 }
 
@@ -514,7 +530,7 @@ fn candidate_flow(
     flow: &Flow<CandidateIdentity>,
     graph: &mut CandidateGraph,
 ) -> Result<(), CandidateGraphError> {
-    graph.register(flow.id)?;
+    graph.register(flow.id, CandidateReferenceKind::Semantic)?;
     candidate_blocks(&flow.blocks, graph)
 }
 
@@ -522,25 +538,28 @@ fn candidate_identities(
     notebook: &Notebook<CandidateIdentity>,
 ) -> Result<Vec<CandidateIdentity>, CandidateGraphError> {
     let mut graph = CandidateGraph::default();
-    graph.register(notebook.id)?;
+    graph.register(notebook.id, CandidateReferenceKind::Semantic)?;
     for asset in &notebook.assets {
-        graph.register(asset.id)?;
+        graph.register(asset.id, CandidateReferenceKind::Asset)?;
     }
     for constraint in &notebook.constraints {
-        graph.register(constraint.id)?;
-        graph.reference(Some(constraint.target));
+        graph.register(constraint.id, CandidateReferenceKind::Semantic)?;
+        graph.reference(
+            Some(constraint.target),
+            CandidateReferenceKind::Semantic,
+        );
     }
     for profile in &notebook.output_profiles {
-        graph.register(profile.id)?;
+        graph.register(profile.id, CandidateReferenceKind::Semantic)?;
     }
     for page in &notebook.pages {
         candidate_page(page, &mut graph)?;
     }
     for provenance in &notebook.provenance {
-        graph.register(provenance.id)?;
+        graph.register(provenance.id, CandidateReferenceKind::Provenance)?;
     }
     for style in &notebook.styles {
-        graph.register(style.id)?;
+        graph.register(style.id, CandidateReferenceKind::Style)?;
     }
     graph.finish()
 }
@@ -549,9 +568,9 @@ fn candidate_list(
     list: &List<CandidateIdentity>,
     graph: &mut CandidateGraph,
 ) -> Result<(), CandidateGraphError> {
-    graph.register(list.id)?;
+    graph.register(list.id, CandidateReferenceKind::Semantic)?;
     for item in &list.items {
-        graph.register(item.id)?;
+        graph.register(item.id, CandidateReferenceKind::Semantic)?;
         candidate_blocks(&item.blocks, graph)?;
     }
     Ok(())
@@ -561,7 +580,7 @@ fn candidate_page(
     page: &Page<CandidateIdentity>,
     graph: &mut CandidateGraph,
 ) -> Result<(), CandidateGraphError> {
-    graph.register(page.id)?;
+    graph.register(page.id, CandidateReferenceKind::Semantic)?;
     for flow in &page.flows {
         candidate_flow(flow, graph)?;
     }
@@ -573,9 +592,9 @@ fn candidate_spans(
     graph: &mut CandidateGraph,
 ) -> Result<(), CandidateGraphError> {
     for span in spans {
-        graph.register(span.id)?;
-        graph.reference(span.provenance);
-        graph.reference(span.style);
+        graph.register(span.id, CandidateReferenceKind::Semantic)?;
+        graph.reference(span.provenance, CandidateReferenceKind::Provenance);
+        graph.reference(span.style, CandidateReferenceKind::Style);
     }
     Ok(())
 }
@@ -584,11 +603,11 @@ fn candidate_table(
     table: &Table<CandidateIdentity>,
     graph: &mut CandidateGraph,
 ) -> Result<(), CandidateGraphError> {
-    graph.register(table.id)?;
+    graph.register(table.id, CandidateReferenceKind::Semantic)?;
     for row in &table.rows {
-        graph.register(row.id)?;
+        graph.register(row.id, CandidateReferenceKind::Semantic)?;
         for cell in &row.cells {
-            graph.register(cell.id)?;
+            graph.register(cell.id, CandidateReferenceKind::Semantic)?;
             candidate_blocks(&cell.blocks, graph)?;
         }
     }

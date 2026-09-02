@@ -37,7 +37,8 @@ use atrament_semantic_notebook::{
     UnresolvedBlock, UnresolvedReason,
 };
 use atrament_semantic_notebook_port::{
-    AcceptanceOutcome, CandidateGraphError, SemanticNotebookSession,
+    AcceptanceOutcome, CandidateGraphError, CandidateReferenceKind,
+    SemanticNotebookSession,
 };
 use atrament_semantic_notebook_session::SemanticNotebookSessionService;
 
@@ -415,4 +416,30 @@ fn nested_semantic_families_promote_all_owned_and_referenced_identities() {
         current.notebook.output_profiles[0].id,
         accepted_for(&mapping, profile_id),
     );
+}
+
+#[test]
+fn wrong_reference_kind_rejects_without_changing_current_revision() {
+    let candidate_ids = IdentityAllocator::new();
+    let valid = candidate_notebook(&candidate_ids, "accepted");
+    let mut invalid = candidate_notebook(&candidate_ids, "wrong reference");
+    let page_id = invalid.pages[0].id;
+    let BlockContent::Paragraph(spans) =
+        &mut invalid.pages[0].flows[0].blocks[0].content
+    else {
+        panic!("fixture block must be a paragraph");
+    };
+    spans[0].style = Some(page_id);
+    let mut session = SemanticNotebookSessionService::default();
+    let _ = session.accept(valid);
+    let before = session.current().expect("accepted revision").clone();
+
+    let outcome = session.accept(invalid);
+    assert!(matches!(outcome, AcceptanceOutcome::InvalidCandidate {
+        reason: CandidateGraphError::ReferenceKindMismatch {
+            expected: CandidateReferenceKind::Style,
+            ..
+        },
+    }));
+    assert_eq!(session.current(), Some(&before));
 }
