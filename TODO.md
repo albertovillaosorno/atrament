@@ -232,10 +232,11 @@ UTF-8 bytes through the presented prompt, mocked clipboard `writeText`, and raw
 response surfaces with exact content equality and one write. A separate newline
 probe showed that Firefox textareas normalize `CRLF` and lone `CR` to `LF`, so
 the frozen browser text contract now requires backend prompts to present
-canonical `LF` and treats line-ending representation as non-semantic. These
-probes do not define a backend protocol limit or prove operating-system
-clipboard
-capacity.
+canonical `LF` and treats line-ending representation as non-semantic. A control
+probe with canonical `LF`, separate NFC/NFD accents, and emoji ZWJ sequences
+preserved every observed code point through prompt, mocked clipboard write, and
+raw response. These probes do not define a backend protocol limit or prove
+operating-system clipboard capacity.
 
 A hostile-text transport probe placed script markup, a fetch expression,
 out-of-scope command prose, file-export prose, hardware-start prose, JSON-like
