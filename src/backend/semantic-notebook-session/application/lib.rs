@@ -52,7 +52,8 @@ use atrament_semantic_notebook_port::{
     CommandCapabilityCompatibilityOutcome, CommandFamilyAdmissionOutcome,
     CommandFamilyCapability, CommandResourceLimits, CommandTargetMaterial,
     CommandTargetMaterialOutcome, CommandTargetPreconditionOutcome,
-    CommandTargetPreconditions, EditableSemanticValue,
+    CommandTargetPreconditions, DirectEditSimulationOutcome,
+    EditableSemanticValue, EditableSemanticValueKind,
     EditableValuePreconditionOutcome, FormulaEditOutcome,
     IdentityInspectOutcome, IdentityKindInspectOutcome, IdentityMapping,
     IdentityOwnerExpectation, IdentityPrecondition,
@@ -751,6 +752,94 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
         self.current = Some(AcceptedRevision { id: revision, notebook });
         TextEditOutcome::Applied { base, revision, target }
     }
+
+    fn simulate_direct_edit(
+        &self,
+        revision: atrament_semantic_notebook::RevisionIdentity,
+        target: AcceptedIdentity,
+        requested: EditableSemanticValue,
+    ) -> DirectEditSimulationOutcome {
+        let material = match self.command_target_material(revision, target) {
+            CommandTargetMaterialOutcome::NoAcceptedRevision => {
+                return DirectEditSimulationOutcome::NoAcceptedRevision;
+            },
+            CommandTargetMaterialOutcome::Prepared { material } => material,
+            CommandTargetMaterialOutcome::StaleBase { current } => {
+                return DirectEditSimulationOutcome::StaleBase { current };
+            },
+            CommandTargetMaterialOutcome::TargetNotFound {
+                revision: inspected_revision,
+                target: missing_target,
+            } => {
+                return DirectEditSimulationOutcome::TargetNotFound {
+                    revision: inspected_revision,
+                    target: missing_target,
+                };
+            },
+        };
+        let Some(actual) = material.editable_value else {
+            return DirectEditSimulationOutcome::TargetNotEditableValue {
+                kind: material.descriptor.kind,
+                revision,
+                target,
+            };
+        };
+        let actual_kind = editable_value_kind(&actual);
+        let requested_kind = editable_value_kind(&requested);
+        if actual_kind != requested_kind {
+            return DirectEditSimulationOutcome::ValueFamilyMismatch {
+                actual: actual_kind,
+                requested: requested_kind,
+                revision,
+                target,
+            };
+        }
+        match &requested {
+            EditableSemanticValue::Formula { mode, source } => {
+                let analyzed = match analyze(source, *mode) {
+                    Ok(analyzed) => analyzed,
+                    Err(reason) => {
+                        return DirectEditSimulationOutcome::InvalidMathematics {
+                            reason,
+                            revision,
+                            target,
+                        };
+                    },
+                };
+                if !analyzed.is_supported() {
+                    return DirectEditSimulationOutcome::UnsupportedMathematics {
+                        revision,
+                        target,
+                    };
+                }
+            },
+            EditableSemanticValue::PageProfile(profile) => {
+                if let Err(reason) = profile.validate() {
+                    return DirectEditSimulationOutcome::InvalidPageProfile {
+                        reason,
+                        revision,
+                        target,
+                    };
+                }
+            },
+            EditableSemanticValue::TableRowRole(_)
+            | EditableSemanticValue::Text(_) => {},
+        }
+        let family = direct_edit_family(&requested);
+        if actual == requested {
+            return DirectEditSimulationOutcome::NoOp {
+                family,
+                revision,
+                target,
+            };
+        }
+        DirectEditSimulationOutcome::Applicable {
+            family,
+            requested,
+            revision,
+            target,
+        }
+    }
 }
 
 impl SemanticNotebookSessionService {
@@ -1148,6 +1237,23 @@ fn formula_content_value(
         | BlockContent::Paragraph(_)
         | BlockContent::Rule
         | BlockContent::Unresolved(_) => None,
+    }
+}
+
+const fn editable_value_kind(
+    value: &EditableSemanticValue,
+) -> EditableSemanticValueKind {
+    match value {
+        EditableSemanticValue::Formula { .. } => {
+            EditableSemanticValueKind::Formula
+        },
+        EditableSemanticValue::PageProfile(_) => {
+            EditableSemanticValueKind::PageProfile
+        },
+        EditableSemanticValue::TableRowRole(_) => {
+            EditableSemanticValueKind::TableRowRole
+        },
+        EditableSemanticValue::Text(_) => EditableSemanticValueKind::Text,
     }
 }
 

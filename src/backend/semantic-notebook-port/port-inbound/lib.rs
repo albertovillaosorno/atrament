@@ -344,6 +344,19 @@ pub enum TextEditOutcome {
     },
 }
 
+/// Kind of one accepted semantic value with established direct-edit authority.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub enum EditableSemanticValueKind {
+    /// Structured mathematical source and presentation family.
+    Formula,
+    /// Complete exact physical page-profile geometry.
+    PageProfile,
+    /// Semantic table-row header/body role.
+    TableRowRole,
+    /// Exact accepted authored inline Unicode text.
+    Text,
+}
+
 /// Accepted semantic value families with established direct-edit authority.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum EditableSemanticValue {
@@ -360,6 +373,90 @@ pub enum EditableSemanticValue {
     TableRowRole(TableRowRole),
     /// Exact accepted authored inline Unicode text.
     Text(String),
+}
+
+/// Read-only semantic simulation result for one established direct edit.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum DirectEditSimulationOutcome {
+    /// Replacement is valid and would change accepted semantic state.
+    Applicable {
+        /// Executable direct-edit family implied by the replacement value.
+        family: SemanticCommandFamily,
+        /// Exact requested replacement value.
+        requested: EditableSemanticValue,
+        /// Accepted revision simulated without mutation.
+        revision: RevisionIdentity,
+        /// Existing semantic target simulated without mutation.
+        target: AcceptedIdentity,
+    },
+    /// Requested mathematical replacement is structurally malformed.
+    InvalidMathematics {
+        /// Typed mathematical source failure.
+        reason: MathSyntaxError,
+        /// Accepted revision simulated without mutation.
+        revision: RevisionIdentity,
+        /// Existing semantic target simulated without mutation.
+        target: AcceptedIdentity,
+    },
+    /// Requested physical page profile is invalid.
+    InvalidPageProfile {
+        /// Typed physical page-profile failure.
+        reason: PhysicalPageProfileError,
+        /// Accepted revision simulated without mutation.
+        revision: RevisionIdentity,
+        /// Existing semantic target simulated without mutation.
+        target: AcceptedIdentity,
+    },
+    /// Session has no accepted semantic revision to simulate.
+    NoAcceptedRevision,
+    /// Replacement is valid but already equals the accepted semantic value.
+    NoOp {
+        /// Executable direct-edit family implied by the replacement value.
+        family: SemanticCommandFamily,
+        /// Accepted revision simulated without mutation.
+        revision: RevisionIdentity,
+        /// Existing semantic target simulated without mutation.
+        target: AcceptedIdentity,
+    },
+    /// Caller names an accepted revision that is no longer current.
+    StaleBase {
+        /// Current accepted revision that rejected stale simulation.
+        current: RevisionIdentity,
+    },
+    /// Target exists but has no established direct-edit value projection.
+    TargetNotEditableValue {
+        /// Semantic kind owned by the existing target.
+        kind: SemanticIdentityKind,
+        /// Accepted revision simulated without mutation.
+        revision: RevisionIdentity,
+        /// Existing target with no direct-edit value projection.
+        target: AcceptedIdentity,
+    },
+    /// Requested accepted identity is absent from the named revision.
+    TargetNotFound {
+        /// Accepted revision simulated without mutation.
+        revision: RevisionIdentity,
+        /// Requested identity absent from that revision.
+        target: AcceptedIdentity,
+    },
+    /// Requested mathematical replacement uses unsupported source constructs.
+    UnsupportedMathematics {
+        /// Accepted revision simulated without mutation.
+        revision: RevisionIdentity,
+        /// Existing semantic target simulated without mutation.
+        target: AcceptedIdentity,
+    },
+    /// Replacement value family does not match the existing editable target.
+    ValueFamilyMismatch {
+        /// Current editable semantic value family.
+        actual: EditableSemanticValueKind,
+        /// Requested replacement semantic value family.
+        requested: EditableSemanticValueKind,
+        /// Accepted revision simulated without mutation.
+        revision: RevisionIdentity,
+        /// Existing semantic target simulated without mutation.
+        target: AcceptedIdentity,
+    },
 }
 
 /// Result of comparing one established editable value against an exact base.
@@ -917,4 +1014,12 @@ pub trait SemanticNotebookSession {
         target: AcceptedIdentity,
         value: String,
     ) -> TextEditOutcome;
+
+    /// Simulate one established direct edit without accepted mutation.
+    fn simulate_direct_edit(
+        &self,
+        revision: RevisionIdentity,
+        target: AcceptedIdentity,
+        requested: EditableSemanticValue,
+    ) -> DirectEditSimulationOutcome;
 }

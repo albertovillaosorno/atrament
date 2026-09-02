@@ -49,7 +49,8 @@ use atrament_semantic_notebook_port::{
     CommandCapabilityCompatibilityOutcome, CommandFamilyAdmissionOutcome,
     CommandFamilyCapability, CommandResourceLimits, CommandTargetMaterial,
     CommandTargetMaterialOutcome, CommandTargetPreconditionOutcome,
-    CommandTargetPreconditions, EditableSemanticValue,
+    CommandTargetPreconditions, DirectEditSimulationOutcome,
+    EditableSemanticValue, EditableSemanticValueKind,
     EditableValuePreconditionOutcome, FormulaEditOutcome,
     IdentityInspectOutcome, IdentityKindInspectOutcome,
     IdentityOwnerExpectation, IdentityPrecondition,
@@ -1419,6 +1420,257 @@ fn editable_value_precondition_stale_missing_and_empty_are_typed() {
     assert_eq!(
         empty.check_editable_value_precondition(current, span, expected),
         EditableValuePreconditionOutcome::NoAcceptedRevision,
+    );
+}
+
+#[test]
+fn direct_edit_simulation_predicts_text_and_table_role_without_mutation() {
+    let ids = IdentityAllocator::new();
+    let (candidate, span) = candidate_notebook_with_span(&ids, "before");
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(candidate)
+    else {
+        panic!("text candidate must be accepted");
+    };
+    let span = accepted_for(&mapping, span);
+    let before = session.current().expect("accepted revision").clone();
+    assert_eq!(
+        session.simulate_direct_edit(
+            revision,
+            span,
+            EditableSemanticValue::Text(String::from("before")),
+        ),
+        DirectEditSimulationOutcome::NoOp {
+            family: SemanticCommandFamily::TextContent,
+            revision,
+            target: span,
+        },
+    );
+    let requested = EditableSemanticValue::Text(String::from("after"));
+    assert_eq!(
+        session.simulate_direct_edit(revision, span, requested.clone()),
+        DirectEditSimulationOutcome::Applicable {
+            family: SemanticCommandFamily::TextContent,
+            requested,
+            revision,
+            target: span,
+        },
+    );
+    assert_eq!(session.current(), Some(&before));
+    assert!(matches!(
+        session.replace_text(revision, span, String::from("after")),
+        TextEditOutcome::Applied { base, target, .. }
+            if base == revision && target == span
+    ));
+
+    let (candidate, row, _) =
+        candidate_table_notebook(&ids, TableRowRole::Header);
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(candidate)
+    else {
+        panic!("table candidate must be accepted");
+    };
+    let row = accepted_for(&mapping, row);
+    let before = session.current().expect("table revision").clone();
+    let requested = EditableSemanticValue::TableRowRole(TableRowRole::Body);
+    assert_eq!(
+        session.simulate_direct_edit(revision, row, requested.clone()),
+        DirectEditSimulationOutcome::Applicable {
+            family: SemanticCommandFamily::StructuredContent,
+            requested,
+            revision,
+            target: row,
+        },
+    );
+    assert_eq!(session.current(), Some(&before));
+    assert!(matches!(
+        session.replace_table_row_role(revision, row, TableRowRole::Body),
+        TableRowRoleEditOutcome::Applied { base, target, .. }
+            if base == revision && target == row
+    ));
+}
+
+#[test]
+fn direct_edit_simulation_matches_formula_domain_rejections() {
+    let ids = IdentityAllocator::new();
+    let (candidate, formula) =
+        candidate_math_notebook(&ids, "x^2", FormulaMode::Display);
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(candidate)
+    else {
+        panic!("formula candidate must be accepted");
+    };
+    let formula = accepted_for(&mapping, formula);
+    let before = session.current().expect("formula revision").clone();
+    let malformed = EditableSemanticValue::Formula {
+        mode: FormulaMode::Display,
+        source: String::from(r"\frac{1}"),
+    };
+    let DirectEditSimulationOutcome::InvalidMathematics { reason, .. } =
+        session.simulate_direct_edit(revision, formula, malformed)
+    else {
+        panic!("malformed formula must be rejected by simulation");
+    };
+    assert_eq!(session.current(), Some(&before));
+    assert_eq!(
+        session.replace_formula(
+            revision,
+            formula,
+            FormulaMode::Display,
+            String::from(r"\frac{1}"),
+        ),
+        FormulaEditOutcome::InvalidMathematics {
+            reason,
+            revision,
+            target: formula,
+        },
+    );
+
+    let unsupported = EditableSemanticValue::Formula {
+        mode: FormulaMode::Display,
+        source: String::from(r"x + \mystery{y}"),
+    };
+    assert_eq!(
+        session.simulate_direct_edit(revision, formula, unsupported),
+        DirectEditSimulationOutcome::UnsupportedMathematics {
+            revision,
+            target: formula,
+        },
+    );
+    assert_eq!(
+        session.replace_formula(
+            revision,
+            formula,
+            FormulaMode::Display,
+            String::from(r"x + \mystery{y}"),
+        ),
+        FormulaEditOutcome::UnsupportedMathematics {
+            revision,
+            target: formula,
+        },
+    );
+}
+
+#[test]
+fn direct_edit_simulation_matches_page_profile_validation_and_noop() {
+    let ids = IdentityAllocator::new();
+    let candidate = candidate_notebook(&ids, "profile simulation");
+    let profile = candidate.page_profiles[0].id;
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(candidate)
+    else {
+        panic!("profile candidate must be accepted");
+    };
+    let profile = accepted_for(&mapping, profile);
+    let before = session.current().expect("profile revision").clone();
+    let same = EditableSemanticValue::PageProfile(physical_page_profile());
+    assert_eq!(
+        session.simulate_direct_edit(revision, profile, same),
+        DirectEditSimulationOutcome::NoOp {
+            family: SemanticCommandFamily::DocumentConstraint,
+            revision,
+            target: profile,
+        },
+    );
+    let mut invalid = physical_page_profile();
+    invalid.sheet.width = Length::ZERO;
+    assert_eq!(
+        session.simulate_direct_edit(
+            revision,
+            profile,
+            EditableSemanticValue::PageProfile(invalid),
+        ),
+        DirectEditSimulationOutcome::InvalidPageProfile {
+            reason: PageProfileError::SheetDimensionIsZero,
+            revision,
+            target: profile,
+        },
+    );
+    assert_eq!(session.current(), Some(&before));
+    assert_eq!(
+        session.replace_page_profile(revision, profile, invalid),
+        PageProfileEditOutcome::InvalidProfile {
+            reason: PageProfileError::SheetDimensionIsZero,
+            revision,
+            target: profile,
+        },
+    );
+}
+
+#[test]
+fn direct_edit_simulation_stale_missing_noneditable_and_family_mismatch() {
+    let ids = IdentityAllocator::new();
+    let (candidate, span) = candidate_notebook_with_span(&ids, "base");
+    let notebook = candidate.id;
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(candidate)
+    else {
+        panic!("text candidate must be accepted");
+    };
+    let span = accepted_for(&mapping, span);
+    let notebook = accepted_for(&mapping, notebook);
+    assert_eq!(
+        session.simulate_direct_edit(
+            revision,
+            span,
+            EditableSemanticValue::TableRowRole(TableRowRole::Body),
+        ),
+        DirectEditSimulationOutcome::ValueFamilyMismatch {
+            actual: EditableSemanticValueKind::Text,
+            requested: EditableSemanticValueKind::TableRowRole,
+            revision,
+            target: span,
+        },
+    );
+    assert_eq!(
+        session.simulate_direct_edit(
+            revision,
+            notebook,
+            EditableSemanticValue::Text(String::from("x")),
+        ),
+        DirectEditSimulationOutcome::TargetNotEditableValue {
+            kind: SemanticIdentityKind::Notebook,
+            revision,
+            target: notebook,
+        },
+    );
+    let replacement = candidate_notebook(&ids, "new revision");
+    let AcceptanceOutcome::Accepted { revision: current, .. } =
+        session.accept(replacement)
+    else {
+        panic!("replacement candidate must be accepted");
+    };
+    assert_eq!(
+        session.simulate_direct_edit(
+            revision,
+            span,
+            EditableSemanticValue::Text(String::from("after")),
+        ),
+        DirectEditSimulationOutcome::StaleBase { current },
+    );
+    assert_eq!(
+        session.simulate_direct_edit(
+            current,
+            span,
+            EditableSemanticValue::Text(String::from("after")),
+        ),
+        DirectEditSimulationOutcome::TargetNotFound {
+            revision: current,
+            target: span,
+        },
+    );
+    let empty = SemanticNotebookSessionService::default();
+    assert_eq!(
+        empty.simulate_direct_edit(
+            current,
+            span,
+            EditableSemanticValue::Text(String::from("after")),
+        ),
+        DirectEditSimulationOutcome::NoAcceptedRevision,
     );
 }
 
