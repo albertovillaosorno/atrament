@@ -161,22 +161,29 @@ fn read_request_head(stream: &mut TcpStream) -> io::Result<Vec<u8>> {
     Ok(bytes)
 }
 
-fn authorization_bearer(request: &[u8]) -> Option<&str> {
+fn single_header_value<'request>(
+    request: &'request [u8],
+    expected_name: &str,
+) -> Option<&'request str> {
     let text = str::from_utf8(request).ok()?;
-    let mut authorization = None;
+    let mut matched_value = None;
     for line in text.split("\r\n").skip(1) {
         if line.is_empty() {
             break;
         }
         let (name, value) = line.split_once(':')?;
-        if name.eq_ignore_ascii_case("authorization") {
-            if authorization.is_some() {
+        if name.eq_ignore_ascii_case(expected_name) {
+            if matched_value.is_some() {
                 return None;
             }
-            authorization = Some(value.trim());
+            matched_value = Some(value.trim());
         }
     }
-    authorization?.strip_prefix("Bearer ")
+    matched_value
+}
+
+fn authorization_bearer(request: &[u8]) -> Option<&str> {
+    single_header_value(request, "authorization")?.strip_prefix("Bearer ")
 }
 
 fn fixed_work_secret_match(expected: &str, candidate: &str) -> bool {
@@ -197,6 +204,12 @@ fn fixed_work_secret_match(expected: &str, candidate: &str) -> bool {
         difference |= expected_byte ^ candidate_byte;
     }
     valid_length && difference == 0
+}
+
+/// Check browser origin metadata against the exact canonical startup origin.
+#[must_use]
+pub fn request_has_exact_origin(request: &[u8], expected_origin: &str) -> bool {
+    single_header_value(request, "origin") == Some(expected_origin)
 }
 
 /// Check one Bearer credential without data-dependent comparison exit.

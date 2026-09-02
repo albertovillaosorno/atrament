@@ -225,3 +225,29 @@ fn session_credential_requires_one_exact_bearer_value() {
         ));
     }
 }
+
+#[test]
+fn browser_origin_requires_one_exact_canonical_value() {
+    let origin = "http://127.0.0.1:43123";
+    let accepted = format!("POST /api HTTP/1.1\r\nOrigin: {origin}\r\n\r\n",);
+    assert!(runtime::request_has_exact_origin(
+        accepted.as_bytes(),
+        origin,
+    ));
+
+    let rejected = [
+        "POST /api HTTP/1.1\r\n\r\n".to_owned(),
+        "POST /api HTTP/1.1\r\nOrigin: http://localhost:43123\r\n\r\n"
+            .to_owned(),
+        format!(
+            "POST /api HTTP/1.1\r\nOrigin: {origin}\r\n\
+             Origin: {origin}\r\n\r\n",
+        ),
+    ];
+    for request in rejected {
+        assert!(!runtime::request_has_exact_origin(
+            request.as_bytes(),
+            origin,
+        ));
+    }
+}
