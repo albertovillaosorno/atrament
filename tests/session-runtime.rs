@@ -160,6 +160,9 @@ const MAIN_JAVASCRIPT: &[u8] = include_bytes!(
 const SESSION_FRAGMENT_JAVASCRIPT: &[u8] = include_bytes!(
     "../src/browser/workspace/adapter-inbound/generated/session-fragment.js"
 );
+const SESSION_HANDSHAKE_JAVASCRIPT: &[u8] = include_bytes!(
+    "../src/browser/workspace/adapter-inbound/generated/session-handshake.js"
+);
 
 fn response_parts(response: &[u8]) -> (&str, &[u8]) {
     let split = response
@@ -231,6 +234,11 @@ fn serves_embedded_frontend_resources_without_caching() {
             "/generated/session-fragment.js",
             "text/javascript; charset=utf-8",
             SESSION_FRAGMENT_JAVASCRIPT,
+        ),
+        (
+            "/generated/session-handshake.js",
+            "text/javascript; charset=utf-8",
+            SESSION_HANDSHAKE_JAVASCRIPT,
         ),
     ];
 

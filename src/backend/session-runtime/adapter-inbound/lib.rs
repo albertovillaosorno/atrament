@@ -66,6 +66,9 @@ const MAIN_JAVASCRIPT: &[u8] = include_bytes!(
 const SESSION_FRAGMENT_JAVASCRIPT: &[u8] = include_bytes!(
     "../../../browser/workspace/adapter-inbound/generated/session-fragment.js"
 );
+const SESSION_HANDSHAKE_JAVASCRIPT: &[u8] = include_bytes!(
+    "../../../browser/workspace/adapter-inbound/generated/session-handshake.js"
+);
 
 /// A listener bound to one operating-system-assigned IPv4 loopback endpoint.
 #[derive(Debug)]
@@ -410,9 +413,14 @@ pub fn route_request(
             JAVASCRIPT_CONTENT_TYPE,
             SESSION_FRAGMENT_JAVASCRIPT,
         ),
+        ("GET", "/generated/session-handshake.js") => response(
+            "200 OK",
+            JAVASCRIPT_CONTENT_TYPE,
+            SESSION_HANDSHAKE_JAVASCRIPT,
+        ),
         ("GET", "/health") => json_response(
             "200 OK",
-            br#"{"product":"atrament","state":"listening"}"#,
+            br#"{"product":"atrament","state":"ready"}"#,
         ),
         ("GET", "/workspace.css") => {
             response("200 OK", CSS_CONTENT_TYPE, WORKSPACE_CSS)

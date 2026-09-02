@@ -31,6 +31,7 @@
 // - Defaults:
 //   - Performs no network request and persists no browser state.
 //
+import * as sessionHandshake from "./session-handshake.js";
 import { sessionSecretFromFragment } from "./session-fragment.js";
 
 function fragmentFreeLocalUrl(): string {
@@ -404,6 +405,69 @@ function clearSessionText(): void {
     updateCharacterCount(candidateInput, candidateCount);
 }
 
+function enableCompatibleEditing(): void {
+    taskInput.disabled = false;
+    sourceInput.disabled = false;
+    candidateInput.disabled = false;
+}
+
+async function completeSessionHandshake(secret: string): Promise<void> {
+    setTextIfChanged(sessionStatus, "Checking backend compatibility…");
+    let response: Response;
+    try {
+        response = await fetch("./api/handshake", {
+            method: "POST",
+            headers: sessionHandshake.handshakeHeaders(secret),
+            cache: "no-store",
+            credentials: "omit",
+            mode: "same-origin",
+            redirect: "error",
+            referrerPolicy: "no-referrer",
+        });
+    } catch {
+        if (sessionSecret === secret) {
+            const unavailableMessage =
+                "Handshake unavailable · editing off";
+            setTextIfChanged(sessionStatus, unavailableMessage);
+        }
+        return;
+    }
+    let payload: unknown;
+    try {
+        payload = await response.json();
+    } catch {
+        payload = null;
+    }
+    if (sessionSecret !== secret) {
+        return;
+    }
+    const outcome = sessionHandshake.parseHandshakePayload(payload);
+    if (response.status === 200 && outcome.kind === "compatible") {
+        enableCompatibleEditing();
+        setTextIfChanged(sessionStatus, "Session ready · backend compatible");
+        return;
+    }
+    if (response.status === 409 && outcome.kind === "incompatible") {
+        const mismatchMessage = [
+            "Incompatible ",
+            outcome.dimension,
+            " · expected ",
+            outcome.expected,
+        ].join("");
+        setTextIfChanged(sessionStatus, mismatchMessage);
+        return;
+    }
+    if (response.status === 401) {
+        sessionSecret = null;
+        const authorizationMessage =
+            "Authorization failed · reopen launcher";
+        setTextIfChanged(sessionStatus, authorizationMessage);
+        return;
+    }
+    const invalidMessage = "Invalid backend handshake · editing disabled";
+    setTextIfChanged(sessionStatus, invalidMessage);
+}
+
 window.addEventListener("pagehide", (event): void => {
     sessionSecret = null;
     invalidateClipboardRequests();
@@ -710,7 +774,10 @@ zoomIn.addEventListener("click", (): void => {
 });
 
 setPreviewZoom(100);
-const sessionMessage = sessionSecret === null
-    ? "Frontend ready · session credential unavailable"
-    : "Session credential received · waiting for backend handshake";
-setTextIfChanged(sessionStatus, sessionMessage);
+if (sessionSecret === null) {
+    const missingCredentialMessage =
+        "Frontend ready · credential unavailable";
+    setTextIfChanged(sessionStatus, missingCredentialMessage);
+} else {
+    void completeSessionHandshake(sessionSecret);
+}
