@@ -69,20 +69,18 @@ impl<'diagnostics> RevisionLayoutDiagnostics<'diagnostics> {
             if diagnostic.operation.operation != Operation::Layout {
                 return Err(ExportLayoutPreflightError::NonLayoutDiagnostic);
             }
-            let revision_contexts = diagnostic
-                .operation
-                .contexts
-                .iter()
-                .filter(|context| {
+            let mut revision_contexts =
+                diagnostic.operation.contexts.iter().filter(|context| {
                     context.kind == OperationContextKind::AcceptedRevision
-                })
-                .collect::<Vec<_>>();
-            let Some(context) = revision_contexts.first() else {
+                });
+            let Some(context) = revision_contexts.next() else {
                 return Err(
                     ExportLayoutPreflightError::DiagnosticContextMissing,
                 );
             };
-            if revision_contexts.len() != 1 || context.identity != expected {
+            if revision_contexts.next().is_some()
+                || context.identity != expected
+            {
                 return Err(
                     ExportLayoutPreflightError::DiagnosticContextMismatch,
                 );
