@@ -447,6 +447,13 @@ If review permits selecting only some returned commands, submit that selection
 to the backend as a new dependency-checked batch and revalidate it. Never splice
 or partially apply the old validated envelope in TypeScript.
 
+Current clipboard transport design evidence freezes explicit Copy, exact text
+transport, prompt/context correlation, intentional external-data egress,
+operating-system clipboard lifetime, failure behavior, untrusted Paste, inert
+browser presentation, no hidden clipboard archive, and MCP parity.
+Browser/backend
+wiring for real command responses remains open.
+
 ### TODO - Expose CLI parity for every application command
 
 Create, inspect, validate, transform, render, export, and plan hardware without

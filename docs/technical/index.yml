@@ -52,6 +52,9 @@ contracts:
   - id: atrament.technical.semantic-inspection-command-context
     status: frozen
     path: semantic-inspection-command-context-contract.md
+  - id: atrament.technical.clipboard-command-transport
+    status: frozen
+    path: clipboard-command-transport-contract.md
   - id: atrament.technical.semantic-application-history-contract
     status: frozen
     path: semantic-application-history-contract.md
