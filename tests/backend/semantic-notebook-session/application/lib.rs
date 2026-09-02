@@ -46,11 +46,12 @@ use atrament_semantic_notebook::{
 use atrament_semantic_notebook_port::{
     AcceptanceOutcome, CANDIDATE_BLOCK_NESTING_LIMIT, CandidateGraphError,
     CandidateReferenceKind, CommandBehaviorVersion,
-    CommandFamilyAdmissionOutcome, CommandFamilyCapability,
-    CommandResourceLimits, CommandTargetMaterial, CommandTargetMaterialOutcome,
-    CommandTargetPreconditionOutcome, CommandTargetPreconditions,
-    EditableSemanticValue, EditableValuePreconditionOutcome,
-    FormulaEditOutcome, IdentityInspectOutcome, IdentityKindInspectOutcome,
+    CommandCapabilityCompatibilityOutcome, CommandFamilyAdmissionOutcome,
+    CommandFamilyCapability, CommandResourceLimits, CommandTargetMaterial,
+    CommandTargetMaterialOutcome, CommandTargetPreconditionOutcome,
+    CommandTargetPreconditions, EditableSemanticValue,
+    EditableValuePreconditionOutcome, FormulaEditOutcome,
+    IdentityInspectOutcome, IdentityKindInspectOutcome,
     IdentityOwnerExpectation, IdentityPrecondition,
     IdentityPreconditionOutcome, PageProfileEditOutcome, SemanticCommandFamily,
     SemanticNotebookSession, TableRowRoleEditOutcome, TextEditOutcome,
@@ -750,6 +751,36 @@ fn command_capability_snapshot_is_deterministic_and_does_not_overclaim() {
         panic!("candidate must be accepted");
     };
     assert_eq!(session.command_capability_snapshot(), snapshot);
+}
+
+#[test]
+fn command_capability_version_detects_drift_independently_of_revision() {
+    let mut session = SemanticNotebookSessionService::default();
+    let snapshot = session.command_capability_snapshot();
+    assert_eq!(
+        session
+            .check_command_capability_compatibility(snapshot.behavior_version,),
+        CommandCapabilityCompatibilityOutcome::Compatible { snapshot },
+    );
+    assert_eq!(
+        session
+            .check_command_capability_compatibility(CommandBehaviorVersion(0),),
+        CommandCapabilityCompatibilityOutcome::Mismatch {
+            current: CommandBehaviorVersion(1),
+            expected: CommandBehaviorVersion(0),
+        },
+    );
+
+    let ids = IdentityAllocator::new();
+    let candidate = candidate_notebook(&ids, "revision changes are separate");
+    let AcceptanceOutcome::Accepted { .. } = session.accept(candidate) else {
+        panic!("candidate must be accepted");
+    };
+    assert_eq!(
+        session
+            .check_command_capability_compatibility(snapshot.behavior_version,),
+        CommandCapabilityCompatibilityOutcome::Compatible { snapshot },
+    );
 }
 
 #[test]

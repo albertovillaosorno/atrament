@@ -49,12 +49,13 @@ use atrament_semantic_notebook::{
 use atrament_semantic_notebook_port::{
     AcceptanceOutcome, CANDIDATE_BLOCK_NESTING_LIMIT, CandidateGraphError,
     CandidateReferenceKind, CommandBehaviorVersion,
-    CommandFamilyAdmissionOutcome, CommandFamilyCapability,
-    CommandResourceLimits, CommandTargetMaterial, CommandTargetMaterialOutcome,
-    CommandTargetPreconditionOutcome, CommandTargetPreconditions,
-    EditableSemanticValue, EditableValuePreconditionOutcome,
-    FormulaEditOutcome, IdentityInspectOutcome, IdentityKindInspectOutcome,
-    IdentityMapping, IdentityOwnerExpectation, IdentityPrecondition,
+    CommandCapabilityCompatibilityOutcome, CommandFamilyAdmissionOutcome,
+    CommandFamilyCapability, CommandResourceLimits, CommandTargetMaterial,
+    CommandTargetMaterialOutcome, CommandTargetPreconditionOutcome,
+    CommandTargetPreconditions, EditableSemanticValue,
+    EditableValuePreconditionOutcome, FormulaEditOutcome,
+    IdentityInspectOutcome, IdentityKindInspectOutcome, IdentityMapping,
+    IdentityOwnerExpectation, IdentityPrecondition,
     IdentityPreconditionOutcome, PageProfileEditOutcome,
     SemanticCommandCapabilitySnapshot, SemanticCommandFamily,
     SemanticNotebookSession, TableRowRoleEditOutcome, TextEditOutcome,
@@ -177,6 +178,20 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
         };
         self.current = Some(AcceptedRevision { id: revision, notebook });
         AcceptanceOutcome::Accepted { mapping, revision }
+    }
+
+    fn check_command_capability_compatibility(
+        &self,
+        expected: CommandBehaviorVersion,
+    ) -> CommandCapabilityCompatibilityOutcome {
+        let snapshot = self.command_capability_snapshot();
+        if snapshot.behavior_version != expected {
+            return CommandCapabilityCompatibilityOutcome::Mismatch {
+                current: snapshot.behavior_version,
+                expected,
+            };
+        }
+        CommandCapabilityCompatibilityOutcome::Compatible { snapshot }
     }
 
     fn check_command_family_admission(

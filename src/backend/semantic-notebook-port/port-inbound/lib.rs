@@ -427,6 +427,24 @@ pub enum CommandApplicationCapability {
     Validate,
 }
 
+/// Result of checking one previously bound command capability behavior version.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum CommandCapabilityCompatibilityOutcome {
+    /// The expected capability behavior is still current.
+    Compatible {
+        /// Current capability discovery snapshot.
+        snapshot: SemanticCommandCapabilitySnapshot,
+    },
+    /// Capability behavior changed and the caller must refresh its context.
+    Mismatch {
+        /// Current backend-owned capability behavior version.
+        current: CommandBehaviorVersion,
+        /// Older or otherwise incompatible behavior version supplied by
+        /// caller.
+        expected: CommandBehaviorVersion,
+    },
+}
+
 /// One semantic command family whose behavior is discoverable globally.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct CommandFamilyCapability {
@@ -800,6 +818,12 @@ pub trait SemanticNotebookSession {
         &mut self,
         candidate: Notebook<CandidateIdentity>,
     ) -> AcceptanceOutcome;
+
+    /// Check one previously bound command capability behavior version.
+    fn check_command_capability_compatibility(
+        &self,
+        expected: CommandBehaviorVersion,
+    ) -> CommandCapabilityCompatibilityOutcome;
 
     /// Check whether one semantic command family is executable for a target.
     fn check_command_family_admission(
