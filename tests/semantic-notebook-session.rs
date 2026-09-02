@@ -46,8 +46,9 @@ use atrament_semantic_notebook::{
 use atrament_semantic_notebook_port::{
     AcceptanceOutcome, CandidateGraphError, CandidateReferenceKind,
     FormulaEditOutcome, IdentityInspectOutcome, IdentityKindInspectOutcome,
-    PageProfileEditOutcome, SemanticNotebookSession, TableRowRoleEditOutcome,
-    TextEditOutcome,
+    IdentityOwnerExpectation, IdentityPrecondition,
+    IdentityPreconditionOutcome, PageProfileEditOutcome,
+    SemanticNotebookSession, TableRowRoleEditOutcome, TextEditOutcome,
 };
 use atrament_semantic_notebook_session::SemanticNotebookSessionService;
 
@@ -450,6 +451,198 @@ fn identity_kind_inspection_rejects_stale_absent_and_empty_session() {
     assert_eq!(
         empty.inspect_identity_kind(current, row),
         IdentityKindInspectOutcome::NoAcceptedRevision,
+    );
+}
+
+#[test]
+fn local_identity_precondition_accepts_exact_kind_and_owner_read_only() {
+    let ids = IdentityAllocator::new();
+    let (candidate, row, table) =
+        candidate_table_notebook(&ids, TableRowRole::Header);
+    let notebook = candidate.id;
+    let block = candidate.pages[0].flows[0].blocks[0].id;
+    let flow = candidate.pages[0].flows[0].id;
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(candidate)
+    else {
+        panic!("table candidate must be accepted");
+    };
+    let notebook = accepted_for(&mapping, notebook);
+    let block = accepted_for(&mapping, block);
+    let flow = accepted_for(&mapping, flow);
+    let row = accepted_for(&mapping, row);
+    let table = accepted_for(&mapping, table);
+    let before = session.current().expect("accepted revision").clone();
+
+    assert_eq!(
+        session.check_identity_precondition(
+            revision,
+            block,
+            IdentityPrecondition {
+                expected_kind: Some(SemanticIdentityKind::Block(
+                    SemanticBlockKind::Table,
+                )),
+                expected_owner: IdentityOwnerExpectation::Direct(flow),
+            },
+        ),
+        IdentityPreconditionOutcome::Satisfied {
+            descriptor: SemanticIdentityDescriptor {
+                kind: SemanticIdentityKind::Block(SemanticBlockKind::Table),
+                owner: Some(flow),
+            },
+            revision,
+            target: block,
+        },
+    );
+    assert_eq!(
+        session.check_identity_precondition(
+            revision,
+            row,
+            IdentityPrecondition {
+                expected_kind: Some(SemanticIdentityKind::TableRow),
+                expected_owner: IdentityOwnerExpectation::Direct(table),
+            },
+        ),
+        IdentityPreconditionOutcome::Satisfied {
+            descriptor: SemanticIdentityDescriptor {
+                kind: SemanticIdentityKind::TableRow,
+                owner: Some(table),
+            },
+            revision,
+            target: row,
+        },
+    );
+    assert_eq!(
+        session.check_identity_precondition(
+            revision,
+            notebook,
+            IdentityPrecondition {
+                expected_kind: Some(SemanticIdentityKind::Notebook),
+                expected_owner: IdentityOwnerExpectation::Root,
+            },
+        ),
+        IdentityPreconditionOutcome::Satisfied {
+            descriptor: SemanticIdentityDescriptor {
+                kind: SemanticIdentityKind::Notebook,
+                owner: None,
+            },
+            revision,
+            target: notebook,
+        },
+    );
+    assert_eq!(session.current(), Some(&before));
+}
+
+#[test]
+fn local_identity_precondition_reports_kind_and_owner_mismatch() {
+    let ids = IdentityAllocator::new();
+    let (candidate, row, table) =
+        candidate_table_notebook(&ids, TableRowRole::Body);
+    let block = candidate.pages[0].flows[0].blocks[0].id;
+    let flow = candidate.pages[0].flows[0].id;
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(candidate)
+    else {
+        panic!("table candidate must be accepted");
+    };
+    let block = accepted_for(&mapping, block);
+    let flow = accepted_for(&mapping, flow);
+    let row = accepted_for(&mapping, row);
+    let table = accepted_for(&mapping, table);
+    let before = session.current().expect("accepted revision").clone();
+
+    assert_eq!(
+        session.check_identity_precondition(
+            revision,
+            block,
+            IdentityPrecondition {
+                expected_kind: Some(SemanticIdentityKind::Block(
+                    SemanticBlockKind::Paragraph,
+                )),
+                expected_owner: IdentityOwnerExpectation::Direct(flow),
+            },
+        ),
+        IdentityPreconditionOutcome::KindMismatch {
+            actual: SemanticIdentityKind::Block(SemanticBlockKind::Table),
+            expected: SemanticIdentityKind::Block(SemanticBlockKind::Paragraph),
+            revision,
+            target: block,
+        },
+    );
+    assert_eq!(
+        session.check_identity_precondition(
+            revision,
+            row,
+            IdentityPrecondition {
+                expected_kind: Some(SemanticIdentityKind::TableRow),
+                expected_owner: IdentityOwnerExpectation::Direct(block),
+            },
+        ),
+        IdentityPreconditionOutcome::OwnerMismatch {
+            actual: Some(table),
+            expected: IdentityOwnerExpectation::Direct(block),
+            revision,
+            target: row,
+        },
+    );
+    assert_eq!(
+        session.check_identity_precondition(
+            revision,
+            row,
+            IdentityPrecondition {
+                expected_kind: None,
+                expected_owner: IdentityOwnerExpectation::Root,
+            },
+        ),
+        IdentityPreconditionOutcome::OwnerMismatch {
+            actual: Some(table),
+            expected: IdentityOwnerExpectation::Root,
+            revision,
+            target: row,
+        },
+    );
+    assert_eq!(session.current(), Some(&before));
+}
+
+#[test]
+fn local_identity_precondition_stale_missing_and_empty_are_typed() {
+    let ids = IdentityAllocator::new();
+    let (candidate, row, _) =
+        candidate_table_notebook(&ids, TableRowRole::Body);
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(candidate)
+    else {
+        panic!("table candidate must be accepted");
+    };
+    let row = accepted_for(&mapping, row);
+    let replacement = candidate_notebook(&ids, "replacement");
+    let AcceptanceOutcome::Accepted { revision: current, .. } =
+        session.accept(replacement)
+    else {
+        panic!("replacement candidate must be accepted");
+    };
+    let any = IdentityPrecondition {
+        expected_kind: None,
+        expected_owner: IdentityOwnerExpectation::Any,
+    };
+    assert_eq!(
+        session.check_identity_precondition(revision, row, any),
+        IdentityPreconditionOutcome::StaleBase { current },
+    );
+    assert_eq!(
+        session.check_identity_precondition(current, row, any),
+        IdentityPreconditionOutcome::TargetNotFound {
+            revision: current,
+            target: row,
+        },
+    );
+    let empty = SemanticNotebookSessionService::default();
+    assert_eq!(
+        empty.check_identity_precondition(current, row, any),
+        IdentityPreconditionOutcome::NoAcceptedRevision,
     );
 }
 

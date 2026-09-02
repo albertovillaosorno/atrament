@@ -49,8 +49,9 @@ use atrament_semantic_notebook::{
 use atrament_semantic_notebook_port::{
     AcceptanceOutcome, CandidateGraphError, CandidateReferenceKind,
     FormulaEditOutcome, IdentityInspectOutcome, IdentityKindInspectOutcome,
-    IdentityMapping, PageProfileEditOutcome, SemanticNotebookSession,
-    TableRowRoleEditOutcome, TextEditOutcome,
+    IdentityMapping, IdentityOwnerExpectation, IdentityPrecondition,
+    IdentityPreconditionOutcome, PageProfileEditOutcome,
+    SemanticNotebookSession, TableRowRoleEditOutcome, TextEditOutcome,
 };
 
 #[derive(Debug, Default)]
@@ -149,6 +150,62 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
         };
         self.current = Some(AcceptedRevision { id: revision, notebook });
         AcceptanceOutcome::Accepted { mapping, revision }
+    }
+
+    fn check_identity_precondition(
+        &self,
+        revision: atrament_semantic_notebook::RevisionIdentity,
+        target: AcceptedIdentity,
+        precondition: IdentityPrecondition,
+    ) -> IdentityPreconditionOutcome {
+        let descriptor = match self.inspect_identity(revision, target) {
+            IdentityInspectOutcome::Inspected { descriptor, .. } => descriptor,
+            IdentityInspectOutcome::NoAcceptedRevision => {
+                return IdentityPreconditionOutcome::NoAcceptedRevision;
+            },
+            IdentityInspectOutcome::StaleBase { current } => {
+                return IdentityPreconditionOutcome::StaleBase { current };
+            },
+            IdentityInspectOutcome::TargetNotFound {
+                revision: inspected_revision,
+                target: missing_target,
+            } => {
+                return IdentityPreconditionOutcome::TargetNotFound {
+                    revision: inspected_revision,
+                    target: missing_target,
+                };
+            },
+        };
+        if let Some(expected) = precondition.expected_kind
+            && descriptor.kind != expected
+        {
+            return IdentityPreconditionOutcome::KindMismatch {
+                actual: descriptor.kind,
+                expected,
+                revision,
+                target,
+            };
+        }
+        let owner_matches = match precondition.expected_owner {
+            IdentityOwnerExpectation::Any => true,
+            IdentityOwnerExpectation::Direct(expected) => {
+                descriptor.owner == Some(expected)
+            },
+            IdentityOwnerExpectation::Root => descriptor.owner.is_none(),
+        };
+        if !owner_matches {
+            return IdentityPreconditionOutcome::OwnerMismatch {
+                actual: descriptor.owner,
+                expected: precondition.expected_owner,
+                revision,
+                target,
+            };
+        }
+        IdentityPreconditionOutcome::Satisfied {
+            descriptor,
+            revision,
+            target,
+        }
     }
 
     fn current(&self) -> Option<&AcceptedRevision> {

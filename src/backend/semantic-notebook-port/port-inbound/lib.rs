@@ -334,6 +334,76 @@ pub enum TextEditOutcome {
     },
 }
 
+/// Expected direct owner for one local semantic identity precondition.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum IdentityOwnerExpectation {
+    /// Do not constrain the target's direct structural owner.
+    Any,
+    /// Require one exact direct structural owner identity.
+    Direct(AcceptedIdentity),
+    /// Require the notebook root, which has no direct structural owner.
+    Root,
+}
+
+/// Local semantic identity precondition checked against one accepted revision.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct IdentityPrecondition {
+    /// Optional exact semantic-kind requirement.
+    pub expected_kind: Option<SemanticIdentityKind>,
+    /// Direct structural-owner requirement.
+    pub expected_owner: IdentityOwnerExpectation,
+}
+
+/// Result of checking one local semantic identity precondition.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum IdentityPreconditionOutcome {
+    /// Existing target has a semantic kind different from the requirement.
+    KindMismatch {
+        /// Semantic kind currently owned by the target identity.
+        actual: SemanticIdentityKind,
+        /// Semantic kind required by the local precondition.
+        expected: SemanticIdentityKind,
+        /// Accepted revision checked without mutation.
+        revision: RevisionIdentity,
+        /// Existing semantic target that failed the kind precondition.
+        target: AcceptedIdentity,
+    },
+    /// Session has no accepted semantic revision to check.
+    NoAcceptedRevision,
+    /// Existing target has a direct owner different from the requirement.
+    OwnerMismatch {
+        /// Current direct structural owner; `None` means notebook root.
+        actual: Option<AcceptedIdentity>,
+        /// Direct structural owner required by the local precondition.
+        expected: IdentityOwnerExpectation,
+        /// Accepted revision checked without mutation.
+        revision: RevisionIdentity,
+        /// Existing semantic target that failed the owner precondition.
+        target: AcceptedIdentity,
+    },
+    /// Target exists and every declared local precondition matches.
+    Satisfied {
+        /// Current semantic kind and direct structural owner.
+        descriptor: SemanticIdentityDescriptor<AcceptedIdentity>,
+        /// Accepted revision checked without mutation.
+        revision: RevisionIdentity,
+        /// Existing semantic target satisfying the precondition.
+        target: AcceptedIdentity,
+    },
+    /// Caller names an accepted revision that is no longer current.
+    StaleBase {
+        /// Current accepted revision that rejected the stale check.
+        current: RevisionIdentity,
+    },
+    /// Requested target is absent from the named accepted revision.
+    TargetNotFound {
+        /// Accepted revision checked without mutation.
+        revision: RevisionIdentity,
+        /// Requested identity absent from that revision.
+        target: AcceptedIdentity,
+    },
+}
+
 /// Result of one exact-revision, single-identity semantic inspection.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum IdentityInspectOutcome {
@@ -407,6 +477,14 @@ pub trait SemanticNotebookSession {
         &mut self,
         candidate: Notebook<CandidateIdentity>,
     ) -> AcceptanceOutcome;
+
+    /// Check local semantic kind and owner preconditions read-only.
+    fn check_identity_precondition(
+        &self,
+        revision: RevisionIdentity,
+        target: AcceptedIdentity,
+        precondition: IdentityPrecondition,
+    ) -> IdentityPreconditionOutcome;
 
     /// Read the current accepted revision without creating another revision.
     fn current(&self) -> Option<&AcceptedRevision>;
