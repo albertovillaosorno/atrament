@@ -543,48 +543,85 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
         mode: FormulaMode,
         source: String,
     ) -> FormulaEditOutcome {
-        let Some(current) = self.current.as_ref() else {
-            return FormulaEditOutcome::NoAcceptedRevision;
-        };
-        if current.id != base {
-            return FormulaEditOutcome::StaleBase { current: current.id };
-        }
-        let Some(existing) = formula_value(&current.notebook, target) else {
-            if semantic_identity_kind(&current.notebook, target).is_some() {
+        let simulation = self.simulate_direct_edit(
+            base,
+            target,
+            EditableSemanticValue::Formula { mode, source },
+        );
+        let (replacement_mode, replacement_source) = match simulation {
+            DirectEditSimulationOutcome::Applicable {
+                requested:
+                    EditableSemanticValue::Formula {
+                        mode: requested_mode,
+                        source: requested_source,
+                    },
+                ..
+            } => (requested_mode, requested_source),
+            DirectEditSimulationOutcome::Applicable { .. }
+            | DirectEditSimulationOutcome::InvalidPageProfile { .. }
+            | DirectEditSimulationOutcome::TargetNotEditableValue { .. }
+            | DirectEditSimulationOutcome::ValueFamilyMismatch { .. } => {
                 return FormulaEditOutcome::TargetNotFormula {
-                    revision: current.id,
-                    target,
-                };
-            }
-            return FormulaEditOutcome::TargetNotFound {
-                revision: current.id,
-                target,
-            };
-        };
-        let analyzed = match analyze(&source, mode) {
-            Ok(analyzed) => analyzed,
-            Err(reason) => {
-                return FormulaEditOutcome::InvalidMathematics {
-                    reason,
-                    revision: current.id,
+                    revision: base,
                     target,
                 };
             },
+            DirectEditSimulationOutcome::InvalidMathematics {
+                reason,
+                revision,
+                target: simulated_target,
+            } => {
+                return FormulaEditOutcome::InvalidMathematics {
+                    reason,
+                    revision,
+                    target: simulated_target,
+                };
+            },
+            DirectEditSimulationOutcome::NoAcceptedRevision => {
+                return FormulaEditOutcome::NoAcceptedRevision;
+            },
+            DirectEditSimulationOutcome::NoOp {
+                revision,
+                target: simulated_target,
+                ..
+            } => {
+                return FormulaEditOutcome::NoOp {
+                    revision,
+                    target: simulated_target,
+                };
+            },
+            DirectEditSimulationOutcome::StaleBase { current } => {
+                return FormulaEditOutcome::StaleBase { current };
+            },
+            DirectEditSimulationOutcome::TargetNotFound {
+                revision,
+                target: missing_target,
+            } => {
+                return FormulaEditOutcome::TargetNotFound {
+                    revision,
+                    target: missing_target,
+                };
+            },
+            DirectEditSimulationOutcome::UnsupportedMathematics {
+                revision,
+                target: simulated_target,
+            } => {
+                return FormulaEditOutcome::UnsupportedMathematics {
+                    revision,
+                    target: simulated_target,
+                };
+            },
         };
-        if !analyzed.is_supported() {
-            return FormulaEditOutcome::UnsupportedMathematics {
-                revision: current.id,
-                target,
-            };
-        }
-        if existing.mode == mode && existing.source == source {
-            return FormulaEditOutcome::NoOp {
-                revision: current.id,
-                target,
-            };
-        }
+        let Some(current) = self.current.as_ref() else {
+            return FormulaEditOutcome::NoAcceptedRevision;
+        };
         let mut notebook = current.notebook.clone();
-        if !replace_formula_value(&mut notebook, target, mode, source) {
+        if !replace_formula_value(
+            &mut notebook,
+            target,
+            replacement_mode,
+            replacement_source,
+        ) {
             return FormulaEditOutcome::TargetNotFound {
                 revision: current.id,
                 target,
