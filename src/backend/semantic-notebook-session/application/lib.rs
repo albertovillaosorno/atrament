@@ -48,7 +48,8 @@ use atrament_semantic_notebook::{
 };
 use atrament_semantic_notebook_port::{
     AcceptanceOutcome, CANDIDATE_BLOCK_NESTING_LIMIT, CandidateGraphError,
-    CandidateReferenceKind, EditableSemanticValue,
+    CandidateReferenceKind, CommandTargetMaterial,
+    CommandTargetMaterialOutcome, EditableSemanticValue,
     EditableValuePreconditionOutcome, FormulaEditOutcome,
     IdentityInspectOutcome, IdentityKindInspectOutcome, IdentityMapping,
     IdentityOwnerExpectation, IdentityPrecondition,
@@ -181,27 +182,27 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
         target: AcceptedIdentity,
         expected: EditableSemanticValue,
     ) -> EditableValuePreconditionOutcome {
-        let Some(current) = self.current.as_ref() else {
-            return EditableValuePreconditionOutcome::NoAcceptedRevision;
+        let material = match self.command_target_material(revision, target) {
+            CommandTargetMaterialOutcome::NoAcceptedRevision => {
+                return EditableValuePreconditionOutcome::NoAcceptedRevision;
+            },
+            CommandTargetMaterialOutcome::Prepared { material } => material,
+            CommandTargetMaterialOutcome::StaleBase { current } => {
+                return EditableValuePreconditionOutcome::StaleBase { current };
+            },
+            CommandTargetMaterialOutcome::TargetNotFound {
+                revision: inspected_revision,
+                target: missing_target,
+            } => {
+                return EditableValuePreconditionOutcome::TargetNotFound {
+                    revision: inspected_revision,
+                    target: missing_target,
+                };
+            },
         };
-        if current.id != revision {
-            return EditableValuePreconditionOutcome::StaleBase {
-                current: current.id,
-            };
-        }
-        let Some(descriptor) =
-            semantic_identity_descriptor(&current.notebook, target)
-        else {
-            return EditableValuePreconditionOutcome::TargetNotFound {
-                revision,
-                target,
-            };
-        };
-        let Some(actual) =
-            editable_semantic_value(&current.notebook, target, descriptor.kind)
-        else {
+        let Some(actual) = material.editable_value else {
             return EditableValuePreconditionOutcome::TargetNotEditableValue {
-                kind: descriptor.kind,
+                kind: material.descriptor.kind,
                 revision,
                 target,
             };
@@ -270,6 +271,39 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
             descriptor,
             revision,
             target,
+        }
+    }
+
+    fn command_target_material(
+        &self,
+        revision: atrament_semantic_notebook::RevisionIdentity,
+        target: AcceptedIdentity,
+    ) -> CommandTargetMaterialOutcome {
+        let Some(current) = self.current.as_ref() else {
+            return CommandTargetMaterialOutcome::NoAcceptedRevision;
+        };
+        if current.id != revision {
+            return CommandTargetMaterialOutcome::StaleBase {
+                current: current.id,
+            };
+        }
+        let Some(descriptor) =
+            semantic_identity_descriptor(&current.notebook, target)
+        else {
+            return CommandTargetMaterialOutcome::TargetNotFound {
+                revision,
+                target,
+            };
+        };
+        let editable_value =
+            editable_semantic_value(&current.notebook, target, descriptor.kind);
+        CommandTargetMaterialOutcome::Prepared {
+            material: CommandTargetMaterial {
+                descriptor,
+                editable_value,
+                revision,
+                target,
+            },
         }
     }
 

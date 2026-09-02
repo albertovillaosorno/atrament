@@ -45,7 +45,8 @@ use atrament_semantic_notebook::{
 };
 use atrament_semantic_notebook_port::{
     AcceptanceOutcome, CANDIDATE_BLOCK_NESTING_LIMIT, CandidateGraphError,
-    CandidateReferenceKind, EditableSemanticValue,
+    CandidateReferenceKind, CommandTargetMaterial,
+    CommandTargetMaterialOutcome, EditableSemanticValue,
     EditableValuePreconditionOutcome, FormulaEditOutcome,
     IdentityInspectOutcome, IdentityKindInspectOutcome,
     IdentityOwnerExpectation, IdentityPrecondition,
@@ -543,6 +544,98 @@ fn identity_kind_inspection_rejects_stale_absent_and_empty_session() {
     assert_eq!(
         empty.inspect_identity_kind(current, row),
         IdentityKindInspectOutcome::NoAcceptedRevision,
+    );
+}
+
+#[test]
+fn command_target_material_combines_owner_and_editable_value_read_only() {
+    let ids = IdentityAllocator::new();
+    let (candidate, span) =
+        candidate_notebook_with_span(&ids, "No cambies esta fuente.");
+    let block = candidate.pages[0].flows[0].blocks[0].id;
+    let flow = candidate.pages[0].flows[0].id;
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(candidate)
+    else {
+        panic!("text candidate must be accepted");
+    };
+    let block = accepted_for(&mapping, block);
+    let flow = accepted_for(&mapping, flow);
+    let span = accepted_for(&mapping, span);
+    let before = session.current().expect("accepted revision").clone();
+    let expected_span = CommandTargetMaterialOutcome::Prepared {
+        material: CommandTargetMaterial {
+            descriptor: SemanticIdentityDescriptor {
+                kind: SemanticIdentityKind::InlineSpan,
+                owner: Some(block),
+            },
+            editable_value: Some(EditableSemanticValue::Text(String::from(
+                "No cambies esta fuente.",
+            ))),
+            revision,
+            target: span,
+        },
+    };
+    assert_eq!(
+        session.command_target_material(revision, span),
+        expected_span
+    );
+    assert_eq!(
+        session.command_target_material(revision, span),
+        expected_span
+    );
+    assert_eq!(
+        session.command_target_material(revision, block),
+        CommandTargetMaterialOutcome::Prepared {
+            material: CommandTargetMaterial {
+                descriptor: SemanticIdentityDescriptor {
+                    kind: SemanticIdentityKind::Block(
+                        SemanticBlockKind::Paragraph,
+                    ),
+                    owner: Some(flow),
+                },
+                editable_value: None,
+                revision,
+                target: block,
+            },
+        },
+    );
+    assert_eq!(session.current(), Some(&before));
+}
+
+#[test]
+fn command_target_material_stale_missing_and_empty_are_typed() {
+    let ids = IdentityAllocator::new();
+    let (candidate, span) = candidate_notebook_with_span(&ids, "base text");
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(candidate)
+    else {
+        panic!("text candidate must be accepted");
+    };
+    let span = accepted_for(&mapping, span);
+    let replacement = candidate_notebook(&ids, "new revision");
+    let AcceptanceOutcome::Accepted { revision: current, .. } =
+        session.accept(replacement)
+    else {
+        panic!("replacement candidate must be accepted");
+    };
+    assert_eq!(
+        session.command_target_material(revision, span),
+        CommandTargetMaterialOutcome::StaleBase { current },
+    );
+    assert_eq!(
+        session.command_target_material(current, span),
+        CommandTargetMaterialOutcome::TargetNotFound {
+            revision: current,
+            target: span,
+        },
+    );
+    let empty = SemanticNotebookSessionService::default();
+    assert_eq!(
+        empty.command_target_material(current, span),
+        CommandTargetMaterialOutcome::NoAcceptedRevision,
     );
 }
 

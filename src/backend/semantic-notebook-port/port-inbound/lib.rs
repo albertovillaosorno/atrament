@@ -410,6 +410,44 @@ pub enum EditableValuePreconditionOutcome {
     },
 }
 
+/// Backend-derived local precondition material for one writable target.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct CommandTargetMaterial {
+    /// Current semantic kind and direct structural owner.
+    pub descriptor: SemanticIdentityDescriptor<AcceptedIdentity>,
+    /// Exact established editable value when this target has direct-edit
+    /// authority.
+    pub editable_value: Option<EditableSemanticValue>,
+    /// Accepted revision that owns this material.
+    pub revision: RevisionIdentity,
+    /// Accepted semantic identity this material describes.
+    pub target: AcceptedIdentity,
+}
+
+/// Result of deriving one writable target's local precondition material.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum CommandTargetMaterialOutcome {
+    /// Session has no accepted semantic revision to inspect.
+    NoAcceptedRevision,
+    /// Target material was derived completely from the named revision.
+    Prepared {
+        /// Complete local material for the requested target.
+        material: CommandTargetMaterial,
+    },
+    /// Caller names an accepted revision that is no longer current.
+    StaleBase {
+        /// Current accepted revision that rejected stale derivation.
+        current: RevisionIdentity,
+    },
+    /// Requested accepted identity is absent from the named revision.
+    TargetNotFound {
+        /// Accepted revision checked without mutation.
+        revision: RevisionIdentity,
+        /// Requested identity absent from that revision.
+        target: AcceptedIdentity,
+    },
+}
+
 /// Expected direct owner for one local semantic identity precondition.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum IdentityOwnerExpectation {
@@ -569,6 +607,13 @@ pub trait SemanticNotebookSession {
         target: AcceptedIdentity,
         precondition: IdentityPrecondition,
     ) -> IdentityPreconditionOutcome;
+
+    /// Derive complete local command-precondition material for one target.
+    fn command_target_material(
+        &self,
+        revision: RevisionIdentity,
+        target: AcceptedIdentity,
+    ) -> CommandTargetMaterialOutcome;
 
     /// Read the current accepted revision without creating another revision.
     fn current(&self) -> Option<&AcceptedRevision>;
