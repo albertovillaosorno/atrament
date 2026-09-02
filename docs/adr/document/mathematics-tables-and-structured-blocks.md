@@ -53,3 +53,21 @@ Fixtures must cover inline mathematics, displays, aligned equations, fractions,
 matrices, tables, boxes, and failure cases. Round trips must preserve source
 semantics and report unsupported constructs without silent substitution. A
 representative bilingual assignment must exercise every initial block family.
+
+### Implementation evidence
+
+The backend now has a dependency-free mathematical source analyzer that retains
+exact UTF-8 source and exposes structural spans for the admitted first slice:
+groups, scripts, fractions, square roots, upright unit or label groups, aligned
+separators, and matrix environments. Unknown control words remain explicit
+unsupported constructs, and malformed source returns typed syntax failures.
+
+Semantic formulas carry an explicit inline, display, or aligned mode. Candidate
+acceptance validates supported mathematics before identity promotion, while the
+existing unresolved-block family can preserve unsupported source exactly rather
+than rewriting it. Accepted formulas can also be replaced against an exact base
+revision while retaining their stable semantic identity.
+
+Expression-tree completeness, component-level formula editing, canonical
+serialization/migration round trips, formula measurement, glyph geometry,
+math-specific diagnostics, and output consumption remain future verification.

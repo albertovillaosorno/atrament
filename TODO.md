@@ -103,7 +103,9 @@ revision atomically while preserving nested semantic references. A direct
 accepted-text edit now preconditions the exact current revision, preserves all
 semantic identities while replacing one admitted inline text identity, creates
 one new revision only for a real change, and rejects no-op, stale, unavailable,
-or non-text targets without mutating accepted state.
+or non-text targets without mutating accepted state. Mathematical blocks now
+carry an explicit inline, display, or aligned mode and exact authored source;
+candidate acceptance validates that source before allocating accepted authority.
 
 The task remains open for the complete first-release semantic vocabulary,
 format parsing and canonical serialization, migrations and round-trip fixtures,
@@ -190,6 +192,31 @@ placement and asset semantics can prove which choices are valid.
 
 Parse and preserve TeX-compatible inline, displayed, aligned, matrix, unit, and
 derivation content while exposing unsupported constructs without rewriting.
+
+Current executable evidence preserves exact UTF-8 mathematical source while
+structurally recognizing ordinary Unicode notation, groups, scripts, fractions,
+square roots, upright unit or label groups, aligned row and column separators,
+and matrix environments. Inline, display, and aligned presentation modes are
+semantic values rather than renderer guesses. Unknown control words remain
+explicit unsupported constructs, while malformed groups, required arguments,
+alignment use, and matrix boundaries return typed syntax failures.
+
+Semantic candidate acceptance analyzes every `Mathematics` block before accepted
+identity allocation. Unsupported or malformed mathematical candidates reject
+atomically without replacing the current revision, and the same exact bytes can
+instead remain admitted through the typed unresolved-block path. Supported
+formula source and mode survive candidate-to-accepted identity promotion without
+rewriting.
+
+Direct accepted formula replacement uses the same analyzer against an exact base
+revision. A real supported edit preserves the formula identity and creates one
+new revision; no-op, malformed, unsupported, stale, absent, non-formula, and
+empty-session requests are typed no-effects.
+
+The task remains open for a broader TeX-compatible expression vocabulary,
+component-level edits such as numerator or matrix-cell operations, canonical
+serialization and migration round trips, formula measurement and glyph geometry,
+math-specific diagnostics, and render/live-output consumption.
 
 ### TODO - Implement tables and ruled educational blocks
 
