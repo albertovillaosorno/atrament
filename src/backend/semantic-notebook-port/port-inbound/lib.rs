@@ -410,6 +410,66 @@ pub enum EditableValuePreconditionOutcome {
     },
 }
 
+/// Behavior version for one backend-owned command capability contract.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub struct CommandBehaviorVersion(pub u32);
+
+/// Application operations discoverable through semantic command capabilities.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub enum CommandApplicationCapability {
+    /// Atomically apply one validated semantic command batch.
+    Apply,
+    /// Generate one backend-owned bounded semantic command context.
+    CommandContext,
+    /// Rebatch a validated subset through an explicitly admitted workflow.
+    SelectiveRebatching,
+    /// Validate one semantic command batch without accepted mutation.
+    Validate,
+}
+
+/// One semantic command family whose behavior is discoverable globally.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct CommandFamilyCapability {
+    /// Version of the family behavior contract.
+    pub behavior_version: CommandBehaviorVersion,
+    /// Semantic mutation family with at least one executable direct target.
+    pub family: SemanticCommandFamily,
+}
+
+/// Command-mode limits published when their owning capability is admitted.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct CommandResourceLimits {
+    /// Maximum commands accepted in one normalized batch, when admitted.
+    pub commands_per_batch: Option<usize>,
+    /// Maximum explicit dependency edges per normalized batch, when admitted.
+    pub dependency_edges: Option<usize>,
+    /// Maximum parsed command envelope size in bytes, when admitted.
+    pub envelope_bytes: Option<usize>,
+    /// Maximum backend-generated readable context size, when admitted.
+    pub readable_context_bytes: Option<usize>,
+    /// Maximum writable semantic targets or anchors, when admitted.
+    pub writable_targets: Option<usize>,
+}
+
+/// Read-only versioned semantic command capability discovery snapshot.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct SemanticCommandCapabilitySnapshot {
+    /// Application-level command operations currently admitted.
+    pub admitted_applications: &'static [CommandApplicationCapability],
+    /// Version of this capability-discovery behavior.
+    pub behavior_version: CommandBehaviorVersion,
+    /// Families with at least one currently executable direct-edit target.
+    pub family_capabilities: &'static [CommandFamilyCapability],
+    /// Versioned normalization behavior, absent until a protocol is admitted.
+    pub normalization_version: Option<CommandBehaviorVersion>,
+    /// Admitted serialized command protocol behavior versions.
+    pub protocol_versions: &'static [CommandBehaviorVersion],
+    /// Command-mode resource limits bound to admitted protocol operations.
+    pub resource_limits: CommandResourceLimits,
+    /// Version of typed local command-target result behavior.
+    pub typed_result_version: CommandBehaviorVersion,
+}
+
 /// Semantic mutation families frozen by the command capability matrix.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum SemanticCommandFamily {
@@ -772,6 +832,9 @@ pub trait SemanticNotebookSession {
         target: AcceptedIdentity,
         precondition: IdentityPrecondition,
     ) -> IdentityPreconditionOutcome;
+
+    /// Discover current semantic command behavior without mutation.
+    fn command_capability_snapshot(&self) -> SemanticCommandCapabilitySnapshot;
 
     /// Derive complete local command-precondition material for one target.
     fn command_target_material(

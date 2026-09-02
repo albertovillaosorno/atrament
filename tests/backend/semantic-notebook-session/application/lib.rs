@@ -45,8 +45,9 @@ use atrament_semantic_notebook::{
 };
 use atrament_semantic_notebook_port::{
     AcceptanceOutcome, CANDIDATE_BLOCK_NESTING_LIMIT, CandidateGraphError,
-    CandidateReferenceKind, CommandFamilyAdmissionOutcome,
-    CommandTargetMaterial, CommandTargetMaterialOutcome,
+    CandidateReferenceKind, CommandBehaviorVersion,
+    CommandFamilyAdmissionOutcome, CommandFamilyCapability,
+    CommandResourceLimits, CommandTargetMaterial, CommandTargetMaterialOutcome,
     CommandTargetPreconditionOutcome, CommandTargetPreconditions,
     EditableSemanticValue, EditableValuePreconditionOutcome,
     FormulaEditOutcome, IdentityInspectOutcome, IdentityKindInspectOutcome,
@@ -708,6 +709,47 @@ fn command_target_preconditions_stale_base_wins_before_local_checks() {
         ),
         CommandTargetPreconditionOutcome::StaleBase { current },
     );
+}
+
+#[test]
+fn command_capability_snapshot_is_deterministic_and_does_not_overclaim() {
+    let mut session = SemanticNotebookSessionService::default();
+    let snapshot = session.command_capability_snapshot();
+    assert_eq!(snapshot.behavior_version, CommandBehaviorVersion(1));
+    assert_eq!(snapshot.typed_result_version, CommandBehaviorVersion(1));
+    assert!(snapshot.admitted_applications.is_empty());
+    assert!(snapshot.protocol_versions.is_empty());
+    assert_eq!(snapshot.normalization_version, None);
+    assert_eq!(snapshot.resource_limits, CommandResourceLimits {
+        commands_per_batch: None,
+        dependency_edges: None,
+        envelope_bytes: None,
+        readable_context_bytes: None,
+        writable_targets: None,
+    },);
+    assert_eq!(snapshot.family_capabilities, [
+        CommandFamilyCapability {
+            behavior_version: CommandBehaviorVersion(1),
+            family: SemanticCommandFamily::DocumentConstraint,
+        },
+        CommandFamilyCapability {
+            behavior_version: CommandBehaviorVersion(1),
+            family: SemanticCommandFamily::StructuredContent,
+        },
+        CommandFamilyCapability {
+            behavior_version: CommandBehaviorVersion(1),
+            family: SemanticCommandFamily::TextContent,
+        },
+    ],);
+    assert_eq!(session.command_capability_snapshot(), snapshot);
+
+    let ids = IdentityAllocator::new();
+    let candidate =
+        candidate_notebook(&ids, "capability metadata is not state");
+    let AcceptanceOutcome::Accepted { .. } = session.accept(candidate) else {
+        panic!("candidate must be accepted");
+    };
+    assert_eq!(session.command_capability_snapshot(), snapshot);
 }
 
 #[test]

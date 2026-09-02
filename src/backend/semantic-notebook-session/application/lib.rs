@@ -48,13 +48,15 @@ use atrament_semantic_notebook::{
 };
 use atrament_semantic_notebook_port::{
     AcceptanceOutcome, CANDIDATE_BLOCK_NESTING_LIMIT, CandidateGraphError,
-    CandidateReferenceKind, CommandFamilyAdmissionOutcome,
-    CommandTargetMaterial, CommandTargetMaterialOutcome,
+    CandidateReferenceKind, CommandBehaviorVersion,
+    CommandFamilyAdmissionOutcome, CommandFamilyCapability,
+    CommandResourceLimits, CommandTargetMaterial, CommandTargetMaterialOutcome,
     CommandTargetPreconditionOutcome, CommandTargetPreconditions,
     EditableSemanticValue, EditableValuePreconditionOutcome,
     FormulaEditOutcome, IdentityInspectOutcome, IdentityKindInspectOutcome,
     IdentityMapping, IdentityOwnerExpectation, IdentityPrecondition,
-    IdentityPreconditionOutcome, PageProfileEditOutcome, SemanticCommandFamily,
+    IdentityPreconditionOutcome, PageProfileEditOutcome,
+    SemanticCommandCapabilitySnapshot, SemanticCommandFamily,
     SemanticNotebookSession, TableRowRoleEditOutcome, TextEditOutcome,
 };
 
@@ -388,6 +390,39 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
             descriptor,
             revision,
             target,
+        }
+    }
+
+    fn command_capability_snapshot(&self) -> SemanticCommandCapabilitySnapshot {
+        const VERSION: CommandBehaviorVersion = CommandBehaviorVersion(1);
+        const FAMILY_CAPABILITIES: [CommandFamilyCapability; 3] = [
+            CommandFamilyCapability {
+                behavior_version: VERSION,
+                family: SemanticCommandFamily::DocumentConstraint,
+            },
+            CommandFamilyCapability {
+                behavior_version: VERSION,
+                family: SemanticCommandFamily::StructuredContent,
+            },
+            CommandFamilyCapability {
+                behavior_version: VERSION,
+                family: SemanticCommandFamily::TextContent,
+            },
+        ];
+        SemanticCommandCapabilitySnapshot {
+            admitted_applications: &[],
+            behavior_version: VERSION,
+            family_capabilities: &FAMILY_CAPABILITIES,
+            normalization_version: None,
+            protocol_versions: &[],
+            resource_limits: CommandResourceLimits {
+                commands_per_batch: None,
+                dependency_edges: None,
+                envelope_bytes: None,
+                readable_context_bytes: None,
+                writable_targets: None,
+            },
+            typed_result_version: VERSION,
         }
     }
 
