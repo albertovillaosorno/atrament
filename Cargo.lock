@@ -11,6 +11,13 @@ name = "atrament_diagnostic"
 version = "0.1.0"
 
 [[package]]
+name = "atrament_flow_pagination"
+version = "0.1.0"
+dependencies = [
+ "atrament_physical_page_profile",
+]
+
+[[package]]
 name = "atrament_paper_mark_geometry"
 version = "0.1.0"
 dependencies = [

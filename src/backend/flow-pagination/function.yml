@@ -1,0 +1,9 @@
+identity:
+  id: function:flow-pagination
+  name: flow-pagination
+  path: src/backend/flow-pagination
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: domain
