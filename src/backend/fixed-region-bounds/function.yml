@@ -1,0 +1,9 @@
+identity:
+  id: function:fixed-region-bounds
+  name: fixed-region-bounds
+  path: src/backend/fixed-region-bounds
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: domain

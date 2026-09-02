@@ -7,6 +7,9 @@ depends_on = []
 [component.atrament_diagnostic]
 depends_on = []
 
+[component.atrament_fixed_region_bounds]
+depends_on = ["atrament_physical_page_profile"]
+
 [component.atrament_flow_pagination]
 depends_on = ["atrament_physical_page_profile"]
 
