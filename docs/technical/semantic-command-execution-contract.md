@@ -456,6 +456,28 @@ Clipboard support remains a human transport convenience. Removing the browser or
 clipboard from an automated workflow does not change command semantics because
 CLI and MCP enter through the same application services.
 
+### Implementation evidence
+
+The current semantic session foundation can check one accepted identity against
+one exact revision for expected semantic kind and direct structural owner. A
+separate compare-and-set check covers exact accepted inline text, formula mode
+and source, table-row role, and physical page-profile geometry without mutating
+accepted state. Stale revision rejection precedes every local comparison.
+
+Exact authored text and formula source are compared as currently accepted bytes;
+no Unicode normalization form is implied by this implementation evidence. The
+complete command protocol may define a versioned normalization contract later.
+
+Candidate acceptance currently admits at most 256 nested block-containment
+levels as an implementation resource bound. Deeper candidates return a typed
+nesting-limit failure before identity promotion or accepted mutation, and their
+recursive structures are dismantled iteratively so rejection itself cannot
+consume unbounded process stack depth.
+
+These primitives do not implement command-context generation, ordered batch
+simulation, retry identity, Validate, Apply, undo/redo, or adapter parity. Those
+parts of this contract remain open.
+
 ## Failure Modes
 
 The command-mode contract fails if any required command failure changes the

@@ -110,13 +110,19 @@ exact authored source; candidate acceptance validates that source before
 allocating accepted authority.
 
 A read-only semantic descriptor now classifies stable identities and their
-direct
-structural owners without exposing storage or wire shape. Exact-revision
+direct structural owners without exposing storage or wire shape. Exact-revision
 inspection returns that kind-and-owner descriptor with typed stale, missing, and
-empty-session outcomes and no mutation. A separate local-precondition check can
-require an exact semantic kind and direct owner, including explicit
-notebook-root
-ownership, before a future command family is admitted to mutate that target.
+empty-session outcomes and no mutation. A local-precondition check can require
+an exact semantic kind and direct owner, including explicit notebook-root
+ownership, before a future command family may mutate that target.
+
+A second read-only precondition compares exact accepted base values for the four
+families with established direct-edit authority: inline text, formula mode and
+source, table-row role, and physical page-profile geometry. Text and formula
+checks preserve exact authored source because no Unicode normalization form is
+yet frozen. Candidate acceptance also enforces a public 256-level block nesting
+resource bound and iteratively dismantles rejected deep candidates before any
+accepted mutation.
 
 The task remains open for the complete first-release semantic vocabulary,
 format parsing and canonical serialization, migrations and round-trip fixtures,
