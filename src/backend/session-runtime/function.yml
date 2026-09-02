@@ -1,0 +1,9 @@
+identity:
+  id: function:session-runtime
+  name: session-runtime
+  path: src/backend/session-runtime
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: adapter-inbound

@@ -1,4 +1,4 @@
 domain = "languages"
 schema_version = 1
 analyzed = []
-present = ["typescript"]
+present = ["rust", "typescript"]

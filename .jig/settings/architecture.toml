@@ -1,2 +1,5 @@
 domain = "architecture"
 schema_version = 1
+
+[component.atrament_session_runtime]
+depends_on = []

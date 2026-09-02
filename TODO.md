@@ -12,11 +12,6 @@ screenshots are never a substitute for semantic or geometric correctness.
 
 ## P1 — Localhost runtime and ephemeral session
 
-### TODO - Start a loopback-only Rust service
-
-Bind only to loopback, select an available port safely, publish startup state,
-and reject remote interfaces and untrusted host headers.
-
 ### TODO - Serve or launch the TypeScript frontend
 
 Open the browser workspace against the exact Rust session and present useful

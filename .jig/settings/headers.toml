@@ -1,10 +1,10 @@
 domain = "headers"
 schema_version = 1
-adapters = ["ts:typescript:slash-line"]
+adapters = ["rs:rust:slash-line", "ts:typescript:slash-line"]
 confidential = false
 copyright = "Copyright © 2026 Alberto Villa Osorno."
 exempt_paths = []
-extensions = ["ts"]
+extensions = ["rs", "ts"]
 max_lines = 96
 required_boundary_fields = ["Owns", "Must-Not", "Allows", "Split-When", "Merge-When", "Summary", "Description", "Usage", "Defaults"]
 require_module_summary = false

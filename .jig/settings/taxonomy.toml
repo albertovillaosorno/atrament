@@ -6,6 +6,9 @@ overlapping_roles = "deny"
 spaces_in_paths = "deny"
 unknown_paths = "deny"
 
+[role.cargo_configuration]
+paths = [".cargo/"]
+
 [role.documentation]
 paths = ["docs/"]
 
@@ -13,7 +16,10 @@ paths = ["docs/"]
 paths = [".jig/"]
 
 [role.root_governance]
-paths = [".editorconfig", ".gitattributes", ".gitignore", "LICENSE-MIT", "README.md", "TODO.md", "package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml", "tsconfig.json"]
+paths = [".editorconfig", ".gitattributes", ".gitignore", "Cargo.lock", "Cargo.toml", "LICENSE-MIT", "README.md", "TODO.md", "package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml", "tsconfig.json"]
 
 [role.source]
 paths = ["src/"]
+
+[role.test]
+paths = ["tests/"]

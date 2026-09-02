@@ -10,12 +10,12 @@ enabled = false
 reason = "The planning generation contains no C, C++, or CUDA source."
 
 [applicability.clippy-config]
-enabled = false
-reason = "Rust policy activates with the first Rust workspace scaffold."
+enabled = true
+reason = "The Rust session runtime is governed by explicit Clippy policy."
 
 [applicability.clippy-lints]
 enabled = false
-reason = "Rust policy activates with the first Rust workspace scaffold."
+reason = "Pinned nightly Clippy is externally validated until repository-local Rust tool provisioning exists."
 
 [applicability.coverage-py]
 enabled = false
@@ -54,16 +54,16 @@ enabled = false
 reason = "The planning generation contains no Python source."
 
 [applicability.rust-toolchain]
-enabled = false
-reason = "Rust policy activates with the first Rust workspace scaffold."
+enabled = true
+reason = "The Rust session runtime requires a pinned toolchain policy."
 
 [applicability.rustc-lints]
 enabled = false
-reason = "Rust policy activates with the first Rust workspace scaffold."
+reason = "Stable Cargo check is externally validated until repository-local Rust tool provisioning exists."
 
 [applicability.rustfmt]
 enabled = false
-reason = "Rust policy activates with the first Rust workspace scaffold."
+reason = "Pinned nightly rustfmt is externally validated until repository-local Rust tool provisioning exists."
 
 [applicability.typescript]
 enabled = true
