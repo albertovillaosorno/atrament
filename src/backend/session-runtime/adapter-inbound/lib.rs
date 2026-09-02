@@ -41,6 +41,7 @@
 use std::io::{self, Read as _, Write as _};
 use std::net::{Ipv4Addr, SocketAddr, TcpListener, TcpStream};
 use std::str;
+use std::time::Duration;
 
 use atrament_session_draft_port::{DraftField, DraftMutation, SessionDraft};
 use atrament_session_handshake_port::{
@@ -50,6 +51,7 @@ use atrament_session_handshake_port::{
 const ENCODED_SECRET_BYTES: usize = 64;
 const MAX_HEADER_BYTES: usize = 16 * 1024;
 const MAX_REQUEST_BODY_BYTES: usize = 2 * 1024 * 1024;
+const REQUEST_IO_TIMEOUT: Duration = Duration::from_secs(2);
 const HTML_CONTENT_TYPE: &str = "text/html; charset=utf-8";
 const CSS_CONTENT_TYPE: &str = "text/css; charset=utf-8";
 const JAVASCRIPT_CONTENT_TYPE: &str = "text/javascript; charset=utf-8";
@@ -140,6 +142,10 @@ impl Runtime {
         for incoming in self.listener.incoming() {
             match incoming {
                 Ok(mut connection) => {
+                    drop(connection.set_read_timeout(Some(REQUEST_IO_TIMEOUT)));
+                    drop(
+                        connection.set_write_timeout(Some(REQUEST_IO_TIMEOUT)),
+                    );
                     drop(serve_connection(
                         &mut connection,
                         &self.expected_host,
@@ -682,7 +688,36 @@ fn serve_connection(
     handshake: &dyn SessionHandshake,
     draft: &mut dyn SessionDraft,
 ) -> io::Result<()> {
-    let request = read_request(stream)?;
+    let request = match read_request(stream) {
+        Ok(request) => request,
+        Err(error)
+            if matches!(
+                error.kind(),
+                io::ErrorKind::InvalidData | io::ErrorKind::UnexpectedEof
+            ) =>
+        {
+            let response = json_response(
+                "400 Bad Request",
+                br#"{"error":"invalid_request"}"#,
+            );
+            stream.write_all(&response)?;
+            return stream.flush();
+        },
+        Err(error)
+            if matches!(
+                error.kind(),
+                io::ErrorKind::TimedOut | io::ErrorKind::WouldBlock
+            ) =>
+        {
+            let response = json_response(
+                "408 Request Timeout",
+                br#"{"error":"request_timeout"}"#,
+            );
+            stream.write_all(&response)?;
+            return stream.flush();
+        },
+        Err(error) => return Err(error),
+    };
     let response = route_request(
         &request,
         expected_host,
