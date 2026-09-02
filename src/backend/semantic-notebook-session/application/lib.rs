@@ -663,33 +663,58 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
         target: AcceptedIdentity,
         role: TableRowRole,
     ) -> TableRowRoleEditOutcome {
+        let simulation = self.simulate_direct_edit(
+            base,
+            target,
+            EditableSemanticValue::TableRowRole(role),
+        );
+        let replacement = match simulation {
+            DirectEditSimulationOutcome::Applicable {
+                requested: EditableSemanticValue::TableRowRole(requested_role),
+                ..
+            } => requested_role,
+            DirectEditSimulationOutcome::Applicable { .. }
+            | DirectEditSimulationOutcome::InvalidMathematics { .. }
+            | DirectEditSimulationOutcome::InvalidPageProfile { .. }
+            | DirectEditSimulationOutcome::TargetNotEditableValue { .. }
+            | DirectEditSimulationOutcome::UnsupportedMathematics { .. }
+            | DirectEditSimulationOutcome::ValueFamilyMismatch { .. } => {
+                return TableRowRoleEditOutcome::TargetNotTableRow {
+                    revision: base,
+                    target,
+                };
+            },
+            DirectEditSimulationOutcome::NoAcceptedRevision => {
+                return TableRowRoleEditOutcome::NoAcceptedRevision;
+            },
+            DirectEditSimulationOutcome::NoOp {
+                revision,
+                target: simulated_target,
+                ..
+            } => {
+                return TableRowRoleEditOutcome::NoOp {
+                    revision,
+                    target: simulated_target,
+                };
+            },
+            DirectEditSimulationOutcome::StaleBase { current } => {
+                return TableRowRoleEditOutcome::StaleBase { current };
+            },
+            DirectEditSimulationOutcome::TargetNotFound {
+                revision,
+                target: missing_target,
+            } => {
+                return TableRowRoleEditOutcome::TargetNotFound {
+                    revision,
+                    target: missing_target,
+                };
+            },
+        };
         let Some(current) = self.current.as_ref() else {
             return TableRowRoleEditOutcome::NoAcceptedRevision;
         };
-        if current.id != base {
-            return TableRowRoleEditOutcome::StaleBase { current: current.id };
-        }
-        let Some(existing) = table_row_role_value(&current.notebook, target)
-        else {
-            if semantic_identity_kind(&current.notebook, target).is_some() {
-                return TableRowRoleEditOutcome::TargetNotTableRow {
-                    revision: current.id,
-                    target,
-                };
-            }
-            return TableRowRoleEditOutcome::TargetNotFound {
-                revision: current.id,
-                target,
-            };
-        };
-        if existing == role {
-            return TableRowRoleEditOutcome::NoOp {
-                revision: current.id,
-                target,
-            };
-        }
         let mut notebook = current.notebook.clone();
-        if !replace_table_row_role_value(&mut notebook, target, role) {
+        if !replace_table_row_role_value(&mut notebook, target, replacement) {
             return TableRowRoleEditOutcome::TargetNotFound {
                 revision: current.id,
                 target,
