@@ -187,17 +187,27 @@ construct a second command-context implementation in TypeScript.
 
 ### Implementation evidence
 
-The semantic notebook domain now exposes a read-only identity-kind projection
-covering notebook, page, flow, block subtype, inline span, formula, list and
-item, figure, table, row, cell, page profile, asset, constraint, output profile,
-provenance, and style ownership. Nested semantic content is resolved by stable
-identity rather than serialized offsets or page coordinates.
+The semantic notebook domain now exposes a read-only identity descriptor
+covering
+notebook, page, flow, block subtype, inline span, formula, list and item,
+figure,
+table, row, cell, page profile, asset, constraint, output profile, provenance,
+and style identities. Each descriptor carries the direct structural owner, with
+the notebook root represented explicitly as having no owner. Nested semantic
+content is resolved by stable identity rather than serialized offsets or page
+coordinates.
 
 The current session application also admits one deliberately narrow Inspect
-foundation: inspect one accepted identity kind against one exact revision. A
-successful read returns the named revision, target identity, and semantic kind
-without changing accepted state. Stale revisions, missing targets, and an empty
-session return typed read-only outcomes.
+foundation: inspect one accepted identity against one exact revision. A
+successful read returns the named revision, target identity, semantic kind, and
+direct owner without changing accepted state. Stale revisions, missing targets,
+and an empty session return typed read-only outcomes.
+
+A read-only local-precondition checker can require an exact semantic kind, an
+exact direct owner, notebook-root ownership, or no owner constraint. Wrong kind
+and wrong owner are distinct typed failures, and stale revision rejection occurs
+before local comparison. This is validation evidence for future command
+preconditions, not a complete command-batch implementation.
 
 This is not the complete first-release Inspect protocol. Bounded multi-object
 selectors, completeness and continuation semantics, capability snapshots,

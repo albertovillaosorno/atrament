@@ -108,10 +108,15 @@ stale, unavailable, or non-text targets without mutating accepted state.
 Mathematical blocks now carry an explicit inline, display, or aligned mode and
 exact authored source; candidate acceptance validates that source before
 allocating accepted authority.
-A read-only semantic-kind projection now classifies stable identities, including
-block subtype and nested structured owners, without exposing storage or wire
-shape. The session can inspect one accepted identity kind against an exact
-revision with typed stale, missing, and empty-session outcomes and no mutation.
+
+A read-only semantic descriptor now classifies stable identities and their
+direct
+structural owners without exposing storage or wire shape. Exact-revision
+inspection returns that kind-and-owner descriptor with typed stale, missing, and
+empty-session outcomes and no mutation. A separate local-precondition check can
+require an exact semantic kind and direct owner, including explicit
+notebook-root
+ownership, before a future command family is admitted to mutate that target.
 
 The task remains open for the complete first-release semantic vocabulary,
 format parsing and canonical serialization, migrations and round-trip fixtures,
