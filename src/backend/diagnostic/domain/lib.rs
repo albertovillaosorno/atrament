@@ -133,7 +133,7 @@ pub enum Evidence {
     /// Exact physical length represented in canonical micrometres.
     PhysicalLength {
         /// Signed canonical physical length.
-        micrometres: i64,
+        micrometres: i128,
         /// Semantic measurement represented by the length.
         quantity: PhysicalLengthQuantity,
     },

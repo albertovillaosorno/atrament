@@ -8,6 +8,7 @@ members = [
     "src/backend/paper-mark-geometry",
     "src/backend/runtime-bootstrap",
     "src/backend/semantic-flow-pagination",
+    "src/backend/semantic-fixed-region-layout",
     "src/backend/semantic-notebook",
     "src/backend/semantic-notebook-port",
     "src/backend/semantic-notebook-session",

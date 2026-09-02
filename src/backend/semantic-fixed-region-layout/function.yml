@@ -1,0 +1,9 @@
+identity:
+  id: function:semantic-fixed-region-layout
+  name: semantic-fixed-region-layout
+  path: src/backend/semantic-fixed-region-layout
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: application

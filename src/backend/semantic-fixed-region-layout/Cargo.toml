@@ -1,0 +1,18 @@
+[package]
+name = "atrament_semantic_fixed_region_layout"
+version = "0.1.0"
+edition = "2024"
+publish = false
+license = "MIT"
+
+[dependencies]
+atrament_diagnostic = { path = "../diagnostic" }
+atrament_fixed_region_bounds = { path = "../fixed-region-bounds" }
+atrament_physical_page_profile = { path = "../physical-page-profile" }
+atrament_semantic_notebook = { path = "../semantic-notebook" }
+
+[lib]
+path = "application/lib.rs"
+
+[lints]
+workspace = true

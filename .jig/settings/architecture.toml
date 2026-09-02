@@ -22,6 +22,9 @@ depends_on = ["atrament_physical_page_profile"]
 [component.atrament_semantic_flow_pagination]
 depends_on = ["atrament_flow_pagination", "atrament_semantic_notebook"]
 
+[component.atrament_semantic_fixed_region_layout]
+depends_on = ["atrament_diagnostic", "atrament_fixed_region_bounds", "atrament_physical_page_profile", "atrament_semantic_notebook"]
+
 [component.atrament_semantic_notebook]
 depends_on = ["atrament_physical_page_profile"]
 
