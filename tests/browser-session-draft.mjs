@@ -91,3 +91,17 @@ test("draft resource limit requires current shared diagnostic metadata", () => {
         false,
     );
 });
+
+test("incomplete draft diagnostics still preserve known resource limit", () => {
+    assert.equal(
+        isResourceLimit({
+            error: "resource_limit",
+            diagnostics: {
+                version: "atrament.diagnostic/1",
+                completeness: "incomplete",
+                items: [{ code: "atrament.session-draft.resource-limit" }],
+            },
+        }),
+        true,
+    );
+});

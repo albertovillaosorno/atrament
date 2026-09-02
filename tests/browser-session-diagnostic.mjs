@@ -39,17 +39,21 @@ const { DIAGNOSTIC_VERSION, parseDiagnosticSet } =
 
 test("diagnostic set admits current version and explicit completeness", () => {
     assert.equal(DIAGNOSTIC_VERSION, "atrament.diagnostic/1");
-    assert.deepEqual(
-        parseDiagnosticSet({
-            version: DIAGNOSTIC_VERSION,
-            completeness: "complete",
-            items: [{ code: "atrament.example.condition", detail: 42 }],
-        }),
-        {
-            completeness: "complete",
-            items: [{ code: "atrament.example.condition", detail: 42 }],
-        },
-    );
+    const complete = parseDiagnosticSet({
+        version: DIAGNOSTIC_VERSION,
+        completeness: "complete",
+        items: [{ code: "atrament.example.condition", detail: 42 }],
+    });
+    assert.deepEqual(complete, {
+        completeness: "complete",
+        items: [{ code: "atrament.example.condition", detail: 42 }],
+    });
+    const incomplete = parseDiagnosticSet({
+        version: DIAGNOSTIC_VERSION,
+        completeness: "incomplete",
+        items: [{ code: "atrament.example.condition" }],
+    });
+    assert.equal(incomplete?.completeness, "incomplete");
 });
 
 test("diagnostic set rejects invalid namespace, completeness, or items", () => {

@@ -134,3 +134,26 @@ test("typed incompatibility rejects diagnostic namespace drift", () => {
         { kind: "invalid" },
     );
 });
+
+test(
+    "incomplete handshake diagnostics preserve known incompatibility",
+    () => {
+    const outcome = parseHandshakePayload({
+        result: "incompatible",
+        diagnostics: {
+            version: "atrament.diagnostic/1",
+            completeness: "incomplete",
+            items: [{
+                code: "atrament.handshake.version-mismatch",
+                dimension: "prompt",
+                expected: CURRENT_VERSIONS.prompt,
+            }],
+        },
+    });
+        assert.deepEqual(outcome, {
+            kind: "incompatible",
+            dimension: "prompt",
+            expected: CURRENT_VERSIONS.prompt,
+        });
+    },
+);
