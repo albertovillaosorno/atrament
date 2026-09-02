@@ -180,10 +180,8 @@ fn real_six_mm_fixed_overflow_blocks_export_layout_preflight() {
     let result = preflight_layout_for_export(
         session.current().expect("accepted revision"),
         fixture.revision,
-        RevisionLayoutDiagnostics {
-            diagnostics: &diagnostics,
-            revision: fixture.revision,
-        },
+        RevisionLayoutDiagnostics::bind(fixture.revision, &diagnostics)
+            .expect("layout diagnostic binding"),
     )
     .expect("revision binding is valid");
     let ExportLayoutPreflightResult::Blocked {
@@ -219,10 +217,8 @@ fn complete_empty_layout_evidence_is_ready_but_does_not_mutate_revision() {
         preflight_layout_for_export(
             &before,
             fixture.revision,
-            RevisionLayoutDiagnostics {
-                diagnostics: &diagnostics,
-                revision: fixture.revision,
-            },
+            RevisionLayoutDiagnostics::bind(fixture.revision, &diagnostics)
+                .expect("layout diagnostic binding"),
         ),
         Ok(ExportLayoutPreflightResult::Ready {
             diagnostics,
@@ -244,10 +240,8 @@ fn incomplete_layout_evidence_never_reports_ready() {
         preflight_layout_for_export(
             session.current().expect("accepted revision"),
             fixture.revision,
-            RevisionLayoutDiagnostics {
-                diagnostics: &diagnostics,
-                revision: fixture.revision,
-            },
+            RevisionLayoutDiagnostics::bind(fixture.revision, &diagnostics)
+                .expect("layout diagnostic binding"),
         ),
         Ok(ExportLayoutPreflightResult::Incomplete {
             diagnostics,
@@ -274,10 +268,8 @@ fn stale_requested_revision_rejects_before_layout_evidence() {
         preflight_layout_for_export(
             session.current().expect("edited revision"),
             fixture.revision,
-            RevisionLayoutDiagnostics {
-                diagnostics: &diagnostics,
-                revision: fixture.revision,
-            },
+            RevisionLayoutDiagnostics::bind(fixture.revision, &diagnostics)
+                .expect("layout diagnostic binding"),
         ),
         Err(ExportLayoutPreflightError::RequestedRevisionMismatch {
             current,
@@ -304,10 +296,8 @@ fn layout_evidence_from_another_revision_cannot_be_reused() {
         preflight_layout_for_export(
             session.current().expect("edited revision"),
             current,
-            RevisionLayoutDiagnostics {
-                diagnostics: &diagnostics,
-                revision: fixture.revision,
-            },
+            RevisionLayoutDiagnostics::bind(fixture.revision, &diagnostics)
+                .expect("layout diagnostic binding"),
         ),
         Err(ExportLayoutPreflightError::LayoutRevisionMismatch {
             requested: current,
@@ -339,15 +329,67 @@ fn non_layout_diagnostic_cannot_be_smuggled_into_layout_preflight() {
             severity: Severity::Error,
         }],
     };
-    assert_eq!(
-        preflight_layout_for_export(
-            session.current().expect("accepted revision"),
-            fixture.revision,
-            RevisionLayoutDiagnostics {
-                diagnostics: &diagnostics,
-                revision: fixture.revision,
-            },
-        ),
+    assert!(matches!(
+        RevisionLayoutDiagnostics::bind(fixture.revision, &diagnostics),
         Err(ExportLayoutPreflightError::NonLayoutDiagnostic),
-    );
+    ));
+}
+
+fn real_overflow_diagnostics(
+    session: &SemanticNotebookSessionService,
+    fixture: &AcceptedFixture,
+) -> DiagnosticSet {
+    let layout = validate_fixed_placement(
+        session.current().expect("accepted revision"),
+        AcceptedFixedPlacement {
+            object: fixture.block,
+            page: fixture.page,
+            rectangle: Rect {
+                height: Length::from_micrometres(23_000),
+                width: Length::from_micrometres(50_000),
+                x: Length::from_micrometres(35_000),
+                y: Length::from_micrometres(270_000),
+            },
+            revision: fixture.revision,
+        },
+    )
+    .expect("fixed layout validation");
+    let FixedRegionLayoutResult::Overflow { diagnostics, .. } = layout else {
+        panic!("fixture must overflow");
+    };
+    diagnostics
+}
+
+#[test]
+fn diagnostic_revision_context_cannot_be_relabelled_as_current() {
+    let mut session = SemanticNotebookSessionService::default();
+    let fixture = accepted_fixture(&mut session);
+    let mut diagnostics = real_overflow_diagnostics(&session, &fixture);
+    diagnostics.diagnostics[0].operation.contexts[0].identity =
+        String::from("RevisionIdentity(999999)");
+
+    assert!(matches!(
+        RevisionLayoutDiagnostics::bind(fixture.revision, &diagnostics),
+        Err(ExportLayoutPreflightError::DiagnosticContextMismatch),
+    ));
+}
+
+#[test]
+fn layout_diagnostic_requires_exactly_one_revision_context() {
+    let mut session = SemanticNotebookSessionService::default();
+    let fixture = accepted_fixture(&mut session);
+    let mut missing = real_overflow_diagnostics(&session, &fixture);
+    missing.diagnostics[0].operation.contexts.clear();
+    assert!(matches!(
+        RevisionLayoutDiagnostics::bind(fixture.revision, &missing),
+        Err(ExportLayoutPreflightError::DiagnosticContextMissing),
+    ));
+
+    let mut duplicated = real_overflow_diagnostics(&session, &fixture);
+    let repeated = duplicated.diagnostics[0].operation.contexts[0].clone();
+    duplicated.diagnostics[0].operation.contexts.push(repeated);
+    assert!(matches!(
+        RevisionLayoutDiagnostics::bind(fixture.revision, &duplicated),
+        Err(ExportLayoutPreflightError::DiagnosticContextMismatch),
+    ));
 }

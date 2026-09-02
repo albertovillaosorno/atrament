@@ -36,6 +36,7 @@
 
 use atrament_diagnostic::{
     BlockingDisposition, Completeness, DiagnosticSet, Operation,
+    OperationContextKind,
 };
 use atrament_semantic_notebook::{AcceptedRevision, RevisionIdentity};
 
@@ -43,10 +44,52 @@ use atrament_semantic_notebook::{AcceptedRevision, RevisionIdentity};
 /// them.
 #[derive(Clone, Copy, Debug)]
 pub struct RevisionLayoutDiagnostics<'diagnostics> {
-    /// Complete or explicitly incomplete layout diagnostic evidence.
-    pub diagnostics: &'diagnostics DiagnosticSet,
-    /// Accepted revision whose layout operation produced the evidence.
-    pub revision: RevisionIdentity,
+    diagnostics: &'diagnostics DiagnosticSet,
+    revision: RevisionIdentity,
+}
+
+impl<'diagnostics> RevisionLayoutDiagnostics<'diagnostics> {
+    /// Bind one layout diagnostic set to the accepted revision that produced
+    /// it.
+    ///
+    /// Empty diagnostic sets have no instance context to inspect, so the typed
+    /// revision argument supplies their binding. Every non-empty set must carry
+    /// one matching accepted-revision context in each layout diagnostic.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed failure when a diagnostic belongs to another operation,
+    /// omits accepted-revision context, or names a different accepted revision.
+    pub fn bind(
+        revision: RevisionIdentity,
+        diagnostics: &'diagnostics DiagnosticSet,
+    ) -> Result<Self, ExportLayoutPreflightError> {
+        let expected = format!("{revision:?}");
+        for diagnostic in &diagnostics.diagnostics {
+            if diagnostic.operation.operation != Operation::Layout {
+                return Err(ExportLayoutPreflightError::NonLayoutDiagnostic);
+            }
+            let revision_contexts = diagnostic
+                .operation
+                .contexts
+                .iter()
+                .filter(|context| {
+                    context.kind == OperationContextKind::AcceptedRevision
+                })
+                .collect::<Vec<_>>();
+            let Some(context) = revision_contexts.first() else {
+                return Err(
+                    ExportLayoutPreflightError::DiagnosticContextMissing,
+                );
+            };
+            if revision_contexts.len() != 1 || context.identity != expected {
+                return Err(
+                    ExportLayoutPreflightError::DiagnosticContextMismatch,
+                );
+            }
+        }
+        Ok(Self { diagnostics, revision })
+    }
 }
 
 /// Layout-only preflight result for a later explicit Export request.
@@ -79,6 +122,10 @@ pub enum ExportLayoutPreflightResult {
 /// Typed failure before layout diagnostics can be used for Export preflight.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ExportLayoutPreflightError {
+    /// One layout diagnostic carries a different accepted-revision context.
+    DiagnosticContextMismatch,
+    /// One layout diagnostic omits its accepted-revision operation context.
+    DiagnosticContextMissing,
     /// Supplied layout evidence belongs to another accepted revision.
     LayoutRevisionMismatch {
         /// Accepted revision explicitly requested for later Export.
@@ -125,14 +172,6 @@ pub fn preflight_layout_for_export(
             requested,
             supplied: layout.revision,
         });
-    }
-    if layout
-        .diagnostics
-        .diagnostics
-        .iter()
-        .any(|diagnostic| diagnostic.operation.operation != Operation::Layout)
-    {
-        return Err(ExportLayoutPreflightError::NonLayoutDiagnostic);
     }
     if layout.diagnostics.completeness == Completeness::Incomplete {
         return Ok(ExportLayoutPreflightResult::Incomplete {
