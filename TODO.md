@@ -17,16 +17,13 @@ screenshots are never a substitute for semantic or geometric correctness.
 Issue an unguessable session token at startup, require it on mutating requests,
 and prevent another local page from controlling an active notebook.
 
-### TODO - Implement the protocol handshake
-
-Exchange product, protocol, prompt, profile, renderer, and capability versions
-before enabling edits and fail clearly on incompatible frontend or backend.
-
-Current frontend evidence starts task, source, prompt, raw-response, and option
-editing disabled while the shell waits for a backend session. Output remains an
-availability state rather than a fabricated action. The task remains open until
-the backend handshake enables compatible controls or exposes a clear
-incompatibility state.
+Current evidence generates 256 bits from the operating-system random source,
+hands the credential to the launched browser only through a scrubbed fragment,
+and requires exact Host, Origin, and fixed-work Bearer admission for the
+authenticated version handshake. Missing, malformed, stale-shaped, and wrong
+credentials share one unauthenticated response shape. The task remains open
+until the first notebook mutation endpoint uses the same admission boundary and
+a browser-forgery fixture proves an unrelated page cannot mutate session state.
 
 ### TODO - Keep all notebook state in memory
 
