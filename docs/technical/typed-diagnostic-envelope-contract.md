@@ -36,10 +36,23 @@ and explicit set completeness for those two conditions. The adapter treats an
 empty diagnostic set attached to a rejecting application result as an internal
 invariant failure rather than fabricating an adapter-owned diagnostic code.
 
-Cross-capability acceptance remains incomplete. Semantic-command, layout,
-Render, Export, Plan, CLI, and MCP implementations must exercise the remaining
-verification fixtures before parity and capability-specific diagnostic behavior
-are proven.
+Fixed-region layout now adds accepted-revision diagnostic evidence outside the
+localhost handshake/draft boundary. A crossed writable page edge produces the
+stable `atrament.layout.fixed-region-overflow` code, blocking disposition,
+semantic object and page locations, typed boundary evidence, and a lossless
+physical overflow amount. The first complete-journey 6 mm bottom overflow is an
+executable fixture rather than prose-only evidence.
+
+A read-only layout-only Export preflight consumes those revision-bound
+diagnostic
+sets without parsing messages. Blocking or explicitly incomplete layout evidence
+cannot report layout readiness, and diagnostic sets with missing, duplicate,
+forged, stale, or non-layout operation context are rejected before preflight.
+This gate performs no path or persistent file operation and is not full Export.
+
+Cross-capability acceptance remains incomplete. Semantic-command, Render, full
+Export, Plan, CLI, and MCP implementations must exercise the remaining fixtures
+before parity and capability-specific diagnostic behavior are proven.
 
 ## Contract
 
