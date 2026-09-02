@@ -40,6 +40,9 @@ use atrament_semantic_notebook::{
     SemanticIdentityKind, TableRowRole,
 };
 
+/// Maximum admitted block-containment depth for one candidate acceptance.
+pub const CANDIDATE_BLOCK_NESTING_LIMIT: usize = 256;
+
 /// Result of one explicit candidate acceptance request.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum AcceptanceOutcome {
@@ -89,6 +92,13 @@ pub enum CandidateGraphError {
     MissingReference {
         /// Candidate-local identity that could not be resolved.
         candidate: CandidateIdentity,
+    },
+    /// Candidate block containment exceeds the admitted resource bound.
+    NestingLimitExceeded {
+        /// First candidate block beyond the admitted nesting bound.
+        candidate: CandidateIdentity,
+        /// Maximum admitted block-containment depth.
+        limit: usize,
     },
     /// One reference resolves to an owner of the wrong semantic class.
     ReferenceKindMismatch {

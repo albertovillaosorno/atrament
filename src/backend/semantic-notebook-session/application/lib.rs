@@ -47,10 +47,11 @@ use atrament_semantic_notebook::{
     semantic_identity_kind,
 };
 use atrament_semantic_notebook_port::{
-    AcceptanceOutcome, CandidateGraphError, CandidateReferenceKind,
-    EditableSemanticValue, EditableValuePreconditionOutcome,
-    FormulaEditOutcome, IdentityInspectOutcome, IdentityKindInspectOutcome,
-    IdentityMapping, IdentityOwnerExpectation, IdentityPrecondition,
+    AcceptanceOutcome, CANDIDATE_BLOCK_NESTING_LIMIT, CandidateGraphError,
+    CandidateReferenceKind, EditableSemanticValue,
+    EditableValuePreconditionOutcome, FormulaEditOutcome,
+    IdentityInspectOutcome, IdentityKindInspectOutcome, IdentityMapping,
+    IdentityOwnerExpectation, IdentityPrecondition,
     IdentityPreconditionOutcome, PageProfileEditOutcome,
     SemanticNotebookSession, TableRowRoleEditOutcome, TextEditOutcome,
 };
@@ -60,6 +61,26 @@ struct CandidateGraph {
     owners: Vec<CandidateIdentity>,
     references: Vec<(CandidateIdentity, CandidateReferenceKind)>,
     seen: BTreeMap<CandidateIdentity, CandidateReferenceKind>,
+}
+
+#[derive(Clone, Copy)]
+enum CandidateGraphFrame<'candidate> {
+    Blocks {
+        blocks: &'candidate [Block<CandidateIdentity>],
+        depth: usize,
+    },
+    ListItems {
+        child_depth: usize,
+        items: &'candidate [ListItem<CandidateIdentity>],
+    },
+    TableCells {
+        cells: &'candidate [TableCell<CandidateIdentity>],
+        child_depth: usize,
+    },
+    TableRows {
+        child_depth: usize,
+        rows: &'candidate [TableRow<CandidateIdentity>],
+    },
 }
 
 impl CandidateGraph {
@@ -128,6 +149,7 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
         let owners = match candidate_identities(&candidate) {
             Ok(owners) => owners,
             Err(reason) => {
+                discard_candidate_notebook(candidate);
                 return AcceptanceOutcome::InvalidCandidate { reason };
             },
         };
@@ -1395,29 +1417,121 @@ fn text_value(
     None
 }
 
-fn candidate_block(
-    block: &Block<CandidateIdentity>,
+fn discard_candidate_notebook(notebook: Notebook<CandidateIdentity>) {
+    let Notebook { pages, .. } = notebook;
+    let mut pending = Vec::new();
+    for page in pages {
+        for flow in page.flows {
+            pending.extend(flow.blocks);
+        }
+    }
+    while let Some(block) = pending.pop() {
+        match block.content {
+            BlockContent::Callout(children)
+            | BlockContent::Freeform(children) => pending.extend(children),
+            BlockContent::List(list) => {
+                for item in list.items {
+                    pending.extend(item.blocks);
+                }
+            },
+            BlockContent::Table(table) => {
+                for row in table.rows {
+                    for cell in row.cells {
+                        pending.extend(cell.blocks);
+                    }
+                }
+            },
+            BlockContent::Date(_)
+            | BlockContent::Figure(_)
+            | BlockContent::Heading(_)
+            | BlockContent::Mathematics(_)
+            | BlockContent::Paragraph(_)
+            | BlockContent::Rule
+            | BlockContent::Unresolved(_) => {},
+        }
+    }
+}
+
+fn candidate_blocks(
+    blocks: &[Block<CandidateIdentity>],
     graph: &mut CandidateGraph,
 ) -> Result<(), CandidateGraphError> {
+    let mut stack = vec![CandidateGraphFrame::Blocks { blocks, depth: 1 }];
+    while let Some(frame) = stack.pop() {
+        candidate_graph_frame(frame, graph, &mut stack)?;
+    }
+    Ok(())
+}
+
+fn candidate_graph_frame<'candidate>(
+    frame: CandidateGraphFrame<'candidate>,
+    graph: &mut CandidateGraph,
+    stack: &mut Vec<CandidateGraphFrame<'candidate>>,
+) -> Result<(), CandidateGraphError> {
+    match frame {
+        CandidateGraphFrame::Blocks { blocks, depth } => {
+            candidate_graph_blocks_frame(blocks, depth, graph, stack)
+        },
+        CandidateGraphFrame::ListItems { child_depth, items } => {
+            candidate_graph_list_items_frame(items, child_depth, graph, stack)
+        },
+        CandidateGraphFrame::TableCells { cells, child_depth } => {
+            candidate_graph_table_cells_frame(cells, child_depth, graph, stack)
+        },
+        CandidateGraphFrame::TableRows { child_depth, rows } => {
+            candidate_graph_table_rows_frame(rows, child_depth, graph, stack)
+        },
+    }
+}
+
+fn candidate_graph_blocks_frame<'candidate>(
+    current: &'candidate [Block<CandidateIdentity>],
+    depth: usize,
+    graph: &mut CandidateGraph,
+    stack: &mut Vec<CandidateGraphFrame<'candidate>>,
+) -> Result<(), CandidateGraphError> {
+    let Some((block, remaining)) = current.split_first() else {
+        return Ok(());
+    };
+    if depth > CANDIDATE_BLOCK_NESTING_LIMIT {
+        return Err(CandidateGraphError::NestingLimitExceeded {
+            candidate: block.id,
+            limit: CANDIDATE_BLOCK_NESTING_LIMIT,
+        });
+    }
+    if !remaining.is_empty() {
+        stack.push(CandidateGraphFrame::Blocks { blocks: remaining, depth });
+    }
     graph.register(block.id, CandidateReferenceKind::Semantic)?;
     graph.reference(block.provenance, CandidateReferenceKind::Provenance);
     graph.reference(block.style, CandidateReferenceKind::Style);
-    candidate_block_content(&block.content, graph)
-}
-
-fn candidate_block_content(
-    content: &BlockContent<CandidateIdentity>,
-    graph: &mut CandidateGraph,
-) -> Result<(), CandidateGraphError> {
-    match content {
-        BlockContent::Callout(blocks) | BlockContent::Freeform(blocks) => {
-            candidate_blocks(blocks, graph)
+    let child_depth = depth.saturating_add(1);
+    match &block.content {
+        BlockContent::Callout(children) | BlockContent::Freeform(children) => {
+            if !children.is_empty() {
+                stack.push(CandidateGraphFrame::Blocks {
+                    blocks: children,
+                    depth: child_depth,
+                });
+            }
         },
         BlockContent::Date(spans)
         | BlockContent::Heading(spans)
-        | BlockContent::Paragraph(spans) => candidate_spans(spans, graph),
-        BlockContent::Figure(figure) => candidate_figure(figure, graph),
-        BlockContent::List(list) => candidate_list(list, graph),
+        | BlockContent::Paragraph(spans) => {
+            candidate_spans(spans, graph)?;
+        },
+        BlockContent::Figure(figure) => {
+            candidate_figure(figure, graph)?;
+        },
+        BlockContent::List(list) => {
+            graph.register(list.id, CandidateReferenceKind::Semantic)?;
+            if !list.items.is_empty() {
+                stack.push(CandidateGraphFrame::ListItems {
+                    child_depth,
+                    items: &list.items,
+                });
+            }
+        },
         BlockContent::Mathematics(formula) => {
             let analyzed =
                 analyze(&formula.source, formula.mode).map_err(|reason| {
@@ -1431,19 +1545,93 @@ fn candidate_block_content(
                     candidate: formula.id,
                 });
             }
-            graph.register(formula.id, CandidateReferenceKind::Semantic)
+            graph.register(formula.id, CandidateReferenceKind::Semantic)?;
         },
-        BlockContent::Rule | BlockContent::Unresolved(_) => Ok(()),
-        BlockContent::Table(table) => candidate_table(table, graph),
+        BlockContent::Rule | BlockContent::Unresolved(_) => {},
+        BlockContent::Table(table) => {
+            graph.register(table.id, CandidateReferenceKind::Semantic)?;
+            if !table.rows.is_empty() {
+                stack.push(CandidateGraphFrame::TableRows {
+                    child_depth,
+                    rows: &table.rows,
+                });
+            }
+        },
     }
+    Ok(())
 }
 
-fn candidate_blocks(
-    blocks: &[Block<CandidateIdentity>],
+fn candidate_graph_list_items_frame<'candidate>(
+    current: &'candidate [ListItem<CandidateIdentity>],
+    child_depth: usize,
     graph: &mut CandidateGraph,
+    stack: &mut Vec<CandidateGraphFrame<'candidate>>,
 ) -> Result<(), CandidateGraphError> {
-    for block in blocks {
-        candidate_block(block, graph)?;
+    let Some((item, remaining)) = current.split_first() else {
+        return Ok(());
+    };
+    if !remaining.is_empty() {
+        stack.push(CandidateGraphFrame::ListItems {
+            child_depth,
+            items: remaining,
+        });
+    }
+    graph.register(item.id, CandidateReferenceKind::Semantic)?;
+    if !item.blocks.is_empty() {
+        stack.push(CandidateGraphFrame::Blocks {
+            blocks: &item.blocks,
+            depth: child_depth,
+        });
+    }
+    Ok(())
+}
+
+fn candidate_graph_table_cells_frame<'candidate>(
+    current: &'candidate [TableCell<CandidateIdentity>],
+    child_depth: usize,
+    graph: &mut CandidateGraph,
+    stack: &mut Vec<CandidateGraphFrame<'candidate>>,
+) -> Result<(), CandidateGraphError> {
+    let Some((cell, remaining)) = current.split_first() else {
+        return Ok(());
+    };
+    if !remaining.is_empty() {
+        stack.push(CandidateGraphFrame::TableCells {
+            cells: remaining,
+            child_depth,
+        });
+    }
+    graph.register(cell.id, CandidateReferenceKind::Semantic)?;
+    if !cell.blocks.is_empty() {
+        stack.push(CandidateGraphFrame::Blocks {
+            blocks: &cell.blocks,
+            depth: child_depth,
+        });
+    }
+    Ok(())
+}
+
+fn candidate_graph_table_rows_frame<'candidate>(
+    current: &'candidate [TableRow<CandidateIdentity>],
+    child_depth: usize,
+    graph: &mut CandidateGraph,
+    stack: &mut Vec<CandidateGraphFrame<'candidate>>,
+) -> Result<(), CandidateGraphError> {
+    let Some((row, remaining)) = current.split_first() else {
+        return Ok(());
+    };
+    if !remaining.is_empty() {
+        stack.push(CandidateGraphFrame::TableRows {
+            child_depth,
+            rows: remaining,
+        });
+    }
+    graph.register(row.id, CandidateReferenceKind::Semantic)?;
+    if !row.cells.is_empty() {
+        stack.push(CandidateGraphFrame::TableCells {
+            cells: &row.cells,
+            child_depth,
+        });
     }
     Ok(())
 }
@@ -1504,18 +1692,6 @@ fn candidate_identities(
     graph.finish()
 }
 
-fn candidate_list(
-    list: &List<CandidateIdentity>,
-    graph: &mut CandidateGraph,
-) -> Result<(), CandidateGraphError> {
-    graph.register(list.id, CandidateReferenceKind::Semantic)?;
-    for item in &list.items {
-        graph.register(item.id, CandidateReferenceKind::Semantic)?;
-        candidate_blocks(&item.blocks, graph)?;
-    }
-    Ok(())
-}
-
 fn candidate_page(
     page: &Page<CandidateIdentity>,
     graph: &mut CandidateGraph,
@@ -1539,21 +1715,6 @@ fn candidate_spans(
         graph.register(span.id, CandidateReferenceKind::Semantic)?;
         graph.reference(span.provenance, CandidateReferenceKind::Provenance);
         graph.reference(span.style, CandidateReferenceKind::Style);
-    }
-    Ok(())
-}
-
-fn candidate_table(
-    table: &Table<CandidateIdentity>,
-    graph: &mut CandidateGraph,
-) -> Result<(), CandidateGraphError> {
-    graph.register(table.id, CandidateReferenceKind::Semantic)?;
-    for row in &table.rows {
-        graph.register(row.id, CandidateReferenceKind::Semantic)?;
-        for cell in &row.cells {
-            graph.register(cell.id, CandidateReferenceKind::Semantic)?;
-            candidate_blocks(&cell.blocks, graph)?;
-        }
     }
     Ok(())
 }

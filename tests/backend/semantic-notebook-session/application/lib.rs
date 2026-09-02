@@ -44,9 +44,10 @@ use atrament_semantic_notebook::{
     TableRow, TableRowRole, UnresolvedBlock, UnresolvedReason,
 };
 use atrament_semantic_notebook_port::{
-    AcceptanceOutcome, CandidateGraphError, CandidateReferenceKind,
-    EditableSemanticValue, EditableValuePreconditionOutcome,
-    FormulaEditOutcome, IdentityInspectOutcome, IdentityKindInspectOutcome,
+    AcceptanceOutcome, CANDIDATE_BLOCK_NESTING_LIMIT, CandidateGraphError,
+    CandidateReferenceKind, EditableSemanticValue,
+    EditableValuePreconditionOutcome, FormulaEditOutcome,
+    IdentityInspectOutcome, IdentityKindInspectOutcome,
     IdentityOwnerExpectation, IdentityPrecondition,
     IdentityPreconditionOutcome, PageProfileEditOutcome,
     SemanticNotebookSession, TableRowRoleEditOutcome, TextEditOutcome,
@@ -156,6 +157,34 @@ fn candidate_notebook_with_span(
     (notebook, span_id)
 }
 
+fn candidate_nested_text_notebook(
+    identities: &IdentityAllocator,
+    wrappers: usize,
+) -> (
+    Notebook<CandidateIdentity>,
+    CandidateIdentity,
+    CandidateIdentity,
+) {
+    let (mut notebook, span) =
+        candidate_notebook_with_span(identities, "nested text");
+    let mut block = notebook.pages[0].flows[0]
+        .blocks
+        .pop()
+        .expect("paragraph block");
+    let leaf = block.id;
+    for _ in 0..wrappers {
+        block = Block {
+            content: BlockContent::Callout(vec![block]),
+            extensions: vec![],
+            id: candidate_id(identities),
+            provenance: None,
+            style: None,
+        };
+    }
+    notebook.pages[0].flows[0].blocks.push(block);
+    (notebook, leaf, span)
+}
+
 fn candidate_math_notebook(
     identities: &IdentityAllocator,
     source: &str,
@@ -235,6 +264,68 @@ fn candidate_table_notebook(
         }],
     });
     (notebook, row_id, table_id)
+}
+
+#[test]
+fn candidate_nesting_limit_accepts_the_exact_boundary() {
+    let ids = IdentityAllocator::new();
+    let (candidate, _, span) = candidate_nested_text_notebook(
+        &ids,
+        CANDIDATE_BLOCK_NESTING_LIMIT.saturating_sub(1),
+    );
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(candidate)
+    else {
+        panic!("candidate at the nesting bound must be accepted");
+    };
+    let span = accepted_for(&mapping, span);
+    let expected = EditableSemanticValue::Text(String::from("nested text"));
+    assert_eq!(
+        session.check_editable_value_precondition(
+            revision,
+            span,
+            expected.clone(),
+        ),
+        EditableValuePreconditionOutcome::Satisfied {
+            actual: expected,
+            revision,
+            target: span,
+        },
+    );
+}
+
+#[test]
+fn candidate_nesting_limit_rejects_before_mutation_and_drops_safely() {
+    let ids = IdentityAllocator::new();
+    let baseline = candidate_notebook(&ids, "accepted baseline");
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { .. } = session.accept(baseline) else {
+        panic!("baseline must be accepted");
+    };
+    let before = session.current().expect("accepted baseline").clone();
+    let (over_limit, leaf, _) =
+        candidate_nested_text_notebook(&ids, CANDIDATE_BLOCK_NESTING_LIMIT);
+    assert_eq!(
+        session.accept(over_limit),
+        AcceptanceOutcome::InvalidCandidate {
+            reason: CandidateGraphError::NestingLimitExceeded {
+                candidate: leaf,
+                limit: CANDIDATE_BLOCK_NESTING_LIMIT,
+            },
+        },
+    );
+    assert_eq!(session.current(), Some(&before));
+
+    let (extreme, _, _) = candidate_nested_text_notebook(&ids, 20_000);
+    let AcceptanceOutcome::InvalidCandidate {
+        reason: CandidateGraphError::NestingLimitExceeded { limit, .. },
+    } = session.accept(extreme)
+    else {
+        panic!("extreme candidate must reject by resource limit");
+    };
+    assert_eq!(limit, CANDIDATE_BLOCK_NESTING_LIMIT);
+    assert_eq!(session.current(), Some(&before));
 }
 
 #[test]
