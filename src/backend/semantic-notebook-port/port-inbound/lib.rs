@@ -131,7 +131,15 @@ pub enum TextEditOutcome {
     TargetNotFound {
         /// Unchanged current revision identity.
         revision: RevisionIdentity,
-        /// Requested semantic identity absent from editable inline text.
+        /// Requested semantic identity absent from the current revision.
+        target: AcceptedIdentity,
+    },
+    /// Requested accepted identity exists but does not own editable inline
+    /// text.
+    TargetNotText {
+        /// Unchanged current revision identity.
+        revision: RevisionIdentity,
+        /// Existing non-text semantic identity that rejected text replacement.
         target: AcceptedIdentity,
     },
 }

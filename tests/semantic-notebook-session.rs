@@ -595,7 +595,7 @@ fn direct_text_edit_non_text_identity_rejects_without_mutation() {
 
     assert_eq!(
         session.replace_text(revision, page_target, String::from("invalid")),
-        TextEditOutcome::TargetNotFound {
+        TextEditOutcome::TargetNotText {
             revision,
             target: page_target,
         },
@@ -776,4 +776,34 @@ fn direct_text_edit_reaches_nested_text_families_across_revisions() {
         revision = next;
     }
     assert_eq!(session.current().expect("nested revision").id, revision);
+}
+
+#[test]
+fn direct_text_edit_absent_identity_is_distinct_from_non_text_owner() {
+    let candidate_ids = IdentityAllocator::new();
+    let (first, first_span) =
+        candidate_notebook_with_span(&candidate_ids, "first");
+    let second = candidate_notebook(&candidate_ids, "second");
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted {
+        mapping: first_mapping, ..
+    } = session.accept(first)
+    else {
+        panic!("first candidate must be accepted");
+    };
+    let absent_target = accepted_for(&first_mapping, first_span);
+    let AcceptanceOutcome::Accepted { revision, .. } = session.accept(second)
+    else {
+        panic!("second candidate must be accepted");
+    };
+    let before = session.current().expect("second revision").clone();
+
+    assert_eq!(
+        session.replace_text(revision, absent_target, String::from("missing")),
+        TextEditOutcome::TargetNotFound {
+            revision,
+            target: absent_target,
+        },
+    );
+    assert_eq!(session.current(), Some(&before));
 }
