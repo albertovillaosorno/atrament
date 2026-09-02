@@ -57,11 +57,12 @@ into background persistence. Keep paths mentioned only in notebook, source,
 diagnostic, clipboard, or model-response text as data rather than Export
 authority.
 
-Current export design evidence freezes accepted-revision binding, explicit path
-and overwrite intent, blocking validation, temporary cleanup, complete file
-commit semantics, output identity, same-retry lost-receipt recovery, external
-target drift handling, concurrency, and browser/CLI/MCP parity. File adapters
-and
+Current export design evidence freezes accepted-revision binding, caller-owned
+or
+explicit host-policy output intent, explicit path and overwrite behavior,
+blocking validation, temporary cleanup, file-commit semantics, output identity,
+same-retry lost-receipt recovery, external target drift handling, cancellation,
+typed output results, concurrency, and browser/CLI/MCP parity. File adapters and
 format-specific execution remain open.
 
 ### TODO - Prove session destruction and temporary cleanup
@@ -333,8 +334,9 @@ Current design evidence freezes Render as a read-only application capability
 bound to one accepted revision and deterministic vector/material inputs. Preview
 and final profiles share geometry, seeds, physical dimensions, and blend order;
 quality-only sampling may differ. Render identity, retry safety, invalidation,
-no-file behavior, and browser/CLI/MCP parity are frozen while implementation
-remains open.
+read-only cancellation/progress semantics, typed projection results, no-file
+behavior, and browser/CLI/MCP parity are frozen while implementation remains
+open.
 
 ### TODO - Implement configurable line-art extraction
 
@@ -480,10 +482,12 @@ device-safety boundary.
 Current design evidence freezes MCP effect classes, capability discovery,
 revision-bound Inspect semantics, explicit completeness and continuation,
 backend-owned command-context derivation, bounded read/write scope, receipt
-chaining, lost-receipt recovery, typed application outcomes, local per-session
-adapter admission, effect-class authorization, session-scoped recovery, no
-internal-file authority, and browser/CLI/MCP parity targets. Tool schemas,
-concrete stdio/loopback mechanism, and backend implementation remain open.
+chaining, lost-receipt recovery, command and output result classes, optional
+operation lifecycle semantics, autonomous-loop progress/stop conditions, local
+per-session adapter admission, effect-class authorization, session-scoped
+recovery, no internal-file authority, and browser/CLI/MCP parity targets. Tool
+schemas, concrete stdio/loopback mechanism, and backend implementation remain
+open.
 
 Current design evidence freezes autonomous-agent loop stop conditions, typed
 progress versus non-progress, same-retry recovery, bounded automation budgets,
@@ -529,9 +533,11 @@ safe bounds, pauses, checkpoints, semantic origin, and estimated duration.
 
 Current design evidence freezes Plan as a read-only derived application
 capability bound to one accepted revision and live capability profile, with
-deterministic inputs, blocking diagnostics, plan identity, no file side effect,
-no device side effect, safe retry, derived invalidation, and browser/CLI/MCP
-parity. Backend plan compilation remains open.
+deterministic inputs, blocking diagnostics, plan identity, read-only
+cancellation/progress semantics, typed projection results, no file or device
+side
+effect, safe retry, derived invalidation, and browser/CLI/MCP parity. Backend
+plan compilation remains open.
 
 ### TODO - Optimize path order without changing handwriting
 
