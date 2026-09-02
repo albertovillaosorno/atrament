@@ -48,8 +48,8 @@ use atrament_semantic_notebook::{
 };
 use atrament_semantic_notebook_port::{
     AcceptanceOutcome, CANDIDATE_BLOCK_NESTING_LIMIT, CandidateGraphError,
-    CandidateReferenceKind, CommandTargetMaterial,
-    CommandTargetMaterialOutcome, EditableSemanticValue,
+    CandidateReferenceKind, CommandFamilyAdmissionOutcome,
+    CommandTargetMaterial, CommandTargetMaterialOutcome, EditableSemanticValue,
     EditableValuePreconditionOutcome, FormulaEditOutcome,
     IdentityInspectOutcome, IdentityKindInspectOutcome, IdentityMapping,
     IdentityOwnerExpectation, IdentityPrecondition,
@@ -174,6 +174,41 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
         };
         self.current = Some(AcceptedRevision { id: revision, notebook });
         AcceptanceOutcome::Accepted { mapping, revision }
+    }
+
+    fn check_command_family_admission(
+        &self,
+        revision: atrament_semantic_notebook::RevisionIdentity,
+        target: AcceptedIdentity,
+        requested: SemanticCommandFamily,
+    ) -> CommandFamilyAdmissionOutcome {
+        let material = match self.command_target_material(revision, target) {
+            CommandTargetMaterialOutcome::NoAcceptedRevision => {
+                return CommandFamilyAdmissionOutcome::NoAcceptedRevision;
+            },
+            CommandTargetMaterialOutcome::Prepared { material } => material,
+            CommandTargetMaterialOutcome::StaleBase { current } => {
+                return CommandFamilyAdmissionOutcome::StaleBase { current };
+            },
+            CommandTargetMaterialOutcome::TargetNotFound {
+                revision: inspected_revision,
+                target: missing_target,
+            } => {
+                return CommandFamilyAdmissionOutcome::TargetNotFound {
+                    revision: inspected_revision,
+                    target: missing_target,
+                };
+            },
+        };
+        if material.direct_edit_family != Some(requested) {
+            return CommandFamilyAdmissionOutcome::FamilyNotExecutable {
+                available: material.direct_edit_family,
+                requested,
+                revision,
+                target,
+            };
+        }
+        CommandFamilyAdmissionOutcome::Admitted { material }
     }
 
     fn check_editable_value_precondition(

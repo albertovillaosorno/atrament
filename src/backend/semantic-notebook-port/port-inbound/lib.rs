@@ -433,6 +433,41 @@ pub enum SemanticCommandFamily {
     TextContent,
 }
 
+/// Result of checking one requested command family against one target.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum CommandFamilyAdmissionOutcome {
+    /// Requested family is currently executable for this exact target.
+    Admitted {
+        /// Complete local precondition material for the admitted target.
+        material: CommandTargetMaterial,
+    },
+    /// Requested family is not currently executable for this exact target.
+    FamilyNotExecutable {
+        /// Currently executable direct-edit family, if one exists.
+        available: Option<SemanticCommandFamily>,
+        /// Requested semantic command family.
+        requested: SemanticCommandFamily,
+        /// Accepted revision checked without mutation.
+        revision: RevisionIdentity,
+        /// Existing target that rejected family admission.
+        target: AcceptedIdentity,
+    },
+    /// Session has no accepted semantic revision to check.
+    NoAcceptedRevision,
+    /// Caller names an accepted revision that is no longer current.
+    StaleBase {
+        /// Current accepted revision that rejected stale admission.
+        current: RevisionIdentity,
+    },
+    /// Requested accepted identity is absent from the named revision.
+    TargetNotFound {
+        /// Accepted revision checked without mutation.
+        revision: RevisionIdentity,
+        /// Requested identity absent from that revision.
+        target: AcceptedIdentity,
+    },
+}
+
 /// Backend-derived local precondition material for one writable target.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CommandTargetMaterial {
@@ -616,6 +651,14 @@ pub trait SemanticNotebookSession {
         &mut self,
         candidate: Notebook<CandidateIdentity>,
     ) -> AcceptanceOutcome;
+
+    /// Check whether one semantic command family is executable for a target.
+    fn check_command_family_admission(
+        &self,
+        revision: RevisionIdentity,
+        target: AcceptedIdentity,
+        requested: SemanticCommandFamily,
+    ) -> CommandFamilyAdmissionOutcome;
 
     /// Compare one established editable semantic value against an exact base.
     fn check_editable_value_precondition(

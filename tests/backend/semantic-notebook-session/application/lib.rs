@@ -45,8 +45,8 @@ use atrament_semantic_notebook::{
 };
 use atrament_semantic_notebook_port::{
     AcceptanceOutcome, CANDIDATE_BLOCK_NESTING_LIMIT, CandidateGraphError,
-    CandidateReferenceKind, CommandTargetMaterial,
-    CommandTargetMaterialOutcome, EditableSemanticValue,
+    CandidateReferenceKind, CommandFamilyAdmissionOutcome,
+    CommandTargetMaterial, CommandTargetMaterialOutcome, EditableSemanticValue,
     EditableValuePreconditionOutcome, FormulaEditOutcome,
     IdentityInspectOutcome, IdentityKindInspectOutcome,
     IdentityOwnerExpectation, IdentityPrecondition,
@@ -544,6 +544,112 @@ fn identity_kind_inspection_rejects_stale_absent_and_empty_session() {
     assert_eq!(
         empty.inspect_identity_kind(current, row),
         IdentityKindInspectOutcome::NoAcceptedRevision,
+    );
+}
+
+#[test]
+fn command_family_admission_is_exact_target_scope_and_read_only() {
+    let ids = IdentityAllocator::new();
+    let (candidate, span) =
+        candidate_notebook_with_span(&ids, "bounded writable text");
+    let block = candidate.pages[0].flows[0].blocks[0].id;
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(candidate)
+    else {
+        panic!("text candidate must be accepted");
+    };
+    let block = accepted_for(&mapping, block);
+    let span = accepted_for(&mapping, span);
+    let before = session.current().expect("accepted revision").clone();
+
+    let CommandFamilyAdmissionOutcome::Admitted { material } = session
+        .check_command_family_admission(
+            revision,
+            span,
+            SemanticCommandFamily::TextContent,
+        )
+    else {
+        panic!("text family must be admitted for text span");
+    };
+    assert_eq!(material.target, span);
+    assert_eq!(
+        material.direct_edit_family,
+        Some(SemanticCommandFamily::TextContent),
+    );
+    assert_eq!(
+        session.check_command_family_admission(
+            revision,
+            span,
+            SemanticCommandFamily::StructuredContent,
+        ),
+        CommandFamilyAdmissionOutcome::FamilyNotExecutable {
+            available: Some(SemanticCommandFamily::TextContent),
+            requested: SemanticCommandFamily::StructuredContent,
+            revision,
+            target: span,
+        },
+    );
+    assert_eq!(
+        session.check_command_family_admission(
+            revision,
+            block,
+            SemanticCommandFamily::TextContent,
+        ),
+        CommandFamilyAdmissionOutcome::FamilyNotExecutable {
+            available: None,
+            requested: SemanticCommandFamily::TextContent,
+            revision,
+            target: block,
+        },
+    );
+    assert_eq!(session.current(), Some(&before));
+}
+
+#[test]
+fn command_family_admission_stale_missing_and_empty_are_typed() {
+    let ids = IdentityAllocator::new();
+    let (candidate, span) = candidate_notebook_with_span(&ids, "base text");
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(candidate)
+    else {
+        panic!("text candidate must be accepted");
+    };
+    let span = accepted_for(&mapping, span);
+    let replacement = candidate_notebook(&ids, "replacement");
+    let AcceptanceOutcome::Accepted { revision: current, .. } =
+        session.accept(replacement)
+    else {
+        panic!("replacement candidate must be accepted");
+    };
+    assert_eq!(
+        session.check_command_family_admission(
+            revision,
+            span,
+            SemanticCommandFamily::TextContent,
+        ),
+        CommandFamilyAdmissionOutcome::StaleBase { current },
+    );
+    assert_eq!(
+        session.check_command_family_admission(
+            current,
+            span,
+            SemanticCommandFamily::TextContent,
+        ),
+        CommandFamilyAdmissionOutcome::TargetNotFound {
+            revision: current,
+            target: span,
+        },
+    );
+    let empty = SemanticNotebookSessionService::default();
+    assert_eq!(
+        empty.check_command_family_admission(
+            current,
+            span,
+            SemanticCommandFamily::TextContent,
+        ),
+        CommandFamilyAdmissionOutcome::NoAcceptedRevision,
     );
 }
 
