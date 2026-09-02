@@ -495,6 +495,15 @@ pub enum SemanticIdentityKind {
     TableRow,
 }
 
+/// Read-only semantic identity descriptor in one notebook snapshot.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct SemanticIdentityDescriptor<Identity> {
+    /// Semantic kind owned by this identity.
+    pub kind: SemanticIdentityKind,
+    /// Direct structural owner, or `None` for the notebook root.
+    pub owner: Option<Identity>,
+}
+
 /// Reason semantic content remains unresolved.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum UnresolvedReason {
@@ -504,10 +513,85 @@ pub enum UnresolvedReason {
     Unsupported,
 }
 
-/// Resolve the semantic kind owned by one identity in a notebook snapshot.
+/// Resolve one identity's semantic kind and direct structural owner.
 ///
 /// This is a read-only semantic inspection primitive. It exposes no serialized
 /// offsets, memory addresses, storage paths, page pixels, or adapter state.
+#[must_use]
+pub fn semantic_identity_descriptor<Identity>(
+    notebook: &Notebook<Identity>,
+    target: Identity,
+) -> Option<SemanticIdentityDescriptor<Identity>>
+where
+    Identity: Copy + Eq,
+{
+    if notebook.id == target {
+        return Some(SemanticIdentityDescriptor {
+            kind: SemanticIdentityKind::Notebook,
+            owner: None,
+        });
+    }
+    for asset in &notebook.assets {
+        if asset.id == target {
+            return Some(descriptor(SemanticIdentityKind::Asset, notebook.id));
+        }
+    }
+    for constraint in &notebook.constraints {
+        if constraint.id == target {
+            return Some(descriptor(
+                SemanticIdentityKind::Constraint,
+                notebook.id,
+            ));
+        }
+    }
+    for profile in &notebook.output_profiles {
+        if profile.id == target {
+            return Some(descriptor(
+                SemanticIdentityKind::OutputProfile,
+                notebook.id,
+            ));
+        }
+    }
+    for profile in &notebook.page_profiles {
+        if profile.id == target {
+            return Some(descriptor(
+                SemanticIdentityKind::PageProfile,
+                notebook.id,
+            ));
+        }
+    }
+    for page in &notebook.pages {
+        if page.id == target {
+            return Some(descriptor(SemanticIdentityKind::Page, notebook.id));
+        }
+        for flow in &page.flows {
+            if flow.id == target {
+                return Some(descriptor(SemanticIdentityKind::Flow, page.id));
+            }
+            if let Some(found) =
+                semantic_blocks_descriptor(&flow.blocks, target, flow.id)
+            {
+                return Some(found);
+            }
+        }
+    }
+    for provenance in &notebook.provenance {
+        if provenance.id == target {
+            return Some(descriptor(
+                SemanticIdentityKind::Provenance,
+                notebook.id,
+            ));
+        }
+    }
+    for style in &notebook.styles {
+        if style.id == target {
+            return Some(descriptor(SemanticIdentityKind::Style, notebook.id));
+        }
+    }
+    None
+}
+
+/// Resolve only the semantic kind owned by one identity in a notebook snapshot.
 #[must_use]
 pub fn semantic_identity_kind<Identity>(
     notebook: &Notebook<Identity>,
@@ -516,55 +600,17 @@ pub fn semantic_identity_kind<Identity>(
 where
     Identity: Copy + Eq,
 {
-    if notebook.id == target {
-        return Some(SemanticIdentityKind::Notebook);
-    }
-    for asset in &notebook.assets {
-        if asset.id == target {
-            return Some(SemanticIdentityKind::Asset);
-        }
-    }
-    for constraint in &notebook.constraints {
-        if constraint.id == target {
-            return Some(SemanticIdentityKind::Constraint);
-        }
-    }
-    for profile in &notebook.output_profiles {
-        if profile.id == target {
-            return Some(SemanticIdentityKind::OutputProfile);
-        }
-    }
-    for profile in &notebook.page_profiles {
-        if profile.id == target {
-            return Some(SemanticIdentityKind::PageProfile);
-        }
-    }
-    for page in &notebook.pages {
-        if page.id == target {
-            return Some(SemanticIdentityKind::Page);
-        }
-        for flow in &page.flows {
-            if flow.id == target {
-                return Some(SemanticIdentityKind::Flow);
-            }
-            if let Some(kind) =
-                semantic_blocks_identity_kind(&flow.blocks, target)
-            {
-                return Some(kind);
-            }
-        }
-    }
-    for provenance in &notebook.provenance {
-        if provenance.id == target {
-            return Some(SemanticIdentityKind::Provenance);
-        }
-    }
-    for style in &notebook.styles {
-        if style.id == target {
-            return Some(SemanticIdentityKind::Style);
-        }
-    }
-    None
+    semantic_identity_descriptor(notebook, target).map(|found| found.kind)
+}
+
+const fn descriptor<Identity>(
+    kind: SemanticIdentityKind,
+    owner: Identity,
+) -> SemanticIdentityDescriptor<Identity>
+where
+    Identity: Copy,
+{
+    SemanticIdentityDescriptor { kind, owner: Some(owner) }
 }
 
 const fn semantic_block_kind<Identity>(
@@ -585,86 +631,105 @@ const fn semantic_block_kind<Identity>(
     }
 }
 
-fn semantic_blocks_identity_kind<Identity>(
+fn semantic_blocks_descriptor<Identity>(
     blocks: &[Block<Identity>],
     target: Identity,
-) -> Option<SemanticIdentityKind>
+    owner: Identity,
+) -> Option<SemanticIdentityDescriptor<Identity>>
 where
     Identity: Copy + Eq,
 {
     for block in blocks {
         if block.id == target {
-            return Some(SemanticIdentityKind::Block(semantic_block_kind(
-                &block.content,
-            )));
+            return Some(descriptor(
+                SemanticIdentityKind::Block(semantic_block_kind(
+                    &block.content,
+                )),
+                owner,
+            ));
         }
-        if let Some(kind) =
-            semantic_content_identity_kind(&block.content, target)
-        {
-            return Some(kind);
+        if let Some(found) = semantic_content_descriptor(block, target) {
+            return Some(found);
         }
     }
     None
 }
 
-fn semantic_content_identity_kind<Identity>(
-    content: &BlockContent<Identity>,
+fn semantic_content_descriptor<Identity>(
+    block: &Block<Identity>,
     target: Identity,
-) -> Option<SemanticIdentityKind>
+) -> Option<SemanticIdentityDescriptor<Identity>>
 where
     Identity: Copy + Eq,
 {
-    match content {
+    match &block.content {
         BlockContent::Callout(blocks) | BlockContent::Freeform(blocks) => {
-            semantic_blocks_identity_kind(blocks, target)
+            semantic_blocks_descriptor(blocks, target, block.id)
         },
         BlockContent::Date(spans)
         | BlockContent::Heading(spans)
         | BlockContent::Paragraph(spans) => {
-            semantic_spans_identity_kind(spans, target)
+            semantic_spans_descriptor(spans, target, block.id)
         },
         BlockContent::Figure(figure) => {
             if figure.id == target {
-                return Some(SemanticIdentityKind::Figure);
+                return Some(descriptor(
+                    SemanticIdentityKind::Figure,
+                    block.id,
+                ));
             }
-            semantic_spans_identity_kind(&figure.caption, target)
+            semantic_spans_descriptor(&figure.caption, target, figure.id)
         },
         BlockContent::List(list) => {
             if list.id == target {
-                return Some(SemanticIdentityKind::List);
+                return Some(descriptor(SemanticIdentityKind::List, block.id));
             }
             for item in &list.items {
                 if item.id == target {
-                    return Some(SemanticIdentityKind::ListItem);
+                    return Some(descriptor(
+                        SemanticIdentityKind::ListItem,
+                        list.id,
+                    ));
                 }
-                if let Some(kind) =
-                    semantic_blocks_identity_kind(&item.blocks, target)
+                if let Some(found) =
+                    semantic_blocks_descriptor(&item.blocks, target, item.id)
                 {
-                    return Some(kind);
+                    return Some(found);
                 }
             }
             None
         },
         BlockContent::Mathematics(formula) => {
-            (formula.id == target).then_some(SemanticIdentityKind::Formula)
+            (formula.id == target).then_some(SemanticIdentityDescriptor {
+                kind: SemanticIdentityKind::Formula,
+                owner: Some(block.id),
+            })
         },
         BlockContent::Rule | BlockContent::Unresolved(_) => None,
         BlockContent::Table(table) => {
             if table.id == target {
-                return Some(SemanticIdentityKind::Table);
+                return Some(descriptor(SemanticIdentityKind::Table, block.id));
             }
             for row in &table.rows {
                 if row.id == target {
-                    return Some(SemanticIdentityKind::TableRow);
+                    return Some(descriptor(
+                        SemanticIdentityKind::TableRow,
+                        table.id,
+                    ));
                 }
                 for cell in &row.cells {
                     if cell.id == target {
-                        return Some(SemanticIdentityKind::TableCell);
+                        return Some(descriptor(
+                            SemanticIdentityKind::TableCell,
+                            row.id,
+                        ));
                     }
-                    if let Some(kind) =
-                        semantic_blocks_identity_kind(&cell.blocks, target)
-                    {
-                        return Some(kind);
+                    if let Some(found) = semantic_blocks_descriptor(
+                        &cell.blocks,
+                        target,
+                        cell.id,
+                    ) {
+                        return Some(found);
                     }
                 }
             }
@@ -673,17 +738,20 @@ where
     }
 }
 
-fn semantic_spans_identity_kind<Identity>(
+fn semantic_spans_descriptor<Identity>(
     spans: &[InlineSpan<Identity>],
     target: Identity,
-) -> Option<SemanticIdentityKind>
+    owner: Identity,
+) -> Option<SemanticIdentityDescriptor<Identity>>
 where
     Identity: Copy + Eq,
 {
-    spans
-        .iter()
-        .any(|span| span.id == target)
-        .then_some(SemanticIdentityKind::InlineSpan)
+    spans.iter().any(|span| span.id == target).then_some(
+        SemanticIdentityDescriptor {
+            kind: SemanticIdentityKind::InlineSpan,
+            owner: Some(owner),
+        },
+    )
 }
 
 fn allocate_next(

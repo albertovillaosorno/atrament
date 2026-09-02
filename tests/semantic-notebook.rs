@@ -36,9 +36,10 @@ use atrament_physical_page_profile::{
 };
 use atrament_semantic_notebook::{
     Block, BlockContent, ExtensionData, Flow, IdentityAllocator, InlineSpan,
-    Notebook, Page, PaperProfile, SemanticBlockKind, SemanticIdentityKind,
-    Table, TableCell, TableRow, TableRowRole, UnresolvedBlock,
-    UnresolvedReason, semantic_identity_kind,
+    Notebook, Page, PaperProfile, SemanticBlockKind,
+    SemanticIdentityDescriptor, SemanticIdentityKind, Table, TableCell,
+    TableRow, TableRowRole, UnresolvedBlock, UnresolvedReason,
+    semantic_identity_descriptor, semantic_identity_kind,
 };
 
 fn physical_page_profile() -> PhysicalPageProfile {
@@ -156,6 +157,48 @@ fn cloned_semantic_state_preserves_stable_identity() {
         semantic_identity_kind(&notebook, span_id),
         Some(SemanticIdentityKind::InlineSpan),
     );
+    assert_eq!(
+        semantic_identity_descriptor(&notebook, notebook_id),
+        Some(SemanticIdentityDescriptor {
+            kind: SemanticIdentityKind::Notebook,
+            owner: None,
+        }),
+    );
+    assert_eq!(
+        semantic_identity_descriptor(&notebook, page_profile_id),
+        Some(SemanticIdentityDescriptor {
+            kind: SemanticIdentityKind::PageProfile,
+            owner: Some(notebook_id),
+        }),
+    );
+    assert_eq!(
+        semantic_identity_descriptor(&notebook, page_id),
+        Some(SemanticIdentityDescriptor {
+            kind: SemanticIdentityKind::Page,
+            owner: Some(notebook_id),
+        }),
+    );
+    assert_eq!(
+        semantic_identity_descriptor(&notebook, flow_id),
+        Some(SemanticIdentityDescriptor {
+            kind: SemanticIdentityKind::Flow,
+            owner: Some(page_id),
+        }),
+    );
+    assert_eq!(
+        semantic_identity_descriptor(&notebook, block_id),
+        Some(SemanticIdentityDescriptor {
+            kind: SemanticIdentityKind::Block(SemanticBlockKind::Paragraph),
+            owner: Some(flow_id),
+        }),
+    );
+    assert_eq!(
+        semantic_identity_descriptor(&notebook, span_id),
+        Some(SemanticIdentityDescriptor {
+            kind: SemanticIdentityKind::InlineSpan,
+            owner: Some(block_id),
+        }),
+    );
 }
 
 #[test]
@@ -234,7 +277,36 @@ fn semantic_identity_kind_reaches_nested_table_owners() {
         semantic_identity_kind(&notebook, child_id),
         Some(SemanticIdentityKind::Block(SemanticBlockKind::Rule)),
     );
+    assert_eq!(
+        semantic_identity_descriptor(&notebook, table_id),
+        Some(SemanticIdentityDescriptor {
+            kind: SemanticIdentityKind::Table,
+            owner: Some(block_id),
+        }),
+    );
+    assert_eq!(
+        semantic_identity_descriptor(&notebook, row_id),
+        Some(SemanticIdentityDescriptor {
+            kind: SemanticIdentityKind::TableRow,
+            owner: Some(table_id),
+        }),
+    );
+    assert_eq!(
+        semantic_identity_descriptor(&notebook, cell_id),
+        Some(SemanticIdentityDescriptor {
+            kind: SemanticIdentityKind::TableCell,
+            owner: Some(row_id),
+        }),
+    );
+    assert_eq!(
+        semantic_identity_descriptor(&notebook, child_id),
+        Some(SemanticIdentityDescriptor {
+            kind: SemanticIdentityKind::Block(SemanticBlockKind::Rule),
+            owner: Some(cell_id),
+        }),
+    );
     assert_eq!(semantic_identity_kind(&notebook, missing), None);
+    assert_eq!(semantic_identity_descriptor(&notebook, missing), None);
 }
 
 #[test]
