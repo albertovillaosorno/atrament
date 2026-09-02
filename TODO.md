@@ -451,8 +451,16 @@ Current clipboard transport design evidence freezes explicit Copy, exact text
 transport, prompt/context correlation, intentional external-data egress,
 operating-system clipboard lifetime, failure behavior, untrusted Paste, inert
 browser presentation, no hidden clipboard archive, and MCP parity.
-Browser/backend
-wiring for real command responses remains open.
+
+Current frontend evidence has one `writeText` path and no clipboard-read API,
+command parser, HTML sink, domain request, or browser storage path. A lifecycle
+fixture produced zero writes before Copy, exactly one blocked write after Copy,
+kept hostile markup and command-like prose inert, and on `pagehide` scrubbed the
+prompt/response without issuing a second clipboard write to simulate revocation.
+The static Copy description also states that system clipboard data can outlive
+the Atrament session and remains available with JavaScript disabled.
+
+Browser/backend wiring for real command responses remains open.
 
 ### TODO - Expose CLI parity for every application command
 
