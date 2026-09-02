@@ -136,6 +136,23 @@ A mismatch is a typed incompatibility diagnostic. The browser cannot downgrade
 or ignore a required backend incompatibility, and the backend does not accept an
 unknown required frontend capability merely because both processes are local.
 
+The first-release browser sends `POST /api/handshake` with no body after it
+scrubs the launch fragment. The request carries the session Bearer credential,
+the exact startup `Origin`, and exactly one of each required version header:
+
+- `X-Atrament-Capability-Version: atrament.capability/1`;
+- `X-Atrament-Product-Version: 0.1.0`;
+- `X-Atrament-Profile-Version: atrament.profile/1`;
+- `X-Atrament-Prompt-Version: atrament.prompt/1`;
+- `X-Atrament-Protocol-Version: atrament.runtime/1`; and
+- `X-Atrament-Renderer-Version: atrament.renderer/1`.
+
+A compatible exchange returns `200` with all six backend identities. An
+authenticated mismatch returns `409` with the mismatched dimension and required
+identity without reflecting the browser-provided value. Authentication or
+origin failure returns the same `401` response shape before compatibility is
+reported, and the service emits no permissive CORS response header.
+
 Refreshing the browser does not create a new backend session. A refresh may
 rejoin the current process only when it still possesses the in-memory session
 secret and completes the handshake again.
