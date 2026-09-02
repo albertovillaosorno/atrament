@@ -18,8 +18,8 @@ It does not freeze MCP tool names, transport configuration, authentication
 mechanism, JSON field names, or a Rust MCP framework.
 
 MCP is one inbound adapter to the same application services used by direct, CLI,
-and browser-assisted workflows. Its admission boundary is separate from browser
-session credentials as required by the localhost runtime contract.
+and browser-assisted workflows. Its admission boundary follows the frozen local
+MCP session-admission contract and remains separate from browser credentials.
 
 ## Contract
 

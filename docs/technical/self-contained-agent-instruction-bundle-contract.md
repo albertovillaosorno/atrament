@@ -74,8 +74,9 @@ schema mechanism rather than requiring the agent to guess historical command
 names.
 
 MCP discovery identifies how to obtain the live tool schemas and capability
-metadata from the admitted MCP adapter. Tool names and argument fields come from
-the shipped/live projection, not from a model's prior memory.
+metadata from an adapter admitted through the frozen local MCP session contract.
+Tool names and argument fields come from the shipped/live projection, not from a
+model's prior memory.
 
 ### Schema and behavior discovery
 

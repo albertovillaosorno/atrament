@@ -19,8 +19,9 @@ in-memory session lifetime. It does not define notebook fields, application
 commands, or file-format schemas.
 
 CLI and MCP adapters may share the same application services, but they do not
-implicitly inherit browser credentials. Each inbound adapter must declare its
-own admission boundary.
+implicitly inherit browser credentials. MCP follows the frozen local MCP
+session-admission contract; every other inbound adapter declares its own
+admission boundary.
 
 ## Contract
 
