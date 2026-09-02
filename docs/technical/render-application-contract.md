@@ -148,6 +148,12 @@ A browser may compose or display that result locally. It does not reinterpret
 semantic blocks or recalculate authoritative layout to fill gaps in the returned
 projection.
 
+### Operation lifecycle
+
+Render follows the frozen application operation lifecycle contract for optional
+progress, cancellation, transport loss, and session shutdown. Cancellation does
+not expose a partial render as complete or mutate accepted source.
+
 ### Retry behavior
 
 Render has no persistent, semantic, or physical side effect. Repeating the same

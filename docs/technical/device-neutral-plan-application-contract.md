@@ -132,6 +132,12 @@ plan bounds, relevant diagnostics, and provenance needed for later inspection.
 Receipt prose or timing metadata may differ by adapter without changing plan
 semantics. The receipt never claims physical execution occurred.
 
+### Operation lifecycle
+
+Plan follows the frozen application operation lifecycle contract for optional
+progress, cancellation, transport loss, and session shutdown. Cancellation does
+not expose a partial plan as complete or authorize physical-device behavior.
+
 ### Retry behavior
 
 Plan has no persistent or physical side effect, so a caller may repeat the same

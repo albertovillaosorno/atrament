@@ -211,6 +211,19 @@ That recovery is bounded to the active ephemeral session. A later independent
 session cannot use a retry identity as a durable transaction lookup or session
 credential.
 
+### Operation lifecycle projection
+
+When an implemented capability exposes progress or cancellation through MCP, it
+preserves the frozen application operation lifecycle semantics. Progress is
+observational and cancellation does not redefine the owning commit boundary.
+
+MCP may project a blocking operation without progress or cancellation when the
+packaged implementation does not admit those features. Tool discovery states
+what is implemented rather than making an agent probe lifecycle behavior.
+
+A transport cancellation is not an application rollback result. Mutating
+unknown outcomes still use the owning same-retry recovery contract.
+
 ### Result-class projection
 
 MCP exposes the semantic application result class frozen by the command result

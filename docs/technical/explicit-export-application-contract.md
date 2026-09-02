@@ -133,6 +133,13 @@ contents.
 Operational timestamps or adapter request IDs do not become semantic notebook
 state merely because an export receipt records them.
 
+### Operation lifecycle
+
+Export follows the frozen application operation lifecycle contract. Cancellation
+before file commit preserves the existing target and cleans owned temporary
+work; cancellation after file commit cannot pretend the committed output rolled
+back.
+
 ### Export retry identity
 
 Because Export has a persistent side effect, an automated request uses an export

@@ -58,6 +58,9 @@ contracts:
   - id: atrament.technical.semantic-application-history-contract
     status: frozen
     path: semantic-application-history-contract.md
+  - id: atrament.technical.application-operation-lifecycle
+    status: frozen
+    path: application-operation-lifecycle-contract.md
   - id: atrament.technical.render-application-contract
     status: frozen
     path: render-application-contract.md
