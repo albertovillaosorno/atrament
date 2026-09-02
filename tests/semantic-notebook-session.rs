@@ -443,3 +443,21 @@ fn wrong_reference_kind_rejects_without_changing_current_revision() {
     }));
     assert_eq!(session.current(), Some(&before));
 }
+
+#[test]
+fn dropped_semantic_session_does_not_seed_a_fresh_service() {
+    let candidate_ids = IdentityAllocator::new();
+    let candidate =
+        candidate_notebook(&candidate_ids, "ephemeral accepted text");
+    {
+        let mut first = SemanticNotebookSessionService::default();
+        assert!(matches!(
+            first.accept(candidate),
+            AcceptanceOutcome::Accepted { .. }
+        ));
+        assert!(first.current().is_some());
+    }
+
+    let fresh = SemanticNotebookSessionService::default();
+    assert!(fresh.current().is_none());
+}

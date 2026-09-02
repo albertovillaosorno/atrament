@@ -19,10 +19,15 @@ active session with no database, autosave, hidden recovery file, or cloud copy.
 
 Current executable evidence keeps source-preparation task text, source material,
 and raw model-response text in one backend application object owned by the
-active process. Browser edits send complete authenticated replacements and no
-browser persistence API is used. The task remains open until accepted semantic
-revisions, assets, history, previews, diagnostics, renders, and plans exist and
-the same lifecycle invariant is executable for those authorities.
+active process. Accepted semantic notebook revisions now also live only inside
+one process-local application service: a fresh service starts without accepted
+state after the prior owner is dropped, and its Debug projection does not expose
+private notebook text. Browser edits send complete authenticated replacements
+and no browser persistence API is used.
+
+The task remains open until the accepted-revision service is composed into the
+live session and assets, history, previews, diagnostics, renders, and plans all
+exist with the same executable lifecycle invariant.
 
 ### TODO - Implement explicit import and export
 
@@ -81,6 +86,18 @@ that those capabilities preserve the same diagnostic semantics.
 
 Represent notebooks, pages, flows, blocks, spans, formulas, tables, figures,
 styles, assets, constraints, output profiles, and provenance with stable IDs.
+
+Current executable evidence defines transport-independent typed values for those
+semantic families, separate opaque candidate, accepted, and revision identities,
+non-recycling active-session allocation, unresolved semantic blocks, and exact
+extension-data preservation. Explicit candidate acceptance validates duplicate,
+dangling, and wrong-kind references before mutation, promotes candidate-local
+identities through one backend-owned mapping, and commits one new accepted
+revision atomically while preserving nested semantic references.
+
+The task remains open for the complete first-release semantic vocabulary,
+format parsing and canonical serialization, migrations and round-trip fixtures,
+accepted semantic editing/history integration, and layout/render consumers.
 
 ### TODO - Implement physical page profiles
 
