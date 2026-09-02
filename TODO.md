@@ -76,7 +76,13 @@ explicit set completeness. The browser admits the same namespace and
 completeness metadata, and the localhost adapter refuses to invent a code for
 an empty application diagnostic set.
 
-The task remains open because semantic-command, layout, Render, Export, and Plan
+Layout now provides the first accepted-revision producer beyond handshake and
+session draft: fixed-region overflow emits stable blocking diagnostics with
+semantic object/page locations, typed boundary and physical-length evidence,
+operation binding, and complete-set semantics. A layout-only Export preflight
+preserves those diagnostics rather than interpreting prose.
+
+The task remains open because semantic-command, Render, full Export, and Plan
 producers do not exist yet, and CLI/MCP parity fixtures therefore cannot prove
 that those capabilities preserve the same diagnostic semantics.
 
@@ -169,8 +175,14 @@ current. Page-profile edits invalidate prior derived geometry, while nested
 semantic blocks retain their accepted page ownership. Overflow amounts retain
 the full physical `u64` range without diagnostic truncation.
 
-The task remains open until an explicit Export preflight consumes complete
-layout diagnostics and refuses success while overflow is blocking. Move, crop,
+A read-only layout-only Export preflight now consumes revision-bound layout
+diagnostics and refuses layout readiness when evidence is blocking or explicitly
+incomplete. Stale revisions, evidence from another revision, and non-layout
+diagnostics cannot be smuggled through that gate. It accepts no path, overwrite,
+retry, format, or file-commit input and therefore cannot report `Exported`.
+
+The task remains open until full Export preflight combines layout with semantic,
+source, asset, capability, and format validation before file commit. Move, crop,
 resize, and reflow remediation classes also remain open until the owning fixed
 placement and asset semantics can prove which choices are valid.
 
