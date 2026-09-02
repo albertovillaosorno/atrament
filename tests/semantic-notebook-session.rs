@@ -40,7 +40,7 @@ use atrament_semantic_notebook::{
     FormulaMode, IdentityAllocator, InlineSpan, List, ListItem,
     MathSyntaxError, MathSyntaxErrorKind, Notebook, OutputProfile, Page,
     PaperProfile, Provenance, ProvenanceKind, Style, Table, TableCell,
-    TableRow, UnresolvedBlock, UnresolvedReason,
+    TableRow, TableRowRole, UnresolvedBlock, UnresolvedReason,
 };
 use atrament_semantic_notebook_port::{
     AcceptanceOutcome, CandidateGraphError, CandidateReferenceKind,
@@ -606,6 +606,7 @@ fn direct_formula_edit_reaches_nested_structures_across_revisions() {
                                     id: table_cell,
                                 }],
                                 id: table_row,
+                                role: TableRowRole::Body,
                             }],
                         }),
                         extensions: vec![],
@@ -964,6 +965,7 @@ fn nested_semantic_families_promote_all_owned_and_referenced_identities() {
                                     id: table_cell_id,
                                 }],
                                 id: table_row_id,
+                                role: TableRowRole::Header,
                             }],
                         }),
                         extensions: vec![],
@@ -1061,6 +1063,12 @@ fn nested_semantic_families_promote_all_owned_and_referenced_identities() {
         current.notebook.pages[0].page_profile,
         accepted_for(&mapping, page_profile_id),
     );
+    let table_block = &current.notebook.pages[0].flows[0].blocks[3];
+    let BlockContent::Table(table) = &table_block.content else {
+        panic!("fourth block must remain a table");
+    };
+    assert_eq!(table.rows[0].id, accepted_for(&mapping, table_row_id));
+    assert_eq!(table.rows[0].role, TableRowRole::Header);
 }
 
 #[test]
@@ -1376,6 +1384,7 @@ fn direct_text_edit_reaches_nested_text_families_across_revisions() {
                                     id: cell_id,
                                 }],
                                 id: row_id,
+                                role: TableRowRole::Body,
                             }],
                         }),
                         extensions: vec![],

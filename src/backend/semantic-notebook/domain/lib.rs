@@ -403,6 +403,17 @@ pub struct TableRow<Identity> {
     pub cells: Vec<TableCell<Identity>>,
     /// Stable or candidate-local semantic identity.
     pub id: Identity,
+    /// Semantic row role independent from visual styling.
+    pub role: TableRowRole,
+}
+
+/// Semantic role of one table row.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub enum TableRowRole {
+    /// Ordinary table data row.
+    Body,
+    /// Header row semantically distinct from table data.
+    Header,
 }
 
 /// Unsupported or ambiguous semantic content preserved without guessing.

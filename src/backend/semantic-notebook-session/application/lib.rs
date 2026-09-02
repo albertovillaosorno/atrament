@@ -643,6 +643,7 @@ fn accept_table_row(
             .map(|cell| accept_table_cell(cell, identities))
             .collect::<Result<Vec<_>, _>>()?,
         id: accepted_id(row.id, identities)?,
+        role: row.role,
     })
 }
 
