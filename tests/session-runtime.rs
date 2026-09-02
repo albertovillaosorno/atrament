@@ -294,6 +294,20 @@ fn session_credential_requires_one_exact_bearer_value() {
             &secret,
         ));
     }
+
+    for index in 0..secret.len() {
+        let mut candidate = secret.clone().into_bytes();
+        candidate[index] = b'b';
+        let candidate = String::from_utf8(candidate)
+            .expect("credential fixture remains ASCII");
+        let request = format!(
+            "POST /api HTTP/1.1\r\nAuthorization: Bearer {candidate}\r\n\r\n",
+        );
+        assert!(!runtime::request_has_session_credential(
+            request.as_bytes(),
+            &secret,
+        ));
+    }
 }
 
 #[test]
