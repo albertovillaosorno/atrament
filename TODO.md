@@ -51,6 +51,13 @@ format-specific execution remain open.
 Close, refresh, cancel, crash, and restart fixtures must show that ephemeral
 state and media intermediates disappear while explicit exports remain intact.
 
+Current runtime evidence proves orderly process termination releases the old
+loopback listener, restart generates a fresh session credential, and a stale
+credential cannot authenticate to the new process. The task remains open until
+notebook state and temporary media exist and fixtures also cover browser close,
+refresh, cancellation, crash, intermediate cleanup, and explicit-export
+survival.
+
 ### TODO - Define one typed diagnostic envelope
 
 Represent field, object, page, source, glyph, collision, capability, renderer,
