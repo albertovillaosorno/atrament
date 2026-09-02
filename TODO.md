@@ -120,9 +120,17 @@ A second read-only precondition compares exact accepted base values for the four
 families with established direct-edit authority: inline text, formula mode and
 source, table-row role, and physical page-profile geometry. Text and formula
 checks preserve exact authored source because no Unicode normalization form is
-yet frozen. Candidate acceptance also enforces a public 256-level block nesting
-resource bound and iteratively dismantles rejected deep candidates before any
-accepted mutation.
+yet frozen. Backend-derived command-target material now combines semantic kind,
+direct owner, exact editable base value when available, and the currently
+executable direct-edit command family for one exact revision and target.
+
+The frozen command-family taxonomy is represented without choosing final wire
+operation names. Current executable targets admit Text content for inline text,
+Structured content for formulas and table-row roles, and Document constraint for
+page profiles. A combined local checker validates family, kind, owner, and an
+optional exact base value in one read-only snapshot with stale-base precedence.
+Candidate acceptance also enforces a public 256-level block nesting resource
+bound and iteratively dismantles rejected deep candidates before mutation.
 
 The task remains open for the complete first-release semantic vocabulary,
 format parsing and canonical serialization, migrations and round-trip fixtures,

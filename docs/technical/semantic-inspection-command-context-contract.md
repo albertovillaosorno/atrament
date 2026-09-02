@@ -206,8 +206,15 @@ and an empty session return typed read-only outcomes.
 A read-only local-precondition checker can require an exact semantic kind, an
 exact direct owner, notebook-root ownership, or no owner constraint. Wrong kind
 and wrong owner are distinct typed failures, and stale revision rejection occurs
-before local comparison. This is validation evidence for future command
-preconditions, not a complete command-batch implementation.
+before local comparison.
+
+The session can also derive one target's local command material directly from an
+exact accepted revision. That material combines semantic kind, direct owner,
+exact editable base value when established, and the currently executable direct
+edit family. A combined checker validates requested family, kind, owner, and an
+optional exact base value against that one projection. This executes the local
+precondition mismatch semantics without defining final command-context identity,
+readable-neighbor selection, behavior-version binding, or wire fields.
 
 This is not the complete first-release Inspect protocol. Bounded multi-object
 selectors, completeness and continuation semantics, capability snapshots,

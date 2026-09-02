@@ -464,6 +464,13 @@ separate compare-and-set check covers exact accepted inline text, formula mode
 and source, table-row role, and physical page-profile geometry without mutating
 accepted state. Stale revision rejection precedes every local comparison.
 
+The frozen application-level command-family taxonomy is now represented as a
+typed value without choosing serialized operation names. Current direct-edit
+targets expose only executable family admission: Text content for inline text,
+Structured content for formulas and table-row roles, and Document constraint for
+page profiles. One aggregate read-only check validates requested family, kind,
+owner, and optional exact base value against backend-derived target material.
+
 Exact authored text and formula source are compared as currently accepted bytes;
 no Unicode normalization form is implied by this implementation evidence. The
 complete command protocol may define a versioned normalization contract later.
