@@ -43,12 +43,12 @@ use atrament_semantic_notebook::{
     CandidateIdentity, Constraint, Figure, Flow, Formula, FormulaMode,
     IdentityAllocator, IdentityExhausted, InlineSpan, List, ListItem, Notebook,
     OutputProfile, Page, PaperProfile, Provenance, Style, Table, TableCell,
-    TableRow,
+    TableRow, TableRowRole,
 };
 use atrament_semantic_notebook_port::{
     AcceptanceOutcome, CandidateGraphError, CandidateReferenceKind,
     FormulaEditOutcome, IdentityMapping, PageProfileEditOutcome,
-    SemanticNotebookSession, TextEditOutcome,
+    SemanticNotebookSession, TableRowRoleEditOutcome, TextEditOutcome,
 };
 
 #[derive(Debug, Default)]
@@ -272,6 +272,54 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
         };
         self.current = Some(AcceptedRevision { id: revision, notebook });
         PageProfileEditOutcome::Applied { base, revision, target }
+    }
+
+    fn replace_table_row_role(
+        &mut self,
+        base: atrament_semantic_notebook::RevisionIdentity,
+        target: AcceptedIdentity,
+        role: TableRowRole,
+    ) -> TableRowRoleEditOutcome {
+        let Some(current) = self.current.as_ref() else {
+            return TableRowRoleEditOutcome::NoAcceptedRevision;
+        };
+        if current.id != base {
+            return TableRowRoleEditOutcome::StaleBase { current: current.id };
+        }
+        let Some(existing) = table_row_role_value(&current.notebook, target)
+        else {
+            if notebook_contains_identity(&current.notebook, target) {
+                return TableRowRoleEditOutcome::TargetNotTableRow {
+                    revision: current.id,
+                    target,
+                };
+            }
+            return TableRowRoleEditOutcome::TargetNotFound {
+                revision: current.id,
+                target,
+            };
+        };
+        if existing == role {
+            return TableRowRoleEditOutcome::NoOp {
+                revision: current.id,
+                target,
+            };
+        }
+        let mut notebook = current.notebook.clone();
+        if !replace_table_row_role_value(&mut notebook, target, role) {
+            return TableRowRoleEditOutcome::TargetNotFound {
+                revision: current.id,
+                target,
+            };
+        }
+        let revision = match self.identities.allocate_revision() {
+            Ok(revision) => revision,
+            Err(sequence) => {
+                return TableRowRoleEditOutcome::IdentityExhausted { sequence };
+            },
+        };
+        self.current = Some(AcceptedRevision { id: revision, notebook });
+        TableRowRoleEditOutcome::Applied { base, revision, target }
     }
 
     fn replace_text(
@@ -924,6 +972,146 @@ fn replace_page_profile_value(
     };
     profile.geometry = geometry;
     true
+}
+
+fn replace_table_row_role_blocks(
+    blocks: &mut [Block<AcceptedIdentity>],
+    target: AcceptedIdentity,
+    role: TableRowRole,
+) -> bool {
+    for block in blocks {
+        if replace_table_row_role_content(&mut block.content, target, role) {
+            return true;
+        }
+    }
+    false
+}
+
+fn replace_table_row_role_content(
+    content: &mut BlockContent<AcceptedIdentity>,
+    target: AcceptedIdentity,
+    role: TableRowRole,
+) -> bool {
+    match content {
+        BlockContent::Callout(blocks) | BlockContent::Freeform(blocks) => {
+            replace_table_row_role_blocks(blocks, target, role)
+        },
+        BlockContent::List(list) => list.items.iter_mut().any(|item| {
+            replace_table_row_role_blocks(&mut item.blocks, target, role)
+        }),
+        BlockContent::Table(table) => {
+            for row in &mut table.rows {
+                if row.id == target {
+                    row.role = role;
+                    return true;
+                }
+                for cell in &mut row.cells {
+                    if replace_table_row_role_blocks(
+                        &mut cell.blocks,
+                        target,
+                        role,
+                    ) {
+                        return true;
+                    }
+                }
+            }
+            false
+        },
+        BlockContent::Date(_)
+        | BlockContent::Figure(_)
+        | BlockContent::Heading(_)
+        | BlockContent::Mathematics(_)
+        | BlockContent::Paragraph(_)
+        | BlockContent::Rule
+        | BlockContent::Unresolved(_) => false,
+    }
+}
+
+fn replace_table_row_role_value(
+    notebook: &mut Notebook<AcceptedIdentity>,
+    target: AcceptedIdentity,
+    role: TableRowRole,
+) -> bool {
+    for page in &mut notebook.pages {
+        for flow in &mut page.flows {
+            if replace_table_row_role_blocks(&mut flow.blocks, target, role) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+fn table_row_role_blocks_value(
+    blocks: &[Block<AcceptedIdentity>],
+    target: AcceptedIdentity,
+) -> Option<TableRowRole> {
+    for block in blocks {
+        if let Some(role) = table_row_role_content_value(&block.content, target)
+        {
+            return Some(role);
+        }
+    }
+    None
+}
+
+fn table_row_role_content_value(
+    content: &BlockContent<AcceptedIdentity>,
+    target: AcceptedIdentity,
+) -> Option<TableRowRole> {
+    match content {
+        BlockContent::Callout(blocks) | BlockContent::Freeform(blocks) => {
+            table_row_role_blocks_value(blocks, target)
+        },
+        BlockContent::List(list) => {
+            for item in &list.items {
+                if let Some(role) =
+                    table_row_role_blocks_value(&item.blocks, target)
+                {
+                    return Some(role);
+                }
+            }
+            None
+        },
+        BlockContent::Table(table) => {
+            for row in &table.rows {
+                if row.id == target {
+                    return Some(row.role);
+                }
+                for cell in &row.cells {
+                    if let Some(role) =
+                        table_row_role_blocks_value(&cell.blocks, target)
+                    {
+                        return Some(role);
+                    }
+                }
+            }
+            None
+        },
+        BlockContent::Date(_)
+        | BlockContent::Figure(_)
+        | BlockContent::Heading(_)
+        | BlockContent::Mathematics(_)
+        | BlockContent::Paragraph(_)
+        | BlockContent::Rule
+        | BlockContent::Unresolved(_) => None,
+    }
+}
+
+fn table_row_role_value(
+    notebook: &Notebook<AcceptedIdentity>,
+    target: AcceptedIdentity,
+) -> Option<TableRowRole> {
+    for page in &notebook.pages {
+        for flow in &page.flows {
+            if let Some(role) =
+                table_row_role_blocks_value(&flow.blocks, target)
+            {
+                return Some(role);
+            }
+        }
+    }
+    None
 }
 
 fn replace_text_blocks(

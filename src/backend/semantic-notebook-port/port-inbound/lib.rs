@@ -36,7 +36,7 @@
 use atrament_semantic_notebook::{
     AcceptedIdentity, AcceptedRevision, CandidateIdentity, FormulaMode,
     IdentityExhausted, MathSyntaxError, Notebook, PhysicalPageProfile,
-    PhysicalPageProfileError, RevisionIdentity,
+    PhysicalPageProfileError, RevisionIdentity, TableRowRole,
 };
 
 /// Result of one explicit candidate acceptance request.
@@ -238,6 +238,53 @@ pub enum PageProfileEditOutcome {
     },
 }
 
+/// Result of one direct accepted semantic table-row role replacement.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum TableRowRoleEditOutcome {
+    /// Row role changed and one new accepted revision committed.
+    Applied {
+        /// Accepted revision used as the edit precondition.
+        base: RevisionIdentity,
+        /// New accepted revision produced by the edit.
+        revision: RevisionIdentity,
+        /// Existing semantic table-row identity whose role changed.
+        target: AcceptedIdentity,
+    },
+    /// Revision identity allocation exhausted before commit.
+    IdentityExhausted {
+        /// Identity sequence that could not allocate another value.
+        sequence: IdentityExhausted,
+    },
+    /// Session has no accepted semantic revision to edit.
+    NoAcceptedRevision,
+    /// Replacement equals current role; no revision churn occurred.
+    NoOp {
+        /// Unchanged current revision identity.
+        revision: RevisionIdentity,
+        /// Existing table-row identity whose role already matched.
+        target: AcceptedIdentity,
+    },
+    /// Caller precondition names a revision that is no longer current.
+    StaleBase {
+        /// Current accepted revision identity that rejected the stale edit.
+        current: RevisionIdentity,
+    },
+    /// Requested accepted identity is absent from the current revision.
+    TargetNotFound {
+        /// Unchanged current revision identity.
+        revision: RevisionIdentity,
+        /// Requested semantic identity absent from the current revision.
+        target: AcceptedIdentity,
+    },
+    /// Requested accepted identity exists but is not a semantic table row.
+    TargetNotTableRow {
+        /// Unchanged current revision identity.
+        revision: RevisionIdentity,
+        /// Existing non-row semantic identity that rejected role replacement.
+        target: AcceptedIdentity,
+    },
+}
+
 /// Result of one direct accepted semantic text replacement.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum TextEditOutcome {
@@ -322,6 +369,14 @@ pub trait SemanticNotebookSession {
         target: AcceptedIdentity,
         geometry: PhysicalPageProfile,
     ) -> PageProfileEditOutcome;
+
+    /// Replace one semantic table-row role against an exact base revision.
+    fn replace_table_row_role(
+        &mut self,
+        base: RevisionIdentity,
+        target: AcceptedIdentity,
+        role: TableRowRole,
+    ) -> TableRowRoleEditOutcome;
 
     /// Replace one existing inline text identity against an exact base
     /// revision.

@@ -45,7 +45,7 @@ use atrament_semantic_notebook::{
 use atrament_semantic_notebook_port::{
     AcceptanceOutcome, CandidateGraphError, CandidateReferenceKind,
     FormulaEditOutcome, PageProfileEditOutcome, SemanticNotebookSession,
-    TextEditOutcome,
+    TableRowRoleEditOutcome, TextEditOutcome,
 };
 use atrament_semantic_notebook_session::SemanticNotebookSessionService;
 
@@ -195,6 +195,42 @@ fn candidate_math_notebook(
         styles: vec![],
     };
     (notebook, formula_id)
+}
+
+fn candidate_table_notebook(
+    identities: &IdentityAllocator,
+    role: TableRowRole,
+) -> (
+    Notebook<CandidateIdentity>,
+    CandidateIdentity,
+    CandidateIdentity,
+) {
+    let mut notebook = candidate_notebook(identities, "table cell text");
+    let table_id = candidate_id(identities);
+    let row_id = candidate_id(identities);
+    let cell_id = candidate_id(identities);
+    let nested_block_id = candidate_id(identities);
+    let outer = &mut notebook.pages[0].flows[0].blocks[0];
+    let cell_content =
+        std::mem::replace(&mut outer.content, BlockContent::Rule);
+    outer.content = BlockContent::Table(Table {
+        id: table_id,
+        rows: vec![TableRow {
+            cells: vec![TableCell {
+                blocks: vec![Block {
+                    content: cell_content,
+                    extensions: vec![],
+                    id: nested_block_id,
+                    provenance: None,
+                    style: None,
+                }],
+                id: cell_id,
+            }],
+            id: row_id,
+            role,
+        }],
+    });
+    (notebook, row_id, table_id)
 }
 
 #[test]
@@ -676,6 +712,135 @@ fn direct_formula_edit_reaches_nested_structures_across_revisions() {
     };
     assert_eq!(table_math.source, "c = 30");
     assert_eq!(current.id, revision);
+}
+
+#[test]
+fn direct_table_row_role_edit_preserves_row_identity_and_cells() {
+    let ids = IdentityAllocator::new();
+    let (candidate, row, _) =
+        candidate_table_notebook(&ids, TableRowRole::Header);
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(candidate)
+    else {
+        panic!("table candidate must be accepted");
+    };
+    let target = accepted_for(&mapping, row);
+    let before = session.current().expect("base revision").clone();
+    let BlockContent::Table(before_table) =
+        &before.notebook.pages[0].flows[0].blocks[0].content
+    else {
+        panic!("fixture must remain a table");
+    };
+    let cells = before_table.rows[0].cells.clone();
+
+    let outcome =
+        session.replace_table_row_role(revision, target, TableRowRole::Body);
+    let TableRowRoleEditOutcome::Applied {
+        base,
+        revision: edited,
+        target: actual_target,
+    } = outcome
+    else {
+        panic!("row role edit must apply: {outcome:?}");
+    };
+    assert_eq!(base, revision);
+    assert_ne!(edited, revision);
+    assert_eq!(actual_target, target);
+    let current = session.current().expect("edited revision");
+    let BlockContent::Table(table) =
+        &current.notebook.pages[0].flows[0].blocks[0].content
+    else {
+        panic!("edited fixture must remain a table");
+    };
+    assert_eq!(table.rows[0].id, target);
+    assert_eq!(table.rows[0].role, TableRowRole::Body);
+    assert_eq!(table.rows[0].cells, cells);
+}
+
+#[test]
+fn direct_table_row_role_same_value_is_noop_without_revision_churn() {
+    let ids = IdentityAllocator::new();
+    let (candidate, row, _) =
+        candidate_table_notebook(&ids, TableRowRole::Header);
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(candidate)
+    else {
+        panic!("table candidate must be accepted");
+    };
+    let target = accepted_for(&mapping, row);
+    assert_eq!(
+        session.replace_table_row_role(revision, target, TableRowRole::Header,),
+        TableRowRoleEditOutcome::NoOp { revision, target },
+    );
+    assert_eq!(session.current().expect("revision").id, revision);
+}
+
+#[test]
+fn direct_table_row_role_stale_nonrow_and_absent_targets_are_no_effect() {
+    let ids = IdentityAllocator::new();
+    let (candidate, row, table) =
+        candidate_table_notebook(&ids, TableRowRole::Header);
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(candidate)
+    else {
+        panic!("table candidate must be accepted");
+    };
+    let row = accepted_for(&mapping, row);
+    let table = accepted_for(&mapping, table);
+    let TableRowRoleEditOutcome::Applied { revision: edited, .. } =
+        session.replace_table_row_role(revision, row, TableRowRole::Body)
+    else {
+        panic!("initial role edit must apply");
+    };
+    let before = session.current().expect("edited revision").clone();
+    assert_eq!(
+        session.replace_table_row_role(revision, row, TableRowRole::Header,),
+        TableRowRoleEditOutcome::StaleBase { current: edited },
+    );
+    assert_eq!(
+        session.replace_table_row_role(edited, table, TableRowRole::Header,),
+        TableRowRoleEditOutcome::TargetNotTableRow {
+            revision: edited,
+            target: table,
+        },
+    );
+    assert_eq!(session.current(), Some(&before));
+
+    let replacement = candidate_notebook(&ids, "replacement");
+    let AcceptanceOutcome::Accepted { revision: current, .. } =
+        session.accept(replacement)
+    else {
+        panic!("replacement candidate must be accepted");
+    };
+    assert_eq!(
+        session.replace_table_row_role(current, row, TableRowRole::Header,),
+        TableRowRoleEditOutcome::TargetNotFound {
+            revision: current,
+            target: row,
+        },
+    );
+}
+
+#[test]
+fn direct_table_row_role_without_accepted_revision_is_typed_no_effect() {
+    let ids = IdentityAllocator::new();
+    let (candidate, row, _) =
+        candidate_table_notebook(&ids, TableRowRole::Body);
+    let mut seed = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        seed.accept(candidate)
+    else {
+        panic!("seed table must be accepted");
+    };
+    let target = accepted_for(&mapping, row);
+    let mut empty = SemanticNotebookSessionService::default();
+    assert_eq!(
+        empty.replace_table_row_role(revision, target, TableRowRole::Header,),
+        TableRowRoleEditOutcome::NoAcceptedRevision,
+    );
 }
 
 #[test]
