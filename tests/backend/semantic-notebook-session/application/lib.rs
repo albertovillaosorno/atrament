@@ -46,9 +46,10 @@ use atrament_semantic_notebook::{
 use atrament_semantic_notebook_port::{
     AcceptanceOutcome, CANDIDATE_BLOCK_NESTING_LIMIT, CandidateGraphError,
     CandidateReferenceKind, CommandFamilyAdmissionOutcome,
-    CommandTargetMaterial, CommandTargetMaterialOutcome, EditableSemanticValue,
-    EditableValuePreconditionOutcome, FormulaEditOutcome,
-    IdentityInspectOutcome, IdentityKindInspectOutcome,
+    CommandTargetMaterial, CommandTargetMaterialOutcome,
+    CommandTargetPreconditionOutcome, CommandTargetPreconditions,
+    EditableSemanticValue, EditableValuePreconditionOutcome,
+    FormulaEditOutcome, IdentityInspectOutcome, IdentityKindInspectOutcome,
     IdentityOwnerExpectation, IdentityPrecondition,
     IdentityPreconditionOutcome, PageProfileEditOutcome, SemanticCommandFamily,
     SemanticNotebookSession, TableRowRoleEditOutcome, TextEditOutcome,
@@ -544,6 +545,132 @@ fn identity_kind_inspection_rejects_stale_absent_and_empty_session() {
     assert_eq!(
         empty.inspect_identity_kind(current, row),
         IdentityKindInspectOutcome::NoAcceptedRevision,
+    );
+}
+
+#[test]
+fn command_target_preconditions_cover_local_mismatch_fixture_read_only() {
+    let ids = IdentityAllocator::new();
+    let (candidate, span) = candidate_notebook_with_span(&ids, "Idea base");
+    let block = candidate.pages[0].flows[0].blocks[0].id;
+    let flow = candidate.pages[0].flows[0].id;
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(candidate)
+    else {
+        panic!("text candidate must be accepted");
+    };
+    let block = accepted_for(&mapping, block);
+    let flow = accepted_for(&mapping, flow);
+    let span = accepted_for(&mapping, span);
+    let before = session.current().expect("accepted revision").clone();
+    let exact = CommandTargetPreconditions {
+        expected_value: Some(EditableSemanticValue::Text(String::from(
+            "Idea base",
+        ))),
+        identity: IdentityPrecondition {
+            expected_kind: Some(SemanticIdentityKind::InlineSpan),
+            expected_owner: IdentityOwnerExpectation::Direct(block),
+        },
+        requested_family: SemanticCommandFamily::TextContent,
+    };
+    let CommandTargetPreconditionOutcome::Satisfied { material } = session
+        .check_command_target_preconditions(revision, span, exact.clone())
+    else {
+        panic!("exact local target preconditions must be satisfied");
+    };
+    assert_eq!(material.target, span);
+
+    let mut wrong_family = exact.clone();
+    wrong_family.requested_family = SemanticCommandFamily::StructuredContent;
+    assert_eq!(
+        session.check_command_target_preconditions(
+            revision,
+            span,
+            wrong_family,
+        ),
+        CommandTargetPreconditionOutcome::FamilyNotExecutable {
+            available: Some(SemanticCommandFamily::TextContent),
+            requested: SemanticCommandFamily::StructuredContent,
+            revision,
+            target: span,
+        },
+    );
+    let mut wrong_kind = exact.clone();
+    wrong_kind.identity.expected_kind =
+        Some(SemanticIdentityKind::Block(SemanticBlockKind::Paragraph));
+    assert_eq!(
+        session.check_command_target_preconditions(revision, span, wrong_kind),
+        CommandTargetPreconditionOutcome::KindMismatch {
+            actual: SemanticIdentityKind::InlineSpan,
+            expected: SemanticIdentityKind::Block(SemanticBlockKind::Paragraph),
+            revision,
+            target: span,
+        },
+    );
+    let mut wrong_owner = exact.clone();
+    wrong_owner.identity.expected_owner =
+        IdentityOwnerExpectation::Direct(flow);
+    assert_eq!(
+        session.check_command_target_preconditions(revision, span, wrong_owner),
+        CommandTargetPreconditionOutcome::OwnerMismatch {
+            actual: Some(block),
+            expected: IdentityOwnerExpectation::Direct(flow),
+            revision,
+            target: span,
+        },
+    );
+    let mut wrong_value = exact;
+    wrong_value.expected_value =
+        Some(EditableSemanticValue::Text(String::from("different base")));
+    assert_eq!(
+        session.check_command_target_preconditions(revision, span, wrong_value),
+        CommandTargetPreconditionOutcome::ValueMismatch {
+            actual: EditableSemanticValue::Text(String::from("Idea base")),
+            expected: EditableSemanticValue::Text(String::from(
+                "different base",
+            )),
+            revision,
+            target: span,
+        },
+    );
+    assert_eq!(session.current(), Some(&before));
+}
+
+#[test]
+fn command_target_preconditions_stale_base_wins_before_local_checks() {
+    let ids = IdentityAllocator::new();
+    let (candidate, span) = candidate_notebook_with_span(&ids, "old base");
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(candidate)
+    else {
+        panic!("text candidate must be accepted");
+    };
+    let span = accepted_for(&mapping, span);
+    let replacement = candidate_notebook(&ids, "new current");
+    let AcceptanceOutcome::Accepted { revision: current, .. } =
+        session.accept(replacement)
+    else {
+        panic!("replacement candidate must be accepted");
+    };
+    let deliberately_wrong = CommandTargetPreconditions {
+        expected_value: Some(EditableSemanticValue::Text(String::from(
+            "wrong",
+        ))),
+        identity: IdentityPrecondition {
+            expected_kind: Some(SemanticIdentityKind::TableRow),
+            expected_owner: IdentityOwnerExpectation::Root,
+        },
+        requested_family: SemanticCommandFamily::StructuredContent,
+    };
+    assert_eq!(
+        session.check_command_target_preconditions(
+            revision,
+            span,
+            deliberately_wrong,
+        ),
+        CommandTargetPreconditionOutcome::StaleBase { current },
     );
 }
 

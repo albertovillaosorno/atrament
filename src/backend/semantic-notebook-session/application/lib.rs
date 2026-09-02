@@ -49,10 +49,11 @@ use atrament_semantic_notebook::{
 use atrament_semantic_notebook_port::{
     AcceptanceOutcome, CANDIDATE_BLOCK_NESTING_LIMIT, CandidateGraphError,
     CandidateReferenceKind, CommandFamilyAdmissionOutcome,
-    CommandTargetMaterial, CommandTargetMaterialOutcome, EditableSemanticValue,
-    EditableValuePreconditionOutcome, FormulaEditOutcome,
-    IdentityInspectOutcome, IdentityKindInspectOutcome, IdentityMapping,
-    IdentityOwnerExpectation, IdentityPrecondition,
+    CommandTargetMaterial, CommandTargetMaterialOutcome,
+    CommandTargetPreconditionOutcome, CommandTargetPreconditions,
+    EditableSemanticValue, EditableValuePreconditionOutcome,
+    FormulaEditOutcome, IdentityInspectOutcome, IdentityKindInspectOutcome,
+    IdentityMapping, IdentityOwnerExpectation, IdentityPrecondition,
     IdentityPreconditionOutcome, PageProfileEditOutcome, SemanticCommandFamily,
     SemanticNotebookSession, TableRowRoleEditOutcome, TextEditOutcome,
 };
@@ -209,6 +210,87 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
             };
         }
         CommandFamilyAdmissionOutcome::Admitted { material }
+    }
+
+    fn check_command_target_preconditions(
+        &self,
+        revision: atrament_semantic_notebook::RevisionIdentity,
+        target: AcceptedIdentity,
+        preconditions: CommandTargetPreconditions,
+    ) -> CommandTargetPreconditionOutcome {
+        let material = match self.command_target_material(revision, target) {
+            CommandTargetMaterialOutcome::NoAcceptedRevision => {
+                return CommandTargetPreconditionOutcome::NoAcceptedRevision;
+            },
+            CommandTargetMaterialOutcome::Prepared { material } => material,
+            CommandTargetMaterialOutcome::StaleBase { current } => {
+                return CommandTargetPreconditionOutcome::StaleBase { current };
+            },
+            CommandTargetMaterialOutcome::TargetNotFound {
+                revision: inspected_revision,
+                target: missing_target,
+            } => {
+                return CommandTargetPreconditionOutcome::TargetNotFound {
+                    revision: inspected_revision,
+                    target: missing_target,
+                };
+            },
+        };
+        if material.direct_edit_family != Some(preconditions.requested_family) {
+            return CommandTargetPreconditionOutcome::FamilyNotExecutable {
+                available: material.direct_edit_family,
+                requested: preconditions.requested_family,
+                revision,
+                target,
+            };
+        }
+        if let Some(expected) = preconditions.identity.expected_kind
+            && material.descriptor.kind != expected
+        {
+            return CommandTargetPreconditionOutcome::KindMismatch {
+                actual: material.descriptor.kind,
+                expected,
+                revision,
+                target,
+            };
+        }
+        let owner_matches = match preconditions.identity.expected_owner {
+            IdentityOwnerExpectation::Any => true,
+            IdentityOwnerExpectation::Direct(expected) => {
+                material.descriptor.owner == Some(expected)
+            },
+            IdentityOwnerExpectation::Root => {
+                material.descriptor.owner.is_none()
+            },
+        };
+        if !owner_matches {
+            return CommandTargetPreconditionOutcome::OwnerMismatch {
+                actual: material.descriptor.owner,
+                expected: preconditions.identity.expected_owner,
+                revision,
+                target,
+            };
+        }
+        if let Some(expected) = preconditions.expected_value {
+            let Some(actual) = material.editable_value.as_ref() else {
+                let outcome =
+                    CommandTargetPreconditionOutcome::TargetNotEditableValue {
+                        kind: material.descriptor.kind,
+                        revision,
+                        target,
+                    };
+                return outcome;
+            };
+            if actual != &expected {
+                return CommandTargetPreconditionOutcome::ValueMismatch {
+                    actual: actual.clone(),
+                    expected,
+                    revision,
+                    target,
+                };
+            }
+        }
+        CommandTargetPreconditionOutcome::Satisfied { material }
     }
 
     fn check_editable_value_precondition(

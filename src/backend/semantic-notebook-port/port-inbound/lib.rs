@@ -468,6 +468,95 @@ pub enum CommandFamilyAdmissionOutcome {
     },
 }
 
+/// Complete local checks supplied for one semantic command target.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct CommandTargetPreconditions {
+    /// Expected current editable base value when compare-and-set intent
+    /// applies.
+    pub expected_value: Option<EditableSemanticValue>,
+    /// Expected semantic kind and direct structural owner.
+    pub identity: IdentityPrecondition,
+    /// Semantic command family requested for this exact target.
+    pub requested_family: SemanticCommandFamily,
+}
+
+/// Result of checking all local preconditions for one semantic command target.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum CommandTargetPreconditionOutcome {
+    /// Requested family is not currently executable for this exact target.
+    FamilyNotExecutable {
+        /// Currently executable direct-edit family, if one exists.
+        available: Option<SemanticCommandFamily>,
+        /// Requested semantic command family.
+        requested: SemanticCommandFamily,
+        /// Accepted revision checked without mutation.
+        revision: RevisionIdentity,
+        /// Existing target that rejected family admission.
+        target: AcceptedIdentity,
+    },
+    /// Existing target has a semantic kind different from the requirement.
+    KindMismatch {
+        /// Semantic kind currently owned by the target identity.
+        actual: SemanticIdentityKind,
+        /// Semantic kind required by the local precondition.
+        expected: SemanticIdentityKind,
+        /// Accepted revision checked without mutation.
+        revision: RevisionIdentity,
+        /// Existing target that failed the kind precondition.
+        target: AcceptedIdentity,
+    },
+    /// Session has no accepted semantic revision to check.
+    NoAcceptedRevision,
+    /// Existing target has a direct owner different from the requirement.
+    OwnerMismatch {
+        /// Current direct structural owner; `None` means notebook root.
+        actual: Option<AcceptedIdentity>,
+        /// Direct structural owner required by the local precondition.
+        expected: IdentityOwnerExpectation,
+        /// Accepted revision checked without mutation.
+        revision: RevisionIdentity,
+        /// Existing target that failed the owner precondition.
+        target: AcceptedIdentity,
+    },
+    /// Every declared local target precondition is satisfied.
+    Satisfied {
+        /// Complete backend-derived target material that was checked.
+        material: CommandTargetMaterial,
+    },
+    /// Caller names an accepted revision that is no longer current.
+    StaleBase {
+        /// Current accepted revision that rejected stale validation.
+        current: RevisionIdentity,
+    },
+    /// Target exists but has no established direct-edit value projection.
+    TargetNotEditableValue {
+        /// Semantic kind owned by the existing target.
+        kind: SemanticIdentityKind,
+        /// Accepted revision checked without mutation.
+        revision: RevisionIdentity,
+        /// Existing target without an editable value projection.
+        target: AcceptedIdentity,
+    },
+    /// Requested accepted identity is absent from the named revision.
+    TargetNotFound {
+        /// Accepted revision checked without mutation.
+        revision: RevisionIdentity,
+        /// Requested identity absent from that revision.
+        target: AcceptedIdentity,
+    },
+    /// Current semantic value differs from the expected base value.
+    ValueMismatch {
+        /// Current accepted semantic value.
+        actual: EditableSemanticValue,
+        /// Semantic base value required by the precondition.
+        expected: EditableSemanticValue,
+        /// Accepted revision checked without mutation.
+        revision: RevisionIdentity,
+        /// Existing target that failed the value precondition.
+        target: AcceptedIdentity,
+    },
+}
+
 /// Backend-derived local precondition material for one writable target.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CommandTargetMaterial {
@@ -659,6 +748,14 @@ pub trait SemanticNotebookSession {
         target: AcceptedIdentity,
         requested: SemanticCommandFamily,
     ) -> CommandFamilyAdmissionOutcome;
+
+    /// Check family, identity, owner, and optional base value in one snapshot.
+    fn check_command_target_preconditions(
+        &self,
+        revision: RevisionIdentity,
+        target: AcceptedIdentity,
+        preconditions: CommandTargetPreconditions,
+    ) -> CommandTargetPreconditionOutcome;
 
     /// Compare one established editable semantic value against an exact base.
     fn check_editable_value_precondition(
