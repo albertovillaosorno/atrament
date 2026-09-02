@@ -481,10 +481,23 @@ revision changes.
 
 A separate single-target direct-edit simulator classifies the four established
 replacement value families as applicable, no-op, domain-invalid, unavailable,
-or value-family mismatched without mutation. Its formula and page-profile
-fixtures agree with the existing direct-edit rejection semantics. This is a
-proposal-simulation seam, not full batch Validate: it has no normalized batch,
-dependency graph, semantic change set, impact set, or command diagnostics yet.
+or value-family mismatched without mutation. All four existing direct mutation
+paths now consume that same simulator before cloning accepted state or
+allocating
+a revision, so target, domain, and no-op validation are shared with proposal
+evidence.
+
+A version-bound direct-edit proposal now composes capability compatibility,
+complete local target preconditions, and replacement simulation in one read-only
+operation. This remains below full batch Validate: it has no command-batch
+identity, normalized batch, retry identity, semantic change set, impact set, or
+command diagnostics.
+
+A separate transport-neutral command-graph domain validates duplicate command
+identities, direct self-dependencies, missing dependency identities, and cycles.
+It is generic over command identity representation, preserves caller command
+order, and uses iterative graph traversal. It is not yet connected to a command
+protocol, normalizer, proposal batch, Validate, or Apply path.
 
 Exact authored text and formula source are compared as currently accepted bytes;
 no Unicode normalization form is implied by this implementation evidence. The
@@ -497,8 +510,9 @@ recursive structures are dismantled iteratively so rejection itself cannot
 consume unbounded process stack depth.
 
 These primitives do not implement command-context generation, ordered batch
-simulation, retry identity, Validate, Apply, undo/redo, or adapter parity. Those
-parts of this contract remain open.
+simulation, retry identity, Validate, Apply, undo/redo, or adapter parity. Graph
+validation exists independently but is not yet part of an admitted batch path.
+Those parts of this contract remain open.
 
 ## Failure Modes
 

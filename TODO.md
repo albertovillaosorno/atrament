@@ -133,11 +133,17 @@ optional exact base value in one read-only snapshot with stale-base precedence.
 Deterministic capability discovery reports only those three family behaviors and
 supports read-only behavior-version drift checks. It deliberately advertises no
 command protocol, normalizer, command context, Validate, Apply, rebatching, or
-numeric command/context limits yet. A single-target direct-edit simulator can
-classify established replacements without mutation, but full batch validation
-and semantic change/impact prediction remain open. Candidate acceptance also
-enforces a public 256-level block nesting resource bound and iteratively
-dismantles rejected deep candidates before mutation.
+numeric command/context limits yet. A version-bound single-target proposal
+combines capability, exact local preconditions, and direct-edit simulation
+read-only; all four direct mutation paths consume that simulator before commit.
+
+A separate generic command-graph domain validates duplicate command identities,
+self-dependencies, missing dependencies, and cycles without choosing command-ID
+syntax or changing command order. It is not yet integrated into an admitted
+normalized batch. Full ordered batch validation and semantic change/impact
+prediction remain open. Candidate acceptance also enforces a public 256-level
+block nesting resource bound and iteratively dismantles rejected deep candidates
+before mutation.
 
 The task remains open for the complete first-release semantic vocabulary,
 format parsing and canonical serialization, migrations and round-trip fixtures,

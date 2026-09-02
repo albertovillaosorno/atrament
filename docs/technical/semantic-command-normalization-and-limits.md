@@ -195,6 +195,20 @@ partially update derived authorities.
 Malformed or excessive command input does not authorize adapters to spill
 semantic state to hidden files, browser storage, or a second mutation path.
 
+### Implementation evidence
+
+A dependency-free semantic-command-graph domain now validates the structural
+graph rules that do not depend on final wire syntax: unique command identities,
+existing dependency references, no direct self-dependency, and acyclicity. The
+validator is generic over caller-owned identity representation and does not
+reorder the supplied command sequence.
+
+The graph validator is iterative; a 100,000-command dependency chain is covered
+by direct executable evidence without recursive traversal. This does not define
+a protocol-owned normalizer, command-count or edge-count limit, retry equality,
+or batch Apply behavior. Those remain version-owned work for the future admitted
+command protocol.
+
 ## Failure Modes
 
 The contract fails if retry equality depends on raw JSON bytes, map iteration
