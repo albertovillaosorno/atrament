@@ -129,8 +129,15 @@ operation names. Current executable targets admit Text content for inline text,
 Structured content for formulas and table-row roles, and Document constraint for
 page profiles. A combined local checker validates family, kind, owner, and an
 optional exact base value in one read-only snapshot with stale-base precedence.
-Candidate acceptance also enforces a public 256-level block nesting resource
-bound and iteratively dismantles rejected deep candidates before mutation.
+
+Deterministic capability discovery reports only those three family behaviors and
+supports read-only behavior-version drift checks. It deliberately advertises no
+command protocol, normalizer, command context, Validate, Apply, rebatching, or
+numeric command/context limits yet. A single-target direct-edit simulator can
+classify established replacements without mutation, but full batch validation
+and semantic change/impact prediction remain open. Candidate acceptance also
+enforces a public 256-level block nesting resource bound and iteratively
+dismantles rejected deep candidates before mutation.
 
 The task remains open for the complete first-release semantic vocabulary,
 format parsing and canonical serialization, migrations and round-trip fixtures,

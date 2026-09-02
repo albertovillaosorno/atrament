@@ -471,6 +471,21 @@ Structured content for formulas and table-row roles, and Document constraint for
 page profiles. One aggregate read-only check validates requested family, kind,
 owner, and optional exact base value against backend-derived target material.
 
+A deterministic capability snapshot now reports those three discoverable family
+behaviors and one top-level behavior version. Because no serialized command
+protocol is implemented, the snapshot advertises no protocol or normalization
+version, no command-context, Validate, Apply, or selective-rebatch capability,
+and no guessed command/context numeric limits. A read-only compatibility check
+rejects an older capability behavior version independently from notebook
+revision changes.
+
+A separate single-target direct-edit simulator classifies the four established
+replacement value families as applicable, no-op, domain-invalid, unavailable,
+or value-family mismatched without mutation. Its formula and page-profile
+fixtures agree with the existing direct-edit rejection semantics. This is a
+proposal-simulation seam, not full batch Validate: it has no normalized batch,
+dependency graph, semantic change set, impact set, or command diagnostics yet.
+
 Exact authored text and formula source are compared as currently accepted bytes;
 no Unicode normalization form is implied by this implementation evidence. The
 complete command protocol may define a versioned normalization contract later.

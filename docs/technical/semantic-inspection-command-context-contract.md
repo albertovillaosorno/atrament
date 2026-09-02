@@ -212,9 +212,15 @@ The session can also derive one target's local command material directly from an
 exact accepted revision. That material combines semantic kind, direct owner,
 exact editable base value when established, and the currently executable direct
 edit family. A combined checker validates requested family, kind, owner, and an
-optional exact base value against that one projection. This executes the local
-precondition mismatch semantics without defining final command-context identity,
-readable-neighbor selection, behavior-version binding, or wire fields.
+optional exact base value against that one projection.
+
+Command capability discovery is now deterministic and versioned independently
+from notebook revisions. It reports only the three family behaviors with current
+direct-edit targets, while command protocol, normalization, context generation,
+Validate, Apply, selective rebatching, and their numeric resource limits remain
+unadvertised. A caller can detect a bound capability-version mismatch read-only.
+This still does not define final command-context identity, readable-neighbor
+selection, or wire fields.
 
 This is not the complete first-release Inspect protocol. Bounded multi-object
 selectors, completeness and continuation semantics, capability snapshots,
