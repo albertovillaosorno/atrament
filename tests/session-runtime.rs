@@ -193,3 +193,35 @@ fn compiled_frontend_module_is_referenced_by_the_served_document() {
     assert!(html.contains("src=\"./generated/main.js\""));
     assert!(html.contains("href=\"./workspace.css\""));
 }
+
+#[test]
+fn session_credential_requires_one_exact_bearer_value() {
+    let secret = "a".repeat(64);
+    let accepted = format!(
+        "POST /api HTTP/1.1\r\nHost: 127.0.0.1:43123\r\n\
+         Authorization: Bearer {secret}\r\n\r\n",
+    );
+    assert!(runtime::request_has_session_credential(
+        accepted.as_bytes(),
+        &secret,
+    ));
+
+    let rejected = [
+        "POST /api HTTP/1.1\r\nHost: 127.0.0.1:43123\r\n\r\n".to_owned(),
+        format!("POST /api HTTP/1.1\r\nAuthorization: {secret}\r\n\r\n",),
+        format!(
+            "POST /api HTTP/1.1\r\nAuthorization: Bearer {}\r\n\r\n",
+            "b".repeat(64),
+        ),
+        format!(
+            "POST /api HTTP/1.1\r\nAuthorization: Bearer {secret}\r\n\
+             Authorization: Bearer {secret}\r\n\r\n",
+        ),
+    ];
+    for request in rejected {
+        assert!(!runtime::request_has_session_credential(
+            request.as_bytes(),
+            &secret,
+        ));
+    }
+}

@@ -9,11 +9,11 @@
 //
 // Boundary-Contract:
 // - Owns:
-//   - Loopback listener startup, frontend resources, and public health.
+//   - Loopback listener, public resources, and credential header admission.
 // - Must-Not:
 //   - Bind non-loopback addresses or expose session-private application state.
 // - Allows:
-//   - Inputs: Local HTTP requests addressed to the canonical startup endpoint.
+//   - Inputs: Local HTTP requests and in-memory expected session credentials.
 //   - Outputs: Public frontend resources and health responses.
 //   - Side effects: Loopback binding, startup and recovery publication, and
 //     HTTP response writes.
@@ -34,14 +34,15 @@
 
 //! Disposable loopback transport for the Atrament browser session runtime.
 //!
-//! This adapter owns pre-authentication listener admission, public frontend
-//! resources, and health routing. Later runtime slices add authenticated
-//! session services without widening this transport boundary.
+//! This adapter owns listener admission, public frontend resources, health
+//! routing, and fixed-work credential checks. Later runtime slices apply these
+//! checks to authenticated services without widening this transport boundary.
 
 use std::io::{self, Read as _, Write as _};
 use std::net::{Ipv4Addr, SocketAddr, TcpListener, TcpStream};
 use std::str;
 
+const ENCODED_SECRET_BYTES: usize = 64;
 const MAX_HEADER_BYTES: usize = 16 * 1024;
 const HTML_CONTENT_TYPE: &str = "text/html; charset=utf-8";
 const CSS_CONTENT_TYPE: &str = "text/css; charset=utf-8";
@@ -158,6 +159,54 @@ fn read_request_head(stream: &mut TcpStream) -> io::Result<Vec<u8>> {
         }
     }
     Ok(bytes)
+}
+
+fn authorization_bearer(request: &[u8]) -> Option<&str> {
+    let text = str::from_utf8(request).ok()?;
+    let mut authorization = None;
+    for line in text.split("\r\n").skip(1) {
+        if line.is_empty() {
+            break;
+        }
+        let (name, value) = line.split_once(':')?;
+        if name.eq_ignore_ascii_case("authorization") {
+            if authorization.is_some() {
+                return None;
+            }
+            authorization = Some(value.trim());
+        }
+    }
+    authorization?.strip_prefix("Bearer ")
+}
+
+fn fixed_work_secret_match(expected: &str, candidate: &str) -> bool {
+    let valid_length = expected.len() == ENCODED_SECRET_BYTES
+        && candidate.len() == ENCODED_SECRET_BYTES;
+    let mut expected_bytes = [0u8; ENCODED_SECRET_BYTES];
+    let mut candidate_bytes = [0u8; ENCODED_SECRET_BYTES];
+    for (slot, byte) in expected_bytes.iter_mut().zip(expected.bytes()) {
+        *slot = byte;
+    }
+    for (slot, byte) in candidate_bytes.iter_mut().zip(candidate.bytes()) {
+        *slot = byte;
+    }
+    let mut difference = 0u8;
+    for (expected_byte, candidate_byte) in
+        expected_bytes.iter().zip(candidate_bytes.iter())
+    {
+        difference |= expected_byte ^ candidate_byte;
+    }
+    valid_length && difference == 0
+}
+
+/// Check one Bearer credential without data-dependent comparison exit.
+#[must_use]
+pub fn request_has_session_credential(
+    request: &[u8],
+    expected_secret: &str,
+) -> bool {
+    let candidate = authorization_bearer(request).unwrap_or("");
+    fixed_work_secret_match(expected_secret, candidate)
 }
 
 fn request_host_and_target(request: &[u8]) -> Option<(&str, &str)> {
