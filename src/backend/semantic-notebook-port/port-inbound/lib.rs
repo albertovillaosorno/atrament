@@ -34,9 +34,9 @@
 //! Inbound application port for transactional semantic candidate acceptance.
 
 use atrament_semantic_notebook::{
-    AcceptedIdentity, AcceptedRevision, CandidateIdentity, IdentityExhausted,
-    MathSyntaxError, Notebook, PhysicalPageProfile, PhysicalPageProfileError,
-    RevisionIdentity,
+    AcceptedIdentity, AcceptedRevision, CandidateIdentity, FormulaMode,
+    IdentityExhausted, MathSyntaxError, Notebook, PhysicalPageProfile,
+    PhysicalPageProfileError, RevisionIdentity,
 };
 
 /// Result of one explicit candidate acceptance request.
@@ -116,6 +116,69 @@ pub enum CandidateReferenceKind {
     Semantic,
     /// Reference must identify a semantic style.
     Style,
+}
+
+/// Result of one direct accepted mathematical source replacement.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum FormulaEditOutcome {
+    /// Formula changed and one new accepted revision committed.
+    Applied {
+        /// Accepted revision used as the edit precondition.
+        base: RevisionIdentity,
+        /// New accepted revision produced by the edit.
+        revision: RevisionIdentity,
+        /// Existing semantic formula identity whose source or mode changed.
+        target: AcceptedIdentity,
+    },
+    /// Revision identity allocation exhausted before commit.
+    IdentityExhausted {
+        /// Identity sequence that could not allocate another value.
+        sequence: IdentityExhausted,
+    },
+    /// Replacement mathematics is structurally malformed; no mutation occurred.
+    InvalidMathematics {
+        /// Typed mathematical source-shape failure.
+        reason: MathSyntaxError,
+        /// Unchanged current revision identity.
+        revision: RevisionIdentity,
+        /// Existing formula identity that rejected replacement.
+        target: AcceptedIdentity,
+    },
+    /// Session has no accepted semantic revision to edit.
+    NoAcceptedRevision,
+    /// Replacement equals current mode and source; no revision churn occurred.
+    NoOp {
+        /// Unchanged current revision identity.
+        revision: RevisionIdentity,
+        /// Existing formula identity whose value already matched.
+        target: AcceptedIdentity,
+    },
+    /// Caller precondition names a revision that is no longer current.
+    StaleBase {
+        /// Current accepted revision identity that rejected the stale edit.
+        current: RevisionIdentity,
+    },
+    /// Requested accepted identity exists but does not own mathematics.
+    TargetNotFormula {
+        /// Unchanged current revision identity.
+        revision: RevisionIdentity,
+        /// Existing non-formula semantic identity that rejected replacement.
+        target: AcceptedIdentity,
+    },
+    /// Requested accepted identity is absent from the current revision.
+    TargetNotFound {
+        /// Unchanged current revision identity.
+        revision: RevisionIdentity,
+        /// Requested semantic identity absent from the current revision.
+        target: AcceptedIdentity,
+    },
+    /// Replacement uses unsupported TeX-like constructs; no mutation occurred.
+    UnsupportedMathematics {
+        /// Unchanged current revision identity.
+        revision: RevisionIdentity,
+        /// Existing formula identity that rejected replacement.
+        target: AcceptedIdentity,
+    },
 }
 
 /// Result of replacing one accepted physical page profile.
@@ -242,6 +305,15 @@ pub trait SemanticNotebookSession {
 
     /// Read the current accepted revision without creating another revision.
     fn current(&self) -> Option<&AcceptedRevision>;
+
+    /// Replace one mathematical source against an exact base revision.
+    fn replace_formula(
+        &mut self,
+        base: RevisionIdentity,
+        target: AcceptedIdentity,
+        mode: FormulaMode,
+        source: String,
+    ) -> FormulaEditOutcome;
 
     /// Replace one physical page profile against an exact base revision.
     fn replace_page_profile(

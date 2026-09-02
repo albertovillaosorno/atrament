@@ -44,7 +44,8 @@ use atrament_semantic_notebook::{
 };
 use atrament_semantic_notebook_port::{
     AcceptanceOutcome, CandidateGraphError, CandidateReferenceKind,
-    PageProfileEditOutcome, SemanticNotebookSession, TextEditOutcome,
+    FormulaEditOutcome, PageProfileEditOutcome, SemanticNotebookSession,
+    TextEditOutcome,
 };
 use atrament_semantic_notebook_session::SemanticNotebookSessionService;
 
@@ -286,6 +287,225 @@ fn unsupported_mathematics_can_be_preserved_as_exact_unresolved_source() {
     };
     assert_eq!(unresolved.reason, UnresolvedReason::Unsupported);
     assert_eq!(unresolved.source, source);
+}
+
+#[test]
+fn direct_formula_edit_preserves_formula_identity_and_commits_one_revision() {
+    let ids = IdentityAllocator::new();
+    let (candidate, formula) =
+        candidate_math_notebook(&ids, "E = mc^2", FormulaMode::Display);
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(candidate)
+    else {
+        panic!("formula candidate must be accepted");
+    };
+    let formula = accepted_for(&mapping, formula);
+    let source = r"E &= K + U \\ K &= \frac{1}{2}mv^2";
+    let outcome = session.replace_formula(
+        revision,
+        formula,
+        FormulaMode::Aligned,
+        source.to_owned(),
+    );
+    let FormulaEditOutcome::Applied {
+        base,
+        revision: edited,
+        target,
+    } = outcome
+    else {
+        panic!("supported formula edit must apply: {outcome:?}");
+    };
+    assert_eq!(base, revision);
+    assert_ne!(edited, revision);
+    assert_eq!(target, formula);
+    let current = session.current().expect("edited revision");
+    let stored = formula_value_for_test(current, formula);
+    assert_eq!(stored.id, formula);
+    assert_eq!(stored.mode, FormulaMode::Aligned);
+    assert_eq!(stored.source, source);
+}
+
+#[test]
+fn direct_formula_edit_same_value_is_noop_without_revision_churn() {
+    let ids = IdentityAllocator::new();
+    let (candidate, formula) =
+        candidate_math_notebook(&ids, "E = mc^2", FormulaMode::Display);
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(candidate)
+    else {
+        panic!("formula candidate must be accepted");
+    };
+    let formula = accepted_for(&mapping, formula);
+    assert_eq!(
+        session.replace_formula(
+            revision,
+            formula,
+            FormulaMode::Display,
+            String::from("E = mc^2"),
+        ),
+        FormulaEditOutcome::NoOp {
+            revision,
+            target: formula,
+        },
+    );
+    assert_eq!(session.current().expect("revision").id, revision);
+}
+
+#[test]
+fn direct_formula_edit_rejects_invalid_and_unsupported_without_mutation() {
+    let ids = IdentityAllocator::new();
+    let (candidate, formula) =
+        candidate_math_notebook(&ids, "E = mc^2", FormulaMode::Display);
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(candidate)
+    else {
+        panic!("formula candidate must be accepted");
+    };
+    let formula = accepted_for(&mapping, formula);
+    let before = session.current().expect("accepted revision").clone();
+    assert_eq!(
+        session.replace_formula(
+            revision,
+            formula,
+            FormulaMode::Display,
+            String::from(r"\frac{1}"),
+        ),
+        FormulaEditOutcome::InvalidMathematics {
+            reason: MathSyntaxError {
+                byte_offset: 8,
+                kind: MathSyntaxErrorKind::MissingRequiredGroup,
+            },
+            revision,
+            target: formula,
+        },
+    );
+    assert_eq!(session.current(), Some(&before));
+    assert_eq!(
+        session.replace_formula(
+            revision,
+            formula,
+            FormulaMode::Display,
+            String::from(r"\mystery{x}"),
+        ),
+        FormulaEditOutcome::UnsupportedMathematics {
+            revision,
+            target: formula,
+        },
+    );
+    assert_eq!(session.current(), Some(&before));
+}
+
+#[test]
+fn direct_formula_edit_stale_nonformula_and_absent_targets_are_no_effect() {
+    let ids = IdentityAllocator::new();
+    let (candidate, formula) =
+        candidate_math_notebook(&ids, "E = mc^2", FormulaMode::Display);
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(candidate)
+    else {
+        panic!("formula candidate must be accepted");
+    };
+    let formula = accepted_for(&mapping, formula);
+    let page =
+        session.current().expect("accepted revision").notebook.pages[0].id;
+    let FormulaEditOutcome::Applied { revision: edited, .. } = session
+        .replace_formula(
+            revision,
+            formula,
+            FormulaMode::Display,
+            String::from("E = mc^3"),
+        )
+    else {
+        panic!("first formula edit must apply");
+    };
+    let before = session.current().expect("edited revision").clone();
+    assert_eq!(
+        session.replace_formula(
+            revision,
+            formula,
+            FormulaMode::Display,
+            String::from("E = mc^4"),
+        ),
+        FormulaEditOutcome::StaleBase { current: edited },
+    );
+    assert_eq!(
+        session.replace_formula(
+            edited,
+            page,
+            FormulaMode::Display,
+            String::from("x = 1"),
+        ),
+        FormulaEditOutcome::TargetNotFormula {
+            revision: edited,
+            target: page,
+        },
+    );
+    assert_eq!(session.current(), Some(&before));
+
+    let replacement = candidate_notebook(&ids, "replacement");
+    let AcceptanceOutcome::Accepted { revision: current, .. } =
+        session.accept(replacement)
+    else {
+        panic!("replacement candidate must be accepted");
+    };
+    assert_eq!(
+        session.replace_formula(
+            current,
+            formula,
+            FormulaMode::Display,
+            String::from("x = 1"),
+        ),
+        FormulaEditOutcome::TargetNotFound {
+            revision: current,
+            target: formula,
+        },
+    );
+}
+
+#[test]
+fn direct_formula_edit_without_accepted_revision_is_typed_no_effect() {
+    let ids = IdentityAllocator::new();
+    let mut seed = SemanticNotebookSessionService::default();
+    let (candidate, formula) =
+        candidate_math_notebook(&ids, "x = 1", FormulaMode::Display);
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        seed.accept(candidate)
+    else {
+        panic!("seed candidate must be accepted");
+    };
+    let accepted = accepted_for(&mapping, formula);
+    let mut empty = SemanticNotebookSessionService::default();
+    assert_eq!(
+        empty.replace_formula(
+            revision,
+            accepted,
+            FormulaMode::Display,
+            String::from("x = 2"),
+        ),
+        FormulaEditOutcome::NoAcceptedRevision,
+    );
+}
+
+fn formula_value_for_test(
+    revision: &atrament_semantic_notebook::AcceptedRevision,
+    target: AcceptedIdentity,
+) -> &Formula<AcceptedIdentity> {
+    for page in &revision.notebook.pages {
+        for flow in &page.flows {
+            for block in &flow.blocks {
+                if let BlockContent::Mathematics(formula) = &block.content
+                    && formula.id == target
+                {
+                    return formula;
+                }
+            }
+        }
+    }
+    panic!("accepted formula target must exist");
 }
 
 #[test]

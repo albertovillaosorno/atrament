@@ -40,14 +40,15 @@ use std::fmt;
 use atrament_mathematics_source::analyze;
 use atrament_semantic_notebook::{
     AcceptedIdentity, AcceptedRevision, Asset, Block, BlockContent,
-    CandidateIdentity, Constraint, Figure, Flow, Formula, IdentityAllocator,
-    IdentityExhausted, InlineSpan, List, ListItem, Notebook, OutputProfile,
-    Page, PaperProfile, Provenance, Style, Table, TableCell, TableRow,
+    CandidateIdentity, Constraint, Figure, Flow, Formula, FormulaMode,
+    IdentityAllocator, IdentityExhausted, InlineSpan, List, ListItem, Notebook,
+    OutputProfile, Page, PaperProfile, Provenance, Style, Table, TableCell,
+    TableRow,
 };
 use atrament_semantic_notebook_port::{
     AcceptanceOutcome, CandidateGraphError, CandidateReferenceKind,
-    IdentityMapping, PageProfileEditOutcome, SemanticNotebookSession,
-    TextEditOutcome,
+    FormulaEditOutcome, IdentityMapping, PageProfileEditOutcome,
+    SemanticNotebookSession, TextEditOutcome,
 };
 
 #[derive(Debug, Default)]
@@ -150,6 +151,70 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
 
     fn current(&self) -> Option<&AcceptedRevision> {
         self.current.as_ref()
+    }
+
+    fn replace_formula(
+        &mut self,
+        base: atrament_semantic_notebook::RevisionIdentity,
+        target: AcceptedIdentity,
+        mode: FormulaMode,
+        source: String,
+    ) -> FormulaEditOutcome {
+        let Some(current) = self.current.as_ref() else {
+            return FormulaEditOutcome::NoAcceptedRevision;
+        };
+        if current.id != base {
+            return FormulaEditOutcome::StaleBase { current: current.id };
+        }
+        let Some(existing) = formula_value(&current.notebook, target) else {
+            if notebook_contains_identity(&current.notebook, target) {
+                return FormulaEditOutcome::TargetNotFormula {
+                    revision: current.id,
+                    target,
+                };
+            }
+            return FormulaEditOutcome::TargetNotFound {
+                revision: current.id,
+                target,
+            };
+        };
+        let analyzed = match analyze(&source, mode) {
+            Ok(analyzed) => analyzed,
+            Err(reason) => {
+                return FormulaEditOutcome::InvalidMathematics {
+                    reason,
+                    revision: current.id,
+                    target,
+                };
+            },
+        };
+        if !analyzed.is_supported() {
+            return FormulaEditOutcome::UnsupportedMathematics {
+                revision: current.id,
+                target,
+            };
+        }
+        if existing.mode == mode && existing.source == source {
+            return FormulaEditOutcome::NoOp {
+                revision: current.id,
+                target,
+            };
+        }
+        let mut notebook = current.notebook.clone();
+        if !replace_formula_value(&mut notebook, target, mode, source) {
+            return FormulaEditOutcome::TargetNotFound {
+                revision: current.id,
+                target,
+            };
+        }
+        let revision = match self.identities.allocate_revision() {
+            Ok(revision) => revision,
+            Err(sequence) => {
+                return FormulaEditOutcome::IdentityExhausted { sequence };
+            },
+        };
+        self.current = Some(AcceptedRevision { id: revision, notebook });
+        FormulaEditOutcome::Applied { base, revision, target }
     }
 
     fn replace_page_profile(
@@ -648,6 +713,75 @@ fn content_contains_identity(
     }
 }
 
+fn formula_blocks_value(
+    blocks: &[Block<AcceptedIdentity>],
+    target: AcceptedIdentity,
+) -> Option<&Formula<AcceptedIdentity>> {
+    for block in blocks {
+        if let Some(formula) = formula_content_value(&block.content, target) {
+            return Some(formula);
+        }
+    }
+    None
+}
+
+fn formula_content_value(
+    content: &BlockContent<AcceptedIdentity>,
+    target: AcceptedIdentity,
+) -> Option<&Formula<AcceptedIdentity>> {
+    match content {
+        BlockContent::Callout(blocks) | BlockContent::Freeform(blocks) => {
+            formula_blocks_value(blocks, target)
+        },
+        BlockContent::List(list) => {
+            for item in &list.items {
+                if let Some(formula) =
+                    formula_blocks_value(&item.blocks, target)
+                {
+                    return Some(formula);
+                }
+            }
+            None
+        },
+        BlockContent::Mathematics(formula) if formula.id == target => {
+            Some(formula)
+        },
+        BlockContent::Table(table) => {
+            for row in &table.rows {
+                for cell in &row.cells {
+                    if let Some(formula) =
+                        formula_blocks_value(&cell.blocks, target)
+                    {
+                        return Some(formula);
+                    }
+                }
+            }
+            None
+        },
+        BlockContent::Date(_)
+        | BlockContent::Figure(_)
+        | BlockContent::Heading(_)
+        | BlockContent::Mathematics(_)
+        | BlockContent::Paragraph(_)
+        | BlockContent::Rule
+        | BlockContent::Unresolved(_) => None,
+    }
+}
+
+fn formula_value(
+    notebook: &Notebook<AcceptedIdentity>,
+    target: AcceptedIdentity,
+) -> Option<&Formula<AcceptedIdentity>> {
+    for page in &notebook.pages {
+        for flow in &page.flows {
+            if let Some(formula) = formula_blocks_value(&flow.blocks, target) {
+                return Some(formula);
+            }
+        }
+    }
+    None
+}
+
 fn notebook_contains_identity(
     notebook: &Notebook<AcceptedIdentity>,
     target: AcceptedIdentity,
@@ -689,6 +823,90 @@ fn page_profile_value(
         .iter()
         .find(|profile| profile.id == target)
         .map(|profile| profile.geometry)
+}
+
+fn replace_formula_blocks(
+    blocks: &mut [Block<AcceptedIdentity>],
+    target: AcceptedIdentity,
+    replacement: &mut Option<(FormulaMode, String)>,
+) -> bool {
+    for block in blocks {
+        if replace_formula_content(&mut block.content, target, replacement) {
+            return true;
+        }
+    }
+    false
+}
+
+fn replace_formula_content(
+    content: &mut BlockContent<AcceptedIdentity>,
+    target: AcceptedIdentity,
+    replacement: &mut Option<(FormulaMode, String)>,
+) -> bool {
+    match content {
+        BlockContent::Callout(blocks) | BlockContent::Freeform(blocks) => {
+            replace_formula_blocks(blocks, target, replacement)
+        },
+        BlockContent::List(list) => {
+            for item in &mut list.items {
+                if replace_formula_blocks(&mut item.blocks, target, replacement)
+                {
+                    return true;
+                }
+            }
+            false
+        },
+        BlockContent::Mathematics(formula) if formula.id == target => {
+            let Some((mode, source)) = replacement.take() else {
+                return false;
+            };
+            formula.mode = mode;
+            formula.source = source;
+            true
+        },
+        BlockContent::Table(table) => {
+            for row in &mut table.rows {
+                for cell in &mut row.cells {
+                    if replace_formula_blocks(
+                        &mut cell.blocks,
+                        target,
+                        replacement,
+                    ) {
+                        return true;
+                    }
+                }
+            }
+            false
+        },
+        BlockContent::Date(_)
+        | BlockContent::Figure(_)
+        | BlockContent::Heading(_)
+        | BlockContent::Mathematics(_)
+        | BlockContent::Paragraph(_)
+        | BlockContent::Rule
+        | BlockContent::Unresolved(_) => false,
+    }
+}
+
+fn replace_formula_value(
+    notebook: &mut Notebook<AcceptedIdentity>,
+    target: AcceptedIdentity,
+    mode: FormulaMode,
+    source: String,
+) -> bool {
+    let mut replacement = Some((mode, source));
+    for page in &mut notebook.pages {
+        for flow in &mut page.flows {
+            if replace_formula_blocks(
+                &mut flow.blocks,
+                target,
+                &mut replacement,
+            ) {
+                return true;
+            }
+        }
+    }
+    false
 }
 
 fn replace_page_profile_value(
