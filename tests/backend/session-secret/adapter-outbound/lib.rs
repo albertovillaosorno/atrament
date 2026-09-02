@@ -32,7 +32,7 @@
 use session_secret::SessionSecret;
 
 #[allow(dead_code)]
-#[path = "../src/backend/session-secret/adapter-outbound/lib.rs"]
+#[path = "../../../../src/backend/session-secret/adapter-outbound/lib.rs"]
 mod session_secret;
 
 #[test]

@@ -32,7 +32,7 @@
 use std::ffi::OsStr;
 
 #[allow(dead_code)]
-#[path = "../src/backend/browser-launch/adapter-outbound/lib.rs"]
+#[path = "../../../../src/backend/browser-launch/adapter-outbound/lib.rs"]
 mod browser_launch;
 
 const ORIGIN: &str = "http://127.0.0.1:43123";

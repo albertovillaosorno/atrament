@@ -39,7 +39,7 @@ use atrament_diagnostic::{
 use atrament_session_draft_port::{DraftField, DraftMutation, SessionDraft};
 
 #[allow(dead_code)]
-#[path = "../src/backend/session-draft/application/lib.rs"]
+#[path = "../../../../src/backend/session-draft/application/lib.rs"]
 mod draft;
 
 fn assert_resource_limit(

@@ -38,7 +38,7 @@ use atrament_session_handshake_port::{
 };
 
 #[allow(dead_code)]
-#[path = "../src/backend/session-handshake/application/lib.rs"]
+#[path = "../../../../src/backend/session-handshake/application/lib.rs"]
 mod handshake;
 
 use handshake::HandshakeService;

@@ -40,7 +40,7 @@ use diagnostic::{
 };
 
 #[allow(dead_code)]
-#[path = "../src/backend/diagnostic/domain/lib.rs"]
+#[path = "../../../../src/backend/diagnostic/domain/lib.rs"]
 mod diagnostic;
 
 #[test]

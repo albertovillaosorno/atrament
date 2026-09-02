@@ -50,7 +50,7 @@ const EXPECTED_SECRET: &str =
 static HANDSHAKE: HandshakeService = HandshakeService;
 
 #[allow(dead_code)]
-#[path = "../src/backend/session-runtime/adapter-inbound/lib.rs"]
+#[path = "../../../../src/backend/session-runtime/adapter-inbound/lib.rs"]
 mod runtime;
 
 fn route_with_draft(
@@ -168,25 +168,34 @@ fn listener_address_type_is_ipv4_loopback() {
     ));
 }
 
-const INDEX_HTML: &[u8] =
-    include_bytes!("../src/browser/workspace/adapter-inbound/index.html");
-const WORKSPACE_CSS: &[u8] =
-    include_bytes!("../src/browser/workspace/adapter-inbound/workspace.css");
-const MAIN_JAVASCRIPT: &[u8] = include_bytes!(
-    "../src/browser/workspace/adapter-inbound/generated/main.js"
-);
-const SESSION_DIAGNOSTIC_JAVASCRIPT: &[u8] = include_bytes!(
-    "../src/browser/workspace/adapter-inbound/generated/session-diagnostic.js"
-);
-const SESSION_DRAFT_JAVASCRIPT: &[u8] = include_bytes!(
-    "../src/browser/workspace/adapter-inbound/generated/session-draft.js"
-);
-const SESSION_FRAGMENT_JAVASCRIPT: &[u8] = include_bytes!(
-    "../src/browser/workspace/adapter-inbound/generated/session-fragment.js"
-);
-const SESSION_HANDSHAKE_JAVASCRIPT: &[u8] = include_bytes!(
-    "../src/browser/workspace/adapter-inbound/generated/session-handshake.js"
-);
+const INDEX_HTML: &[u8] = include_bytes!(concat!(
+    "../../../../src/browser/workspace/adapter-inbound/",
+    "index.html"
+));
+const WORKSPACE_CSS: &[u8] = include_bytes!(concat!(
+    "../../../../src/browser/workspace/adapter-inbound/",
+    "workspace.css"
+));
+const MAIN_JAVASCRIPT: &[u8] = include_bytes!(concat!(
+    "../../../../src/browser/workspace/adapter-inbound/",
+    "generated/main.js"
+));
+const SESSION_DIAGNOSTIC_JAVASCRIPT: &[u8] = include_bytes!(concat!(
+    "../../../../src/browser/workspace/adapter-inbound/",
+    "generated/session-diagnostic.js"
+));
+const SESSION_DRAFT_JAVASCRIPT: &[u8] = include_bytes!(concat!(
+    "../../../../src/browser/workspace/adapter-inbound/",
+    "generated/session-draft.js"
+));
+const SESSION_FRAGMENT_JAVASCRIPT: &[u8] = include_bytes!(concat!(
+    "../../../../src/browser/workspace/adapter-inbound/",
+    "generated/session-fragment.js"
+));
+const SESSION_HANDSHAKE_JAVASCRIPT: &[u8] = include_bytes!(concat!(
+    "../../../../src/browser/workspace/adapter-inbound/",
+    "generated/session-handshake.js"
+));
 
 fn response_parts(response: &[u8]) -> (&str, &[u8]) {
     let split = response
