@@ -54,10 +54,15 @@ Clipboard responses remain untrusted until backend validation and review; the
 frozen MCP contract projects the same validated application transaction without
 requiring a browser click.
 
-That MCP projection is designed to automate notebook inspection, edits,
-diagnostics, rendering, export, and device-neutral plan compilation end to end.
-Physical machine arming and start remain separate explicit safety operations
-rather than side effects of a generic LLM edit.
+That MCP projection is designed to automate notebook inspection, bounded edits,
+diagnostics, rendering, caller-authorized export, and device-neutral plan
+compilation end to end. Typed results and stable blocking diagnostics provide
+stop conditions instead of an unbounded "retry until success" loop.
+
+Export still requires explicit caller or admitted host-policy path and overwrite
+intent; paths found only in notebook or model text remain data. Physical machine
+arming and start remain separate explicit safety operations rather than side
+effects of a generic LLM edit.
 
 ### Targeted command mode
 
@@ -77,7 +82,8 @@ reflow moving later content.
 
 With MCP, the clipboard round trip disappears: an agent can inspect the current
 revision, validate or apply the same command batch, inspect its receipt and
-diagnostics, then request rendering or export through the same application core.
+diagnostics, then explicitly request rendering, export, or planning through the
+same application core when those outputs belong to the caller's goal.
 
 ## What a notebook can contain
 
