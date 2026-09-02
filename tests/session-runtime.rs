@@ -127,3 +127,61 @@ fn listener_address_type_is_ipv4_loopback() {
         SocketAddr::V4(address) if *address.ip() == Ipv4Addr::LOCALHOST
     ));
 }
+
+const INDEX_HTML: &[u8] =
+    include_bytes!("../src/browser/workspace/adapter-inbound/index.html");
+const WORKSPACE_CSS: &[u8] =
+    include_bytes!("../src/browser/workspace/adapter-inbound/workspace.css");
+const MAIN_JAVASCRIPT: &[u8] = include_bytes!(
+    "../src/browser/workspace/adapter-inbound/generated/main.js"
+);
+
+fn response_parts(response: &[u8]) -> (&str, &[u8]) {
+    let split = response
+        .windows(4)
+        .position(|window| window == b"\r\n\r\n")
+        .expect("response has header terminator");
+    let body_start = split + 4;
+    let head = std::str::from_utf8(&response[..body_start])
+        .expect("response head is UTF-8");
+    (head, &response[body_start..])
+}
+
+fn request(target: &str, host: &str) -> Vec<u8> {
+    let request = format!("GET {target} HTTP/1.1\r\nHost: {host}\r\n\r\n");
+    runtime::route_request(request.as_bytes(), host)
+}
+
+#[test]
+fn serves_embedded_frontend_resources_without_caching() {
+    let host = "127.0.0.1:43123";
+    let cases = [
+        ("/", "text/html; charset=utf-8", INDEX_HTML),
+        ("/index.html", "text/html; charset=utf-8", INDEX_HTML),
+        ("/workspace.css", "text/css; charset=utf-8", WORKSPACE_CSS),
+        (
+            "/generated/main.js",
+            "text/javascript; charset=utf-8",
+            MAIN_JAVASCRIPT,
+        ),
+    ];
+
+    for (target, content_type, expected_body) in cases {
+        let response = request(target, host);
+        let (head, body) = response_parts(&response);
+        assert!(head.starts_with("HTTP/1.1 200 OK\r\n"));
+        assert!(head.contains(&format!("Content-Type: {content_type}\r\n")));
+        assert!(head.contains("Cache-Control: no-store\r\n"));
+        assert!(head.contains("X-Content-Type-Options: nosniff\r\n"));
+        assert_eq!(body, expected_body);
+    }
+}
+
+#[test]
+fn compiled_frontend_module_is_referenced_by_the_served_document() {
+    let response = request("/", "127.0.0.1:43123");
+    let (_, body) = response_parts(&response);
+    let html = std::str::from_utf8(body).expect("HTML is UTF-8");
+    assert!(html.contains("src=\"./generated/main.js\""));
+    assert!(html.contains("href=\"./workspace.css\""));
+}

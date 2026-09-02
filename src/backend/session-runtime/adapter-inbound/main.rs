@@ -9,12 +9,12 @@
 //
 // Boundary-Contract:
 // - Owns:
-//   - Loopback listener startup and public runtime-health transport.
+//   - Loopback listener startup, frontend resources, and public health.
 // - Must-Not:
 //   - Bind non-loopback addresses or expose session-private application state.
 // - Allows:
 //   - Inputs: Local HTTP requests addressed to the canonical startup endpoint.
-//   - Outputs: Secret-free startup records and public health responses.
+//   - Outputs: Secret-free startup, frontend resources, and public health.
 //   - Side effects: Loopback socket binding, stdout startup publication, and
 //     HTTP response writes.
 // - Split-When:
@@ -26,7 +26,7 @@
 // - Description:
 //   - Owns exact loopback endpoint admission before application services exist.
 // - Usage:
-//   - Run the atrament binary to publish one listening loopback health
+//   - Run the atrament binary to serve the browser shell on one loopback
 //     endpoint.
 // - Defaults:
 //   - Binds 127.0.0.1 on an operating-system assigned port.
@@ -34,8 +34,8 @@
 
 //! Disposable loopback transport for the Atrament browser session runtime.
 //!
-//! This binary owns only pre-authentication listener admission and public
-//! health routing. Later runtime slices add frontend serving and authenticated
+//! This binary owns pre-authentication listener admission, public frontend
+//! resources, and health routing. Later runtime slices add authenticated
 //! session services without widening this transport boundary.
 
 use std::io::{self, Read as _, Write as _};
@@ -48,10 +48,22 @@ const PROCESS_VERSION: &str = match option_env!("CARGO_PKG_VERSION") {
     None => "0.1.0",
 };
 const PROTOCOL_VERSION: &str = "atrament.runtime/1";
-const JSON_CONTENT_TYPE: &str =
-    "Content-Type: application/json; charset=utf-8\r\n";
-const RESPONSE_TRAILERS: &str =
-    "Cache-Control: no-store\r\nConnection: close\r\n\r\n";
+const HTML_CONTENT_TYPE: &str = "text/html; charset=utf-8";
+const CSS_CONTENT_TYPE: &str = "text/css; charset=utf-8";
+const JAVASCRIPT_CONTENT_TYPE: &str = "text/javascript; charset=utf-8";
+const JSON_CONTENT_TYPE: &str = "application/json; charset=utf-8";
+const RESPONSE_TRAILERS: &str = concat!(
+    "Cache-Control: no-store\r\n",
+    "X-Content-Type-Options: nosniff\r\n",
+    "Connection: close\r\n\r\n",
+);
+const INDEX_HTML: &[u8] =
+    include_bytes!("../../../browser/workspace/adapter-inbound/index.html");
+const WORKSPACE_CSS: &[u8] =
+    include_bytes!("../../../browser/workspace/adapter-inbound/workspace.css");
+const MAIN_JAVASCRIPT: &[u8] = include_bytes!(
+    "../../../browser/workspace/adapter-inbound/generated/main.js"
+);
 
 /// A listener bound to one operating-system-assigned IPv4 loopback endpoint.
 #[derive(Debug)]
@@ -196,34 +208,50 @@ fn request_host_and_target(request: &[u8]) -> Option<(&str, &str)> {
     Some((host?, target))
 }
 
-fn response(status: &str, body: &str) -> Vec<u8> {
-    format!(
-        "HTTP/1.1 {status}\r\n{JSON_CONTENT_TYPE}Content-Length: {}\r\n\
-         {RESPONSE_TRAILERS}{body}",
+fn response(status: &str, content_type: &str, body: &[u8]) -> Vec<u8> {
+    let mut response = format!(
+        "HTTP/1.1 {status}\r\nContent-Type: {content_type}\r\n\
+         Content-Length: {}\r\n{RESPONSE_TRAILERS}",
         body.len(),
     )
-    .into_bytes()
+    .into_bytes();
+    response.extend_from_slice(body);
+    response
+}
+
+fn json_response(status: &str, body: &'static [u8]) -> Vec<u8> {
+    response(status, JSON_CONTENT_TYPE, body)
 }
 
 /// Route one parsed HTTP request after exact canonical `Host` admission.
 #[must_use]
 pub fn route_request(request: &[u8], expected_host: &str) -> Vec<u8> {
     let Some((host, target)) = request_host_and_target(request) else {
-        return response("400 Bad Request", "{\"error\":\"invalid_request\"}");
+        return json_response(
+            "400 Bad Request",
+            br#"{"error":"invalid_request"}"#,
+        );
     };
     if host != expected_host {
-        return response(
+        return json_response(
             "421 Misdirected Request",
-            "{\"error\":\"invalid_host\"}",
+            br#"{"error":"invalid_host"}"#,
         );
     }
-    if target == "/health" {
-        return response(
+    match target {
+        "/" | "/index.html" => {
+            response("200 OK", HTML_CONTENT_TYPE, INDEX_HTML)
+        },
+        "/generated/main.js" => {
+            response("200 OK", JAVASCRIPT_CONTENT_TYPE, MAIN_JAVASCRIPT)
+        },
+        "/health" => json_response(
             "200 OK",
-            "{\"product\":\"atrament\",\"state\":\"listening\"}",
-        );
+            br#"{"product":"atrament","state":"listening"}"#,
+        ),
+        "/workspace.css" => response("200 OK", CSS_CONTENT_TYPE, WORKSPACE_CSS),
+        _ => json_response("404 Not Found", br#"{"error":"not_found"}"#),
     }
-    response("404 Not Found", "{\"error\":\"not_found\"}")
 }
 
 fn serve_connection(
