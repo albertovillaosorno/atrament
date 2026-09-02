@@ -62,12 +62,18 @@ and explicit-export survival.
 Represent field, object, page, source, glyph, collision, capability, renderer,
 and hardware errors with stable codes and actionable locations.
 
-Current design evidence freezes the semantic envelope: result class remains
-separate from diagnostic explanation; code, severity, capability blocking,
-semantic locations, typed evidence, remediation classes, completeness, privacy,
-and browser/CLI/MCP parity are defined without choosing final wire field names.
-The task remains open until backend diagnostics implement and version that
-shared contract.
+Current executable evidence now implements the versioned
+`atrament.diagnostic/1` backend domain model. Handshake incompatibility and
+resource-limit results preserve their application result classes while carrying
+shared diagnostic sets with stable codes, severity, blocking disposition,
+semantic locations, typed evidence, remediation, operation binding, and
+explicit set completeness. The browser admits the same namespace and
+completeness metadata, and the localhost adapter refuses to invent a code for
+an empty application diagnostic set.
+
+The task remains open because semantic-command, layout, Render, Export, and Plan
+producers do not exist yet, and CLI/MCP parity fixtures therefore cannot prove
+that those capabilities preserve the same diagnostic semantics.
 
 ## P2 — Semantic notebook and physical layout
 

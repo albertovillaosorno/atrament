@@ -23,6 +23,24 @@ It does not freeze final JSON field names, numeric code values, localization
 strings, UI presentation, HTTP statuses, terminal formatting, vendor error
 formats, or a complete catalog of future diagnostic codes.
 
+### Implementation evidence
+
+The current backend implements the shared semantic vocabulary as
+`atrament.diagnostic/1`. Session handshake incompatibility and pre-acceptance
+draft resource limits are the first application results carrying versioned
+`DiagnosticSet` values; their result classes remain separate from diagnostic
+explanation.
+
+The localhost browser projection preserves diagnostic namespace, stable code,
+and explicit set completeness for those two conditions. The adapter treats an
+empty diagnostic set attached to a rejecting application result as an internal
+invariant failure rather than fabricating an adapter-owned diagnostic code.
+
+Cross-capability acceptance remains incomplete. Semantic-command, layout,
+Render, Export, Plan, CLI, and MCP implementations must exercise the remaining
+verification fixtures before parity and capability-specific diagnostic behavior
+are proven.
+
 ## Contract
 
 ### Diagnostic versus application result
