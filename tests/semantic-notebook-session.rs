@@ -616,3 +616,166 @@ fn direct_text_edit_without_accepted_revision_is_typed_no_effect() {
     );
     assert!(session.current().is_none());
 }
+
+#[test]
+fn direct_text_edit_reaches_nested_text_families_across_revisions() {
+    let ids = IdentityAllocator::new();
+    let notebook_id = candidate_id(&ids);
+    let page_id = candidate_id(&ids);
+    let flow_id = candidate_id(&ids);
+    let callout_id = candidate_id(&ids);
+    let callout_child_id = candidate_id(&ids);
+    let callout_span_id = candidate_id(&ids);
+    let figure_block_id = candidate_id(&ids);
+    let figure_id = candidate_id(&ids);
+    let figure_span_id = candidate_id(&ids);
+    let list_block_id = candidate_id(&ids);
+    let list_id = candidate_id(&ids);
+    let list_item_id = candidate_id(&ids);
+    let list_child_id = candidate_id(&ids);
+    let list_span_id = candidate_id(&ids);
+    let table_block_id = candidate_id(&ids);
+    let table_id = candidate_id(&ids);
+    let row_id = candidate_id(&ids);
+    let cell_id = candidate_id(&ids);
+    let table_child_id = candidate_id(&ids);
+    let table_span_id = candidate_id(&ids);
+    let candidate = Notebook {
+        assets: vec![],
+        constraints: vec![],
+        extensions: vec![],
+        id: notebook_id,
+        output_profiles: vec![],
+        pages: vec![Page {
+            flows: vec![Flow {
+                blocks: vec![
+                    Block {
+                        content: BlockContent::Callout(vec![Block {
+                            content: BlockContent::Paragraph(vec![
+                                InlineSpan {
+                                    id: callout_span_id,
+                                    provenance: None,
+                                    style: None,
+                                    text: String::from("callout old"),
+                                },
+                            ]),
+                            extensions: vec![],
+                            id: callout_child_id,
+                            provenance: None,
+                            style: None,
+                        }]),
+                        extensions: vec![],
+                        id: callout_id,
+                        provenance: None,
+                        style: None,
+                    },
+                    Block {
+                        content: BlockContent::Figure(Figure {
+                            asset: None,
+                            caption: vec![InlineSpan {
+                                id: figure_span_id,
+                                provenance: None,
+                                style: None,
+                                text: String::from("figure old"),
+                            }],
+                            id: figure_id,
+                        }),
+                        extensions: vec![],
+                        id: figure_block_id,
+                        provenance: None,
+                        style: None,
+                    },
+                    Block {
+                        content: BlockContent::List(List {
+                            id: list_id,
+                            items: vec![ListItem {
+                                blocks: vec![Block {
+                                    content: BlockContent::Paragraph(vec![
+                                        InlineSpan {
+                                            id: list_span_id,
+                                            provenance: None,
+                                            style: None,
+                                            text: String::from("list old"),
+                                        },
+                                    ]),
+                                    extensions: vec![],
+                                    id: list_child_id,
+                                    provenance: None,
+                                    style: None,
+                                }],
+                                id: list_item_id,
+                            }],
+                            ordered: false,
+                        }),
+                        extensions: vec![],
+                        id: list_block_id,
+                        provenance: None,
+                        style: None,
+                    },
+                    Block {
+                        content: BlockContent::Table(Table {
+                            id: table_id,
+                            rows: vec![TableRow {
+                                cells: vec![TableCell {
+                                    blocks: vec![Block {
+                                        content: BlockContent::Paragraph(vec![
+                                            InlineSpan {
+                                                id: table_span_id,
+                                                provenance: None,
+                                                style: None,
+                                                text: String::from("table old"),
+                                            },
+                                        ]),
+                                        extensions: vec![],
+                                        id: table_child_id,
+                                        provenance: None,
+                                        style: None,
+                                    }],
+                                    id: cell_id,
+                                }],
+                                id: row_id,
+                            }],
+                        }),
+                        extensions: vec![],
+                        id: table_block_id,
+                        provenance: None,
+                        style: None,
+                    },
+                ],
+                id: flow_id,
+            }],
+            id: page_id,
+        }],
+        provenance: vec![],
+        styles: vec![],
+    };
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted {
+        mapping,
+        revision: mut revision,
+    } = session.accept(candidate)
+    else {
+        panic!("nested candidate must be accepted");
+    };
+    let cases = [
+        (callout_span_id, "callout new"),
+        (figure_span_id, "figure new"),
+        (list_span_id, "list new"),
+        (table_span_id, "table new"),
+    ];
+    for (candidate_target, replacement) in cases {
+        let target = accepted_for(&mapping, candidate_target);
+        let TextEditOutcome::Applied {
+            revision: next,
+            target: actual_target,
+            ..
+        } = session.replace_text(revision, target, String::from(replacement))
+        else {
+            panic!("nested text edit must apply");
+        };
+        assert_eq!(actual_target, target);
+        assert_ne!(next, revision);
+        revision = next;
+    }
+    assert_eq!(session.current().expect("nested revision").id, revision);
+}
