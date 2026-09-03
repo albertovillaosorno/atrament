@@ -33,7 +33,11 @@
 
 //! Inbound application port for transactional semantic candidate acceptance.
 
-use atrament_semantic_command_graph::CommandGraphError;
+use std::collections::BTreeSet;
+
+use atrament_semantic_command_graph::{
+    CommandGraphError, MissingDependencyRequirement,
+};
 use atrament_semantic_notebook::{
     AcceptedIdentity, AcceptedRevision, CandidateIdentity, FormulaMode,
     IdentityExhausted, MathSyntaxError, Notebook, PhysicalPageProfile,
@@ -502,6 +506,44 @@ pub struct DirectEditBatchProposal<CommandIdentity> {
     pub capability_version: CommandBehaviorVersion,
     /// Ordered command sequence; order remains application-significant.
     pub commands: Vec<DirectEditBatchCommand<CommandIdentity>>,
+}
+
+/// Read-only dependency analysis for one in-memory direct-edit batch selection.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum DirectEditBatchSelectionRequirementsOutcome<CommandIdentity> {
+    /// Capability behavior changed before selection analysis.
+    CapabilityMismatch {
+        /// Current backend-owned capability behavior version.
+        current: CommandBehaviorVersion,
+        /// Capability behavior version bound by the batch proposal.
+        expected: CommandBehaviorVersion,
+    },
+    /// Complete command dependency structure rejected before selection
+    /// analysis.
+    DependencyGraphRejected {
+        /// Typed transport-neutral dependency graph failure.
+        reason: CommandGraphError<CommandIdentity>,
+    },
+    /// Session has no accepted semantic revision to analyze.
+    NoAcceptedRevision,
+    /// Selection is structurally known and its omitted requirements are
+    /// reported.
+    Requirements {
+        /// Explicit dependency edges absent from the original selection.
+        missing: Vec<MissingDependencyRequirement<CommandIdentity>>,
+        /// Immutable accepted revision whose proposal base was checked.
+        revision: RevisionIdentity,
+    },
+    /// Batch base revision is no longer the current accepted revision.
+    StaleBase {
+        /// Current accepted revision that rejected stale selection analysis.
+        current: RevisionIdentity,
+    },
+    /// Selection names no command in the batch proposal.
+    UnknownSelection {
+        /// Unknown caller-owned command identity.
+        command: CommandIdentity,
+    },
 }
 
 /// One successfully simulated direct-edit batch command.
@@ -1231,6 +1273,15 @@ pub trait SemanticNotebookSession {
 
     /// Read the current accepted revision without creating another revision.
     fn current(&self) -> Option<&AcceptedRevision>;
+
+    /// Analyze omitted dependencies for one in-memory batch selection.
+    fn direct_edit_batch_selection_requirements<CommandIdentity>(
+        &self,
+        batch: &DirectEditBatchProposal<CommandIdentity>,
+        selected: &BTreeSet<CommandIdentity>,
+    ) -> DirectEditBatchSelectionRequirementsOutcome<CommandIdentity>
+    where
+        CommandIdentity: Clone + Ord;
 
     /// Inspect one semantic identity against an exact accepted revision.
     fn inspect_identity(

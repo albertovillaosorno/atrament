@@ -39,7 +39,10 @@ use std::fmt;
 use std::slice::from_ref;
 
 use atrament_mathematics_source::analyze;
-use atrament_semantic_command_graph::{CommandNode, validate_command_graph};
+use atrament_semantic_command_graph::{
+    CommandNode, DependencyRequirementsError,
+    dependency_selection_requirements, validate_command_graph,
+};
 use atrament_semantic_notebook::{
     AcceptedIdentity, AcceptedRevision, Asset, Block, BlockContent,
     CandidateIdentity, Constraint, Figure, Flow, Formula, FormulaMode,
@@ -56,14 +59,16 @@ use atrament_semantic_notebook_port::{
     CommandTargetMaterialOutcome, CommandTargetPreconditionOutcome,
     CommandTargetPreconditions, DirectEditBatchCommand,
     DirectEditBatchCommandPrediction, DirectEditBatchCommandRejection,
-    DirectEditBatchProposal, DirectEditBatchSimulationOutcome,
-    DirectEditChangePreviewOutcome, DirectEditDerivedAuthority,
-    DirectEditEffectClass, DirectEditImpactScope, DirectEditImpactSeed,
-    DirectEditProposal, DirectEditProposalOutcome, DirectEditSemanticChange,
-    DirectEditSimulationOutcome, EditableSemanticValue,
-    EditableSemanticValueKind, EditableValuePreconditionOutcome,
-    FormulaEditOutcome, IdentityInspectOutcome, IdentityKindInspectOutcome,
-    IdentityMapping, IdentityOwnerExpectation, IdentityPrecondition,
+    DirectEditBatchProposal,
+    DirectEditBatchSelectionRequirementsOutcome as BatchSelectionOutcome,
+    DirectEditBatchSimulationOutcome, DirectEditChangePreviewOutcome,
+    DirectEditDerivedAuthority, DirectEditEffectClass, DirectEditImpactScope,
+    DirectEditImpactSeed, DirectEditProposal, DirectEditProposalOutcome,
+    DirectEditSemanticChange, DirectEditSimulationOutcome,
+    EditableSemanticValue, EditableSemanticValueKind,
+    EditableValuePreconditionOutcome, FormulaEditOutcome,
+    IdentityInspectOutcome, IdentityKindInspectOutcome, IdentityMapping,
+    IdentityOwnerExpectation, IdentityPrecondition,
     IdentityPreconditionOutcome, PageProfileEditOutcome,
     SemanticCommandCapabilitySnapshot, SemanticCommandFamily,
     SemanticNotebookSession, TableRowRoleEditOutcome, TextEditOutcome,
@@ -428,6 +433,49 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
 
     fn current(&self) -> Option<&AcceptedRevision> {
         self.current.as_ref()
+    }
+
+    fn direct_edit_batch_selection_requirements<CommandIdentity>(
+        &self,
+        batch: &DirectEditBatchProposal<CommandIdentity>,
+        selected: &BTreeSet<CommandIdentity>,
+    ) -> BatchSelectionOutcome<CommandIdentity>
+    where
+        CommandIdentity: Clone + Ord,
+    {
+        let snapshot = self.command_capability_snapshot();
+        if snapshot.behavior_version != batch.capability_version {
+            return BatchSelectionOutcome::CapabilityMismatch {
+                current: snapshot.behavior_version,
+                expected: batch.capability_version,
+            };
+        }
+        let Some(current) = self.current.as_ref() else {
+            return BatchSelectionOutcome::NoAcceptedRevision;
+        };
+        if current.id != batch.base {
+            return BatchSelectionOutcome::StaleBase { current: current.id };
+        }
+        let nodes = batch
+            .commands
+            .iter()
+            .map(|command| CommandNode {
+                dependencies: command.dependencies.clone(),
+                id: command.id.clone(),
+            })
+            .collect::<Vec<_>>();
+        match dependency_selection_requirements(&nodes, selected) {
+            Ok(missing) => BatchSelectionOutcome::Requirements {
+                missing,
+                revision: current.id,
+            },
+            Err(DependencyRequirementsError::Graph { reason }) => {
+                BatchSelectionOutcome::DependencyGraphRejected { reason }
+            },
+            Err(DependencyRequirementsError::UnknownSelection { command }) => {
+                BatchSelectionOutcome::UnknownSelection { command }
+            },
+        }
     }
 
     fn inspect_identity(
