@@ -383,6 +383,9 @@ pub enum DirectEditChangePreviewOutcome {
     Predicted {
         /// Ordered direct semantic changes; empty means semantic no-op.
         changes: Vec<DirectEditSemanticChange>,
+        /// Conservative seeds for later dependency-expanded impact
+        /// calculation.
+        impact_seeds: Vec<DirectEditImpactSeed>,
         /// Accepted revision whose immutable state was previewed.
         revision: RevisionIdentity,
     },

@@ -2076,12 +2076,16 @@ fn ordered_direct_edit_batch_seeds_structured_and_profile_impacts() {
 fn direct_edit_change_preview_reports_exact_change_or_empty_noop() {
     let ids = IdentityAllocator::new();
     let (candidate, span) = candidate_notebook_with_span(&ids, "before");
+    let flow = candidate.pages[0].flows[0].id;
+    let page = candidate.pages[0].id;
     let mut session = SemanticNotebookSessionService::default();
     let AcceptanceOutcome::Accepted { mapping, revision } =
         session.accept(candidate)
     else {
         panic!("text candidate must be accepted");
     };
+    let flow = accepted_for(&mapping, flow);
+    let page = accepted_for(&mapping, page);
     let span = accepted_for(&mapping, span);
     let before = session.current().expect("accepted revision").clone();
     assert_eq!(
@@ -2097,6 +2101,18 @@ fn direct_edit_change_preview_reports_exact_change_or_empty_noop() {
                 family: SemanticCommandFamily::TextContent,
                 target: span,
             }],
+            impact_seeds: vec![DirectEditImpactSeed {
+                authorities: vec![
+                    DirectEditDerivedAuthority::Diagnostics,
+                    DirectEditDerivedAuthority::FlowGeometry,
+                    DirectEditDerivedAuthority::Handwriting,
+                    DirectEditDerivedAuthority::Motion,
+                    DirectEditDerivedAuthority::Rendering,
+                    DirectEditDerivedAuthority::Shaping,
+                    DirectEditDerivedAuthority::Wrapping,
+                ],
+                scope: DirectEditImpactScope::Flow { flow, page },
+            }],
             revision,
         },
     );
@@ -2108,6 +2124,7 @@ fn direct_edit_change_preview_reports_exact_change_or_empty_noop() {
         ),
         DirectEditChangePreviewOutcome::Predicted {
             changes: Vec::new(),
+            impact_seeds: Vec::new(),
             revision,
         },
     );
@@ -2119,6 +2136,9 @@ fn direct_edit_change_preview_preserves_structured_before_and_after_values() {
     let ids = IdentityAllocator::new();
     let (candidate, formula) =
         candidate_math_notebook(&ids, "x^2", FormulaMode::Display);
+    let formula_block = candidate.pages[0].flows[0].blocks[0].id;
+    let formula_flow = candidate.pages[0].flows[0].id;
+    let formula_page = candidate.pages[0].id;
     let mut session = SemanticNotebookSessionService::default();
     let AcceptanceOutcome::Accepted { mapping, revision } =
         session.accept(candidate)
@@ -2126,6 +2146,9 @@ fn direct_edit_change_preview_preserves_structured_before_and_after_values() {
         panic!("formula candidate must be accepted");
     };
     let formula = accepted_for(&mapping, formula);
+    let formula_block = accepted_for(&mapping, formula_block);
+    let formula_flow = accepted_for(&mapping, formula_flow);
+    let formula_page = accepted_for(&mapping, formula_page);
     assert_eq!(
         session.preview_direct_edit_changes(
             revision,
@@ -2148,18 +2171,36 @@ fn direct_edit_change_preview_preserves_structured_before_and_after_values() {
                 family: SemanticCommandFamily::StructuredContent,
                 target: formula,
             }],
+            impact_seeds: vec![DirectEditImpactSeed {
+                authorities: vec![
+                    DirectEditDerivedAuthority::Layout,
+                    DirectEditDerivedAuthority::Output,
+                    DirectEditDerivedAuthority::StructureValidation,
+                ],
+                scope: DirectEditImpactScope::BlockFlow {
+                    block: formula_block,
+                    flow: formula_flow,
+                    page: formula_page,
+                },
+            }],
             revision,
         },
     );
 
     let (candidate, row, _) =
         candidate_table_notebook(&ids, TableRowRole::Header);
+    let table_block = candidate.pages[0].flows[0].blocks[0].id;
+    let table_flow = candidate.pages[0].flows[0].id;
+    let table_page = candidate.pages[0].id;
     let AcceptanceOutcome::Accepted { mapping, revision } =
         session.accept(candidate)
     else {
         panic!("table candidate must be accepted");
     };
     let row = accepted_for(&mapping, row);
+    let table_block = accepted_for(&mapping, table_block);
+    let table_flow = accepted_for(&mapping, table_flow);
+    let table_page = accepted_for(&mapping, table_page);
     assert_eq!(
         session.preview_direct_edit_changes(
             revision,
@@ -2175,12 +2216,25 @@ fn direct_edit_change_preview_preserves_structured_before_and_after_values() {
                 family: SemanticCommandFamily::StructuredContent,
                 target: row,
             }],
+            impact_seeds: vec![DirectEditImpactSeed {
+                authorities: vec![
+                    DirectEditDerivedAuthority::Layout,
+                    DirectEditDerivedAuthority::Output,
+                    DirectEditDerivedAuthority::StructureValidation,
+                ],
+                scope: DirectEditImpactScope::BlockFlow {
+                    block: table_block,
+                    flow: table_flow,
+                    page: table_page,
+                },
+            }],
             revision,
         },
     );
 
     let candidate = candidate_notebook(&ids, "profile change preview");
     let profile = candidate.page_profiles[0].id;
+    let profile_page = candidate.pages[0].id;
     let mut changed_profile = physical_page_profile();
     changed_profile.top_clearance = Length::from_micrometres(22_000);
     let AcceptanceOutcome::Accepted { mapping, revision } =
@@ -2189,6 +2243,7 @@ fn direct_edit_change_preview_preserves_structured_before_and_after_values() {
         panic!("profile candidate must be accepted");
     };
     let profile = accepted_for(&mapping, profile);
+    let profile_page = accepted_for(&mapping, profile_page);
     assert_eq!(
         session.preview_direct_edit_changes(
             revision,
@@ -2203,6 +2258,12 @@ fn direct_edit_change_preview_preserves_structured_before_and_after_values() {
                 ),
                 family: SemanticCommandFamily::DocumentConstraint,
                 target: profile,
+            }],
+            impact_seeds: vec![DirectEditImpactSeed {
+                authorities: vec![DirectEditDerivedAuthority::AllDerived],
+                scope: DirectEditImpactScope::Pages {
+                    pages: vec![profile_page],
+                },
             }],
             revision,
         },

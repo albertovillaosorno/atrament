@@ -36,6 +36,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
+use std::slice::from_ref;
 
 use atrament_mathematics_source::analyze;
 use atrament_semantic_command_graph::{CommandNode, validate_command_graph};
@@ -495,14 +496,29 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
                     revision: simulated_revision,
                     target: simulated_target,
                 },
-            ) => DirectEditChangePreviewOutcome::Predicted {
-                changes: vec![DirectEditSemanticChange {
+            ) => {
+                let change = DirectEditSemanticChange {
                     after: simulated_requested,
                     before,
                     family,
                     target: simulated_target,
-                }],
-                revision: simulated_revision,
+                };
+                let Some(current) = self.current.as_ref() else {
+                    return DirectEditChangePreviewOutcome::Rejected {
+                        outcome: Box::new(
+                            DirectEditSimulationOutcome::NoAcceptedRevision,
+                        ),
+                    };
+                };
+                let impact_seeds = direct_edit_impact_seeds(
+                    &current.notebook,
+                    from_ref(&change),
+                );
+                DirectEditChangePreviewOutcome::Predicted {
+                    changes: vec![change],
+                    impact_seeds,
+                    revision: simulated_revision,
+                }
             },
             (
                 _,
@@ -512,6 +528,7 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
                 },
             ) => DirectEditChangePreviewOutcome::Predicted {
                 changes: Vec::new(),
+                impact_seeds: Vec::new(),
                 revision: simulated_revision,
             },
             (_, outcome) => DirectEditChangePreviewOutcome::Rejected {
