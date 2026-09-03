@@ -63,6 +63,110 @@ fn unit(
     MeasuredFlowUnit { fragments, policy }
 }
 
+fn reference_independent(
+    pages: &[PageRegion<u64>],
+    fragments: &[MeasuredFragment<u64>],
+) -> Result<Vec<PlacedFragment<u64, u64>>, PaginationError<u64, u64>> {
+    let mut page_index = 0usize;
+    let mut used_height = 0u64;
+    let mut placements = Vec::new();
+    for fragment in fragments {
+        let can_fit_fresh = pages.iter().skip(page_index).any(|page| {
+            fragment.width <= page.writable.width
+                && fragment.height <= page.writable.height
+        });
+        if !can_fit_fresh {
+            return Err(PaginationError::FragmentDoesNotFitAnyPage {
+                owner: fragment.owner,
+            });
+        }
+        loop {
+            let Some(current) = pages.get(page_index) else {
+                return Err(PaginationError::NoPageAvailable {
+                    owner: fragment.owner,
+                });
+            };
+            let fresh_fit = fragment.width <= current.writable.width
+                && fragment.height <= current.writable.height;
+            let remaining = current
+                .writable
+                .height
+                .micrometres()
+                .saturating_sub(used_height);
+            if fresh_fit && fragment.height.micrometres() <= remaining {
+                let top = current
+                    .writable
+                    .y
+                    .micrometres()
+                    .checked_add(used_height)
+                    .expect("small oracle coordinates cannot overflow");
+                placements.push(PlacedFragment {
+                    height: fragment.height,
+                    owner: fragment.owner,
+                    page: current.page,
+                    top: Length::from_micrometres(top),
+                    width: fragment.width,
+                });
+                used_height += fragment.height.micrometres();
+                break;
+            }
+            page_index += 1;
+            used_height = 0;
+        }
+    }
+    Ok(placements)
+}
+
+#[test]
+fn independent_pagination_matches_reference_oracle() {
+    let mut cases = 0usize;
+    for first_width in 1..=2 {
+        for first_height in 1..=2 {
+            for second_width in 1..=2 {
+                for second_height in 1..=2 {
+                    let pages = [
+                        page(1, 10, first_width, first_height),
+                        page(2, 20, second_width, second_height),
+                    ];
+                    for first_fragment_width in 1..=3 {
+                        for first_fragment_height in 1..=3 {
+                            for second_fragment_width in 1..=3 {
+                                for second_fragment_height in 1..=3 {
+                                    let fragments = vec![
+                                        fragment(
+                                            11,
+                                            first_fragment_width,
+                                            first_fragment_height,
+                                        ),
+                                        fragment(
+                                            12,
+                                            second_fragment_width,
+                                            second_fragment_height,
+                                        ),
+                                    ];
+                                    let units = [unit(
+                                        FlowUnitPolicy::Independent,
+                                        fragments.clone(),
+                                    )];
+                                    let actual = paginate(&pages, &units)
+                                        .map(|plan| plan.placements);
+                                    let expected = reference_independent(
+                                        &pages,
+                                        &fragments,
+                                    );
+                                    assert_eq!(actual, expected);
+                                    cases += 1;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    assert_eq!(cases, 1_296);
+}
+
 #[test]
 fn empty_flow_needs_no_page_authority() {
     let plan = paginate::<u64, u64>(&[], &[]).expect("empty flow");
