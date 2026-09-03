@@ -44,7 +44,11 @@ explicit host-policy output intent, explicit path and overwrite behavior,
 blocking validation, temporary cleanup, file-commit semantics, output identity,
 same-retry lost-receipt recovery, external target drift handling, cancellation,
 typed output results, concurrency, and browser/CLI/MCP parity. File adapters and
-format-specific execution remain open.
+format-specific execution remain open. Execution is also blocked on a typed
+exportable-artifact payload: current backend code has semantic layout preflight
+but no renderer or serializer result value whose admitted bytes a file adapter
+can commit. Filesystem writes must not guess that missing artifact-ownership
+boundary.
 
 ### TODO - Prove session destruction and temporary cleanup
 
