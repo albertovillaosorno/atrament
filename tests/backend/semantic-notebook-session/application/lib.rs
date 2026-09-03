@@ -1590,6 +1590,106 @@ fn asset_reference_batch_applies_atomically_and_undo_restores_reference() {
 }
 
 #[test]
+fn ordered_asset_reference_chain_replaces_then_removes_one_figure_reference() {
+    let ids = IdentityAllocator::new();
+    let (candidate, candidate_ids) =
+        candidate_notebook_with_figure_assets(&ids);
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision: base } =
+        session.accept(candidate)
+    else {
+        panic!("asset chain candidate must be accepted");
+    };
+    let figure = accepted_for(&mapping, candidate_ids.figure);
+    let first_asset = accepted_for(&mapping, candidate_ids.asset_one);
+    let second_asset = accepted_for(&mapping, candidate_ids.asset_two);
+    let command = |
+        id,
+        dependencies,
+        expected,
+        requested,
+    | DirectEditBatchCommand {
+        dependencies,
+        id,
+        preconditions: CommandTargetPreconditions {
+            expected_value: Some(EditableSemanticValue::AssetReference(
+                expected,
+            )),
+            identity: IdentityPrecondition {
+                expected_kind: Some(SemanticIdentityKind::Figure),
+                expected_owner: IdentityOwnerExpectation::Any,
+            },
+            requested_family: SemanticCommandFamily::AssetReference,
+        },
+        requested: EditableSemanticValue::AssetReference(requested),
+        target: figure,
+    };
+    let commands = vec![
+        command(1_u32, vec![], Some(first_asset), Some(second_asset)),
+        command(2_u32, vec![1], Some(second_asset), None),
+    ];
+    assert_eq!(
+        session.simulate_direct_edit_batch(DirectEditBatchProposal {
+            base,
+            capability_version: CommandBehaviorVersion(2),
+            commands: commands.clone(),
+        }),
+        DirectEditBatchSimulationOutcome::CapabilityMismatch {
+            current: CommandBehaviorVersion(3),
+            expected: CommandBehaviorVersion(2),
+        },
+    );
+
+    let batch = DirectEditBatchProposal {
+        base,
+        capability_version: CommandBehaviorVersion(3),
+        commands,
+    };
+    let DirectEditBatchSimulationOutcome::Predicted {
+        changes,
+        commands: predictions,
+        effect: DirectEditEffectClass::Mutation,
+        ..
+    } = session.simulate_direct_edit_batch(batch.clone())
+    else {
+        panic!("dependent asset-reference chain must simulate");
+    };
+    assert_eq!(predictions.len(), 2);
+    assert_eq!(changes, vec![DirectEditSemanticChange {
+        after: EditableSemanticValue::AssetReference(None),
+        before: EditableSemanticValue::AssetReference(Some(first_asset)),
+        family: SemanticCommandFamily::AssetReference,
+        target: figure,
+    }]);
+
+    let DirectEditBatchApplyOutcome::Applied { revision: applied, .. } =
+        session.apply_direct_edit_batch(batch)
+    else {
+        panic!("dependent asset-reference chain must apply");
+    };
+    let current = session.current().expect("asset chain revision");
+    let BlockContent::Figure(current_figure) =
+        &current.notebook.pages[0].flows[0].blocks[0].content
+    else {
+        panic!("asset chain fixture must remain figure");
+    };
+    assert_eq!(current_figure.asset, None);
+
+    let HistoryTraversalOutcome::Traversed { .. } =
+        session.traverse_history(applied, HistoryDirection::Undo)
+    else {
+        panic!("asset-reference chain must Undo as one transaction");
+    };
+    let current = session.current().expect("asset chain Undo revision");
+    let BlockContent::Figure(current_figure) =
+        &current.notebook.pages[0].flows[0].blocks[0].content
+    else {
+        panic!("asset chain Undo fixture must remain figure");
+    };
+    assert_eq!(current_figure.asset, Some(first_asset));
+}
+
+#[test]
 fn asset_reference_rejects_identity_not_present_in_current_revision() {
     let ids = IdentityAllocator::new();
     let (first, first_ids) = candidate_notebook_with_figure_assets(&ids);
