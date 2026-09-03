@@ -587,6 +587,134 @@ fn candidate_two_block_fixture(
     (fixture, second_block)
 }
 
+fn expected_owner_sequence_outcome(
+    flow: AcceptedIdentity,
+    blocks: &[AcceptedIdentity],
+    owners: &[AcceptedIdentity],
+    outsider: AcceptedIdentity,
+) -> Result<(), SemanticPaginationError> {
+    let mut previous = None;
+    let mut run_index = 0usize;
+    for owner in owners {
+        if previous == Some(*owner) {
+            continue;
+        }
+        previous = Some(*owner);
+        let Some(expected) = blocks.get(run_index) else {
+            return if blocks.contains(owner) {
+                Err(SemanticPaginationError::MeasurementBlockSequenceMismatch {
+                    flow,
+                })
+            } else {
+                Err(SemanticPaginationError::MeasuredBlockNotInFlow {
+                    flow,
+                    owner: *owner,
+                })
+            };
+        };
+        if *owner != *expected {
+            return if *owner == outsider {
+                Err(SemanticPaginationError::MeasuredBlockNotInFlow {
+                    flow,
+                    owner: *owner,
+                })
+            } else {
+                Err(SemanticPaginationError::MeasurementBlockSequenceMismatch {
+                    flow,
+                })
+            };
+        }
+        run_index += 1;
+    }
+    if let Some(missing) = blocks.get(run_index) {
+        return Err(SemanticPaginationError::MeasurementIncomplete {
+            flow,
+            missing: *missing,
+        });
+    }
+    Ok(())
+}
+
+#[test]
+fn streaming_owner_admission_matches_reference_oracle() {
+    let ids = IdentityAllocator::new();
+    let mut fixture = candidate_fixture(&ids);
+    let second = ids.allocate_candidate().expect("second block");
+    let third = ids.allocate_candidate().expect("third block");
+    fixture.notebook.pages[0].flows[0].blocks.extend([
+        Block {
+            content: BlockContent::Rule,
+            extensions: vec![],
+            id: second,
+            provenance: None,
+            style: None,
+        },
+        Block {
+            content: BlockContent::Rule,
+            extensions: vec![],
+            id: third,
+            provenance: None,
+            style: None,
+        },
+    ]);
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(fixture.notebook)
+    else {
+        panic!("three-block candidate must be accepted");
+    };
+    let flow = accepted_for(&mapping, fixture.flow);
+    let blocks = [
+        accepted_for(&mapping, fixture.block),
+        accepted_for(&mapping, second),
+        accepted_for(&mapping, third),
+    ];
+    let outsider = accepted_for(&mapping, fixture.page_one);
+    let alphabet = [blocks[0], blocks[1], blocks[2], outsider];
+    let accepted = session.current().expect("accepted revision");
+    let mut cases = 0usize;
+
+    for length in 0..=4usize {
+        let combinations = 4usize.pow(length as u32);
+        for encoded in 0..combinations {
+            let mut value = encoded;
+            let mut owners = Vec::with_capacity(length);
+            for _ in 0..length {
+                owners.push(alphabet[value % alphabet.len()]);
+                value /= alphabet.len();
+            }
+            let measured = RevisionFlowMeasurement {
+                flow,
+                revision,
+                units: vec![MeasuredFlowUnit {
+                    fragments: owners
+                        .iter()
+                        .map(|owner| MeasuredFragment {
+                            height: Length::from_micrometres(1),
+                            owner: *owner,
+                            width: Length::from_micrometres(1),
+                        })
+                        .collect(),
+                    policy: FlowUnitPolicy::Independent,
+                }],
+            };
+            let expected = expected_owner_sequence_outcome(
+                flow,
+                &blocks,
+                &owners,
+                outsider,
+            );
+            let actual = paginate_revision(accepted, &measured);
+            match expected {
+                Ok(()) => assert!(actual.is_ok()),
+                Err(reason) => assert_eq!(actual, Err(reason)),
+            }
+            cases += 1;
+        }
+    }
+    assert_eq!(cases, 341);
+}
+
 #[test]
 fn large_complete_measurement_streams_in_semantic_block_order() {
     const BLOCKS: usize = 10_000;
