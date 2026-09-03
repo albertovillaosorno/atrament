@@ -376,6 +376,16 @@ pub enum EditableSemanticValue {
     Text(String),
 }
 
+/// Net semantic effect classification for one direct-edit prediction.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub enum DirectEditEffectClass {
+    /// At least one accepted semantic value would differ from the base
+    /// snapshot.
+    Mutation,
+    /// Final semantic state equals the accepted base for this prediction.
+    NoOp,
+}
+
 /// Read-only semantic change-set preview for one established direct edit.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum DirectEditChangePreviewOutcome {
@@ -383,6 +393,8 @@ pub enum DirectEditChangePreviewOutcome {
     Predicted {
         /// Ordered direct semantic changes; empty means semantic no-op.
         changes: Vec<DirectEditSemanticChange>,
+        /// Explicit net semantic mutation or no-op classification.
+        effect: DirectEditEffectClass,
         /// Conservative seeds for later dependency-expanded impact
         /// calculation.
         impact_seeds: Vec<DirectEditImpactSeed>,
@@ -550,6 +562,8 @@ pub enum DirectEditBatchSimulationOutcome<CommandIdentity> {
         changes: Vec<DirectEditSemanticChange>,
         /// Ordered per-command simulation evidence.
         commands: Vec<DirectEditBatchCommandPrediction<CommandIdentity>>,
+        /// Explicit net semantic mutation or no-op classification.
+        effect: DirectEditEffectClass,
         /// Conservative seeds for later dependency-expanded impact
         /// calculation.
         impact_seeds: Vec<DirectEditImpactSeed>,

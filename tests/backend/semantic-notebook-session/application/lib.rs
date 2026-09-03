@@ -54,8 +54,8 @@ use atrament_semantic_notebook_port::{
     DirectEditBatchCommandPrediction, DirectEditBatchCommandRejection,
     DirectEditBatchProposal, DirectEditBatchSimulationOutcome,
     DirectEditChangePreviewOutcome, DirectEditDerivedAuthority,
-    DirectEditImpactScope, DirectEditImpactSeed, DirectEditProposal,
-    DirectEditProposalOutcome, DirectEditSemanticChange,
+    DirectEditEffectClass, DirectEditImpactScope, DirectEditImpactSeed,
+    DirectEditProposal, DirectEditProposalOutcome, DirectEditSemanticChange,
     DirectEditSimulationOutcome, EditableSemanticValue,
     EditableSemanticValueKind, EditableValuePreconditionOutcome,
     FormulaEditOutcome, IdentityInspectOutcome, IdentityKindInspectOutcome,
@@ -1676,6 +1676,7 @@ fn ordered_direct_edit_batch_simulates_independent_changes_read_only() {
     let DirectEditBatchSimulationOutcome::Predicted {
         changes,
         commands,
+        effect,
         impact_seeds,
         revision: predicted_revision,
     } = outcome
@@ -1685,6 +1686,7 @@ fn ordered_direct_edit_batch_simulates_independent_changes_read_only() {
     assert_eq!(predicted_revision, revision);
     assert_eq!(changes.len(), 2);
     assert_eq!(commands.len(), 2);
+    assert_eq!(effect, DirectEditEffectClass::Mutation);
     assert_eq!(commands[0].command, 1);
     assert_eq!(commands[1].command, 2);
     assert_eq!(impact_seeds, vec![DirectEditImpactSeed {
@@ -1913,6 +1915,7 @@ fn ordered_direct_edit_batch_coalesces_net_noop_across_commands() {
     let DirectEditBatchSimulationOutcome::Predicted {
         changes,
         commands,
+        effect,
         impact_seeds,
         ..
     } = outcome
@@ -1920,6 +1923,7 @@ fn ordered_direct_edit_batch_coalesces_net_noop_across_commands() {
         panic!("dependent revert chain must simulate");
     };
     assert!(changes.is_empty());
+    assert_eq!(effect, DirectEditEffectClass::NoOp);
     assert!(impact_seeds.is_empty());
     assert_eq!(commands.len(), 2);
     assert!(commands.iter().all(|command| command.change.is_some()));
@@ -2101,6 +2105,7 @@ fn direct_edit_change_preview_reports_exact_change_or_empty_noop() {
                 family: SemanticCommandFamily::TextContent,
                 target: span,
             }],
+            effect: DirectEditEffectClass::Mutation,
             impact_seeds: vec![DirectEditImpactSeed {
                 authorities: vec![
                     DirectEditDerivedAuthority::Diagnostics,
@@ -2124,6 +2129,7 @@ fn direct_edit_change_preview_reports_exact_change_or_empty_noop() {
         ),
         DirectEditChangePreviewOutcome::Predicted {
             changes: Vec::new(),
+            effect: DirectEditEffectClass::NoOp,
             impact_seeds: Vec::new(),
             revision,
         },
@@ -2171,6 +2177,7 @@ fn direct_edit_change_preview_preserves_structured_before_and_after_values() {
                 family: SemanticCommandFamily::StructuredContent,
                 target: formula,
             }],
+            effect: DirectEditEffectClass::Mutation,
             impact_seeds: vec![DirectEditImpactSeed {
                 authorities: vec![
                     DirectEditDerivedAuthority::Layout,
@@ -2216,6 +2223,7 @@ fn direct_edit_change_preview_preserves_structured_before_and_after_values() {
                 family: SemanticCommandFamily::StructuredContent,
                 target: row,
             }],
+            effect: DirectEditEffectClass::Mutation,
             impact_seeds: vec![DirectEditImpactSeed {
                 authorities: vec![
                     DirectEditDerivedAuthority::Layout,
@@ -2259,6 +2267,7 @@ fn direct_edit_change_preview_preserves_structured_before_and_after_values() {
                 family: SemanticCommandFamily::DocumentConstraint,
                 target: profile,
             }],
+            effect: DirectEditEffectClass::Mutation,
             impact_seeds: vec![DirectEditImpactSeed {
                 authorities: vec![DirectEditDerivedAuthority::AllDerived],
                 scope: DirectEditImpactScope::Pages {

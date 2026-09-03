@@ -57,8 +57,8 @@ use atrament_semantic_notebook_port::{
     DirectEditBatchCommandPrediction, DirectEditBatchCommandRejection,
     DirectEditBatchProposal, DirectEditBatchSimulationOutcome,
     DirectEditChangePreviewOutcome, DirectEditDerivedAuthority,
-    DirectEditImpactScope, DirectEditImpactSeed, DirectEditProposal,
-    DirectEditProposalOutcome, DirectEditSemanticChange,
+    DirectEditEffectClass, DirectEditImpactScope, DirectEditImpactSeed,
+    DirectEditProposal, DirectEditProposalOutcome, DirectEditSemanticChange,
     DirectEditSimulationOutcome, EditableSemanticValue,
     EditableSemanticValueKind, EditableValuePreconditionOutcome,
     FormulaEditOutcome, IdentityInspectOutcome, IdentityKindInspectOutcome,
@@ -516,6 +516,7 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
                 );
                 DirectEditChangePreviewOutcome::Predicted {
                     changes: vec![change],
+                    effect: DirectEditEffectClass::Mutation,
                     impact_seeds,
                     revision: simulated_revision,
                 }
@@ -528,6 +529,7 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
                 },
             ) => DirectEditChangePreviewOutcome::Predicted {
                 changes: Vec::new(),
+                effect: DirectEditEffectClass::NoOp,
                 impact_seeds: Vec::new(),
                 revision: simulated_revision,
             },
@@ -1507,10 +1509,16 @@ where
         .map(|(_, change)| change)
         .filter(|change| change.before != change.after)
         .collect::<Vec<_>>();
+    let effect = if changes.is_empty() {
+        DirectEditEffectClass::NoOp
+    } else {
+        DirectEditEffectClass::Mutation
+    };
     let impact_seeds = direct_edit_impact_seeds(&current.notebook, &changes);
     DirectEditBatchSimulationOutcome::Predicted {
         changes,
         commands: evaluated,
+        effect,
         impact_seeds,
         revision,
     }
