@@ -41,9 +41,9 @@ use atrament_physical_page_profile::{
 };
 use atrament_semantic_notebook::{
     Asset, Block, BlockContent, CandidateIdentity, Figure, Flow, FormulaMode,
-    IdentityAllocator,
-    InlineSpan, Notebook, Page, PaperProfile, SemanticIdentityDescriptor,
-    SemanticIdentityKind, TableCellSpan, TableRowRole,
+    IdentityAllocator, InlineSpan, Notebook, Page, PaperProfile, Provenance,
+    ProvenanceKind, SemanticIdentityDescriptor, SemanticIdentityKind,
+    TableCellSpan, TableRowRole,
 };
 use atrament_semantic_notebook_port::{
     AcceptanceOutcome, CommandBehaviorVersion,
@@ -148,6 +148,28 @@ fn editable_text_candidate(
         },
         span,
     )
+}
+
+fn provenance_claim_candidate(
+    identities: &IdentityAllocator,
+) -> (Notebook<CandidateIdentity>, CandidateIdentity, CandidateIdentity) {
+    let (mut candidate, claim) =
+        editable_text_candidate(identities, "Energy is conserved.");
+    let provenance = identities
+        .allocate_candidate()
+        .expect("provenance id");
+    candidate.provenance.push(Provenance {
+        id: provenance,
+        kind: ProvenanceKind::Supplied,
+        reference: Some(String::from("source:old")),
+    });
+    let BlockContent::Paragraph(spans) =
+        &mut candidate.pages[0].flows[0].blocks[0].content
+    else {
+        panic!("provenance candidate must contain paragraph");
+    };
+    spans[0].provenance = Some(provenance);
+    (candidate, claim, provenance)
 }
 
 fn asset_figure_candidate(
@@ -427,6 +449,131 @@ fn application_routes_bounded_inspection_through_owned_semantic_authority() {
         session.accepted_revision().map(|current| current.id),
         Some(revision),
     );
+}
+
+#[test]
+fn application_routes_provenance_batch_through_owned_authority() {
+    let identities = IdentityAllocator::new();
+    let (candidate, candidate_claim, candidate_provenance) =
+        provenance_claim_candidate(&identities);
+    let mut session = application::SessionApplication::default();
+    let AcceptanceOutcome::Accepted { mapping, revision: base } =
+        session.accept_candidate(candidate)
+    else {
+        panic!("provenance candidate must be accepted");
+    };
+    let accepted = |candidate| {
+        mapping
+            .iter()
+            .find(|entry| entry.candidate == candidate)
+            .expect("candidate identity must map")
+            .accepted
+    };
+    let claim = accepted(candidate_claim);
+    let provenance = accepted(candidate_provenance);
+    let snapshot = session.command_capability_snapshot();
+    assert_eq!(snapshot.behavior_version, CommandBehaviorVersion(4));
+    assert!(snapshot.family_capabilities.iter().any(|capability| {
+        capability.family == SemanticCommandFamily::Provenance
+    }));
+    let current_value = EditableSemanticValue::Provenance {
+        kind: ProvenanceKind::Supplied,
+        reference: Some(String::from("source:old")),
+    };
+    let requested = EditableSemanticValue::Provenance {
+        kind: ProvenanceKind::Cited,
+        reference: Some(String::from("doi:10.1000/example")),
+    };
+    let CommandTargetMaterialOutcome::Prepared { material } =
+        session.command_target_material(base, provenance)
+    else {
+        panic!("live owner must expose provenance material");
+    };
+    assert_eq!(material.editable_value, Some(current_value.clone()));
+    assert_eq!(
+        material.direct_edit_family,
+        Some(SemanticCommandFamily::Provenance),
+    );
+    assert_eq!(
+        session.simulate_direct_edit(base, provenance, requested.clone()),
+        DirectEditSimulationOutcome::Applicable {
+            family: SemanticCommandFamily::Provenance,
+            requested: requested.clone(),
+            revision: base,
+            target: provenance,
+        },
+    );
+    let DirectEditChangePreviewOutcome::Predicted { changes, .. } =
+        session.preview_direct_edit_changes(base, provenance, requested.clone())
+    else {
+        panic!("live owner must preview provenance replacement");
+    };
+    assert_eq!(changes, vec![DirectEditSemanticChange {
+        after: requested.clone(),
+        before: current_value.clone(),
+        family: SemanticCommandFamily::Provenance,
+        target: provenance,
+    }]);
+
+    let batch = DirectEditBatchProposal {
+        base,
+        capability_version: snapshot.behavior_version,
+        commands: vec![DirectEditBatchCommand {
+            dependencies: vec![],
+            id: 1_u32,
+            preconditions: CommandTargetPreconditions {
+                expected_value: Some(current_value),
+                identity: IdentityPrecondition {
+                    expected_kind: Some(SemanticIdentityKind::Provenance),
+                    expected_owner: IdentityOwnerExpectation::Any,
+                },
+                requested_family: SemanticCommandFamily::Provenance,
+            },
+            requested,
+            target: provenance,
+        }],
+    };
+    let DirectEditBatchApplyOutcome::Applied { revision: applied, .. } =
+        session.apply_direct_edit_batch(batch)
+    else {
+        panic!("live owner must apply provenance replacement");
+    };
+    let current = session
+        .accepted_revision()
+        .expect("provenance revision");
+    let BlockContent::Paragraph(spans) =
+        &current.notebook.pages[0].flows[0].blocks[0].content
+    else {
+        panic!("live claim must remain paragraph");
+    };
+    assert_eq!(spans[0].id, claim);
+    assert_eq!(spans[0].text, "Energy is conserved.");
+    assert_eq!(spans[0].provenance, Some(provenance));
+    let changed = current
+        .notebook
+        .provenance
+        .iter()
+        .find(|record| record.id == provenance)
+        .expect("live provenance record");
+    assert_eq!(changed.kind, ProvenanceKind::Cited);
+    assert_eq!(changed.reference.as_deref(), Some("doi:10.1000/example"));
+
+    let HistoryTraversalOutcome::Traversed { .. } =
+        session.traverse_history(applied, HistoryDirection::Undo)
+    else {
+        panic!("live provenance batch must Undo");
+    };
+    let current = session
+        .accepted_revision()
+        .expect("provenance Undo revision");
+    let restored = current
+        .notebook
+        .provenance
+        .iter()
+        .find(|record| record.id == provenance)
+        .expect("restored provenance record");
+    assert_eq!(restored.kind, ProvenanceKind::Supplied);
+    assert_eq!(restored.reference.as_deref(), Some("source:old"));
 }
 
 #[test]
