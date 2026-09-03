@@ -1066,17 +1066,10 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
                 current: current.id,
             };
         }
-        let nodes = batch
-            .commands
-            .iter()
-            .map(|command| CommandNode {
-                dependencies: command.dependencies.clone(),
-                id: command.id.clone(),
-            })
-            .collect::<Vec<_>>();
+        let nodes = borrowed_command_nodes(&batch);
         if let Err(reason) = validate_command_graph(&nodes) {
             return DirectEditBatchSimulationOutcome::DependencyGraphRejected {
-                reason,
+                reason: owned_command_graph_error(&reason),
             };
         }
         simulate_direct_edit_batch_commands(current, &batch.commands)

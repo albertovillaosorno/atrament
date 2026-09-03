@@ -2052,6 +2052,58 @@ fn selection_summary_and_bounded_rejection_borrow_command_identities() {
 }
 
 #[test]
+fn invalid_batch_graph_clones_only_reported_command_identities() {
+    let ids = IdentityAllocator::new();
+    let (candidate, span) = candidate_notebook_with_span(&ids, "base text");
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(candidate)
+    else {
+        panic!("candidate must be accepted");
+    };
+    let span = accepted_for(&mapping, span);
+    let command = |id, dependencies| DirectEditBatchCommand {
+        dependencies,
+        id: CountingCommandIdentity(id),
+        preconditions: CommandTargetPreconditions {
+            expected_value: Some(EditableSemanticValue::Text(
+                "base text".to_owned(),
+            )),
+            identity: IdentityPrecondition {
+                expected_kind: Some(SemanticIdentityKind::InlineSpan),
+                expected_owner: IdentityOwnerExpectation::Any,
+            },
+            requested_family: SemanticCommandFamily::TextContent,
+        },
+        requested: EditableSemanticValue::Text("changed".to_owned()),
+        target: span,
+    };
+    let batch = DirectEditBatchProposal {
+        base: revision,
+        capability_version: CommandBehaviorVersion(1),
+        commands: vec![
+            command(1, vec![CountingCommandIdentity(2)]),
+            command(2, Vec::new()),
+            command(3, Vec::new()),
+        ],
+    };
+    SELECTION_COMMAND_IDENTITY_CLONES.store(0, AtomicOrdering::Relaxed);
+    assert_eq!(
+        session.simulate_direct_edit_batch(batch),
+        DirectEditBatchSimulationOutcome::DependencyGraphRejected {
+            reason: CommandGraphError::DependencyAfterCommand {
+                command: CountingCommandIdentity(1),
+                dependency: CountingCommandIdentity(2),
+            },
+        },
+    );
+    assert_eq!(
+        SELECTION_COMMAND_IDENTITY_CLONES.load(AtomicOrdering::Relaxed),
+        2,
+    );
+}
+
+#[test]
 fn ordered_direct_edit_batch_material_overlay_reaches_nested_text() {
     let ids = IdentityAllocator::new();
     let (candidate, _, span) = candidate_nested_text_notebook(
