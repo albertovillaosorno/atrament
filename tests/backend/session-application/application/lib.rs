@@ -40,7 +40,7 @@ use atrament_physical_page_profile::{
     SheetSize,
 };
 use atrament_semantic_notebook::{
-    Block, BlockContent, CandidateIdentity, Flow, FormulaMode,
+    Asset, Block, BlockContent, CandidateIdentity, Figure, Flow, FormulaMode,
     IdentityAllocator,
     InlineSpan, Notebook, Page, PaperProfile, SemanticIdentityDescriptor,
     SemanticIdentityKind, TableCellSpan, TableRowRole,
@@ -148,6 +148,67 @@ fn editable_text_candidate(
         },
         span,
     )
+}
+
+fn asset_figure_candidate(
+    identities: &IdentityAllocator,
+) -> (
+    Notebook<CandidateIdentity>,
+    CandidateIdentity,
+    CandidateIdentity,
+    CandidateIdentity,
+) {
+    let notebook = identities.allocate_candidate().expect("notebook id");
+    let profile = identities.allocate_candidate().expect("profile id");
+    let page = identities.allocate_candidate().expect("page id");
+    let flow = identities.allocate_candidate().expect("flow id");
+    let block = identities.allocate_candidate().expect("block id");
+    let figure = identities.allocate_candidate().expect("figure id");
+    let first_asset = identities.allocate_candidate().expect("first asset id");
+    let second_asset = identities
+        .allocate_candidate()
+        .expect("second asset id");
+    let candidate = Notebook {
+        assets: vec![
+            Asset {
+                id: first_asset,
+                media_type: String::from("image/png"),
+            },
+            Asset {
+                id: second_asset,
+                media_type: String::from("image/webp"),
+            },
+        ],
+        constraints: vec![],
+        extensions: vec![],
+        id: notebook,
+        output_profiles: vec![],
+        page_profiles: vec![PaperProfile {
+            geometry: physical_page_profile(),
+            id: profile,
+        }],
+        pages: vec![Page {
+            flows: vec![Flow {
+                blocks: vec![Block {
+                    content: BlockContent::Figure(Figure {
+                        asset: Some(first_asset),
+                        caption: vec![],
+                        id: figure,
+                    }),
+                    extensions: vec![],
+                    id: block,
+                    provenance: None,
+                    style: None,
+                }],
+                id: flow,
+            }],
+            id: page,
+            page_profile: profile,
+        }],
+        provenance: vec![],
+        styles: vec![],
+    };
+    (candidate, figure, first_asset, second_asset)
 }
 
 fn minimal_candidate(
@@ -366,6 +427,110 @@ fn application_routes_bounded_inspection_through_owned_semantic_authority() {
         session.accepted_revision().map(|current| current.id),
         Some(revision),
     );
+}
+
+#[test]
+fn application_routes_asset_reference_batch_through_owned_authority() {
+    let identities = IdentityAllocator::new();
+    let (candidate, candidate_figure, candidate_first, candidate_second) =
+        asset_figure_candidate(&identities);
+    let mut session = application::SessionApplication::default();
+    let AcceptanceOutcome::Accepted { mapping, revision: base } =
+        session.accept_candidate(candidate)
+    else {
+        panic!("asset figure candidate must be accepted");
+    };
+    let accepted = |candidate| {
+        mapping
+            .iter()
+            .find(|entry| entry.candidate == candidate)
+            .expect("candidate identity must map")
+            .accepted
+    };
+    let figure = accepted(candidate_figure);
+    let first_asset = accepted(candidate_first);
+    let second_asset = accepted(candidate_second);
+    let snapshot = session.command_capability_snapshot();
+    assert_eq!(snapshot.behavior_version, CommandBehaviorVersion(3));
+    assert!(snapshot.family_capabilities.iter().any(|capability| {
+        capability.family == SemanticCommandFamily::AssetReference
+    }));
+    let CommandTargetMaterialOutcome::Prepared { material } =
+        session.command_target_material(base, figure)
+    else {
+        panic!("live owner must expose figure command material");
+    };
+    assert_eq!(
+        material.editable_value,
+        Some(EditableSemanticValue::AssetReference(Some(first_asset))),
+    );
+    assert_eq!(
+        session.simulate_direct_edit(
+            base,
+            figure,
+            EditableSemanticValue::AssetReference(Some(second_asset)),
+        ),
+        DirectEditSimulationOutcome::Applicable {
+            family: SemanticCommandFamily::AssetReference,
+            requested: EditableSemanticValue::AssetReference(
+                Some(second_asset),
+            ),
+            revision: base,
+            target: figure,
+        },
+    );
+
+    let batch = DirectEditBatchProposal {
+        base,
+        capability_version: snapshot.behavior_version,
+        commands: vec![DirectEditBatchCommand {
+            dependencies: vec![],
+            id: 1_u32,
+            preconditions: CommandTargetPreconditions {
+                expected_value: Some(EditableSemanticValue::AssetReference(
+                    Some(first_asset),
+                )),
+                identity: IdentityPrecondition {
+                    expected_kind: Some(SemanticIdentityKind::Figure),
+                    expected_owner: IdentityOwnerExpectation::Any,
+                },
+                requested_family: SemanticCommandFamily::AssetReference,
+            },
+            requested: EditableSemanticValue::AssetReference(
+                Some(second_asset),
+            ),
+            target: figure,
+        }],
+    };
+    let DirectEditBatchApplyOutcome::Applied { revision: applied, .. } =
+        session.apply_direct_edit_batch(batch)
+    else {
+        panic!("live owner must apply admitted asset reference");
+    };
+    let current = session
+        .accepted_revision()
+        .expect("asset reference revision");
+    let BlockContent::Figure(current_figure) =
+        &current.notebook.pages[0].flows[0].blocks[0].content
+    else {
+        panic!("live fixture must remain a figure");
+    };
+    assert_eq!(current_figure.id, figure);
+    assert_eq!(current_figure.asset, Some(second_asset));
+
+    let HistoryTraversalOutcome::Traversed { .. } =
+        session.traverse_history(applied, HistoryDirection::Undo)
+    else {
+        panic!("live asset-reference batch must Undo");
+    };
+    let current = session.accepted_revision().expect("asset reference Undo");
+    let BlockContent::Figure(current_figure) =
+        &current.notebook.pages[0].flows[0].blocks[0].content
+    else {
+        panic!("live Undo fixture must remain a figure");
+    };
+    assert_eq!(current_figure.id, figure);
+    assert_eq!(current_figure.asset, Some(first_asset));
 }
 
 #[test]
