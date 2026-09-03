@@ -29,7 +29,9 @@
 // - Defaults:
 //   - Large acyclic graphs validate iteratively without recursive traversal.
 //
+use std::cmp::Ordering;
 use std::collections::BTreeSet;
+use std::sync::atomic::{AtomicUsize, Ordering as AtomicOrdering};
 
 use atrament_semantic_command_graph::{
     BoundedDependencyRequirementsError, CommandGraphError,
@@ -468,4 +470,58 @@ fn bounded_dependency_requirements_reject_before_pair_materialization() {
             }
         ),
     );
+}
+
+static IDENTITY_CLONES: AtomicUsize = AtomicUsize::new(0);
+
+#[derive(Debug, Eq, PartialEq)]
+struct CountingIdentity(u32);
+
+impl Clone for CountingIdentity {
+    fn clone(&self) -> Self {
+        let _previous = IDENTITY_CLONES.fetch_add(1, AtomicOrdering::Relaxed);
+        Self(self.0)
+    }
+}
+
+impl Ord for CountingIdentity {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.0.cmp(&other.0)
+    }
+}
+
+impl PartialOrd for CountingIdentity {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+#[test]
+fn bounded_requirement_rejection_does_not_clone_identity_pairs() {
+    let nodes = [
+        CommandNode {
+            dependencies: Vec::new(),
+            id: CountingIdentity(1),
+        },
+        CommandNode {
+            dependencies: vec![CountingIdentity(1)],
+            id: CountingIdentity(2),
+        },
+        CommandNode {
+            dependencies: vec![CountingIdentity(2)],
+            id: CountingIdentity(3),
+        },
+    ];
+    let selected = BTreeSet::from([CountingIdentity(3)]);
+    IDENTITY_CLONES.store(0, AtomicOrdering::Relaxed);
+    assert_eq!(
+        dependency_selection_requirements_bounded(&nodes, &selected, 1),
+        Err(
+            BoundedDependencyRequirementsError::RequirementCountExceeded {
+                actual: 2,
+                limit: 1,
+            }
+        ),
+    );
+    assert_eq!(IDENTITY_CLONES.load(AtomicOrdering::Relaxed), 0);
 }
