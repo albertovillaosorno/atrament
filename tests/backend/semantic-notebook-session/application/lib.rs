@@ -1590,6 +1590,168 @@ fn asset_reference_batch_applies_atomically_and_undo_restores_reference() {
 }
 
 #[test]
+fn asset_reference_batch_attaches_to_figure_without_reference() {
+    let ids = IdentityAllocator::new();
+    let (mut candidate, candidate_ids) =
+        candidate_notebook_with_figure_assets(&ids);
+    let BlockContent::Figure(candidate_figure) =
+        &mut candidate.pages[0].flows[0].blocks[0].content
+    else {
+        panic!("fixture must contain a figure");
+    };
+    candidate_figure.asset = None;
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision: base } =
+        session.accept(candidate)
+    else {
+        panic!("empty-reference figure candidate must be accepted");
+    };
+    let figure = accepted_for(&mapping, candidate_ids.figure);
+    let first_asset = accepted_for(&mapping, candidate_ids.asset_one);
+    assert_eq!(
+        session.check_editable_value_precondition(
+            base,
+            figure,
+            EditableSemanticValue::AssetReference(None),
+        ),
+        EditableValuePreconditionOutcome::Satisfied {
+            actual: EditableSemanticValue::AssetReference(None),
+            revision: base,
+            target: figure,
+        },
+    );
+    let batch = DirectEditBatchProposal {
+        base,
+        capability_version: CommandBehaviorVersion(3),
+        commands: vec![DirectEditBatchCommand {
+            dependencies: vec![],
+            id: 1_u32,
+            preconditions: CommandTargetPreconditions {
+                expected_value: Some(EditableSemanticValue::AssetReference(
+                    None,
+                )),
+                identity: IdentityPrecondition {
+                    expected_kind: Some(SemanticIdentityKind::Figure),
+                    expected_owner: IdentityOwnerExpectation::Any,
+                },
+                requested_family: SemanticCommandFamily::AssetReference,
+            },
+            requested: EditableSemanticValue::AssetReference(Some(first_asset)),
+            target: figure,
+        }],
+    };
+    let DirectEditBatchApplyOutcome::Applied { revision: applied, .. } =
+        session.apply_direct_edit_batch(batch)
+    else {
+        panic!("empty figure reference must admit an existing asset");
+    };
+    let current = session.current().expect("attached asset revision");
+    let BlockContent::Figure(current_figure) =
+        &current.notebook.pages[0].flows[0].blocks[0].content
+    else {
+        panic!("fixture must remain figure");
+    };
+    assert_eq!(current_figure.asset, Some(first_asset));
+
+    let HistoryTraversalOutcome::Traversed { .. } =
+        session.traverse_history(applied, HistoryDirection::Undo)
+    else {
+        panic!("asset attachment must Undo");
+    };
+    let current = session.current().expect("asset attachment Undo");
+    let BlockContent::Figure(current_figure) =
+        &current.notebook.pages[0].flows[0].blocks[0].content
+    else {
+        panic!("Undo fixture must remain figure");
+    };
+    assert_eq!(current_figure.asset, None);
+}
+
+#[test]
+fn invalid_asset_reference_in_mixed_batch_is_atomic() {
+    let ids = IdentityAllocator::new();
+    let (mut candidate, candidate_ids) =
+        candidate_notebook_with_figure_assets(&ids);
+    let text_block = candidate_id(&ids);
+    let text_span = candidate_id(&ids);
+    candidate.pages[0].flows[0].blocks.insert(0, Block {
+        content: BlockContent::Paragraph(vec![InlineSpan {
+            id: text_span,
+            provenance: None,
+            style: None,
+            text: String::from("before"),
+        }]),
+        extensions: vec![],
+        id: text_block,
+        provenance: None,
+        style: None,
+    });
+    let candidate_flow = candidate.pages[0].flows[0].id;
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision: base } =
+        session.accept(candidate)
+    else {
+        panic!("mixed asset candidate must be accepted");
+    };
+    let span = accepted_for(&mapping, text_span);
+    let figure = accepted_for(&mapping, candidate_ids.figure);
+    let first_asset = accepted_for(&mapping, candidate_ids.asset_one);
+    let flow = accepted_for(&mapping, candidate_flow);
+    let before = session.current().expect("mixed asset base").clone();
+    let batch = DirectEditBatchProposal {
+        base,
+        capability_version: CommandBehaviorVersion(3),
+        commands: vec![
+            text_batch_command(1, &[], span, "before", "after"),
+            DirectEditBatchCommand {
+                dependencies: vec![],
+                id: 2_u32,
+                preconditions: CommandTargetPreconditions {
+                    expected_value: Some(EditableSemanticValue::AssetReference(
+                        Some(first_asset),
+                    )),
+                    identity: IdentityPrecondition {
+                        expected_kind: Some(SemanticIdentityKind::Figure),
+                        expected_owner: IdentityOwnerExpectation::Any,
+                    },
+                    requested_family: SemanticCommandFamily::AssetReference,
+                },
+                requested: EditableSemanticValue::AssetReference(Some(flow)),
+                target: figure,
+            },
+        ],
+    };
+    let DirectEditBatchSimulationOutcome::Rejected { reason, .. } =
+        session.simulate_direct_edit_batch(batch.clone())
+    else {
+        panic!("wrong-kind asset reference must reject mixed simulation");
+    };
+    assert!(matches!(
+        *reason,
+        DirectEditBatchCommandRejection::Simulation { outcome }
+            if *outcome == DirectEditSimulationOutcome::InvalidAssetReference {
+                actual: Some(SemanticIdentityKind::Flow),
+                reference: flow,
+                revision: base,
+                target: figure,
+            }
+    ));
+    assert!(matches!(
+        session.apply_direct_edit_batch(batch),
+        DirectEditBatchApplyOutcome::Rejected { .. }
+    ));
+    assert_eq!(session.current(), Some(&before));
+    assert_eq!(
+        session.history_availability(),
+        HistoryAvailabilityOutcome::Available(HistoryAvailability {
+            can_redo: false,
+            can_undo: false,
+            revision: base,
+        }),
+    );
+}
+
+#[test]
 fn asset_reference_batch_reaches_deeply_nested_figure() {
     let ids = IdentityAllocator::new();
     let (mut candidate, candidate_ids) =
