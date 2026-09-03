@@ -202,6 +202,15 @@ pub fn validate_command_graph<Identity>(
 where
     Identity: Clone + Ord,
 {
+    validated_command_positions(nodes).map(|_positions| ())
+}
+
+fn validated_command_positions<Identity>(
+    nodes: &[CommandNode<Identity>],
+) -> Result<BTreeMap<&Identity, usize>, CommandGraphError<Identity>>
+where
+    Identity: Clone + Ord,
+{
     let mut positions = BTreeMap::new();
     for (position, node) in nodes.iter().enumerate() {
         if positions.insert(&node.id, position).is_some() {
@@ -232,7 +241,7 @@ where
         }
     }
     let Some((forward_command, forward_dependency)) = first_forward else {
-        return Ok(());
+        return Ok(positions);
     };
 
     let mut indegrees = vec![0usize; nodes.len()];
@@ -301,12 +310,13 @@ pub fn validate_dependency_closed_selection<Identity>(
 where
     Identity: Clone + Ord,
 {
-    if let Err(reason) = validate_command_graph(nodes) {
-        return Err(DependencySelectionError::Graph { reason });
-    }
-    let known = nodes.iter().map(|node| &node.id).collect::<BTreeSet<_>>();
-    if let Some(command) =
-        selected.iter().find(|command| !known.contains(*command))
+    let positions = match validated_command_positions(nodes) {
+        Ok(positions) => positions,
+        Err(reason) => return Err(DependencySelectionError::Graph { reason }),
+    };
+    if let Some(command) = selected
+        .iter()
+        .find(|command| !positions.contains_key(*command))
     {
         return Err(DependencySelectionError::UnknownSelection {
             command: command.clone(),
