@@ -42,8 +42,9 @@ use atrament_semantic_command_graph::{
 use atrament_semantic_notebook::{
     AcceptedIdentity, AcceptedRevision, CandidateIdentity, FormulaMode,
     IdentityExhausted, MathSyntaxError, Notebook, PhysicalPageProfile,
-    PhysicalPageProfileError, RevisionIdentity, SemanticIdentityDescriptor,
-    SemanticIdentityKind, TableCellSpan, TableGridError, TableRowRole,
+    PhysicalPageProfileError, ProvenanceKind, RevisionIdentity,
+    SemanticIdentityDescriptor, SemanticIdentityKind, TableCellSpan,
+    TableGridError, TableRowRole,
 };
 
 /// Maximum admitted block-containment depth for one candidate acceptance.
@@ -430,6 +431,8 @@ pub enum EditableSemanticValueKind {
     Formula,
     /// Complete exact physical page-profile geometry.
     PageProfile,
+    /// Revision-owned semantic provenance kind and source reference.
+    Provenance,
     /// Logical row and column coverage owned by one table cell.
     TableCellSpan,
     /// Semantic table-row header/body role.
@@ -452,6 +455,13 @@ pub enum EditableSemanticValue {
     },
     /// Complete exact physical page-profile geometry.
     PageProfile(PhysicalPageProfile),
+    /// Revision-owned semantic provenance kind and optional source reference.
+    Provenance {
+        /// Provenance meaning retained independently from presentation.
+        kind: ProvenanceKind,
+        /// Optional caller-visible source reference.
+        reference: Option<String>,
+    },
     /// Logical row and column coverage owned by one table cell.
     TableCellSpan(TableCellSpan),
     /// Semantic table-row header/body role.
@@ -776,7 +786,7 @@ pub struct DirectEditBatchCommandPrediction<CommandIdentity> {
     pub change: Option<DirectEditSemanticChange>,
     /// Caller-owned command identity.
     pub command: CommandIdentity,
-    /// Executable direct-edit family simulated for this command.
+    /// Executable generic edit family simulated for this command.
     pub family: SemanticCommandFamily,
     /// Existing accepted semantic target simulated by this command.
     pub target: AcceptedIdentity,
@@ -995,7 +1005,7 @@ pub struct DirectEditSemanticChange {
 pub enum DirectEditSimulationOutcome {
     /// Replacement is valid and would change accepted semantic state.
     Applicable {
-        /// Executable direct-edit family implied by the replacement value.
+        /// Executable generic edit family implied by the replacement value.
         family: SemanticCommandFamily,
         /// Exact requested replacement value.
         requested: EditableSemanticValue,
@@ -1046,7 +1056,7 @@ pub enum DirectEditSimulationOutcome {
     NoAcceptedRevision,
     /// Replacement is valid but already equals the accepted semantic value.
     NoOp {
-        /// Executable direct-edit family implied by the replacement value.
+        /// Executable generic edit family implied by the replacement value.
         family: SemanticCommandFamily,
         /// Accepted revision simulated without mutation.
         revision: RevisionIdentity,
@@ -1253,7 +1263,7 @@ pub enum CommandFamilyAdmissionOutcome {
     },
     /// Requested family is not currently executable for this exact target.
     FamilyNotExecutable {
-        /// Currently executable direct-edit family, if one exists.
+        /// Currently executable generic edit family, if one exists.
         available: Option<SemanticCommandFamily>,
         /// Requested semantic command family.
         requested: SemanticCommandFamily,
@@ -1295,7 +1305,7 @@ pub struct CommandTargetPreconditions {
 pub enum CommandTargetPreconditionOutcome {
     /// Requested family is not currently executable for this exact target.
     FamilyNotExecutable {
-        /// Currently executable direct-edit family, if one exists.
+        /// Currently executable generic edit family, if one exists.
         available: Option<SemanticCommandFamily>,
         /// Requested semantic command family.
         requested: SemanticCommandFamily,
@@ -1372,9 +1382,9 @@ pub enum CommandTargetPreconditionOutcome {
 pub struct CommandTargetMaterial {
     /// Current semantic kind and direct structural owner.
     pub descriptor: SemanticIdentityDescriptor<AcceptedIdentity>,
-    /// Currently executable direct-edit family for this target, if any.
+    /// Currently executable generic edit family for this target, if any.
     pub direct_edit_family: Option<SemanticCommandFamily>,
-    /// Exact established editable value when this target has direct-edit
+    /// Exact established editable value when this target has generic edit
     /// authority.
     pub editable_value: Option<EditableSemanticValue>,
     /// Accepted revision that owns this material.

@@ -144,32 +144,35 @@ does not invent a continuation token or writable scope. A local-precondition
 check can require an exact semantic kind and direct owner, including explicit
 notebook-root ownership, before a future command family may mutate that target.
 
-A second read-only precondition compares exact accepted base values for six
+A second read-only precondition compares exact accepted base values for seven
 generic edit families: an existing figure's optional admitted asset reference,
-inline text, formula mode and source, table-row role, table-cell span, and
-physical page-profile geometry.
+inline text, formula mode and source, provenance kind and source reference,
+table-row role, table-cell span, and physical page-profile geometry.
 Text and formula checks preserve exact authored source because no Unicode
 normalization form is
 yet frozen. Backend-derived command-target material now combines semantic kind,
 direct owner, exact editable base value when available, and the currently
-executable direct-edit command family for one exact revision and target.
+executable generic edit command family for one exact revision and target.
 
 The frozen command-family taxonomy is represented without choosing final wire
 operation names. Current executable targets admit Asset reference for a figure's
 existing optional asset identity, Text content for inline text, Structured
-content for formulas, table-row roles, and table-cell spans, and Document
-constraint for page profiles. A combined local checker validates
+content for formulas, table-row roles, and table-cell spans, Provenance for
+revision-owned source records, and Document constraint for page profiles. A
+combined local checker validates
 family, kind, owner, and an optional exact base value in one read-only snapshot
 with stale-base precedence.
 
-Deterministic capability discovery reports only those four family behaviors and
+Deterministic capability discovery reports only those five family behaviors and
 supports read-only behavior-version drift checks. It deliberately advertises no
 command protocol, normalizer, command context, Validate, Apply, rebatching, or
-numeric command/context limits yet. Aggregate command behavior and typed-result
-behavior are version 3 after admitting figure Asset reference; Asset reference,
-Text content, and Document constraint retain family behavior version 1, while
-Structured content remains version 2. Older aggregate version-2 contexts reject
-instead of being reinterpreted.
+numeric command/context limits yet.
+
+Aggregate command behavior and typed-result behavior are version 4 after
+admitting provenance-record edits. Asset reference, Provenance, Text content,
+and Document constraint retain family behavior version 1, while Structured
+content remains version 2. Older aggregate version-3 contexts reject instead of
+being reinterpreted.
 
 A version-bound single-target proposal combines capability, exact local
 preconditions, and direct-edit simulation read-only. All five dedicated direct
@@ -231,6 +234,12 @@ The immediately previous aggregate behavior version 2 rejects. A wrong-kind
 reference in a later mixed-batch command leaves earlier valid predictions and
 history uncommitted.
 
+Provenance commands now replace one existing revision-owned provenance record's
+kind and optional caller-visible source reference without rewriting the claim
+that points at it. Single-target review and batch Apply preserve claim identity,
+authored claim text, and unrelated provenance records; Undo restores the prior
+record. Aggregate behavior version 3 rejects after this new family admission.
+
 An empty batch returns the frozen NoOp prediction before semantic target
 indexing. Explicit dependencies are required before a later command can observe
 an earlier same-target candidate change; prior no-ops do not manufacture
@@ -240,10 +249,13 @@ Successful direct-edit predictions classify their net effect as Mutation or
 NoOp and derive conservative impact seeds from backend-owned semantic ownership.
 Text seeds identify the owning flow/page dependency region, structured edits
 and figure asset-reference edits seed the nearest block/flow/page, and
-page-profile changes seed referencing pages. Asset-reference seeds
-conservatively require all derived authorities. Single-target review and
-ordered batches share the same seed projection;
-net semantic no-ops emit no seed.
+page-profile changes seed referencing pages.
+
+Asset-reference seeds conservatively require all derived authorities.
+Provenance-record edits seed the notebook for only diagnostic and output
+authorities because reverse claim/source dependency expansion is not yet
+implemented. Single-target review and ordered batches share the same seed
+projection; net semantic no-ops emit no seed.
 
 Ordered simulation consumes indexed target material and impact scopes instead of
 cloning them for each evaluation. Block, list, and table traversal uses borrowed
@@ -774,10 +786,14 @@ semantic provenance separate from application transaction provenance recording
 whether an accepted mutation entered through direct human editing,
 clipboard-assisted model response, CLI, or MCP.
 
-Current command-mode design evidence includes a provenance-only acceptance case
-where source/citation metadata changes while claim text and identity stay
-stable.
-Backend provenance storage, validation, and citation UI remain open.
+The provenance-only acceptance case is now executable for one existing
+revision-owned provenance record: kind and optional source reference can change
+while claim text, claim identity, claim-to-record linkage, and unrelated source
+records remain stable. The generic batch remains atomic and Undo restores the
+prior record.
+
+The task remains open for richer source/citation linkage semantics, claim-level
+assignment and removal workflows, provenance diagnostics, and citation UI.
 
 ### TODO - Prove complex educational coverage
 

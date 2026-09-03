@@ -461,7 +461,8 @@ CLI and MCP enter through the same application services.
 The current semantic session foundation can check one accepted identity against
 one exact revision for expected semantic kind and direct structural owner. A
 separate compare-and-set check covers exact accepted inline text, formula mode
-and source, table-row role, table-cell span, and physical page-profile geometry
+and source, provenance kind and source reference, table-row role, table-cell
+span, and physical page-profile geometry
 without mutating accepted state. Stale revision rejection precedes every local
 comparison.
 
@@ -469,16 +470,18 @@ The frozen application-level command-family taxonomy is now represented as a
 typed value without choosing serialized operation names. Current generic edit
 targets expose only executable family admission: Asset reference for a figure's
 optional admitted asset identity, Text content for inline text, Structured
-content for formulas, table-row roles, and table-cell spans, and Document
-constraint for page profiles. One aggregate read-only check validates
+content for formulas, table-row roles, and table-cell spans, Provenance for
+revision-owned source records, and Document constraint for page profiles. One
+aggregate read-only check validates
 requested family, kind,
 owner, and optional exact base value against backend-derived target material.
 
-A deterministic capability snapshot now reports those four discoverable family
+A deterministic capability snapshot now reports those five discoverable family
 behaviors and one top-level behavior version. Aggregate command behavior and
-typed-result behavior are version 3 after figure Asset-reference admission.
-Asset reference, Text content, and Document constraint retain family behavior
-version 1; Structured content remains version 2 after table-cell span admission.
+typed-result behavior are version 4 after provenance-record admission. Asset
+reference, Provenance, Text content, and Document constraint retain family
+behavior version 1; Structured content remains version 2 after table-cell span
+admission.
 
 Because no serialized command protocol is implemented, the snapshot advertises
 no protocol or normalization version, no command-context, Validate, Apply, or
@@ -486,7 +489,7 @@ selective-rebatch capability, and no guessed command/context numeric limits. A
 read-only compatibility check rejects an older capability behavior version
 independently from notebook revision changes.
 
-A separate single-target direct-edit simulator classifies six established
+A separate single-target direct-edit simulator classifies seven established
 replacement value families as applicable, no-op, domain-invalid, unavailable,
 or value-family mismatched without mutation. Figure Asset references
 additionally reject missing or non-Asset accepted identities, while table-cell
@@ -514,6 +517,11 @@ current revision before simulation succeeds. Raw bytes, base64, filesystem
 paths, and remote URLs remain outside this semantic value; media ingestion is a
 separate capability.
 
+A Provenance value carries one existing record's `ProvenanceKind` plus its
+optional caller-visible source reference. The command targets that record
+identity directly; it does not rewrite claim text, replace claim identity, or
+change which record a claim references.
+
 Dependency validation borrows command payloads first; valid commands are then
 consumed in order so caller command IDs and requested values can move into
 prediction/candidate evidence. Local preconditions are compared by reference,
@@ -535,8 +543,12 @@ Successful direct-edit predictions now classify their net effect explicitly as
 Mutation or NoOp. They also derive conservative impact seeds from backend-owned
 semantic relationships rather than trusting caller impact claims. Text seeds
 identify the owning flow and page plus shaping, wrapping, geometry, diagnostic,
-rendering, handwriting, and motion authorities. Structured edits seed their
-nearest block, flow, and page for structure, layout, and output dependencies.
+rendering, handwriting, and motion authorities.
+
+Structured edits seed their nearest block, flow, and page for structure, layout,
+and output dependencies. Provenance-record edits seed notebook scope for
+diagnostic and output authorities only; later dependency expansion may narrow
+affected claims and outputs.
 
 Page-profile edits seed every accepted page that references the changed profile.
 Those seeds are shared by single-target review and ordered batch simulation and

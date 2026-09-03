@@ -50,8 +50,9 @@ use atrament_semantic_notebook::{
     AcceptedIdentity, AcceptedRevision, Asset, Block, BlockContent,
     CandidateIdentity, Constraint, Figure, Flow, Formula, FormulaMode,
     IdentityAllocator, IdentityExhausted, InlineSpan, List, ListItem, Notebook,
-    OutputProfile, Page, PaperProfile, Provenance, SemanticIdentityDescriptor,
-    SemanticIdentityKind, Style, Table, TableCell, TableCellSpan,
+    OutputProfile, Page, PaperProfile, Provenance, ProvenanceKind,
+    SemanticIdentityDescriptor, SemanticIdentityKind, Style, Table, TableCell,
+    TableCellSpan,
     TableGridError, TableRow,
     TableRowRole,
     semantic_identity_descriptor,
@@ -497,8 +498,8 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
     }
 
     fn command_capability_snapshot(&self) -> SemanticCommandCapabilitySnapshot {
-        const VERSION: CommandBehaviorVersion = CommandBehaviorVersion(3);
-        const FAMILY_CAPABILITIES: [CommandFamilyCapability; 4] = [
+        const VERSION: CommandBehaviorVersion = CommandBehaviorVersion(4);
+        const FAMILY_CAPABILITIES: [CommandFamilyCapability; 5] = [
             CommandFamilyCapability {
                 behavior_version: CommandBehaviorVersion(1),
                 family: SemanticCommandFamily::AssetReference,
@@ -506,6 +507,10 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
             CommandFamilyCapability {
                 behavior_version: CommandBehaviorVersion(1),
                 family: SemanticCommandFamily::DocumentConstraint,
+            },
+            CommandFamilyCapability {
+                behavior_version: CommandBehaviorVersion(1),
+                family: SemanticCommandFamily::Provenance,
             },
             CommandFamilyCapability {
                 behavior_version: CommandBehaviorVersion(2),
@@ -2292,6 +2297,28 @@ fn direct_edit_material_index(
             return index;
         }
     }
+    for provenance in &notebook.provenance {
+        if !targets.contains(&provenance.id) {
+            continue;
+        }
+        insert_direct_edit_material(
+            &mut index,
+            provenance.id,
+            SemanticIdentityDescriptor {
+                kind: SemanticIdentityKind::Provenance,
+                owner: Some(notebook.id),
+            },
+            EditableSemanticValue::Provenance {
+                kind: provenance.kind,
+                reference: provenance.reference.clone(),
+            },
+            DirectEditImpactScope::Notebook { notebook: notebook.id },
+            revision,
+        );
+    }
+    if index.materials.len() == targets.len() {
+        return index;
+    }
     let mut stack = Vec::new();
     'pages: for page in &notebook.pages {
         for flow in &page.flows {
@@ -2846,11 +2873,14 @@ const fn direct_edit_impact_authorities(
         | SemanticCommandFamily::AssetReference
         | SemanticCommandFamily::BlockInsertionAndDeletion
         | SemanticCommandFamily::OrderingAndGrouping
-        | SemanticCommandFamily::Provenance
         | SemanticCommandFamily::SpatialConstraint
         | SemanticCommandFamily::StyleRole => {
             &[DirectEditDerivedAuthority::AllDerived]
         },
+        SemanticCommandFamily::Provenance => &[
+            DirectEditDerivedAuthority::Diagnostics,
+            DirectEditDerivedAuthority::Output,
+        ],
         SemanticCommandFamily::StructuredContent => &[
             DirectEditDerivedAuthority::Layout,
             DirectEditDerivedAuthority::Output,
@@ -3248,6 +3278,9 @@ const fn editable_value_kind(
         EditableSemanticValue::PageProfile(_) => {
             EditableSemanticValueKind::PageProfile
         },
+        EditableSemanticValue::Provenance { .. } => {
+            EditableSemanticValueKind::Provenance
+        },
         EditableSemanticValue::TableCellSpan(_) => {
             EditableSemanticValueKind::TableCellSpan
         },
@@ -3496,6 +3529,7 @@ fn simulate_prepared_direct_edit(
             }
         },
         EditableSemanticValue::AssetReference(_)
+        | EditableSemanticValue::Provenance { .. }
         | EditableSemanticValue::TableCellSpan(_)
         | EditableSemanticValue::TableRowRole(_)
         | EditableSemanticValue::Text(_) => {},
@@ -3538,6 +3572,9 @@ const fn direct_edit_family(
         EditableSemanticValue::PageProfile(_) => {
             SemanticCommandFamily::DocumentConstraint
         },
+        EditableSemanticValue::Provenance { .. } => {
+            SemanticCommandFamily::Provenance
+        },
         EditableSemanticValue::Text(_) => SemanticCommandFamily::TextContent,
     }
 }
@@ -3562,6 +3599,11 @@ fn editable_semantic_value(
             page_profile_value(notebook, target)
                 .map(EditableSemanticValue::PageProfile)
         },
+        SemanticIdentityKind::Provenance => provenance_value(notebook, target)
+            .map(|provenance| EditableSemanticValue::Provenance {
+                kind: provenance.kind,
+                reference: provenance.reference.clone(),
+            }),
         SemanticIdentityKind::TableCell => {
             table_cell_span_value(notebook, target)
                 .map(EditableSemanticValue::TableCellSpan)
@@ -3581,10 +3623,19 @@ fn editable_semantic_value(
         | SemanticIdentityKind::Notebook
         | SemanticIdentityKind::OutputProfile
         | SemanticIdentityKind::Page
-        | SemanticIdentityKind::Provenance
         | SemanticIdentityKind::Style
         | SemanticIdentityKind::Table => None,
     }
+}
+
+fn provenance_value(
+    notebook: &Notebook<AcceptedIdentity>,
+    target: AcceptedIdentity,
+) -> Option<&Provenance<AcceptedIdentity>> {
+    notebook
+        .provenance
+        .iter()
+        .find(|provenance| provenance.id == target)
 }
 
 fn figure_blocks_value(
@@ -3858,6 +3909,14 @@ fn apply_direct_edit_change(
                 *profile,
             )
         },
+        EditableSemanticValue::Provenance { kind, reference } => {
+            replace_provenance_value(
+                notebook,
+                change.target,
+                *kind,
+                reference.clone(),
+            )
+        },
         EditableSemanticValue::TableCellSpan(span) => {
             replace_table_cell_span_raw_value(notebook, change.target, *span)
         },
@@ -3889,6 +3948,24 @@ fn replace_formula_value(
         }
     }
     false
+}
+
+fn replace_provenance_value(
+    notebook: &mut Notebook<AcceptedIdentity>,
+    target: AcceptedIdentity,
+    kind: ProvenanceKind,
+    reference: Option<String>,
+) -> bool {
+    let Some(provenance) = notebook
+        .provenance
+        .iter_mut()
+        .find(|provenance| provenance.id == target)
+    else {
+        return false;
+    };
+    provenance.kind = kind;
+    provenance.reference = reference;
+    true
 }
 
 fn replace_page_profile_value(
