@@ -3620,6 +3620,97 @@ fn direct_edit_batch_apply_net_noop_keeps_revision_and_history_position() {
 }
 
 #[test]
+fn direct_edit_batch_history_redoes_transaction_and_discards_old_branch() {
+    let ids = IdentityAllocator::new();
+    let (candidate, first, second, third) =
+        candidate_notebook_with_three_spans(&ids);
+    let mut service = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision: base } =
+        service.accept(candidate)
+    else {
+        panic!("three-span candidate must be accepted");
+    };
+    let first = accepted_for(&mapping, first);
+    let second = accepted_for(&mapping, second);
+    let third = accepted_for(&mapping, third);
+    let initial = DirectEditBatchProposal {
+        base,
+        capability_version: CommandBehaviorVersion(1),
+        commands: vec![
+            text_batch_command(1, &[], first, "one", "ONE"),
+            text_batch_command(2, &[], second, "two", "TWO"),
+        ],
+    };
+    let DirectEditBatchApplyOutcome::Applied {
+        revision: applied, ..
+    } = service.apply_direct_edit_batch(initial)
+    else {
+        panic!("initial batch must apply");
+    };
+    let HistoryTraversalOutcome::Traversed {
+        revision: undone, ..
+    } = service.traverse_history(applied, HistoryDirection::Undo)
+    else {
+        panic!("initial batch must Undo");
+    };
+    let HistoryTraversalOutcome::Traversed {
+        revision: redone, ..
+    } = service.traverse_history(undone, HistoryDirection::Redo)
+    else {
+        panic!("initial batch must Redo");
+    };
+    let current = service.current().expect("Redo revision");
+    let BlockContent::Paragraph(spans) =
+        &current.notebook.pages[0].flows[0].blocks[0].content
+    else {
+        panic!("Redo fixture must remain paragraph");
+    };
+    assert_eq!(spans[0].text, "ONE");
+    assert_eq!(spans[1].text, "TWO");
+    assert_ne!(redone, applied);
+
+    let HistoryTraversalOutcome::Traversed {
+        revision: branch_base,
+        ..
+    } = service.traverse_history(redone, HistoryDirection::Undo)
+    else {
+        panic!("redone batch must Undo again");
+    };
+    let branch = DirectEditBatchProposal {
+        base: branch_base,
+        capability_version: CommandBehaviorVersion(1),
+        commands: vec![text_batch_command(
+            3,
+            &[],
+            third,
+            "three",
+            "branch",
+        )],
+    };
+    let DirectEditBatchApplyOutcome::Applied {
+        revision: branched, ..
+    } = service.apply_direct_edit_batch(branch)
+    else {
+        panic!("branch batch must apply");
+    };
+    assert_eq!(
+        service.history_availability(),
+        HistoryAvailabilityOutcome::Available(HistoryAvailability {
+            can_redo: false,
+            can_undo: true,
+            revision: branched,
+        }),
+    );
+    assert_eq!(
+        service.traverse_history(branched, HistoryDirection::Redo),
+        HistoryTraversalOutcome::Boundary {
+            direction: HistoryDirection::Redo,
+            revision: branched,
+        },
+    );
+}
+
+#[test]
 fn direct_edit_batch_apply_middle_failure_is_atomic() {
     let ids = IdentityAllocator::new();
     let (candidate, first, second, third) =

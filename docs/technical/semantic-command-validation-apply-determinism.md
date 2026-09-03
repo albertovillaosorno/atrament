@@ -221,6 +221,11 @@ outcomes, semantic changes, and impact seeds exactly; net no-op application does
 not allocate a revision, and a changed base rejects as stale. The accepted batch
 enters semantic history as one Undo transaction.
 
+Semantic history fixtures also traverse whole applied batches in both
+directions.
+Redo restores the complete multi-command transaction with a fresh revision; a
+new batch applied after Undo clears the abandoned Redo branch.
+
 Replay coverage exercises all four currently established editable value
 families in one transaction: exact text, formula source/mode, physical page
 profile, and table-row role. One accepted revision contains all four changes,
