@@ -121,6 +121,12 @@ struct Cursor {
     used_height: Length,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct GroupExtent {
+    height: Length,
+    width: Length,
+}
+
 /// Paginate immutable measured fragments over the supplied page sequence.
 ///
 /// `KeepTogetherWhenPossible` moves a complete unit to the earliest remaining
@@ -185,14 +191,19 @@ const fn advance_cursor(cursor: &mut Cursor) -> bool {
     true
 }
 
-fn complete_height<Identity>(
+fn complete_group_extent<Identity>(
     fragments: &[MeasuredFragment<Identity>],
-) -> Option<Length> {
-    let mut total = 0u64;
+) -> Option<GroupExtent> {
+    let mut height = 0u64;
+    let mut width = Length::ZERO;
     for fragment in fragments {
-        total = total.checked_add(fragment.height.micrometres())?;
+        height = height.checked_add(fragment.height.micrometres())?;
+        width = width.max(fragment.width);
     }
-    Some(Length::from_micrometres(total))
+    Some(GroupExtent {
+        height: Length::from_micrometres(height),
+        width,
+    })
 }
 
 fn fragment_fits_region<Identity>(
@@ -202,18 +213,12 @@ fn fragment_fits_region<Identity>(
     fragment.width <= region.width && fragment.height <= region.height
 }
 
-fn group_fits_region<Identity>(
-    fragments: &[MeasuredFragment<Identity>],
+fn group_fits_region(
+    extent: GroupExtent,
     region: Rect,
     available_height: Length,
 ) -> bool {
-    let Some(height) = complete_height(fragments) else {
-        return false;
-    };
-    height <= available_height
-        && fragments
-            .iter()
-            .all(|fragment| fragment.width <= region.width)
+    extent.height <= available_height && extent.width <= region.width
 }
 
 fn place_independent<Identity, PageIdentity>(
@@ -242,9 +247,12 @@ where
     Identity: Copy,
     PageIdentity: Copy,
 {
+    let Some(extent) = complete_group_extent(fragments) else {
+        return place_independent(pages, fragments, cursor, placements);
+    };
     if let Some(current) = pages.get(cursor.page_index) {
         let remaining = remaining_height(current.writable, cursor.used_height);
-        if group_fits_region(fragments, current.writable, remaining) {
+        if group_fits_region(extent, current.writable, remaining) {
             for fragment in fragments {
                 place_on_current(*fragment, *current, cursor, placements)?;
             }
@@ -260,7 +268,7 @@ where
         .enumerate()
         .skip(start_index)
         .find(|(_, page)| {
-            group_fits_region(fragments, page.writable, page.writable.height)
+            group_fits_region(extent, page.writable, page.writable.height)
         })
     {
         cursor.page_index = page_index;
