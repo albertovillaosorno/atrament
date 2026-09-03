@@ -221,10 +221,15 @@ outcomes, semantic changes, and impact seeds exactly; net no-op application does
 not allocate a revision, and a changed base rejects as stale. The accepted batch
 enters semantic history as one Undo transaction.
 
+A synchronized in-process concurrency fixture releases two Apply attempts bound
+to the same accepted base together. Exactly one commits; after that commit the
+other observes the winning revision as its typed stale-base result. One Undo
+restores the complete pre-race semantic snapshot.
+
 These foundations change no advertised capability or published resource limit.
 Full Validate/Apply admission still requires protocol normalization, command
 context and writable scope, retry identity, complete dependency impact
-expansion, diagnostics, and adapter parity.
+expansion, diagnostics, cancellation behavior, and adapter parity.
 
 ## Failure Modes
 

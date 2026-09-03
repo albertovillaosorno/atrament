@@ -699,11 +699,14 @@ no-op creates no revision, and stale or middle-command failure remains atomic.
 Validate/Apply semantic change and impact-seed evidence match for unchanged
 inputs.
 
+An in-process synchronized race fixture now releases two Apply calls sharing one
+base; exactly one commits and the other returns the winning revision as stale.
 The task remains open for the normalized protocol/envelope, command-context and
 writable-scope admission, retry identity and lost-receipt recovery, published
 resource limits, complete dependency-expanded impact, diagnostics, transaction
-provenance, concurrent/cancellation fixtures, and browser/CLI/MCP parity. Until
-those exist, capability discovery intentionally does not advertise `Apply`.
+provenance, cancellation and adapter-level concurrency fixtures, and
+browser/CLI/MCP parity. Until those exist, capability discovery intentionally
+does not advertise `Apply`.
 
 ### TODO - Implement impact-scoped recomputation
 

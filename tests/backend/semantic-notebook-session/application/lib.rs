@@ -32,7 +32,7 @@
 use std::cmp::Ordering;
 use std::collections::BTreeSet;
 use std::num::NonZeroU32;
-use std::sync::Arc;
+use std::sync::{Arc, Barrier, Mutex};
 use std::sync::atomic::{AtomicUsize, Ordering as AtomicOrdering};
 
 use atrament_physical_page_profile::{
@@ -3502,6 +3502,111 @@ fn direct_edit_batch_apply_middle_failure_is_atomic() {
     assert_eq!(reason, predicted_reason);
     assert_eq!(rejected_revision, predicted_revision);
     assert_eq!(session.current(), Some(&before));
+}
+
+#[test]
+fn concurrent_direct_edit_batch_apply_allows_one_commit_from_one_base() {
+    let ids = IdentityAllocator::new();
+    let (candidate, span) = candidate_notebook_with_span(&ids, "base text");
+    let mut service = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision: base } =
+        service.accept(candidate)
+    else {
+        panic!("candidate must be accepted");
+    };
+    let target = accepted_for(&mapping, span);
+    let first_batch = DirectEditBatchProposal {
+        base,
+        capability_version: CommandBehaviorVersion(1),
+        commands: vec![text_batch_command(
+            1,
+            &[],
+            target,
+            "base text",
+            "first winner",
+        )],
+    };
+    let second_batch = DirectEditBatchProposal {
+        base,
+        capability_version: CommandBehaviorVersion(1),
+        commands: vec![text_batch_command(
+            2,
+            &[],
+            target,
+            "base text",
+            "second winner",
+        )],
+    };
+    let service = Arc::new(Mutex::new(service));
+    let barrier = Arc::new(Barrier::new(3));
+
+    let first_service = Arc::clone(&service);
+    let first_barrier = Arc::clone(&barrier);
+    let first = std::thread::spawn(move || {
+        first_barrier.wait();
+        first_service
+            .lock()
+            .expect("first application lock")
+            .apply_direct_edit_batch(first_batch)
+    });
+    let second_service = Arc::clone(&service);
+    let second_barrier = Arc::clone(&barrier);
+    let second = std::thread::spawn(move || {
+        second_barrier.wait();
+        second_service
+            .lock()
+            .expect("second application lock")
+            .apply_direct_edit_batch(second_batch)
+    });
+    barrier.wait();
+    let outcomes = [
+        first.join().expect("first application thread"),
+        second.join().expect("second application thread"),
+    ];
+
+    let mut applied_revision = None;
+    let mut stale_revision = None;
+    for outcome in outcomes {
+        match outcome {
+            DirectEditBatchApplyOutcome::Applied { revision, .. } => {
+                assert!(applied_revision.replace(revision).is_none());
+            },
+            DirectEditBatchApplyOutcome::StaleBase { current } => {
+                assert!(stale_revision.replace(current).is_none());
+            },
+            other => panic!("unexpected concurrent Apply outcome: {other:?}"),
+        }
+    }
+    let applied = applied_revision.expect("one application must commit");
+    assert_eq!(stale_revision, Some(applied));
+
+    let mut service = service.lock().expect("final application lock");
+    assert_eq!(service.current().map(|current| current.id), Some(applied));
+    let current = service.current().expect("winning revision");
+    let BlockContent::Paragraph(spans) =
+        &current.notebook.pages[0].flows[0].blocks[0].content
+    else {
+        panic!("fixture must remain a paragraph");
+    };
+    assert!(matches!(
+        spans[0].text.as_str(),
+        "first winner" | "second winner"
+    ));
+
+    let HistoryTraversalOutcome::Traversed { revision: undone, .. } =
+        service.traverse_history(applied, HistoryDirection::Undo)
+    else {
+        panic!("winning Apply must be one Undo transaction");
+    };
+    assert_ne!(undone, base);
+    let current = service.current().expect("Undo revision");
+    let BlockContent::Paragraph(spans) =
+        &current.notebook.pages[0].flows[0].blocks[0].content
+    else {
+        panic!("Undo fixture must remain a paragraph");
+    };
+    assert_eq!(spans[0].id, target);
+    assert_eq!(spans[0].text, "base text");
 }
 
 #[test]
