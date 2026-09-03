@@ -2084,6 +2084,69 @@ fn ordered_asset_reference_chain_replaces_then_removes_one_figure_reference() {
 }
 
 #[test]
+fn provenance_family_does_not_edit_claim_linkage() {
+    let ids = IdentityAllocator::new();
+    let (candidate, candidate_ids) = candidate_notebook_with_provenance(&ids);
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(candidate)
+    else {
+        panic!("provenance linkage candidate must be accepted");
+    };
+    let claim = accepted_for(&mapping, candidate_ids.claim);
+    let provenance = accepted_for(&mapping, candidate_ids.edited);
+    let before = session.current().expect("provenance linkage base").clone();
+    let CommandTargetMaterialOutcome::Prepared { material } =
+        session.command_target_material(revision, claim)
+    else {
+        panic!("claim material must be prepared");
+    };
+    assert_eq!(material.descriptor.kind, SemanticIdentityKind::InlineSpan);
+    assert_eq!(
+        material.direct_edit_family,
+        Some(SemanticCommandFamily::TextContent),
+    );
+    assert_eq!(
+        session.check_command_family_admission(
+            revision,
+            claim,
+            SemanticCommandFamily::Provenance,
+        ),
+        CommandFamilyAdmissionOutcome::FamilyNotExecutable {
+            available: Some(SemanticCommandFamily::TextContent),
+            requested: SemanticCommandFamily::Provenance,
+            revision,
+            target: claim,
+        },
+    );
+    assert_eq!(
+        session.simulate_direct_edit(
+            revision,
+            claim,
+            EditableSemanticValue::Provenance {
+                kind: ProvenanceKind::Cited,
+                reference: Some(String::from("source:new")),
+            },
+        ),
+        DirectEditSimulationOutcome::ValueFamilyMismatch {
+            actual: EditableSemanticValueKind::Text,
+            requested: EditableSemanticValueKind::Provenance,
+            revision,
+            target: claim,
+        },
+    );
+    let current = session.current().expect("provenance linkage unchanged");
+    let BlockContent::Paragraph(spans) =
+        &current.notebook.pages[0].flows[0].blocks[0].content
+    else {
+        panic!("claim must remain paragraph");
+    };
+    assert_eq!(spans[0].id, claim);
+    assert_eq!(spans[0].provenance, Some(provenance));
+    assert_eq!(session.current(), Some(&before));
+}
+
+#[test]
 fn provenance_material_stays_exact_with_many_unrelated_blocks() {
     let ids = IdentityAllocator::new();
     let (mut candidate, candidate_ids) =
