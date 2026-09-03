@@ -2001,6 +2001,17 @@ fn ordered_asset_reference_chain_replaces_then_removes_one_figure_reference() {
         panic!("asset chain fixture must remain figure");
     };
     assert_eq!(current_figure.asset, None);
+    assert_eq!(current.notebook.assets.len(), 2);
+    assert!(current
+        .notebook
+        .assets
+        .iter()
+        .any(|asset| asset.id == first_asset));
+    assert!(current
+        .notebook
+        .assets
+        .iter()
+        .any(|asset| asset.id == second_asset));
 
     let HistoryTraversalOutcome::Traversed { .. } =
         session.traverse_history(applied, HistoryDirection::Undo)
@@ -2014,6 +2025,17 @@ fn ordered_asset_reference_chain_replaces_then_removes_one_figure_reference() {
         panic!("asset chain Undo fixture must remain figure");
     };
     assert_eq!(current_figure.asset, Some(first_asset));
+    assert_eq!(current.notebook.assets.len(), 2);
+    assert!(current
+        .notebook
+        .assets
+        .iter()
+        .any(|asset| asset.id == first_asset));
+    assert!(current
+        .notebook
+        .assets
+        .iter()
+        .any(|asset| asset.id == second_asset));
 }
 
 #[test]
