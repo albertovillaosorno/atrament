@@ -438,18 +438,12 @@ where
     {
         return Ok(None);
     }
-    for command in selected {
-        if !positions.contains_key(command) {
-            return Err(DependencyRequirementsError::UnknownSelection {
-                command: command.clone(),
-            });
-        }
-    }
-
     let mut selected_positions = vec![false; nodes.len()];
     for command in selected {
         let Some(position) = positions.get(command).copied() else {
-            continue;
+            return Err(DependencyRequirementsError::UnknownSelection {
+                command: command.clone(),
+            });
         };
         if let Some(is_selected) = selected_positions.get_mut(position) {
             *is_selected = true;
