@@ -39,12 +39,14 @@
 use std::fmt;
 
 use atrament_semantic_notebook::{
-    AcceptedRevision, CandidateIdentity, Notebook, RevisionIdentity,
+    AcceptedIdentity, AcceptedRevision, CandidateIdentity, Notebook,
+    RevisionIdentity,
 };
 use atrament_semantic_notebook_port::{
     AcceptanceOutcome, DirectEditBatchApplyOutcome, DirectEditBatchProposal,
-    HistoryAvailabilityOutcome, HistoryDirection,
-    HistoryTraversalOutcome, SemanticNotebookHistory as _,
+    HistoryAvailabilityOutcome, HistoryDirection, HistoryTraversalOutcome,
+    IdentityAncestryInspectOutcome, IdentityInspectOutcome,
+    SemanticNotebookHistory as _,
     SemanticNotebookSession as _,
 };
 use atrament_semantic_notebook_session::SemanticNotebookSessionService;
@@ -94,6 +96,31 @@ impl SessionApplication {
     #[must_use]
     pub fn history_availability(&self) -> HistoryAvailabilityOutcome {
         self.semantic.history_availability()
+    }
+
+    /// Inspect one accepted semantic identity without mutation.
+    #[must_use]
+    pub fn inspect_identity(
+        &self,
+        revision: RevisionIdentity,
+        target: AcceptedIdentity,
+    ) -> IdentityInspectOutcome {
+        self.semantic.inspect_identity(revision, target)
+    }
+
+    /// Inspect one bounded target-first semantic owner chain without mutation.
+    #[must_use]
+    pub fn inspect_identity_ancestry_bounded(
+        &self,
+        revision: RevisionIdentity,
+        target: AcceptedIdentity,
+        maximum_results: usize,
+    ) -> IdentityAncestryInspectOutcome {
+        self.semantic.inspect_identity_ancestry_bounded(
+            revision,
+            target,
+            maximum_results,
+        )
     }
 
     /// Traverse one in-memory semantic history transaction.

@@ -34,11 +34,14 @@ use std::io::{BufRead, BufReader, Read, Write};
 use std::process::{Command, Stdio};
 
 use atrament_semantic_notebook::{
-    CandidateIdentity, IdentityAllocator, Notebook,
+    CandidateIdentity, IdentityAllocator, Notebook, SemanticIdentityDescriptor,
+    SemanticIdentityKind,
 };
 use atrament_semantic_notebook_port::{
     AcceptanceOutcome, CommandBehaviorVersion, DirectEditBatchApplyOutcome,
     DirectEditBatchProposal, HistoryAvailability, HistoryAvailabilityOutcome,
+    IdentityAncestryCompleteness, IdentityAncestryEntry,
+    IdentityAncestryInspectOutcome, IdentityInspectOutcome,
 };
 use atrament_session_draft_port::{DraftField, DraftMutation, SessionDraft};
 
@@ -178,6 +181,64 @@ fn process_restart_drops_accepted_revision_and_history() {
     let status = forced.wait().expect("wait forced child");
     assert!(!status.success());
     assert_fresh_process_empty();
+}
+
+#[test]
+fn application_routes_bounded_inspection_through_owned_semantic_authority() {
+    let identities = IdentityAllocator::new();
+    let candidate = minimal_candidate(&identities);
+    let notebook = candidate.id;
+    let mut session = application::SessionApplication::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept_candidate(candidate)
+    else {
+        panic!("minimal candidate must be accepted");
+    };
+    let notebook = mapping
+        .iter()
+        .find(|entry| entry.candidate == notebook)
+        .expect("notebook identity must map")
+        .accepted;
+
+    let descriptor = SemanticIdentityDescriptor {
+        kind: SemanticIdentityKind::Notebook,
+        owner: None,
+    };
+    assert_eq!(
+        session.inspect_identity(revision, notebook),
+        IdentityInspectOutcome::Inspected {
+            descriptor,
+            revision,
+            target: notebook,
+        },
+    );
+    assert_eq!(
+        session.inspect_identity_ancestry_bounded(revision, notebook, 0),
+        IdentityAncestryInspectOutcome::Inspected {
+            completeness: IdentityAncestryCompleteness::Incomplete {
+                remaining_identity: notebook,
+            },
+            entries: Vec::new(),
+            revision,
+            target: notebook,
+        },
+    );
+    assert_eq!(
+        session.inspect_identity_ancestry_bounded(revision, notebook, 1),
+        IdentityAncestryInspectOutcome::Inspected {
+            completeness: IdentityAncestryCompleteness::Complete,
+            entries: vec![IdentityAncestryEntry {
+                descriptor,
+                identity: notebook,
+            }],
+            revision,
+            target: notebook,
+        },
+    );
+    assert_eq!(
+        session.accepted_revision().map(|current| current.id),
+        Some(revision),
+    );
 }
 
 #[test]
