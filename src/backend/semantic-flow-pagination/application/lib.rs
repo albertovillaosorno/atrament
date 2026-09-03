@@ -177,6 +177,7 @@ fn page_regions(
     let remaining_pages =
         revision.notebook.pages.len().saturating_sub(start_page_index);
     let mut regions = Vec::with_capacity(remaining_pages);
+    let mut writable_by_profile = BTreeMap::new();
     for page in revision.notebook.pages.iter().skip(start_page_index) {
         let Some(profile) = profiles.get(&page.page_profile).copied() else {
             return Err(SemanticPaginationError::MissingPageProfile {
@@ -184,18 +185,27 @@ fn page_regions(
                 profile: page.page_profile,
             });
         };
-        let valid = profile.geometry.validate().map_err(|reason| {
-            SemanticPaginationError::InvalidPageProfile {
-                page: page.id,
-                reason,
-            }
-        })?;
-        let writable = valid.writable_region().map_err(|reason| {
-            SemanticPaginationError::InvalidPageProfile {
-                page: page.id,
-                reason,
-            }
-        })?;
+        let writable = if let Some(writable) =
+            writable_by_profile.get(&page.page_profile).copied()
+        {
+            writable
+        } else {
+            let valid = profile.geometry.validate().map_err(|reason| {
+                SemanticPaginationError::InvalidPageProfile {
+                    page: page.id,
+                    reason,
+                }
+            })?;
+            let writable = valid.writable_region().map_err(|reason| {
+                SemanticPaginationError::InvalidPageProfile {
+                    page: page.id,
+                    reason,
+                }
+            })?;
+            let _previous =
+                writable_by_profile.insert(page.page_profile, writable);
+            writable
+        };
         regions.push(PageRegion { page: page.id, writable });
     }
     Ok(regions)

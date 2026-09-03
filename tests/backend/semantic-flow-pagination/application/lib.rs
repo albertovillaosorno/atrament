@@ -265,6 +265,40 @@ fn defensive_duplicate_profile_keeps_first_match_semantics() {
 }
 
 #[test]
+fn many_pages_can_share_one_cached_page_profile() {
+    const EXTRA_PAGES: usize = 10_000;
+
+    let ids = IdentityAllocator::new();
+    let mut fixture = candidate_fixture(&ids);
+    for _ in 0..EXTRA_PAGES {
+        let page = ids.allocate_candidate().expect("shared-profile page");
+        fixture.notebook.pages.push(Page {
+            flows: Vec::new(),
+            id: page,
+            page_profile: fixture.profile_one,
+        });
+    }
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(fixture.notebook)
+    else {
+        panic!("shared-profile candidate must be accepted");
+    };
+    let flow = accepted_for(&mapping, fixture.flow);
+    let owner = accepted_for(&mapping, fixture.block);
+    let page_one = accepted_for(&mapping, fixture.page_one);
+    let measured = measurement(revision, flow, owner, &[(1, 1)]);
+
+    let plan = paginate_revision(
+        session.current().expect("accepted revision"),
+        &measured,
+    )
+    .expect("shared page profile must preserve pagination");
+    assert_eq!(plan.placements.len(), 1);
+    assert_eq!(plan.placements[0].page, page_one);
+}
+
+#[test]
 fn large_page_profile_index_preserves_pagination() {
     const EXTRA_PAGES: usize = 10_000;
 
