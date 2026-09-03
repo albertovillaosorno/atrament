@@ -40,8 +40,10 @@ use atrament_semantic_notebook::{
 use atrament_semantic_notebook_port::{
     AcceptanceOutcome, CommandBehaviorVersion,
     CommandCapabilityCompatibilityOutcome, CommandFamilyAdmissionOutcome,
+    CommandGraphLimits,
     CommandTargetMaterialOutcome, CommandTargetPreconditionOutcome,
     CommandTargetPreconditions, DirectEditBatchApplyOutcome,
+    DirectEditBatchGraphLimitsOutcome, DirectEditBatchGraphSizeOutcome,
     DirectEditBatchProposal, DirectEditBatchSimulationOutcome,
     DirectEditChangePreviewOutcome, DirectEditEffectClass, DirectEditProposal,
     DirectEditProposalOutcome, DirectEditSimulationOutcome,
@@ -483,6 +485,45 @@ fn application_routes_atomic_batch_apply_through_owned_semantic_authority() {
         capability_version: CommandBehaviorVersion(2),
         commands: Vec::new(),
     };
+
+    let zero_limits = CommandGraphLimits {
+        commands: 0,
+        dependency_edges: 0,
+    };
+    let DirectEditBatchGraphSizeOutcome::Sized {
+        revision: sized_revision,
+        size,
+    } = session.direct_edit_batch_graph_size(&empty)
+    else {
+        panic!("live owner must route exact graph sizing");
+    };
+    assert_eq!(sized_revision, revision);
+    assert_eq!(size.commands, 0);
+    assert_eq!(size.dependency_edges, 0);
+    assert_eq!(
+        session.direct_edit_batch_graph_limits(&empty, zero_limits),
+        DirectEditBatchGraphLimitsOutcome::Admitted { revision, size },
+    );
+    assert_eq!(
+        session.simulate_direct_edit_batch_bounded(
+            empty.clone(),
+            zero_limits,
+        ),
+        DirectEditBatchSimulationOutcome::Predicted {
+            changes: Vec::new(),
+            commands: Vec::new(),
+            effect: DirectEditEffectClass::NoOp,
+            impact_seeds: Vec::new(),
+            revision,
+        },
+    );
+    assert_eq!(
+        session.apply_direct_edit_batch_bounded(empty.clone(), zero_limits),
+        DirectEditBatchApplyOutcome::NoOp {
+            commands: Vec::new(),
+            revision,
+        },
+    );
 
     assert_eq!(
         session.simulate_direct_edit_batch(empty.clone()),

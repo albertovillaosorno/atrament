@@ -44,9 +44,11 @@ use atrament_semantic_notebook::{
 };
 use atrament_semantic_notebook_port::{
     AcceptanceOutcome, CommandCapabilityCompatibilityOutcome,
+    CommandGraphLimits,
     CommandFamilyAdmissionOutcome, CommandTargetMaterialOutcome,
     CommandTargetPreconditionOutcome, CommandTargetPreconditions,
-    DirectEditBatchApplyOutcome, DirectEditBatchProposal,
+    DirectEditBatchApplyOutcome, DirectEditBatchGraphLimitsOutcome,
+    DirectEditBatchGraphSizeOutcome, DirectEditBatchProposal,
     DirectEditBatchSimulationOutcome, DirectEditChangePreviewOutcome,
     DirectEditProposal, DirectEditProposalOutcome, DirectEditSimulationOutcome,
     EditableSemanticValue, EditableValuePreconditionOutcome,
@@ -98,6 +100,18 @@ impl SessionApplication {
         CommandIdentity: Clone + Ord,
     {
         self.semantic.apply_direct_edit_batch(batch)
+    }
+
+    /// Apply one caller-bounded semantic batch through the owned authority.
+    pub fn apply_direct_edit_batch_bounded<CommandIdentity>(
+        &mut self,
+        batch: DirectEditBatchProposal<CommandIdentity>,
+        limits: CommandGraphLimits,
+    ) -> DirectEditBatchApplyOutcome<CommandIdentity>
+    where
+        CommandIdentity: Clone + Ord,
+    {
+        self.semantic.apply_direct_edit_batch_bounded(batch, limits)
     }
 
     /// Check one previously bound semantic command behavior version.
@@ -175,6 +189,25 @@ impl SessionApplication {
         self.semantic.command_target_material(revision, target)
     }
 
+    /// Enforce caller-supplied coarse batch graph bounds without mutation.
+    #[must_use]
+    pub fn direct_edit_batch_graph_limits<CommandIdentity>(
+        &self,
+        batch: &DirectEditBatchProposal<CommandIdentity>,
+        limits: CommandGraphLimits,
+    ) -> DirectEditBatchGraphLimitsOutcome {
+        self.semantic.direct_edit_batch_graph_limits(batch, limits)
+    }
+
+    /// Derive exact coarse batch graph size without mutation.
+    #[must_use]
+    pub fn direct_edit_batch_graph_size<CommandIdentity>(
+        &self,
+        batch: &DirectEditBatchProposal<CommandIdentity>,
+    ) -> DirectEditBatchGraphSizeOutcome {
+        self.semantic.direct_edit_batch_graph_size(batch)
+    }
+
     /// Inspect in-memory semantic Undo and Redo availability.
     #[must_use]
     pub fn history_availability(&self) -> HistoryAvailabilityOutcome {
@@ -248,6 +281,18 @@ impl SessionApplication {
         CommandIdentity: Clone + Ord,
     {
         self.semantic.simulate_direct_edit_batch(batch)
+    }
+
+    /// Simulate one caller-bounded direct-edit batch without mutation.
+    pub fn simulate_direct_edit_batch_bounded<CommandIdentity>(
+        &self,
+        batch: DirectEditBatchProposal<CommandIdentity>,
+        limits: CommandGraphLimits,
+    ) -> DirectEditBatchSimulationOutcome<CommandIdentity>
+    where
+        CommandIdentity: Clone + Ord,
+    {
+        self.semantic.simulate_direct_edit_batch_bounded(batch, limits)
     }
 
     /// Validate and simulate one version-bound direct-edit proposal read-only.

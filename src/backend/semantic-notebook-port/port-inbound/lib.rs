@@ -34,9 +34,10 @@
 
 use std::collections::BTreeSet;
 
+pub use atrament_semantic_command_graph::CommandGraphLimits;
 use atrament_semantic_command_graph::{
-    CommandGraphError, CommandGraphLimitError, CommandGraphLimits,
-    CommandGraphSize, DependencySelectionSummary, MissingDependencyRequirement,
+    CommandGraphError, CommandGraphLimitError, CommandGraphSize,
+    DependencySelectionSummary, MissingDependencyRequirement,
 };
 use atrament_semantic_notebook::{
     AcceptedIdentity, AcceptedRevision, CandidateIdentity, FormulaMode,
