@@ -154,7 +154,8 @@ be checked against caller-supplied bounds without choosing product limits.
 
 Session graph-resource preflight also binds exact command/dependency counts to
 capability behavior and the accepted base revision before candidate simulation;
-passing those bounds does not validate graph structure.
+passing those bounds does not validate graph structure. Ordered simulation can
+apply the same caller-supplied bounds before graph and semantic work.
 
 Direct-edit simulation now also projects exact before/after semantic changes. An
 ordered in-memory direct-edit batch validates the generic dependency graph,

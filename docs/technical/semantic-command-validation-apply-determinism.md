@@ -188,6 +188,11 @@ checks caller-supplied coarse bounds against capability behavior and exact base
 revision before semantic simulation. Passing those bounds does not imply that
 the dependency graph itself is valid.
 
+A bounded ordered simulation applies those coarse limits before structural graph
+validation and semantic candidate work. Exact-limit inputs retain the same
+prediction as unbounded simulation, while over-limit input returns a typed
+resource rejection without truncation.
+
 These foundations change no advertised capability or published resource limit.
 Full Validate still requires protocol normalization, command context, complete
 dependency impact expansion, diagnostics, and Apply revalidation.
