@@ -4892,6 +4892,48 @@ fn direct_table_cell_span_edit_rejects_invalid_grid_atomically() {
 }
 
 #[test]
+fn direct_table_cell_span_edit_revalidates_later_rows_atomically() {
+    let ids = IdentityAllocator::new();
+    let (mut candidate, _, _) =
+        candidate_table_notebook(&ids, TableRowRole::Body);
+    let BlockContent::Table(table) =
+        &mut candidate.pages[0].flows[0].blocks[0].content
+    else {
+        panic!("fixture must contain a table");
+    };
+    let candidate_cell = table.rows[0].cells[0].id;
+    let second_row = table_row(
+        &ids,
+        vec![empty_table_cell(&ids, TableCellSpan::SINGLE)],
+    );
+    let candidate_second_row = second_row.id;
+    table.rows.push(second_row);
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(candidate)
+    else {
+        panic!("two-row table candidate must be accepted");
+    };
+    let target = accepted_for(&mapping, candidate_cell);
+    let second_row = accepted_for(&mapping, candidate_second_row);
+    let before = session.current().expect("base table revision").clone();
+
+    assert_eq!(
+        session.replace_table_cell_span(
+            revision,
+            target,
+            table_cell_span(2, 1),
+        ),
+        TableCellSpanEditOutcome::InvalidTableGrid {
+            reason: TableGridError::RowWidth { row: second_row },
+            revision,
+            target,
+        },
+    );
+    assert_eq!(session.current(), Some(&before));
+}
+
+#[test]
 fn direct_table_cell_span_edit_preserves_typed_no_effects() {
     let ids = IdentityAllocator::new();
     let (candidate, row, _) =
