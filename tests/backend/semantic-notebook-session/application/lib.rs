@@ -5858,6 +5858,50 @@ fn dropped_semantic_session_does_not_seed_a_fresh_service() {
 }
 
 #[test]
+fn bilingual_unicode_punctuation_is_preserved_exactly_across_text_edits() {
+    let ids = IdentityAllocator::new();
+    let original = concat!(
+        "«¿Qué dijo Ana?» — “It’s piñata time” – cafe\u{301}; ",
+        "emoji 👩‍🔬.",
+    );
+    let replacement = concat!(
+        "“Hello—hola”, dijo Íñigo; «¡acción!» – café; ",
+        "emoji 👩‍🔬.",
+    );
+    let (candidate, candidate_span) =
+        candidate_notebook_with_span(&ids, original);
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision: base } =
+        session.accept(candidate)
+    else {
+        panic!("bilingual Unicode candidate must be accepted");
+    };
+    let target = accepted_for(&mapping, candidate_span);
+    let before = session.current().expect("accepted Unicode revision");
+    let BlockContent::Paragraph(spans) =
+        &before.notebook.pages[0].flows[0].blocks[0].content
+    else {
+        panic!("fixture must remain a paragraph");
+    };
+    assert_eq!(spans[0].text, original);
+
+    let TextEditOutcome::Applied { revision, .. } =
+        session.replace_text(base, target, replacement.to_owned())
+    else {
+        panic!("bilingual Unicode text edit must apply");
+    };
+    let after = session.current().expect("edited Unicode revision");
+    let BlockContent::Paragraph(spans) =
+        &after.notebook.pages[0].flows[0].blocks[0].content
+    else {
+        panic!("edited fixture must remain a paragraph");
+    };
+    assert_eq!(spans[0].id, target);
+    assert_eq!(spans[0].text, replacement);
+    assert_eq!(after.id, revision);
+}
+
+#[test]
 fn direct_text_edit_changes_one_span_and_preserves_all_semantic_identities() {
     let candidate_ids = IdentityAllocator::new();
     let original = concat!(
