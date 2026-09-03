@@ -167,6 +167,70 @@ fn independent_pagination_matches_reference_oracle() {
     assert_eq!(cases, 1_296);
 }
 
+#[derive(Clone, Copy)]
+struct ReferenceCursor {
+    page_index: usize,
+    used_height: u64,
+}
+
+fn reference_place_fragment(
+    pages: &[PageRegion<u64>],
+    fragment: MeasuredFragment<u64>,
+    cursor: &mut ReferenceCursor,
+    placements: &mut Vec<PlacedFragment<u64, u64>>,
+) -> Result<(), PaginationError<u64, u64>> {
+    let can_fit_fresh = pages.iter().skip(cursor.page_index).any(|page| {
+        fragment.width <= page.writable.width
+            && fragment.height <= page.writable.height
+    });
+    if !can_fit_fresh {
+        return Err(PaginationError::FragmentDoesNotFitAnyPage {
+            owner: fragment.owner,
+        });
+    }
+    loop {
+        let Some(page) = pages.get(cursor.page_index) else {
+            return Err(PaginationError::NoPageAvailable {
+                owner: fragment.owner,
+            });
+        };
+        let fresh_fit = fragment.width <= page.writable.width
+            && fragment.height <= page.writable.height;
+        let remaining = page
+            .writable
+            .height
+            .micrometres()
+            .saturating_sub(cursor.used_height);
+        if fresh_fit && fragment.height.micrometres() <= remaining {
+            placements.push(PlacedFragment {
+                height: fragment.height,
+                owner: fragment.owner,
+                page: page.page,
+                top: Length::from_micrometres(
+                    page.writable.y.micrometres() + cursor.used_height,
+                ),
+                width: fragment.width,
+            });
+            cursor.used_height += fragment.height.micrometres();
+            return Ok(());
+        }
+        cursor.page_index += 1;
+        cursor.used_height = 0;
+    }
+}
+
+fn reference_place_group(
+    pages: &[PageRegion<u64>],
+    fragments: &[MeasuredFragment<u64>],
+    cursor: &mut ReferenceCursor,
+    placements: &mut Vec<PlacedFragment<u64, u64>>,
+) -> Result<(), PaginationError<u64, u64>> {
+    for fragment in fragments {
+        reference_place_fragment(pages, *fragment, cursor, placements)?;
+    }
+    Ok(())
+}
+
 fn reference_keep_together_fresh(
     pages: &[PageRegion<u64>],
     fragments: &[MeasuredFragment<u64>],
@@ -260,6 +324,143 @@ fn keep_together_pagination_matches_fresh_page_reference_oracle() {
         }
     }
     assert_eq!(cases, 5_184);
+}
+
+fn reference_prefix_then_keep(
+    pages: &[PageRegion<u64>],
+    prefix: MeasuredFragment<u64>,
+    fragments: &[MeasuredFragment<u64>],
+) -> Result<Vec<PlacedFragment<u64, u64>>, PaginationError<u64, u64>> {
+    let mut cursor = ReferenceCursor {
+        page_index: 0,
+        used_height: 0,
+    };
+    let mut placements = Vec::new();
+    reference_place_fragment(pages, prefix, &mut cursor, &mut placements)?;
+    let total_height = fragments
+        .iter()
+        .map(|fragment| fragment.height.micrometres())
+        .sum::<u64>();
+    let maximum_width = fragments
+        .iter()
+        .map(|fragment| fragment.width)
+        .max()
+        .unwrap_or(Length::ZERO);
+    let current = &pages[cursor.page_index];
+    let remaining = current
+        .writable
+        .height
+        .micrometres()
+        .saturating_sub(cursor.used_height);
+    if total_height <= remaining && maximum_width <= current.writable.width {
+        for fragment in fragments {
+            reference_place_fragment(
+                pages,
+                *fragment,
+                &mut cursor,
+                &mut placements,
+            )?;
+        }
+        return Ok(placements);
+    }
+    if let Some((page_index, page)) = pages
+        .iter()
+        .enumerate()
+        .skip(cursor.page_index + 1)
+        .find(|(_, page)| {
+            total_height <= page.writable.height.micrometres()
+                && maximum_width <= page.writable.width
+        })
+    {
+        cursor.page_index = page_index;
+        cursor.used_height = 0;
+        for fragment in fragments {
+            placements.push(PlacedFragment {
+                height: fragment.height,
+                owner: fragment.owner,
+                page: page.page,
+                top: Length::from_micrometres(
+                    page.writable.y.micrometres() + cursor.used_height,
+                ),
+                width: fragment.width,
+            });
+            cursor.used_height += fragment.height.micrometres();
+        }
+        return Ok(placements);
+    }
+    reference_place_group(pages, fragments, &mut cursor, &mut placements)?;
+    Ok(placements)
+}
+
+#[test]
+fn keep_together_remainder_matches_reference_oracle() {
+    let keep_together = FlowUnitPolicy::KeepTogetherWhenPossible;
+    let mut cases = 0usize;
+    for first_width in 1..=2 {
+        for first_height in 1..=2 {
+            for second_width in 1..=2 {
+                for second_height in 1..=2 {
+                    let pages = [
+                        page(1, 10, first_width, first_height),
+                        page(2, 20, second_width, second_height),
+                    ];
+                    for prefix_width in 1..=2 {
+                        for prefix_height in 1..=2 {
+                            let prefix = fragment(
+                                10,
+                                prefix_width,
+                                prefix_height,
+                            );
+                            for first_width in 1..=2 {
+                                for first_height in 1..=2 {
+                                    for second_width in 1..=2 {
+                                        for second_height in 1..=2 {
+                                            let group = vec![
+                                                fragment(
+                                                    11,
+                                                    first_width,
+                                                    first_height,
+                                                ),
+                                                fragment(
+                                                    12,
+                                                    second_width,
+                                                    second_height,
+                                                ),
+                                            ];
+                                            let units = [
+                                                unit(
+                                                    FlowUnitPolicy::Independent,
+                                                    vec![prefix],
+                                                ),
+                                                unit(
+                                                    keep_together,
+                                                    group.clone(),
+                                                ),
+                                            ];
+                                            let actual = paginate(
+                                                &pages,
+                                                &units,
+                                            )
+                                            .map(|plan| plan.placements);
+                                            let expected =
+                                                reference_prefix_then_keep(
+                                                    &pages,
+                                                    prefix,
+                                                    &group,
+                                                );
+                                            assert_eq!(actual, expected);
+                                            cases += 1;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    assert_eq!(cases, 1_024);
 }
 
 #[test]
