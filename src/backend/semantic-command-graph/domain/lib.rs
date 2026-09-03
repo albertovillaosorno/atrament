@@ -345,30 +345,51 @@ where
             return Err(DependencyRequirementsError::Graph { reason });
         },
     };
-    if let Some(command) = selected
-        .iter()
-        .find(|command| !positions.contains_key(*command))
-    {
-        return Err(DependencyRequirementsError::UnknownSelection {
-            command: command.clone(),
-        });
-    }
-
-    let mut required = selected.clone();
-    for node in nodes.iter().rev() {
-        if !required.contains(&node.id) {
-            continue;
+    let mut selected_positions = vec![false; nodes.len()];
+    for command in selected {
+        let Some(position) = positions.get(command).copied() else {
+            return Err(DependencyRequirementsError::UnknownSelection {
+                command: command.clone(),
+            });
+        };
+        if let Some(is_selected) = selected_positions.get_mut(position) {
+            *is_selected = true;
         }
-        required.extend(node.dependencies.iter().cloned());
     }
 
-    let mut missing = Vec::new();
-    for node in nodes {
-        if !required.contains(&node.id) {
+    let mut required_positions = selected_positions.clone();
+    for (position, node) in nodes.iter().enumerate().rev() {
+        if !required_positions.get(position).copied().unwrap_or(false) {
             continue;
         }
         for dependency in &node.dependencies {
-            if !selected.contains(dependency) {
+            let Some(dependency_position) = positions.get(dependency).copied()
+            else {
+                continue;
+            };
+            if let Some(is_required) =
+                required_positions.get_mut(dependency_position)
+            {
+                *is_required = true;
+            }
+        }
+    }
+
+    let mut missing = Vec::new();
+    for (position, node) in nodes.iter().enumerate() {
+        if !required_positions.get(position).copied().unwrap_or(false) {
+            continue;
+        }
+        for dependency in &node.dependencies {
+            let Some(dependency_position) = positions.get(dependency).copied()
+            else {
+                continue;
+            };
+            if !selected_positions
+                .get(dependency_position)
+                .copied()
+                .unwrap_or(false)
+            {
                 missing.push(MissingDependencyRequirement {
                     command: node.id.clone(),
                     dependency: dependency.clone(),
