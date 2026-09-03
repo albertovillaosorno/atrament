@@ -1172,7 +1172,11 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
                 reason,
             };
         }
-        simulate_direct_edit_batch_after_base(current, &batch.commands)
+        simulate_direct_edit_batch_after_base_with_nodes(
+            current,
+            &batch.commands,
+            &nodes,
+        )
     }
 
     fn simulate_direct_edit_proposal(
@@ -1908,7 +1912,18 @@ where
     CommandIdentity: Clone + Ord,
 {
     let nodes = direct_edit_command_graph_nodes(commands);
-    if let Err(reason) = validate_command_graph(&nodes) {
+    simulate_direct_edit_batch_after_base_with_nodes(current, commands, &nodes)
+}
+
+fn simulate_direct_edit_batch_after_base_with_nodes<CommandIdentity>(
+    current: &AcceptedRevision,
+    commands: &[DirectEditBatchCommand<CommandIdentity>],
+    nodes: &[DirectEditCommandGraphNode<'_, CommandIdentity>],
+) -> DirectEditBatchSimulationOutcome<CommandIdentity>
+where
+    CommandIdentity: Clone + Ord,
+{
+    if let Err(reason) = validate_command_graph(nodes) {
         return DirectEditBatchSimulationOutcome::DependencyGraphRejected {
             reason,
         };
