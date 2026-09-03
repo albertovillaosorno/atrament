@@ -179,7 +179,9 @@ case where every explicit dependency points backward, while preserving cycle
 precedence when a forward dependency exists. Interactive selection analysis can
 report complete transitive requirements or summarize closure size against an
 exact base revision without creating a replacement batch. Generic report bounds
-reject oversized identity-pair materialization before allocation.
+reject oversized identity-pair materialization before allocation, and session
+analysis borrows proposal identities until concrete detail or failure is
+returned.
 
 These foundations change no advertised capability or published resource limit.
 Full Validate still requires protocol normalization, command context, complete

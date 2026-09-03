@@ -542,14 +542,18 @@ source/dependency order.
 Session-level selection analysis binds that requirement report to the current
 capability behavior and exact accepted base revision before graph inspection. It
 also exposes selected-command, complete required-command, and omitted-edge
-counts without materializing command-identity pairs. Stale, invalid-graph, and
-unknown-selection failures remain typed and read-only.
+counts without materializing command-identity pairs. Session analysis borrows
+proposal command identities; bounded detail clones only identities carried by a
+successful report or typed failure. Stale and unknown inputs remain read-only.
 
 Graph validation fast-paths the normal ordered case where every dependency
 points to an earlier command and reuses borrowed source positions for subset
 analysis. Complete requirement closure uses positional bitmaps rather than a
 second cloned identity set. A caller-bounded report counts omitted edges before
 materializing pairs and rejects one over the supplied bound without truncation.
+
+Ordered batch graph preflight uses the same borrowed-identity projection, so an
+invalid graph clones only identities carried by its typed rejection.
 No protocol normalizer, selective-rebatch capability, published product limit,
 Validate, or Apply capability is admitted yet.
 
