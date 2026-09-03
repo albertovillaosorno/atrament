@@ -328,7 +328,7 @@ fn application_routes_atomic_batch_apply_through_owned_semantic_authority() {
     };
     let empty = DirectEditBatchProposal::<u32> {
         base: revision,
-        capability_version: CommandBehaviorVersion(1),
+        capability_version: CommandBehaviorVersion(2),
         commands: Vec::new(),
     };
 

@@ -427,6 +427,8 @@ pub enum EditableSemanticValueKind {
     Formula,
     /// Complete exact physical page-profile geometry.
     PageProfile,
+    /// Logical row and column coverage owned by one table cell.
+    TableCellSpan,
     /// Semantic table-row header/body role.
     TableRowRole,
     /// Exact accepted authored inline Unicode text.
@@ -445,6 +447,8 @@ pub enum EditableSemanticValue {
     },
     /// Complete exact physical page-profile geometry.
     PageProfile(PhysicalPageProfile),
+    /// Logical row and column coverage owned by one table cell.
+    TableCellSpan(TableCellSpan),
     /// Semantic table-row header/body role.
     TableRowRole(TableRowRole),
     /// Exact accepted authored inline Unicode text.
@@ -1011,6 +1015,15 @@ pub enum DirectEditSimulationOutcome {
         /// Accepted revision simulated without mutation.
         revision: RevisionIdentity,
         /// Existing semantic target simulated without mutation.
+        target: AcceptedIdentity,
+    },
+    /// Requested table-cell span would make its owning table invalid.
+    InvalidTableGrid {
+        /// Exact table-grid invariant rejected by the candidate replacement.
+        reason: TableGridError<AcceptedIdentity>,
+        /// Accepted revision simulated without mutation.
+        revision: RevisionIdentity,
+        /// Existing semantic table cell simulated without mutation.
         target: AcceptedIdentity,
     },
     /// Session has no accepted semantic revision to simulate.

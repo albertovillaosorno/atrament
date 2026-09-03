@@ -91,14 +91,16 @@ use atrament_semantic_notebook_port::{
 struct DirectEditBatchIndex {
     impacts: BTreeMap<AcceptedIdentity, DirectEditImpactScope>,
     materials: BTreeMap<AcceptedIdentity, CommandTargetMaterial>,
+    table_by_cell: BTreeMap<AcceptedIdentity, AcceptedIdentity>,
+    table_overlays: BTreeMap<AcceptedIdentity, Table<AcceptedIdentity>>,
 }
 
 #[derive(Clone, Copy)]
-struct DirectEditBatchTableContext {
+struct DirectEditBatchTableContext<'notebook> {
     block: AcceptedIdentity,
     flow: AcceptedIdentity,
     page: AcceptedIdentity,
-    table: AcceptedIdentity,
+    table: &'notebook Table<AcceptedIdentity>,
 }
 
 #[derive(Clone, Copy)]
@@ -115,15 +117,15 @@ enum DirectEditBatchIndexFrame<'notebook> {
     },
     TableCells {
         cells: &'notebook [TableCell<AcceptedIdentity>],
-        flow: AcceptedIdentity,
-        page: AcceptedIdentity,
+        context: DirectEditBatchTableContext<'notebook>,
+        row: AcceptedIdentity,
     },
     TableRows {
         block: AcceptedIdentity,
         flow: AcceptedIdentity,
         page: AcceptedIdentity,
         rows: &'notebook [TableRow<AcceptedIdentity>],
-        table: AcceptedIdentity,
+        table: &'notebook Table<AcceptedIdentity>,
     },
 }
 
@@ -495,10 +497,10 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
     }
 
     fn command_capability_snapshot(&self) -> SemanticCommandCapabilitySnapshot {
-        const VERSION: CommandBehaviorVersion = CommandBehaviorVersion(1);
+        const VERSION: CommandBehaviorVersion = CommandBehaviorVersion(2);
         const FAMILY_CAPABILITIES: [CommandFamilyCapability; 3] = [
             CommandFamilyCapability {
-                behavior_version: VERSION,
+                behavior_version: CommandBehaviorVersion(1),
                 family: SemanticCommandFamily::DocumentConstraint,
             },
             CommandFamilyCapability {
@@ -506,7 +508,7 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
                 family: SemanticCommandFamily::StructuredContent,
             },
             CommandFamilyCapability {
-                behavior_version: VERSION,
+                behavior_version: CommandBehaviorVersion(1),
                 family: SemanticCommandFamily::TextContent,
             },
         ];
@@ -881,7 +883,8 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
         target: AcceptedIdentity,
         requested: EditableSemanticValue,
     ) -> DirectEditChangePreviewOutcome {
-        let simulation = simulate_direct_edit_material(
+        let simulation = simulate_direct_edit_material_in_notebook(
+            self.current.as_ref().map(|current| &current.notebook),
             self.command_target_material(revision, target),
             requested,
         );
@@ -960,6 +963,7 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
             } => (requested_mode, requested_source),
             DirectEditSimulationOutcome::Applicable { .. }
             | DirectEditSimulationOutcome::InvalidPageProfile { .. }
+            | DirectEditSimulationOutcome::InvalidTableGrid { .. }
             | DirectEditSimulationOutcome::TargetNotEditableValue { .. }
             | DirectEditSimulationOutcome::ValueFamilyMismatch { .. } => {
                 return FormulaEditOutcome::TargetNotFormula {
@@ -1055,6 +1059,7 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
             } => requested,
             DirectEditSimulationOutcome::Applicable { .. }
             | DirectEditSimulationOutcome::InvalidMathematics { .. }
+            | DirectEditSimulationOutcome::InvalidTableGrid { .. }
             | DirectEditSimulationOutcome::TargetNotEditableValue { .. }
             | DirectEditSimulationOutcome::UnsupportedMathematics { .. }
             | DirectEditSimulationOutcome::ValueFamilyMismatch { .. } => {
@@ -1125,45 +1130,73 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
         target: AcceptedIdentity,
         span: TableCellSpan,
     ) -> TableCellSpanEditOutcome {
+        let simulation = self.simulate_direct_edit(
+            base,
+            target,
+            EditableSemanticValue::TableCellSpan(span),
+        );
+        let replacement = match simulation {
+            DirectEditSimulationOutcome::Applicable {
+                requested: EditableSemanticValue::TableCellSpan(requested),
+                ..
+            } => requested,
+            DirectEditSimulationOutcome::Applicable { .. }
+            | DirectEditSimulationOutcome::InvalidMathematics { .. }
+            | DirectEditSimulationOutcome::InvalidPageProfile { .. }
+            | DirectEditSimulationOutcome::TargetNotEditableValue { .. }
+            | DirectEditSimulationOutcome::UnsupportedMathematics { .. }
+            | DirectEditSimulationOutcome::ValueFamilyMismatch { .. } => {
+                return TableCellSpanEditOutcome::TargetNotTableCell {
+                    revision: base,
+                    target,
+                };
+            },
+            DirectEditSimulationOutcome::InvalidTableGrid {
+                reason,
+                revision,
+                target: simulated_target,
+            } => {
+                return TableCellSpanEditOutcome::InvalidTableGrid {
+                    reason,
+                    revision,
+                    target: simulated_target,
+                };
+            },
+            DirectEditSimulationOutcome::NoAcceptedRevision => {
+                return TableCellSpanEditOutcome::NoAcceptedRevision;
+            },
+            DirectEditSimulationOutcome::NoOp {
+                revision,
+                target: simulated_target,
+                ..
+            } => {
+                return TableCellSpanEditOutcome::NoOp {
+                    revision,
+                    target: simulated_target,
+                };
+            },
+            DirectEditSimulationOutcome::StaleBase { current } => {
+                return TableCellSpanEditOutcome::StaleBase { current };
+            },
+            DirectEditSimulationOutcome::TargetNotFound {
+                revision,
+                target: missing_target,
+            } => {
+                return TableCellSpanEditOutcome::TargetNotFound {
+                    revision,
+                    target: missing_target,
+                };
+            },
+        };
         let Some(current) = self.current.as_ref() else {
             return TableCellSpanEditOutcome::NoAcceptedRevision;
         };
-        if current.id != base {
-            return TableCellSpanEditOutcome::StaleBase {
-                current: current.id,
-            };
-        }
-        let Some(descriptor) = semantic_identity_descriptor(
-            &current.notebook,
-            target,
-        ) else {
-            return TableCellSpanEditOutcome::TargetNotFound {
-                revision: current.id,
-                target,
-            };
-        };
-        if descriptor.kind != SemanticIdentityKind::TableCell {
-            return TableCellSpanEditOutcome::TargetNotTableCell {
-                revision: current.id,
-                target,
-            };
-        }
-        let Some(actual) =
-            table_cell_span_value(&current.notebook, target)
-        else {
-            return TableCellSpanEditOutcome::TargetNotFound {
-                revision: current.id,
-                target,
-            };
-        };
-        if actual == span {
-            return TableCellSpanEditOutcome::NoOp {
-                revision: current.id,
-                target,
-            };
-        }
         let mut notebook = current.notebook.clone();
-        match replace_table_cell_span_value(&mut notebook, target, span) {
+        match replace_table_cell_span_value(
+            &mut notebook,
+            target,
+            replacement,
+        ) {
             Ok(true) => {},
             Ok(false) => {
                 return TableCellSpanEditOutcome::TargetNotFound {
@@ -1207,6 +1240,7 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
             DirectEditSimulationOutcome::Applicable { .. }
             | DirectEditSimulationOutcome::InvalidMathematics { .. }
             | DirectEditSimulationOutcome::InvalidPageProfile { .. }
+            | DirectEditSimulationOutcome::InvalidTableGrid { .. }
             | DirectEditSimulationOutcome::TargetNotEditableValue { .. }
             | DirectEditSimulationOutcome::UnsupportedMathematics { .. }
             | DirectEditSimulationOutcome::ValueFamilyMismatch { .. } => {
@@ -1279,6 +1313,7 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
             DirectEditSimulationOutcome::Applicable { .. }
             | DirectEditSimulationOutcome::InvalidMathematics { .. }
             | DirectEditSimulationOutcome::InvalidPageProfile { .. }
+            | DirectEditSimulationOutcome::InvalidTableGrid { .. }
             | DirectEditSimulationOutcome::TargetNotEditableValue { .. }
             | DirectEditSimulationOutcome::UnsupportedMathematics { .. }
             | DirectEditSimulationOutcome::ValueFamilyMismatch { .. } => {
@@ -1338,7 +1373,8 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
         target: AcceptedIdentity,
         requested: EditableSemanticValue,
     ) -> DirectEditSimulationOutcome {
-        simulate_direct_edit_material(
+        simulate_direct_edit_material_in_notebook(
+            self.current.as_ref().map(|current| &current.notebook),
             self.command_target_material(revision, target),
             requested,
         )
@@ -1630,13 +1666,13 @@ impl SemanticNotebookSessionService {
             };
         }
         let mut notebook = current.notebook.clone();
-        for change in &changes {
-            if !apply_direct_edit_change(&mut notebook, change) {
-                return DirectEditBatchApplyOutcome::CandidateReplayFailed {
-                    revision: base,
-                    target: change.target,
-                };
-            }
+        if let Err(target) =
+            apply_direct_edit_changes(&mut notebook, &changes)
+        {
+            return DirectEditBatchApplyOutcome::CandidateReplayFailed {
+                revision: base,
+                target,
+            };
         }
         let revision = match self.commit_semantic_edit(notebook) {
             Ok(revision) => revision,
@@ -2286,8 +2322,14 @@ fn index_direct_edit_frame<'notebook>(
         DirectEditBatchIndexFrame::ListItems { flow, items, page } => {
             index_direct_edit_list_items_frame(items, flow, page, stack);
         },
-        DirectEditBatchIndexFrame::TableCells { cells, flow, page } => {
-            index_direct_edit_table_cells_frame(cells, flow, page, stack);
+        DirectEditBatchIndexFrame::TableCells {
+            cells,
+            context,
+            row,
+        } => {
+            index_direct_edit_table_cells_frame(
+                cells, context, row, index, targets, revision, stack,
+            );
         },
         DirectEditBatchIndexFrame::TableRows {
             block,
@@ -2393,7 +2435,7 @@ fn index_direct_edit_blocks_frame<'notebook>(
                     flow,
                     page,
                     rows: &table.rows,
-                    table: table.id,
+                    table,
                 });
             }
         },
@@ -2428,8 +2470,11 @@ fn index_direct_edit_list_items_frame<'notebook>(
 
 fn index_direct_edit_table_cells_frame<'notebook>(
     current: &'notebook [TableCell<AcceptedIdentity>],
-    flow: AcceptedIdentity,
-    page: AcceptedIdentity,
+    context: DirectEditBatchTableContext<'notebook>,
+    row: AcceptedIdentity,
+    index: &mut DirectEditBatchIndex,
+    targets: &BTreeSet<AcceptedIdentity>,
+    revision: atrament_semantic_notebook::RevisionIdentity,
     stack: &mut Vec<DirectEditBatchIndexFrame<'notebook>>,
 ) {
     let Some((cell, remaining)) = current.split_first() else {
@@ -2438,22 +2483,48 @@ fn index_direct_edit_table_cells_frame<'notebook>(
     if !remaining.is_empty() {
         stack.push(DirectEditBatchIndexFrame::TableCells {
             cells: remaining,
-            flow,
-            page,
+            context,
+            row,
         });
+    }
+    if targets.contains(&cell.id) {
+        insert_direct_edit_material(
+            index,
+            cell.id,
+            SemanticIdentityDescriptor {
+                kind: SemanticIdentityKind::TableCell,
+                owner: Some(row),
+            },
+            EditableSemanticValue::TableCellSpan(cell.span),
+            DirectEditImpactScope::BlockFlow {
+                block: context.block,
+                flow: context.flow,
+                page: context.page,
+            },
+            revision,
+        );
+        let table_id = context.table.id;
+        let _previous_table = index.table_by_cell.insert(cell.id, table_id);
+        let _overlay = index
+            .table_overlays
+            .entry(table_id)
+            .or_insert_with(|| context.table.clone());
+        if index.materials.len() == targets.len() {
+            return;
+        }
     }
     if !cell.blocks.is_empty() {
         stack.push(DirectEditBatchIndexFrame::Blocks {
             blocks: &cell.blocks,
-            flow,
-            page,
+            flow: context.flow,
+            page: context.page,
         });
     }
 }
 
 fn index_direct_edit_table_rows_frame<'notebook>(
     current: &'notebook [TableRow<AcceptedIdentity>],
-    context: DirectEditBatchTableContext,
+    context: DirectEditBatchTableContext<'notebook>,
     index: &mut DirectEditBatchIndex,
     targets: &BTreeSet<AcceptedIdentity>,
     revision: atrament_semantic_notebook::RevisionIdentity,
@@ -2478,7 +2549,7 @@ fn index_direct_edit_table_rows_frame<'notebook>(
             row.id,
             SemanticIdentityDescriptor {
                 kind: SemanticIdentityKind::TableRow,
-                owner: Some(table),
+                owner: Some(table.id),
             },
             EditableSemanticValue::TableRowRole(row.role),
             DirectEditImpactScope::BlockFlow { block, flow, page },
@@ -2491,8 +2562,8 @@ fn index_direct_edit_table_rows_frame<'notebook>(
     if !row.cells.is_empty() {
         stack.push(DirectEditBatchIndexFrame::TableCells {
             cells: &row.cells,
-            flow,
-            page,
+            context,
+            row: row.id,
         });
     }
 }
@@ -2605,6 +2676,8 @@ where
         let result = simulate_direct_edit_batch_command(
             &current.notebook,
             &mut batch_index.materials,
+            &batch_index.table_by_cell,
+            &mut batch_index.table_overlays,
             command,
             previous,
             revision,
@@ -2824,6 +2897,8 @@ fn direct_edit_ancestor_scope(
 fn simulate_direct_edit_batch_command<CommandIdentity>(
     notebook: &Notebook<AcceptedIdentity>,
     materials: &mut BTreeMap<AcceptedIdentity, CommandTargetMaterial>,
+    table_by_cell: &BTreeMap<AcceptedIdentity, AcceptedIdentity>,
+    table_overlays: &mut BTreeMap<AcceptedIdentity, Table<AcceptedIdentity>>,
     command: DirectEditBatchCommand<CommandIdentity>,
     previous: Option<&CommandIdentity>,
     revision: atrament_semantic_notebook::RevisionIdentity,
@@ -2885,7 +2960,16 @@ where
         },
     };
     let simulation = simulate_prepared_direct_edit(checked, requested);
-    batch_command_prediction(materials, id, metadata, simulation)
+    let validated_simulation = if metadata.indexed {
+        validate_batch_table_cell_span(
+            table_by_cell,
+            table_overlays,
+            simulation,
+        )
+    } else {
+        simulation
+    };
+    batch_command_prediction(materials, id, metadata, validated_simulation)
 }
 
 fn batch_command_target_material<CommandIdentity>(
@@ -3024,9 +3108,8 @@ fn batch_command_prediction<CommandIdentity>(
         outcome @ (DirectEditSimulationOutcome::InvalidMathematics {
             ..
         }
-        | DirectEditSimulationOutcome::InvalidPageProfile {
-            ..
-        }
+        | DirectEditSimulationOutcome::InvalidPageProfile { .. }
+        | DirectEditSimulationOutcome::InvalidTableGrid { .. }
         | DirectEditSimulationOutcome::NoAcceptedRevision
         | DirectEditSimulationOutcome::StaleBase { .. }
         | DirectEditSimulationOutcome::TargetNotEditableValue {
@@ -3125,6 +3208,9 @@ const fn editable_value_kind(
         EditableSemanticValue::PageProfile(_) => {
             EditableSemanticValueKind::PageProfile
         },
+        EditableSemanticValue::TableCellSpan(_) => {
+            EditableSemanticValueKind::TableCellSpan
+        },
         EditableSemanticValue::TableRowRole(_) => {
             EditableSemanticValueKind::TableRowRole
         },
@@ -3160,6 +3246,113 @@ fn simulate_direct_edit_material(
                     target,
                 },
             }
+        },
+    }
+}
+
+fn simulate_direct_edit_material_in_notebook(
+    notebook: Option<&Notebook<AcceptedIdentity>>,
+    material_outcome: CommandTargetMaterialOutcome,
+    requested: EditableSemanticValue,
+) -> DirectEditSimulation {
+    let simulation = simulate_direct_edit_material(material_outcome, requested);
+    let Some(accepted_notebook) = notebook else {
+        return simulation;
+    };
+    validate_single_table_cell_span(accepted_notebook, simulation)
+}
+
+fn validate_batch_table_cell_span(
+    table_by_cell: &BTreeMap<AcceptedIdentity, AcceptedIdentity>,
+    table_overlays: &mut BTreeMap<AcceptedIdentity, Table<AcceptedIdentity>>,
+    simulation: DirectEditSimulation,
+) -> DirectEditSimulation {
+    let DirectEditSimulationOutcome::Applicable {
+        requested: EditableSemanticValue::TableCellSpan(span),
+        revision,
+        target,
+        ..
+    } = &simulation.outcome
+    else {
+        return simulation;
+    };
+    let Some(table_id) = table_by_cell.get(target) else {
+        return DirectEditSimulation {
+            before: simulation.before,
+            outcome: DirectEditSimulationOutcome::TargetNotFound {
+                revision: *revision,
+                target: *target,
+            },
+        };
+    };
+    let Some(table) = table_overlays.get_mut(table_id) else {
+        return DirectEditSimulation {
+            before: simulation.before,
+            outcome: DirectEditSimulationOutcome::TargetNotFound {
+                revision: *revision,
+                target: *target,
+            },
+        };
+    };
+    match replace_table_cell_span_in_table(table, *target, *span) {
+        Ok(true) => simulation,
+        Ok(false) => DirectEditSimulation {
+            before: simulation.before,
+            outcome: DirectEditSimulationOutcome::TargetNotFound {
+                revision: *revision,
+                target: *target,
+            },
+        },
+        Err(reason) => DirectEditSimulation {
+            before: simulation.before,
+            outcome: DirectEditSimulationOutcome::InvalidTableGrid {
+                reason,
+                revision: *revision,
+                target: *target,
+            },
+        },
+    }
+}
+
+fn validate_single_table_cell_span(
+    notebook: &Notebook<AcceptedIdentity>,
+    simulation: DirectEditSimulation,
+) -> DirectEditSimulation {
+    let DirectEditSimulationOutcome::Applicable {
+        requested: EditableSemanticValue::TableCellSpan(span),
+        revision,
+        target,
+        ..
+    } = &simulation.outcome
+    else {
+        return simulation;
+    };
+    let Some(table) = table_containing_cell_value(notebook, *target) else {
+        return DirectEditSimulation {
+            before: simulation.before,
+            outcome: DirectEditSimulationOutcome::TargetNotFound {
+                revision: *revision,
+                target: *target,
+            },
+        };
+    };
+    let mut candidate = table.clone();
+    match replace_table_cell_span_in_table(&mut candidate, *target, *span) {
+        Ok(true) => simulation,
+        Ok(false) => DirectEditSimulation {
+            before: simulation.before,
+            outcome: DirectEditSimulationOutcome::TargetNotFound {
+                revision: *revision,
+                target: *target,
+            },
+        },
+        Err(reason) => DirectEditSimulation {
+            before: simulation.before,
+            outcome: DirectEditSimulationOutcome::InvalidTableGrid {
+                reason,
+                revision: *revision,
+                target: *target,
+            },
         },
     }
 }
@@ -3232,7 +3425,8 @@ fn simulate_prepared_direct_edit(
                 };
             }
         },
-        EditableSemanticValue::TableRowRole(_)
+        EditableSemanticValue::TableCellSpan(_)
+        | EditableSemanticValue::TableRowRole(_)
         | EditableSemanticValue::Text(_) => {},
     }
     let family = direct_edit_family(&requested);
@@ -3263,6 +3457,7 @@ const fn direct_edit_family(
 ) -> SemanticCommandFamily {
     match value {
         EditableSemanticValue::Formula { .. }
+        | EditableSemanticValue::TableCellSpan(_)
         | EditableSemanticValue::TableRowRole(_) => {
             SemanticCommandFamily::StructuredContent
         },
@@ -3293,6 +3488,10 @@ fn editable_semantic_value(
             page_profile_value(notebook, target)
                 .map(EditableSemanticValue::PageProfile)
         },
+        SemanticIdentityKind::TableCell => {
+            table_cell_span_value(notebook, target)
+                .map(EditableSemanticValue::TableCellSpan)
+        },
         SemanticIdentityKind::TableRow => {
             table_row_role_value(notebook, target)
                 .map(EditableSemanticValue::TableRowRole)
@@ -3309,8 +3508,7 @@ fn editable_semantic_value(
         | SemanticIdentityKind::Page
         | SemanticIdentityKind::Provenance
         | SemanticIdentityKind::Style
-        | SemanticIdentityKind::Table
-        | SemanticIdentityKind::TableCell => None,
+        | SemanticIdentityKind::Table => None,
     }
 }
 
@@ -3402,6 +3600,37 @@ fn replace_formula_content(
     }
 }
 
+fn apply_direct_edit_changes(
+    notebook: &mut Notebook<AcceptedIdentity>,
+    changes: &[DirectEditSemanticChange],
+) -> Result<(), AcceptedIdentity> {
+    let mut affected_tables =
+        BTreeMap::<AcceptedIdentity, AcceptedIdentity>::new();
+    for change in changes {
+        if matches!(change.after, EditableSemanticValue::TableCellSpan(_)) {
+            let Some(table) =
+                table_containing_cell_value(notebook, change.target)
+            else {
+                return Err(change.target);
+            };
+            let _first_target =
+                affected_tables.entry(table.id).or_insert(change.target);
+        }
+        if !apply_direct_edit_change(notebook, change) {
+            return Err(change.target);
+        }
+    }
+    for target in affected_tables.into_values() {
+        let Some(table) = table_containing_cell_value(notebook, target) else {
+            return Err(target);
+        };
+        if table.validate_grid().is_err() {
+            return Err(target);
+        }
+    }
+    Ok(())
+}
+
 fn apply_direct_edit_change(
     notebook: &mut Notebook<AcceptedIdentity>,
     change: &DirectEditSemanticChange,
@@ -3421,6 +3650,9 @@ fn apply_direct_edit_change(
                 change.target,
                 *profile,
             )
+        },
+        EditableSemanticValue::TableCellSpan(span) => {
+            replace_table_cell_span_raw_value(notebook, change.target, *span)
         },
         EditableSemanticValue::TableRowRole(role) => {
             replace_table_row_role_value(notebook, change.target, *role)
@@ -3466,6 +3698,179 @@ fn replace_page_profile_value(
     };
     profile.geometry = geometry;
     true
+}
+
+fn replace_table_cell_span_in_table(
+    table: &mut Table<AcceptedIdentity>,
+    target: AcceptedIdentity,
+    span: TableCellSpan,
+) -> Result<bool, TableGridError<AcceptedIdentity>> {
+    let previous_span = table.rows.iter_mut().find_map(|row| {
+        row.cells.iter_mut().find_map(|cell| {
+            if cell.id != target {
+                return None;
+            }
+            let previous = cell.span;
+            cell.span = span;
+            Some(previous)
+        })
+    });
+    let Some(previous) = previous_span else {
+        return Ok(false);
+    };
+    if let Err(reason) = table.validate_grid() {
+        for row in &mut table.rows {
+            if let Some(cell) =
+                row.cells.iter_mut().find(|cell| cell.id == target)
+            {
+                cell.span = previous;
+                break;
+            }
+        }
+        return Err(reason);
+    }
+    Ok(true)
+}
+
+fn table_containing_cell_blocks_value(
+    blocks: &[Block<AcceptedIdentity>],
+    target: AcceptedIdentity,
+) -> Option<&Table<AcceptedIdentity>> {
+    for block in blocks {
+        if let Some(table) = table_containing_cell_content_value(
+            &block.content,
+            target,
+        ) {
+            return Some(table);
+        }
+    }
+    None
+}
+
+fn table_containing_cell_content_value(
+    content: &BlockContent<AcceptedIdentity>,
+    target: AcceptedIdentity,
+) -> Option<&Table<AcceptedIdentity>> {
+    match content {
+        BlockContent::Callout(blocks) | BlockContent::Freeform(blocks) => {
+            table_containing_cell_blocks_value(blocks, target)
+        },
+        BlockContent::List(list) => {
+            for item in &list.items {
+                if let Some(table) =
+                    table_containing_cell_blocks_value(&item.blocks, target)
+                {
+                    return Some(table);
+                }
+            }
+            None
+        },
+        BlockContent::Table(table) => {
+            if table
+                .rows
+                .iter()
+                .any(|row| row.cells.iter().any(|cell| cell.id == target))
+            {
+                return Some(table);
+            }
+            for row in &table.rows {
+                for cell in &row.cells {
+                    if let Some(nested) =
+                        table_containing_cell_blocks_value(&cell.blocks, target)
+                    {
+                        return Some(nested);
+                    }
+                }
+            }
+            None
+        },
+        BlockContent::Date(_)
+        | BlockContent::Figure(_)
+        | BlockContent::Heading(_)
+        | BlockContent::Mathematics(_)
+        | BlockContent::Paragraph(_)
+        | BlockContent::Rule
+        | BlockContent::Unresolved(_) => None,
+    }
+}
+
+fn table_containing_cell_value(
+    notebook: &Notebook<AcceptedIdentity>,
+    target: AcceptedIdentity,
+) -> Option<&Table<AcceptedIdentity>> {
+    for page in &notebook.pages {
+        for flow in &page.flows {
+            if let Some(table) =
+                table_containing_cell_blocks_value(&flow.blocks, target)
+            {
+                return Some(table);
+            }
+        }
+    }
+    None
+}
+
+fn replace_table_cell_span_raw_blocks(
+    blocks: &mut [Block<AcceptedIdentity>],
+    target: AcceptedIdentity,
+    span: TableCellSpan,
+) -> bool {
+    blocks.iter_mut().any(|block| {
+        replace_table_cell_span_raw_content(&mut block.content, target, span)
+    })
+}
+
+fn replace_table_cell_span_raw_content(
+    content: &mut BlockContent<AcceptedIdentity>,
+    target: AcceptedIdentity,
+    span: TableCellSpan,
+) -> bool {
+    match content {
+        BlockContent::Callout(blocks) | BlockContent::Freeform(blocks) => {
+            replace_table_cell_span_raw_blocks(blocks, target, span)
+        },
+        BlockContent::List(list) => list.items.iter_mut().any(|item| {
+            replace_table_cell_span_raw_blocks(&mut item.blocks, target, span)
+        }),
+        BlockContent::Table(table) => {
+            for row in &mut table.rows {
+                if let Some(cell) =
+                    row.cells.iter_mut().find(|cell| cell.id == target)
+                {
+                    cell.span = span;
+                    return true;
+                }
+            }
+            table.rows.iter_mut().any(|row| {
+                row.cells.iter_mut().any(|cell| {
+                    replace_table_cell_span_raw_blocks(
+                        &mut cell.blocks,
+                        target,
+                        span,
+                    )
+                })
+            })
+        },
+        BlockContent::Date(_)
+        | BlockContent::Figure(_)
+        | BlockContent::Heading(_)
+        | BlockContent::Mathematics(_)
+        | BlockContent::Paragraph(_)
+        | BlockContent::Rule
+        | BlockContent::Unresolved(_) => false,
+    }
+}
+
+fn replace_table_cell_span_raw_value(
+    notebook: &mut Notebook<AcceptedIdentity>,
+    target: AcceptedIdentity,
+    span: TableCellSpan,
+) -> bool {
+    notebook.pages.iter_mut().any(|page| {
+        page.flows.iter_mut().any(|flow| {
+            replace_table_cell_span_raw_blocks(&mut flow.blocks, target, span)
+        })
+    })
 }
 
 fn replace_table_cell_span_blocks(
