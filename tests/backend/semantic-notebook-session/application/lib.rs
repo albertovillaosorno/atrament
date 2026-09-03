@@ -3827,6 +3827,97 @@ fn direct_edit_batch_apply_net_noop_keeps_revision_and_history_position() {
 }
 
 #[test]
+fn repeated_batch_apply_history_round_trip_preserves_every_snapshot() {
+    const TRANSACTIONS: u32 = 64;
+
+    let ids = IdentityAllocator::new();
+    let (candidate, span) = candidate_notebook_with_span(&ids, "value-0");
+    let mut service = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision: base } =
+        service.accept(candidate)
+    else {
+        panic!("candidate must be accepted");
+    };
+    let target = accepted_for(&mapping, span);
+    let mut revisions = vec![base];
+    for index in 1..=TRANSACTIONS {
+        let prior = format!("value-{}", index.saturating_sub(1));
+        let next = format!("value-{index}");
+        let batch = DirectEditBatchProposal {
+            base: *revisions.last().expect("current revision"),
+            capability_version: CommandBehaviorVersion(1),
+            commands: vec![text_batch_command(
+                index,
+                &[],
+                target,
+                &prior,
+                &next,
+            )],
+        };
+        let DirectEditBatchApplyOutcome::Applied { revision, .. } =
+            service.apply_direct_edit_batch(batch)
+        else {
+            panic!("transaction {index} must apply");
+        };
+        assert!(!revisions.contains(&revision));
+        revisions.push(revision);
+    }
+
+    let mut current = *revisions.last().expect("last applied revision");
+    for index in (1..=TRANSACTIONS).rev() {
+        let HistoryTraversalOutcome::Traversed { revision, .. } =
+            service.traverse_history(current, HistoryDirection::Undo)
+        else {
+            panic!("transaction {index} must Undo");
+        };
+        current = revision;
+        let accepted = service.current().expect("Undo revision");
+        let BlockContent::Paragraph(spans) =
+            &accepted.notebook.pages[0].flows[0].blocks[0].content
+        else {
+            panic!("Undo fixture must remain paragraph");
+        };
+        assert_eq!(spans[0].id, target);
+        assert_eq!(spans[0].text, format!("value-{}", index - 1));
+    }
+    assert_eq!(
+        service.history_availability(),
+        HistoryAvailabilityOutcome::Available(HistoryAvailability {
+            can_redo: true,
+            can_undo: false,
+            revision: current,
+        }),
+    );
+
+    for index in 1..=TRANSACTIONS {
+        let HistoryTraversalOutcome::Traversed { revision, .. } =
+            service.traverse_history(current, HistoryDirection::Redo)
+        else {
+            panic!("transaction {index} must Redo");
+        };
+        assert!(!revisions.contains(&revision));
+        revisions.push(revision);
+        current = revision;
+        let accepted = service.current().expect("Redo revision");
+        let BlockContent::Paragraph(spans) =
+            &accepted.notebook.pages[0].flows[0].blocks[0].content
+        else {
+            panic!("Redo fixture must remain paragraph");
+        };
+        assert_eq!(spans[0].id, target);
+        assert_eq!(spans[0].text, format!("value-{index}"));
+    }
+    assert_eq!(
+        service.history_availability(),
+        HistoryAvailabilityOutcome::Available(HistoryAvailability {
+            can_redo: false,
+            can_undo: true,
+            revision: current,
+        }),
+    );
+}
+
+#[test]
 fn direct_edit_batch_history_redoes_transaction_and_discards_old_branch() {
     let ids = IdentityAllocator::new();
     let (candidate, first, second, third) =

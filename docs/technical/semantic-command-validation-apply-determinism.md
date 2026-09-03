@@ -221,6 +221,11 @@ outcomes, semantic changes, and impact seeds exactly; net no-op application does
 not allocate a revision, and a changed base rejects as stale. The accepted batch
 enters semantic history as one Undo transaction.
 
+A repeated-history fixture commits 64 consecutive one-command Apply
+transactions, traverses every snapshot back to the base, then redoes every
+snapshot forward. Authored text and stable target identity survive every move,
+and each history traversal receives a fresh revision identity.
+
 Semantic history fixtures also traverse whole applied batches in both
 directions.
 Redo restores the complete multi-command transaction with a fresh revision; a
