@@ -1442,6 +1442,32 @@ fn asset_reference_review_accepts_only_current_asset_identities() {
         CommandFamilyAdmissionOutcome::Admitted { .. }
     ));
     assert_eq!(
+        session.check_command_family_admission(
+            revision,
+            figure,
+            SemanticCommandFamily::StructuredContent,
+        ),
+        CommandFamilyAdmissionOutcome::FamilyNotExecutable {
+            available: Some(SemanticCommandFamily::AssetReference),
+            requested: SemanticCommandFamily::StructuredContent,
+            revision,
+            target: figure,
+        },
+    );
+    assert_eq!(
+        session.simulate_direct_edit(
+            revision,
+            figure,
+            EditableSemanticValue::Text(String::from("not an asset")),
+        ),
+        DirectEditSimulationOutcome::ValueFamilyMismatch {
+            actual: EditableSemanticValueKind::AssetReference,
+            requested: EditableSemanticValueKind::Text,
+            revision,
+            target: figure,
+        },
+    );
+    assert_eq!(
         session.simulate_direct_edit(
             revision,
             figure,
@@ -1477,6 +1503,23 @@ fn asset_reference_review_accepts_only_current_asset_identities() {
             reference: flow,
             revision,
             target: figure,
+        },
+    );
+    assert_eq!(
+        session.preview_direct_edit_changes(
+            revision,
+            figure,
+            EditableSemanticValue::AssetReference(Some(flow)),
+        ),
+        DirectEditChangePreviewOutcome::Rejected {
+            outcome: Box::new(
+                DirectEditSimulationOutcome::InvalidAssetReference {
+                    actual: Some(SemanticIdentityKind::Flow),
+                    reference: flow,
+                    revision,
+                    target: figure,
+                },
+            ),
         },
     );
     assert_eq!(
