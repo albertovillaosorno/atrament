@@ -177,8 +177,9 @@ material lookup as the fallback for non-editable targets.
 Graph validation now avoids cycle-state allocation for the ordinary ordered
 case where every explicit dependency points backward, while preserving cycle
 precedence when a forward dependency exists. Interactive selection analysis can
-report the complete omitted transitive dependency requirements against an exact
-base revision without creating a replacement batch.
+report complete transitive requirements or summarize closure size against an
+exact base revision without creating a replacement batch. Generic report bounds
+reject oversized identity-pair materialization before allocation.
 
 These foundations change no advertised capability or published resource limit.
 Full Validate still requires protocol normalization, command context, complete

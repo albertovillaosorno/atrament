@@ -145,8 +145,9 @@ requirements without silently changing the caller's selection.
 
 Session-level selection analysis binds those requirements to capability behavior
 and the exact accepted base revision, but does not construct a replacement
-batch.
-Exact command and explicit edge counts can be measured and checked against
+batch. A non-materializing summary reports selected-command, required-command,
+and omitted-edge counts before identity-pair review data is requested.
+Exact graph counts and requirement-report size can be checked against
 caller-supplied bounds without choosing product limits.
 
 Direct-edit simulation now also projects exact before/after semantic changes. An
