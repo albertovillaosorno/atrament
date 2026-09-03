@@ -36,7 +36,7 @@
 use std::collections::BTreeSet;
 
 use atrament_semantic_command_graph::{
-    CommandGraphError, MissingDependencyRequirement,
+    CommandGraphError, DependencySelectionSummary, MissingDependencyRequirement,
 };
 use atrament_semantic_notebook::{
     AcceptedIdentity, AcceptedRevision, CandidateIdentity, FormulaMode,
@@ -538,6 +538,45 @@ pub enum DirectEditBatchSelectionRequirementsOutcome<CommandIdentity> {
     StaleBase {
         /// Current accepted revision that rejected stale selection analysis.
         current: RevisionIdentity,
+    },
+    /// Selection names no command in the batch proposal.
+    UnknownSelection {
+        /// Unknown caller-owned command identity.
+        command: CommandIdentity,
+    },
+}
+
+/// Read-only dependency-closure size for one in-memory batch selection.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum DirectEditBatchSelectionSummaryOutcome<CommandIdentity> {
+    /// Capability behavior changed before selection summary derivation.
+    CapabilityMismatch {
+        /// Current backend-owned capability behavior version.
+        current: CommandBehaviorVersion,
+        /// Capability behavior version bound by the batch proposal.
+        expected: CommandBehaviorVersion,
+    },
+    /// Complete command dependency structure rejected before summary
+    /// derivation.
+    DependencyGraphRejected {
+        /// Typed transport-neutral dependency graph failure.
+        reason: CommandGraphError<CommandIdentity>,
+    },
+    /// Session has no accepted semantic revision to analyze.
+    NoAcceptedRevision,
+    /// Exact omitted-dependency edge counting exceeded addressable range.
+    RequirementCountOverflow,
+    /// Batch base revision is no longer the current accepted revision.
+    StaleBase {
+        /// Current accepted revision that rejected stale selection summary.
+        current: RevisionIdentity,
+    },
+    /// Selection is known and its transitive closure size was derived.
+    Summarized {
+        /// Immutable accepted revision whose proposal base was checked.
+        revision: RevisionIdentity,
+        /// Exact coarse dependency-closure size without command-ID pairs.
+        summary: DependencySelectionSummary,
     },
     /// Selection names no command in the batch proposal.
     UnknownSelection {
@@ -1280,6 +1319,15 @@ pub trait SemanticNotebookSession {
         batch: &DirectEditBatchProposal<CommandIdentity>,
         selected: &BTreeSet<CommandIdentity>,
     ) -> DirectEditBatchSelectionRequirementsOutcome<CommandIdentity>
+    where
+        CommandIdentity: Clone + Ord;
+
+    /// Summarize one in-memory batch selection without materializing edges.
+    fn direct_edit_batch_selection_summary<CommandIdentity>(
+        &self,
+        batch: &DirectEditBatchProposal<CommandIdentity>,
+        selected: &BTreeSet<CommandIdentity>,
+    ) -> DirectEditBatchSelectionSummaryOutcome<CommandIdentity>
     where
         CommandIdentity: Clone + Ord;
 

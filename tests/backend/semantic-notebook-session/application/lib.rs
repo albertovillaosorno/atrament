@@ -37,7 +37,7 @@ use atrament_physical_page_profile::{
     PaperMarkJoin, PaperMarkLayer, PaperPattern, Rect, SheetSize,
 };
 use atrament_semantic_command_graph::{
-    CommandGraphError, MissingDependencyRequirement,
+    CommandGraphError, DependencySelectionSummary, MissingDependencyRequirement,
 };
 use atrament_semantic_notebook::{
     AcceptedIdentity, Asset, Block, BlockContent, CandidateIdentity,
@@ -57,13 +57,13 @@ use atrament_semantic_notebook_port::{
     CommandTargetPreconditions, DirectEditBatchCommand,
     DirectEditBatchCommandPrediction, DirectEditBatchCommandRejection,
     DirectEditBatchProposal, DirectEditBatchSelectionRequirementsOutcome,
-    DirectEditBatchSimulationOutcome, DirectEditChangePreviewOutcome,
-    DirectEditDerivedAuthority, DirectEditEffectClass, DirectEditImpactScope,
-    DirectEditImpactSeed, DirectEditProposal, DirectEditProposalOutcome,
-    DirectEditSemanticChange, DirectEditSimulationOutcome,
-    EditableSemanticValue, EditableSemanticValueKind,
-    EditableValuePreconditionOutcome, FormulaEditOutcome,
-    IdentityInspectOutcome, IdentityKindInspectOutcome,
+    DirectEditBatchSelectionSummaryOutcome, DirectEditBatchSimulationOutcome,
+    DirectEditChangePreviewOutcome, DirectEditDerivedAuthority,
+    DirectEditEffectClass, DirectEditImpactScope, DirectEditImpactSeed,
+    DirectEditProposal, DirectEditProposalOutcome, DirectEditSemanticChange,
+    DirectEditSimulationOutcome, EditableSemanticValue,
+    EditableSemanticValueKind, EditableValuePreconditionOutcome,
+    FormulaEditOutcome, IdentityInspectOutcome, IdentityKindInspectOutcome,
     IdentityOwnerExpectation, IdentityPrecondition,
     IdentityPreconditionOutcome, PageProfileEditOutcome, SemanticCommandFamily,
     SemanticNotebookSession, TableRowRoleEditOutcome, TextEditOutcome,
@@ -1810,6 +1810,94 @@ fn direct_edit_batch_selection_preserves_global_failure_precedence() {
         DirectEditBatchSelectionRequirementsOutcome::UnknownSelection {
             command: 99,
         },
+    );
+}
+
+#[test]
+fn direct_edit_batch_selection_summary_matches_transitive_requirements() {
+    let ids = IdentityAllocator::new();
+    let (candidate, span) = candidate_notebook_with_span(&ids, "base text");
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(candidate)
+    else {
+        panic!("candidate must be accepted");
+    };
+    let span = accepted_for(&mapping, span);
+    let batch = DirectEditBatchProposal {
+        base: revision,
+        capability_version: CommandBehaviorVersion(1),
+        commands: vec![
+            text_batch_command(1, &[], span, "base text", "one"),
+            text_batch_command(2, &[1], span, "one", "two"),
+            text_batch_command(3, &[2], span, "two", "three"),
+        ],
+    };
+    let before = session.current().expect("accepted revision").clone();
+    assert_eq!(
+        session
+            .direct_edit_batch_selection_summary(&batch, &BTreeSet::from([3]),),
+        DirectEditBatchSelectionSummaryOutcome::Summarized {
+            revision,
+            summary: DependencySelectionSummary {
+                missing_dependency_edges: 2,
+                required_commands: 3,
+                selected_commands: 1,
+            },
+        },
+    );
+    assert_eq!(session.current(), Some(&before));
+}
+
+#[test]
+fn direct_edit_batch_selection_summary_preserves_global_precedence() {
+    let ids = IdentityAllocator::new();
+    let (candidate, span) = candidate_notebook_with_span(&ids, "base text");
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(candidate)
+    else {
+        panic!("candidate must be accepted");
+    };
+    let span = accepted_for(&mapping, span);
+    let valid = DirectEditBatchProposal {
+        base: revision,
+        capability_version: CommandBehaviorVersion(1),
+        commands: vec![text_batch_command(
+            1,
+            &[],
+            span,
+            "base text",
+            "selected text",
+        )],
+    };
+    let incompatible = DirectEditBatchProposal {
+        base: revision,
+        capability_version: CommandBehaviorVersion(0),
+        commands: valid.commands.clone(),
+    };
+    assert_eq!(
+        session.direct_edit_batch_selection_summary(
+            &incompatible,
+            &BTreeSet::from([99]),
+        ),
+        DirectEditBatchSelectionSummaryOutcome::CapabilityMismatch {
+            current: CommandBehaviorVersion(1),
+            expected: CommandBehaviorVersion(0),
+        },
+    );
+    let replacement = candidate_notebook(&ids, "new revision");
+    let AcceptanceOutcome::Accepted { revision: current, .. } =
+        session.accept(replacement)
+    else {
+        panic!("replacement candidate must be accepted");
+    };
+    assert_eq!(
+        session.direct_edit_batch_selection_summary(
+            &valid,
+            &BTreeSet::from([99]),
+        ),
+        DirectEditBatchSelectionSummaryOutcome::StaleBase { current },
     );
 }
 

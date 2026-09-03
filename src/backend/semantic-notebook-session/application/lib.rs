@@ -40,8 +40,9 @@ use std::slice::from_ref;
 
 use atrament_mathematics_source::analyze;
 use atrament_semantic_command_graph::{
-    CommandNode, DependencyRequirementsError,
-    dependency_selection_requirements, validate_command_graph,
+    CommandNode, DependencyRequirementsError, DependencySummaryError,
+    dependency_selection_requirements, dependency_selection_summary,
+    validate_command_graph,
 };
 use atrament_semantic_notebook::{
     AcceptedIdentity, AcceptedRevision, Asset, Block, BlockContent,
@@ -61,6 +62,7 @@ use atrament_semantic_notebook_port::{
     DirectEditBatchCommandPrediction, DirectEditBatchCommandRejection,
     DirectEditBatchProposal,
     DirectEditBatchSelectionRequirementsOutcome as BatchSelectionOutcome,
+    DirectEditBatchSelectionSummaryOutcome as BatchSelectionSummaryOutcome,
     DirectEditBatchSimulationOutcome, DirectEditChangePreviewOutcome,
     DirectEditDerivedAuthority, DirectEditEffectClass, DirectEditImpactScope,
     DirectEditImpactSeed, DirectEditProposal, DirectEditProposalOutcome,
@@ -474,6 +476,54 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
             },
             Err(DependencyRequirementsError::UnknownSelection { command }) => {
                 BatchSelectionOutcome::UnknownSelection { command }
+            },
+        }
+    }
+
+    fn direct_edit_batch_selection_summary<CommandIdentity>(
+        &self,
+        batch: &DirectEditBatchProposal<CommandIdentity>,
+        selected: &BTreeSet<CommandIdentity>,
+    ) -> BatchSelectionSummaryOutcome<CommandIdentity>
+    where
+        CommandIdentity: Clone + Ord,
+    {
+        let snapshot = self.command_capability_snapshot();
+        if snapshot.behavior_version != batch.capability_version {
+            return BatchSelectionSummaryOutcome::CapabilityMismatch {
+                current: snapshot.behavior_version,
+                expected: batch.capability_version,
+            };
+        }
+        let Some(current) = self.current.as_ref() else {
+            return BatchSelectionSummaryOutcome::NoAcceptedRevision;
+        };
+        if current.id != batch.base {
+            return BatchSelectionSummaryOutcome::StaleBase {
+                current: current.id,
+            };
+        }
+        let nodes = batch
+            .commands
+            .iter()
+            .map(|command| CommandNode {
+                dependencies: command.dependencies.clone(),
+                id: command.id.clone(),
+            })
+            .collect::<Vec<_>>();
+        match dependency_selection_summary(&nodes, selected) {
+            Ok(summary) => BatchSelectionSummaryOutcome::Summarized {
+                revision: current.id,
+                summary,
+            },
+            Err(DependencySummaryError::Graph { reason }) => {
+                BatchSelectionSummaryOutcome::DependencyGraphRejected { reason }
+            },
+            Err(DependencySummaryError::RequirementCountOverflow) => {
+                BatchSelectionSummaryOutcome::RequirementCountOverflow
+            },
+            Err(DependencySummaryError::UnknownSelection { command }) => {
+                BatchSelectionSummaryOutcome::UnknownSelection { command }
             },
         }
     }
