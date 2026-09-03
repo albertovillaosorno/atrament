@@ -41,10 +41,10 @@ use std::slice::from_ref;
 use atrament_mathematics_source::analyze;
 use atrament_semantic_command_graph::{
     BoundedDependencyRequirementsError, CommandDependencyNode,
-    DependencyRequirementsError, DependencySummaryError,
-    dependency_selection_requirements,
+    CommandGraphLimits, DependencyRequirementsError, DependencySummaryError,
+    command_graph_size, dependency_selection_requirements,
     dependency_selection_requirements_bounded, dependency_selection_summary,
-    validate_command_graph,
+    validate_command_graph, validate_command_graph_limits,
 };
 use atrament_semantic_notebook::{
     AcceptedIdentity, AcceptedRevision, Asset, Block, BlockContent,
@@ -62,6 +62,7 @@ use atrament_semantic_notebook_port::{
     CommandTargetMaterialOutcome, CommandTargetPreconditionOutcome,
     CommandTargetPreconditions, DirectEditBatchCommand,
     DirectEditBatchCommandPrediction, DirectEditBatchCommandRejection,
+    DirectEditBatchGraphLimitsOutcome, DirectEditBatchGraphSizeOutcome,
     DirectEditBatchProposal,
     DirectEditBatchSelectionBoundedOutcome as BoundedSelectionOutcome,
     DirectEditBatchSelectionRequirementsOutcome as BatchSelectionOutcome,
@@ -459,6 +460,73 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
 
     fn current(&self) -> Option<&AcceptedRevision> {
         self.current.as_ref()
+    }
+
+    fn direct_edit_batch_graph_limits<CommandIdentity>(
+        &self,
+        batch: &DirectEditBatchProposal<CommandIdentity>,
+        limits: CommandGraphLimits,
+    ) -> DirectEditBatchGraphLimitsOutcome
+    where
+        CommandIdentity: Ord,
+    {
+        let snapshot = self.command_capability_snapshot();
+        if snapshot.behavior_version != batch.capability_version {
+            return DirectEditBatchGraphLimitsOutcome::CapabilityMismatch {
+                current: snapshot.behavior_version,
+                expected: batch.capability_version,
+            };
+        }
+        let Some(current) = self.current.as_ref() else {
+            return DirectEditBatchGraphLimitsOutcome::NoAcceptedRevision;
+        };
+        if current.id != batch.base {
+            return DirectEditBatchGraphLimitsOutcome::StaleBase {
+                current: current.id,
+            };
+        }
+        let nodes = direct_edit_command_graph_nodes(&batch.commands);
+        match validate_command_graph_limits(&nodes, limits) {
+            Ok(size) => DirectEditBatchGraphLimitsOutcome::Admitted {
+                revision: current.id,
+                size,
+            },
+            Err(reason) => {
+                DirectEditBatchGraphLimitsOutcome::Rejected { reason }
+            },
+        }
+    }
+
+    fn direct_edit_batch_graph_size<CommandIdentity>(
+        &self,
+        batch: &DirectEditBatchProposal<CommandIdentity>,
+    ) -> DirectEditBatchGraphSizeOutcome
+    where
+        CommandIdentity: Ord,
+    {
+        let snapshot = self.command_capability_snapshot();
+        if snapshot.behavior_version != batch.capability_version {
+            return DirectEditBatchGraphSizeOutcome::CapabilityMismatch {
+                current: snapshot.behavior_version,
+                expected: batch.capability_version,
+            };
+        }
+        let Some(current) = self.current.as_ref() else {
+            return DirectEditBatchGraphSizeOutcome::NoAcceptedRevision;
+        };
+        if current.id != batch.base {
+            return DirectEditBatchGraphSizeOutcome::StaleBase {
+                current: current.id,
+            };
+        }
+        let nodes = direct_edit_command_graph_nodes(&batch.commands);
+        command_graph_size(&nodes).map_or(
+            DirectEditBatchGraphSizeOutcome::SizeOverflow,
+            |size| DirectEditBatchGraphSizeOutcome::Sized {
+                revision: current.id,
+                size,
+            },
+        )
     }
 
     fn direct_edit_batch_selection_requirements<CommandIdentity>(

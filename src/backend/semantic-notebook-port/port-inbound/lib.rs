@@ -36,7 +36,8 @@
 use std::collections::BTreeSet;
 
 use atrament_semantic_command_graph::{
-    CommandGraphError, DependencySelectionSummary, MissingDependencyRequirement,
+    CommandGraphError, CommandGraphLimitError, CommandGraphLimits,
+    CommandGraphSize, DependencySelectionSummary, MissingDependencyRequirement,
 };
 use atrament_semantic_notebook::{
     AcceptedIdentity, AcceptedRevision, CandidateIdentity, FormulaMode,
@@ -506,6 +507,65 @@ pub struct DirectEditBatchProposal<CommandIdentity> {
     pub capability_version: CommandBehaviorVersion,
     /// Ordered command sequence; order remains application-significant.
     pub commands: Vec<DirectEditBatchCommand<CommandIdentity>>,
+}
+
+/// Read-only exact coarse size for one in-memory direct-edit batch graph.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum DirectEditBatchGraphSizeOutcome {
+    /// Capability behavior changed before graph size derivation.
+    CapabilityMismatch {
+        /// Current backend-owned capability behavior version.
+        current: CommandBehaviorVersion,
+        /// Capability behavior version bound by the batch proposal.
+        expected: CommandBehaviorVersion,
+    },
+    /// Session has no accepted semantic revision to inspect.
+    NoAcceptedRevision,
+    /// Dependency-edge counting exceeded addressable `usize` range.
+    SizeOverflow,
+    /// Exact command and dependency-edge counts were derived.
+    Sized {
+        /// Immutable accepted revision whose proposal base was checked.
+        revision: RevisionIdentity,
+        /// Exact complete in-memory graph size.
+        size: CommandGraphSize,
+    },
+    /// Batch base revision is no longer the current accepted revision.
+    StaleBase {
+        /// Current accepted revision that rejected stale graph sizing.
+        current: RevisionIdentity,
+    },
+}
+
+/// Caller-bounded coarse resource preflight for one direct-edit batch graph.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum DirectEditBatchGraphLimitsOutcome {
+    /// Batch graph is within the caller-supplied coarse resource bounds.
+    Admitted {
+        /// Immutable accepted revision whose proposal base was checked.
+        revision: RevisionIdentity,
+        /// Exact graph size admitted by the supplied bounds.
+        size: CommandGraphSize,
+    },
+    /// Capability behavior changed before graph resource preflight.
+    CapabilityMismatch {
+        /// Current backend-owned capability behavior version.
+        current: CommandBehaviorVersion,
+        /// Capability behavior version bound by the batch proposal.
+        expected: CommandBehaviorVersion,
+    },
+    /// Session has no accepted semantic revision to inspect.
+    NoAcceptedRevision,
+    /// Exact coarse resource sizing rejected against the caller bounds.
+    Rejected {
+        /// Typed exact coarse resource failure; no graph was truncated.
+        reason: CommandGraphLimitError,
+    },
+    /// Batch base revision is no longer the current accepted revision.
+    StaleBase {
+        /// Current accepted revision that rejected stale graph preflight.
+        current: RevisionIdentity,
+    },
 }
 
 /// Caller-bounded dependency report for one in-memory batch selection.
@@ -1357,6 +1417,23 @@ pub trait SemanticNotebookSession {
 
     /// Read the current accepted revision without creating another revision.
     fn current(&self) -> Option<&AcceptedRevision>;
+
+    /// Enforce caller-owned coarse graph resource limits read-only.
+    fn direct_edit_batch_graph_limits<CommandIdentity>(
+        &self,
+        batch: &DirectEditBatchProposal<CommandIdentity>,
+        limits: CommandGraphLimits,
+    ) -> DirectEditBatchGraphLimitsOutcome
+    where
+        CommandIdentity: Ord;
+
+    /// Derive exact coarse command and dependency-edge counts read-only.
+    fn direct_edit_batch_graph_size<CommandIdentity>(
+        &self,
+        batch: &DirectEditBatchProposal<CommandIdentity>,
+    ) -> DirectEditBatchGraphSizeOutcome
+    where
+        CommandIdentity: Ord;
 
     /// Analyze omitted dependencies for one in-memory batch selection.
     fn direct_edit_batch_selection_requirements<CommandIdentity>(

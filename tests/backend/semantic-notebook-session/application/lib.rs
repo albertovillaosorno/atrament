@@ -40,7 +40,8 @@ use atrament_physical_page_profile::{
     PaperMarkJoin, PaperMarkLayer, PaperPattern, Rect, SheetSize,
 };
 use atrament_semantic_command_graph::{
-    CommandGraphError, DependencySelectionSummary, MissingDependencyRequirement,
+    CommandGraphError, CommandGraphLimitError, CommandGraphLimits,
+    CommandGraphSize, DependencySelectionSummary, MissingDependencyRequirement,
 };
 use atrament_semantic_notebook::{
     AcceptedIdentity, Asset, Block, BlockContent, CandidateIdentity,
@@ -59,6 +60,7 @@ use atrament_semantic_notebook_port::{
     CommandTargetMaterialOutcome, CommandTargetPreconditionOutcome,
     CommandTargetPreconditions, DirectEditBatchCommand,
     DirectEditBatchCommandPrediction, DirectEditBatchCommandRejection,
+    DirectEditBatchGraphLimitsOutcome, DirectEditBatchGraphSizeOutcome,
     DirectEditBatchProposal, DirectEditBatchSelectionBoundedOutcome,
     DirectEditBatchSelectionRequirementsOutcome,
     DirectEditBatchSelectionSummaryOutcome, DirectEditBatchSimulationOutcome,
@@ -1945,6 +1947,148 @@ fn direct_edit_batch_selection_summary_preserves_global_precedence() {
         ),
         DirectEditBatchSelectionSummaryOutcome::StaleBase { current },
     );
+}
+
+#[test]
+fn direct_edit_batch_graph_resource_preflight_is_exact_and_read_only() {
+    let ids = IdentityAllocator::new();
+    let (candidate, span) = candidate_notebook_with_span(&ids, "base text");
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(candidate)
+    else {
+        panic!("candidate must be accepted");
+    };
+    let span = accepted_for(&mapping, span);
+    let batch = DirectEditBatchProposal {
+        base: revision,
+        capability_version: CommandBehaviorVersion(1),
+        commands: vec![
+            text_batch_command(1, &[], span, "base text", "one"),
+            text_batch_command(2, &[1], span, "one", "two"),
+            text_batch_command(3, &[2], span, "two", "three"),
+        ],
+    };
+    let size = CommandGraphSize {
+        commands: 3,
+        dependency_edges: 2,
+    };
+    let before = session.current().expect("accepted revision").clone();
+    assert_eq!(
+        session.direct_edit_batch_graph_size(&batch),
+        DirectEditBatchGraphSizeOutcome::Sized { revision, size },
+    );
+    assert_eq!(
+        session.direct_edit_batch_graph_limits(&batch, CommandGraphLimits {
+            commands: 3,
+            dependency_edges: 2,
+        },),
+        DirectEditBatchGraphLimitsOutcome::Admitted { revision, size },
+    );
+    assert_eq!(
+        session.direct_edit_batch_graph_limits(&batch, CommandGraphLimits {
+            commands: 2,
+            dependency_edges: 2,
+        },),
+        DirectEditBatchGraphLimitsOutcome::Rejected {
+            reason: CommandGraphLimitError::CommandCountExceeded {
+                actual: 3,
+                limit: 2,
+            },
+        },
+    );
+    assert_eq!(
+        session.direct_edit_batch_graph_limits(&batch, CommandGraphLimits {
+            commands: 3,
+            dependency_edges: 1,
+        },),
+        DirectEditBatchGraphLimitsOutcome::Rejected {
+            reason: CommandGraphLimitError::DependencyEdgeCountExceeded {
+                actual: 2,
+                limit: 1,
+            },
+        },
+    );
+    assert_eq!(session.current(), Some(&before));
+}
+
+#[test]
+fn direct_edit_batch_graph_resources_preserve_authority_and_structure_layers() {
+    let ids = IdentityAllocator::new();
+    let (candidate, span) = candidate_notebook_with_span(&ids, "base text");
+    let mut session = SemanticNotebookSessionService::default();
+    let mut revision_source = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted {
+        revision: unavailable_revision,
+        ..
+    } = revision_source.accept(candidate_notebook(&ids, "revision source"))
+    else {
+        panic!("revision source candidate must be accepted");
+    };
+    let unavailable = DirectEditBatchProposal::<u32> {
+        base: unavailable_revision,
+        capability_version: CommandBehaviorVersion(1),
+        commands: Vec::new(),
+    };
+    assert_eq!(
+        session.direct_edit_batch_graph_size(&unavailable),
+        DirectEditBatchGraphSizeOutcome::NoAcceptedRevision,
+    );
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(candidate)
+    else {
+        panic!("candidate must be accepted");
+    };
+    let span = accepted_for(&mapping, span);
+    let invalid_graph = DirectEditBatchProposal {
+        base: revision,
+        capability_version: CommandBehaviorVersion(1),
+        commands: vec![
+            text_batch_command(1, &[2], span, "base text", "one"),
+            text_batch_command(2, &[], span, "base text", "two"),
+        ],
+    };
+    let size = CommandGraphSize {
+        commands: 2,
+        dependency_edges: 1,
+    };
+    let before = session.current().expect("accepted revision").clone();
+    assert_eq!(
+        session.direct_edit_batch_graph_size(&invalid_graph),
+        DirectEditBatchGraphSizeOutcome::Sized { revision, size },
+    );
+    assert_eq!(
+        session.direct_edit_batch_graph_limits(
+            &invalid_graph,
+            CommandGraphLimits {
+                commands: 2,
+                dependency_edges: 1,
+            },
+        ),
+        DirectEditBatchGraphLimitsOutcome::Admitted { revision, size },
+    );
+    let incompatible = DirectEditBatchProposal {
+        capability_version: CommandBehaviorVersion(0),
+        ..invalid_graph.clone()
+    };
+    assert_eq!(
+        session.direct_edit_batch_graph_size(&incompatible),
+        DirectEditBatchGraphSizeOutcome::CapabilityMismatch {
+            current: CommandBehaviorVersion(1),
+            expected: CommandBehaviorVersion(0),
+        },
+    );
+    let replacement = candidate_notebook(&ids, "new revision");
+    let AcceptanceOutcome::Accepted { revision: current, .. } =
+        session.accept(replacement)
+    else {
+        panic!("replacement candidate must be accepted");
+    };
+    assert_eq!(
+        session.direct_edit_batch_graph_size(&invalid_graph),
+        DirectEditBatchGraphSizeOutcome::StaleBase { current },
+    );
+    assert_ne!(session.current(), Some(&before));
 }
 
 #[test]
