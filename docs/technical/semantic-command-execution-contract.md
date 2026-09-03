@@ -587,7 +587,9 @@ transaction.
 
 A net semantic no-op keeps the current revision and history position.
 Middle-command failure and stale base produce no accepted mutation, and
-successful semantic change/impact-seed evidence matches prior simulation.
+successful semantic change/impact-seed evidence matches prior simulation. A
+caller-bounded application path reuses the graph-limit preflight before any
+candidate replay or history mutation.
 
 No protocol normalizer, command-context/writable-scope admission, retry
 identity, selective-rebatch capability, published product limit, full Validate

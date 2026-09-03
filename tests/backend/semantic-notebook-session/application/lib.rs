@@ -3259,6 +3259,70 @@ fn ordered_batch_index_waits_until_every_requested_target_is_resolved() {
 }
 
 #[test]
+fn bounded_direct_edit_batch_apply_rejects_resources_before_commit() {
+    let ids = IdentityAllocator::new();
+    let (candidate, first, second, _) =
+        candidate_notebook_with_three_spans(&ids);
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision: base } =
+        session.accept(candidate)
+    else {
+        panic!("three-span candidate must be accepted");
+    };
+    let first = accepted_for(&mapping, first);
+    let second = accepted_for(&mapping, second);
+    let batch = DirectEditBatchProposal {
+        base,
+        capability_version: CommandBehaviorVersion(1),
+        commands: vec![
+            text_batch_command(1, &[], first, "one", "ONE"),
+            text_batch_command(2, &[1], second, "two", "TWO"),
+        ],
+    };
+    let before = session.current().expect("accepted revision").clone();
+
+    assert_eq!(
+        session.apply_direct_edit_batch_bounded(
+            batch.clone(),
+            CommandGraphLimits {
+                commands: 1,
+                dependency_edges: 1,
+            },
+        ),
+        DirectEditBatchApplyOutcome::ResourceRejected {
+            reason: CommandGraphLimitError::CommandCountExceeded {
+                actual: 2,
+                limit: 1,
+            },
+        },
+    );
+    assert_eq!(session.current(), Some(&before));
+    assert_eq!(
+        session.history_availability(),
+        HistoryAvailabilityOutcome::Available(HistoryAvailability {
+            can_redo: false,
+            can_undo: false,
+            revision: base,
+        }),
+    );
+
+    let outcome = session.apply_direct_edit_batch_bounded(
+        batch,
+        CommandGraphLimits {
+            commands: 2,
+            dependency_edges: 1,
+        },
+    );
+    assert!(matches!(
+        outcome,
+        DirectEditBatchApplyOutcome::Applied {
+            base: applied_base,
+            ..
+        } if applied_base == base
+    ));
+}
+
+#[test]
 fn direct_edit_batch_apply_matches_prediction_and_undoes_as_one_transaction() {
     let ids = IdentityAllocator::new();
     let (candidate, first, second, _) =

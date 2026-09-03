@@ -1610,6 +1610,15 @@ pub trait SemanticNotebookSession {
     where
         CommandIdentity: Clone + Ord;
 
+    /// Apply one in-memory batch under caller-supplied coarse graph limits.
+    fn apply_direct_edit_batch_bounded<CommandIdentity>(
+        &mut self,
+        batch: DirectEditBatchProposal<CommandIdentity>,
+        limits: CommandGraphLimits,
+    ) -> DirectEditBatchApplyOutcome<CommandIdentity>
+    where
+        CommandIdentity: Clone + Ord;
+
     /// Check one previously bound command capability behavior version.
     fn check_command_capability_compatibility(
         &self,
