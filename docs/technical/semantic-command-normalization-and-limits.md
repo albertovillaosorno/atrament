@@ -209,6 +209,12 @@ does not add that dependency on the caller's behalf. It also measures exact
 command and explicit dependency-edge counts and enforces caller-supplied coarse
 bounds at the exact limit and one step beyond without truncation.
 
+Session-level graph resource preflight binds those counts to current capability
+behavior and the exact accepted base revision before candidate simulation. It
+uses read-only command-node views and does not clone caller command identities.
+Passing coarse limits remains distinct from dependency-graph validation, so a
+later structural check may still reject an otherwise in-bounds proposal.
+
 The graph validator is iterative; a 100,000-command dependency chain is covered
 by direct executable evidence without recursive traversal. No numeric product
 limit is selected or advertised by this foundation. It does not define a

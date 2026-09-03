@@ -152,6 +152,10 @@ requirement materialization without cloning omitted pairs first or allocating a
 dependency-reference vector per command. Exact graph counts and report size can
 be checked against caller-supplied bounds without choosing product limits.
 
+Session graph-resource preflight also binds exact command/dependency counts to
+capability behavior and the accepted base revision before candidate simulation;
+passing those bounds does not validate graph structure.
+
 Direct-edit simulation now also projects exact before/after semantic changes. An
 ordered in-memory direct-edit batch validates the generic dependency graph,
 replays replacements against a private targeted value overlay, stops atomically

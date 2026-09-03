@@ -183,6 +183,11 @@ reject oversized identity-pair materialization before allocation, and session
 analysis borrows proposal identities until concrete detail or failure is
 returned.
 
+Session graph-resource preflight derives exact command/dependency counts and
+checks caller-supplied coarse bounds against capability behavior and exact base
+revision before semantic simulation. Passing those bounds does not imply that
+the dependency graph itself is valid.
+
 These foundations change no advertised capability or published resource limit.
 Full Validate still requires protocol normalization, command context, complete
 dependency impact expansion, diagnostics, and Apply revalidation.
