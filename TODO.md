@@ -287,8 +287,10 @@ incomplete, repeated, reordered, and out-of-flow semantic measurements.
 
 Empty measured flows now avoid unused page-profile authority entirely. Nonempty
 semantic pagination indexes page profiles once per call while preserving
-first-match defensive behavior; fixtures cover 10,000 ordered measured blocks
-and 10,000 additional page/profile pairs without changing semantic order.
+first-match defensive behavior, and derives each writable profile region once
+for all pages sharing it. Fixtures cover 10,000 ordered measured blocks, 10,000
+additional distinct page/profile pairs, and 10,000 pages sharing one profile
+without changing semantic order.
 
 Runtime composition of this read-only pagination service remains open. The
 current architecture declaration does not admit a dependency from the live
