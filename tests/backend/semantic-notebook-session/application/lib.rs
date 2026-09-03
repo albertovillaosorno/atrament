@@ -2084,6 +2084,140 @@ fn ordered_asset_reference_chain_replaces_then_removes_one_figure_reference() {
 }
 
 #[test]
+fn provenance_source_reference_preserves_exact_unicode() {
+    let ids = IdentityAllocator::new();
+    let (mut candidate, candidate_ids) =
+        candidate_notebook_with_provenance(&ids);
+    let exact = String::from("fuente: José 👩🏽‍🔬 cafe\u{301}");
+    let composed = String::from("fuente: José 👩🏽‍🔬 café");
+    assert_ne!(exact, composed);
+    candidate
+        .provenance
+        .iter_mut()
+        .find(|record| record.id == candidate_ids.edited)
+        .expect("candidate provenance record")
+        .reference = Some(exact.clone());
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(candidate)
+    else {
+        panic!("Unicode provenance candidate must be accepted");
+    };
+    let provenance = accepted_for(&mapping, candidate_ids.edited);
+    let exact_value = EditableSemanticValue::Provenance {
+        kind: ProvenanceKind::Supplied,
+        reference: Some(exact.clone()),
+    };
+    let composed_value = EditableSemanticValue::Provenance {
+        kind: ProvenanceKind::Supplied,
+        reference: Some(composed.clone()),
+    };
+    let before = session.current().expect("Unicode provenance base").clone();
+    assert_eq!(
+        session.check_editable_value_precondition(
+            revision,
+            provenance,
+            exact_value.clone(),
+        ),
+        EditableValuePreconditionOutcome::Satisfied {
+            actual: exact_value.clone(),
+            revision,
+            target: provenance,
+        },
+    );
+    assert_eq!(
+        session.check_editable_value_precondition(
+            revision,
+            provenance,
+            composed_value.clone(),
+        ),
+        EditableValuePreconditionOutcome::ValueMismatch {
+            actual: exact_value.clone(),
+            expected: composed_value.clone(),
+            revision,
+            target: provenance,
+        },
+    );
+    assert_eq!(
+        session.simulate_direct_edit(revision, provenance, exact_value),
+        DirectEditSimulationOutcome::NoOp {
+            family: SemanticCommandFamily::Provenance,
+            revision,
+            target: provenance,
+        },
+    );
+    assert_eq!(
+        session.simulate_direct_edit(
+            revision,
+            provenance,
+            composed_value.clone(),
+        ),
+        DirectEditSimulationOutcome::Applicable {
+            family: SemanticCommandFamily::Provenance,
+            requested: composed_value.clone(),
+            revision,
+            target: provenance,
+        },
+    );
+    assert_eq!(session.current(), Some(&before));
+
+    let batch = DirectEditBatchProposal {
+        base: revision,
+        capability_version: CommandBehaviorVersion(4),
+        commands: vec![DirectEditBatchCommand {
+            dependencies: vec![],
+            id: 1_u32,
+            preconditions: CommandTargetPreconditions {
+                expected_value: Some(EditableSemanticValue::Provenance {
+                    kind: ProvenanceKind::Supplied,
+                    reference: Some(exact),
+                }),
+                identity: IdentityPrecondition {
+                    expected_kind: Some(SemanticIdentityKind::Provenance),
+                    expected_owner: IdentityOwnerExpectation::Any,
+                },
+                requested_family: SemanticCommandFamily::Provenance,
+            },
+            requested: composed_value,
+            target: provenance,
+        }],
+    };
+    let DirectEditBatchApplyOutcome::Applied { revision: applied, .. } =
+        session.apply_direct_edit_batch(batch)
+    else {
+        panic!("Unicode provenance replacement must apply");
+    };
+    let current = session.current().expect("Unicode provenance edit");
+    let changed = current
+        .notebook
+        .provenance
+        .iter()
+        .find(|record| record.id == provenance)
+        .expect("Unicode provenance record");
+    assert_eq!(changed.reference.as_deref(), Some(composed.as_str()));
+    let HistoryTraversalOutcome::Traversed { .. } =
+        session.traverse_history(applied, HistoryDirection::Undo)
+    else {
+        panic!("Unicode provenance replacement must Undo");
+    };
+    let current = session.current().expect("Unicode provenance Undo");
+    let restored = current
+        .notebook
+        .provenance
+        .iter()
+        .find(|record| record.id == provenance)
+        .expect("restored Unicode provenance record");
+    assert_eq!(restored.reference.as_deref(), before
+        .notebook
+        .provenance
+        .iter()
+        .find(|record| record.id == provenance)
+        .expect("base Unicode provenance record")
+        .reference
+        .as_deref());
+}
+
+#[test]
 fn independent_provenance_changes_merge_notebook_impact_seed() {
     let ids = IdentityAllocator::new();
     let (candidate, candidate_ids) = candidate_notebook_with_provenance(&ids);
