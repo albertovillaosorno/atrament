@@ -41,11 +41,11 @@ use std::slice::from_ref;
 use atrament_mathematics_source::analyze;
 use atrament_semantic_command_graph::{
     BoundedDependencyRequirementsError, CommandDependencyNode,
-    CommandGraphLimitError, CommandGraphLimits, DependencyRequirementsError,
-    DependencySummaryError, command_graph_size,
+    CommandGraphLimitError, CommandGraphLimits, CommandGraphSize,
+    DependencyRequirementsError, DependencySummaryError,
     dependency_selection_requirements,
     dependency_selection_requirements_bounded, dependency_selection_summary,
-    validate_command_graph, validate_command_graph_limits,
+    validate_command_graph,
 };
 use atrament_semantic_notebook::{
     AcceptedIdentity, AcceptedRevision, Asset, Block, BlockContent,
@@ -486,13 +486,10 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
                 current: current.id,
             };
         }
-        if let Some(reason) =
-            direct_edit_command_count_limit(batch.commands.len(), limits)
-        {
-            return DirectEditBatchGraphLimitsOutcome::Rejected { reason };
-        }
-        let nodes = direct_edit_command_graph_nodes(&batch.commands);
-        match validate_command_graph_limits(&nodes, limits) {
+        match direct_edit_batch_graph_limits_from_commands(
+            &batch.commands,
+            limits,
+        ) {
             Ok(size) => DirectEditBatchGraphLimitsOutcome::Admitted {
                 revision: current.id,
                 size,
@@ -525,8 +522,7 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
                 current: current.id,
             };
         }
-        let nodes = direct_edit_command_graph_nodes(&batch.commands);
-        command_graph_size(&nodes).map_or(
+        direct_edit_batch_graph_size_from_commands(&batch.commands).map_or(
             DirectEditBatchGraphSizeOutcome::SizeOverflow,
             |size| DirectEditBatchGraphSizeOutcome::Sized {
                 revision: current.id,
@@ -1172,19 +1168,15 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
                 current: current.id,
             };
         }
-        if let Some(reason) =
-            direct_edit_command_count_limit(batch.commands.len(), limits)
-        {
+        if let Err(reason) = direct_edit_batch_graph_limits_from_commands(
+            &batch.commands,
+            limits,
+        ) {
             return DirectEditBatchSimulationOutcome::ResourceRejected {
                 reason,
             };
         }
         let nodes = direct_edit_command_graph_nodes(&batch.commands);
-        if let Err(reason) = validate_command_graph_limits(&nodes, limits) {
-            return DirectEditBatchSimulationOutcome::ResourceRejected {
-                reason,
-            };
-        }
         simulate_direct_edit_batch_after_base_with_nodes(
             current,
             &batch.commands,
@@ -1630,16 +1622,42 @@ fn formula_content_value(
     }
 }
 
-fn direct_edit_command_count_limit(
-    commands: usize,
+fn direct_edit_batch_graph_limits_from_commands<CommandIdentity>(
+    commands: &[DirectEditBatchCommand<CommandIdentity>],
     limits: CommandGraphLimits,
-) -> Option<CommandGraphLimitError> {
-    (commands > limits.commands).then_some(
-        CommandGraphLimitError::CommandCountExceeded {
-            actual: commands,
+) -> Result<CommandGraphSize, CommandGraphLimitError> {
+    if commands.len() > limits.commands {
+        return Err(CommandGraphLimitError::CommandCountExceeded {
+            actual: commands.len(),
             limit: limits.commands,
-        },
-    )
+        });
+    }
+    let size = direct_edit_batch_graph_size_from_commands(commands)?;
+    if size.dependency_edges > limits.dependency_edges {
+        return Err(CommandGraphLimitError::DependencyEdgeCountExceeded {
+            actual: size.dependency_edges,
+            limit: limits.dependency_edges,
+        });
+    }
+    Ok(size)
+}
+
+fn direct_edit_batch_graph_size_from_commands<CommandIdentity>(
+    commands: &[DirectEditBatchCommand<CommandIdentity>],
+) -> Result<CommandGraphSize, CommandGraphLimitError> {
+    let mut dependency_edges = 0usize;
+    for command in commands {
+        let Some(next) =
+            dependency_edges.checked_add(command.dependencies.len())
+        else {
+            return Err(CommandGraphLimitError::DependencyEdgeCountOverflow);
+        };
+        dependency_edges = next;
+    }
+    Ok(CommandGraphSize {
+        commands: commands.len(),
+        dependency_edges,
+    })
 }
 
 fn direct_edit_command_graph_nodes<CommandIdentity>(
