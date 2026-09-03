@@ -7522,6 +7522,76 @@ fn semantic_history_rejects_stale_base_without_traversal() {
 }
 
 #[test]
+fn history_boundary_probe_preserves_the_opposite_available_traversal() {
+    let candidate_ids = IdentityAllocator::new();
+    let (candidate, candidate_span) =
+        candidate_notebook_with_span(&candidate_ids, "zero");
+    let mut service = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision: base } =
+        service.accept(candidate)
+    else {
+        panic!("candidate must be accepted");
+    };
+    let target = accepted_for(&mapping, candidate_span);
+    let TextEditOutcome::Applied { revision: edited, .. } =
+        service.replace_text(base, target, String::from("one"))
+    else {
+        panic!("edit must apply");
+    };
+
+    assert_eq!(
+        service.traverse_history(edited, HistoryDirection::Redo),
+        HistoryTraversalOutcome::Boundary {
+            direction: HistoryDirection::Redo,
+            revision: edited,
+        },
+    );
+    assert_eq!(
+        service.history_availability(),
+        HistoryAvailabilityOutcome::Available(HistoryAvailability {
+            can_redo: false,
+            can_undo: true,
+            revision: edited,
+        }),
+    );
+    let HistoryTraversalOutcome::Traversed { revision: undone, .. } =
+        service.traverse_history(edited, HistoryDirection::Undo)
+    else {
+        panic!("Redo boundary probe must preserve Undo");
+    };
+
+    assert_eq!(
+        service.traverse_history(undone, HistoryDirection::Undo),
+        HistoryTraversalOutcome::Boundary {
+            direction: HistoryDirection::Undo,
+            revision: undone,
+        },
+    );
+    assert_eq!(
+        service.history_availability(),
+        HistoryAvailabilityOutcome::Available(HistoryAvailability {
+            can_redo: true,
+            can_undo: false,
+            revision: undone,
+        }),
+    );
+    let HistoryTraversalOutcome::Traversed { revision: redone, .. } =
+        service.traverse_history(undone, HistoryDirection::Redo)
+    else {
+        panic!("Undo boundary probe must preserve Redo");
+    };
+    let current = service.current().expect("redone revision");
+    let BlockContent::Paragraph(spans) =
+        &current.notebook.pages[0].flows[0].blocks[0].content
+    else {
+        panic!("history boundary fixture must remain paragraph");
+    };
+    assert_eq!(spans[0].id, target);
+    assert_eq!(spans[0].text, "one");
+    assert_eq!(current.id, redone);
+}
+
+#[test]
 fn repeated_completed_history_request_is_stale_without_advancing_again() {
     let candidate_ids = IdentityAllocator::new();
     let (candidate, candidate_span) =
