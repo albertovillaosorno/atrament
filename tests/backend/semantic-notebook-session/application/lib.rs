@@ -3323,6 +3323,176 @@ fn bounded_direct_edit_batch_apply_rejects_resources_before_commit() {
 }
 
 #[test]
+fn direct_edit_batch_apply_replays_every_established_value_family() {
+    let ids = IdentityAllocator::new();
+    let (mut candidate, text) =
+        candidate_notebook_with_span(&ids, "before text");
+    let profile = candidate.page_profiles[0].id;
+    let formula = candidate_id(&ids);
+    let formula_block = candidate_id(&ids);
+    let table = candidate_id(&ids);
+    let row = candidate_id(&ids);
+    let cell = candidate_id(&ids);
+    let table_block = candidate_id(&ids);
+    candidate.pages[0].flows[0].blocks.push(Block {
+        content: BlockContent::Mathematics(Formula {
+            id: formula,
+            mode: FormulaMode::Display,
+            source: String::from("x"),
+        }),
+        extensions: vec![],
+        id: formula_block,
+        provenance: None,
+        style: None,
+    });
+    candidate.pages[0].flows[0].blocks.push(Block {
+        content: BlockContent::Table(Table {
+            id: table,
+            rows: vec![TableRow {
+                cells: vec![TableCell {
+                    blocks: vec![],
+                    id: cell,
+                    span: TableCellSpan::SINGLE,
+                }],
+                id: row,
+                role: TableRowRole::Header,
+            }],
+        }),
+        extensions: vec![],
+        id: table_block,
+        provenance: None,
+        style: None,
+    });
+    let mut service = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision: base } =
+        service.accept(candidate)
+    else {
+        panic!("mixed editable candidate must be accepted");
+    };
+    let text = accepted_for(&mapping, text);
+    let profile = accepted_for(&mapping, profile);
+    let formula = accepted_for(&mapping, formula);
+    let row = accepted_for(&mapping, row);
+    let mut changed_profile = physical_page_profile();
+    changed_profile.top_clearance = Length::from_micrometres(12_000);
+    let batch = DirectEditBatchProposal {
+        base,
+        capability_version: CommandBehaviorVersion(1),
+        commands: vec![
+            text_batch_command(1, &[], text, "before text", "after text"),
+            DirectEditBatchCommand {
+                dependencies: vec![],
+                id: 2_u32,
+                preconditions: CommandTargetPreconditions {
+                    expected_value: Some(EditableSemanticValue::Formula {
+                        mode: FormulaMode::Display,
+                        source: String::from("x"),
+                    }),
+                    identity: IdentityPrecondition {
+                        expected_kind: Some(SemanticIdentityKind::Formula),
+                        expected_owner: IdentityOwnerExpectation::Any,
+                    },
+                    requested_family: SemanticCommandFamily::StructuredContent,
+                },
+                requested: EditableSemanticValue::Formula {
+                    mode: FormulaMode::Display,
+                    source: String::from("x^2"),
+                },
+                target: formula,
+            },
+            DirectEditBatchCommand {
+                dependencies: vec![],
+                id: 3_u32,
+                preconditions: CommandTargetPreconditions {
+                    expected_value: Some(EditableSemanticValue::PageProfile(
+                        physical_page_profile(),
+                    )),
+                    identity: IdentityPrecondition {
+                        expected_kind: Some(SemanticIdentityKind::PageProfile),
+                        expected_owner: IdentityOwnerExpectation::Any,
+                    },
+                    requested_family: SemanticCommandFamily::DocumentConstraint,
+                },
+                requested: EditableSemanticValue::PageProfile(changed_profile),
+                target: profile,
+            },
+            DirectEditBatchCommand {
+                dependencies: vec![],
+                id: 4_u32,
+                preconditions: CommandTargetPreconditions {
+                    expected_value: Some(EditableSemanticValue::TableRowRole(
+                        TableRowRole::Header,
+                    )),
+                    identity: IdentityPrecondition {
+                        expected_kind: Some(SemanticIdentityKind::TableRow),
+                        expected_owner: IdentityOwnerExpectation::Any,
+                    },
+                    requested_family: SemanticCommandFamily::StructuredContent,
+                },
+                requested: EditableSemanticValue::TableRowRole(
+                    TableRowRole::Body,
+                ),
+                target: row,
+            },
+        ],
+    };
+
+    let outcome = service.apply_direct_edit_batch(batch);
+    let DirectEditBatchApplyOutcome::Applied {
+        changes,
+        revision: applied,
+        ..
+    } = outcome
+    else {
+        panic!("mixed-family batch must apply: {outcome:?}");
+    };
+    assert_eq!(changes.len(), 4);
+    assert_ne!(applied, base);
+    let current = service.current().expect("mixed-family revision");
+    assert_eq!(current.notebook.page_profiles[0].geometry, changed_profile);
+    let blocks = &current.notebook.pages[0].flows[0].blocks;
+    let BlockContent::Paragraph(spans) = &blocks[0].content else {
+        panic!("first block must remain paragraph");
+    };
+    assert_eq!(spans[0].id, text);
+    assert_eq!(spans[0].text, "after text");
+    let BlockContent::Mathematics(math) = &blocks[1].content else {
+        panic!("second block must remain mathematics");
+    };
+    assert_eq!(math.id, formula);
+    assert_eq!(math.source, "x^2");
+    let BlockContent::Table(table) = &blocks[2].content else {
+        panic!("third block must remain table");
+    };
+    assert_eq!(table.rows[0].id, row);
+    assert_eq!(table.rows[0].role, TableRowRole::Body);
+
+    let HistoryTraversalOutcome::Traversed { .. } =
+        service.traverse_history(applied, HistoryDirection::Undo)
+    else {
+        panic!("mixed-family Apply must Undo as one transaction");
+    };
+    let current = service.current().expect("mixed-family Undo revision");
+    assert_eq!(
+        current.notebook.page_profiles[0].geometry,
+        physical_page_profile(),
+    );
+    let blocks = &current.notebook.pages[0].flows[0].blocks;
+    let BlockContent::Paragraph(spans) = &blocks[0].content else {
+        panic!("Undo first block must remain paragraph");
+    };
+    assert_eq!(spans[0].text, "before text");
+    let BlockContent::Mathematics(math) = &blocks[1].content else {
+        panic!("Undo second block must remain mathematics");
+    };
+    assert_eq!(math.source, "x");
+    let BlockContent::Table(table) = &blocks[2].content else {
+        panic!("Undo third block must remain table");
+    };
+    assert_eq!(table.rows[0].role, TableRowRole::Header);
+}
+
+#[test]
 fn direct_edit_batch_apply_matches_prediction_and_undoes_as_one_transaction() {
     let ids = IdentityAllocator::new();
     let (candidate, first, second, _) =

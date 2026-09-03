@@ -221,6 +221,11 @@ outcomes, semantic changes, and impact seeds exactly; net no-op application does
 not allocate a revision, and a changed base rejects as stale. The accepted batch
 enters semantic history as one Undo transaction.
 
+Replay coverage exercises all four currently established editable value
+families in one transaction: exact text, formula source/mode, physical page
+profile, and table-row role. One accepted revision contains all four changes,
+and one Undo restores all four prior values with stable semantic identities.
+
 A synchronized in-process concurrency fixture releases two Apply attempts bound
 to the same accepted base together. Exactly one commits; after that commit the
 other observes the winning revision as its typed stale-base result. One Undo
