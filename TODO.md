@@ -223,6 +223,13 @@ identity already classified as `Asset` in the same current revision. Missing or
 wrong-kind identities reject before mutation; raw bytes, base64 payloads, local
 paths, and remote URLs are not representable by this value. Asset ingestion and
 media-byte ownership remain separate open capabilities.
+Executable fixtures now cover attach from no reference, replacement between two
+admitted assets, removal to no reference, a dependent replace-then-remove chain,
+and a figure nested through callout, list, table-cell, and freeform containers.
+
+The immediately previous aggregate behavior version 2 rejects. A wrong-kind
+reference in a later mixed-batch command leaves earlier valid predictions and
+history uncommitted.
 
 An empty batch returns the frozen NoOp prediction before semantic target
 indexing. Explicit dependencies are required before a later command can observe

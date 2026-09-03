@@ -1058,13 +1058,13 @@ pub enum DirectEditSimulationOutcome {
         /// Current accepted revision that rejected stale simulation.
         current: RevisionIdentity,
     },
-    /// Target exists but has no established direct-edit value projection.
+    /// Target exists but has no established generic edit value projection.
     TargetNotEditableValue {
         /// Semantic kind owned by the existing target.
         kind: SemanticIdentityKind,
         /// Accepted revision simulated without mutation.
         revision: RevisionIdentity,
-        /// Existing target with no direct-edit value projection.
+        /// Existing target with no generic edit value projection.
         target: AcceptedIdentity,
     },
     /// Requested accepted identity is absent from the named revision.
@@ -1113,7 +1113,7 @@ pub enum EditableValuePreconditionOutcome {
         /// Current accepted revision that rejected the stale check.
         current: RevisionIdentity,
     },
-    /// Target exists but has no established direct-edit value projection.
+    /// Target exists but has no established generic edit value projection.
     TargetNotEditableValue {
         /// Semantic kind owned by the existing target.
         kind: SemanticIdentityKind,
@@ -1338,7 +1338,7 @@ pub enum CommandTargetPreconditionOutcome {
         /// Current accepted revision that rejected stale validation.
         current: RevisionIdentity,
     },
-    /// Target exists but has no established direct-edit value projection.
+    /// Target exists but has no established generic edit value projection.
     TargetNotEditableValue {
         /// Semantic kind owned by the existing target.
         kind: SemanticIdentityKind,
