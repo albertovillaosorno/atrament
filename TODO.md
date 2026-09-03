@@ -275,8 +275,19 @@ Groups too tall for any one remaining page fall back only to measured-fragment
 boundaries, while exact-bottom fits do not manufacture page breaks. A page
 profile edit invalidates old measurements, and fresh measurements reflow
 deterministically against the new accepted writable geometry without backfilling
-pages
-before the selected flow's owning page.
+pages before the selected flow's owning page.
+
+Measurement admission now streams contiguous block-owner runs instead of
+materializing a second owner vector. Independent pagination advances through the
+remaining page sequence once per fragment, and keep-together search computes one
+checked total height and maximum width per group. A 1,296-case reference oracle
+covers small independent placements and typed failures, while a 10,000-block
+accepted-flow fixture preserves complete semantic order.
+
+Runtime composition of this read-only pagination service remains open. The
+current architecture declaration does not admit a dependency from the live
+`SessionApplication` owner to `atrament_semantic_flow_pagination`, so adapters
+must not bypass that boundary by wiring it ad hoc.
 
 The task remains open for real handwriting and formula measurement, grapheme-
 aware line breaking and paragraph wrapping, quotation and citation measurement,
