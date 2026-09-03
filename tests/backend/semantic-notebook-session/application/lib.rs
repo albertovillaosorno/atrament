@@ -2826,6 +2826,77 @@ fn ordered_direct_edit_batch_material_overlay_reaches_nested_text() {
 }
 
 #[test]
+fn ordered_batch_overlay_indexes_profile_and_text_targets_together() {
+    let ids = IdentityAllocator::new();
+    let (candidate, span) = candidate_notebook_with_span(&ids, "before");
+    let profile = candidate.page_profiles[0].id;
+    let page = candidate.pages[0].id;
+    let flow = candidate.pages[0].flows[0].id;
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(candidate)
+    else {
+        panic!("candidate must be accepted");
+    };
+    let profile = accepted_for(&mapping, profile);
+    let page = accepted_for(&mapping, page);
+    let flow = accepted_for(&mapping, flow);
+    let span = accepted_for(&mapping, span);
+    let mut changed_profile = physical_page_profile();
+    changed_profile.top_clearance = Length::from_micrometres(14_000);
+    let batch = DirectEditBatchProposal {
+        base: revision,
+        capability_version: CommandBehaviorVersion(1),
+        commands: vec![
+            DirectEditBatchCommand {
+                dependencies: Vec::<u32>::new(),
+                id: 1_u32,
+                preconditions: CommandTargetPreconditions {
+                    expected_value: Some(EditableSemanticValue::PageProfile(
+                        physical_page_profile(),
+                    )),
+                    identity: IdentityPrecondition {
+                        expected_kind: Some(SemanticIdentityKind::PageProfile),
+                        expected_owner: IdentityOwnerExpectation::Any,
+                    },
+                    requested_family: SemanticCommandFamily::DocumentConstraint,
+                },
+                requested: EditableSemanticValue::PageProfile(changed_profile),
+                target: profile,
+            },
+            text_batch_command(2, &[], span, "before", "after"),
+        ],
+    };
+    let DirectEditBatchSimulationOutcome::Predicted {
+        changes,
+        impact_seeds,
+        ..
+    } = session.simulate_direct_edit_batch(batch)
+    else {
+        panic!("mixed profile and text batch must simulate");
+    };
+    assert_eq!(changes.len(), 2);
+    assert!(changes.iter().any(|change| change.target == profile));
+    assert!(changes.iter().any(|change| change.target == span));
+    assert!(impact_seeds.contains(&DirectEditImpactSeed {
+        authorities: vec![DirectEditDerivedAuthority::AllDerived],
+        scope: DirectEditImpactScope::Pages { pages: vec![page] },
+    }));
+    assert!(impact_seeds.contains(&DirectEditImpactSeed {
+        authorities: vec![
+            DirectEditDerivedAuthority::Diagnostics,
+            DirectEditDerivedAuthority::FlowGeometry,
+            DirectEditDerivedAuthority::Handwriting,
+            DirectEditDerivedAuthority::Motion,
+            DirectEditDerivedAuthority::Rendering,
+            DirectEditDerivedAuthority::Shaping,
+            DirectEditDerivedAuthority::Wrapping,
+        ],
+        scope: DirectEditImpactScope::Flow { flow, page },
+    }));
+}
+
+#[test]
 fn ordered_batch_overlay_keeps_unreferenced_profile_impact() {
     let ids = IdentityAllocator::new();
     let mut candidate = candidate_notebook(&ids, "unreferenced profile");

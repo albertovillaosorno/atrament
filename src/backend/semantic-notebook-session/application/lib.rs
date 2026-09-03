@@ -1815,35 +1815,47 @@ fn direct_edit_material_index(
     revision: atrament_semantic_notebook::RevisionIdentity,
 ) -> DirectEditBatchIndex {
     let mut index = DirectEditBatchIndex::default();
-    let mut profile_pages =
-        BTreeMap::<AcceptedIdentity, Vec<AcceptedIdentity>>::new();
-    for page in &notebook.pages {
-        profile_pages
-            .entry(page.page_profile)
-            .or_default()
-            .push(page.id);
-    }
-    for profile in &notebook.page_profiles {
-        if !targets.contains(&profile.id) {
-            continue;
+    let targeted_profiles = notebook
+        .page_profiles
+        .iter()
+        .filter(|profile| targets.contains(&profile.id))
+        .count();
+    if targeted_profiles > 0 {
+        let mut profile_pages =
+            BTreeMap::<AcceptedIdentity, Vec<AcceptedIdentity>>::new();
+        for page in &notebook.pages {
+            if targets.contains(&page.page_profile) {
+                profile_pages
+                    .entry(page.page_profile)
+                    .or_default()
+                    .push(page.id);
+            }
         }
-        let pages = profile_pages.remove(&profile.id).unwrap_or_default();
-        let impact = if pages.is_empty() {
-            DirectEditImpactScope::Notebook { notebook: notebook.id }
-        } else {
-            DirectEditImpactScope::Pages { pages }
-        };
-        insert_direct_edit_material(
-            &mut index,
-            profile.id,
-            SemanticIdentityDescriptor {
-                kind: SemanticIdentityKind::PageProfile,
-                owner: Some(notebook.id),
-            },
-            EditableSemanticValue::PageProfile(profile.geometry),
-            impact,
-            revision,
-        );
+        for profile in &notebook.page_profiles {
+            if !targets.contains(&profile.id) {
+                continue;
+            }
+            let pages = profile_pages.remove(&profile.id).unwrap_or_default();
+            let impact = if pages.is_empty() {
+                DirectEditImpactScope::Notebook { notebook: notebook.id }
+            } else {
+                DirectEditImpactScope::Pages { pages }
+            };
+            insert_direct_edit_material(
+                &mut index,
+                profile.id,
+                SemanticIdentityDescriptor {
+                    kind: SemanticIdentityKind::PageProfile,
+                    owner: Some(notebook.id),
+                },
+                EditableSemanticValue::PageProfile(profile.geometry),
+                impact,
+                revision,
+            );
+        }
+        if targeted_profiles == targets.len() {
+            return index;
+        }
     }
     let mut stack = Vec::new();
     for page in &notebook.pages {
