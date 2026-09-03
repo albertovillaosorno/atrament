@@ -3398,6 +3398,60 @@ fn ordered_direct_edit_batch_requires_dependency_for_repeated_target() {
 }
 
 #[test]
+fn ordered_batch_index_coalescing_preserves_first_change_order() {
+    let ids = IdentityAllocator::new();
+    let (candidate, first, second, third) =
+        candidate_notebook_with_three_spans(&ids);
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(candidate)
+    else {
+        panic!("three-span candidate must be accepted");
+    };
+    let first = accepted_for(&mapping, first);
+    let second = accepted_for(&mapping, second);
+    let third = accepted_for(&mapping, third);
+    let outcome = session.simulate_direct_edit_batch(DirectEditBatchProposal {
+        base: revision,
+        capability_version: CommandBehaviorVersion(1),
+        commands: vec![
+            text_batch_command(1, &[], second, "two", "TWO-1"),
+            text_batch_command(2, &[], first, "one", "ONE-1"),
+            text_batch_command(3, &[1], second, "TWO-1", "TWO-2"),
+            text_batch_command(4, &[2], first, "ONE-1", "ONE-2"),
+            text_batch_command(5, &[], third, "three", "temporary"),
+            text_batch_command(6, &[5], third, "temporary", "three"),
+        ],
+    });
+    let DirectEditBatchSimulationOutcome::Predicted {
+        changes,
+        commands,
+        effect,
+        ..
+    } = outcome
+    else {
+        panic!("interleaved dependent edits must simulate");
+    };
+    assert_eq!(commands.len(), 6);
+    assert!(commands.iter().all(|command| command.change.is_some()));
+    assert_eq!(effect, DirectEditEffectClass::Mutation);
+    assert_eq!(changes, vec![
+        DirectEditSemanticChange {
+            after: EditableSemanticValue::Text(String::from("TWO-2")),
+            before: EditableSemanticValue::Text(String::from("two")),
+            family: SemanticCommandFamily::TextContent,
+            target: second,
+        },
+        DirectEditSemanticChange {
+            after: EditableSemanticValue::Text(String::from("ONE-2")),
+            before: EditableSemanticValue::Text(String::from("one")),
+            family: SemanticCommandFamily::TextContent,
+            target: first,
+        },
+    ]);
+}
+
+#[test]
 fn ordered_direct_edit_batch_graph_rejects_before_candidate_replay() {
     let ids = IdentityAllocator::new();
     let (candidate, span) = candidate_notebook_with_span(&ids, "base");

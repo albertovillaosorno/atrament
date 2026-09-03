@@ -2059,7 +2059,7 @@ where
             commands.len(),
         );
     let mut previous_by_target = BTreeMap::<AcceptedIdentity, usize>::new();
-    let mut aggregate = BTreeMap::new();
+    let mut aggregate = BTreeMap::<AcceptedIdentity, (usize, usize)>::new();
     let mut remaining = commands.into_iter();
     while let Some(command) = remaining.next() {
         let target = command.target;
@@ -2087,23 +2087,17 @@ where
             },
         };
         let command_index = evaluated.len();
-        if let Some(change) = prediction.change.as_ref() {
-            record_direct_edit_batch_change(
+        if prediction.change.is_some() {
+            record_direct_edit_batch_change_index(
                 &mut aggregate,
                 command_index,
-                change,
+                target,
             );
             let _previous = previous_by_target.insert(target, command_index);
         }
         evaluated.push(prediction);
     }
-    let mut ordered_changes = aggregate.into_values().collect::<Vec<_>>();
-    ordered_changes.sort_by_key(|(index, _)| *index);
-    let changes = ordered_changes
-        .into_iter()
-        .map(|(_, change)| change)
-        .filter(|change| change.before != change.after)
-        .collect::<Vec<_>>();
+    let changes = collect_direct_edit_batch_changes(&evaluated, aggregate);
     let effect = if changes.is_empty() {
         DirectEditEffectClass::NoOp
     } else {
@@ -2488,20 +2482,40 @@ fn batch_command_prediction<CommandIdentity>(
     }
 }
 
-fn record_direct_edit_batch_change(
-    aggregate: &mut BTreeMap<
-        AcceptedIdentity,
-        (usize, DirectEditSemanticChange),
-    >,
+fn record_direct_edit_batch_change_index(
+    aggregate: &mut BTreeMap<AcceptedIdentity, (usize, usize)>,
     index: usize,
-    change: &DirectEditSemanticChange,
+    target: AcceptedIdentity,
 ) {
-    if let Some((_, existing)) = aggregate.get_mut(&change.target) {
-        existing.after = change.after.clone();
+    if let Some((_, last)) = aggregate.get_mut(&target) {
+        *last = index;
     } else {
-        let _previous =
-            aggregate.insert(change.target, (index, change.clone()));
+        let _previous = aggregate.insert(target, (index, index));
     }
+}
+
+fn collect_direct_edit_batch_changes<CommandIdentity>(
+    evaluated: &[DirectEditBatchCommandPrediction<CommandIdentity>],
+    aggregate: BTreeMap<AcceptedIdentity, (usize, usize)>,
+) -> Vec<DirectEditSemanticChange> {
+    let mut ordered = aggregate.into_iter().collect::<Vec<_>>();
+    ordered.sort_by_key(|(_, (first, _))| *first);
+    ordered
+        .into_iter()
+        .filter_map(|(target, (first, last))| {
+            let first_change = evaluated.get(first)?.change.as_ref()?;
+            let last_change = evaluated.get(last)?.change.as_ref()?;
+            if first_change.before == last_change.after {
+                return None;
+            }
+            Some(DirectEditSemanticChange {
+                after: last_change.after.clone(),
+                before: first_change.before.clone(),
+                family: first_change.family,
+                target,
+            })
+        })
+        .collect()
 }
 
 fn reject_direct_edit_batch<CommandIdentity>(
