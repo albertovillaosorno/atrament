@@ -29,8 +29,11 @@
 // - Defaults:
 //   - Large acyclic graphs validate iteratively without recursive traversal.
 //
+use std::collections::BTreeSet;
+
 use atrament_semantic_command_graph::{
-    CommandGraphError, CommandNode, validate_command_graph,
+    CommandGraphError, CommandNode, DependencySelectionError,
+    validate_command_graph, validate_dependency_closed_selection,
 };
 
 fn node(id: u32, dependencies: &[u32]) -> CommandNode<u32> {
@@ -124,4 +127,63 @@ fn one_hundred_thousand_command_chain_is_iterative() {
         nodes.push(node(id, &[id.saturating_sub(1)]));
     }
     assert_eq!(validate_command_graph(&nodes), Ok(()));
+}
+
+#[test]
+fn independent_interactive_subset_is_dependency_closed() {
+    let nodes = [node(1, &[]), node(2, &[1]), node(3, &[])];
+    let selected = BTreeSet::from([3]);
+    assert_eq!(
+        validate_dependency_closed_selection(&nodes, &selected),
+        Ok(()),
+    );
+}
+
+#[test]
+fn dependent_interactive_subset_reports_omitted_dependency() {
+    let nodes = [node(1, &[]), node(2, &[1]), node(3, &[])];
+    let selected = BTreeSet::from([2]);
+    assert_eq!(
+        validate_dependency_closed_selection(&nodes, &selected),
+        Err(DependencySelectionError::MissingRequiredDependency {
+            command: 2,
+            dependency: 1,
+        }),
+    );
+    let closed = BTreeSet::from([1, 2]);
+    assert_eq!(
+        validate_dependency_closed_selection(&nodes, &closed),
+        Ok(())
+    );
+}
+
+#[test]
+fn transitive_selection_never_silently_adds_missing_commands() {
+    let nodes = [node(1, &[]), node(2, &[1]), node(3, &[2])];
+    let selected = BTreeSet::from([2, 3]);
+    let before = nodes.clone();
+    assert_eq!(
+        validate_dependency_closed_selection(&nodes, &selected),
+        Err(DependencySelectionError::MissingRequiredDependency {
+            command: 2,
+            dependency: 1,
+        }),
+    );
+    assert_eq!(nodes, before);
+}
+
+#[test]
+fn unknown_selection_and_invalid_source_graph_are_typed() {
+    let nodes = [node(1, &[]), node(2, &[1])];
+    assert_eq!(
+        validate_dependency_closed_selection(&nodes, &BTreeSet::from([9])),
+        Err(DependencySelectionError::UnknownSelection { command: 9 }),
+    );
+    let invalid = [node(1, &[2]), node(2, &[1])];
+    assert_eq!(
+        validate_dependency_closed_selection(&invalid, &BTreeSet::from([1])),
+        Err(DependencySelectionError::Graph {
+            reason: CommandGraphError::Cycle,
+        }),
+    );
 }

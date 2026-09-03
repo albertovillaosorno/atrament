@@ -44,6 +44,28 @@ pub struct CommandNode<Identity> {
     pub id: Identity,
 }
 
+/// Typed failure while checking one selected command subset.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum DependencySelectionError<Identity> {
+    /// The complete source graph is invalid before subset closure is checked.
+    Graph {
+        /// Typed structural failure in the complete command graph.
+        reason: CommandGraphError<Identity>,
+    },
+    /// One selected command requires another command that was not selected.
+    MissingRequiredDependency {
+        /// Selected command whose dependency is absent from the selection.
+        command: Identity,
+        /// Required dependency omitted by the selection.
+        dependency: Identity,
+    },
+    /// Selection names no command in the complete source graph.
+    UnknownSelection {
+        /// Unknown command identity named by the selection.
+        command: Identity,
+    },
+}
+
 /// Typed command dependency graph failure.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum CommandGraphError<Identity> {
@@ -135,6 +157,55 @@ where
     }
     if processed != nodes.len() {
         return Err(CommandGraphError::Cycle);
+    }
+    Ok(())
+}
+
+/// Check that one selected subset contains every explicit command dependency.
+///
+/// The complete graph is validated first. Selection is set-valued and therefore
+/// does not define or rewrite command order. Required dependencies are checked
+/// in the original command and dependency order supplied by `nodes`.
+///
+/// # Errors
+///
+/// Returns the complete graph failure, an unknown selected command identity, or
+/// the first selected command whose explicit dependency was omitted.
+pub fn validate_dependency_closed_selection<Identity>(
+    nodes: &[CommandNode<Identity>],
+    selected: &BTreeSet<Identity>,
+) -> Result<(), DependencySelectionError<Identity>>
+where
+    Identity: Clone + Ord,
+{
+    if let Err(reason) = validate_command_graph(nodes) {
+        return Err(DependencySelectionError::Graph { reason });
+    }
+    let known = nodes
+        .iter()
+        .map(|node| node.id.clone())
+        .collect::<BTreeSet<_>>();
+    if let Some(command) =
+        selected.iter().find(|command| !known.contains(*command))
+    {
+        return Err(DependencySelectionError::UnknownSelection {
+            command: command.clone(),
+        });
+    }
+    for node in nodes {
+        if !selected.contains(&node.id) {
+            continue;
+        }
+        for dependency in &node.dependencies {
+            if !selected.contains(dependency) {
+                return Err(
+                    DependencySelectionError::MissingRequiredDependency {
+                        command: node.id.clone(),
+                        dependency: dependency.clone(),
+                    },
+                );
+            }
+        }
     }
     Ok(())
 }
