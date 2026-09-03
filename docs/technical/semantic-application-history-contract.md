@@ -229,8 +229,8 @@ Undo abandons one candidate snapshot, accepting another candidate clears Redo
 without reusing any accepted semantic identity still present in that abandoned
 snapshot.
 
-Without a history retry identity, replaying a completed traversal against its old
-exact base returns stale and cannot traverse again. This prevents duplicate
+Without a history retry identity, replaying a completed traversal against its
+old exact base returns stale and cannot traverse again. This prevents duplicate
 effects but does not satisfy lost-receipt recovery, because base and direction
 alone cannot distinguish an idempotent retry from a separate caller operation.
 
