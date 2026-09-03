@@ -494,10 +494,11 @@ report one exact before/after semantic change, or an empty change set for a
 no-op, while preserving typed simulation rejection.
 
 A transport-neutral ordered direct-edit batch now combines those primitives with
-the generic dependency graph. It clones only the accepted notebook snapshot,
-simulates each command in isolated candidate state, stops after the first
-semantic rejection, and reports later command identities as not evaluated. The
-accepted revision and identity allocator remain untouched.
+the generic dependency graph. It derives a private overlay for only targeted
+editable values and their impact scopes. It simulates commands against that
+overlay, stops after the first semantic rejection, and reports later command
+identities as
+not evaluated. The accepted revision and identity allocator remain untouched.
 
 When a later command edits a target changed earlier in the same candidate, it
 must explicitly depend on the previous target writer before observing that
@@ -517,6 +518,13 @@ Page-profile edits seed every accepted page that references the changed profile.
 Those seeds are shared by single-target review and ordered batch simulation and
 are omitted for a net semantic no-op. They are inputs to future dependency
 expansion, not the final authoritative Validate impact set.
+
+The ordered overlay is populated by one semantic-structure scan but clones
+values only for identities named by the batch. Later same-target commands update
+the
+cached value while non-editable targets fall back to ordinary semantic material
+resolution. This is internal simulation hardening, not a new capability or
+numeric product-limit decision.
 
 A separate transport-neutral command-graph domain validates duplicate command
 identities, direct self-dependencies, missing dependencies, cycles, and acyclic

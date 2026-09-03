@@ -156,9 +156,11 @@ still performs the same authoritative validation and simulation before commit.
 The current application foundation can deterministically simulate an ordered
 batch of the four established direct replacement value families against one
 immutable accepted revision. It validates generic command dependencies first,
-then applies successful commands only to an isolated cloned notebook candidate.
-A middle failure leaves accepted state unchanged and marks later commands as not
-evaluated.
+then derives a private value-and-impact overlay for only the editable identities
+targeted by the batch. Successful commands update that overlay rather than a
+cloned notebook. A middle failure leaves accepted state unchanged and marks
+later
+commands as not evaluated.
 
 Dependent same-target commands can observe earlier simulated candidate values
 only through an explicit command dependency. Per-command changes retain their
@@ -168,10 +170,13 @@ or NoOp.
 
 The same simulation derives conservative backend-owned impact seeds for text,
 structured-content, and page-profile changes. Single-target review and ordered
-batches share those seeds, and net no-ops emit none. This does not yet satisfy
-full Validate determinism because protocol normalization, command context,
-complete dependency impact expansion, diagnostics, and Apply revalidation are
-not implemented.
+batches share those seeds, and net no-ops emit none. The ordered overlay caches
+impact scopes during the same structural scan and retains ordinary semantic
+material lookup as the fallback for non-editable targets.
+
+This optimization changes no capability or published resource limit. Full
+Validate still requires protocol normalization, command context, complete
+dependency impact expansion, diagnostics, and Apply revalidation.
 
 ## Failure Modes
 

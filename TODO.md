@@ -146,18 +146,20 @@ and checked against caller-supplied bounds without choosing product limits.
 
 Direct-edit simulation now also projects exact before/after semantic changes. An
 ordered in-memory direct-edit batch validates the generic dependency graph,
-replays replacements against an isolated notebook candidate, stops atomically on
-the first failure, and coalesces accepted-base to final-candidate net changes.
+replays replacements against a private targeted value overlay, stops atomically
+on the first failure, and coalesces accepted-base to final-candidate net
+changes.
 Explicit dependencies are required before a later command can observe an earlier
 same-target candidate change; prior no-ops do not manufacture dependencies.
 
 Successful direct-edit predictions classify their net effect as Mutation or
 NoOp and derive conservative impact seeds from backend-owned semantic ownership.
 Text seeds identify the owning flow/page dependency region, while structured
-edits seed
-the nearest block/flow/page, and page-profile changes seed referencing pages.
-Single-target review and ordered batches share the same seed projection; net
-semantic no-ops emit no seed.
+edits seed the nearest block/flow/page, while page-profile changes seed
+referencing pages. Single-target review and ordered batches share the same seed
+projection;
+net semantic no-ops emit no seed. Ordered simulation now indexes only targeted
+editable values and cached impact scopes during one semantic scan.
 
 This is still not an admitted normalized command batch. Protocol normalization,
 command context and writable scope, published limits, complete impact expansion,
