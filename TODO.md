@@ -26,14 +26,17 @@ without exposing the concrete semantic service.
 
 The localhost runtime still consumes only the established draft inbound port,
 while the same application owner retains accepted semantic and history
-authority for later admitted routes. No command transport or writable scope is
-published by this composition evidence.
+authority for later admitted routes. `SessionApplication` is the only production
+consumer of the concrete semantic-session service. No command transport or
+writable scope is published by this composition evidence.
 
 Dropping that owner and creating a fresh application yields empty draft fields,
 no accepted revision, and no history position; its Debug projection does not
-expose private draft text. Browser edits send complete authenticated
-replacements
-and no browser persistence API is used.
+expose private draft text. A process fixture now creates a real accepted text
+mutation and Undo history before both orderly and forced termination, then
+proves
+a fresh process has neither accepted state nor history. Browser edits send
+complete authenticated replacements and no browser persistence API is used.
 
 The task remains open until assets, previews, diagnostics, renders, and plans
 all join the same executable lifecycle invariant.
