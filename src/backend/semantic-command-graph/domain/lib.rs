@@ -416,7 +416,7 @@ fn dependency_selection_state<'graph, Node>(
     nodes: &'graph [Node],
     selected: &BTreeSet<Node::Identity>,
 ) -> Result<
-    DependencySelectionState<'graph, Node::Identity>,
+    Option<DependencySelectionState<'graph, Node::Identity>>,
     DependencyRequirementsError<Node::Identity>,
 >
 where
@@ -429,12 +429,27 @@ where
             return Err(DependencyRequirementsError::Graph { reason });
         },
     };
-    let mut selected_positions = vec![false; nodes.len()];
+    if selected.len() == nodes.len()
+        && selected.iter().zip(positions.keys()).all(
+            |(selected_command, known_command)| {
+                selected_command == *known_command
+            },
+        )
+    {
+        return Ok(None);
+    }
     for command in selected {
-        let Some(position) = positions.get(command).copied() else {
+        if !positions.contains_key(command) {
             return Err(DependencyRequirementsError::UnknownSelection {
                 command: command.clone(),
             });
+        }
+    }
+
+    let mut selected_positions = vec![false; nodes.len()];
+    for command in selected {
+        let Some(position) = positions.get(command).copied() else {
+            continue;
         };
         if let Some(is_selected) = selected_positions.get_mut(position) {
             *is_selected = true;
@@ -458,11 +473,11 @@ where
             }
         }
     }
-    Ok(DependencySelectionState {
+    Ok(Some(DependencySelectionState {
         positions,
         required_positions,
         selected_positions,
-    })
+    }))
 }
 
 fn missing_dependency_edge_count<Node>(
@@ -566,7 +581,8 @@ where
     Node::Identity: Clone,
 {
     let state = match dependency_selection_state(nodes, selected) {
-        Ok(state) => state,
+        Ok(Some(state)) => state,
+        Ok(None) => return Ok(Vec::new()),
         Err(DependencyRequirementsError::Graph { reason }) => {
             return Err(BoundedDependencyRequirementsError::Graph { reason });
         },
@@ -608,7 +624,14 @@ where
     Node::Identity: Clone,
 {
     let state = match dependency_selection_state(nodes, selected) {
-        Ok(state) => state,
+        Ok(Some(state)) => state,
+        Ok(None) => {
+            return Ok(DependencySelectionSummary {
+                missing_dependency_edges: 0,
+                required_commands: nodes.len(),
+                selected_commands: selected.len(),
+            });
+        },
         Err(DependencyRequirementsError::Graph { reason }) => {
             return Err(DependencySummaryError::Graph { reason });
         },
@@ -655,7 +678,9 @@ where
     Node: CommandDependencyNode,
     Node::Identity: Clone,
 {
-    let state = dependency_selection_state(nodes, selected)?;
+    let Some(state) = dependency_selection_state(nodes, selected)? else {
+        return Ok(Vec::new());
+    };
     Ok(missing_dependency_requirements(nodes, &state))
 }
 
@@ -681,6 +706,15 @@ where
         Ok(positions) => positions,
         Err(reason) => return Err(DependencySelectionError::Graph { reason }),
     };
+    if selected.len() == nodes.len()
+        && selected.iter().zip(positions.keys()).all(
+            |(selected_command, known_command)| {
+                selected_command == *known_command
+            },
+        )
+    {
+        return Ok(());
+    }
     if let Some(command) = selected
         .iter()
         .find(|command| !positions.contains_key(*command))

@@ -298,6 +298,24 @@ fn dependency_requirements_report_complete_transitive_closure_without_mutation()
 }
 
 #[test]
+fn full_selection_fast_path_still_rejects_same_size_unknown_set() {
+    let nodes = [node(1, &[]), node(2, &[1]), node(3, &[2])];
+    let selected = BTreeSet::from([1, 2, 9]);
+    assert_eq!(
+        dependency_selection_requirements(&nodes, &selected),
+        Err(DependencyRequirementsError::UnknownSelection { command: 9 }),
+    );
+    assert_eq!(
+        dependency_selection_summary(&nodes, &selected),
+        Err(DependencySummaryError::UnknownSelection { command: 9 }),
+    );
+    assert_eq!(
+        validate_dependency_closed_selection(&nodes, &selected),
+        Err(DependencySelectionError::UnknownSelection { command: 9 }),
+    );
+}
+
+#[test]
 fn empty_selection_still_validates_the_complete_source_graph() {
     let valid = [node(1, &[]), node(2, &[1])];
     let selected = BTreeSet::new();
