@@ -1464,6 +1464,12 @@ fn direct_edit_material_index(
             .push(page.id);
     }
     for profile in &notebook.page_profiles {
+        let pages = profile_pages.remove(&profile.id).unwrap_or_default();
+        let impact = if pages.is_empty() {
+            DirectEditImpactScope::Notebook { notebook: notebook.id }
+        } else {
+            DirectEditImpactScope::Pages { pages }
+        };
         insert_direct_edit_material(
             &mut index,
             profile.id,
@@ -1472,9 +1478,7 @@ fn direct_edit_material_index(
                 owner: Some(notebook.id),
             },
             EditableSemanticValue::PageProfile(profile.geometry),
-            DirectEditImpactScope::Pages {
-                pages: profile_pages.remove(&profile.id).unwrap_or_default(),
-            },
+            impact,
             revision,
         );
     }

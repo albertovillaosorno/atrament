@@ -1684,6 +1684,57 @@ fn ordered_direct_edit_batch_material_overlay_reaches_nested_text() {
 }
 
 #[test]
+fn ordered_batch_overlay_keeps_unreferenced_profile_impact() {
+    let ids = IdentityAllocator::new();
+    let mut candidate = candidate_notebook(&ids, "unreferenced profile");
+    let notebook = candidate.id;
+    let profile = candidate_id(&ids);
+    candidate.page_profiles.push(PaperProfile {
+        geometry: physical_page_profile(),
+        id: profile,
+    });
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(candidate)
+    else {
+        panic!("candidate with unused profile must be accepted");
+    };
+    let notebook = accepted_for(&mapping, notebook);
+    let profile = accepted_for(&mapping, profile);
+    let mut changed = physical_page_profile();
+    changed.top_clearance = Length::from_micrometres(13_000);
+    let outcome = session.simulate_direct_edit_batch(DirectEditBatchProposal {
+        base: revision,
+        capability_version: CommandBehaviorVersion(1),
+        commands: vec![DirectEditBatchCommand {
+            dependencies: Vec::<u32>::new(),
+            id: 1_u32,
+            preconditions: CommandTargetPreconditions {
+                expected_value: Some(EditableSemanticValue::PageProfile(
+                    physical_page_profile(),
+                )),
+                identity: IdentityPrecondition {
+                    expected_kind: Some(SemanticIdentityKind::PageProfile),
+                    expected_owner: IdentityOwnerExpectation::Any,
+                },
+                requested_family: SemanticCommandFamily::DocumentConstraint,
+            },
+            requested: EditableSemanticValue::PageProfile(changed),
+            target: profile,
+        }],
+    });
+    let DirectEditBatchSimulationOutcome::Predicted { impact_seeds, .. } =
+        outcome
+    else {
+        panic!("unused profile edit must simulate");
+    };
+    assert_eq!(impact_seeds, vec![DirectEditImpactSeed {
+        authorities: vec![DirectEditDerivedAuthority::AllDerived],
+        scope: DirectEditImpactScope::Notebook { notebook },
+    }]);
+}
+
+#[test]
 fn ordered_direct_edit_batch_material_overlay_preserves_noneditable_rejection()
 {
     let ids = IdentityAllocator::new();
