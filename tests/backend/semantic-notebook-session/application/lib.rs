@@ -53,7 +53,8 @@ use atrament_semantic_notebook_port::{
     CommandTargetPreconditions, DirectEditBatchCommand,
     DirectEditBatchCommandPrediction, DirectEditBatchCommandRejection,
     DirectEditBatchProposal, DirectEditBatchSimulationOutcome,
-    DirectEditChangePreviewOutcome, DirectEditProposal,
+    DirectEditChangePreviewOutcome, DirectEditDerivedAuthority,
+    DirectEditImpactScope, DirectEditImpactSeed, DirectEditProposal,
     DirectEditProposalOutcome, DirectEditSemanticChange,
     DirectEditSimulationOutcome, EditableSemanticValue,
     EditableSemanticValueKind, EditableValuePreconditionOutcome,
@@ -1651,6 +1652,8 @@ fn ordered_direct_edit_batch_simulates_independent_changes_read_only() {
     let ids = IdentityAllocator::new();
     let (candidate, first, second, _) =
         candidate_notebook_with_three_spans(&ids);
+    let page = candidate.pages[0].id;
+    let flow = candidate.pages[0].flows[0].id;
     let mut session = SemanticNotebookSessionService::default();
     let AcceptanceOutcome::Accepted { mapping, revision } =
         session.accept(candidate)
@@ -1659,6 +1662,8 @@ fn ordered_direct_edit_batch_simulates_independent_changes_read_only() {
     };
     let first = accepted_for(&mapping, first);
     let second = accepted_for(&mapping, second);
+    let flow = accepted_for(&mapping, flow);
+    let page = accepted_for(&mapping, page);
     let before = session.current().expect("accepted revision").clone();
     let outcome = session.simulate_direct_edit_batch(DirectEditBatchProposal {
         base: revision,
@@ -1671,6 +1676,7 @@ fn ordered_direct_edit_batch_simulates_independent_changes_read_only() {
     let DirectEditBatchSimulationOutcome::Predicted {
         changes,
         commands,
+        impact_seeds,
         revision: predicted_revision,
     } = outcome
     else {
@@ -1681,6 +1687,18 @@ fn ordered_direct_edit_batch_simulates_independent_changes_read_only() {
     assert_eq!(commands.len(), 2);
     assert_eq!(commands[0].command, 1);
     assert_eq!(commands[1].command, 2);
+    assert_eq!(impact_seeds, vec![DirectEditImpactSeed {
+        authorities: vec![
+            DirectEditDerivedAuthority::Diagnostics,
+            DirectEditDerivedAuthority::FlowGeometry,
+            DirectEditDerivedAuthority::Handwriting,
+            DirectEditDerivedAuthority::Motion,
+            DirectEditDerivedAuthority::Rendering,
+            DirectEditDerivedAuthority::Shaping,
+            DirectEditDerivedAuthority::Wrapping,
+        ],
+        scope: DirectEditImpactScope::Flow { flow, page },
+    }]);
     assert_eq!(session.current(), Some(&before));
 }
 
@@ -1893,12 +1911,16 @@ fn ordered_direct_edit_batch_coalesces_net_noop_across_commands() {
         ],
     });
     let DirectEditBatchSimulationOutcome::Predicted {
-        changes, commands, ..
+        changes,
+        commands,
+        impact_seeds,
+        ..
     } = outcome
     else {
         panic!("dependent revert chain must simulate");
     };
     assert!(changes.is_empty());
+    assert!(impact_seeds.is_empty());
     assert_eq!(commands.len(), 2);
     assert!(commands.iter().all(|command| command.change.is_some()));
     assert_eq!(session.current(), Some(&before));
@@ -1940,6 +1962,114 @@ fn ordered_direct_edit_batch_preserves_global_rejection_precedence() {
         }),
         DirectEditBatchSimulationOutcome::StaleBase { current },
     );
+}
+
+#[test]
+fn ordered_direct_edit_batch_seeds_structured_and_profile_impacts() {
+    let ids = IdentityAllocator::new();
+    let (candidate, formula) =
+        candidate_math_notebook(&ids, "x", FormulaMode::Display);
+    let block = candidate.pages[0].flows[0].blocks[0].id;
+    let flow = candidate.pages[0].flows[0].id;
+    let page = candidate.pages[0].id;
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(candidate)
+    else {
+        panic!("formula candidate must be accepted");
+    };
+    let block = accepted_for(&mapping, block);
+    let flow = accepted_for(&mapping, flow);
+    let formula = accepted_for(&mapping, formula);
+    let page = accepted_for(&mapping, page);
+    let formula_batch = DirectEditBatchProposal {
+        base: revision,
+        capability_version: CommandBehaviorVersion(1),
+        commands: vec![DirectEditBatchCommand {
+            dependencies: Vec::<u32>::new(),
+            id: 1_u32,
+            preconditions: CommandTargetPreconditions {
+                expected_value: Some(EditableSemanticValue::Formula {
+                    mode: FormulaMode::Display,
+                    source: String::from("x"),
+                }),
+                identity: IdentityPrecondition {
+                    expected_kind: Some(SemanticIdentityKind::Formula),
+                    expected_owner: IdentityOwnerExpectation::Direct(block),
+                },
+                requested_family: SemanticCommandFamily::StructuredContent,
+            },
+            requested: EditableSemanticValue::Formula {
+                mode: FormulaMode::Display,
+                source: String::from("x^2"),
+            },
+            target: formula,
+        }],
+    };
+    let DirectEditBatchSimulationOutcome::Predicted { impact_seeds, .. } =
+        session.simulate_direct_edit_batch(formula_batch)
+    else {
+        panic!("formula batch must simulate");
+    };
+    assert_eq!(impact_seeds, vec![DirectEditImpactSeed {
+        authorities: vec![
+            DirectEditDerivedAuthority::Layout,
+            DirectEditDerivedAuthority::Output,
+            DirectEditDerivedAuthority::StructureValidation,
+        ],
+        scope: DirectEditImpactScope::BlockFlow { block, flow, page },
+    }]);
+
+    let mut candidate = candidate_notebook(&ids, "profile impact");
+    let profile = candidate.page_profiles[0].id;
+    let first_page = candidate.pages[0].id;
+    let second_page = candidate_id(&ids);
+    candidate.pages.push(Page {
+        flows: vec![],
+        id: second_page,
+        page_profile: profile,
+    });
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(candidate)
+    else {
+        panic!("shared-profile candidate must be accepted");
+    };
+    let first_page = accepted_for(&mapping, first_page);
+    let profile = accepted_for(&mapping, profile);
+    let second_page = accepted_for(&mapping, second_page);
+    let mut changed = physical_page_profile();
+    changed.top_clearance = Length::from_micrometres(12_000);
+    let profile_batch = DirectEditBatchProposal {
+        base: revision,
+        capability_version: CommandBehaviorVersion(1),
+        commands: vec![DirectEditBatchCommand {
+            dependencies: Vec::<u32>::new(),
+            id: 1_u32,
+            preconditions: CommandTargetPreconditions {
+                expected_value: Some(EditableSemanticValue::PageProfile(
+                    physical_page_profile(),
+                )),
+                identity: IdentityPrecondition {
+                    expected_kind: Some(SemanticIdentityKind::PageProfile),
+                    expected_owner: IdentityOwnerExpectation::Any,
+                },
+                requested_family: SemanticCommandFamily::DocumentConstraint,
+            },
+            requested: EditableSemanticValue::PageProfile(changed),
+            target: profile,
+        }],
+    };
+    let DirectEditBatchSimulationOutcome::Predicted { impact_seeds, .. } =
+        session.simulate_direct_edit_batch(profile_batch)
+    else {
+        panic!("profile batch must simulate");
+    };
+    assert_eq!(impact_seeds, vec![DirectEditImpactSeed {
+        authorities: vec![DirectEditDerivedAuthority::AllDerived],
+        scope: DirectEditImpactScope::Pages {
+            pages: vec![first_page, second_page],
+        },
+    }]);
 }
 
 #[test]

@@ -395,6 +395,74 @@ pub enum DirectEditChangePreviewOutcome {
     },
 }
 
+/// Derived-authority family that may require recomputation after a direct edit.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub enum DirectEditDerivedAuthority {
+    /// Every derived authority rooted in the selected semantic scope.
+    AllDerived,
+    /// Acceptance or derived diagnostics depending on changed semantics.
+    Diagnostics,
+    /// Flow geometry downstream from semantic measurement or wrapping.
+    FlowGeometry,
+    /// Handwriting projection depending on changed authored semantics.
+    Handwriting,
+    /// Layout authority depending on changed structured semantics.
+    Layout,
+    /// Motion projection depending on changed semantic geometry or text.
+    Motion,
+    /// Output projections depending on changed structured semantics.
+    Output,
+    /// Rendering projection depending on changed semantics.
+    Rendering,
+    /// Text shaping depending on changed authored text.
+    Shaping,
+    /// Typed structure validation depending on structured content.
+    StructureValidation,
+    /// Text wrapping depending on changed authored text.
+    Wrapping,
+}
+
+/// Semantic scope that seeds later dependency-expanded impact calculation.
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub enum DirectEditImpactScope {
+    /// One structured block plus its containing flow and page.
+    BlockFlow {
+        /// Nearest owning semantic block.
+        block: AcceptedIdentity,
+        /// Containing semantic flow.
+        flow: AcceptedIdentity,
+        /// Containing semantic page.
+        page: AcceptedIdentity,
+    },
+    /// One semantic flow and its containing page.
+    Flow {
+        /// Containing semantic flow.
+        flow: AcceptedIdentity,
+        /// Containing semantic page.
+        page: AcceptedIdentity,
+    },
+    /// Complete notebook fallback when a narrower safe scope is unavailable.
+    Notebook {
+        /// Accepted semantic notebook identity.
+        notebook: AcceptedIdentity,
+    },
+    /// Exact accepted pages referencing one changed page profile.
+    Pages {
+        /// Referencing page identities in accepted semantic order.
+        pages: Vec<AcceptedIdentity>,
+    },
+}
+
+/// Conservative backend-owned seed for later dependency-expanded impact.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct DirectEditImpactSeed {
+    /// Derived-authority families requiring dependency expansion from this
+    /// seed.
+    pub authorities: Vec<DirectEditDerivedAuthority>,
+    /// Semantic region from which dependency expansion begins.
+    pub scope: DirectEditImpactScope,
+}
+
 /// One command in a transport-neutral direct-edit batch proposal.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct DirectEditBatchCommand<CommandIdentity> {
@@ -479,6 +547,9 @@ pub enum DirectEditBatchSimulationOutcome<CommandIdentity> {
         changes: Vec<DirectEditSemanticChange>,
         /// Ordered per-command simulation evidence.
         commands: Vec<DirectEditBatchCommandPrediction<CommandIdentity>>,
+        /// Conservative seeds for later dependency-expanded impact
+        /// calculation.
+        impact_seeds: Vec<DirectEditImpactSeed>,
         /// Immutable accepted base revision used for the simulation.
         revision: RevisionIdentity,
     },

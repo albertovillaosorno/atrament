@@ -34,7 +34,7 @@
 
 //! Atomic in-memory acceptance of complete semantic notebook candidates.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
 use atrament_mathematics_source::analyze;
@@ -55,7 +55,8 @@ use atrament_semantic_notebook_port::{
     CommandTargetPreconditions, DirectEditBatchCommand,
     DirectEditBatchCommandPrediction, DirectEditBatchCommandRejection,
     DirectEditBatchProposal, DirectEditBatchSimulationOutcome,
-    DirectEditChangePreviewOutcome, DirectEditProposal,
+    DirectEditChangePreviewOutcome, DirectEditDerivedAuthority,
+    DirectEditImpactScope, DirectEditImpactSeed, DirectEditProposal,
     DirectEditProposalOutcome, DirectEditSemanticChange,
     DirectEditSimulationOutcome, EditableSemanticValue,
     EditableSemanticValueKind, EditableValuePreconditionOutcome,
@@ -1488,11 +1489,140 @@ where
         .into_iter()
         .map(|(_, change)| change)
         .filter(|change| change.before != change.after)
-        .collect();
+        .collect::<Vec<_>>();
+    let impact_seeds = direct_edit_impact_seeds(&current.notebook, &changes);
     DirectEditBatchSimulationOutcome::Predicted {
         changes,
         commands: evaluated,
+        impact_seeds,
         revision,
+    }
+}
+
+fn direct_edit_impact_seeds(
+    notebook: &Notebook<AcceptedIdentity>,
+    changes: &[DirectEditSemanticChange],
+) -> Vec<DirectEditImpactSeed> {
+    let mut seeds = BTreeMap::<
+        DirectEditImpactScope,
+        BTreeSet<DirectEditDerivedAuthority>,
+    >::new();
+    for change in changes {
+        let (scope, authorities) = direct_edit_impact_seed(notebook, change);
+        seeds.entry(scope).or_default().extend(authorities);
+    }
+    seeds
+        .into_iter()
+        .map(|(scope, authorities)| DirectEditImpactSeed {
+            authorities: authorities.into_iter().collect(),
+            scope,
+        })
+        .collect()
+}
+
+fn direct_edit_impact_seed(
+    notebook: &Notebook<AcceptedIdentity>,
+    change: &DirectEditSemanticChange,
+) -> (DirectEditImpactScope, &'static [DirectEditDerivedAuthority]) {
+    match change.family {
+        SemanticCommandFamily::DocumentConstraint => (
+            direct_edit_document_constraint_scope(notebook, change.target),
+            &[DirectEditDerivedAuthority::AllDerived],
+        ),
+        SemanticCommandFamily::StructuredContent => {
+            (direct_edit_structured_scope(notebook, change.target), &[
+                DirectEditDerivedAuthority::Layout,
+                DirectEditDerivedAuthority::Output,
+                DirectEditDerivedAuthority::StructureValidation,
+            ])
+        },
+        SemanticCommandFamily::TextContent => {
+            (direct_edit_text_scope(notebook, change.target), &[
+                DirectEditDerivedAuthority::Diagnostics,
+                DirectEditDerivedAuthority::FlowGeometry,
+                DirectEditDerivedAuthority::Handwriting,
+                DirectEditDerivedAuthority::Motion,
+                DirectEditDerivedAuthority::Rendering,
+                DirectEditDerivedAuthority::Shaping,
+                DirectEditDerivedAuthority::Wrapping,
+            ])
+        },
+        SemanticCommandFamily::AssetReference
+        | SemanticCommandFamily::BlockInsertionAndDeletion
+        | SemanticCommandFamily::OrderingAndGrouping
+        | SemanticCommandFamily::Provenance
+        | SemanticCommandFamily::SpatialConstraint
+        | SemanticCommandFamily::StyleRole => (
+            DirectEditImpactScope::Notebook { notebook: notebook.id },
+            &[DirectEditDerivedAuthority::AllDerived],
+        ),
+    }
+}
+
+fn direct_edit_document_constraint_scope(
+    notebook: &Notebook<AcceptedIdentity>,
+    target: AcceptedIdentity,
+) -> DirectEditImpactScope {
+    let pages = notebook
+        .pages
+        .iter()
+        .filter(|page| page.page_profile == target)
+        .map(|page| page.id)
+        .collect::<Vec<_>>();
+    if pages.is_empty() {
+        DirectEditImpactScope::Notebook { notebook: notebook.id }
+    } else {
+        DirectEditImpactScope::Pages { pages }
+    }
+}
+
+fn direct_edit_text_scope(
+    notebook: &Notebook<AcceptedIdentity>,
+    target: AcceptedIdentity,
+) -> DirectEditImpactScope {
+    let Some((_, flow, page)) = direct_edit_ancestor_scope(notebook, target)
+    else {
+        return DirectEditImpactScope::Notebook { notebook: notebook.id };
+    };
+    DirectEditImpactScope::Flow { flow, page }
+}
+
+fn direct_edit_structured_scope(
+    notebook: &Notebook<AcceptedIdentity>,
+    target: AcceptedIdentity,
+) -> DirectEditImpactScope {
+    let Some((block_owner, flow, page)) =
+        direct_edit_ancestor_scope(notebook, target)
+    else {
+        return DirectEditImpactScope::Notebook { notebook: notebook.id };
+    };
+    let Some(block) = block_owner else {
+        return DirectEditImpactScope::Flow { flow, page };
+    };
+    DirectEditImpactScope::BlockFlow { block, flow, page }
+}
+
+fn direct_edit_ancestor_scope(
+    notebook: &Notebook<AcceptedIdentity>,
+    target: AcceptedIdentity,
+) -> Option<(Option<AcceptedIdentity>, AcceptedIdentity, AcceptedIdentity)> {
+    let mut block = None;
+    let mut current = target;
+    loop {
+        let descriptor = semantic_identity_descriptor(notebook, current)?;
+        if matches!(
+            descriptor.kind,
+            atrament_semantic_notebook::SemanticIdentityKind::Block(_)
+        ) && block.is_none()
+        {
+            block = Some(current);
+        }
+        if descriptor.kind
+            == atrament_semantic_notebook::SemanticIdentityKind::Flow
+        {
+            return descriptor.owner.map(|page| (block, current, page));
+        }
+        current = descriptor.owner?;
     }
 }
 
