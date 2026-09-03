@@ -9,7 +9,8 @@
 //
 // Boundary-Contract:
 // - Owns:
-//   - Regression evidence that session UI code avoids browser persistence APIs.
+//   - Regression evidence for browser persistence and page-exit disposal
+//     policy.
 // - Must-Not:
 //   - Execute browser storage, perform network requests, or inspect user data.
 // - Allows:
@@ -21,7 +22,7 @@
 // - Merge-When:
 //   - Another executable browser policy fixture subsumes this static evidence.
 // - Summary:
-//   - Guards the disposable-session browser against accidental persistence.
+//   - Guards browser persistence absence and mandatory page-exit cleanup.
 // - Description:
 //   - Fails when generated workspace code starts using persistent browser APIs.
 // - Usage:
@@ -54,6 +55,32 @@ test("workspace module contains no browser persistence API", async () => {
             source.includes(capability),
             false,
             `generated workspace uses ${capability}`,
+        );
+    }
+});
+
+
+test("page exit invalidates credential, work, and session text", async () => {
+    const source = await readFile(MAIN_MODULE, "utf8");
+    const start = source.indexOf(
+        'window.addEventListener("pagehide", (event) => {',
+    );
+    assert.notEqual(start, -1, "generated workspace must handle pagehide");
+    const end = source.indexOf("\n});", start);
+    assert.notEqual(end, -1, "pagehide handler must have a bounded body");
+    const handler = source.slice(start, end);
+    for (const required of [
+        "sessionSecret = null;",
+        "invalidateClipboardRequests();",
+        "invalidateDraftSync();",
+        "clearSessionText();",
+        "if (event.persisted)",
+        "scrubBfcacheSubtree(workspace);",
+    ]) {
+        assert.equal(
+            handler.includes(required),
+            true,
+            `pagehide handler must retain ${required}`,
         );
     }
 });

@@ -60,10 +60,12 @@ session. A checked-in application-process fixture now also populates an accepted
 semantic revision plus Undo history, then proves orderly exit and forced process
 death both leave a fresh owner with no accepted revision or history position.
 While private draft text is live, the runtime holds no writable regular-file
-descriptor and changes no declared repository runtime-root file.
+descriptor and changes no declared repository runtime-root file. A checked-in
+browser policy test also guards `pagehide` credential invalidation, pending-work
+invalidation, session-text clearing, and bfcache subtree scrubbing.
 
-The task remains open until temporary media exist and fixtures also cover
-browser close, refresh, cancellation, media cleanup, and explicit-export
+The task remains open until temporary media exist and end-to-end fixtures also
+cover browser close, refresh, cancellation, media cleanup, and explicit-export
 survival.
 
 ### TODO - Define one typed diagnostic envelope
