@@ -3827,6 +3827,82 @@ fn direct_edit_batch_apply_net_noop_keeps_revision_and_history_position() {
 }
 
 #[test]
+fn noncommitting_direct_and_candidate_attempts_preserve_redo_branch() {
+    let ids = IdentityAllocator::new();
+    let (candidate, span) = candidate_notebook_with_span(&ids, "zero");
+    let mut service = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision: base } =
+        service.accept(candidate)
+    else {
+        panic!("candidate must be accepted");
+    };
+    let target = accepted_for(&mapping, span);
+    let TextEditOutcome::Applied { revision: first, .. } =
+        service.replace_text(base, target, String::from("one"))
+    else {
+        panic!("first edit must apply");
+    };
+    let TextEditOutcome::Applied { revision: second, .. } =
+        service.replace_text(first, target, String::from("two"))
+    else {
+        panic!("second edit must apply");
+    };
+    let HistoryTraversalOutcome::Traversed {
+        revision: branch_base,
+        ..
+    } = service.traverse_history(second, HistoryDirection::Undo)
+    else {
+        panic!("second edit must Undo");
+    };
+    let expected_history = HistoryAvailabilityOutcome::Available(
+        HistoryAvailability {
+            can_redo: true,
+            can_undo: true,
+            revision: branch_base,
+        },
+    );
+
+    assert_eq!(
+        service.replace_text(branch_base, target, String::from("one")),
+        TextEditOutcome::NoOp {
+            revision: branch_base,
+            target,
+        },
+    );
+    assert_eq!(service.history_availability(), expected_history);
+    assert_eq!(
+        service.replace_text(second, target, String::from("stale")),
+        TextEditOutcome::StaleBase {
+            current: branch_base,
+        },
+    );
+    assert_eq!(service.history_availability(), expected_history);
+
+    let mut invalid = candidate_notebook(&ids, "invalid replacement");
+    invalid.pages[0].id = invalid.id;
+    assert!(matches!(
+        service.accept(invalid),
+        AcceptanceOutcome::InvalidCandidate { .. }
+    ));
+    assert_eq!(service.history_availability(), expected_history);
+
+    let HistoryTraversalOutcome::Traversed { revision: redone, .. } =
+        service.traverse_history(branch_base, HistoryDirection::Redo)
+    else {
+        panic!("preserved direct redo branch must remain traversable");
+    };
+    let current = service.current().expect("redone revision");
+    let BlockContent::Paragraph(spans) =
+        &current.notebook.pages[0].flows[0].blocks[0].content
+    else {
+        panic!("redo fixture must remain paragraph");
+    };
+    assert_eq!(spans[0].id, target);
+    assert_eq!(spans[0].text, "two");
+    assert_eq!(current.id, redone);
+}
+
+#[test]
 fn noncommitting_batch_attempts_preserve_an_existing_redo_branch() {
     let ids = IdentityAllocator::new();
     let (candidate, span) = candidate_notebook_with_span(&ids, "zero");
