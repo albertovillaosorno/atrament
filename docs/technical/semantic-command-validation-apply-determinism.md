@@ -163,9 +163,15 @@ evaluated.
 Dependent same-target commands can observe earlier simulated candidate values
 only through an explicit command dependency. Per-command changes retain their
 local before/after values while aggregate changes compare the accepted base with
-the final candidate. This does not yet satisfy full Validate determinism because
-protocol normalization, command context, impact expansion, diagnostics, and
-Apply revalidation are not implemented.
+the final candidate. Successful predictions classify the net effect as Mutation
+or NoOp.
+
+The same simulation derives conservative backend-owned impact seeds for text,
+structured-content, and page-profile changes. Single-target review and ordered
+batches share those seeds, and net no-ops emit none. This does not yet satisfy
+full Validate determinism because protocol normalization, command context,
+complete dependency impact expansion, diagnostics, and Apply revalidation are
+not implemented.
 
 ## Failure Modes
 

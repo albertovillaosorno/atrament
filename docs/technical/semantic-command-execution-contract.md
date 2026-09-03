@@ -506,6 +506,18 @@ dependency. Per-command changes remain visible while the aggregate semantic
 change set coalesces each target from accepted base value to final candidate
 value, including an empty net set for a change-then-revert sequence.
 
+Successful direct-edit predictions now classify their net effect explicitly as
+Mutation or NoOp. They also derive conservative impact seeds from backend-owned
+semantic relationships rather than trusting caller impact claims. Text seeds
+identify the owning flow and page plus shaping, wrapping, geometry, diagnostic,
+rendering, handwriting, and motion authorities. Structured edits seed their
+nearest block, flow, and page for structure, layout, and output dependencies.
+
+Page-profile edits seed every accepted page that references the changed profile.
+Those seeds are shared by single-target review and ordered batch simulation and
+are omitted for a net semantic no-op. They are inputs to future dependency
+expansion, not the final authoritative Validate impact set.
+
 A separate transport-neutral command-graph domain validates duplicate command
 identities, direct self-dependencies, missing dependencies, cycles, and acyclic
 dependencies that point to later commands in the ordered sequence. It is generic
@@ -532,8 +544,9 @@ recursive structures are dismantled iteratively so rejection itself cannot
 consume unbounded process stack depth.
 
 These primitives do not implement command-context generation, protocol-owned
-normalization, writable-scope admission, impact expansion, deterministic command
-diagnostics, retry identity, Validate, Apply, undo/redo, or adapter parity. The
+normalization, writable-scope admission, complete impact expansion,
+deterministic command diagnostics, retry identity, Validate, Apply, undo/redo,
+or adapter parity. The
 ordered direct-edit simulator is an internal application foundation, not an
 advertised command-mode capability. Those parts of this contract remain open.
 

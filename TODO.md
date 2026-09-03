@@ -151,8 +151,16 @@ the first failure, and coalesces accepted-base to final-candidate net changes.
 Explicit dependencies are required before a later command can observe an earlier
 same-target candidate change; prior no-ops do not manufacture dependencies.
 
+Successful direct-edit predictions classify their net effect as Mutation or
+NoOp and derive conservative impact seeds from backend-owned semantic ownership.
+Text seeds identify the owning flow/page dependency region, while structured
+edits seed
+the nearest block/flow/page, and page-profile changes seed referencing pages.
+Single-target review and ordered batches share the same seed projection; net
+semantic no-ops emit no seed.
+
 This is still not an admitted normalized command batch. Protocol normalization,
-command context and writable scope, published limits, impact prediction,
+command context and writable scope, published limits, complete impact expansion,
 diagnostics, retry handling, Validate, and Apply remain open. Candidate
 acceptance also enforces a public 256-level block nesting resource bound and
 iteratively dismantles rejected deep candidates before mutation.
