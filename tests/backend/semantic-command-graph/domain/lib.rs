@@ -340,3 +340,32 @@ fn dependency_requirements_reject_unknown_selection_and_invalid_graph() {
         }),
     );
 }
+
+#[test]
+fn one_hundred_thousand_selection_requirements_are_iterative() {
+    let mut nodes = Vec::with_capacity(100_000);
+    nodes.push(node(0, &[]));
+    for id in 1_u32..100_000_u32 {
+        nodes.push(node(id, &[id.saturating_sub(1)]));
+    }
+    let selected = BTreeSet::from([99_999]);
+    let before = selected.clone();
+    let missing = dependency_selection_requirements(&nodes, &selected)
+        .expect("valid chain requirements");
+    assert_eq!(missing.len(), 99_999);
+    assert_eq!(
+        missing.first(),
+        Some(&MissingDependencyRequirement {
+            command: 1,
+            dependency: 0,
+        }),
+    );
+    assert_eq!(
+        missing.last(),
+        Some(&MissingDependencyRequirement {
+            command: 99_999,
+            dependency: 99_998,
+        }),
+    );
+    assert_eq!(selected, before);
+}
