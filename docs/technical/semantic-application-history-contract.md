@@ -212,6 +212,18 @@ the same restored semantic state and dependency impact.
 MCP cannot bypass history by editing serialized internal snapshots, and the
 browser cannot implement authoritative undo by manipulating preview DOM.
 
+### Implementation evidence
+
+The current in-memory semantic session stores Undo and Redo snapshots behind one
+exact-current-revision history authority. A synchronized fixture races Undo
+against semantic Apply from the same current revision and proves exactly one can
+commit while the loser reports the winner's fresh revision as stale.
+
+A separate fixture establishes a Redo branch, then submits semantic no-op,
+semantic-rejected, and resource-rejected Apply attempts. None changes the
+current revision or destroys the branch, and the original Redo remains
+traversable.
+
 ## Failure Modes
 
 The contract fails if Undo or Redo mutates DOM or preview snapshots as document

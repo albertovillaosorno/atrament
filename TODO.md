@@ -286,6 +286,13 @@ consumption.
 Place titles, figures, callouts, and freeform regions with anchors, alignment,
 minimum size, collision policy, and explicit infeasibility diagnostics.
 
+The current semantic `Constraint` owns only the broad
+`ConstraintKind::Placement` classification; it has no typed anchor, alignment,
+minimum-size, or collision fields. The fixed-region bounds and accepted-layout
+components explicitly must not choose those semantics. Solver implementation is
+therefore blocked until an executable placement authority owns the typed
+constraint values and infeasibility policy.
+
 ### TODO - Prevent invisible page overflow
 
 Block export while fixed content crosses the writable region and identify the
@@ -471,10 +478,14 @@ read-only availability exposes traversal boundaries, and a new edit after Undo
 discards the old redo branch. Dropping the session destroys populated history.
 
 Transport-neutral direct-edit batch application now enters this same semantic
-history as one transaction, including multi-command batches. The task remains
-open for transaction provenance, dependency-expanded derived impact, bounded
-history resource policy, retry/lost-receipt recovery, cancellation/concurrency
-evidence, and browser/CLI/MCP parity.
+history as one transaction, including multi-command batches. A synchronized
+in-process fixture races Undo against Apply from one shared current revision;
+exactly one commits and the loser reports the winner's fresh revision as stale.
+
+No-op, semantic-rejected, and resource-rejected batch attempts preserve an
+existing Redo branch after Undo. The task remains open for transaction
+provenance, dependency-expanded derived impact, bounded history resource policy,
+retry/lost-receipt recovery, cancellation, and browser/CLI/MCP parity.
 
 ### TODO - Implement rich clipboard intake
 
@@ -726,10 +737,16 @@ small command does not regenerate unrelated notebook content, while every
 derived layout, handwriting, diagnostic, preview, export, or motion result that
 can change is recomputed.
 
-Current design evidence separates semantic change from derived impact and covers
-one-paragraph, table-cell, spatial, asset-reference, and document-wide
-constraint
-fixtures. Dependency tracking and incremental backend recomputation remain open.
+Current executable direct-edit simulation separates semantic changes from
+conservative derived-impact seeds for text, structured content, and page-profile
+edits. Those seeds identify safe starting scopes and authority families, but the
+frozen command contract explicitly treats them as inputs to later expansion.
+
+No executable dependency graph currently relates those seeds to downstream flow
+regions or layout, handwriting, diagnostic, preview, export, and motion
+producers. Full impact expansion and incremental recomputation are blocked on
+that derived-dependency authority; seeds must not be relabeled as the final
+impact set.
 
 ### TODO - Add clipboard command-mode round trips
 
