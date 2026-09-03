@@ -387,6 +387,68 @@ pub struct Table<Identity> {
     pub rows: Vec<TableRow<Identity>>,
 }
 
+impl<Identity> Table<Identity>
+where
+    Identity: Copy,
+{
+    /// Validate logical row/column spans as one complete rectangular grid.
+    ///
+    /// The first row establishes logical width. Later rows fill the first
+    /// unoccupied columns while inherited row spans reserve their coverage.
+    ///
+    /// # Errors
+    ///
+    /// Returns the first semantic cell or row whose span cannot participate in
+    /// one complete non-overlapping rectangular table grid.
+    pub fn validate_grid(&self) -> Result<(), TableGridError<Identity>> {
+        let width = table_grid_width(self)?;
+        let row_count = u64::try_from(self.rows.len()).unwrap_or(u64::MAX);
+        let mut active = Vec::<TableActiveSpan>::new();
+        let mut current_row = 0u64;
+        for row in &self.rows {
+            active.retain(|span| current_row < span.until_row);
+            active.sort_unstable_by_key(|span| span.start);
+            let mut cursor = 0u64;
+            let mut additions = Vec::<TableActiveSpan>::new();
+            for cell in &row.cells {
+                cursor = table_grid_advance_cursor(cursor, &active);
+                let columns = NonZeroU64::from(cell.span.columns).get();
+                let end = cursor.checked_add(columns).ok_or(
+                    TableGridError::ColumnSpan { cell: cell.id },
+                )?;
+                if end > width
+                    || active
+                        .iter()
+                        .any(|span| span.start < end && cursor < span.end)
+                {
+                    return Err(TableGridError::ColumnSpan { cell: cell.id });
+                }
+                let until_row = current_row
+                    .checked_add(NonZeroU64::from(cell.span.rows).get())
+                    .ok_or(TableGridError::RowSpan { cell: cell.id })?;
+                if until_row > row_count {
+                    return Err(TableGridError::RowSpan { cell: cell.id });
+                }
+                if cell.span.rows.get() > 1 {
+                    additions.push(TableActiveSpan {
+                        end,
+                        start: cursor,
+                        until_row,
+                    });
+                }
+                cursor = end;
+            }
+            cursor = table_grid_advance_cursor(cursor, &active);
+            if cursor != width {
+                return Err(TableGridError::RowWidth { row: row.id });
+            }
+            active.extend(additions);
+            current_row = current_row.saturating_add(1);
+        }
+        Ok(())
+    }
+}
+
 /// One semantic table cell.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct TableCell<Identity> {
@@ -419,6 +481,33 @@ impl Default for TableCellSpan {
     fn default() -> Self {
         Self::SINGLE
     }
+}
+
+/// Typed structural failure for one logical merged-cell table grid.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum TableGridError<Identity> {
+    /// One cell cannot fit the table's logical columns without overlap.
+    ColumnSpan {
+        /// Semantic cell identity with invalid horizontal coverage.
+        cell: Identity,
+    },
+    /// One cell's logical row coverage extends beyond the table.
+    RowSpan {
+        /// Semantic cell identity with invalid vertical coverage.
+        cell: Identity,
+    },
+    /// One row leaves logical table columns uncovered.
+    RowWidth {
+        /// Semantic row identity that does not cover the table width.
+        row: Identity,
+    },
+}
+
+#[derive(Clone, Copy)]
+struct TableActiveSpan {
+    end: u64,
+    start: u64,
+    until_row: u64,
 }
 
 /// One semantic table row.
@@ -934,6 +1023,38 @@ where
             owner: Some(owner),
         },
     )
+}
+
+fn table_grid_advance_cursor(
+    mut cursor: u64,
+    active: &[TableActiveSpan],
+) -> u64 {
+    for span in active {
+        if cursor < span.start {
+            break;
+        }
+        if cursor < span.end {
+            cursor = span.end;
+        }
+    }
+    cursor
+}
+
+fn table_grid_width<Identity>(
+    table: &Table<Identity>,
+) -> Result<u64, TableGridError<Identity>>
+where
+    Identity: Copy,
+{
+    let Some(first_row) = table.rows.first() else {
+        return Ok(0);
+    };
+    first_row.cells.iter().try_fold(0u64, |width, cell| {
+        let columns = NonZeroU64::from(cell.span.columns).get();
+        width
+            .checked_add(columns)
+            .ok_or(TableGridError::ColumnSpan { cell: cell.id })
+    })
 }
 
 fn allocate_next(

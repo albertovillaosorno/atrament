@@ -21,9 +21,9 @@
 // - Merge-When:
 //   - Semantic notebook invariants move into another direct domain harness.
 // - Summary:
-//   - Verifies first semantic notebook domain authority invariants.
+//   - Verifies semantic identity, value, and table-grid domain invariants.
 // - Description:
-//   - Exercises opaque identity sequences and unresolved semantic preservation.
+//   - Exercises opaque identities, merged tables, and semantic preservation.
 // - Usage:
 //   - Compile directly against the semantic-notebook domain crate.
 // - Defaults:
@@ -34,14 +34,42 @@ use atrament_physical_page_profile::{
     PageProfile as PhysicalPageProfile, PaperMarkAppearance, PaperMarkJoin,
     PaperMarkLayer, PaperPattern, Rect, SheetSize,
 };
+use std::num::NonZeroU32;
+
 use atrament_semantic_notebook::{
     Block, BlockContent, ExtensionData, Flow, IdentityAllocator, InlineSpan,
     Notebook, Page, PaperProfile, SemanticBlockKind,
     SemanticIdentityDescriptor, SemanticIdentityKind, Table, TableCell,
-    TableCellSpan,
-    TableRow, TableRowRole, UnresolvedBlock, UnresolvedReason,
+    TableCellSpan, TableGridError, TableRow, TableRowRole, UnresolvedBlock,
+    UnresolvedReason,
     semantic_identity_descriptor, semantic_identity_kind,
 };
+
+fn grid_cell(
+    id: u32,
+    columns: u32,
+    rows: u32,
+) -> TableCell<u32> {
+    let Some(columns) = NonZeroU32::new(columns) else {
+        panic!("fixture column span must be nonzero");
+    };
+    let Some(rows) = NonZeroU32::new(rows) else {
+        panic!("fixture row span must be nonzero");
+    };
+    TableCell {
+        blocks: vec![],
+        id,
+        span: TableCellSpan { columns, rows },
+    }
+}
+
+fn grid_row(id: u32, cells: Vec<TableCell<u32>>) -> TableRow<u32> {
+    TableRow {
+        cells,
+        id,
+        role: TableRowRole::Body,
+    }
+}
 
 fn physical_page_profile() -> PhysicalPageProfile {
     PhysicalPageProfile {
@@ -199,6 +227,56 @@ fn cloned_semantic_state_preserves_stable_identity() {
             kind: SemanticIdentityKind::InlineSpan,
             owner: Some(block_id),
         }),
+    );
+}
+
+#[test]
+fn merged_table_grid_validation_is_identity_generic() {
+    let table = Table {
+        id: 100u32,
+        rows: vec![
+            grid_row(1, vec![grid_cell(10, 2, 2), grid_cell(11, 1, 1)]),
+            grid_row(2, vec![grid_cell(20, 1, 1)]),
+            grid_row(3, vec![grid_cell(30, 1, 1), grid_cell(31, 2, 1)]),
+        ],
+    };
+
+    assert_eq!(table.validate_grid(), Ok(()));
+}
+
+#[test]
+fn table_grid_validation_reports_semantic_owner_of_each_failure() {
+    let row_span = Table {
+        id: 100u32,
+        rows: vec![grid_row(1, vec![grid_cell(10, 1, 2)])],
+    };
+    assert_eq!(
+        row_span.validate_grid(),
+        Err(TableGridError::RowSpan { cell: 10 }),
+    );
+
+    let row_width = Table {
+        id: 101u32,
+        rows: vec![
+            grid_row(2, vec![grid_cell(20, 1, 1), grid_cell(21, 1, 1)]),
+            grid_row(3, vec![grid_cell(30, 1, 1)]),
+        ],
+    };
+    assert_eq!(
+        row_width.validate_grid(),
+        Err(TableGridError::RowWidth { row: 3 }),
+    );
+
+    let column_span = Table {
+        id: 102u32,
+        rows: vec![
+            grid_row(4, vec![grid_cell(40, 1, 2), grid_cell(41, 1, 1)]),
+            grid_row(5, vec![grid_cell(50, 2, 1)]),
+        ],
+    };
+    assert_eq!(
+        column_span.validate_grid(),
+        Err(TableGridError::ColumnSpan { cell: 50 }),
     );
 }
 
