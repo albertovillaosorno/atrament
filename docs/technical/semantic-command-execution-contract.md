@@ -548,12 +548,14 @@ successful report or typed failure. Stale and unknown inputs remain read-only.
 
 Graph validation fast-paths the normal ordered case where every dependency
 points to an earlier command and reuses borrowed source positions for subset
-analysis. Complete requirement closure uses positional bitmaps rather than a
-second cloned identity set. A caller-bounded report counts omitted edges before
-materializing pairs and rejects one over the supplied bound without truncation.
+analysis. Its read-only node-view contract lets application preflight borrow
+command IDs and dependency slices instead of allocating per-command edge views.
+Complete requirement closure still uses positional bitmaps.
 
-Ordered batch graph preflight uses the same borrowed-identity projection, so an
-invalid graph clones only identities carried by its typed rejection.
+A caller-bounded report counts omitted edges before materializing pairs and
+rejects one over the supplied bound without truncation. Ordered batch graph
+preflight uses the same node view, so invalid graphs clone only identities
+carried by their typed rejection.
 No protocol normalizer, selective-rebatch capability, published product limit,
 Validate, or Apply capability is admitted yet.
 

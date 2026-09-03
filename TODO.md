@@ -147,10 +147,10 @@ Session-level selection analysis binds those requirements to capability behavior
 and the exact accepted base revision, but does not construct a replacement
 batch. A non-materializing summary reports selected-command, required-command,
 and omitted-edge counts before identity-pair review data is requested. Session
-selection analysis borrows proposal command identities and can bound detailed
-requirement materialization without cloning omitted pairs first.
-Exact graph counts and report size can be checked against caller-supplied bounds
-without choosing product limits.
+analysis uses lightweight read-only graph-node views and can bound detailed
+requirement materialization without cloning omitted pairs first or allocating a
+dependency-reference vector per command. Exact graph counts and report size can
+be checked against caller-supplied bounds without choosing product limits.
 
 Direct-edit simulation now also projects exact before/after semantic changes. An
 ordered in-memory direct-edit batch validates the generic dependency graph,
