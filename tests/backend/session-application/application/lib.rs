@@ -1001,15 +1001,23 @@ fn dropping_application_leaves_a_fresh_session_empty() {
 }
 
 #[test]
-fn application_debug_does_not_expose_private_draft_text() {
+fn application_debug_does_not_expose_private_session_text() {
+    let identities = IdentityAllocator::new();
     let mut session = application::SessionApplication::default();
-    let private = "session-only private source";
+    let private_draft = "session-only private source";
+    let private_semantic = "accepted-only private paragraph";
     assert_eq!(
-        session.replace(DraftField::Source, String::from(private)),
+        session.replace(DraftField::Source, String::from(private_draft)),
         DraftMutation::Applied,
     );
+    let (candidate, _) = editable_text_candidate(&identities, private_semantic);
+    assert!(matches!(
+        session.accept_candidate(candidate),
+        AcceptanceOutcome::Accepted { .. }
+    ));
 
     let debug = format!("{session:?}");
     assert!(debug.contains("SessionApplication"));
-    assert!(!debug.contains(private));
+    assert!(!debug.contains(private_draft));
+    assert!(!debug.contains(private_semantic));
 }
