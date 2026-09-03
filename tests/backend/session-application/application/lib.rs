@@ -40,9 +40,10 @@ use atrament_physical_page_profile::{
     SheetSize,
 };
 use atrament_semantic_notebook::{
-    Block, BlockContent, CandidateIdentity, Flow, IdentityAllocator, InlineSpan,
-    Notebook, Page, PaperProfile, SemanticIdentityDescriptor,
-    SemanticIdentityKind,
+    Block, BlockContent, CandidateIdentity, Flow, FormulaMode,
+    IdentityAllocator,
+    InlineSpan, Notebook, Page, PaperProfile, SemanticIdentityDescriptor,
+    SemanticIdentityKind, TableCellSpan, TableRowRole,
 };
 use atrament_semantic_notebook_port::{
     AcceptanceOutcome, CommandBehaviorVersion,
@@ -57,13 +58,14 @@ use atrament_semantic_notebook_port::{
     DirectEditChangePreviewOutcome, DirectEditEffectClass, DirectEditProposal,
     DirectEditSemanticChange,
     DirectEditProposalOutcome, DirectEditSimulationOutcome,
-    EditableSemanticValue, EditableValuePreconditionOutcome,
+    EditableSemanticValue, EditableValuePreconditionOutcome, FormulaEditOutcome,
     HistoryAvailability, HistoryAvailabilityOutcome, HistoryDirection,
     HistoryTraversalOutcome,
     IdentityAncestryCompleteness, IdentityAncestryEntry,
     IdentityAncestryInspectOutcome, IdentityInspectOutcome,
     IdentityKindInspectOutcome, IdentityOwnerExpectation,
-    IdentityPrecondition, IdentityPreconditionOutcome, SemanticCommandFamily,
+    IdentityPrecondition, IdentityPreconditionOutcome, PageProfileEditOutcome,
+    SemanticCommandFamily, TableCellSpanEditOutcome, TableRowRoleEditOutcome,
     TextEditOutcome,
 };
 use atrament_session_draft_port::{DraftField, DraftMutation, SessionDraft};
@@ -350,6 +352,90 @@ fn application_routes_bounded_inspection_through_owned_semantic_authority() {
     assert_eq!(
         session.accepted_revision().map(|current| current.id),
         Some(revision),
+    );
+}
+
+#[test]
+fn application_routes_all_direct_edit_no_effects_through_owned_authority() {
+    let identities = IdentityAllocator::new();
+    let candidate = minimal_candidate(&identities);
+    let candidate_notebook = candidate.id;
+    let mut session = application::SessionApplication::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept_candidate(candidate)
+    else {
+        panic!("minimal candidate must be accepted");
+    };
+    let notebook = mapping
+        .iter()
+        .find(|entry| entry.candidate == candidate_notebook)
+        .expect("notebook identity must map")
+        .accepted;
+    let before = session
+        .accepted_revision()
+        .expect("accepted revision")
+        .clone();
+
+    assert_eq!(
+        session.replace_formula(
+            revision,
+            notebook,
+            FormulaMode::Display,
+            String::from("x"),
+        ),
+        FormulaEditOutcome::TargetNotFormula {
+            revision,
+            target: notebook,
+        },
+    );
+    assert_eq!(
+        session.replace_page_profile(
+            revision,
+            notebook,
+            physical_page_profile(),
+        ),
+        PageProfileEditOutcome::TargetNotPageProfile {
+            revision,
+            target: notebook,
+        },
+    );
+    assert_eq!(
+        session.replace_table_cell_span(
+            revision,
+            notebook,
+            TableCellSpan::SINGLE,
+        ),
+        TableCellSpanEditOutcome::TargetNotTableCell {
+            revision,
+            target: notebook,
+        },
+    );
+    assert_eq!(
+        session.replace_table_row_role(
+            revision,
+            notebook,
+            TableRowRole::Header,
+        ),
+        TableRowRoleEditOutcome::TargetNotTableRow {
+            revision,
+            target: notebook,
+        },
+    );
+    assert_eq!(
+        session.replace_text(revision, notebook, String::from("text")),
+        TextEditOutcome::TargetNotText {
+            revision,
+            target: notebook,
+        },
+    );
+    assert_eq!(session.accepted_revision(), Some(&before));
+    assert_eq!(
+        session.history_availability(),
+        HistoryAvailabilityOutcome::Available(HistoryAvailability {
+            can_redo: false,
+            can_undo: false,
+            revision,
+        }),
     );
 }
 
