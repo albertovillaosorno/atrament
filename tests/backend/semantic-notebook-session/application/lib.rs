@@ -860,6 +860,60 @@ fn bounded_identity_ancestry_reports_explicit_complete_and_incomplete_chains() {
 }
 
 #[test]
+fn bounded_identity_ancestry_reaches_the_maximum_accepted_nesting_depth() {
+    let ids = IdentityAllocator::new();
+    let (candidate, _, span) = candidate_nested_text_notebook(
+        &ids,
+        CANDIDATE_BLOCK_NESTING_LIMIT.saturating_sub(1),
+    );
+    let notebook = candidate.id;
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(candidate)
+    else {
+        panic!("candidate at the nesting bound must be accepted");
+    };
+    let span = accepted_for(&mapping, span);
+    let notebook = accepted_for(&mapping, notebook);
+
+    let IdentityAncestryInspectOutcome::Inspected {
+        completeness,
+        entries,
+        ..
+    } = session.inspect_identity_ancestry_bounded(revision, span, 4)
+    else {
+        panic!("bounded deep ancestry must inspect");
+    };
+    assert!(matches!(
+        completeness,
+        IdentityAncestryCompleteness::Incomplete { .. }
+    ));
+    assert_eq!(entries.len(), 4);
+    assert_eq!(entries[0].identity, span);
+
+    let expected_entries = CANDIDATE_BLOCK_NESTING_LIMIT + 4;
+    let IdentityAncestryInspectOutcome::Inspected {
+        completeness,
+        entries,
+        ..
+    } = session.inspect_identity_ancestry_bounded(
+        revision,
+        span,
+        expected_entries,
+    ) else {
+        panic!("complete deep ancestry must inspect");
+    };
+    assert_eq!(completeness, IdentityAncestryCompleteness::Complete);
+    assert_eq!(entries.len(), expected_entries);
+    assert_eq!(entries.first().map(|entry| entry.identity), Some(span));
+    assert_eq!(entries.last().map(|entry| entry.identity), Some(notebook));
+    assert_eq!(
+        entries.last().map(|entry| entry.descriptor.kind),
+        Some(SemanticIdentityKind::Notebook),
+    );
+}
+
+#[test]
 fn bounded_identity_ancestry_does_not_preallocate_the_caller_bound() {
     let ids = IdentityAllocator::new();
     let (candidate, row, _) =
