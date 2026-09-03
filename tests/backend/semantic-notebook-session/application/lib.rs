@@ -860,6 +860,73 @@ fn bounded_identity_ancestry_reports_explicit_complete_and_incomplete_chains() {
 }
 
 #[test]
+fn bounded_identity_ancestry_does_not_preallocate_the_caller_bound() {
+    let ids = IdentityAllocator::new();
+    let (candidate, row, _) =
+        candidate_table_notebook(&ids, TableRowRole::Body);
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(candidate)
+    else {
+        panic!("table candidate must be accepted");
+    };
+    let row = accepted_for(&mapping, row);
+
+    let IdentityAncestryInspectOutcome::Inspected {
+        completeness,
+        entries,
+        ..
+    } = session.inspect_identity_ancestry_bounded(revision, row, usize::MAX)
+    else {
+        panic!("huge caller bound must inspect the finite owner chain");
+    };
+    assert_eq!(completeness, IdentityAncestryCompleteness::Complete);
+    assert_eq!(entries.len(), 6);
+    assert_eq!(entries.first().map(|entry| entry.identity), Some(row));
+    assert_eq!(
+        entries.last().map(|entry| entry.descriptor.kind),
+        Some(SemanticIdentityKind::Notebook),
+    );
+}
+
+#[test]
+fn bounded_identity_ancestry_is_read_only_at_an_undo_position() {
+    let ids = IdentityAllocator::new();
+    let (candidate, span) = candidate_notebook_with_span(&ids, "zero");
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision: base } =
+        session.accept(candidate)
+    else {
+        panic!("candidate must be accepted");
+    };
+    let target = accepted_for(&mapping, span);
+    let TextEditOutcome::Applied { revision: first, .. } =
+        session.replace_text(base, target, String::from("one"))
+    else {
+        panic!("first edit must apply");
+    };
+    let TextEditOutcome::Applied { revision: second, .. } =
+        session.replace_text(first, target, String::from("two"))
+    else {
+        panic!("second edit must apply");
+    };
+    let HistoryTraversalOutcome::Traversed { revision: undone, .. } =
+        session.traverse_history(second, HistoryDirection::Undo)
+    else {
+        panic!("second edit must Undo");
+    };
+    let expected_history = session.history_availability();
+    let before = session.current().expect("undone revision").clone();
+
+    assert!(matches!(
+        session.inspect_identity_ancestry_bounded(undone, target, 2),
+        IdentityAncestryInspectOutcome::Inspected { .. }
+    ));
+    assert_eq!(session.current(), Some(&before));
+    assert_eq!(session.history_availability(), expected_history);
+}
+
+#[test]
 fn bounded_identity_ancestry_preserves_global_inspection_precedence() {
     let ids = IdentityAllocator::new();
     let (candidate, row, _) =
