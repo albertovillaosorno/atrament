@@ -34,6 +34,7 @@ use atrament_physical_page_profile::{
     PageProfile as PhysicalPageProfile, PageProfileError, PaperMarkAppearance,
     PaperMarkJoin, PaperMarkLayer, PaperPattern, Rect, SheetSize,
 };
+use atrament_semantic_command_graph::CommandGraphError;
 use atrament_semantic_notebook::{
     AcceptedIdentity, Asset, Block, BlockContent, CandidateIdentity,
     Constraint, ConstraintKind, ExtensionData, Figure, Flow, Formula,
@@ -1807,6 +1808,66 @@ fn ordered_direct_edit_batch_requires_dependency_for_repeated_target() {
         family: SemanticCommandFamily::TextContent,
         target: span,
     }]);
+    assert_eq!(session.current(), Some(&before));
+}
+
+#[test]
+fn ordered_direct_edit_batch_graph_rejects_before_candidate_replay() {
+    let ids = IdentityAllocator::new();
+    let (candidate, span) = candidate_notebook_with_span(&ids, "base");
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(candidate)
+    else {
+        panic!("text candidate must be accepted");
+    };
+    let span = accepted_for(&mapping, span);
+    let before = session.current().expect("accepted revision").clone();
+    assert_eq!(
+        session.simulate_direct_edit_batch(DirectEditBatchProposal {
+            base: revision,
+            capability_version: CommandBehaviorVersion(1),
+            commands: vec![
+                text_batch_command(7, &[], span, "base", "one"),
+                text_batch_command(7, &[], span, "base", "two"),
+            ],
+        }),
+        DirectEditBatchSimulationOutcome::DependencyGraphRejected {
+            reason: CommandGraphError::DuplicateIdentity { command: 7 },
+        },
+    );
+    assert_eq!(session.current(), Some(&before));
+}
+
+#[test]
+fn ordered_direct_edit_batch_coalesces_net_noop_across_commands() {
+    let ids = IdentityAllocator::new();
+    let (candidate, span) = candidate_notebook_with_span(&ids, "base");
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(candidate)
+    else {
+        panic!("text candidate must be accepted");
+    };
+    let span = accepted_for(&mapping, span);
+    let before = session.current().expect("accepted revision").clone();
+    let outcome = session.simulate_direct_edit_batch(DirectEditBatchProposal {
+        base: revision,
+        capability_version: CommandBehaviorVersion(1),
+        commands: vec![
+            text_batch_command(1, &[], span, "base", "temporary"),
+            text_batch_command(2, &[1], span, "temporary", "base"),
+        ],
+    });
+    let DirectEditBatchSimulationOutcome::Predicted {
+        changes, commands, ..
+    } = outcome
+    else {
+        panic!("dependent revert chain must simulate");
+    };
+    assert!(changes.is_empty());
+    assert_eq!(commands.len(), 2);
+    assert!(commands.iter().all(|command| command.change.is_some()));
     assert_eq!(session.current(), Some(&before));
 }
 
