@@ -3000,6 +3000,49 @@ fn ordered_direct_edit_batch_material_overlay_preserves_noneditable_rejection()
 }
 
 #[test]
+fn ordered_batch_index_waits_until_every_requested_target_is_resolved() {
+    let ids = IdentityAllocator::new();
+    let (mut candidate, first) = candidate_notebook_with_span(&ids, "first");
+    let second_block = candidate_id(&ids);
+    let second = candidate_id(&ids);
+    candidate.pages[0].flows[0].blocks.push(Block {
+        content: BlockContent::Paragraph(vec![InlineSpan {
+            id: second,
+            provenance: None,
+            style: None,
+            text: String::from("second"),
+        }]),
+        extensions: Vec::new(),
+        id: second_block,
+        provenance: None,
+        style: None,
+    });
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(candidate)
+    else {
+        panic!("two-block candidate must be accepted");
+    };
+    let first = accepted_for(&mapping, first);
+    let second = accepted_for(&mapping, second);
+    let outcome = session.simulate_direct_edit_batch(DirectEditBatchProposal {
+        base: revision,
+        capability_version: CommandBehaviorVersion(1),
+        commands: vec![
+            text_batch_command(1, &[], first, "first", "FIRST"),
+            text_batch_command(2, &[], second, "second", "SECOND"),
+        ],
+    });
+    let DirectEditBatchSimulationOutcome::Predicted { changes, .. } = outcome
+    else {
+        panic!("both requested targets must resolve before indexing stops");
+    };
+    assert_eq!(changes.len(), 2);
+    assert!(changes.iter().any(|change| change.target == first));
+    assert!(changes.iter().any(|change| change.target == second));
+}
+
+#[test]
 fn ordered_direct_edit_batch_simulates_independent_changes_read_only() {
     let ids = IdentityAllocator::new();
     let (candidate, first, second, _) =

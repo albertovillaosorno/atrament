@@ -1869,6 +1869,9 @@ fn direct_edit_material_index(
         index_direct_edit_block(
             &mut index, &mut stack, block, targets, flow, page, revision,
         );
+        if index.materials.len() == targets.len() {
+            break;
+        }
     }
     index
 }
