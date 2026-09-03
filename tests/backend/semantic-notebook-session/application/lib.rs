@@ -3146,7 +3146,7 @@ fn ordered_direct_edit_batch_rejects_atomic_middle_failure_read_only() {
 }
 
 #[test]
-fn ordered_same_target_success_clones_command_ids_only_for_predictions() {
+fn ordered_same_target_success_moves_command_ids_without_cloning() {
     let ids = IdentityAllocator::new();
     let (candidate, span) = candidate_notebook_with_span(&ids, "base");
     let mut session = SemanticNotebookSessionService::default();
@@ -3201,7 +3201,119 @@ fn ordered_same_target_success_clones_command_ids_only_for_predictions() {
         panic!("dependent same-target chain must simulate");
     };
     assert_eq!(commands.len(), 3);
-    assert_eq!(clones.load(AtomicOrdering::Relaxed), 3);
+    assert_eq!(clones.load(AtomicOrdering::Relaxed), 0);
+}
+
+#[test]
+fn ordered_semantic_rejection_moves_result_command_ids_without_cloning() {
+    let ids = IdentityAllocator::new();
+    let (candidate, first, second, third) =
+        candidate_notebook_with_three_spans(&ids);
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(candidate)
+    else {
+        panic!("candidate must be accepted");
+    };
+    let first = accepted_for(&mapping, first);
+    let second = accepted_for(&mapping, second);
+    let third = accepted_for(&mapping, third);
+    let clones = Arc::new(AtomicUsize::new(0));
+    let command =
+        |id, target, expected: &str, requested: &str| DirectEditBatchCommand {
+            dependencies: Vec::new(),
+            id: CountingCommandIdentity::new(&clones, id),
+            preconditions: CommandTargetPreconditions {
+                expected_value: Some(EditableSemanticValue::Text(
+                    expected.to_owned(),
+                )),
+                identity: IdentityPrecondition {
+                    expected_kind: Some(SemanticIdentityKind::InlineSpan),
+                    expected_owner: IdentityOwnerExpectation::Any,
+                },
+                requested_family: SemanticCommandFamily::TextContent,
+            },
+            requested: EditableSemanticValue::Text(requested.to_owned()),
+            target,
+        };
+    let batch = DirectEditBatchProposal {
+        base: revision,
+        capability_version: CommandBehaviorVersion(1),
+        commands: vec![
+            command(1, first, "one", "ONE"),
+            command(2, second, "wrong", "TWO"),
+            command(3, third, "three", "THREE"),
+        ],
+    };
+    clones.store(0, AtomicOrdering::Relaxed);
+    let DirectEditBatchSimulationOutcome::Rejected {
+        command,
+        evaluated,
+        not_evaluated,
+        ..
+    } = session.simulate_direct_edit_batch(batch)
+    else {
+        panic!("middle semantic mismatch must reject");
+    };
+    assert_eq!(command.id, 2);
+    assert_eq!(evaluated.len(), 1);
+    assert_eq!(evaluated[0].command.id, 1);
+    assert_eq!(not_evaluated.len(), 1);
+    assert_eq!(not_evaluated[0].id, 3);
+    assert_eq!(clones.load(AtomicOrdering::Relaxed), 0);
+}
+
+#[test]
+fn ordered_missing_target_dependency_clones_only_dependency_evidence() {
+    let ids = IdentityAllocator::new();
+    let (candidate, span) = candidate_notebook_with_span(&ids, "base");
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(candidate)
+    else {
+        panic!("candidate must be accepted");
+    };
+    let span = accepted_for(&mapping, span);
+    let clones = Arc::new(AtomicUsize::new(0));
+    let command =
+        |id, expected: &str, requested: &str| DirectEditBatchCommand {
+            dependencies: Vec::new(),
+            id: CountingCommandIdentity::new(&clones, id),
+            preconditions: CommandTargetPreconditions {
+                expected_value: Some(EditableSemanticValue::Text(
+                    expected.to_owned(),
+                )),
+                identity: IdentityPrecondition {
+                    expected_kind: Some(SemanticIdentityKind::InlineSpan),
+                    expected_owner: IdentityOwnerExpectation::Any,
+                },
+                requested_family: SemanticCommandFamily::TextContent,
+            },
+            requested: EditableSemanticValue::Text(requested.to_owned()),
+            target: span,
+        };
+    let batch = DirectEditBatchProposal {
+        base: revision,
+        capability_version: CommandBehaviorVersion(1),
+        commands: vec![
+            command(1, "base", "middle"),
+            command(2, "middle", "final"),
+        ],
+    };
+    clones.store(0, AtomicOrdering::Relaxed);
+    let DirectEditBatchSimulationOutcome::Rejected { reason, .. } =
+        session.simulate_direct_edit_batch(batch)
+    else {
+        panic!("missing same-target dependency must reject");
+    };
+    assert!(matches!(
+        *reason,
+        DirectEditBatchCommandRejection::MissingPriorTargetDependency {
+            dependency,
+            target,
+        } if dependency.id == 1 && target == span
+    ));
+    assert_eq!(clones.load(AtomicOrdering::Relaxed), 1);
 }
 
 #[test]
