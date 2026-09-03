@@ -40,8 +40,9 @@ use std::collections::BTreeSet;
 use std::fmt;
 
 use atrament_semantic_notebook::{
-    AcceptedIdentity, AcceptedRevision, CandidateIdentity, Notebook,
-    RevisionIdentity,
+    AcceptedIdentity, AcceptedRevision, CandidateIdentity, FormulaMode,
+    Notebook, PhysicalPageProfile, RevisionIdentity, TableCellSpan,
+    TableRowRole,
 };
 use atrament_semantic_notebook_port::{
     AcceptanceOutcome, CommandCapabilityCompatibilityOutcome,
@@ -55,13 +56,15 @@ use atrament_semantic_notebook_port::{
     DirectEditBatchSelectionSummaryOutcome, DirectEditBatchSimulationOutcome,
     DirectEditChangePreviewOutcome,
     DirectEditProposal, DirectEditProposalOutcome, DirectEditSimulationOutcome,
-    EditableSemanticValue, EditableValuePreconditionOutcome,
+    EditableSemanticValue, EditableValuePreconditionOutcome, FormulaEditOutcome,
     HistoryAvailabilityOutcome, HistoryDirection, HistoryTraversalOutcome,
     IdentityAncestryInspectOutcome, IdentityInspectOutcome,
     IdentityKindInspectOutcome, IdentityPrecondition,
-    IdentityPreconditionOutcome, SemanticCommandCapabilitySnapshot,
-    SemanticCommandFamily, SemanticNotebookHistory as _,
-    SemanticNotebookSession as _,
+    IdentityPreconditionOutcome, PageProfileEditOutcome,
+    SemanticCommandCapabilitySnapshot, SemanticCommandFamily,
+    SemanticNotebookHistory as _,
+    SemanticNotebookSession as _, TableCellSpanEditOutcome,
+    TableRowRoleEditOutcome, TextEditOutcome,
 };
 use atrament_semantic_notebook_session::SemanticNotebookSessionService;
 use atrament_session_draft::SessionDraftService;
@@ -309,6 +312,57 @@ impl SessionApplication {
     ) -> DirectEditChangePreviewOutcome {
         self.semantic
             .preview_direct_edit_changes(revision, target, requested)
+    }
+
+    /// Replace one mathematical source through the owned semantic authority.
+    pub fn replace_formula(
+        &mut self,
+        base: RevisionIdentity,
+        target: AcceptedIdentity,
+        mode: FormulaMode,
+        source: String,
+    ) -> FormulaEditOutcome {
+        self.semantic.replace_formula(base, target, mode, source)
+    }
+
+    /// Replace one physical page profile through the owned semantic authority.
+    pub fn replace_page_profile(
+        &mut self,
+        base: RevisionIdentity,
+        target: AcceptedIdentity,
+        geometry: PhysicalPageProfile,
+    ) -> PageProfileEditOutcome {
+        self.semantic.replace_page_profile(base, target, geometry)
+    }
+
+    /// Replace one table-cell span through the owned semantic authority.
+    pub fn replace_table_cell_span(
+        &mut self,
+        base: RevisionIdentity,
+        target: AcceptedIdentity,
+        span: TableCellSpan,
+    ) -> TableCellSpanEditOutcome {
+        self.semantic.replace_table_cell_span(base, target, span)
+    }
+
+    /// Replace one table-row role through the owned semantic authority.
+    pub fn replace_table_row_role(
+        &mut self,
+        base: RevisionIdentity,
+        target: AcceptedIdentity,
+        role: TableRowRole,
+    ) -> TableRowRoleEditOutcome {
+        self.semantic.replace_table_row_role(base, target, role)
+    }
+
+    /// Replace one inline text value through the owned semantic authority.
+    pub fn replace_text(
+        &mut self,
+        base: RevisionIdentity,
+        target: AcceptedIdentity,
+        value: String,
+    ) -> TextEditOutcome {
+        self.semantic.replace_text(base, target, value)
     }
 
     /// Simulate one established direct semantic edit without mutation.

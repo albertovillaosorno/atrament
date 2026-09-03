@@ -58,11 +58,13 @@ use atrament_semantic_notebook_port::{
     DirectEditSemanticChange,
     DirectEditProposalOutcome, DirectEditSimulationOutcome,
     EditableSemanticValue, EditableValuePreconditionOutcome,
-    HistoryAvailability, HistoryAvailabilityOutcome,
+    HistoryAvailability, HistoryAvailabilityOutcome, HistoryDirection,
+    HistoryTraversalOutcome,
     IdentityAncestryCompleteness, IdentityAncestryEntry,
     IdentityAncestryInspectOutcome, IdentityInspectOutcome,
     IdentityKindInspectOutcome, IdentityOwnerExpectation,
     IdentityPrecondition, IdentityPreconditionOutcome, SemanticCommandFamily,
+    TextEditOutcome,
 };
 use atrament_session_draft_port::{DraftField, DraftMutation, SessionDraft};
 
@@ -349,6 +351,83 @@ fn application_routes_bounded_inspection_through_owned_semantic_authority() {
         session.accepted_revision().map(|current| current.id),
         Some(revision),
     );
+}
+
+#[test]
+fn application_routes_direct_text_edit_into_owned_history() {
+    let identities = IdentityAllocator::new();
+    let (candidate, candidate_span) =
+        editable_text_candidate(&identities, "before direct edit");
+    let mut session = application::SessionApplication::default();
+    let AcceptanceOutcome::Accepted { mapping, revision: base } =
+        session.accept_candidate(candidate)
+    else {
+        panic!("text candidate must be accepted");
+    };
+    let span = mapping
+        .iter()
+        .find(|entry| entry.candidate == candidate_span)
+        .expect("span identity must map")
+        .accepted;
+
+    let TextEditOutcome::Applied {
+        base: applied_base,
+        revision: applied,
+        target,
+    } = session.replace_text(
+        base,
+        span,
+        String::from("after direct edit"),
+    )
+    else {
+        panic!("live-owner direct text edit must apply");
+    };
+    assert_eq!(applied_base, base);
+    assert_eq!(target, span);
+    assert_ne!(applied, base);
+    let current = session.accepted_revision().expect("applied revision");
+    let BlockContent::Paragraph(spans) =
+        &current.notebook.pages[0].flows[0].blocks[0].content
+    else {
+        panic!("fixture must remain a paragraph");
+    };
+    assert_eq!(spans[0].id, span);
+    assert_eq!(spans[0].text, "after direct edit");
+    assert_eq!(
+        session.command_target_material(base, span),
+        CommandTargetMaterialOutcome::StaleBase { current: applied },
+    );
+    assert_eq!(
+        session.simulate_direct_edit(
+            base,
+            span,
+            EditableSemanticValue::Text(String::from("later")),
+        ),
+        DirectEditSimulationOutcome::StaleBase { current: applied },
+    );
+    assert_eq!(
+        session.history_availability(),
+        HistoryAvailabilityOutcome::Available(HistoryAvailability {
+            can_redo: false,
+            can_undo: true,
+            revision: applied,
+        }),
+    );
+
+    let HistoryTraversalOutcome::Traversed { revision: undone, .. } =
+        session.traverse_history(applied, HistoryDirection::Undo)
+    else {
+        panic!("live-owner direct text edit must Undo");
+    };
+    let current = session.accepted_revision().expect("Undo revision");
+    let BlockContent::Paragraph(spans) =
+        &current.notebook.pages[0].flows[0].blocks[0].content
+    else {
+        panic!("Undo fixture must remain a paragraph");
+    };
+    assert_eq!(spans[0].id, span);
+    assert_eq!(spans[0].text, "before direct edit");
+    assert_ne!(undone, applied);
 }
 
 #[test]
