@@ -2757,6 +2757,39 @@ fn bounded_ordered_batch_resource_rejection_borrows_command_ids() {
 }
 
 #[test]
+fn ordered_empty_batch_is_read_only_no_op_at_zero_limits() {
+    let ids = IdentityAllocator::new();
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { revision, .. } =
+        session.accept(candidate_notebook(&ids, "unchanged"))
+    else {
+        panic!("candidate must be accepted");
+    };
+    let before = session.current().expect("accepted revision").clone();
+    let batch = DirectEditBatchProposal::<u32> {
+        base: revision,
+        capability_version: CommandBehaviorVersion(1),
+        commands: Vec::new(),
+    };
+    let expected = DirectEditBatchSimulationOutcome::Predicted {
+        changes: Vec::new(),
+        commands: Vec::new(),
+        effect: DirectEditEffectClass::NoOp,
+        impact_seeds: Vec::new(),
+        revision,
+    };
+    assert_eq!(session.simulate_direct_edit_batch(batch.clone()), expected,);
+    assert_eq!(
+        session.simulate_direct_edit_batch_bounded(batch, CommandGraphLimits {
+            commands: 0,
+            dependency_edges: 0,
+        },),
+        expected,
+    );
+    assert_eq!(session.current(), Some(&before));
+}
+
+#[test]
 fn ordered_direct_edit_batch_material_overlay_reaches_nested_text() {
     let ids = IdentityAllocator::new();
     let (candidate, _, span) = candidate_nested_text_notebook(

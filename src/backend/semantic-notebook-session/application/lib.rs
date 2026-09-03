@@ -2037,6 +2037,15 @@ where
     CommandIdentity: Clone + Ord,
 {
     let revision = current.id;
+    if commands.is_empty() {
+        return DirectEditBatchSimulationOutcome::Predicted {
+            changes: Vec::new(),
+            commands: Vec::new(),
+            effect: DirectEditEffectClass::NoOp,
+            impact_seeds: Vec::new(),
+            revision,
+        };
+    }
     let targets = commands
         .iter()
         .map(|command| command.target)
