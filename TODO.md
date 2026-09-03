@@ -705,8 +705,12 @@ The task remains open for the normalized protocol/envelope, command-context and
 writable-scope admission, retry identity and lost-receipt recovery, published
 resource limits, complete dependency-expanded impact, diagnostics, transaction
 provenance, cancellation and adapter-level concurrency fixtures, and
-browser/CLI/MCP parity. Until those exist, capability discovery intentionally
-does not advertise `Apply`.
+browser/CLI/MCP parity. Retry recovery is specifically blocked on normalized
+batch identity: the current `DirectEditBatchProposal` is deliberately
+pre-normalization, while the frozen retry contract compares one retry identity
+against the normalized batch. Raw proposal equality must not stand in for that
+missing normalization authority. Until these boundaries exist, capability
+discovery intentionally does not advertise `Apply`.
 
 ### TODO - Implement impact-scoped recomputation
 

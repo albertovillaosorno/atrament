@@ -594,6 +594,10 @@ candidate replay or history mutation.
 No protocol normalizer, command-context/writable-scope admission, retry
 identity, selective-rebatch capability, published product limit, full Validate
 service, or discoverable Apply capability is admitted yet.
+Retry-result caching is not implemented against the current in-memory proposal.
+That proposal is explicitly pre-normalization, while same-retry conflict and
+recovery compare normalized batch identity; equating those two representations
+would weaken the frozen retry contract.
 Executable capability evidence confirms that a successful internal batch Apply
 does not change this snapshot or populate `admitted_applications`.
 
