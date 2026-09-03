@@ -199,15 +199,21 @@ semantic state to hidden files, browser storage, or a second mutation path.
 
 A dependency-free semantic-command-graph domain now validates the structural
 graph rules that do not depend on final wire syntax: unique command identities,
-existing dependency references, no direct self-dependency, and acyclicity. The
-validator is generic over caller-owned identity representation and does not
-reorder the supplied command sequence.
+existing dependency references, no direct self-dependency, acyclicity, and no
+acyclic dependency on a later command in the ordered sequence. The validator is
+generic over caller-owned identity representation and never reorders commands.
+
+The graph layer checks dependency closure for interactive command-ID selections.
+A selected command with an omitted dependency rejects explicitly; the validator
+does not add that dependency on the caller's behalf. It also measures exact
+command and explicit dependency-edge counts and enforces caller-supplied coarse
+bounds at the exact limit and one step beyond without truncation.
 
 The graph validator is iterative; a 100,000-command dependency chain is covered
-by direct executable evidence without recursive traversal. This does not define
-a protocol-owned normalizer, command-count or edge-count limit, retry equality,
-or batch Apply behavior. Those remain version-owned work for the future admitted
-command protocol.
+by direct executable evidence without recursive traversal. No numeric product
+limit is selected or advertised by this foundation. It does not define a
+protocol-owned normalizer, retry equality, or batch Apply behavior. Those remain
+version-owned work for a future admitted command protocol.
 
 ## Failure Modes
 

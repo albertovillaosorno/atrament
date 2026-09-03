@@ -489,15 +489,23 @@ evidence.
 
 A version-bound direct-edit proposal now composes capability compatibility,
 complete local target preconditions, and replacement simulation in one read-only
-operation. This remains below full batch Validate: it has no command-batch
-identity, normalized batch, retry identity, semantic change set, impact set, or
-command diagnostics.
+operation. A direct change preview uses the same target-material snapshot to
+report one exact before/after semantic change, or an empty change set for a
+no-op, while preserving typed simulation rejection. This remains below full
+batch Validate: it has no normalized batch, impact set, or command diagnostics.
 
 A separate transport-neutral command-graph domain validates duplicate command
-identities, direct self-dependencies, missing dependency identities, and cycles.
-It is generic over command identity representation, preserves caller command
-order, and uses iterative graph traversal. It is not yet connected to a command
-protocol, normalizer, proposal batch, Validate, or Apply path.
+identities, direct self-dependencies, missing dependencies, cycles, and acyclic
+dependencies that point to later commands in the ordered sequence. It is generic
+over command identity representation, preserves caller order, and uses iterative
+graph traversal.
+
+The graph layer also checks whether an interactive command-ID selection contains
+all required dependencies; omissions are reported instead of silently adding
+commands. It measures exact command and explicit dependency-edge counts and can
+enforce caller-supplied coarse bounds without choosing product limits or
+truncating input. These graph primitives are not yet connected to a protocol,
+normalizer, proposal batch, Validate, or Apply path.
 
 Exact authored text and formula source are compared as currently accepted bytes;
 no Unicode normalization form is implied by this implementation evidence. The

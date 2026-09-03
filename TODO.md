@@ -138,12 +138,18 @@ combines capability, exact local preconditions, and direct-edit simulation
 read-only; all four direct mutation paths consume that simulator before commit.
 
 A separate generic command-graph domain validates duplicate command identities,
-self-dependencies, missing dependencies, and cycles without choosing command-ID
-syntax or changing command order. It is not yet integrated into an admitted
-normalized batch. Full ordered batch validation and semantic change/impact
-prediction remain open. Candidate acceptance also enforces a public 256-level
-block nesting resource bound and iteratively dismantles rejected deep candidates
-before mutation.
+self-dependencies, missing dependencies, cycles, and dependency direction
+without choosing command-ID syntax or changing command order. Interactive
+command-ID selections can be checked for dependency closure without silently
+adding omitted commands. Exact command and explicit edge counts can be measured
+and checked against caller-supplied bounds without choosing product limits.
+
+Direct-edit simulation now also projects one exact before/after semantic change
+or an empty no-op set from the same target-material snapshot. These foundations
+are not yet an admitted normalized batch; full ordered batch simulation,
+impact prediction, diagnostics, retry handling, Validate, and Apply remain open.
+Candidate acceptance also enforces a public 256-level block nesting resource
+bound and iteratively dismantles rejected deep candidates before mutation.
 
 The task remains open for the complete first-release semantic vocabulary,
 format parsing and canonical serialization, migrations and round-trip fixtures,
