@@ -49,8 +49,11 @@ use atrament_semantic_notebook_port::{
     CommandCapabilityCompatibilityOutcome, CommandFamilyAdmissionOutcome,
     CommandFamilyCapability, CommandResourceLimits, CommandTargetMaterial,
     CommandTargetMaterialOutcome, CommandTargetPreconditionOutcome,
-    CommandTargetPreconditions, DirectEditChangePreviewOutcome,
-    DirectEditProposal, DirectEditProposalOutcome, DirectEditSemanticChange,
+    CommandTargetPreconditions, DirectEditBatchCommand,
+    DirectEditBatchCommandPrediction, DirectEditBatchCommandRejection,
+    DirectEditBatchProposal, DirectEditBatchSimulationOutcome,
+    DirectEditChangePreviewOutcome, DirectEditProposal,
+    DirectEditProposalOutcome, DirectEditSemanticChange,
     DirectEditSimulationOutcome, EditableSemanticValue,
     EditableSemanticValueKind, EditableValuePreconditionOutcome,
     FormulaEditOutcome, IdentityInspectOutcome, IdentityKindInspectOutcome,
@@ -161,6 +164,62 @@ fn candidate_notebook_with_span(
         styles: vec![],
     };
     (notebook, span_id)
+}
+
+fn candidate_notebook_with_three_spans(
+    identities: &IdentityAllocator,
+) -> (
+    Notebook<CandidateIdentity>,
+    CandidateIdentity,
+    CandidateIdentity,
+    CandidateIdentity,
+) {
+    let (mut notebook, first) = candidate_notebook_with_span(identities, "one");
+    let second = candidate_id(identities);
+    let third = candidate_id(identities);
+    let BlockContent::Paragraph(spans) =
+        &mut notebook.pages[0].flows[0].blocks[0].content
+    else {
+        panic!("fixture must contain one paragraph");
+    };
+    spans.push(InlineSpan {
+        id: second,
+        provenance: None,
+        style: None,
+        text: String::from("two"),
+    });
+    spans.push(InlineSpan {
+        id: third,
+        provenance: None,
+        style: None,
+        text: String::from("three"),
+    });
+    (notebook, first, second, third)
+}
+
+fn text_batch_command(
+    id: u32,
+    dependencies: &[u32],
+    target: AcceptedIdentity,
+    expected: &str,
+    requested: &str,
+) -> DirectEditBatchCommand<u32> {
+    DirectEditBatchCommand {
+        dependencies: dependencies.to_vec(),
+        id,
+        preconditions: CommandTargetPreconditions {
+            expected_value: Some(EditableSemanticValue::Text(
+                expected.to_owned(),
+            )),
+            identity: IdentityPrecondition {
+                expected_kind: Some(SemanticIdentityKind::InlineSpan),
+                expected_owner: IdentityOwnerExpectation::Any,
+            },
+            requested_family: SemanticCommandFamily::TextContent,
+        },
+        requested: EditableSemanticValue::Text(requested.to_owned()),
+        target,
+    }
 }
 
 fn candidate_nested_text_notebook(
@@ -1584,6 +1643,209 @@ fn direct_edit_proposal_stale_base_precedes_local_simulation() {
         },
     );
     assert_eq!(session.current(), Some(&before));
+}
+
+#[test]
+fn ordered_direct_edit_batch_simulates_independent_changes_read_only() {
+    let ids = IdentityAllocator::new();
+    let (candidate, first, second, _) =
+        candidate_notebook_with_three_spans(&ids);
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(candidate)
+    else {
+        panic!("three-span candidate must be accepted");
+    };
+    let first = accepted_for(&mapping, first);
+    let second = accepted_for(&mapping, second);
+    let before = session.current().expect("accepted revision").clone();
+    let outcome = session.simulate_direct_edit_batch(DirectEditBatchProposal {
+        base: revision,
+        capability_version: CommandBehaviorVersion(1),
+        commands: vec![
+            text_batch_command(1, &[], first, "one", "ONE"),
+            text_batch_command(2, &[], second, "two", "TWO"),
+        ],
+    });
+    let DirectEditBatchSimulationOutcome::Predicted {
+        changes,
+        commands,
+        revision: predicted_revision,
+    } = outcome
+    else {
+        panic!("independent direct edits must simulate");
+    };
+    assert_eq!(predicted_revision, revision);
+    assert_eq!(changes.len(), 2);
+    assert_eq!(commands.len(), 2);
+    assert_eq!(commands[0].command, 1);
+    assert_eq!(commands[1].command, 2);
+    assert_eq!(session.current(), Some(&before));
+}
+
+#[test]
+fn ordered_direct_edit_batch_rejects_atomic_middle_failure_read_only() {
+    let ids = IdentityAllocator::new();
+    let (candidate, first, second, third) =
+        candidate_notebook_with_three_spans(&ids);
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(candidate)
+    else {
+        panic!("three-span candidate must be accepted");
+    };
+    let first = accepted_for(&mapping, first);
+    let second = accepted_for(&mapping, second);
+    let third = accepted_for(&mapping, third);
+    let before = session.current().expect("accepted revision").clone();
+    let outcome = session.simulate_direct_edit_batch(DirectEditBatchProposal {
+        base: revision,
+        capability_version: CommandBehaviorVersion(1),
+        commands: vec![
+            text_batch_command(1, &[], first, "one", "ONE"),
+            text_batch_command(2, &[], second, "wrong", "TWO"),
+            text_batch_command(3, &[], third, "three", "THREE"),
+        ],
+    });
+    let DirectEditBatchSimulationOutcome::Rejected {
+        command,
+        evaluated,
+        not_evaluated,
+        reason,
+        revision: rejected_revision,
+    } = outcome
+    else {
+        panic!("middle precondition must reject the complete simulation");
+    };
+    assert_eq!(command, 2);
+    assert_eq!(rejected_revision, revision);
+    assert_eq!(evaluated.len(), 1);
+    assert_eq!(evaluated[0].command, 1);
+    assert_eq!(not_evaluated, vec![3]);
+    assert!(matches!(
+        *reason,
+        DirectEditBatchCommandRejection::Precondition { .. }
+    ));
+    assert_eq!(session.current(), Some(&before));
+}
+
+#[test]
+fn ordered_direct_edit_batch_requires_dependency_for_repeated_target() {
+    let ids = IdentityAllocator::new();
+    let (candidate, span) = candidate_notebook_with_span(&ids, "base");
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(candidate)
+    else {
+        panic!("text candidate must be accepted");
+    };
+    let span = accepted_for(&mapping, span);
+    let before = session.current().expect("accepted revision").clone();
+    let rejected =
+        session.simulate_direct_edit_batch(DirectEditBatchProposal {
+            base: revision,
+            capability_version: CommandBehaviorVersion(1),
+            commands: vec![
+                text_batch_command(1, &[], span, "base", "middle"),
+                text_batch_command(2, &[], span, "middle", "final"),
+            ],
+        });
+    assert!(matches!(
+        rejected,
+        DirectEditBatchSimulationOutcome::Rejected {
+            command: 2,
+            reason,
+            ..
+        } if matches!(
+            *reason,
+            DirectEditBatchCommandRejection::MissingPriorTargetDependency {
+                dependency: 1,
+                target,
+            } if target == span
+        )
+    ));
+
+    let predicted =
+        session.simulate_direct_edit_batch(DirectEditBatchProposal {
+            base: revision,
+            capability_version: CommandBehaviorVersion(1),
+            commands: vec![
+                text_batch_command(1, &[], span, "base", "middle"),
+                text_batch_command(2, &[1], span, "middle", "final"),
+            ],
+        });
+    let DirectEditBatchSimulationOutcome::Predicted {
+        changes, commands, ..
+    } = predicted
+    else {
+        panic!("explicitly dependent repeated target must simulate");
+    };
+    assert_eq!(commands.len(), 2);
+    assert_eq!(commands[0], DirectEditBatchCommandPrediction {
+        change: Some(DirectEditSemanticChange {
+            after: EditableSemanticValue::Text(String::from("middle")),
+            before: EditableSemanticValue::Text(String::from("base")),
+            family: SemanticCommandFamily::TextContent,
+            target: span,
+        }),
+        command: 1,
+        family: SemanticCommandFamily::TextContent,
+        target: span,
+    });
+    assert_eq!(
+        commands[1].change,
+        Some(DirectEditSemanticChange {
+            after: EditableSemanticValue::Text(String::from("final")),
+            before: EditableSemanticValue::Text(String::from("middle")),
+            family: SemanticCommandFamily::TextContent,
+            target: span,
+        })
+    );
+    assert_eq!(changes, vec![DirectEditSemanticChange {
+        after: EditableSemanticValue::Text(String::from("final")),
+        before: EditableSemanticValue::Text(String::from("base")),
+        family: SemanticCommandFamily::TextContent,
+        target: span,
+    }]);
+    assert_eq!(session.current(), Some(&before));
+}
+
+#[test]
+fn ordered_direct_edit_batch_preserves_global_rejection_precedence() {
+    let ids = IdentityAllocator::new();
+    let (candidate, span) = candidate_notebook_with_span(&ids, "base");
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(candidate)
+    else {
+        panic!("text candidate must be accepted");
+    };
+    let span = accepted_for(&mapping, span);
+    assert_eq!(
+        session.simulate_direct_edit_batch(DirectEditBatchProposal {
+            base: revision,
+            capability_version: CommandBehaviorVersion(0),
+            commands: vec![text_batch_command(1, &[], span, "base", "after")],
+        }),
+        DirectEditBatchSimulationOutcome::CapabilityMismatch {
+            current: CommandBehaviorVersion(1),
+            expected: CommandBehaviorVersion(0),
+        },
+    );
+    let replacement = candidate_notebook(&ids, "new revision");
+    let AcceptanceOutcome::Accepted { revision: current, .. } =
+        session.accept(replacement)
+    else {
+        panic!("replacement candidate must be accepted");
+    };
+    assert_eq!(
+        session.simulate_direct_edit_batch(DirectEditBatchProposal {
+            base: revision,
+            capability_version: CommandBehaviorVersion(1),
+            commands: vec![text_batch_command(1, &[], span, "base", "after")],
+        }),
+        DirectEditBatchSimulationOutcome::StaleBase { current },
+    );
 }
 
 #[test]

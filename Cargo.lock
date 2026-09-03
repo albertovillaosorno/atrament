@@ -92,6 +92,7 @@ dependencies = [
 name = "atrament_semantic_notebook_port"
 version = "0.1.0"
 dependencies = [
+ "atrament_semantic_command_graph",
  "atrament_semantic_notebook",
 ]
 
@@ -100,6 +101,7 @@ name = "atrament_semantic_notebook_session"
 version = "0.1.0"
 dependencies = [
  "atrament_mathematics_source",
+ "atrament_semantic_command_graph",
  "atrament_semantic_notebook",
  "atrament_semantic_notebook_port",
 ]

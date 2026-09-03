@@ -33,6 +33,7 @@
 
 //! Inbound application port for transactional semantic candidate acceptance.
 
+use atrament_semantic_command_graph::CommandGraphError;
 use atrament_semantic_notebook::{
     AcceptedIdentity, AcceptedRevision, CandidateIdentity, FormulaMode,
     IdentityExhausted, MathSyntaxError, Notebook, PhysicalPageProfile,
@@ -391,6 +392,113 @@ pub enum DirectEditChangePreviewOutcome {
         /// Existing typed simulation rejection, preserved without
         /// reinterpretation.
         outcome: Box<DirectEditSimulationOutcome>,
+    },
+}
+
+/// One command in a transport-neutral direct-edit batch proposal.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct DirectEditBatchCommand<CommandIdentity> {
+    /// Explicit earlier commands this command semantically depends on.
+    pub dependencies: Vec<CommandIdentity>,
+    /// Caller-owned batch-local command identity.
+    pub id: CommandIdentity,
+    /// Complete local target preconditions for this command.
+    pub preconditions: CommandTargetPreconditions,
+    /// Exact requested replacement semantic value.
+    pub requested: EditableSemanticValue,
+    /// Existing accepted semantic identity targeted by this command.
+    pub target: AcceptedIdentity,
+}
+
+/// Ordered in-memory direct-edit batch proposal before protocol normalization.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct DirectEditBatchProposal<CommandIdentity> {
+    /// Accepted revision required by every command in this proposal.
+    pub base: RevisionIdentity,
+    /// Capability behavior version used to construct the proposal.
+    pub capability_version: CommandBehaviorVersion,
+    /// Ordered command sequence; order remains application-significant.
+    pub commands: Vec<DirectEditBatchCommand<CommandIdentity>>,
+}
+
+/// One successfully simulated direct-edit batch command.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct DirectEditBatchCommandPrediction<CommandIdentity> {
+    /// Exact semantic change, absent only for a valid semantic no-op.
+    pub change: Option<DirectEditSemanticChange>,
+    /// Caller-owned command identity.
+    pub command: CommandIdentity,
+    /// Executable direct-edit family simulated for this command.
+    pub family: SemanticCommandFamily,
+    /// Existing accepted semantic target simulated by this command.
+    pub target: AcceptedIdentity,
+}
+
+/// Typed semantic failure for one command in an otherwise admitted batch.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum DirectEditBatchCommandRejection<CommandIdentity> {
+    /// Repeated target lacks an explicit dependency on its previous writer.
+    MissingPriorTargetDependency {
+        /// Previous command that most recently simulated this target.
+        dependency: CommandIdentity,
+        /// Repeated accepted semantic target.
+        target: AcceptedIdentity,
+    },
+    /// Local command preconditions failed against isolated candidate state.
+    Precondition {
+        /// Existing typed local-precondition failure.
+        outcome: Box<CommandTargetPreconditionOutcome>,
+    },
+    /// Replacement simulation rejected through an existing typed result.
+    Simulation {
+        /// Existing direct-edit simulation rejection.
+        outcome: Box<DirectEditSimulationOutcome>,
+    },
+}
+
+/// Read-only ordered direct-edit batch simulation result.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum DirectEditBatchSimulationOutcome<CommandIdentity> {
+    /// Capability behavior changed before batch simulation.
+    CapabilityMismatch {
+        /// Current backend-owned capability behavior version.
+        current: CommandBehaviorVersion,
+        /// Capability behavior version bound by the batch.
+        expected: CommandBehaviorVersion,
+    },
+    /// Command dependency structure rejected before semantic simulation.
+    DependencyGraphRejected {
+        /// Typed transport-neutral dependency graph failure.
+        reason: CommandGraphError<CommandIdentity>,
+    },
+    /// Session has no accepted semantic revision to simulate.
+    NoAcceptedRevision,
+    /// Every command simulated successfully against isolated candidate state.
+    Predicted {
+        /// Exact ordered semantic change set; no-op commands add no entry.
+        changes: Vec<DirectEditSemanticChange>,
+        /// Ordered per-command simulation evidence.
+        commands: Vec<DirectEditBatchCommandPrediction<CommandIdentity>>,
+        /// Immutable accepted base revision used for the simulation.
+        revision: RevisionIdentity,
+    },
+    /// One required command rejected and later commands were not evaluated.
+    Rejected {
+        /// Command whose semantic validation rejected the batch.
+        command: CommandIdentity,
+        /// Successfully simulated earlier commands, none committed.
+        evaluated: Vec<DirectEditBatchCommandPrediction<CommandIdentity>>,
+        /// Later command identities deliberately not evaluated after failure.
+        not_evaluated: Vec<CommandIdentity>,
+        /// Typed reason the decisive command rejected.
+        reason: Box<DirectEditBatchCommandRejection<CommandIdentity>>,
+        /// Immutable accepted base revision used for isolated simulation.
+        revision: RevisionIdentity,
+    },
+    /// Batch base revision is no longer the current accepted revision.
+    StaleBase {
+        /// Current accepted revision that rejected the stale batch.
+        current: RevisionIdentity,
     },
 }
 
@@ -1099,6 +1207,14 @@ pub trait SemanticNotebookSession {
         target: AcceptedIdentity,
         requested: EditableSemanticValue,
     ) -> DirectEditSimulationOutcome;
+
+    /// Simulate one ordered direct-edit batch in isolated candidate state.
+    fn simulate_direct_edit_batch<CommandIdentity>(
+        &self,
+        batch: DirectEditBatchProposal<CommandIdentity>,
+    ) -> DirectEditBatchSimulationOutcome<CommandIdentity>
+    where
+        CommandIdentity: Clone + Ord;
 
     /// Check capability and local preconditions, then simulate one proposal.
     fn simulate_direct_edit_proposal(

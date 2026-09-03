@@ -6,6 +6,7 @@ publish = false
 license = "MIT"
 
 [dependencies]
+atrament_semantic_command_graph = { path = "../semantic-command-graph" }
 atrament_semantic_notebook = { path = "../semantic-notebook" }
 
 [lib]

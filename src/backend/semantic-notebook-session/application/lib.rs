@@ -38,6 +38,7 @@ use std::collections::BTreeMap;
 use std::fmt;
 
 use atrament_mathematics_source::analyze;
+use atrament_semantic_command_graph::{CommandNode, validate_command_graph};
 use atrament_semantic_notebook::{
     AcceptedIdentity, AcceptedRevision, Asset, Block, BlockContent,
     CandidateIdentity, Constraint, Figure, Flow, Formula, FormulaMode,
@@ -51,8 +52,11 @@ use atrament_semantic_notebook_port::{
     CommandCapabilityCompatibilityOutcome, CommandFamilyAdmissionOutcome,
     CommandFamilyCapability, CommandResourceLimits, CommandTargetMaterial,
     CommandTargetMaterialOutcome, CommandTargetPreconditionOutcome,
-    CommandTargetPreconditions, DirectEditChangePreviewOutcome,
-    DirectEditProposal, DirectEditProposalOutcome, DirectEditSemanticChange,
+    CommandTargetPreconditions, DirectEditBatchCommand,
+    DirectEditBatchCommandPrediction, DirectEditBatchCommandRejection,
+    DirectEditBatchProposal, DirectEditBatchSimulationOutcome,
+    DirectEditChangePreviewOutcome, DirectEditProposal,
+    DirectEditProposalOutcome, DirectEditSemanticChange,
     DirectEditSimulationOutcome, EditableSemanticValue,
     EditableSemanticValueKind, EditableValuePreconditionOutcome,
     FormulaEditOutcome, IdentityInspectOutcome, IdentityKindInspectOutcome,
@@ -259,61 +263,7 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
                 };
             },
         };
-        if material.direct_edit_family != Some(preconditions.requested_family) {
-            return CommandTargetPreconditionOutcome::FamilyNotExecutable {
-                available: material.direct_edit_family,
-                requested: preconditions.requested_family,
-                revision,
-                target,
-            };
-        }
-        if let Some(expected) = preconditions.identity.expected_kind
-            && material.descriptor.kind != expected
-        {
-            return CommandTargetPreconditionOutcome::KindMismatch {
-                actual: material.descriptor.kind,
-                expected,
-                revision,
-                target,
-            };
-        }
-        let owner_matches = match preconditions.identity.expected_owner {
-            IdentityOwnerExpectation::Any => true,
-            IdentityOwnerExpectation::Direct(expected) => {
-                material.descriptor.owner == Some(expected)
-            },
-            IdentityOwnerExpectation::Root => {
-                material.descriptor.owner.is_none()
-            },
-        };
-        if !owner_matches {
-            return CommandTargetPreconditionOutcome::OwnerMismatch {
-                actual: material.descriptor.owner,
-                expected: preconditions.identity.expected_owner,
-                revision,
-                target,
-            };
-        }
-        if let Some(expected) = preconditions.expected_value {
-            let Some(actual) = material.editable_value.as_ref() else {
-                let outcome =
-                    CommandTargetPreconditionOutcome::TargetNotEditableValue {
-                        kind: material.descriptor.kind,
-                        revision,
-                        target,
-                    };
-                return outcome;
-            };
-            if actual != &expected {
-                return CommandTargetPreconditionOutcome::ValueMismatch {
-                    actual: actual.clone(),
-                    expected,
-                    revision,
-                    target,
-                };
-            }
-        }
-        CommandTargetPreconditionOutcome::Satisfied { material }
+        check_command_target_preconditions_material(material, preconditions)
     }
 
     fn check_editable_value_precondition(
@@ -460,27 +410,11 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
                 current: current.id,
             };
         }
-        let Some(descriptor) =
-            semantic_identity_descriptor(&current.notebook, target)
-        else {
-            return CommandTargetMaterialOutcome::TargetNotFound {
-                revision,
-                target,
-            };
-        };
-        let editable_value =
-            editable_semantic_value(&current.notebook, target, descriptor.kind);
-        let direct_edit_family =
-            editable_value.as_ref().map(direct_edit_family);
-        CommandTargetMaterialOutcome::Prepared {
-            material: CommandTargetMaterial {
-                direct_edit_family,
-                descriptor,
-                editable_value,
-                revision,
-                target,
-            },
-        }
+        command_target_material_from_notebook(
+            &current.notebook,
+            revision,
+            target,
+        )
     }
 
     fn current(&self) -> Option<&AcceptedRevision> {
@@ -928,6 +862,44 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
         .outcome
     }
 
+    fn simulate_direct_edit_batch<CommandIdentity>(
+        &self,
+        batch: DirectEditBatchProposal<CommandIdentity>,
+    ) -> DirectEditBatchSimulationOutcome<CommandIdentity>
+    where
+        CommandIdentity: Clone + Ord,
+    {
+        let snapshot = self.command_capability_snapshot();
+        if snapshot.behavior_version != batch.capability_version {
+            return DirectEditBatchSimulationOutcome::CapabilityMismatch {
+                current: snapshot.behavior_version,
+                expected: batch.capability_version,
+            };
+        }
+        let Some(current) = self.current.as_ref() else {
+            return DirectEditBatchSimulationOutcome::NoAcceptedRevision;
+        };
+        if current.id != batch.base {
+            return DirectEditBatchSimulationOutcome::StaleBase {
+                current: current.id,
+            };
+        }
+        let nodes = batch
+            .commands
+            .iter()
+            .map(|command| CommandNode {
+                dependencies: command.dependencies.clone(),
+                id: command.id.clone(),
+            })
+            .collect::<Vec<_>>();
+        if let Err(reason) = validate_command_graph(&nodes) {
+            return DirectEditBatchSimulationOutcome::DependencyGraphRejected {
+                reason,
+            };
+        }
+        simulate_direct_edit_batch_commands(current, &batch.commands)
+    }
+
     fn simulate_direct_edit_proposal(
         &self,
         proposal: DirectEditProposal,
@@ -1363,6 +1335,363 @@ fn formula_content_value(
         | BlockContent::Paragraph(_)
         | BlockContent::Rule
         | BlockContent::Unresolved(_) => None,
+    }
+}
+
+fn command_target_material_from_notebook(
+    notebook: &Notebook<AcceptedIdentity>,
+    revision: atrament_semantic_notebook::RevisionIdentity,
+    target: AcceptedIdentity,
+) -> CommandTargetMaterialOutcome {
+    let Some(descriptor) = semantic_identity_descriptor(notebook, target)
+    else {
+        return CommandTargetMaterialOutcome::TargetNotFound {
+            revision,
+            target,
+        };
+    };
+    let editable_value =
+        editable_semantic_value(notebook, target, descriptor.kind);
+    let direct_edit_family = editable_value.as_ref().map(direct_edit_family);
+    CommandTargetMaterialOutcome::Prepared {
+        material: CommandTargetMaterial {
+            direct_edit_family,
+            descriptor,
+            editable_value,
+            revision,
+            target,
+        },
+    }
+}
+
+fn check_command_target_preconditions_material(
+    material: CommandTargetMaterial,
+    preconditions: CommandTargetPreconditions,
+) -> CommandTargetPreconditionOutcome {
+    let revision = material.revision;
+    let target = material.target;
+    if material.direct_edit_family != Some(preconditions.requested_family) {
+        return CommandTargetPreconditionOutcome::FamilyNotExecutable {
+            available: material.direct_edit_family,
+            requested: preconditions.requested_family,
+            revision,
+            target,
+        };
+    }
+    if let Some(expected) = preconditions.identity.expected_kind
+        && material.descriptor.kind != expected
+    {
+        return CommandTargetPreconditionOutcome::KindMismatch {
+            actual: material.descriptor.kind,
+            expected,
+            revision,
+            target,
+        };
+    }
+    let owner_matches = match preconditions.identity.expected_owner {
+        IdentityOwnerExpectation::Any => true,
+        IdentityOwnerExpectation::Direct(expected) => {
+            material.descriptor.owner == Some(expected)
+        },
+        IdentityOwnerExpectation::Root => material.descriptor.owner.is_none(),
+    };
+    if !owner_matches {
+        return CommandTargetPreconditionOutcome::OwnerMismatch {
+            actual: material.descriptor.owner,
+            expected: preconditions.identity.expected_owner,
+            revision,
+            target,
+        };
+    }
+    if let Some(expected) = preconditions.expected_value {
+        let Some(actual) = material.editable_value.as_ref() else {
+            return CommandTargetPreconditionOutcome::TargetNotEditableValue {
+                kind: material.descriptor.kind,
+                revision,
+                target,
+            };
+        };
+        if actual != &expected {
+            return CommandTargetPreconditionOutcome::ValueMismatch {
+                actual: actual.clone(),
+                expected,
+                revision,
+                target,
+            };
+        }
+    }
+    CommandTargetPreconditionOutcome::Satisfied { material }
+}
+
+fn apply_direct_edit_value(
+    notebook: &mut Notebook<AcceptedIdentity>,
+    target: AcceptedIdentity,
+    requested: EditableSemanticValue,
+) -> bool {
+    match requested {
+        EditableSemanticValue::Formula { mode, source } => {
+            replace_formula_value(notebook, target, mode, source)
+        },
+        EditableSemanticValue::PageProfile(profile) => {
+            replace_page_profile_value(notebook, target, profile)
+        },
+        EditableSemanticValue::TableRowRole(role) => {
+            replace_table_row_role_value(notebook, target, role)
+        },
+        EditableSemanticValue::Text(text) => {
+            replace_text_value(notebook, target, text)
+        },
+    }
+}
+
+fn simulate_direct_edit_batch_commands<CommandIdentity>(
+    current: &AcceptedRevision,
+    commands: &[DirectEditBatchCommand<CommandIdentity>],
+) -> DirectEditBatchSimulationOutcome<CommandIdentity>
+where
+    CommandIdentity: Clone + Ord,
+{
+    let revision = current.id;
+    let mut candidate = current.notebook.clone();
+    let mut evaluated = Vec::with_capacity(commands.len());
+    let mut previous_by_target = BTreeMap::new();
+    let mut aggregate = BTreeMap::new();
+    for (index, command) in commands.iter().enumerate() {
+        let result = simulate_direct_edit_batch_command(
+            &mut candidate,
+            command,
+            previous_by_target.get(&command.target),
+            revision,
+        );
+        let prediction = match result {
+            Ok(prediction) => prediction,
+            Err(reason) => {
+                return reject_direct_edit_batch(
+                    command.id.clone(),
+                    commands.iter().skip(index.saturating_add(1)),
+                    evaluated,
+                    reason,
+                    revision,
+                );
+            },
+        };
+        if let Some(change) = prediction.change.as_ref() {
+            record_direct_edit_batch_change(&mut aggregate, index, change);
+        }
+        let _previous =
+            previous_by_target.insert(command.target, command.id.clone());
+        evaluated.push(prediction);
+    }
+    let mut ordered_changes = aggregate.into_values().collect::<Vec<_>>();
+    ordered_changes.sort_by_key(|(index, _)| *index);
+    let changes = ordered_changes
+        .into_iter()
+        .map(|(_, change)| change)
+        .filter(|change| change.before != change.after)
+        .collect();
+    DirectEditBatchSimulationOutcome::Predicted {
+        changes,
+        commands: evaluated,
+        revision,
+    }
+}
+
+fn simulate_direct_edit_batch_command<CommandIdentity>(
+    candidate: &mut Notebook<AcceptedIdentity>,
+    command: &DirectEditBatchCommand<CommandIdentity>,
+    previous: Option<&CommandIdentity>,
+    revision: atrament_semantic_notebook::RevisionIdentity,
+) -> Result<
+    DirectEditBatchCommandPrediction<CommandIdentity>,
+    DirectEditBatchCommandRejection<CommandIdentity>,
+>
+where
+    CommandIdentity: Clone + Ord,
+{
+    if let Some(dependency) = previous
+        && !command.dependencies.contains(dependency)
+    {
+        return Err(
+            DirectEditBatchCommandRejection::MissingPriorTargetDependency {
+                dependency: dependency.clone(),
+                target: command.target,
+            },
+        );
+    }
+    let material =
+        batch_command_target_material(candidate, revision, command.target)?;
+    let kind = material.descriptor.kind;
+    let precondition = check_command_target_preconditions_material(
+        material.clone(),
+        command.preconditions.clone(),
+    );
+    if !matches!(
+        precondition,
+        CommandTargetPreconditionOutcome::Satisfied { .. }
+    ) {
+        return Err(DirectEditBatchCommandRejection::Precondition {
+            outcome: Box::new(precondition),
+        });
+    }
+    let simulation =
+        simulate_prepared_direct_edit(material, command.requested.clone());
+    batch_command_prediction(candidate, command.id.clone(), kind, simulation)
+}
+
+fn batch_command_target_material<CommandIdentity>(
+    candidate: &Notebook<AcceptedIdentity>,
+    revision: atrament_semantic_notebook::RevisionIdentity,
+    target: AcceptedIdentity,
+) -> Result<
+    CommandTargetMaterial,
+    DirectEditBatchCommandRejection<CommandIdentity>,
+> {
+    match command_target_material_from_notebook(candidate, revision, target) {
+        CommandTargetMaterialOutcome::Prepared { material } => Ok(material),
+        CommandTargetMaterialOutcome::TargetNotFound {
+            revision: missing_revision,
+            target: missing_target,
+        } => Err(DirectEditBatchCommandRejection::Simulation {
+            outcome: Box::new(DirectEditSimulationOutcome::TargetNotFound {
+                revision: missing_revision,
+                target: missing_target,
+            }),
+        }),
+        CommandTargetMaterialOutcome::NoAcceptedRevision => {
+            Err(DirectEditBatchCommandRejection::Simulation {
+                outcome: Box::new(
+                    DirectEditSimulationOutcome::NoAcceptedRevision,
+                ),
+            })
+        },
+        CommandTargetMaterialOutcome::StaleBase { current } => {
+            Err(DirectEditBatchCommandRejection::Simulation {
+                outcome: Box::new(DirectEditSimulationOutcome::StaleBase {
+                    current,
+                }),
+            })
+        },
+    }
+}
+
+fn batch_command_prediction<CommandIdentity>(
+    candidate: &mut Notebook<AcceptedIdentity>,
+    command: CommandIdentity,
+    kind: atrament_semantic_notebook::SemanticIdentityKind,
+    simulation: DirectEditSimulation,
+) -> Result<
+    DirectEditBatchCommandPrediction<CommandIdentity>,
+    DirectEditBatchCommandRejection<CommandIdentity>,
+> {
+    match simulation.outcome {
+        DirectEditSimulationOutcome::Applicable {
+            family,
+            requested,
+            revision,
+            target,
+        } => {
+            let Some(before) = simulation.before else {
+                return Err(DirectEditBatchCommandRejection::Simulation {
+                    outcome: Box::new(
+                        DirectEditSimulationOutcome::TargetNotEditableValue {
+                            kind,
+                            revision,
+                            target,
+                        },
+                    ),
+                });
+            };
+            let change = DirectEditSemanticChange {
+                after: requested.clone(),
+                before,
+                family,
+                target,
+            };
+            if !apply_direct_edit_value(candidate, target, requested) {
+                return Err(DirectEditBatchCommandRejection::Simulation {
+                    outcome: Box::new(
+                        DirectEditSimulationOutcome::TargetNotFound {
+                            revision,
+                            target,
+                        },
+                    ),
+                });
+            }
+            Ok(DirectEditBatchCommandPrediction {
+                change: Some(change),
+                command,
+                family,
+                target,
+            })
+        },
+        DirectEditSimulationOutcome::NoOp { family, target, .. } => {
+            Ok(DirectEditBatchCommandPrediction {
+                change: None,
+                command,
+                family,
+                target,
+            })
+        },
+        outcome @ (DirectEditSimulationOutcome::InvalidMathematics {
+            ..
+        }
+        | DirectEditSimulationOutcome::InvalidPageProfile {
+            ..
+        }
+        | DirectEditSimulationOutcome::NoAcceptedRevision
+        | DirectEditSimulationOutcome::StaleBase { .. }
+        | DirectEditSimulationOutcome::TargetNotEditableValue {
+            ..
+        }
+        | DirectEditSimulationOutcome::TargetNotFound { .. }
+        | DirectEditSimulationOutcome::UnsupportedMathematics {
+            ..
+        }
+        | DirectEditSimulationOutcome::ValueFamilyMismatch {
+            ..
+        }) => Err(DirectEditBatchCommandRejection::Simulation {
+            outcome: Box::new(outcome),
+        }),
+    }
+}
+
+fn record_direct_edit_batch_change(
+    aggregate: &mut BTreeMap<
+        AcceptedIdentity,
+        (usize, DirectEditSemanticChange),
+    >,
+    index: usize,
+    change: &DirectEditSemanticChange,
+) {
+    if let Some((_, existing)) = aggregate.get_mut(&change.target) {
+        existing.after = change.after.clone();
+    } else {
+        let _previous =
+            aggregate.insert(change.target, (index, change.clone()));
+    }
+}
+
+fn reject_direct_edit_batch<'command, CommandIdentity>(
+    command: CommandIdentity,
+    remaining: impl Iterator<
+        Item = &'command DirectEditBatchCommand<CommandIdentity>,
+    >,
+    evaluated: Vec<DirectEditBatchCommandPrediction<CommandIdentity>>,
+    reason: DirectEditBatchCommandRejection<CommandIdentity>,
+    revision: atrament_semantic_notebook::RevisionIdentity,
+) -> DirectEditBatchSimulationOutcome<CommandIdentity>
+where
+    CommandIdentity: Clone + 'command,
+{
+    let not_evaluated = remaining
+        .map(|remaining_command| remaining_command.id.clone())
+        .collect();
+    DirectEditBatchSimulationOutcome::Rejected {
+        command,
+        evaluated,
+        not_evaluated,
+        reason: Box::new(reason),
+        revision,
     }
 }
 
