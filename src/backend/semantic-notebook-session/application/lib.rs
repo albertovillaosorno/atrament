@@ -40,8 +40,10 @@ use std::slice::from_ref;
 
 use atrament_mathematics_source::analyze;
 use atrament_semantic_command_graph::{
-    CommandNode, DependencyRequirementsError, DependencySummaryError,
-    dependency_selection_requirements, dependency_selection_summary,
+    BoundedDependencyRequirementsError, CommandGraphError, CommandNode,
+    DependencyRequirementsError, DependencySummaryError,
+    MissingDependencyRequirement, dependency_selection_requirements,
+    dependency_selection_requirements_bounded, dependency_selection_summary,
     validate_command_graph,
 };
 use atrament_semantic_notebook::{
@@ -61,6 +63,7 @@ use atrament_semantic_notebook_port::{
     CommandTargetPreconditions, DirectEditBatchCommand,
     DirectEditBatchCommandPrediction, DirectEditBatchCommandRejection,
     DirectEditBatchProposal,
+    DirectEditBatchSelectionBoundedOutcome as BoundedSelectionOutcome,
     DirectEditBatchSelectionRequirementsOutcome as BatchSelectionOutcome,
     DirectEditBatchSelectionSummaryOutcome as BatchSelectionSummaryOutcome,
     DirectEditBatchSimulationOutcome, DirectEditChangePreviewOutcome,
@@ -458,24 +461,80 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
         if current.id != batch.base {
             return BatchSelectionOutcome::StaleBase { current: current.id };
         }
-        let nodes = batch
-            .commands
-            .iter()
-            .map(|command| CommandNode {
-                dependencies: command.dependencies.clone(),
-                id: command.id.clone(),
-            })
-            .collect::<Vec<_>>();
-        match dependency_selection_requirements(&nodes, selected) {
+        let nodes = borrowed_command_nodes(batch);
+        let borrowed_selected = borrowed_command_selection(selected);
+        match dependency_selection_requirements(&nodes, &borrowed_selected) {
             Ok(missing) => BatchSelectionOutcome::Requirements {
-                missing,
+                missing: owned_missing_requirements(missing),
                 revision: current.id,
             },
             Err(DependencyRequirementsError::Graph { reason }) => {
-                BatchSelectionOutcome::DependencyGraphRejected { reason }
+                BatchSelectionOutcome::DependencyGraphRejected {
+                    reason: owned_command_graph_error(&reason),
+                }
             },
             Err(DependencyRequirementsError::UnknownSelection { command }) => {
-                BatchSelectionOutcome::UnknownSelection { command }
+                BatchSelectionOutcome::UnknownSelection {
+                    command: (*command).clone(),
+                }
+            },
+        }
+    }
+
+    fn direct_edit_batch_selection_requirements_bounded<CommandIdentity>(
+        &self,
+        batch: &DirectEditBatchProposal<CommandIdentity>,
+        selected: &BTreeSet<CommandIdentity>,
+        maximum_missing_edges: usize,
+    ) -> BoundedSelectionOutcome<CommandIdentity>
+    where
+        CommandIdentity: Clone + Ord,
+    {
+        let snapshot = self.command_capability_snapshot();
+        if snapshot.behavior_version != batch.capability_version {
+            return BoundedSelectionOutcome::CapabilityMismatch {
+                current: snapshot.behavior_version,
+                expected: batch.capability_version,
+            };
+        }
+        let Some(current) = self.current.as_ref() else {
+            return BoundedSelectionOutcome::NoAcceptedRevision;
+        };
+        if current.id != batch.base {
+            return BoundedSelectionOutcome::StaleBase { current: current.id };
+        }
+        let nodes = borrowed_command_nodes(batch);
+        let borrowed_selected = borrowed_command_selection(selected);
+        match dependency_selection_requirements_bounded(
+            &nodes,
+            &borrowed_selected,
+            maximum_missing_edges,
+        ) {
+            Ok(missing) => BoundedSelectionOutcome::Requirements {
+                missing: owned_missing_requirements(missing),
+                revision: current.id,
+            },
+            Err(BoundedDependencyRequirementsError::Graph { reason }) => {
+                BoundedSelectionOutcome::DependencyGraphRejected {
+                    reason: owned_command_graph_error(&reason),
+                }
+            },
+            Err(
+                BoundedDependencyRequirementsError::RequirementCountExceeded {
+                    actual,
+                    limit,
+                },
+            ) => BoundedSelectionOutcome::RequirementCountExceeded {
+                actual,
+                limit,
+            },
+            Err(
+                BoundedDependencyRequirementsError::RequirementCountOverflow,
+            ) => BoundedSelectionOutcome::RequirementCountOverflow,
+            Err(BoundedDependencyRequirementsError::UnknownSelection {
+                command,
+            }) => BoundedSelectionOutcome::UnknownSelection {
+                command: (*command).clone(),
             },
         }
     }
@@ -503,27 +562,25 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
                 current: current.id,
             };
         }
-        let nodes = batch
-            .commands
-            .iter()
-            .map(|command| CommandNode {
-                dependencies: command.dependencies.clone(),
-                id: command.id.clone(),
-            })
-            .collect::<Vec<_>>();
-        match dependency_selection_summary(&nodes, selected) {
+        let nodes = borrowed_command_nodes(batch);
+        let borrowed_selected = borrowed_command_selection(selected);
+        match dependency_selection_summary(&nodes, &borrowed_selected) {
             Ok(summary) => BatchSelectionSummaryOutcome::Summarized {
                 revision: current.id,
                 summary,
             },
             Err(DependencySummaryError::Graph { reason }) => {
-                BatchSelectionSummaryOutcome::DependencyGraphRejected { reason }
+                BatchSelectionSummaryOutcome::DependencyGraphRejected {
+                    reason: owned_command_graph_error(&reason),
+                }
             },
             Err(DependencySummaryError::RequirementCountOverflow) => {
                 BatchSelectionSummaryOutcome::RequirementCountOverflow
             },
             Err(DependencySummaryError::UnknownSelection { command }) => {
-                BatchSelectionSummaryOutcome::UnknownSelection { command }
+                BatchSelectionSummaryOutcome::UnknownSelection {
+                    command: (*command).clone(),
+                }
             },
         }
     }
@@ -1461,6 +1518,76 @@ fn formula_content_value(
         | BlockContent::Rule
         | BlockContent::Unresolved(_) => None,
     }
+}
+
+fn borrowed_command_nodes<CommandIdentity>(
+    batch: &DirectEditBatchProposal<CommandIdentity>,
+) -> Vec<CommandNode<&CommandIdentity>> {
+    batch
+        .commands
+        .iter()
+        .map(|command| CommandNode {
+            dependencies: command.dependencies.iter().collect(),
+            id: &command.id,
+        })
+        .collect()
+}
+
+fn borrowed_command_selection<CommandIdentity>(
+    selected: &BTreeSet<CommandIdentity>,
+) -> BTreeSet<&CommandIdentity>
+where
+    CommandIdentity: Ord,
+{
+    selected.iter().collect()
+}
+
+fn owned_command_graph_error<CommandIdentity>(
+    reason: &CommandGraphError<&CommandIdentity>,
+) -> CommandGraphError<CommandIdentity>
+where
+    CommandIdentity: Clone,
+{
+    match reason {
+        CommandGraphError::Cycle => CommandGraphError::Cycle,
+        CommandGraphError::DependencyAfterCommand { command, dependency } => {
+            CommandGraphError::DependencyAfterCommand {
+                command: (*command).clone(),
+                dependency: (*dependency).clone(),
+            }
+        },
+        CommandGraphError::DuplicateIdentity { command } => {
+            CommandGraphError::DuplicateIdentity {
+                command: (**command).clone(),
+            }
+        },
+        CommandGraphError::MissingDependency { command, dependency } => {
+            CommandGraphError::MissingDependency {
+                command: (*command).clone(),
+                dependency: (*dependency).clone(),
+            }
+        },
+        CommandGraphError::SelfDependency { command } => {
+            CommandGraphError::SelfDependency {
+                command: (**command).clone(),
+            }
+        },
+    }
+}
+
+fn owned_missing_requirements<CommandIdentity>(
+    missing: Vec<MissingDependencyRequirement<&CommandIdentity>>,
+) -> Vec<MissingDependencyRequirement<CommandIdentity>>
+where
+    CommandIdentity: Clone,
+{
+    missing
+        .into_iter()
+        .map(|requirement| MissingDependencyRequirement {
+            command: (*requirement.command).clone(),
+            dependency: (*requirement.dependency).clone(),
+        })
+        .collect()
 }
 
 fn command_target_material_from_notebook(

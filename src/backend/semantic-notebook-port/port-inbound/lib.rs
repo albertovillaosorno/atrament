@@ -508,6 +508,51 @@ pub struct DirectEditBatchProposal<CommandIdentity> {
     pub commands: Vec<DirectEditBatchCommand<CommandIdentity>>,
 }
 
+/// Caller-bounded dependency report for one in-memory batch selection.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum DirectEditBatchSelectionBoundedOutcome<CommandIdentity> {
+    /// Capability behavior changed before bounded selection analysis.
+    CapabilityMismatch {
+        /// Current backend-owned capability behavior version.
+        current: CommandBehaviorVersion,
+        /// Capability behavior version bound by the batch proposal.
+        expected: CommandBehaviorVersion,
+    },
+    /// Complete command dependency structure rejected before analysis.
+    DependencyGraphRejected {
+        /// Typed transport-neutral dependency graph failure.
+        reason: CommandGraphError<CommandIdentity>,
+    },
+    /// Session has no accepted semantic revision to analyze.
+    NoAcceptedRevision,
+    /// Exact omitted dependency-edge count exceeds the caller bound.
+    RequirementCountExceeded {
+        /// Exact omitted dependency-edge count.
+        actual: usize,
+        /// Maximum missing dependency edges admitted for materialization.
+        limit: usize,
+    },
+    /// Exact omitted-dependency edge counting exceeded addressable range.
+    RequirementCountOverflow,
+    /// Selection is structurally known and its bounded report was materialized.
+    Requirements {
+        /// Explicit dependency edges absent from the original selection.
+        missing: Vec<MissingDependencyRequirement<CommandIdentity>>,
+        /// Immutable accepted revision whose proposal base was checked.
+        revision: RevisionIdentity,
+    },
+    /// Batch base revision is no longer the current accepted revision.
+    StaleBase {
+        /// Current accepted revision that rejected stale selection analysis.
+        current: RevisionIdentity,
+    },
+    /// Selection names no command in the batch proposal.
+    UnknownSelection {
+        /// Unknown caller-owned command identity.
+        command: CommandIdentity,
+    },
+}
+
 /// Read-only dependency analysis for one in-memory direct-edit batch selection.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum DirectEditBatchSelectionRequirementsOutcome<CommandIdentity> {
@@ -1319,6 +1364,16 @@ pub trait SemanticNotebookSession {
         batch: &DirectEditBatchProposal<CommandIdentity>,
         selected: &BTreeSet<CommandIdentity>,
     ) -> DirectEditBatchSelectionRequirementsOutcome<CommandIdentity>
+    where
+        CommandIdentity: Clone + Ord;
+
+    /// Materialize omitted dependencies up to a caller-supplied edge bound.
+    fn direct_edit_batch_selection_requirements_bounded<CommandIdentity>(
+        &self,
+        batch: &DirectEditBatchProposal<CommandIdentity>,
+        selected: &BTreeSet<CommandIdentity>,
+        maximum_missing_edges: usize,
+    ) -> DirectEditBatchSelectionBoundedOutcome<CommandIdentity>
     where
         CommandIdentity: Clone + Ord;
 

@@ -29,7 +29,9 @@
 // - Defaults:
 //   - Rejected candidates leave the previously accepted revision unchanged.
 //
+use std::cmp::Ordering;
 use std::collections::BTreeSet;
+use std::sync::atomic::{AtomicUsize, Ordering as AtomicOrdering};
 
 use atrament_physical_page_profile::{
     BindingEdge, BorderShape, Length, Orientation,
@@ -56,7 +58,8 @@ use atrament_semantic_notebook_port::{
     CommandTargetMaterialOutcome, CommandTargetPreconditionOutcome,
     CommandTargetPreconditions, DirectEditBatchCommand,
     DirectEditBatchCommandPrediction, DirectEditBatchCommandRejection,
-    DirectEditBatchProposal, DirectEditBatchSelectionRequirementsOutcome,
+    DirectEditBatchProposal, DirectEditBatchSelectionBoundedOutcome,
+    DirectEditBatchSelectionRequirementsOutcome,
     DirectEditBatchSelectionSummaryOutcome, DirectEditBatchSimulationOutcome,
     DirectEditChangePreviewOutcome, DirectEditDerivedAuthority,
     DirectEditEffectClass, DirectEditImpactScope, DirectEditImpactSeed,
@@ -69,6 +72,31 @@ use atrament_semantic_notebook_port::{
     SemanticNotebookSession, TableRowRoleEditOutcome, TextEditOutcome,
 };
 use atrament_semantic_notebook_session::SemanticNotebookSessionService;
+
+static SELECTION_COMMAND_IDENTITY_CLONES: AtomicUsize = AtomicUsize::new(0);
+
+#[derive(Debug, Eq, PartialEq)]
+struct CountingCommandIdentity(u32);
+
+impl Clone for CountingCommandIdentity {
+    fn clone(&self) -> Self {
+        let _previous = SELECTION_COMMAND_IDENTITY_CLONES
+            .fetch_add(1, AtomicOrdering::Relaxed);
+        Self(self.0)
+    }
+}
+
+impl Ord for CountingCommandIdentity {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.0.cmp(&other.0)
+    }
+}
+
+impl PartialOrd for CountingCommandIdentity {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
 
 fn physical_page_profile() -> PhysicalPageProfile {
     PhysicalPageProfile {
@@ -1898,6 +1926,128 @@ fn direct_edit_batch_selection_summary_preserves_global_precedence() {
             &BTreeSet::from([99]),
         ),
         DirectEditBatchSelectionSummaryOutcome::StaleBase { current },
+    );
+}
+
+#[test]
+fn direct_edit_batch_bounded_selection_enforces_exact_report_limit() {
+    let ids = IdentityAllocator::new();
+    let (candidate, span) = candidate_notebook_with_span(&ids, "base text");
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(candidate)
+    else {
+        panic!("candidate must be accepted");
+    };
+    let span = accepted_for(&mapping, span);
+    let batch = DirectEditBatchProposal {
+        base: revision,
+        capability_version: CommandBehaviorVersion(1),
+        commands: vec![
+            text_batch_command(1, &[], span, "base text", "one"),
+            text_batch_command(2, &[1], span, "one", "two"),
+            text_batch_command(3, &[2], span, "two", "three"),
+        ],
+    };
+    let selected = BTreeSet::from([3]);
+    let before = session.current().expect("accepted revision").clone();
+    assert_eq!(
+        session.direct_edit_batch_selection_requirements_bounded(
+            &batch, &selected, 2,
+        ),
+        DirectEditBatchSelectionBoundedOutcome::Requirements {
+            missing: vec![
+                MissingDependencyRequirement {
+                    command: 2,
+                    dependency: 1,
+                },
+                MissingDependencyRequirement {
+                    command: 3,
+                    dependency: 2,
+                },
+            ],
+            revision,
+        },
+    );
+    assert_eq!(
+        session.direct_edit_batch_selection_requirements_bounded(
+            &batch, &selected, 1,
+        ),
+        DirectEditBatchSelectionBoundedOutcome::RequirementCountExceeded {
+            actual: 2,
+            limit: 1,
+        },
+    );
+    assert_eq!(session.current(), Some(&before));
+}
+
+#[test]
+fn selection_summary_and_bounded_rejection_borrow_command_identities() {
+    let ids = IdentityAllocator::new();
+    let (candidate, span) = candidate_notebook_with_span(&ids, "base text");
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(candidate)
+    else {
+        panic!("candidate must be accepted");
+    };
+    let span = accepted_for(&mapping, span);
+    let command = |id, dependencies, expected: &str, requested: &str| {
+        DirectEditBatchCommand {
+            dependencies,
+            id: CountingCommandIdentity(id),
+            preconditions: CommandTargetPreconditions {
+                expected_value: Some(EditableSemanticValue::Text(
+                    expected.to_owned(),
+                )),
+                identity: IdentityPrecondition {
+                    expected_kind: Some(SemanticIdentityKind::InlineSpan),
+                    expected_owner: IdentityOwnerExpectation::Any,
+                },
+                requested_family: SemanticCommandFamily::TextContent,
+            },
+            requested: EditableSemanticValue::Text(requested.to_owned()),
+            target: span,
+        }
+    };
+    let batch = DirectEditBatchProposal {
+        base: revision,
+        capability_version: CommandBehaviorVersion(1),
+        commands: vec![
+            command(1, Vec::new(), "base text", "one"),
+            command(2, vec![CountingCommandIdentity(1)], "one", "two"),
+            command(3, vec![CountingCommandIdentity(2)], "two", "three"),
+        ],
+    };
+    let selected = BTreeSet::from([CountingCommandIdentity(3)]);
+    SELECTION_COMMAND_IDENTITY_CLONES.store(0, AtomicOrdering::Relaxed);
+    assert_eq!(
+        session.direct_edit_batch_selection_summary(&batch, &selected),
+        DirectEditBatchSelectionSummaryOutcome::Summarized {
+            revision,
+            summary: DependencySelectionSummary {
+                missing_dependency_edges: 2,
+                required_commands: 3,
+                selected_commands: 1,
+            },
+        },
+    );
+    assert_eq!(
+        SELECTION_COMMAND_IDENTITY_CLONES.load(AtomicOrdering::Relaxed),
+        0,
+    );
+    assert_eq!(
+        session.direct_edit_batch_selection_requirements_bounded(
+            &batch, &selected, 1,
+        ),
+        DirectEditBatchSelectionBoundedOutcome::RequirementCountExceeded {
+            actual: 2,
+            limit: 1,
+        },
+    );
+    assert_eq!(
+        SELECTION_COMMAND_IDENTITY_CLONES.load(AtomicOrdering::Relaxed),
+        0,
     );
 }
 
