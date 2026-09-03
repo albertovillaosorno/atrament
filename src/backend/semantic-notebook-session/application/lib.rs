@@ -87,6 +87,18 @@ struct DirectEditBatchIndex {
     materials: BTreeMap<AcceptedIdentity, CommandTargetMaterial>,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum DirectEditBatchAuthorityError {
+    CapabilityMismatch {
+        current: CommandBehaviorVersion,
+        expected: CommandBehaviorVersion,
+    },
+    NoAcceptedRevision,
+    StaleBase {
+        current: atrament_semantic_notebook::RevisionIdentity,
+    },
+}
+
 #[derive(Debug, Default)]
 struct CandidateGraph {
     owners: Vec<CandidateIdentity>,
@@ -468,21 +480,26 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
         batch: &DirectEditBatchProposal<CommandIdentity>,
         limits: CommandGraphLimits,
     ) -> DirectEditBatchGraphLimitsOutcome {
-        let snapshot = self.command_capability_snapshot();
-        if snapshot.behavior_version != batch.capability_version {
-            return DirectEditBatchGraphLimitsOutcome::CapabilityMismatch {
-                current: snapshot.behavior_version,
-                expected: batch.capability_version,
-            };
-        }
-        let Some(current) = self.current.as_ref() else {
-            return DirectEditBatchGraphLimitsOutcome::NoAcceptedRevision;
+        let current = match direct_edit_batch_authority(self, batch) {
+            Ok(current) => current,
+            Err(DirectEditBatchAuthorityError::CapabilityMismatch {
+                current,
+                expected,
+            }) => {
+                return DirectEditBatchGraphLimitsOutcome::CapabilityMismatch {
+                    current,
+                    expected,
+                };
+            },
+            Err(DirectEditBatchAuthorityError::NoAcceptedRevision) => {
+                return DirectEditBatchGraphLimitsOutcome::NoAcceptedRevision;
+            },
+            Err(DirectEditBatchAuthorityError::StaleBase { current }) => {
+                return DirectEditBatchGraphLimitsOutcome::StaleBase {
+                    current,
+                };
+            },
         };
-        if current.id != batch.base {
-            return DirectEditBatchGraphLimitsOutcome::StaleBase {
-                current: current.id,
-            };
-        }
         match direct_edit_batch_graph_limits_from_commands(
             &batch.commands,
             limits,
@@ -501,21 +518,24 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
         &self,
         batch: &DirectEditBatchProposal<CommandIdentity>,
     ) -> DirectEditBatchGraphSizeOutcome {
-        let snapshot = self.command_capability_snapshot();
-        if snapshot.behavior_version != batch.capability_version {
-            return DirectEditBatchGraphSizeOutcome::CapabilityMismatch {
-                current: snapshot.behavior_version,
-                expected: batch.capability_version,
-            };
-        }
-        let Some(current) = self.current.as_ref() else {
-            return DirectEditBatchGraphSizeOutcome::NoAcceptedRevision;
+        let current = match direct_edit_batch_authority(self, batch) {
+            Ok(current) => current,
+            Err(DirectEditBatchAuthorityError::CapabilityMismatch {
+                current,
+                expected,
+            }) => {
+                return DirectEditBatchGraphSizeOutcome::CapabilityMismatch {
+                    current,
+                    expected,
+                };
+            },
+            Err(DirectEditBatchAuthorityError::NoAcceptedRevision) => {
+                return DirectEditBatchGraphSizeOutcome::NoAcceptedRevision;
+            },
+            Err(DirectEditBatchAuthorityError::StaleBase { current }) => {
+                return DirectEditBatchGraphSizeOutcome::StaleBase { current };
+            },
         };
-        if current.id != batch.base {
-            return DirectEditBatchGraphSizeOutcome::StaleBase {
-                current: current.id,
-            };
-        }
         direct_edit_batch_graph_size_from_commands(&batch.commands).map_or(
             DirectEditBatchGraphSizeOutcome::SizeOverflow,
             |size| DirectEditBatchGraphSizeOutcome::Sized {
@@ -533,19 +553,24 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
     where
         CommandIdentity: Clone + Ord,
     {
-        let snapshot = self.command_capability_snapshot();
-        if snapshot.behavior_version != batch.capability_version {
-            return BatchSelectionOutcome::CapabilityMismatch {
-                current: snapshot.behavior_version,
-                expected: batch.capability_version,
-            };
-        }
-        let Some(current) = self.current.as_ref() else {
-            return BatchSelectionOutcome::NoAcceptedRevision;
+        let current = match direct_edit_batch_authority(self, batch) {
+            Ok(current) => current,
+            Err(DirectEditBatchAuthorityError::CapabilityMismatch {
+                current,
+                expected,
+            }) => {
+                return BatchSelectionOutcome::CapabilityMismatch {
+                    current,
+                    expected,
+                };
+            },
+            Err(DirectEditBatchAuthorityError::NoAcceptedRevision) => {
+                return BatchSelectionOutcome::NoAcceptedRevision;
+            },
+            Err(DirectEditBatchAuthorityError::StaleBase { current }) => {
+                return BatchSelectionOutcome::StaleBase { current };
+            },
         };
-        if current.id != batch.base {
-            return BatchSelectionOutcome::StaleBase { current: current.id };
-        }
         let nodes = direct_edit_command_graph_nodes(&batch.commands);
         match dependency_selection_requirements(&nodes, selected) {
             Ok(missing) => BatchSelectionOutcome::Requirements {
@@ -570,19 +595,24 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
     where
         CommandIdentity: Clone + Ord,
     {
-        let snapshot = self.command_capability_snapshot();
-        if snapshot.behavior_version != batch.capability_version {
-            return BoundedSelectionOutcome::CapabilityMismatch {
-                current: snapshot.behavior_version,
-                expected: batch.capability_version,
-            };
-        }
-        let Some(current) = self.current.as_ref() else {
-            return BoundedSelectionOutcome::NoAcceptedRevision;
+        let current = match direct_edit_batch_authority(self, batch) {
+            Ok(current) => current,
+            Err(DirectEditBatchAuthorityError::CapabilityMismatch {
+                current,
+                expected,
+            }) => {
+                return BoundedSelectionOutcome::CapabilityMismatch {
+                    current,
+                    expected,
+                };
+            },
+            Err(DirectEditBatchAuthorityError::NoAcceptedRevision) => {
+                return BoundedSelectionOutcome::NoAcceptedRevision;
+            },
+            Err(DirectEditBatchAuthorityError::StaleBase { current }) => {
+                return BoundedSelectionOutcome::StaleBase { current };
+            },
         };
-        if current.id != batch.base {
-            return BoundedSelectionOutcome::StaleBase { current: current.id };
-        }
         let nodes = direct_edit_command_graph_nodes(&batch.commands);
         match dependency_selection_requirements_bounded(
             &nodes,
@@ -622,21 +652,24 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
     where
         CommandIdentity: Clone + Ord,
     {
-        let snapshot = self.command_capability_snapshot();
-        if snapshot.behavior_version != batch.capability_version {
-            return BatchSelectionSummaryOutcome::CapabilityMismatch {
-                current: snapshot.behavior_version,
-                expected: batch.capability_version,
-            };
-        }
-        let Some(current) = self.current.as_ref() else {
-            return BatchSelectionSummaryOutcome::NoAcceptedRevision;
+        let current = match direct_edit_batch_authority(self, batch) {
+            Ok(current) => current,
+            Err(DirectEditBatchAuthorityError::CapabilityMismatch {
+                current,
+                expected,
+            }) => {
+                return BatchSelectionSummaryOutcome::CapabilityMismatch {
+                    current,
+                    expected,
+                };
+            },
+            Err(DirectEditBatchAuthorityError::NoAcceptedRevision) => {
+                return BatchSelectionSummaryOutcome::NoAcceptedRevision;
+            },
+            Err(DirectEditBatchAuthorityError::StaleBase { current }) => {
+                return BatchSelectionSummaryOutcome::StaleBase { current };
+            },
         };
-        if current.id != batch.base {
-            return BatchSelectionSummaryOutcome::StaleBase {
-                current: current.id,
-            };
-        }
         let nodes = direct_edit_command_graph_nodes(&batch.commands);
         match dependency_selection_summary(&nodes, selected) {
             Ok(summary) => BatchSelectionSummaryOutcome::Summarized {
@@ -1121,21 +1154,24 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
     where
         CommandIdentity: Clone + Ord,
     {
-        let snapshot = self.command_capability_snapshot();
-        if snapshot.behavior_version != batch.capability_version {
-            return DirectEditBatchSimulationOutcome::CapabilityMismatch {
-                current: snapshot.behavior_version,
-                expected: batch.capability_version,
-            };
-        }
-        let Some(current) = self.current.as_ref() else {
-            return DirectEditBatchSimulationOutcome::NoAcceptedRevision;
+        let current = match direct_edit_batch_authority(self, &batch) {
+            Ok(current) => current,
+            Err(DirectEditBatchAuthorityError::CapabilityMismatch {
+                current,
+                expected,
+            }) => {
+                return DirectEditBatchSimulationOutcome::CapabilityMismatch {
+                    current,
+                    expected,
+                };
+            },
+            Err(DirectEditBatchAuthorityError::NoAcceptedRevision) => {
+                return DirectEditBatchSimulationOutcome::NoAcceptedRevision;
+            },
+            Err(DirectEditBatchAuthorityError::StaleBase { current }) => {
+                return DirectEditBatchSimulationOutcome::StaleBase { current };
+            },
         };
-        if current.id != batch.base {
-            return DirectEditBatchSimulationOutcome::StaleBase {
-                current: current.id,
-            };
-        }
         simulate_direct_edit_batch_after_base(current, &batch.commands)
     }
 
@@ -1147,21 +1183,24 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
     where
         CommandIdentity: Clone + Ord,
     {
-        let snapshot = self.command_capability_snapshot();
-        if snapshot.behavior_version != batch.capability_version {
-            return DirectEditBatchSimulationOutcome::CapabilityMismatch {
-                current: snapshot.behavior_version,
-                expected: batch.capability_version,
-            };
-        }
-        let Some(current) = self.current.as_ref() else {
-            return DirectEditBatchSimulationOutcome::NoAcceptedRevision;
+        let current = match direct_edit_batch_authority(self, &batch) {
+            Ok(current) => current,
+            Err(DirectEditBatchAuthorityError::CapabilityMismatch {
+                current,
+                expected,
+            }) => {
+                return DirectEditBatchSimulationOutcome::CapabilityMismatch {
+                    current,
+                    expected,
+                };
+            },
+            Err(DirectEditBatchAuthorityError::NoAcceptedRevision) => {
+                return DirectEditBatchSimulationOutcome::NoAcceptedRevision;
+            },
+            Err(DirectEditBatchAuthorityError::StaleBase { current }) => {
+                return DirectEditBatchSimulationOutcome::StaleBase { current };
+            },
         };
-        if current.id != batch.base {
-            return DirectEditBatchSimulationOutcome::StaleBase {
-                current: current.id,
-            };
-        }
         if let Err(reason) = direct_edit_batch_graph_limits_from_commands(
             &batch.commands,
             limits,
@@ -1614,6 +1653,28 @@ fn formula_content_value(
         | BlockContent::Rule
         | BlockContent::Unresolved(_) => None,
     }
+}
+
+fn direct_edit_batch_authority<'session, CommandIdentity>(
+    session: &'session SemanticNotebookSessionService,
+    batch: &DirectEditBatchProposal<CommandIdentity>,
+) -> Result<&'session AcceptedRevision, DirectEditBatchAuthorityError> {
+    let snapshot = session.command_capability_snapshot();
+    if snapshot.behavior_version != batch.capability_version {
+        return Err(DirectEditBatchAuthorityError::CapabilityMismatch {
+            current: snapshot.behavior_version,
+            expected: batch.capability_version,
+        });
+    }
+    let Some(current) = session.current.as_ref() else {
+        return Err(DirectEditBatchAuthorityError::NoAcceptedRevision);
+    };
+    if current.id != batch.base {
+        return Err(DirectEditBatchAuthorityError::StaleBase {
+            current: current.id,
+        });
+    }
+    Ok(current)
 }
 
 fn direct_edit_batch_graph_limits_from_commands<CommandIdentity>(

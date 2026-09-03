@@ -2067,6 +2067,154 @@ fn graph_resource_preflight_does_not_require_ordered_command_ids() {
 }
 
 #[test]
+fn batch_read_only_apis_share_capability_and_stale_authority_precedence() {
+    let ids = IdentityAllocator::new();
+    let (candidate, span) = candidate_notebook_with_span(&ids, "base text");
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(candidate)
+    else {
+        panic!("candidate must be accepted");
+    };
+    let span = accepted_for(&mapping, span);
+    let incompatible = DirectEditBatchProposal {
+        base: revision,
+        capability_version: CommandBehaviorVersion(0),
+        commands: vec![text_batch_command(
+            1,
+            &[],
+            span,
+            "base text",
+            "changed",
+        )],
+    };
+    let selected = BTreeSet::from([1_u32]);
+    let mismatch = CommandBehaviorVersion(0);
+    let current_behavior = CommandBehaviorVersion(1);
+    assert_eq!(
+        session.direct_edit_batch_graph_size(&incompatible),
+        DirectEditBatchGraphSizeOutcome::CapabilityMismatch {
+            current: current_behavior,
+            expected: mismatch,
+        },
+    );
+    assert_eq!(
+        session.direct_edit_batch_graph_limits(
+            &incompatible,
+            CommandGraphLimits {
+                commands: 0,
+                dependency_edges: 0,
+            },
+        ),
+        DirectEditBatchGraphLimitsOutcome::CapabilityMismatch {
+            current: current_behavior,
+            expected: mismatch,
+        },
+    );
+    assert_eq!(
+        session.direct_edit_batch_selection_requirements(
+            &incompatible,
+            &selected,
+        ),
+        DirectEditBatchSelectionRequirementsOutcome::CapabilityMismatch {
+            current: current_behavior,
+            expected: mismatch,
+        },
+    );
+    assert_eq!(
+        session.direct_edit_batch_selection_requirements_bounded(
+            &incompatible,
+            &selected,
+            0,
+        ),
+        DirectEditBatchSelectionBoundedOutcome::CapabilityMismatch {
+            current: current_behavior,
+            expected: mismatch,
+        },
+    );
+    assert_eq!(
+        session.direct_edit_batch_selection_summary(&incompatible, &selected),
+        DirectEditBatchSelectionSummaryOutcome::CapabilityMismatch {
+            current: current_behavior,
+            expected: mismatch,
+        },
+    );
+    assert_eq!(
+        session.simulate_direct_edit_batch(incompatible.clone()),
+        DirectEditBatchSimulationOutcome::CapabilityMismatch {
+            current: current_behavior,
+            expected: mismatch,
+        },
+    );
+    assert_eq!(
+        session.simulate_direct_edit_batch_bounded(
+            incompatible,
+            CommandGraphLimits {
+                commands: 0,
+                dependency_edges: 0,
+            },
+        ),
+        DirectEditBatchSimulationOutcome::CapabilityMismatch {
+            current: current_behavior,
+            expected: mismatch,
+        },
+    );
+
+    let stale = DirectEditBatchProposal {
+        base: revision,
+        capability_version: current_behavior,
+        commands: vec![text_batch_command(
+            1,
+            &[],
+            span,
+            "base text",
+            "changed",
+        )],
+    };
+    let AcceptanceOutcome::Accepted { revision: current, .. } =
+        session.accept(candidate_notebook(&ids, "new revision"))
+    else {
+        panic!("replacement candidate must be accepted");
+    };
+    assert_eq!(
+        session.direct_edit_batch_graph_size(&stale),
+        DirectEditBatchGraphSizeOutcome::StaleBase { current },
+    );
+    assert_eq!(
+        session.direct_edit_batch_graph_limits(&stale, CommandGraphLimits {
+            commands: 0,
+            dependency_edges: 0,
+        },),
+        DirectEditBatchGraphLimitsOutcome::StaleBase { current },
+    );
+    assert_eq!(
+        session.direct_edit_batch_selection_requirements(&stale, &selected),
+        DirectEditBatchSelectionRequirementsOutcome::StaleBase { current },
+    );
+    assert_eq!(
+        session.direct_edit_batch_selection_requirements_bounded(
+            &stale, &selected, 0,
+        ),
+        DirectEditBatchSelectionBoundedOutcome::StaleBase { current },
+    );
+    assert_eq!(
+        session.direct_edit_batch_selection_summary(&stale, &selected),
+        DirectEditBatchSelectionSummaryOutcome::StaleBase { current },
+    );
+    assert_eq!(
+        session.simulate_direct_edit_batch(stale.clone()),
+        DirectEditBatchSimulationOutcome::StaleBase { current },
+    );
+    assert_eq!(
+        session.simulate_direct_edit_batch_bounded(stale, CommandGraphLimits {
+            commands: 0,
+            dependency_edges: 0,
+        },),
+        DirectEditBatchSimulationOutcome::StaleBase { current },
+    );
+}
+
+#[test]
 fn direct_edit_batch_graph_resources_preserve_authority_and_structure_layers() {
     let ids = IdentityAllocator::new();
     let (candidate, span) = candidate_notebook_with_span(&ids, "base text");
