@@ -1860,19 +1860,26 @@ fn direct_edit_material_index(
         }
     }
     let mut stack = Vec::new();
-    for page in &notebook.pages {
+    'pages: for page in &notebook.pages {
         for flow in &page.flows {
-            stack.extend(
-                flow.blocks.iter().map(|block| (block, flow.id, page.id)),
-            );
-        }
-    }
-    while let Some((block, flow, page)) = stack.pop() {
-        index_direct_edit_block(
-            &mut index, &mut stack, block, targets, flow, page, revision,
-        );
-        if index.materials.len() == targets.len() {
-            break;
+            for block in &flow.blocks {
+                index_direct_edit_block(
+                    &mut index, &mut stack, block, targets, flow.id, page.id,
+                    revision,
+                );
+                if index.materials.len() == targets.len() {
+                    break 'pages;
+                }
+                while let Some((child, child_flow, child_page)) = stack.pop() {
+                    index_direct_edit_block(
+                        &mut index, &mut stack, child, targets, child_flow,
+                        child_page, revision,
+                    );
+                    if index.materials.len() == targets.len() {
+                        break 'pages;
+                    }
+                }
+            }
         }
     }
     index
@@ -1893,7 +1900,8 @@ fn index_direct_edit_block<'notebook>(
 ) {
     match &block.content {
         BlockContent::Callout(children) | BlockContent::Freeform(children) => {
-            stack.extend(children.iter().map(|child| (child, flow, page)));
+            stack
+                .extend(children.iter().rev().map(|child| (child, flow, page)));
         },
         BlockContent::Date(spans)
         | BlockContent::Heading(spans)
@@ -1914,9 +1922,9 @@ fn index_direct_edit_block<'notebook>(
             );
         },
         BlockContent::List(list) => {
-            for item in &list.items {
+            for item in list.items.iter().rev() {
                 stack.extend(
-                    item.blocks.iter().map(|child| (child, flow, page)),
+                    item.blocks.iter().rev().map(|child| (child, flow, page)),
                 );
             }
         },
@@ -1960,10 +1968,18 @@ fn index_direct_edit_block<'notebook>(
                         },
                         revision,
                     );
+                    if index.materials.len() == targets.len() {
+                        return;
+                    }
                 }
-                for cell in &row.cells {
+            }
+            for row in table.rows.iter().rev() {
+                for cell in row.cells.iter().rev() {
                     stack.extend(
-                        cell.blocks.iter().map(|child| (child, flow, page)),
+                        cell.blocks
+                            .iter()
+                            .rev()
+                            .map(|child| (child, flow, page)),
                     );
                 }
             }
@@ -1996,6 +2012,9 @@ fn index_direct_edit_spans(
             DirectEditImpactScope::Flow { flow, page },
             revision,
         );
+        if index.materials.len() == targets.len() {
+            break;
+        }
     }
 }
 

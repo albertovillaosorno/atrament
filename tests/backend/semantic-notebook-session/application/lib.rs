@@ -2826,6 +2826,47 @@ fn ordered_direct_edit_batch_material_overlay_reaches_nested_text() {
 }
 
 #[test]
+fn ordered_batch_index_reaches_table_cell_text_in_document_order() {
+    let ids = IdentityAllocator::new();
+    let (candidate, _, _) = candidate_table_notebook(&ids, TableRowRole::Body);
+    let BlockContent::Table(table) =
+        &candidate.pages[0].flows[0].blocks[0].content
+    else {
+        panic!("fixture must contain a table");
+    };
+    let BlockContent::Paragraph(spans) =
+        &table.rows[0].cells[0].blocks[0].content
+    else {
+        panic!("table cell must contain paragraph text");
+    };
+    let candidate_span = spans[0].id;
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(candidate)
+    else {
+        panic!("nested table candidate must be accepted");
+    };
+    let span = accepted_for(&mapping, candidate_span);
+    let outcome = session.simulate_direct_edit_batch(DirectEditBatchProposal {
+        base: revision,
+        capability_version: CommandBehaviorVersion(1),
+        commands: vec![text_batch_command(
+            1,
+            &[],
+            span,
+            "table cell text",
+            "changed cell text",
+        )],
+    });
+    let DirectEditBatchSimulationOutcome::Predicted { changes, .. } = outcome
+    else {
+        panic!("nested table text must simulate");
+    };
+    assert_eq!(changes.len(), 1);
+    assert_eq!(changes[0].target, span);
+}
+
+#[test]
 fn ordered_batch_overlay_indexes_profile_and_text_targets_together() {
     let ids = IdentityAllocator::new();
     let (candidate, span) = candidate_notebook_with_span(&ids, "before");
