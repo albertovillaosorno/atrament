@@ -33,9 +33,10 @@ use std::collections::BTreeSet;
 
 use atrament_semantic_command_graph::{
     CommandGraphError, CommandGraphLimitError, CommandGraphLimits,
-    CommandGraphSize, CommandNode, DependencySelectionError,
-    command_graph_size, validate_command_graph, validate_command_graph_limits,
-    validate_dependency_closed_selection,
+    CommandGraphSize, CommandNode, DependencyRequirementsError,
+    DependencySelectionError, MissingDependencyRequirement, command_graph_size,
+    dependency_selection_requirements, validate_command_graph,
+    validate_command_graph_limits, validate_dependency_closed_selection,
 };
 
 fn node(id: u32, dependencies: &[u32]) -> CommandNode<u32> {
@@ -260,6 +261,78 @@ fn unknown_selection_and_invalid_source_graph_are_typed() {
     assert_eq!(
         validate_dependency_closed_selection(&invalid, &BTreeSet::from([1])),
         Err(DependencySelectionError::Graph {
+            reason: CommandGraphError::DependencyAfterCommand {
+                command: 1,
+                dependency: 2,
+            },
+        }),
+    );
+}
+
+#[test]
+fn dependency_requirements_report_complete_transitive_closure_without_mutation()
+{
+    let nodes = [node(1, &[]), node(2, &[1]), node(3, &[2]), node(4, &[1])];
+    let selected = BTreeSet::from([3]);
+    let before = selected.clone();
+    assert_eq!(
+        dependency_selection_requirements(&nodes, &selected),
+        Ok(vec![
+            MissingDependencyRequirement {
+                command: 2,
+                dependency: 1,
+            },
+            MissingDependencyRequirement {
+                command: 3,
+                dependency: 2,
+            },
+        ]),
+    );
+    assert_eq!(selected, before);
+}
+
+#[test]
+fn dependency_requirements_are_empty_for_closed_or_independent_selection() {
+    let nodes = [node(1, &[]), node(2, &[1]), node(3, &[])];
+    assert_eq!(
+        dependency_selection_requirements(&nodes, &BTreeSet::from([1, 2])),
+        Ok(Vec::new()),
+    );
+    assert_eq!(
+        dependency_selection_requirements(&nodes, &BTreeSet::from([3])),
+        Ok(Vec::new()),
+    );
+}
+
+#[test]
+fn dependency_requirements_preserve_explicit_duplicate_edges() {
+    let nodes = [node(1, &[]), node(2, &[1, 1])];
+    assert_eq!(
+        dependency_selection_requirements(&nodes, &BTreeSet::from([2])),
+        Ok(vec![
+            MissingDependencyRequirement {
+                command: 2,
+                dependency: 1,
+            },
+            MissingDependencyRequirement {
+                command: 2,
+                dependency: 1,
+            },
+        ]),
+    );
+}
+
+#[test]
+fn dependency_requirements_reject_unknown_selection_and_invalid_graph() {
+    let nodes = [node(1, &[]), node(2, &[1])];
+    assert_eq!(
+        dependency_selection_requirements(&nodes, &BTreeSet::from([9])),
+        Err(DependencyRequirementsError::UnknownSelection { command: 9 }),
+    );
+    let invalid = [node(1, &[2]), node(2, &[])];
+    assert_eq!(
+        dependency_selection_requirements(&invalid, &BTreeSet::from([1])),
+        Err(DependencyRequirementsError::Graph {
             reason: CommandGraphError::DependencyAfterCommand {
                 command: 1,
                 dependency: 2,

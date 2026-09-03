@@ -83,6 +83,31 @@ pub enum CommandGraphLimitError {
     DependencyEdgeCountOverflow,
 }
 
+/// One explicit dependency edge omitted by an interactive selection.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct MissingDependencyRequirement<Identity> {
+    /// Command whose complete dependency closure requires another command.
+    pub command: Identity,
+    /// Explicit required dependency absent from the caller's original
+    /// selection.
+    pub dependency: Identity,
+}
+
+/// Typed failure while deriving dependency requirements for one selection.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum DependencyRequirementsError<Identity> {
+    /// The complete source graph is invalid before requirements are derived.
+    Graph {
+        /// Typed structural failure in the complete command graph.
+        reason: CommandGraphError<Identity>,
+    },
+    /// Selection names no command in the complete source graph.
+    UnknownSelection {
+        /// Unknown command identity named by the selection.
+        command: Identity,
+    },
+}
+
 /// Typed failure while checking one selected command subset.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum DependencySelectionError<Identity> {
@@ -291,6 +316,67 @@ where
         command: forward_command,
         dependency: forward_dependency,
     })
+}
+
+/// Derive the complete explicit dependency requirements omitted by a selection.
+///
+/// The source graph is validated first. The function computes the transitive
+/// dependency closure required by the selected commands but does not mutate or
+/// return a replacement selection. Requirements are reported in original
+/// command order and each command's explicit dependency order.
+///
+/// # Errors
+///
+/// Returns the complete graph failure or the first selected identity absent
+/// from the source graph.
+pub fn dependency_selection_requirements<Identity>(
+    nodes: &[CommandNode<Identity>],
+    selected: &BTreeSet<Identity>,
+) -> Result<
+    Vec<MissingDependencyRequirement<Identity>>,
+    DependencyRequirementsError<Identity>,
+>
+where
+    Identity: Clone + Ord,
+{
+    let positions = match validated_command_positions(nodes) {
+        Ok(positions) => positions,
+        Err(reason) => {
+            return Err(DependencyRequirementsError::Graph { reason });
+        },
+    };
+    if let Some(command) = selected
+        .iter()
+        .find(|command| !positions.contains_key(*command))
+    {
+        return Err(DependencyRequirementsError::UnknownSelection {
+            command: command.clone(),
+        });
+    }
+
+    let mut required = selected.clone();
+    for node in nodes.iter().rev() {
+        if !required.contains(&node.id) {
+            continue;
+        }
+        required.extend(node.dependencies.iter().cloned());
+    }
+
+    let mut missing = Vec::new();
+    for node in nodes {
+        if !required.contains(&node.id) {
+            continue;
+        }
+        for dependency in &node.dependencies {
+            if !selected.contains(dependency) {
+                missing.push(MissingDependencyRequirement {
+                    command: node.id.clone(),
+                    dependency: dependency.clone(),
+                });
+            }
+        }
+    }
+    Ok(missing)
 }
 
 /// Check that one selected subset contains every explicit command dependency.
