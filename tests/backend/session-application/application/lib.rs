@@ -181,6 +181,66 @@ fn process_restart_drops_accepted_revision_and_history() {
 }
 
 #[test]
+fn application_routes_history_traversal_through_owned_semantic_authority() {
+    let identities = IdentityAllocator::new();
+    let mut session = application::SessionApplication::default();
+    let AcceptanceOutcome::Accepted { revision: first, .. } =
+        session.accept_candidate(minimal_candidate(&identities))
+    else {
+        panic!("first candidate must be accepted");
+    };
+    let AcceptanceOutcome::Accepted { revision: second, .. } =
+        session.accept_candidate(minimal_candidate(&identities))
+    else {
+        panic!("second candidate must be accepted");
+    };
+
+    let atrament_semantic_notebook_port::HistoryTraversalOutcome::Traversed {
+        base,
+        direction,
+        revision: undone,
+    } = session.traverse_history(
+        second,
+        atrament_semantic_notebook_port::HistoryDirection::Undo,
+    ) else {
+        panic!("live owner must route Undo");
+    };
+    assert_eq!(base, second);
+    assert_eq!(
+        direction,
+        atrament_semantic_notebook_port::HistoryDirection::Undo,
+    );
+    assert_ne!(undone, first);
+    assert_eq!(
+        session.accepted_revision().map(|revision| revision.id),
+        Some(undone),
+    );
+    assert_eq!(
+        session.history_availability(),
+        HistoryAvailabilityOutcome::Available(HistoryAvailability {
+            can_redo: true,
+            can_undo: false,
+            revision: undone,
+        }),
+    );
+
+    let atrament_semantic_notebook_port::HistoryTraversalOutcome::Traversed {
+        revision: redone,
+        ..
+    } = session.traverse_history(
+        undone,
+        atrament_semantic_notebook_port::HistoryDirection::Redo,
+    ) else {
+        panic!("live owner must route Redo");
+    };
+    assert_ne!(redone, second);
+    assert_eq!(
+        session.accepted_revision().map(|revision| revision.id),
+        Some(redone),
+    );
+}
+
+#[test]
 fn application_routes_atomic_batch_apply_through_owned_semantic_authority() {
     let identities = IdentityAllocator::new();
     let mut session = application::SessionApplication::default();
