@@ -465,6 +465,36 @@ fn application_routes_asset_reference_batch_through_owned_authority() {
         Some(EditableSemanticValue::AssetReference(Some(first_asset))),
     );
     assert_eq!(
+        session.check_editable_value_precondition(
+            base,
+            figure,
+            EditableSemanticValue::AssetReference(Some(second_asset)),
+        ),
+        EditableValuePreconditionOutcome::ValueMismatch {
+            actual: EditableSemanticValue::AssetReference(Some(first_asset)),
+            expected: EditableSemanticValue::AssetReference(Some(second_asset)),
+            revision: base,
+            target: figure,
+        },
+    );
+    assert_eq!(
+        session.simulate_direct_edit(
+            base,
+            figure,
+            EditableSemanticValue::AssetReference(Some(figure)),
+        ),
+        DirectEditSimulationOutcome::InvalidAssetReference {
+            actual: Some(SemanticIdentityKind::Figure),
+            reference: figure,
+            revision: base,
+            target: figure,
+        },
+    );
+    assert_eq!(
+        session.accepted_revision().map(|current| current.id),
+        Some(base),
+    );
+    assert_eq!(
         session.simulate_direct_edit(
             base,
             figure,
