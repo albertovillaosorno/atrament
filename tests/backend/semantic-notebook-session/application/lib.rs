@@ -2144,6 +2144,66 @@ fn direct_edit_batch_bounded_selection_enforces_exact_report_limit() {
 }
 
 #[test]
+fn graph_resource_preflight_borrows_command_identities() {
+    let ids = IdentityAllocator::new();
+    let (candidate, span) = candidate_notebook_with_span(&ids, "base text");
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(candidate)
+    else {
+        panic!("candidate must be accepted");
+    };
+    let span = accepted_for(&mapping, span);
+    let clones = Arc::new(AtomicUsize::new(0));
+    let command = |id, dependencies| DirectEditBatchCommand {
+        dependencies,
+        id: CountingCommandIdentity::new(&clones, id),
+        preconditions: CommandTargetPreconditions {
+            expected_value: Some(EditableSemanticValue::Text(
+                "base text".to_owned(),
+            )),
+            identity: IdentityPrecondition {
+                expected_kind: Some(SemanticIdentityKind::InlineSpan),
+                expected_owner: IdentityOwnerExpectation::Any,
+            },
+            requested_family: SemanticCommandFamily::TextContent,
+        },
+        requested: EditableSemanticValue::Text("changed".to_owned()),
+        target: span,
+    };
+    let batch = DirectEditBatchProposal {
+        base: revision,
+        capability_version: CommandBehaviorVersion(1),
+        commands: vec![
+            command(1, Vec::new()),
+            command(2, vec![CountingCommandIdentity::new(&clones, 1)]),
+        ],
+    };
+    let size = CommandGraphSize {
+        commands: 2,
+        dependency_edges: 1,
+    };
+    assert_eq!(
+        session.direct_edit_batch_graph_size(&batch),
+        DirectEditBatchGraphSizeOutcome::Sized { revision, size },
+    );
+    assert_eq!(clones.load(AtomicOrdering::Relaxed), 0);
+    assert_eq!(
+        session.direct_edit_batch_graph_limits(&batch, CommandGraphLimits {
+            commands: 1,
+            dependency_edges: 1,
+        },),
+        DirectEditBatchGraphLimitsOutcome::Rejected {
+            reason: CommandGraphLimitError::CommandCountExceeded {
+                actual: 2,
+                limit: 1,
+            },
+        },
+    );
+    assert_eq!(clones.load(AtomicOrdering::Relaxed), 0);
+}
+
+#[test]
 fn selection_summary_and_bounded_rejection_borrow_command_identities() {
     let ids = IdentityAllocator::new();
     let (candidate, span) = candidate_notebook_with_span(&ids, "base text");
