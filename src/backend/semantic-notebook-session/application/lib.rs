@@ -2075,7 +2075,7 @@ where
             &current.notebook,
             &mut batch_index.materials,
             command,
-            previous_by_target.get(&command.target),
+            previous_by_target.get(&command.target).copied(),
             revision,
         );
         let prediction = match result {
@@ -2097,7 +2097,7 @@ where
                 change,
             );
             let _previous =
-                previous_by_target.insert(command.target, command.id.clone());
+                previous_by_target.insert(command.target, &command.id);
         }
         evaluated.push(prediction);
     }

@@ -3146,6 +3146,65 @@ fn ordered_direct_edit_batch_rejects_atomic_middle_failure_read_only() {
 }
 
 #[test]
+fn ordered_same_target_success_clones_command_ids_only_for_predictions() {
+    let ids = IdentityAllocator::new();
+    let (candidate, span) = candidate_notebook_with_span(&ids, "base");
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(candidate)
+    else {
+        panic!("candidate must be accepted");
+    };
+    let span = accepted_for(&mapping, span);
+    let clones = Arc::new(AtomicUsize::new(0));
+    let command = |id, dependencies, expected: &str, requested: &str| {
+        DirectEditBatchCommand {
+            dependencies,
+            id: CountingCommandIdentity::new(&clones, id),
+            preconditions: CommandTargetPreconditions {
+                expected_value: Some(EditableSemanticValue::Text(
+                    expected.to_owned(),
+                )),
+                identity: IdentityPrecondition {
+                    expected_kind: Some(SemanticIdentityKind::InlineSpan),
+                    expected_owner: IdentityOwnerExpectation::Any,
+                },
+                requested_family: SemanticCommandFamily::TextContent,
+            },
+            requested: EditableSemanticValue::Text(requested.to_owned()),
+            target: span,
+        }
+    };
+    let batch = DirectEditBatchProposal {
+        base: revision,
+        capability_version: CommandBehaviorVersion(1),
+        commands: vec![
+            command(1, Vec::new(), "base", "one"),
+            command(
+                2,
+                vec![CountingCommandIdentity::new(&clones, 1)],
+                "one",
+                "two",
+            ),
+            command(
+                3,
+                vec![CountingCommandIdentity::new(&clones, 2)],
+                "two",
+                "three",
+            ),
+        ],
+    };
+    clones.store(0, AtomicOrdering::Relaxed);
+    let DirectEditBatchSimulationOutcome::Predicted { commands, .. } =
+        session.simulate_direct_edit_batch(batch)
+    else {
+        panic!("dependent same-target chain must simulate");
+    };
+    assert_eq!(commands.len(), 3);
+    assert_eq!(clones.load(AtomicOrdering::Relaxed), 3);
+}
+
+#[test]
 fn ordered_direct_edit_batch_requires_dependency_for_repeated_target() {
     let ids = IdentityAllocator::new();
     let (candidate, span) = candidate_notebook_with_span(&ids, "base");
