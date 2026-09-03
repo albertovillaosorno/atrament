@@ -71,6 +71,66 @@ fn grid_row(id: u32, cells: Vec<TableCell<u32>>) -> TableRow<u32> {
     }
 }
 
+fn grid_oracle_is_valid(table: &Table<u32>) -> bool {
+    let Some(first) = table.rows.first() else {
+        return true;
+    };
+    let width: usize = first
+        .cells
+        .iter()
+        .map(|cell| {
+            usize::try_from(cell.span.columns.get()).expect("small width")
+        })
+        .sum();
+    let mut occupied = vec![vec![false; width]; table.rows.len()];
+    for (row_index, row) in table.rows.iter().enumerate() {
+        let mut cursor = 0usize;
+        for cell in &row.cells {
+            while cursor < width && occupied[row_index][cursor] {
+                cursor = cursor.saturating_add(1);
+            }
+            let columns = usize::try_from(cell.span.columns.get())
+                .expect("small columns");
+            let rows =
+                usize::try_from(cell.span.rows.get()).expect("small rows");
+            let Some(end_column) = cursor.checked_add(columns) else {
+                return false;
+            };
+            let Some(end_row) = row_index.checked_add(rows) else {
+                return false;
+            };
+            if end_column > width || end_row > table.rows.len() {
+                return false;
+            }
+            for occupied_row in &occupied[row_index..end_row] {
+                if occupied_row[cursor..end_column]
+                    .iter()
+                    .any(|slot| *slot)
+                {
+                    return false;
+                }
+            }
+            for occupied_row in &mut occupied[row_index..end_row] {
+                for slot in &mut occupied_row[cursor..end_column] {
+                    *slot = true;
+                }
+            }
+            cursor = end_column;
+        }
+        if occupied[row_index].iter().any(|slot| !*slot) {
+            return false;
+        }
+    }
+    true
+}
+
+fn next_grid_seed(seed: &mut u64) -> u32 {
+    *seed = seed
+        .wrapping_mul(6_364_136_223_846_793_005)
+        .wrapping_add(1_442_695_040_888_963_407);
+    u32::try_from(*seed >> 32).expect("upper half fits u32")
+}
+
 fn physical_page_profile() -> PhysicalPageProfile {
     PhysicalPageProfile {
         binding_edge: BindingEdge::Left,
@@ -228,6 +288,40 @@ fn cloned_semantic_state_preserves_stable_identity() {
             owner: Some(block_id),
         }),
     );
+}
+
+#[test]
+fn logical_table_validator_matches_naive_occupancy_oracle() {
+    let mut seed = 0x5eed_1234_9876_abcd;
+    for case in 0..20_000u32 {
+        let row_count = usize::try_from((next_grid_seed(&mut seed) % 4) + 1)
+            .expect("small row count");
+        let mut rows = Vec::with_capacity(row_count);
+        let mut identity = case.saturating_mul(100).saturating_add(1);
+        for _ in 0..row_count {
+            let cell_count = usize::try_from(next_grid_seed(&mut seed) % 4)
+                .expect("small cell count");
+            let mut cells = Vec::with_capacity(cell_count);
+            for _ in 0..cell_count {
+                let columns = (next_grid_seed(&mut seed) % 3) + 1;
+                let span_rows = (next_grid_seed(&mut seed) % 3) + 1;
+                cells.push(grid_cell(identity, columns, span_rows));
+                identity = identity.saturating_add(1);
+            }
+            rows.push(TableRow {
+                cells,
+                id: identity,
+                role: TableRowRole::Body,
+            });
+            identity = identity.saturating_add(1);
+        }
+        let table = Table { id: identity, rows };
+        assert_eq!(
+            table.validate_grid().is_ok(),
+            grid_oracle_is_valid(&table),
+            "occupancy oracle mismatch in generated case {case}",
+        );
+    }
 }
 
 #[test]
