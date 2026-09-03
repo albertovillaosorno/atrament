@@ -4064,6 +4064,127 @@ fn direct_edit_batch_apply_middle_failure_is_atomic() {
 }
 
 #[test]
+fn concurrent_history_undo_and_batch_apply_allow_one_commit_from_one_base() {
+    let ids = IdentityAllocator::new();
+    let (candidate, span) = candidate_notebook_with_span(&ids, "base text");
+    let mut service = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision: base } =
+        service.accept(candidate)
+    else {
+        panic!("candidate must be accepted");
+    };
+    let target = accepted_for(&mapping, span);
+    let TextEditOutcome::Applied { revision: shared, .. } =
+        service.replace_text(base, target, String::from("first edit"))
+    else {
+        panic!("first edit must create the shared race base");
+    };
+    let batch = DirectEditBatchProposal {
+        base: shared,
+        capability_version: CommandBehaviorVersion(1),
+        commands: vec![text_batch_command(
+            1,
+            &[],
+            target,
+            "first edit",
+            "applied edit",
+        )],
+    };
+    let service = Arc::new(Mutex::new(service));
+    let barrier = Arc::new(Barrier::new(3));
+
+    let undo_service = Arc::clone(&service);
+    let undo_barrier = Arc::clone(&barrier);
+    let undo = std::thread::spawn(move || {
+        undo_barrier.wait();
+        undo_service
+            .lock()
+            .expect("Undo race lock")
+            .traverse_history(shared, HistoryDirection::Undo)
+    });
+    let apply_service = Arc::clone(&service);
+    let apply_barrier = Arc::clone(&barrier);
+    let apply = std::thread::spawn(move || {
+        apply_barrier.wait();
+        apply_service
+            .lock()
+            .expect("Apply race lock")
+            .apply_direct_edit_batch(batch)
+    });
+    barrier.wait();
+    let undo = undo.join().expect("Undo race thread");
+    let apply = apply.join().expect("Apply race thread");
+    let service = service.lock().expect("final race lock");
+
+    match (undo, apply) {
+        (
+            HistoryTraversalOutcome::Traversed {
+                base: undo_base,
+                direction: HistoryDirection::Undo,
+                revision: winner,
+            },
+            DirectEditBatchApplyOutcome::StaleBase { current },
+        ) => {
+            assert_eq!(undo_base, shared);
+            assert_eq!(current, winner);
+            assert_eq!(
+                service.current().map(|revision| revision.id),
+                Some(winner),
+            );
+            let current = service.current().expect("Undo-winning revision");
+            let BlockContent::Paragraph(spans) =
+                &current.notebook.pages[0].flows[0].blocks[0].content
+            else {
+                panic!("Undo-winning fixture must remain a paragraph");
+            };
+            assert_eq!(spans[0].id, target);
+            assert_eq!(spans[0].text, "base text");
+            assert_eq!(
+                service.history_availability(),
+                HistoryAvailabilityOutcome::Available(HistoryAvailability {
+                    can_redo: true,
+                    can_undo: false,
+                    revision: winner,
+                }),
+            );
+        },
+        (
+            HistoryTraversalOutcome::StaleBase { current, requested },
+            DirectEditBatchApplyOutcome::Applied {
+                base: applied_base,
+                revision: winner,
+                ..
+            },
+        ) => {
+            assert_eq!(applied_base, shared);
+            assert_eq!(requested, shared);
+            assert_eq!(current, winner);
+            assert_eq!(
+                service.current().map(|revision| revision.id),
+                Some(winner),
+            );
+            let current = service.current().expect("Apply-winning revision");
+            let BlockContent::Paragraph(spans) =
+                &current.notebook.pages[0].flows[0].blocks[0].content
+            else {
+                panic!("Apply-winning fixture must remain a paragraph");
+            };
+            assert_eq!(spans[0].id, target);
+            assert_eq!(spans[0].text, "applied edit");
+            assert_eq!(
+                service.history_availability(),
+                HistoryAvailabilityOutcome::Available(HistoryAvailability {
+                    can_redo: false,
+                    can_undo: true,
+                    revision: winner,
+                }),
+            );
+        },
+        other => panic!("unexpected Undo/Apply race outcomes: {other:?}"),
+    }
+}
+
+#[test]
 fn concurrent_direct_edit_batch_apply_allows_one_commit_from_one_base() {
     let ids = IdentityAllocator::new();
     let (candidate, span) = candidate_notebook_with_span(&ids, "base text");
