@@ -31,6 +31,7 @@
 //
 use std::cmp::Ordering;
 use std::collections::BTreeSet;
+use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering as AtomicOrdering};
 
 use atrament_physical_page_profile::{
@@ -73,22 +74,39 @@ use atrament_semantic_notebook_port::{
 };
 use atrament_semantic_notebook_session::SemanticNotebookSessionService;
 
-static SELECTION_COMMAND_IDENTITY_CLONES: AtomicUsize = AtomicUsize::new(0);
+#[derive(Debug)]
+struct CountingCommandIdentity {
+    clones: Arc<AtomicUsize>,
+    id: u32,
+}
 
-#[derive(Debug, Eq, PartialEq)]
-struct CountingCommandIdentity(u32);
-
-impl Clone for CountingCommandIdentity {
-    fn clone(&self) -> Self {
-        let _previous = SELECTION_COMMAND_IDENTITY_CLONES
-            .fetch_add(1, AtomicOrdering::Relaxed);
-        Self(self.0)
+impl CountingCommandIdentity {
+    fn new(clones: &Arc<AtomicUsize>, id: u32) -> Self {
+        Self {
+            clones: Arc::clone(clones),
+            id,
+        }
     }
 }
 
+impl Clone for CountingCommandIdentity {
+    fn clone(&self) -> Self {
+        let _previous = self.clones.fetch_add(1, AtomicOrdering::Relaxed);
+        Self::new(&self.clones, self.id)
+    }
+}
+
+impl Eq for CountingCommandIdentity {}
+
 impl Ord for CountingCommandIdentity {
     fn cmp(&self, other: &Self) -> Ordering {
-        self.0.cmp(&other.0)
+        self.id.cmp(&other.id)
+    }
+}
+
+impl PartialEq for CountingCommandIdentity {
+    fn eq(&self, other: &Self) -> bool {
+        self.id == other.id
     }
 }
 
@@ -1992,10 +2010,11 @@ fn selection_summary_and_bounded_rejection_borrow_command_identities() {
         panic!("candidate must be accepted");
     };
     let span = accepted_for(&mapping, span);
+    let clones = Arc::new(AtomicUsize::new(0));
     let command = |id, dependencies, expected: &str, requested: &str| {
         DirectEditBatchCommand {
             dependencies,
-            id: CountingCommandIdentity(id),
+            id: CountingCommandIdentity::new(&clones, id),
             preconditions: CommandTargetPreconditions {
                 expected_value: Some(EditableSemanticValue::Text(
                     expected.to_owned(),
@@ -2015,12 +2034,21 @@ fn selection_summary_and_bounded_rejection_borrow_command_identities() {
         capability_version: CommandBehaviorVersion(1),
         commands: vec![
             command(1, Vec::new(), "base text", "one"),
-            command(2, vec![CountingCommandIdentity(1)], "one", "two"),
-            command(3, vec![CountingCommandIdentity(2)], "two", "three"),
+            command(
+                2,
+                vec![CountingCommandIdentity::new(&clones, 1)],
+                "one",
+                "two",
+            ),
+            command(
+                3,
+                vec![CountingCommandIdentity::new(&clones, 2)],
+                "two",
+                "three",
+            ),
         ],
     };
-    let selected = BTreeSet::from([CountingCommandIdentity(3)]);
-    SELECTION_COMMAND_IDENTITY_CLONES.store(0, AtomicOrdering::Relaxed);
+    let selected = BTreeSet::from([CountingCommandIdentity::new(&clones, 3)]);
     assert_eq!(
         session.direct_edit_batch_selection_summary(&batch, &selected),
         DirectEditBatchSelectionSummaryOutcome::Summarized {
@@ -2032,10 +2060,7 @@ fn selection_summary_and_bounded_rejection_borrow_command_identities() {
             },
         },
     );
-    assert_eq!(
-        SELECTION_COMMAND_IDENTITY_CLONES.load(AtomicOrdering::Relaxed),
-        0,
-    );
+    assert_eq!(clones.load(AtomicOrdering::Relaxed), 0,);
     assert_eq!(
         session.direct_edit_batch_selection_requirements_bounded(
             &batch, &selected, 1,
@@ -2045,10 +2070,7 @@ fn selection_summary_and_bounded_rejection_borrow_command_identities() {
             limit: 1,
         },
     );
-    assert_eq!(
-        SELECTION_COMMAND_IDENTITY_CLONES.load(AtomicOrdering::Relaxed),
-        0,
-    );
+    assert_eq!(clones.load(AtomicOrdering::Relaxed), 0,);
 }
 
 #[test]
@@ -2062,9 +2084,10 @@ fn invalid_batch_graph_clones_only_reported_command_identities() {
         panic!("candidate must be accepted");
     };
     let span = accepted_for(&mapping, span);
+    let clones = Arc::new(AtomicUsize::new(0));
     let command = |id, dependencies| DirectEditBatchCommand {
         dependencies,
-        id: CountingCommandIdentity(id),
+        id: CountingCommandIdentity::new(&clones, id),
         preconditions: CommandTargetPreconditions {
             expected_value: Some(EditableSemanticValue::Text(
                 "base text".to_owned(),
@@ -2082,25 +2105,21 @@ fn invalid_batch_graph_clones_only_reported_command_identities() {
         base: revision,
         capability_version: CommandBehaviorVersion(1),
         commands: vec![
-            command(1, vec![CountingCommandIdentity(2)]),
+            command(1, vec![CountingCommandIdentity::new(&clones, 2)]),
             command(2, Vec::new()),
             command(3, Vec::new()),
         ],
     };
-    SELECTION_COMMAND_IDENTITY_CLONES.store(0, AtomicOrdering::Relaxed);
     assert_eq!(
         session.simulate_direct_edit_batch(batch),
         DirectEditBatchSimulationOutcome::DependencyGraphRejected {
             reason: CommandGraphError::DependencyAfterCommand {
-                command: CountingCommandIdentity(1),
-                dependency: CountingCommandIdentity(2),
+                command: CountingCommandIdentity::new(&clones, 1),
+                dependency: CountingCommandIdentity::new(&clones, 2),
             },
         },
     );
-    assert_eq!(
-        SELECTION_COMMAND_IDENTITY_CLONES.load(AtomicOrdering::Relaxed),
-        2,
-    );
+    assert_eq!(clones.load(AtomicOrdering::Relaxed), 2,);
 }
 
 #[test]
