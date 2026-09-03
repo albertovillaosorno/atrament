@@ -167,6 +167,99 @@ fn independent_pagination_matches_reference_oracle() {
     assert_eq!(cases, 1_296);
 }
 
+fn reference_keep_together_fresh(
+    pages: &[PageRegion<u64>],
+    fragments: &[MeasuredFragment<u64>],
+) -> Result<Vec<PlacedFragment<u64, u64>>, PaginationError<u64, u64>> {
+    let total_height = fragments
+        .iter()
+        .map(|fragment| fragment.height.micrometres())
+        .sum::<u64>();
+    let maximum_width = fragments
+        .iter()
+        .map(|fragment| fragment.width)
+        .max()
+        .unwrap_or(Length::ZERO);
+    let whole_page = pages.iter().find(|page| {
+        total_height <= page.writable.height.micrometres()
+            && maximum_width <= page.writable.width
+    });
+    let Some(page) = whole_page else {
+        return reference_independent(pages, fragments);
+    };
+    let mut top = page.writable.y.micrometres();
+    let mut placements = Vec::with_capacity(fragments.len());
+    for fragment in fragments {
+        placements.push(PlacedFragment {
+            height: fragment.height,
+            owner: fragment.owner,
+            page: page.page,
+            top: Length::from_micrometres(top),
+            width: fragment.width,
+        });
+        top += fragment.height.micrometres();
+    }
+    Ok(placements)
+}
+
+#[test]
+fn keep_together_pagination_matches_fresh_page_reference_oracle() {
+    let mut cases = 0usize;
+    for first_width in 1..=2 {
+        for first_height in 1..=2 {
+            for second_width in 1..=2 {
+                for second_height in 1..=2 {
+                    for third_width in 1..=2 {
+                        for third_height in 1..=2 {
+                            let pages = [
+                                page(1, 10, first_width, first_height),
+                                page(2, 20, second_width, second_height),
+                                page(3, 30, third_width, third_height),
+                            ];
+                            for first_fragment_width in 1..=3 {
+                                for first_fragment_height in 1..=3 {
+                                    for second_fragment_width in 1..=3 {
+                                        for second_fragment_height in 1..=3 {
+                                            let fragments = vec![
+                                                fragment(
+                                                    11,
+                                                    first_fragment_width,
+                                                    first_fragment_height,
+                                                ),
+                                                fragment(
+                                                    12,
+                                                    second_fragment_width,
+                                                    second_fragment_height,
+                                                ),
+                                            ];
+                                            let units = [unit(
+                                                FlowUnitPolicy::
+                                                    KeepTogetherWhenPossible,
+                                                fragments.clone(),
+                                            )];
+                                            let actual =
+                                                paginate(&pages, &units)
+                                                    .map(|plan| plan.placements);
+                                            let expected =
+                                                reference_keep_together_fresh(
+                                                    &pages,
+                                                    &fragments,
+                                                );
+                                            assert_eq!(actual, expected);
+                                            cases += 1;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    assert_eq!(cases, 5_184);
+}
+
 #[test]
 fn empty_flow_needs_no_page_authority() {
     let plan = paginate::<u64, u64>(&[], &[]).expect("empty flow");
