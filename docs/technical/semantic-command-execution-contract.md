@@ -594,6 +594,8 @@ candidate replay or history mutation.
 No protocol normalizer, command-context/writable-scope admission, retry
 identity, selective-rebatch capability, published product limit, full Validate
 service, or discoverable Apply capability is admitted yet.
+Executable capability evidence confirms that a successful internal batch Apply
+does not change this snapshot or populate `admitted_applications`.
 
 Exact authored text and formula source are compared as currently accepted bytes;
 no Unicode normalization form is implied by this implementation evidence. The

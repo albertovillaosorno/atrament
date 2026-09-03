@@ -15,10 +15,11 @@
 //     rules.
 // - Allows:
 //   - Inputs: Existing draft and semantic application-service operations.
-//   - Outputs: Borrowed access to the active semantic authority and draft port.
+//   - Outputs: Typed semantic outcomes, borrowed accepted state, and the draft
+//     port.
 //   - Side effects: Process-local mutation through owned application services.
 // - Split-When:
-//   - Assets, history, or derived state require independently bounded owners.
+//   - Assets or derived state require independently bounded owners.
 // - Merge-When:
 //   - One broader application authority owns every active-session capability.
 // - Summary:

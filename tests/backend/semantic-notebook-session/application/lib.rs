@@ -1047,6 +1047,40 @@ fn command_capability_snapshot_is_deterministic_and_does_not_overclaim() {
 }
 
 #[test]
+fn internal_batch_apply_does_not_advertise_protocol_apply_capability() {
+    let ids = IdentityAllocator::new();
+    let (candidate, span) = candidate_notebook_with_span(&ids, "before");
+    let mut service = SemanticNotebookSessionService::default();
+    let before_capability = service.command_capability_snapshot();
+    assert!(before_capability.admitted_applications.is_empty());
+    let AcceptanceOutcome::Accepted { mapping, revision: base } =
+        service.accept(candidate)
+    else {
+        panic!("candidate must be accepted");
+    };
+    let target = accepted_for(&mapping, span);
+    let batch = DirectEditBatchProposal {
+        base,
+        capability_version: before_capability.behavior_version,
+        commands: vec![text_batch_command(
+            1,
+            &[],
+            target,
+            "before",
+            "after",
+        )],
+    };
+    assert!(matches!(
+        service.apply_direct_edit_batch(batch),
+        DirectEditBatchApplyOutcome::Applied { .. }
+    ));
+
+    let after_capability = service.command_capability_snapshot();
+    assert_eq!(after_capability, before_capability);
+    assert!(after_capability.admitted_applications.is_empty());
+}
+
+#[test]
 fn command_capability_version_detects_drift_independently_of_revision() {
     let mut session = SemanticNotebookSessionService::default();
     let snapshot = session.command_capability_snapshot();
