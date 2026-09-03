@@ -118,6 +118,8 @@ impl PartialOrd for CountingCommandIdentity {
     }
 }
 
+struct NonOrdCommandIdentity;
+
 fn physical_page_profile() -> PhysicalPageProfile {
     PhysicalPageProfile {
         binding_edge: BindingEdge::Left,
@@ -2010,6 +2012,58 @@ fn direct_edit_batch_graph_resource_preflight_is_exact_and_read_only() {
         },
     );
     assert_eq!(session.current(), Some(&before));
+}
+
+#[test]
+fn graph_resource_preflight_does_not_require_ordered_command_ids() {
+    let ids = IdentityAllocator::new();
+    let (candidate, span) = candidate_notebook_with_span(&ids, "base text");
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(candidate)
+    else {
+        panic!("candidate must be accepted");
+    };
+    let span = accepted_for(&mapping, span);
+    let command = |dependencies| DirectEditBatchCommand {
+        dependencies,
+        id: NonOrdCommandIdentity,
+        preconditions: CommandTargetPreconditions {
+            expected_value: Some(EditableSemanticValue::Text(
+                "base text".to_owned(),
+            )),
+            identity: IdentityPrecondition {
+                expected_kind: Some(SemanticIdentityKind::InlineSpan),
+                expected_owner: IdentityOwnerExpectation::Any,
+            },
+            requested_family: SemanticCommandFamily::TextContent,
+        },
+        requested: EditableSemanticValue::Text("changed".to_owned()),
+        target: span,
+    };
+    let batch = DirectEditBatchProposal {
+        base: revision,
+        capability_version: CommandBehaviorVersion(1),
+        commands: vec![
+            command(Vec::new()),
+            command(vec![NonOrdCommandIdentity]),
+        ],
+    };
+    let size = CommandGraphSize {
+        commands: 2,
+        dependency_edges: 1,
+    };
+    assert_eq!(
+        session.direct_edit_batch_graph_size(&batch),
+        DirectEditBatchGraphSizeOutcome::Sized { revision, size },
+    );
+    assert_eq!(
+        session.direct_edit_batch_graph_limits(&batch, CommandGraphLimits {
+            commands: 2,
+            dependency_edges: 1,
+        }),
+        DirectEditBatchGraphLimitsOutcome::Admitted { revision, size },
+    );
 }
 
 #[test]

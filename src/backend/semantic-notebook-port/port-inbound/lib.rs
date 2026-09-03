@@ -1429,17 +1429,13 @@ pub trait SemanticNotebookSession {
         &self,
         batch: &DirectEditBatchProposal<CommandIdentity>,
         limits: CommandGraphLimits,
-    ) -> DirectEditBatchGraphLimitsOutcome
-    where
-        CommandIdentity: Ord;
+    ) -> DirectEditBatchGraphLimitsOutcome;
 
     /// Derive exact coarse command and dependency-edge counts read-only.
     fn direct_edit_batch_graph_size<CommandIdentity>(
         &self,
         batch: &DirectEditBatchProposal<CommandIdentity>,
-    ) -> DirectEditBatchGraphSizeOutcome
-    where
-        CommandIdentity: Ord;
+    ) -> DirectEditBatchGraphSizeOutcome;
 
     /// Analyze omitted dependencies for one in-memory batch selection.
     fn direct_edit_batch_selection_requirements<CommandIdentity>(

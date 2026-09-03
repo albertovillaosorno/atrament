@@ -467,10 +467,7 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
         &self,
         batch: &DirectEditBatchProposal<CommandIdentity>,
         limits: CommandGraphLimits,
-    ) -> DirectEditBatchGraphLimitsOutcome
-    where
-        CommandIdentity: Ord,
-    {
+    ) -> DirectEditBatchGraphLimitsOutcome {
         let snapshot = self.command_capability_snapshot();
         if snapshot.behavior_version != batch.capability_version {
             return DirectEditBatchGraphLimitsOutcome::CapabilityMismatch {
@@ -503,10 +500,7 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
     fn direct_edit_batch_graph_size<CommandIdentity>(
         &self,
         batch: &DirectEditBatchProposal<CommandIdentity>,
-    ) -> DirectEditBatchGraphSizeOutcome
-    where
-        CommandIdentity: Ord,
-    {
+    ) -> DirectEditBatchGraphSizeOutcome {
         let snapshot = self.command_capability_snapshot();
         if snapshot.behavior_version != batch.capability_version {
             return DirectEditBatchGraphSizeOutcome::CapabilityMismatch {
