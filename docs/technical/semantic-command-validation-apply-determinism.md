@@ -166,7 +166,7 @@ Dependent same-target commands can observe earlier simulated candidate values
 only through an explicit command dependency. Per-command changes retain their
 local before/after values while aggregate changes compare the accepted base with
 the final candidate. Successful predictions classify the net effect as Mutation
-or NoOp.
+or NoOp. An empty ordered batch returns NoOp before semantic target indexing.
 
 The same simulation derives conservative backend-owned impact seeds for text,
 structured-content, and page-profile changes. Single-target review and ordered
@@ -183,10 +183,12 @@ reject oversized identity-pair materialization before allocation, and session
 analysis borrows proposal identities until concrete detail or failure is
 returned.
 
-Session graph-resource preflight derives exact command/dependency counts and
-checks caller-supplied coarse bounds against capability behavior and exact base
-revision before semantic simulation. Passing those bounds does not imply that
-the dependency graph itself is valid.
+Session graph-resource preflight derives exact command/dependency counts
+directly
+from proposal commands and checks caller-supplied coarse bounds against
+capability behavior and exact base revision before semantic simulation. Resource
+inspection does not require command-ID ordering or graph-node allocation.
+Passing those bounds does not imply that the dependency graph itself is valid.
 
 A bounded ordered simulation applies those coarse limits before structural graph
 validation and semantic candidate work. Exact-limit inputs retain the same

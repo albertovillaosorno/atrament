@@ -211,12 +211,15 @@ bounds at the exact limit and one step beyond without truncation.
 
 Session-level graph resource preflight binds those counts to current capability
 behavior and the exact accepted base revision before candidate simulation. It
-uses read-only command-node views and does not clone caller command identities.
+counts commands and explicit dependency edges directly from the proposal, so
+resource-only inspection needs neither command-ID ordering nor graph-node view
+allocation.
 
 Ordered direct-edit simulation can enforce those same caller-supplied bounds
 before dependency-graph and semantic evaluation. Repeated explicit dependency
 edges remain structurally admissible but each still consumes one edge of the
-resource budget.
+resource budget. Batch resource, selection, and simulation APIs share one
+capability, accepted-state, and exact-base authority gate.
 
 The graph validator is iterative; a 100,000-command dependency chain is covered
 by direct executable evidence without recursive traversal. No numeric product
