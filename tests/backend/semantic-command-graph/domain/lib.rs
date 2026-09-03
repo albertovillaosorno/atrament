@@ -32,11 +32,13 @@
 use std::collections::BTreeSet;
 
 use atrament_semantic_command_graph::{
-    CommandGraphError, CommandGraphLimitError, CommandGraphLimits,
-    CommandGraphSize, CommandNode, DependencyRequirementsError,
-    DependencySelectionError, DependencySelectionSummary,
-    DependencySummaryError, MissingDependencyRequirement, command_graph_size,
-    dependency_selection_requirements, dependency_selection_summary,
+    BoundedDependencyRequirementsError, CommandGraphError,
+    CommandGraphLimitError, CommandGraphLimits, CommandGraphSize, CommandNode,
+    DependencyRequirementsError, DependencySelectionError,
+    DependencySelectionSummary, DependencySummaryError,
+    MissingDependencyRequirement, command_graph_size,
+    dependency_selection_requirements,
+    dependency_selection_requirements_bounded, dependency_selection_summary,
     validate_command_graph, validate_command_graph_limits,
     validate_dependency_closed_selection,
 };
@@ -417,5 +419,53 @@ fn dependency_selection_summary_rejects_unknown_and_invalid_graph() {
                 dependency: 2,
             },
         }),
+    );
+}
+
+#[test]
+fn bounded_dependency_requirements_accept_exact_limit_and_closed_selection() {
+    let nodes = [node(1, &[]), node(2, &[1]), node(3, &[2])];
+    assert_eq!(
+        dependency_selection_requirements_bounded(
+            &nodes,
+            &BTreeSet::from([3]),
+            2,
+        ),
+        Ok(vec![
+            MissingDependencyRequirement {
+                command: 2,
+                dependency: 1,
+            },
+            MissingDependencyRequirement {
+                command: 3,
+                dependency: 2,
+            },
+        ]),
+    );
+    assert_eq!(
+        dependency_selection_requirements_bounded(
+            &nodes,
+            &BTreeSet::from([1, 2, 3]),
+            0,
+        ),
+        Ok(Vec::new()),
+    );
+}
+
+#[test]
+fn bounded_dependency_requirements_reject_before_pair_materialization() {
+    let nodes = [node(1, &[]), node(2, &[1]), node(3, &[2])];
+    assert_eq!(
+        dependency_selection_requirements_bounded(
+            &nodes,
+            &BTreeSet::from([3]),
+            1,
+        ),
+        Err(
+            BoundedDependencyRequirementsError::RequirementCountExceeded {
+                actual: 2,
+                limit: 1,
+            }
+        ),
     );
 }

@@ -104,6 +104,30 @@ pub struct DependencySelectionSummary {
     pub selected_commands: usize,
 }
 
+/// Typed failure while materializing a caller-bounded requirement report.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum BoundedDependencyRequirementsError<Identity> {
+    /// The complete source graph is invalid before requirements are derived.
+    Graph {
+        /// Typed structural failure in the complete command graph.
+        reason: CommandGraphError<Identity>,
+    },
+    /// Exact omitted dependency-edge count exceeds the caller-supplied bound.
+    RequirementCountExceeded {
+        /// Exact omitted dependency-edge count.
+        actual: usize,
+        /// Maximum missing dependency edges the caller admits materializing.
+        limit: usize,
+    },
+    /// Missing-edge counting exceeded addressable `usize` range.
+    RequirementCountOverflow,
+    /// Selection names no command in the complete source graph.
+    UnknownSelection {
+        /// Unknown command identity named by the selection.
+        command: Identity,
+    },
+}
+
 /// Typed failure while summarizing one dependency selection.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum DependencySummaryError<Identity> {
@@ -404,35 +428,14 @@ where
     })
 }
 
-/// Summarize selection and transitive dependency-closure size without
-/// materializing missing identity pairs.
-///
-/// # Errors
-///
-/// Returns a typed graph failure, unknown selected identity, or exact count
-/// overflow. The caller selection is never changed.
-pub fn dependency_selection_summary<Identity>(
+fn missing_dependency_edge_count<Identity>(
     nodes: &[CommandNode<Identity>],
-    selected: &BTreeSet<Identity>,
-) -> Result<DependencySelectionSummary, DependencySummaryError<Identity>>
+    state: &DependencySelectionState<'_, Identity>,
+) -> Option<usize>
 where
-    Identity: Clone + Ord,
+    Identity: Ord,
 {
-    let state = match dependency_selection_state(nodes, selected) {
-        Ok(state) => state,
-        Err(DependencyRequirementsError::Graph { reason }) => {
-            return Err(DependencySummaryError::Graph { reason });
-        },
-        Err(DependencyRequirementsError::UnknownSelection { command }) => {
-            return Err(DependencySummaryError::UnknownSelection { command });
-        },
-    };
-    let required_commands = state
-        .required_positions
-        .iter()
-        .filter(|is_required| **is_required)
-        .count();
-    let mut missing_dependency_edges = 0usize;
+    let mut count = 0usize;
     for (position, node) in nodes.iter().enumerate() {
         if !state
             .required_positions
@@ -456,40 +459,19 @@ where
             {
                 continue;
             }
-            missing_dependency_edges = missing_dependency_edges
-                .checked_add(1)
-                .ok_or(DependencySummaryError::RequirementCountOverflow)?;
+            count = count.checked_add(1)?;
         }
     }
-    Ok(DependencySelectionSummary {
-        missing_dependency_edges,
-        required_commands,
-        selected_commands: selected.len(),
-    })
+    Some(count)
 }
 
-/// Derive the complete explicit dependency requirements omitted by a selection.
-///
-/// The source graph is validated first. The function computes the transitive
-/// dependency closure required by the selected commands but does not mutate or
-/// return a replacement selection. Requirements are reported in original
-/// command order and each command's explicit dependency order.
-///
-/// # Errors
-///
-/// Returns the complete graph failure or the first selected identity absent
-/// from the source graph.
-pub fn dependency_selection_requirements<Identity>(
+fn missing_dependency_requirements<Identity>(
     nodes: &[CommandNode<Identity>],
-    selected: &BTreeSet<Identity>,
-) -> Result<
-    Vec<MissingDependencyRequirement<Identity>>,
-    DependencyRequirementsError<Identity>,
->
+    state: &DependencySelectionState<'_, Identity>,
+) -> Vec<MissingDependencyRequirement<Identity>>
 where
     Identity: Clone + Ord,
 {
-    let state = dependency_selection_state(nodes, selected)?;
     let mut missing = Vec::new();
     for (position, node) in nodes.iter().enumerate() {
         if !state
@@ -519,7 +501,121 @@ where
             }
         }
     }
-    Ok(missing)
+    missing
+}
+
+/// Derive omitted dependency requirements subject to a caller-supplied report
+/// bound.
+///
+/// The complete exact omitted-edge count is derived before any identity-pair
+/// result is materialized. The source graph and caller selection remain
+/// unchanged.
+///
+/// # Errors
+///
+/// Returns a typed graph or unknown-selection failure, exact count overflow, or
+/// an exact omitted-edge count greater than `maximum_missing_edges`.
+pub fn dependency_selection_requirements_bounded<Identity>(
+    nodes: &[CommandNode<Identity>],
+    selected: &BTreeSet<Identity>,
+    maximum_missing_edges: usize,
+) -> Result<
+    Vec<MissingDependencyRequirement<Identity>>,
+    BoundedDependencyRequirementsError<Identity>,
+>
+where
+    Identity: Clone + Ord,
+{
+    let state = match dependency_selection_state(nodes, selected) {
+        Ok(state) => state,
+        Err(DependencyRequirementsError::Graph { reason }) => {
+            return Err(BoundedDependencyRequirementsError::Graph { reason });
+        },
+        Err(DependencyRequirementsError::UnknownSelection { command }) => {
+            return Err(BoundedDependencyRequirementsError::UnknownSelection {
+                command,
+            });
+        },
+    };
+    let Some(actual) = missing_dependency_edge_count(nodes, &state) else {
+        return Err(
+            BoundedDependencyRequirementsError::RequirementCountOverflow,
+        );
+    };
+    if actual > maximum_missing_edges {
+        return Err(
+            BoundedDependencyRequirementsError::RequirementCountExceeded {
+                actual,
+                limit: maximum_missing_edges,
+            },
+        );
+    }
+    Ok(missing_dependency_requirements(nodes, &state))
+}
+
+/// Summarize selection and transitive dependency-closure size without
+/// materializing missing identity pairs.
+///
+/// # Errors
+///
+/// Returns a typed graph failure, unknown selected identity, or exact count
+/// overflow. The caller selection is never changed.
+pub fn dependency_selection_summary<Identity>(
+    nodes: &[CommandNode<Identity>],
+    selected: &BTreeSet<Identity>,
+) -> Result<DependencySelectionSummary, DependencySummaryError<Identity>>
+where
+    Identity: Clone + Ord,
+{
+    let state = match dependency_selection_state(nodes, selected) {
+        Ok(state) => state,
+        Err(DependencyRequirementsError::Graph { reason }) => {
+            return Err(DependencySummaryError::Graph { reason });
+        },
+        Err(DependencyRequirementsError::UnknownSelection { command }) => {
+            return Err(DependencySummaryError::UnknownSelection { command });
+        },
+    };
+    let required_commands = state
+        .required_positions
+        .iter()
+        .filter(|is_required| **is_required)
+        .count();
+    let Some(missing_dependency_edges) =
+        missing_dependency_edge_count(nodes, &state)
+    else {
+        return Err(DependencySummaryError::RequirementCountOverflow);
+    };
+    Ok(DependencySelectionSummary {
+        missing_dependency_edges,
+        required_commands,
+        selected_commands: selected.len(),
+    })
+}
+
+/// Derive the complete explicit dependency requirements omitted by a selection.
+///
+/// The source graph is validated first. The function computes the transitive
+/// dependency closure required by the selected commands but does not mutate or
+/// return a replacement selection. Requirements are reported in original
+/// command order and each command's explicit dependency order.
+///
+/// # Errors
+///
+/// Returns the complete graph failure or the first selected identity absent
+/// from the source graph.
+pub fn dependency_selection_requirements<Identity>(
+    nodes: &[CommandNode<Identity>],
+    selected: &BTreeSet<Identity>,
+) -> Result<
+    Vec<MissingDependencyRequirement<Identity>>,
+    DependencyRequirementsError<Identity>,
+>
+where
+    Identity: Clone + Ord,
+{
+    let state = dependency_selection_state(nodes, selected)?;
+    Ok(missing_dependency_requirements(nodes, &state))
 }
 
 /// Check that one selected subset contains every explicit command dependency.
