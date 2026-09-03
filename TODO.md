@@ -280,9 +280,15 @@ pages before the selected flow's owning page.
 Measurement admission now streams contiguous block-owner runs instead of
 materializing a second owner vector. Independent pagination advances through the
 remaining page sequence once per fragment, and keep-together search computes one
-checked total height and maximum width per group. A 1,296-case reference oracle
-covers small independent placements and typed failures, while a 10,000-block
-accepted-flow fixture preserves complete semantic order.
+checked total height and maximum width per group. Three reference oracles cover
+7,504 small independent and keep-together placement cases, including nonzero
+current-page remainder, while 341 owner-sequence cases cover complete,
+incomplete, repeated, reordered, and out-of-flow semantic measurements.
+
+Empty measured flows now avoid unused page-profile authority entirely. Nonempty
+semantic pagination indexes page profiles once per call while preserving
+first-match defensive behavior; fixtures cover 10,000 ordered measured blocks
+and 10,000 additional page/profile pairs without changing semantic order.
 
 Runtime composition of this read-only pagination service remains open. The
 current architecture declaration does not admit a dependency from the live
