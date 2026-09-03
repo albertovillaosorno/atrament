@@ -44,6 +44,33 @@ pub struct CommandNode<Identity> {
     pub id: Identity,
 }
 
+/// Read-only view of one ordered command dependency node.
+pub trait CommandDependencyNode {
+    /// Caller-owned command identity representation.
+    type Identity: Ord;
+
+    /// Explicit predecessor command identities required by this command.
+    fn dependencies(&self) -> &[Self::Identity];
+
+    /// Caller-owned identity of this command.
+    fn id(&self) -> &Self::Identity;
+}
+
+impl<Identity> CommandDependencyNode for CommandNode<Identity>
+where
+    Identity: Ord,
+{
+    type Identity = Identity;
+
+    fn dependencies(&self) -> &[Self::Identity] {
+        &self.dependencies
+    }
+
+    fn id(&self) -> &Self::Identity {
+        &self.id
+    }
+}
+
 /// Caller-supplied coarse resource bounds for one command graph.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct CommandGraphLimits {
@@ -225,12 +252,16 @@ struct DependencySelectionState<'graph, Identity> {
 ///
 /// Returns [`CommandGraphLimitError::DependencyEdgeCountOverflow`] if summing
 /// explicit dependency edges exceeds addressable `usize` range.
-pub fn command_graph_size<Identity>(
-    nodes: &[CommandNode<Identity>],
-) -> Result<CommandGraphSize, CommandGraphLimitError> {
+pub fn command_graph_size<Node>(
+    nodes: &[Node],
+) -> Result<CommandGraphSize, CommandGraphLimitError>
+where
+    Node: CommandDependencyNode,
+{
     let mut dependency_edges = 0usize;
     for node in nodes {
-        let Some(next) = dependency_edges.checked_add(node.dependencies.len())
+        let Some(next) =
+            dependency_edges.checked_add(node.dependencies().len())
         else {
             return Err(CommandGraphLimitError::DependencyEdgeCountOverflow);
         };
@@ -252,10 +283,13 @@ pub fn command_graph_size<Identity>(
 ///
 /// Returns a typed exact count overflow or at the first exceeded supplied
 /// bound.
-pub fn validate_command_graph_limits<Identity>(
-    nodes: &[CommandNode<Identity>],
+pub fn validate_command_graph_limits<Node>(
+    nodes: &[Node],
     limits: CommandGraphLimits,
-) -> Result<CommandGraphSize, CommandGraphLimitError> {
+) -> Result<CommandGraphSize, CommandGraphLimitError>
+where
+    Node: CommandDependencyNode,
+{
     if nodes.len() > limits.commands {
         return Err(CommandGraphLimitError::CommandCountExceeded {
             actual: nodes.len(),
@@ -279,47 +313,49 @@ pub fn validate_command_graph_limits<Identity>(
 /// Returns a typed failure for duplicate command identities, direct
 /// self-dependencies, missing or forward dependency identities, or dependency
 /// cycles.
-pub fn validate_command_graph<Identity>(
-    nodes: &[CommandNode<Identity>],
-) -> Result<(), CommandGraphError<Identity>>
+pub fn validate_command_graph<Node>(
+    nodes: &[Node],
+) -> Result<(), CommandGraphError<Node::Identity>>
 where
-    Identity: Clone + Ord,
+    Node: CommandDependencyNode,
+    Node::Identity: Clone,
 {
     validated_command_positions(nodes).map(|_positions| ())
 }
 
-fn validated_command_positions<Identity>(
-    nodes: &[CommandNode<Identity>],
-) -> Result<BTreeMap<&Identity, usize>, CommandGraphError<Identity>>
+fn validated_command_positions<Node>(
+    nodes: &[Node],
+) -> Result<BTreeMap<&Node::Identity, usize>, CommandGraphError<Node::Identity>>
 where
-    Identity: Clone + Ord,
+    Node: CommandDependencyNode,
+    Node::Identity: Clone,
 {
     let mut positions = BTreeMap::new();
     for (position, node) in nodes.iter().enumerate() {
-        if positions.insert(&node.id, position).is_some() {
+        if positions.insert(node.id(), position).is_some() {
             return Err(CommandGraphError::DuplicateIdentity {
-                command: node.id.clone(),
+                command: node.id().clone(),
             });
         }
     }
 
     let mut first_forward = None;
     for (position, node) in nodes.iter().enumerate() {
-        for dependency in &node.dependencies {
-            if dependency == &node.id {
+        for dependency in node.dependencies() {
+            if dependency == node.id() {
                 return Err(CommandGraphError::SelfDependency {
-                    command: node.id.clone(),
+                    command: node.id().clone(),
                 });
             }
             let Some(dependency_position) = positions.get(dependency).copied()
             else {
                 return Err(CommandGraphError::MissingDependency {
-                    command: node.id.clone(),
+                    command: node.id().clone(),
                     dependency: dependency.clone(),
                 });
             };
             if dependency_position > position && first_forward.is_none() {
-                first_forward = Some((node.id.clone(), dependency.clone()));
+                first_forward = Some((node.id().clone(), dependency.clone()));
             }
         }
     }
@@ -330,7 +366,7 @@ where
     let mut indegrees = vec![0usize; nodes.len()];
     let mut dependents = vec![Vec::new(); nodes.len()];
     for (position, node) in nodes.iter().enumerate() {
-        for dependency in &node.dependencies {
+        for dependency in node.dependencies() {
             let Some(dependency_position) = positions.get(dependency).copied()
             else {
                 continue;
@@ -376,15 +412,16 @@ where
     })
 }
 
-fn dependency_selection_state<'graph, Identity>(
-    nodes: &'graph [CommandNode<Identity>],
-    selected: &BTreeSet<Identity>,
+fn dependency_selection_state<'graph, Node>(
+    nodes: &'graph [Node],
+    selected: &BTreeSet<Node::Identity>,
 ) -> Result<
-    DependencySelectionState<'graph, Identity>,
-    DependencyRequirementsError<Identity>,
+    DependencySelectionState<'graph, Node::Identity>,
+    DependencyRequirementsError<Node::Identity>,
 >
 where
-    Identity: Clone + Ord,
+    Node: CommandDependencyNode,
+    Node::Identity: Clone,
 {
     let positions = match validated_command_positions(nodes) {
         Ok(positions) => positions,
@@ -409,7 +446,7 @@ where
         if !required_positions.get(position).copied().unwrap_or(false) {
             continue;
         }
-        for dependency in &node.dependencies {
+        for dependency in node.dependencies() {
             let Some(dependency_position) = positions.get(dependency).copied()
             else {
                 continue;
@@ -428,12 +465,12 @@ where
     })
 }
 
-fn missing_dependency_edge_count<Identity>(
-    nodes: &[CommandNode<Identity>],
-    state: &DependencySelectionState<'_, Identity>,
+fn missing_dependency_edge_count<Node>(
+    nodes: &[Node],
+    state: &DependencySelectionState<'_, Node::Identity>,
 ) -> Option<usize>
 where
-    Identity: Ord,
+    Node: CommandDependencyNode,
 {
     let mut count = 0usize;
     for (position, node) in nodes.iter().enumerate() {
@@ -445,7 +482,7 @@ where
         {
             continue;
         }
-        for dependency in &node.dependencies {
+        for dependency in node.dependencies() {
             let Some(dependency_position) =
                 state.positions.get(dependency).copied()
             else {
@@ -465,12 +502,13 @@ where
     Some(count)
 }
 
-fn missing_dependency_requirements<Identity>(
-    nodes: &[CommandNode<Identity>],
-    state: &DependencySelectionState<'_, Identity>,
-) -> Vec<MissingDependencyRequirement<Identity>>
+fn missing_dependency_requirements<Node>(
+    nodes: &[Node],
+    state: &DependencySelectionState<'_, Node::Identity>,
+) -> Vec<MissingDependencyRequirement<Node::Identity>>
 where
-    Identity: Clone + Ord,
+    Node: CommandDependencyNode,
+    Node::Identity: Clone,
 {
     let mut missing = Vec::new();
     for (position, node) in nodes.iter().enumerate() {
@@ -482,7 +520,7 @@ where
         {
             continue;
         }
-        for dependency in &node.dependencies {
+        for dependency in node.dependencies() {
             let Some(dependency_position) =
                 state.positions.get(dependency).copied()
             else {
@@ -495,7 +533,7 @@ where
                 .unwrap_or(false)
             {
                 missing.push(MissingDependencyRequirement {
-                    command: node.id.clone(),
+                    command: node.id().clone(),
                     dependency: dependency.clone(),
                 });
             }
@@ -515,16 +553,17 @@ where
 ///
 /// Returns a typed graph or unknown-selection failure, exact count overflow, or
 /// an exact omitted-edge count greater than `maximum_missing_edges`.
-pub fn dependency_selection_requirements_bounded<Identity>(
-    nodes: &[CommandNode<Identity>],
-    selected: &BTreeSet<Identity>,
+pub fn dependency_selection_requirements_bounded<Node>(
+    nodes: &[Node],
+    selected: &BTreeSet<Node::Identity>,
     maximum_missing_edges: usize,
 ) -> Result<
-    Vec<MissingDependencyRequirement<Identity>>,
-    BoundedDependencyRequirementsError<Identity>,
+    Vec<MissingDependencyRequirement<Node::Identity>>,
+    BoundedDependencyRequirementsError<Node::Identity>,
 >
 where
-    Identity: Clone + Ord,
+    Node: CommandDependencyNode,
+    Node::Identity: Clone,
 {
     let state = match dependency_selection_state(nodes, selected) {
         Ok(state) => state,
@@ -560,12 +599,13 @@ where
 ///
 /// Returns a typed graph failure, unknown selected identity, or exact count
 /// overflow. The caller selection is never changed.
-pub fn dependency_selection_summary<Identity>(
-    nodes: &[CommandNode<Identity>],
-    selected: &BTreeSet<Identity>,
-) -> Result<DependencySelectionSummary, DependencySummaryError<Identity>>
+pub fn dependency_selection_summary<Node>(
+    nodes: &[Node],
+    selected: &BTreeSet<Node::Identity>,
+) -> Result<DependencySelectionSummary, DependencySummaryError<Node::Identity>>
 where
-    Identity: Clone + Ord,
+    Node: CommandDependencyNode,
+    Node::Identity: Clone,
 {
     let state = match dependency_selection_state(nodes, selected) {
         Ok(state) => state,
@@ -604,15 +644,16 @@ where
 ///
 /// Returns the complete graph failure or the first selected identity absent
 /// from the source graph.
-pub fn dependency_selection_requirements<Identity>(
-    nodes: &[CommandNode<Identity>],
-    selected: &BTreeSet<Identity>,
+pub fn dependency_selection_requirements<Node>(
+    nodes: &[Node],
+    selected: &BTreeSet<Node::Identity>,
 ) -> Result<
-    Vec<MissingDependencyRequirement<Identity>>,
-    DependencyRequirementsError<Identity>,
+    Vec<MissingDependencyRequirement<Node::Identity>>,
+    DependencyRequirementsError<Node::Identity>,
 >
 where
-    Identity: Clone + Ord,
+    Node: CommandDependencyNode,
+    Node::Identity: Clone,
 {
     let state = dependency_selection_state(nodes, selected)?;
     Ok(missing_dependency_requirements(nodes, &state))
@@ -628,12 +669,13 @@ where
 ///
 /// Returns the complete graph failure, an unknown selected command identity, or
 /// the first selected command whose explicit dependency was omitted.
-pub fn validate_dependency_closed_selection<Identity>(
-    nodes: &[CommandNode<Identity>],
-    selected: &BTreeSet<Identity>,
-) -> Result<(), DependencySelectionError<Identity>>
+pub fn validate_dependency_closed_selection<Node>(
+    nodes: &[Node],
+    selected: &BTreeSet<Node::Identity>,
+) -> Result<(), DependencySelectionError<Node::Identity>>
 where
-    Identity: Clone + Ord,
+    Node: CommandDependencyNode,
+    Node::Identity: Clone,
 {
     let positions = match validated_command_positions(nodes) {
         Ok(positions) => positions,
@@ -648,14 +690,14 @@ where
         });
     }
     for node in nodes {
-        if !selected.contains(&node.id) {
+        if !selected.contains(node.id()) {
             continue;
         }
-        for dependency in &node.dependencies {
+        for dependency in node.dependencies() {
             if !selected.contains(dependency) {
                 return Err(
                     DependencySelectionError::MissingRequiredDependency {
-                        command: node.id.clone(),
+                        command: node.id().clone(),
                         dependency: dependency.clone(),
                     },
                 );

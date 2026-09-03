@@ -34,11 +34,11 @@ use std::collections::BTreeSet;
 use std::sync::atomic::{AtomicUsize, Ordering as AtomicOrdering};
 
 use atrament_semantic_command_graph::{
-    BoundedDependencyRequirementsError, CommandGraphError,
-    CommandGraphLimitError, CommandGraphLimits, CommandGraphSize, CommandNode,
-    DependencyRequirementsError, DependencySelectionError,
-    DependencySelectionSummary, DependencySummaryError,
-    MissingDependencyRequirement, command_graph_size,
+    BoundedDependencyRequirementsError, CommandDependencyNode,
+    CommandGraphError, CommandGraphLimitError, CommandGraphLimits,
+    CommandGraphSize, CommandNode, DependencyRequirementsError,
+    DependencySelectionError, DependencySelectionSummary,
+    DependencySummaryError, MissingDependencyRequirement, command_graph_size,
     dependency_selection_requirements,
     dependency_selection_requirements_bounded, dependency_selection_summary,
     validate_command_graph, validate_command_graph_limits,
@@ -54,7 +54,7 @@ fn node(id: u32, dependencies: &[u32]) -> CommandNode<u32> {
 
 #[test]
 fn empty_chain_and_diamond_graphs_are_valid() {
-    assert_eq!(validate_command_graph::<u32>(&[]), Ok(()));
+    assert_eq!(validate_command_graph::<CommandNode<u32>>(&[]), Ok(()));
     assert_eq!(
         validate_command_graph(&[
             node(1, &[]),
@@ -130,7 +130,7 @@ fn command_graph_size_counts_commands_and_explicit_edges_exactly() {
         }),
     );
     assert_eq!(
-        command_graph_size::<u32>(&[]),
+        command_graph_size::<CommandNode<u32>>(&[]),
         Ok(CommandGraphSize {
             commands: 0,
             dependency_edges: 0,
@@ -524,4 +524,55 @@ fn bounded_requirement_rejection_does_not_clone_identity_pairs() {
         ),
     );
     assert_eq!(IDENTITY_CLONES.load(AtomicOrdering::Relaxed), 0);
+}
+
+#[derive(Clone, Copy)]
+struct BorrowedNode<'graph> {
+    dependencies: &'graph [u32],
+    id: &'graph u32,
+}
+
+impl CommandDependencyNode for BorrowedNode<'_> {
+    type Identity = u32;
+
+    fn dependencies(&self) -> &[Self::Identity] {
+        self.dependencies
+    }
+
+    fn id(&self) -> &Self::Identity {
+        self.id
+    }
+}
+
+#[test]
+fn graph_validation_accepts_borrowed_node_views() {
+    let one = 1_u32;
+    let two = 2_u32;
+    let three = 3_u32;
+    let no_dependencies = [];
+    let depends_on_one = [1_u32];
+    let depends_on_two = [2_u32];
+    let nodes = [
+        BorrowedNode {
+            dependencies: &no_dependencies,
+            id: &one,
+        },
+        BorrowedNode {
+            dependencies: &depends_on_one,
+            id: &two,
+        },
+        BorrowedNode {
+            dependencies: &depends_on_two,
+            id: &three,
+        },
+    ];
+    assert_eq!(validate_command_graph(&nodes), Ok(()));
+    assert_eq!(
+        dependency_selection_summary(&nodes, &BTreeSet::from([three])),
+        Ok(DependencySelectionSummary {
+            missing_dependency_edges: 2,
+            required_commands: 3,
+            selected_commands: 1,
+        }),
+    );
 }
