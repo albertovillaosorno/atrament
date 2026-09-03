@@ -957,7 +957,7 @@ fn application_routes_atomic_batch_apply_through_owned_semantic_authority() {
         DirectEditBatchSimulationOutcome::ResourceRejected { .. }
     ));
     assert!(matches!(
-        session.apply_direct_edit_batch_bounded(bounded, zero_limits),
+        session.apply_direct_edit_batch_bounded(bounded.clone(), zero_limits),
         DirectEditBatchApplyOutcome::ResourceRejected { .. }
     ));
     assert_eq!(session.accepted_revision(), Some(&before_rejection));
@@ -991,6 +991,49 @@ fn application_routes_atomic_batch_apply_through_owned_semantic_authority() {
             revision,
         }),
     );
+
+    let DirectEditBatchApplyOutcome::Applied {
+        base: applied_base,
+        changes,
+        revision: applied,
+        ..
+    } = session.apply_direct_edit_batch(bounded)
+    else {
+        panic!("live-owner text batch must apply without caller bound");
+    };
+    assert_eq!(applied_base, revision);
+    assert_eq!(changes.len(), 1);
+    let current = session.accepted_revision().expect("batch revision");
+    let BlockContent::Paragraph(spans) =
+        &current.notebook.pages[0].flows[0].blocks[0].content
+    else {
+        panic!("batch fixture must remain paragraph");
+    };
+    assert_eq!(spans[0].id, span);
+    assert_eq!(spans[0].text, "bounded after");
+    assert_eq!(
+        session.history_availability(),
+        HistoryAvailabilityOutcome::Available(HistoryAvailability {
+            can_redo: false,
+            can_undo: true,
+            revision: applied,
+        }),
+    );
+
+    let HistoryTraversalOutcome::Traversed { revision: undone, .. } =
+        session.traverse_history(applied, HistoryDirection::Undo)
+    else {
+        panic!("live-owner text batch must Undo as one transaction");
+    };
+    let current = session.accepted_revision().expect("batch Undo revision");
+    let BlockContent::Paragraph(spans) =
+        &current.notebook.pages[0].flows[0].blocks[0].content
+    else {
+        panic!("batch Undo fixture must remain paragraph");
+    };
+    assert_eq!(spans[0].id, span);
+    assert_eq!(spans[0].text, "bounded before");
+    assert_ne!(undone, applied);
 }
 
 #[test]
