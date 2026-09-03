@@ -36,6 +36,7 @@
 
 //! Process-lifetime owner for disposable Atrament application state.
 
+use std::collections::BTreeSet;
 use std::fmt;
 
 use atrament_semantic_notebook::{
@@ -49,7 +50,10 @@ use atrament_semantic_notebook_port::{
     CommandTargetPreconditionOutcome, CommandTargetPreconditions,
     DirectEditBatchApplyOutcome, DirectEditBatchGraphLimitsOutcome,
     DirectEditBatchGraphSizeOutcome, DirectEditBatchProposal,
-    DirectEditBatchSimulationOutcome, DirectEditChangePreviewOutcome,
+    DirectEditBatchSelectionBoundedOutcome,
+    DirectEditBatchSelectionRequirementsOutcome,
+    DirectEditBatchSelectionSummaryOutcome, DirectEditBatchSimulationOutcome,
+    DirectEditChangePreviewOutcome,
     DirectEditProposal, DirectEditProposalOutcome, DirectEditSimulationOutcome,
     EditableSemanticValue, EditableValuePreconditionOutcome,
     HistoryAvailabilityOutcome, HistoryDirection, HistoryTraversalOutcome,
@@ -206,6 +210,52 @@ impl SessionApplication {
         batch: &DirectEditBatchProposal<CommandIdentity>,
     ) -> DirectEditBatchGraphSizeOutcome {
         self.semantic.direct_edit_batch_graph_size(batch)
+    }
+
+    /// Analyze omitted dependencies for one in-memory batch selection.
+    #[must_use]
+    pub fn direct_edit_batch_selection_requirements<CommandIdentity>(
+        &self,
+        batch: &DirectEditBatchProposal<CommandIdentity>,
+        selected: &BTreeSet<CommandIdentity>,
+    ) -> DirectEditBatchSelectionRequirementsOutcome<CommandIdentity>
+    where
+        CommandIdentity: Clone + Ord,
+    {
+        self.semantic
+            .direct_edit_batch_selection_requirements(batch, selected)
+    }
+
+    /// Analyze omitted dependencies under one caller-supplied report bound.
+    #[must_use]
+    pub fn direct_edit_batch_selection_requirements_bounded<CommandIdentity>(
+        &self,
+        batch: &DirectEditBatchProposal<CommandIdentity>,
+        selected: &BTreeSet<CommandIdentity>,
+        maximum_missing_edges: usize,
+    ) -> DirectEditBatchSelectionBoundedOutcome<CommandIdentity>
+    where
+        CommandIdentity: Clone + Ord,
+    {
+        self.semantic.direct_edit_batch_selection_requirements_bounded(
+            batch,
+            selected,
+            maximum_missing_edges,
+        )
+    }
+
+    /// Summarize one in-memory batch selection without materializing edges.
+    #[must_use]
+    pub fn direct_edit_batch_selection_summary<CommandIdentity>(
+        &self,
+        batch: &DirectEditBatchProposal<CommandIdentity>,
+        selected: &BTreeSet<CommandIdentity>,
+    ) -> DirectEditBatchSelectionSummaryOutcome<CommandIdentity>
+    where
+        CommandIdentity: Clone + Ord,
+    {
+        self.semantic
+            .direct_edit_batch_selection_summary(batch, selected)
     }
 
     /// Inspect in-memory semantic Undo and Redo availability.

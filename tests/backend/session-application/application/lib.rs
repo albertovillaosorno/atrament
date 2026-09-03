@@ -30,6 +30,7 @@
 // - Defaults:
 //   - Starts with empty draft fields and no accepted semantic revision.
 //
+use std::collections::BTreeSet;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::process::{Command, Stdio};
 
@@ -44,7 +45,9 @@ use atrament_semantic_notebook_port::{
     CommandTargetMaterialOutcome, CommandTargetPreconditionOutcome,
     CommandTargetPreconditions, DirectEditBatchApplyOutcome,
     DirectEditBatchGraphLimitsOutcome, DirectEditBatchGraphSizeOutcome,
-    DirectEditBatchProposal, DirectEditBatchSimulationOutcome,
+    DirectEditBatchProposal, DirectEditBatchSelectionBoundedOutcome,
+    DirectEditBatchSelectionRequirementsOutcome,
+    DirectEditBatchSelectionSummaryOutcome, DirectEditBatchSimulationOutcome,
     DirectEditChangePreviewOutcome, DirectEditEffectClass, DirectEditProposal,
     DirectEditProposalOutcome, DirectEditSimulationOutcome,
     EditableSemanticValue, EditableValuePreconditionOutcome,
@@ -504,6 +507,36 @@ fn application_routes_atomic_batch_apply_through_owned_semantic_authority() {
         session.direct_edit_batch_graph_limits(&empty, zero_limits),
         DirectEditBatchGraphLimitsOutcome::Admitted { revision, size },
     );
+    let selected = BTreeSet::new();
+    assert_eq!(
+        session.direct_edit_batch_selection_requirements(&empty, &selected),
+        DirectEditBatchSelectionRequirementsOutcome::Requirements {
+            missing: Vec::new(),
+            revision,
+        },
+    );
+    assert_eq!(
+        session.direct_edit_batch_selection_requirements_bounded(
+            &empty,
+            &selected,
+            0,
+        ),
+        DirectEditBatchSelectionBoundedOutcome::Requirements {
+            missing: Vec::new(),
+            revision,
+        },
+    );
+    let DirectEditBatchSelectionSummaryOutcome::Summarized {
+        revision: summary_revision,
+        summary,
+    } = session.direct_edit_batch_selection_summary(&empty, &selected)
+    else {
+        panic!("live owner must route selection summary");
+    };
+    assert_eq!(summary_revision, revision);
+    assert_eq!(summary.selected_commands, 0);
+    assert_eq!(summary.required_commands, 0);
+    assert_eq!(summary.missing_dependency_edges, 0);
     assert_eq!(
         session.simulate_direct_edit_batch_bounded(
             empty.clone(),
