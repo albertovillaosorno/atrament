@@ -7266,6 +7266,79 @@ fn semantic_history_traverses_candidate_replacement_snapshots() {
 }
 
 #[test]
+fn candidate_branch_after_undo_never_reuses_abandoned_redo_identities() {
+    let candidate_ids = IdentityAllocator::new();
+    let (first_candidate, _) =
+        candidate_notebook_with_span(&candidate_ids, "first candidate");
+    let (second_candidate, _) =
+        candidate_notebook_with_span(&candidate_ids, "second candidate");
+    let (third_candidate, third_span) =
+        candidate_notebook_with_span(&candidate_ids, "third candidate");
+    let mut service = SemanticNotebookSessionService::default();
+
+    let AcceptanceOutcome::Accepted { revision: first, .. } =
+        service.accept(first_candidate)
+    else {
+        panic!("first candidate must be accepted");
+    };
+    let AcceptanceOutcome::Accepted {
+        mapping: second_mapping,
+        revision: second,
+    } = service.accept(second_candidate)
+    else {
+        panic!("second candidate must be accepted");
+    };
+    let abandoned: BTreeSet<_> = second_mapping
+        .iter()
+        .map(|mapping| mapping.accepted)
+        .collect();
+    let HistoryTraversalOutcome::Traversed { revision: undone, .. } =
+        service.traverse_history(second, HistoryDirection::Undo)
+    else {
+        panic!("second candidate must Undo");
+    };
+    assert_ne!(undone, first);
+    assert_eq!(
+        service.history_availability(),
+        HistoryAvailabilityOutcome::Available(HistoryAvailability {
+            can_redo: true,
+            can_undo: false,
+            revision: undone,
+        }),
+    );
+
+    let AcceptanceOutcome::Accepted {
+        mapping: third_mapping,
+        revision: branched,
+    } = service.accept(third_candidate)
+    else {
+        panic!("third candidate must create a new branch");
+    };
+    assert!(
+        third_mapping
+            .iter()
+            .all(|mapping| !abandoned.contains(&mapping.accepted))
+    );
+    let third_span = accepted_for(&third_mapping, third_span);
+    assert!(!abandoned.contains(&third_span));
+    assert_eq!(
+        service.history_availability(),
+        HistoryAvailabilityOutcome::Available(HistoryAvailability {
+            can_redo: false,
+            can_undo: true,
+            revision: branched,
+        }),
+    );
+    assert_eq!(
+        service.traverse_history(branched, HistoryDirection::Redo),
+        HistoryTraversalOutcome::Boundary {
+            direction: HistoryDirection::Redo,
+            revision: branched,
+        },
+    );
+}
+
+#[test]
 fn semantic_history_undo_redo_preserves_stable_text_identity() {
     let candidate_ids = IdentityAllocator::new();
     let (candidate, candidate_span) =
