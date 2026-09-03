@@ -377,6 +377,7 @@ impl SessionApplication {
     }
 
     /// Simulate one transport-neutral direct-edit batch without mutation.
+    #[must_use]
     pub fn simulate_direct_edit_batch<CommandIdentity>(
         &self,
         batch: DirectEditBatchProposal<CommandIdentity>,
@@ -388,6 +389,7 @@ impl SessionApplication {
     }
 
     /// Simulate one caller-bounded direct-edit batch without mutation.
+    #[must_use]
     pub fn simulate_direct_edit_batch_bounded<CommandIdentity>(
         &self,
         batch: DirectEditBatchProposal<CommandIdentity>,
