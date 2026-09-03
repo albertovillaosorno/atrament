@@ -207,11 +207,18 @@ hardening. A nested first-child probe measured about 19 microseconds with
 siblings versus 186 microseconds before slice frames. These are implementation
 measurements, not product latency or resource guarantees.
 
+The same transport-neutral direct-edit batch can now be applied atomically after
+re-running its validation and simulation. Net mutations replay only the
+coalesced final semantic changes into a cloned accepted notebook, commit exactly
+one revision, and enter Undo history as one transaction. Net no-ops keep the
+current revision and history position, while middle-command failure and stale
+base remain no-effects. The discoverable `Apply` capability remains disabled.
+
 This is still not an admitted normalized command batch. Protocol normalization,
 command context and writable scope, published limits, complete impact expansion,
-diagnostics, retry handling, Validate, and Apply remain open. Candidate
-acceptance also enforces a public 256-level block nesting resource bound and
-iteratively dismantles rejected deep candidates before mutation.
+diagnostics, retry handling, and full Validate/Apply admission remain open.
+Candidate acceptance also enforces a public 256-level block nesting resource
+bound and iteratively dismantles rejected deep candidates before mutation.
 
 The task remains open for the complete first-release semantic vocabulary,
 format parsing and canonical serialization, migrations and round-trip fixtures,
@@ -453,10 +460,11 @@ allocate fresh revision identities, restored semantic identities remain stable,
 read-only availability exposes traversal boundaries, and a new edit after Undo
 discards the old redo branch. Dropping the session destroys populated history.
 
-The task remains open for transaction provenance, dependency-expanded derived
-impact, bounded history resource policy, retry/lost-receipt recovery, command
-Apply integration, cancellation/concurrency evidence, and browser/CLI/MCP
-parity.
+Transport-neutral direct-edit batch application now enters this same semantic
+history as one transaction, including multi-command batches. The task remains
+open for transaction provenance, dependency-expanded derived impact, bounded
+history resource policy, retry/lost-receipt recovery, cancellation/concurrency
+evidence, and browser/CLI/MCP parity.
 
 ### TODO - Implement rich clipboard intake
 
@@ -679,12 +687,18 @@ Validate the whole batch against one accepted snapshot, reject stale or invalid
 commands without partial mutation, and make retry behavior idempotent enough for
 CLI and MCP automation.
 
-Current design evidence covers stale bases, retry identity, no-op behavior,
-concurrent commits, scope escape, unsupported requests, forged identities,
-semantic local preconditions, middle-command failure, lost Apply receipts,
-normalized retry equality, invalid command dependencies, and typed application
-result classes. No tracked Rust application core exists yet, so executable apply
-remains open.
+Current executable foundation applies the transport-neutral ordered direct-edit
+batch through the same semantic simulation used for review. A successful net
+mutation commits exactly one accepted revision and one Undo transaction; a net
+no-op creates no revision, and stale or middle-command failure remains atomic.
+Validate/Apply semantic change and impact-seed evidence match for unchanged
+inputs.
+
+The task remains open for the normalized protocol/envelope, command-context and
+writable-scope admission, retry identity and lost-receipt recovery, published
+resource limits, complete dependency-expanded impact, diagnostics, transaction
+provenance, concurrent/cancellation fixtures, and browser/CLI/MCP parity. Until
+those exist, capability discovery intentionally does not advertise `Apply`.
 
 ### TODO - Implement impact-scoped recomputation
 

@@ -578,8 +578,20 @@ A caller-bounded report counts omitted edges before materializing pairs and
 rejects one over the supplied bound without truncation. Ordered batch graph
 preflight uses the same node view, so invalid graphs clone only identities
 carried by their typed rejection.
-No protocol normalizer, selective-rebatch capability, published product limit,
-Validate, or Apply capability is admitted yet.
+
+The same transport-neutral batch now has an atomic application foundation. Apply
+re-runs the existing validation and simulation, rechecks the accepted base, then
+replays only the coalesced final semantic changes into a cloned notebook before
+one commit. Multi-command mutation enters semantic Undo history as one
+transaction.
+
+A net semantic no-op keeps the current revision and history position.
+Middle-command failure and stale base produce no accepted mutation, and
+successful semantic change/impact-seed evidence matches prior simulation.
+
+No protocol normalizer, command-context/writable-scope admission, retry
+identity, selective-rebatch capability, published product limit, full Validate
+service, or discoverable Apply capability is admitted yet.
 
 Exact authored text and formula source are compared as currently accepted bytes;
 no Unicode normalization form is implied by this implementation evidence. The

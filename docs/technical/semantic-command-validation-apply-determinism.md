@@ -213,9 +213,18 @@ validation and semantic candidate work. Exact-limit inputs retain the same
 prediction as unbounded simulation, while over-limit input returns a typed
 resource rejection without truncation.
 
+A transport-neutral application foundation now consumes that same simulation.
+It rechecks the current accepted base before candidate replay, applies only the
+coalesced final semantic changes, and commits one revision for a net mutation.
+Executable fixtures compare successful simulation and application command
+outcomes, semantic changes, and impact seeds exactly; net no-op application does
+not allocate a revision, and a changed base rejects as stale. The accepted batch
+enters semantic history as one Undo transaction.
+
 These foundations change no advertised capability or published resource limit.
-Full Validate still requires protocol normalization, command context, complete
-dependency impact expansion, diagnostics, and Apply revalidation.
+Full Validate/Apply admission still requires protocol normalization, command
+context and writable scope, retry identity, complete dependency impact
+expansion, diagnostics, and adapter parity.
 
 ## Failure Modes
 

@@ -852,6 +852,85 @@ pub enum DirectEditBatchSimulationOutcome<CommandIdentity> {
     },
 }
 
+/// Atomic application result for one transport-neutral direct-edit batch.
+///
+/// This is an internal semantic application foundation. It does not by itself
+/// admit a serialized command protocol, command context, retry identity, or the
+/// discoverable `Apply` application capability.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum DirectEditBatchApplyOutcome<CommandIdentity> {
+    /// Net semantic mutation committed as exactly one accepted revision.
+    Applied {
+        /// Accepted base revision validated immediately before commit.
+        base: RevisionIdentity,
+        /// Ordered net semantic changes committed by the transaction.
+        changes: Vec<DirectEditSemanticChange>,
+        /// Ordered per-command validation and simulation evidence.
+        commands: Vec<DirectEditBatchCommandPrediction<CommandIdentity>>,
+        /// Conservative seeds for later dependency-expanded invalidation.
+        impact_seeds: Vec<DirectEditImpactSeed>,
+        /// Newly allocated accepted result revision.
+        revision: RevisionIdentity,
+    },
+    /// A validated semantic change could not be replayed into candidate state.
+    CandidateReplayFailed {
+        /// Accepted base revision whose candidate replay failed.
+        revision: RevisionIdentity,
+        /// Stable semantic target whose validated replacement was unavailable.
+        target: AcceptedIdentity,
+    },
+    /// Capability behavior changed before application validation.
+    CapabilityMismatch {
+        /// Current backend-owned capability behavior version.
+        current: CommandBehaviorVersion,
+        /// Capability behavior version bound by the batch.
+        expected: CommandBehaviorVersion,
+    },
+    /// Command dependency structure rejected before semantic candidate work.
+    DependencyGraphRejected {
+        /// Typed transport-neutral dependency graph failure.
+        reason: CommandGraphError<CommandIdentity>,
+    },
+    /// Revision allocation exhausted before a validated mutation could commit.
+    IdentityExhausted {
+        /// Identity sequence that could not allocate another revision.
+        sequence: IdentityExhausted,
+    },
+    /// Session has no accepted semantic revision to apply against.
+    NoAcceptedRevision,
+    /// Every command validated successfully while net semantic state is
+    /// unchanged.
+    NoOp {
+        /// Ordered per-command validation and simulation evidence.
+        commands: Vec<DirectEditBatchCommandPrediction<CommandIdentity>>,
+        /// Unchanged current accepted revision.
+        revision: RevisionIdentity,
+    },
+    /// One required command rejected and no accepted mutation occurred.
+    Rejected {
+        /// Command whose semantic validation rejected the batch.
+        command: CommandIdentity,
+        /// Successfully evaluated earlier commands; none were committed.
+        evaluated: Vec<DirectEditBatchCommandPrediction<CommandIdentity>>,
+        /// Later command identities deliberately not evaluated after failure.
+        not_evaluated: Vec<CommandIdentity>,
+        /// Typed reason the decisive command rejected.
+        reason: Box<DirectEditBatchCommandRejection<CommandIdentity>>,
+        /// Immutable accepted revision used for isolated validation.
+        revision: RevisionIdentity,
+    },
+    /// Caller-supplied coarse resource limits rejected before simulation.
+    ResourceRejected {
+        /// Typed exact command/dependency limit failure.
+        reason: CommandGraphLimitError,
+    },
+    /// Batch base revision is no longer the current accepted revision.
+    StaleBase {
+        /// Current accepted revision that rejected the stale application.
+        current: RevisionIdentity,
+    },
+}
+
 /// One version-bound single-target direct-edit proposal.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct DirectEditProposal {
@@ -1519,6 +1598,17 @@ pub trait SemanticNotebookSession {
         &mut self,
         candidate: Notebook<CandidateIdentity>,
     ) -> AcceptanceOutcome;
+
+    /// Atomically apply one validated in-memory direct-edit batch.
+    ///
+    /// The current foundation intentionally does not imply protocol, command
+    /// context, retry, or discoverable application-capability admission.
+    fn apply_direct_edit_batch<CommandIdentity>(
+        &mut self,
+        batch: DirectEditBatchProposal<CommandIdentity>,
+    ) -> DirectEditBatchApplyOutcome<CommandIdentity>
+    where
+        CommandIdentity: Clone + Ord;
 
     /// Check one previously bound command capability behavior version.
     fn check_command_capability_compatibility(

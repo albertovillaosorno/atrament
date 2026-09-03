@@ -62,8 +62,9 @@ use atrament_semantic_notebook_port::{
     CommandCapabilityCompatibilityOutcome, CommandFamilyAdmissionOutcome,
     CommandFamilyCapability, CommandResourceLimits, CommandTargetMaterial,
     CommandTargetMaterialOutcome, CommandTargetPreconditionOutcome,
-    CommandTargetPreconditions, DirectEditBatchCommand,
-    DirectEditBatchCommandPrediction, DirectEditBatchCommandRejection,
+    CommandTargetPreconditions, DirectEditBatchApplyOutcome,
+    DirectEditBatchCommand, DirectEditBatchCommandPrediction,
+    DirectEditBatchCommandRejection,
     DirectEditBatchGraphLimitsOutcome, DirectEditBatchGraphSizeOutcome,
     DirectEditBatchProposal,
     DirectEditBatchSelectionBoundedOutcome as BoundedSelectionOutcome,
@@ -293,6 +294,108 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
         self.redo_notebooks.clear();
         self.current = Some(AcceptedRevision { id: revision, notebook });
         AcceptanceOutcome::Accepted { mapping, revision }
+    }
+
+    fn apply_direct_edit_batch<CommandIdentity>(
+        &mut self,
+        batch: DirectEditBatchProposal<CommandIdentity>,
+    ) -> DirectEditBatchApplyOutcome<CommandIdentity>
+    where
+        CommandIdentity: Clone + Ord,
+    {
+        let simulation = self.simulate_direct_edit_batch(batch);
+        let (base, changes, commands, impact_seeds) = match simulation {
+            DirectEditBatchSimulationOutcome::CapabilityMismatch {
+                current,
+                expected,
+            } => {
+                return DirectEditBatchApplyOutcome::CapabilityMismatch {
+                    current,
+                    expected,
+                };
+            },
+            DirectEditBatchSimulationOutcome::DependencyGraphRejected {
+                reason,
+            } => {
+                return DirectEditBatchApplyOutcome::DependencyGraphRejected {
+                    reason,
+                };
+            },
+            DirectEditBatchSimulationOutcome::NoAcceptedRevision => {
+                return DirectEditBatchApplyOutcome::NoAcceptedRevision;
+            },
+            DirectEditBatchSimulationOutcome::Predicted {
+                commands,
+                effect: DirectEditEffectClass::NoOp,
+                revision,
+                ..
+            } => {
+                return DirectEditBatchApplyOutcome::NoOp {
+                    commands,
+                    revision,
+                };
+            },
+            DirectEditBatchSimulationOutcome::Predicted {
+                changes,
+                commands,
+                effect: DirectEditEffectClass::Mutation,
+                impact_seeds,
+                revision,
+            } => (revision, changes, commands, impact_seeds),
+            DirectEditBatchSimulationOutcome::Rejected {
+                command,
+                evaluated,
+                not_evaluated,
+                reason,
+                revision,
+            } => {
+                return DirectEditBatchApplyOutcome::Rejected {
+                    command,
+                    evaluated,
+                    not_evaluated,
+                    reason,
+                    revision,
+                };
+            },
+            DirectEditBatchSimulationOutcome::ResourceRejected { reason } => {
+                return DirectEditBatchApplyOutcome::ResourceRejected { reason };
+            },
+            DirectEditBatchSimulationOutcome::StaleBase { current } => {
+                return DirectEditBatchApplyOutcome::StaleBase { current };
+            },
+        };
+        let Some(current) = self.current.as_ref() else {
+            return DirectEditBatchApplyOutcome::NoAcceptedRevision;
+        };
+        if current.id != base {
+            return DirectEditBatchApplyOutcome::StaleBase {
+                current: current.id,
+            };
+        }
+        let mut notebook = current.notebook.clone();
+        for change in &changes {
+            if !apply_direct_edit_change(&mut notebook, change) {
+                return DirectEditBatchApplyOutcome::CandidateReplayFailed {
+                    revision: base,
+                    target: change.target,
+                };
+            }
+        }
+        let revision = match self.commit_semantic_edit(notebook) {
+            Ok(revision) => revision,
+            Err(sequence) => {
+                return DirectEditBatchApplyOutcome::IdentityExhausted {
+                    sequence,
+                };
+            },
+        };
+        DirectEditBatchApplyOutcome::Applied {
+            base,
+            changes,
+            commands,
+            impact_seeds,
+            revision,
+        }
     }
 
     fn check_command_capability_compatibility(
@@ -3214,6 +3317,35 @@ fn replace_formula_content(
         | BlockContent::Paragraph(_)
         | BlockContent::Rule
         | BlockContent::Unresolved(_) => false,
+    }
+}
+
+fn apply_direct_edit_change(
+    notebook: &mut Notebook<AcceptedIdentity>,
+    change: &DirectEditSemanticChange,
+) -> bool {
+    match &change.after {
+        EditableSemanticValue::Formula { mode, source } => {
+            replace_formula_value(
+                notebook,
+                change.target,
+                *mode,
+                source.clone(),
+            )
+        },
+        EditableSemanticValue::PageProfile(profile) => {
+            replace_page_profile_value(
+                notebook,
+                change.target,
+                *profile,
+            )
+        },
+        EditableSemanticValue::TableRowRole(role) => {
+            replace_table_row_role_value(notebook, change.target, *role)
+        },
+        EditableSemanticValue::Text(text) => {
+            replace_text_value(notebook, change.target, text.clone())
+        },
     }
 }
 

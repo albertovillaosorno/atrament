@@ -60,8 +60,9 @@ use atrament_semantic_notebook_port::{
     CommandCapabilityCompatibilityOutcome, CommandFamilyAdmissionOutcome,
     CommandFamilyCapability, CommandResourceLimits, CommandTargetMaterial,
     CommandTargetMaterialOutcome, CommandTargetPreconditionOutcome,
-    CommandTargetPreconditions, DirectEditBatchCommand,
-    DirectEditBatchCommandPrediction, DirectEditBatchCommandRejection,
+    CommandTargetPreconditions, DirectEditBatchApplyOutcome,
+    DirectEditBatchCommand, DirectEditBatchCommandPrediction,
+    DirectEditBatchCommandRejection,
     DirectEditBatchGraphLimitsOutcome, DirectEditBatchGraphSizeOutcome,
     DirectEditBatchProposal, DirectEditBatchSelectionBoundedOutcome,
     DirectEditBatchSelectionRequirementsOutcome,
@@ -3255,6 +3256,231 @@ fn ordered_batch_index_waits_until_every_requested_target_is_resolved() {
     assert_eq!(changes.len(), 2);
     assert!(changes.iter().any(|change| change.target == first));
     assert!(changes.iter().any(|change| change.target == second));
+}
+
+#[test]
+fn direct_edit_batch_apply_matches_prediction_and_undoes_as_one_transaction() {
+    let ids = IdentityAllocator::new();
+    let (candidate, first, second, _) =
+        candidate_notebook_with_three_spans(&ids);
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision: base } =
+        session.accept(candidate)
+    else {
+        panic!("three-span candidate must be accepted");
+    };
+    let first = accepted_for(&mapping, first);
+    let second = accepted_for(&mapping, second);
+    let batch = DirectEditBatchProposal {
+        base,
+        capability_version: CommandBehaviorVersion(1),
+        commands: vec![
+            text_batch_command(1, &[], first, "one", "ONE"),
+            text_batch_command(2, &[], second, "two", "TWO"),
+        ],
+    };
+    let predicted = session.simulate_direct_edit_batch(batch.clone());
+    let DirectEditBatchSimulationOutcome::Predicted {
+        changes: predicted_changes,
+        commands: predicted_commands,
+        effect: DirectEditEffectClass::Mutation,
+        impact_seeds: predicted_impact,
+        revision: predicted_base,
+    } = predicted
+    else {
+        panic!("valid batch must predict a mutation");
+    };
+    assert_eq!(predicted_base, base);
+
+    let applied = session.apply_direct_edit_batch(batch);
+    let DirectEditBatchApplyOutcome::Applied {
+        base: applied_base,
+        changes,
+        commands,
+        impact_seeds,
+        revision: result,
+    } = applied
+    else {
+        panic!("valid batch must apply: {applied:?}");
+    };
+    assert_eq!(applied_base, base);
+    assert_eq!(changes, predicted_changes);
+    assert_eq!(commands, predicted_commands);
+    assert_eq!(impact_seeds, predicted_impact);
+    assert_ne!(result, base);
+    let current = session.current().expect("applied revision");
+    let BlockContent::Paragraph(spans) =
+        &current.notebook.pages[0].flows[0].blocks[0].content
+    else {
+        panic!("fixture must remain a paragraph");
+    };
+    assert_eq!(spans[0].id, first);
+    assert_eq!(spans[0].text, "ONE");
+    assert_eq!(spans[1].id, second);
+    assert_eq!(spans[1].text, "TWO");
+
+    let HistoryTraversalOutcome::Traversed { revision: undone, .. } =
+        session.traverse_history(result, HistoryDirection::Undo)
+    else {
+        panic!("batch application must enter history as one transaction");
+    };
+    let current = session.current().expect("Undo revision");
+    let BlockContent::Paragraph(spans) =
+        &current.notebook.pages[0].flows[0].blocks[0].content
+    else {
+        panic!("Undo fixture must remain a paragraph");
+    };
+    assert_eq!(spans[0].text, "one");
+    assert_eq!(spans[1].text, "two");
+    assert_ne!(undone, base);
+    assert_eq!(
+        session.history_availability(),
+        HistoryAvailabilityOutcome::Available(HistoryAvailability {
+            can_redo: true,
+            can_undo: false,
+            revision: undone,
+        }),
+    );
+}
+
+#[test]
+fn direct_edit_batch_apply_net_noop_keeps_revision_and_history_position() {
+    let ids = IdentityAllocator::new();
+    let (candidate, span) = candidate_notebook_with_span(&ids, "base text");
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(candidate)
+    else {
+        panic!("candidate must be accepted");
+    };
+    let target = accepted_for(&mapping, span);
+    let before = session.current().expect("accepted revision").clone();
+    let batch = DirectEditBatchProposal {
+        base: revision,
+        capability_version: CommandBehaviorVersion(1),
+        commands: vec![
+            text_batch_command(1, &[], target, "base text", "changed"),
+            text_batch_command(2, &[1], target, "changed", "base text"),
+        ],
+    };
+
+    let outcome = session.apply_direct_edit_batch(batch);
+    let DirectEditBatchApplyOutcome::NoOp {
+        commands,
+        revision: unchanged,
+    } = outcome
+    else {
+        panic!("change-then-revert must apply as a no-op: {outcome:?}");
+    };
+    assert_eq!(commands.len(), 2);
+    assert_eq!(unchanged, revision);
+    assert_eq!(session.current(), Some(&before));
+    assert_eq!(
+        session.history_availability(),
+        HistoryAvailabilityOutcome::Available(HistoryAvailability {
+            can_redo: false,
+            can_undo: false,
+            revision,
+        }),
+    );
+}
+
+#[test]
+fn direct_edit_batch_apply_middle_failure_is_atomic() {
+    let ids = IdentityAllocator::new();
+    let (candidate, first, second, third) =
+        candidate_notebook_with_three_spans(&ids);
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(candidate)
+    else {
+        panic!("three-span candidate must be accepted");
+    };
+    let first = accepted_for(&mapping, first);
+    let second = accepted_for(&mapping, second);
+    let third = accepted_for(&mapping, third);
+    let batch = DirectEditBatchProposal {
+        base: revision,
+        capability_version: CommandBehaviorVersion(1),
+        commands: vec![
+            text_batch_command(1, &[], first, "one", "ONE"),
+            text_batch_command(2, &[], second, "wrong", "TWO"),
+            text_batch_command(3, &[], third, "three", "THREE"),
+        ],
+    };
+    let before = session.current().expect("accepted revision").clone();
+    let predicted = session.simulate_direct_edit_batch(batch.clone());
+
+    let applied = session.apply_direct_edit_batch(batch);
+    let DirectEditBatchApplyOutcome::Rejected {
+        command,
+        evaluated,
+        not_evaluated,
+        reason,
+        revision: rejected_revision,
+    } = applied
+    else {
+        panic!("middle failure must reject application: {applied:?}");
+    };
+    let DirectEditBatchSimulationOutcome::Rejected {
+        command: predicted_command,
+        evaluated: predicted_evaluated,
+        not_evaluated: predicted_not_evaluated,
+        reason: predicted_reason,
+        revision: predicted_revision,
+    } = predicted
+    else {
+        panic!("middle failure must also reject simulation");
+    };
+    assert_eq!(command, predicted_command);
+    assert_eq!(evaluated, predicted_evaluated);
+    assert_eq!(not_evaluated, predicted_not_evaluated);
+    assert_eq!(reason, predicted_reason);
+    assert_eq!(rejected_revision, predicted_revision);
+    assert_eq!(session.current(), Some(&before));
+}
+
+#[test]
+fn direct_edit_batch_apply_refuses_stale_base_after_another_commit() {
+    let ids = IdentityAllocator::new();
+    let (candidate, span) = candidate_notebook_with_span(&ids, "base text");
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision: base } =
+        session.accept(candidate)
+    else {
+        panic!("candidate must be accepted");
+    };
+    let target = accepted_for(&mapping, span);
+    let batch = DirectEditBatchProposal {
+        base,
+        capability_version: CommandBehaviorVersion(1),
+        commands: vec![text_batch_command(
+            1,
+            &[],
+            target,
+            "base text",
+            "batch text",
+        )],
+    };
+    assert!(matches!(
+        session.simulate_direct_edit_batch(batch.clone()),
+        DirectEditBatchSimulationOutcome::Predicted {
+            effect: DirectEditEffectClass::Mutation,
+            ..
+        }
+    ));
+    let TextEditOutcome::Applied { revision: current, .. } =
+        session.replace_text(base, target, String::from("concurrent edit"))
+    else {
+        panic!("intervening direct edit must apply");
+    };
+    let before = session.current().expect("intervening revision").clone();
+
+    assert_eq!(
+        session.apply_direct_edit_batch(batch),
+        DirectEditBatchApplyOutcome::StaleBase { current },
+    );
+    assert_eq!(session.current(), Some(&before));
 }
 
 #[test]
