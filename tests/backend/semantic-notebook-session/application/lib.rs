@@ -2084,6 +2084,131 @@ fn ordered_asset_reference_chain_replaces_then_removes_one_figure_reference() {
 }
 
 #[test]
+fn ordered_provenance_chain_requires_dependency_and_coalesces() {
+    let ids = IdentityAllocator::new();
+    let (candidate, candidate_ids) = candidate_notebook_with_provenance(&ids);
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision: base } =
+        session.accept(candidate)
+    else {
+        panic!("provenance chain candidate must be accepted");
+    };
+    let provenance = accepted_for(&mapping, candidate_ids.edited);
+    let before = session.current().expect("provenance chain base").clone();
+    let value = |kind, reference: Option<&str>| {
+        EditableSemanticValue::Provenance {
+            kind,
+            reference: reference.map(str::to_owned),
+        }
+    };
+    let command = |
+        id,
+        dependencies,
+        expected,
+        requested,
+    | DirectEditBatchCommand {
+        dependencies,
+        id,
+        preconditions: CommandTargetPreconditions {
+            expected_value: Some(expected),
+            identity: IdentityPrecondition {
+                expected_kind: Some(SemanticIdentityKind::Provenance),
+                expected_owner: IdentityOwnerExpectation::Any,
+            },
+            requested_family: SemanticCommandFamily::Provenance,
+        },
+        requested,
+        target: provenance,
+    };
+    let original = value(ProvenanceKind::Supplied, Some("source:old"));
+    let middle = value(ProvenanceKind::Cited, Some("source:mid"));
+    let final_value = value(ProvenanceKind::Derived, None);
+    let rejected = session.simulate_direct_edit_batch(DirectEditBatchProposal {
+        base,
+        capability_version: CommandBehaviorVersion(4),
+        commands: vec![
+            command(1_u32, vec![], original.clone(), middle.clone()),
+            command(2_u32, vec![], middle.clone(), final_value.clone()),
+        ],
+    });
+    assert!(matches!(
+        rejected,
+        DirectEditBatchSimulationOutcome::Rejected {
+            command: 2,
+            reason,
+            ..
+        } if matches!(
+            *reason,
+            DirectEditBatchCommandRejection::MissingPriorTargetDependency {
+                dependency: 1,
+                target,
+            } if target == provenance
+        )
+    ));
+    assert_eq!(session.current(), Some(&before));
+
+    let batch = DirectEditBatchProposal {
+        base,
+        capability_version: CommandBehaviorVersion(4),
+        commands: vec![
+            command(1_u32, vec![], original.clone(), middle.clone()),
+            command(2_u32, vec![1], middle.clone(), final_value.clone()),
+        ],
+    };
+    let DirectEditBatchSimulationOutcome::Predicted {
+        changes,
+        commands,
+        effect: DirectEditEffectClass::Mutation,
+        ..
+    } = session.simulate_direct_edit_batch(batch.clone())
+    else {
+        panic!("dependent provenance chain must simulate");
+    };
+    assert_eq!(commands.len(), 2);
+    assert_eq!(commands[0].change, Some(DirectEditSemanticChange {
+        after: middle.clone(),
+        before: original.clone(),
+        family: SemanticCommandFamily::Provenance,
+        target: provenance,
+    }));
+    assert_eq!(commands[1].change, Some(DirectEditSemanticChange {
+        after: final_value.clone(),
+        before: middle,
+        family: SemanticCommandFamily::Provenance,
+        target: provenance,
+    }));
+    assert_eq!(changes, vec![DirectEditSemanticChange {
+        after: final_value,
+        before: original,
+        family: SemanticCommandFamily::Provenance,
+        target: provenance,
+    }]);
+
+    let DirectEditBatchApplyOutcome::Applied { revision: applied, .. } =
+        session.apply_direct_edit_batch(batch)
+    else {
+        panic!("dependent provenance chain must apply");
+    };
+    let current = session.current().expect("provenance chain revision");
+    let changed = current
+        .notebook
+        .provenance
+        .iter()
+        .find(|record| record.id == provenance)
+        .expect("provenance chain record");
+    assert_eq!(changed.kind, ProvenanceKind::Derived);
+    assert_eq!(changed.reference, None);
+
+    let HistoryTraversalOutcome::Traversed { .. } =
+        session.traverse_history(applied, HistoryDirection::Undo)
+    else {
+        panic!("provenance chain must Undo as one transaction");
+    };
+    let current = session.current().expect("provenance chain Undo");
+    assert_eq!(current.notebook, before.notebook);
+}
+
+#[test]
 fn asset_reference_rejects_identity_not_present_in_current_revision() {
     let ids = IdentityAllocator::new();
     let (first, first_ids) = candidate_notebook_with_figure_assets(&ids);
