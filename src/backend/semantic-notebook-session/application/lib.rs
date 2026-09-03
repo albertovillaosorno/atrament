@@ -497,14 +497,18 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
     }
 
     fn command_capability_snapshot(&self) -> SemanticCommandCapabilitySnapshot {
-        const VERSION: CommandBehaviorVersion = CommandBehaviorVersion(2);
-        const FAMILY_CAPABILITIES: [CommandFamilyCapability; 3] = [
+        const VERSION: CommandBehaviorVersion = CommandBehaviorVersion(3);
+        const FAMILY_CAPABILITIES: [CommandFamilyCapability; 4] = [
+            CommandFamilyCapability {
+                behavior_version: CommandBehaviorVersion(1),
+                family: SemanticCommandFamily::AssetReference,
+            },
             CommandFamilyCapability {
                 behavior_version: CommandBehaviorVersion(1),
                 family: SemanticCommandFamily::DocumentConstraint,
             },
             CommandFamilyCapability {
-                behavior_version: VERSION,
+                behavior_version: CommandBehaviorVersion(2),
                 family: SemanticCommandFamily::StructuredContent,
             },
             CommandFamilyCapability {
@@ -962,6 +966,7 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
                 ..
             } => (requested_mode, requested_source),
             DirectEditSimulationOutcome::Applicable { .. }
+            | DirectEditSimulationOutcome::InvalidAssetReference { .. }
             | DirectEditSimulationOutcome::InvalidPageProfile { .. }
             | DirectEditSimulationOutcome::InvalidTableGrid { .. }
             | DirectEditSimulationOutcome::TargetNotEditableValue { .. }
@@ -1058,6 +1063,7 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
                 ..
             } => requested,
             DirectEditSimulationOutcome::Applicable { .. }
+            | DirectEditSimulationOutcome::InvalidAssetReference { .. }
             | DirectEditSimulationOutcome::InvalidMathematics { .. }
             | DirectEditSimulationOutcome::InvalidTableGrid { .. }
             | DirectEditSimulationOutcome::TargetNotEditableValue { .. }
@@ -1141,6 +1147,7 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
                 ..
             } => requested,
             DirectEditSimulationOutcome::Applicable { .. }
+            | DirectEditSimulationOutcome::InvalidAssetReference { .. }
             | DirectEditSimulationOutcome::InvalidMathematics { .. }
             | DirectEditSimulationOutcome::InvalidPageProfile { .. }
             | DirectEditSimulationOutcome::TargetNotEditableValue { .. }
@@ -1238,6 +1245,7 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
                 ..
             } => requested_role,
             DirectEditSimulationOutcome::Applicable { .. }
+            | DirectEditSimulationOutcome::InvalidAssetReference { .. }
             | DirectEditSimulationOutcome::InvalidMathematics { .. }
             | DirectEditSimulationOutcome::InvalidPageProfile { .. }
             | DirectEditSimulationOutcome::InvalidTableGrid { .. }
@@ -1311,6 +1319,7 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
                 ..
             } => requested_text,
             DirectEditSimulationOutcome::Applicable { .. }
+            | DirectEditSimulationOutcome::InvalidAssetReference { .. }
             | DirectEditSimulationOutcome::InvalidMathematics { .. }
             | DirectEditSimulationOutcome::InvalidPageProfile { .. }
             | DirectEditSimulationOutcome::InvalidTableGrid { .. }
@@ -2386,17 +2395,9 @@ fn index_direct_edit_blocks_frame<'notebook>(
                 index, spans, targets, block.id, flow, page, revision,
             );
         },
-        BlockContent::Figure(figure) => {
-            index_direct_edit_spans(
-                index,
-                &figure.caption,
-                targets,
-                figure.id,
-                flow,
-                page,
-                revision,
-            );
-        },
+        BlockContent::Figure(figure) => index_direct_edit_figure(
+            figure, block.id, flow, page, index, targets, revision,
+        ),
         BlockContent::List(list) => {
             if !list.items.is_empty() {
                 stack.push(DirectEditBatchIndexFrame::ListItems {
@@ -2441,6 +2442,42 @@ fn index_direct_edit_blocks_frame<'notebook>(
         },
         BlockContent::Rule | BlockContent::Unresolved(_) => {},
     }
+}
+
+fn index_direct_edit_figure(
+    figure: &Figure<AcceptedIdentity>,
+    block: AcceptedIdentity,
+    flow: AcceptedIdentity,
+    page: AcceptedIdentity,
+    index: &mut DirectEditBatchIndex,
+    targets: &BTreeSet<AcceptedIdentity>,
+    revision: atrament_semantic_notebook::RevisionIdentity,
+) {
+    if targets.contains(&figure.id) {
+        insert_direct_edit_material(
+            index,
+            figure.id,
+            SemanticIdentityDescriptor {
+                kind: SemanticIdentityKind::Figure,
+                owner: Some(block),
+            },
+            EditableSemanticValue::AssetReference(figure.asset),
+            DirectEditImpactScope::BlockFlow { block, flow, page },
+            revision,
+        );
+        if index.materials.len() == targets.len() {
+            return;
+        }
+    }
+    index_direct_edit_spans(
+        index,
+        &figure.caption,
+        targets,
+        figure.id,
+        flow,
+        page,
+        revision,
+    );
 }
 
 fn index_direct_edit_list_items_frame<'notebook>(
@@ -2784,14 +2821,14 @@ fn direct_edit_impact_scope(
         SemanticCommandFamily::DocumentConstraint => {
             direct_edit_document_constraint_scope(notebook, change.target)
         },
-        SemanticCommandFamily::StructuredContent => {
+        SemanticCommandFamily::AssetReference
+        | SemanticCommandFamily::StructuredContent => {
             direct_edit_structured_scope(notebook, change.target)
         },
         SemanticCommandFamily::TextContent => {
             direct_edit_text_scope(notebook, change.target)
         },
-        SemanticCommandFamily::AssetReference
-        | SemanticCommandFamily::BlockInsertionAndDeletion
+        SemanticCommandFamily::BlockInsertionAndDeletion
         | SemanticCommandFamily::OrderingAndGrouping
         | SemanticCommandFamily::Provenance
         | SemanticCommandFamily::SpatialConstraint
@@ -2960,14 +2997,15 @@ where
         },
     };
     let simulation = simulate_prepared_direct_edit(checked, requested);
+    let asset_checked = validate_asset_reference(notebook, simulation);
     let validated_simulation = if metadata.indexed {
         validate_batch_table_cell_span(
             table_by_cell,
             table_overlays,
-            simulation,
+            asset_checked,
         )
     } else {
-        simulation
+        asset_checked
     };
     batch_command_prediction(materials, id, metadata, validated_simulation)
 }
@@ -3105,9 +3143,8 @@ fn batch_command_prediction<CommandIdentity>(
                 target,
             })
         },
-        outcome @ (DirectEditSimulationOutcome::InvalidMathematics {
-            ..
-        }
+        outcome @ (DirectEditSimulationOutcome::InvalidAssetReference { .. }
+        | DirectEditSimulationOutcome::InvalidMathematics { .. }
         | DirectEditSimulationOutcome::InvalidPageProfile { .. }
         | DirectEditSimulationOutcome::InvalidTableGrid { .. }
         | DirectEditSimulationOutcome::NoAcceptedRevision
@@ -3202,6 +3239,9 @@ const fn editable_value_kind(
     value: &EditableSemanticValue,
 ) -> EditableSemanticValueKind {
     match value {
+        EditableSemanticValue::AssetReference(_) => {
+            EditableSemanticValueKind::AssetReference
+        },
         EditableSemanticValue::Formula { .. } => {
             EditableSemanticValueKind::Formula
         },
@@ -3259,7 +3299,37 @@ fn simulate_direct_edit_material_in_notebook(
     let Some(accepted_notebook) = notebook else {
         return simulation;
     };
-    validate_single_table_cell_span(accepted_notebook, simulation)
+    let asset_checked = validate_asset_reference(accepted_notebook, simulation);
+    validate_single_table_cell_span(accepted_notebook, asset_checked)
+}
+
+fn validate_asset_reference(
+    notebook: &Notebook<AcceptedIdentity>,
+    simulation: DirectEditSimulation,
+) -> DirectEditSimulation {
+    let DirectEditSimulationOutcome::Applicable {
+        requested: EditableSemanticValue::AssetReference(Some(reference)),
+        revision,
+        target,
+        ..
+    } = &simulation.outcome
+    else {
+        return simulation;
+    };
+    let actual = semantic_identity_descriptor(notebook, *reference)
+        .map(|descriptor| descriptor.kind);
+    if actual == Some(SemanticIdentityKind::Asset) {
+        return simulation;
+    }
+    DirectEditSimulation {
+        before: simulation.before,
+        outcome: DirectEditSimulationOutcome::InvalidAssetReference {
+            actual,
+            reference: *reference,
+            revision: *revision,
+            target: *target,
+        },
+    }
 }
 
 fn validate_batch_table_cell_span(
@@ -3425,7 +3495,8 @@ fn simulate_prepared_direct_edit(
                 };
             }
         },
-        EditableSemanticValue::TableCellSpan(_)
+        EditableSemanticValue::AssetReference(_)
+        | EditableSemanticValue::TableCellSpan(_)
         | EditableSemanticValue::TableRowRole(_)
         | EditableSemanticValue::Text(_) => {},
     }
@@ -3456,6 +3527,9 @@ const fn direct_edit_family(
     value: &EditableSemanticValue,
 ) -> SemanticCommandFamily {
     match value {
+        EditableSemanticValue::AssetReference(_) => {
+            SemanticCommandFamily::AssetReference
+        },
         EditableSemanticValue::Formula { .. }
         | EditableSemanticValue::TableCellSpan(_)
         | EditableSemanticValue::TableRowRole(_) => {
@@ -3496,10 +3570,11 @@ fn editable_semantic_value(
             table_row_role_value(notebook, target)
                 .map(EditableSemanticValue::TableRowRole)
         },
+        SemanticIdentityKind::Figure => figure_value(notebook, target)
+            .map(|figure| EditableSemanticValue::AssetReference(figure.asset)),
         SemanticIdentityKind::Asset
         | SemanticIdentityKind::Block(_)
         | SemanticIdentityKind::Constraint
-        | SemanticIdentityKind::Figure
         | SemanticIdentityKind::Flow
         | SemanticIdentityKind::List
         | SemanticIdentityKind::ListItem
@@ -3510,6 +3585,135 @@ fn editable_semantic_value(
         | SemanticIdentityKind::Style
         | SemanticIdentityKind::Table => None,
     }
+}
+
+fn figure_blocks_value(
+    blocks: &[Block<AcceptedIdentity>],
+    target: AcceptedIdentity,
+) -> Option<&Figure<AcceptedIdentity>> {
+    for block in blocks {
+        match &block.content {
+            BlockContent::Callout(children)
+            | BlockContent::Freeform(children) => {
+                if let Some(figure) = figure_blocks_value(children, target) {
+                    return Some(figure);
+                }
+            },
+            BlockContent::Figure(figure) if figure.id == target => {
+                return Some(figure);
+            },
+            BlockContent::List(list) => {
+                for item in &list.items {
+                    if let Some(figure) =
+                        figure_blocks_value(&item.blocks, target)
+                    {
+                        return Some(figure);
+                    }
+                }
+            },
+            BlockContent::Table(table) => {
+                for row in &table.rows {
+                    for cell in &row.cells {
+                        if let Some(figure) =
+                            figure_blocks_value(&cell.blocks, target)
+                        {
+                            return Some(figure);
+                        }
+                    }
+                }
+            },
+            BlockContent::Date(_)
+            | BlockContent::Figure(_)
+            | BlockContent::Heading(_)
+            | BlockContent::Mathematics(_)
+            | BlockContent::Paragraph(_)
+            | BlockContent::Rule
+            | BlockContent::Unresolved(_) => {},
+        }
+    }
+    None
+}
+
+fn figure_value(
+    notebook: &Notebook<AcceptedIdentity>,
+    target: AcceptedIdentity,
+) -> Option<&Figure<AcceptedIdentity>> {
+    for page in &notebook.pages {
+        for flow in &page.flows {
+            if let Some(figure) = figure_blocks_value(&flow.blocks, target) {
+                return Some(figure);
+            }
+        }
+    }
+    None
+}
+
+fn replace_figure_asset_blocks(
+    blocks: &mut [Block<AcceptedIdentity>],
+    target: AcceptedIdentity,
+    asset: Option<AcceptedIdentity>,
+) -> bool {
+    for block in blocks {
+        match &mut block.content {
+            BlockContent::Callout(children)
+            | BlockContent::Freeform(children) => {
+                if replace_figure_asset_blocks(children, target, asset) {
+                    return true;
+                }
+            },
+            BlockContent::Figure(figure) if figure.id == target => {
+                figure.asset = asset;
+                return true;
+            },
+            BlockContent::List(list) => {
+                for item in &mut list.items {
+                    if replace_figure_asset_blocks(
+                        &mut item.blocks,
+                        target,
+                        asset,
+                    ) {
+                        return true;
+                    }
+                }
+            },
+            BlockContent::Table(table) => {
+                for row in &mut table.rows {
+                    for cell in &mut row.cells {
+                        if replace_figure_asset_blocks(
+                            &mut cell.blocks,
+                            target,
+                            asset,
+                        ) {
+                            return true;
+                        }
+                    }
+                }
+            },
+            BlockContent::Date(_)
+            | BlockContent::Figure(_)
+            | BlockContent::Heading(_)
+            | BlockContent::Mathematics(_)
+            | BlockContent::Paragraph(_)
+            | BlockContent::Rule
+            | BlockContent::Unresolved(_) => {},
+        }
+    }
+    false
+}
+
+fn replace_figure_asset_value(
+    notebook: &mut Notebook<AcceptedIdentity>,
+    target: AcceptedIdentity,
+    asset: Option<AcceptedIdentity>,
+) -> bool {
+    for page in &mut notebook.pages {
+        for flow in &mut page.flows {
+            if replace_figure_asset_blocks(&mut flow.blocks, target, asset) {
+                return true;
+            }
+        }
+    }
+    false
 }
 
 fn formula_value(
@@ -3636,6 +3840,9 @@ fn apply_direct_edit_change(
     change: &DirectEditSemanticChange,
 ) -> bool {
     match &change.after {
+        EditableSemanticValue::AssetReference(reference) => {
+            replace_figure_asset_value(notebook, change.target, *reference)
+        },
         EditableSemanticValue::Formula { mode, source } => {
             replace_formula_value(
                 notebook,

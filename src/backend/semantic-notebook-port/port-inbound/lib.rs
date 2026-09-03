@@ -421,9 +421,11 @@ pub enum TextEditOutcome {
     },
 }
 
-/// Kind of one accepted semantic value with established direct-edit authority.
+/// Kind of one accepted semantic value with established generic edit authority.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum EditableSemanticValueKind {
+    /// Optional reference to one already-admitted session asset.
+    AssetReference,
     /// Structured mathematical source and presentation family.
     Formula,
     /// Complete exact physical page-profile geometry.
@@ -436,9 +438,11 @@ pub enum EditableSemanticValueKind {
     Text,
 }
 
-/// Accepted semantic value families with established direct-edit authority.
+/// Accepted semantic value families with established generic edit authority.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum EditableSemanticValue {
+    /// Optional reference to one already-admitted session asset.
+    AssetReference(Option<AcceptedIdentity>),
     /// Structured mathematical source and presentation family.
     Formula {
         /// Semantic mathematical presentation family.
@@ -998,6 +1002,17 @@ pub enum DirectEditSimulationOutcome {
         /// Accepted revision simulated without mutation.
         revision: RevisionIdentity,
         /// Existing semantic target simulated without mutation.
+        target: AcceptedIdentity,
+    },
+    /// Requested asset reference does not name an admitted asset identity.
+    InvalidAssetReference {
+        /// Semantic kind currently owned by the requested reference, when any.
+        actual: Option<SemanticIdentityKind>,
+        /// Requested accepted identity that is not an admitted asset.
+        reference: AcceptedIdentity,
+        /// Accepted revision simulated without mutation.
+        revision: RevisionIdentity,
+        /// Existing semantic figure simulated without mutation.
         target: AcceptedIdentity,
     },
     /// Requested mathematical replacement is structurally malformed.

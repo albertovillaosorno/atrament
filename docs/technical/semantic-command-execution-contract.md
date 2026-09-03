@@ -466,31 +466,35 @@ without mutating accepted state. Stale revision rejection precedes every local
 comparison.
 
 The frozen application-level command-family taxonomy is now represented as a
-typed value without choosing serialized operation names. Current direct-edit
-targets expose only executable family admission: Text content for inline text,
-Structured content for formulas, table-row roles, and table-cell spans, and
-Document constraint for page profiles. One aggregate read-only check validates
+typed value without choosing serialized operation names. Current generic edit
+targets expose only executable family admission: Asset reference for a figure's
+optional admitted asset identity, Text content for inline text, Structured
+content for formulas, table-row roles, and table-cell spans, and Document
+constraint for page profiles. One aggregate read-only check validates
 requested family, kind,
 owner, and optional exact base value against backend-derived target material.
 
-A deterministic capability snapshot now reports those three discoverable family
+A deterministic capability snapshot now reports those four discoverable family
 behaviors and one top-level behavior version. Aggregate command behavior and
-typed-result behavior are version 2, as is Structured content after table-cell
-span admission; Text content and Document constraint retain family behavior
-version 1. Because no serialized command
-protocol is implemented, the snapshot advertises no protocol or normalization
-version, no command-context, Validate, Apply, or selective-rebatch capability,
-and no guessed command/context numeric limits. A read-only compatibility check
-rejects an older capability behavior version independently from notebook
-revision changes.
+typed-result behavior are version 3 after figure Asset-reference admission.
+Asset reference, Text content, and Document constraint retain family behavior
+version 1; Structured content remains version 2 after table-cell span admission.
 
-A separate single-target direct-edit simulator classifies five established
+Because no serialized command protocol is implemented, the snapshot advertises
+no protocol or normalization version, no command-context, Validate, Apply, or
+selective-rebatch capability, and no guessed command/context numeric limits. A
+read-only compatibility check rejects an older capability behavior version
+independently from notebook revision changes.
+
+A separate single-target direct-edit simulator classifies six established
 replacement value families as applicable, no-op, domain-invalid, unavailable,
-or value-family mismatched without mutation. Table-cell spans additionally
-return the owning table's typed grid failure. All five existing direct mutation
-paths consume that same simulator before cloning accepted state or allocating a
-revision, so target, domain, and no-op validation are shared with proposal
-evidence.
+or value-family mismatched without mutation. Figure Asset references
+additionally reject missing or non-Asset accepted identities, while table-cell
+spans return the owning table's typed grid failure. All five existing dedicated
+direct
+mutation paths consume that same simulator before cloning accepted state or
+allocating a revision, so target, domain, and no-op validation are shared with
+proposal evidence.
 
 A version-bound direct-edit proposal now composes capability compatibility,
 complete local target preconditions, and replacement simulation in one read-only
@@ -503,6 +507,12 @@ the generic dependency graph. It derives a private overlay for only targeted
 editable values and their impact scopes. A targeted table cell also retains a
 cloned owning-table overlay, so every ordered span command validates the
 complete candidate grid before its value becomes observable.
+
+A figure Asset-reference value carries only `None` or an accepted identity. A
+nonempty reference must resolve to `SemanticIdentityKind::Asset` in the same
+current revision before simulation succeeds. Raw bytes, base64, filesystem
+paths, and remote URLs remain outside this semantic value; media ingestion is a
+separate capability.
 
 Dependency validation borrows command payloads first; valid commands are then
 consumed in order so caller command IDs and requested values can move into
