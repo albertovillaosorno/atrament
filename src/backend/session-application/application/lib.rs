@@ -43,10 +43,12 @@ use atrament_semantic_notebook::{
     RevisionIdentity,
 };
 use atrament_semantic_notebook_port::{
-    AcceptanceOutcome, DirectEditBatchApplyOutcome, DirectEditBatchProposal,
-    HistoryAvailabilityOutcome, HistoryDirection, HistoryTraversalOutcome,
+    AcceptanceOutcome, CommandTargetMaterialOutcome,
+    DirectEditBatchApplyOutcome, DirectEditBatchProposal,
+    HistoryAvailabilityOutcome, HistoryDirection,
+    HistoryTraversalOutcome,
     IdentityAncestryInspectOutcome, IdentityInspectOutcome,
-    SemanticNotebookHistory as _,
+    SemanticCommandCapabilitySnapshot, SemanticNotebookHistory as _,
     SemanticNotebookSession as _,
 };
 use atrament_semantic_notebook_session::SemanticNotebookSessionService;
@@ -90,6 +92,24 @@ impl SessionApplication {
         CommandIdentity: Clone + Ord,
     {
         self.semantic.apply_direct_edit_batch(batch)
+    }
+
+    /// Discover current transport-neutral semantic command behavior.
+    #[must_use]
+    pub fn command_capability_snapshot(
+        &self,
+    ) -> SemanticCommandCapabilitySnapshot {
+        self.semantic.command_capability_snapshot()
+    }
+
+    /// Derive exact local command material for one accepted semantic target.
+    #[must_use]
+    pub fn command_target_material(
+        &self,
+        revision: RevisionIdentity,
+        target: AcceptedIdentity,
+    ) -> CommandTargetMaterialOutcome {
+        self.semantic.command_target_material(revision, target)
     }
 
     /// Inspect in-memory semantic Undo and Redo availability.

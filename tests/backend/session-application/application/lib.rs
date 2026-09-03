@@ -38,8 +38,9 @@ use atrament_semantic_notebook::{
     SemanticIdentityKind,
 };
 use atrament_semantic_notebook_port::{
-    AcceptanceOutcome, CommandBehaviorVersion, DirectEditBatchApplyOutcome,
-    DirectEditBatchProposal, HistoryAvailability, HistoryAvailabilityOutcome,
+    AcceptanceOutcome, CommandBehaviorVersion, CommandTargetMaterialOutcome,
+    DirectEditBatchApplyOutcome, DirectEditBatchProposal, HistoryAvailability,
+    HistoryAvailabilityOutcome,
     IdentityAncestryCompleteness, IdentityAncestryEntry,
     IdentityAncestryInspectOutcome, IdentityInspectOutcome,
 };
@@ -204,6 +205,20 @@ fn application_routes_bounded_inspection_through_owned_semantic_authority() {
         kind: SemanticIdentityKind::Notebook,
         owner: None,
     };
+    let snapshot = session.command_capability_snapshot();
+    assert!(snapshot.admitted_applications.is_empty());
+    assert!(snapshot.protocol_versions.is_empty());
+    assert_eq!(snapshot.normalization_version, None);
+    let CommandTargetMaterialOutcome::Prepared { material } =
+        session.command_target_material(revision, notebook)
+    else {
+        panic!("live owner must route exact command target material");
+    };
+    assert_eq!(material.descriptor, descriptor);
+    assert_eq!(material.direct_edit_family, None);
+    assert_eq!(material.editable_value, None);
+    assert_eq!(material.revision, revision);
+    assert_eq!(material.target, notebook);
     assert_eq!(
         session.inspect_identity(revision, notebook),
         IdentityInspectOutcome::Inspected {

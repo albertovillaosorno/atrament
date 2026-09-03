@@ -210,10 +210,11 @@ bound stops earlier, naming the first omitted target-or-owner chain identity.
 That identity remains ordinary semantic data and is not a continuation token,
 retry identity, credential, or writable-scope grant.
 
-The active-process `SessionApplication` delegates both exact identity inspection
-and bounded ancestry to its owned semantic authority. This keeps runtime
-composition from reaching into the concrete semantic service while still adding
-no transport route or advertised Inspect protocol.
+The active-process `SessionApplication` delegates exact identity inspection,
+bounded ancestry, capability discovery, and exact command-target material to its
+owned semantic authority. This keeps runtime composition from reaching into the
+concrete semantic service while still adding no transport route or advertised
+Inspect or command-context protocol.
 
 A read-only local-precondition checker can require an exact semantic kind, an
 exact direct owner, notebook-root ownership, or no owner constraint. Wrong kind
