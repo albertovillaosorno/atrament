@@ -1,0 +1,19 @@
+[package]
+name = "atrament_session_application"
+version = "0.1.0"
+edition = "2024"
+publish = false
+license = "MIT"
+
+[dependencies]
+atrament_semantic_notebook = { path = "../semantic-notebook" }
+atrament_semantic_notebook_port = { path = "../semantic-notebook-port" }
+atrament_semantic_notebook_session = { path = "../semantic-notebook-session" }
+atrament_session_draft = { path = "../session-draft" }
+atrament_session_draft_port = { path = "../session-draft-port" }
+
+[lib]
+path = "application/lib.rs"
+
+[lints]
+workspace = true

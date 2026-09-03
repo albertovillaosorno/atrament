@@ -52,7 +52,7 @@ name = "atrament_runtime_bootstrap"
 version = "0.1.0"
 dependencies = [
  "atrament_browser_launch",
- "atrament_session_draft",
+ "atrament_session_application",
  "atrament_session_handshake",
  "atrament_session_runtime",
  "atrament_session_secret",
@@ -104,6 +104,17 @@ dependencies = [
  "atrament_semantic_command_graph",
  "atrament_semantic_notebook",
  "atrament_semantic_notebook_port",
+]
+
+[[package]]
+name = "atrament_session_application"
+version = "0.1.0"
+dependencies = [
+ "atrament_semantic_notebook",
+ "atrament_semantic_notebook_port",
+ "atrament_semantic_notebook_session",
+ "atrament_session_draft",
+ "atrament_session_draft_port",
 ]
 
 [[package]]

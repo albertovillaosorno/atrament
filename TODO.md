@@ -17,17 +17,17 @@ screenshots are never a substitute for semantic or geometric correctness.
 Hold documents, assets, undo history, previews, and derived plans only for the
 active session with no database, autosave, hidden recovery file, or cloud copy.
 
-Current executable evidence keeps source-preparation task text, source material,
-and raw model-response text in one backend application object owned by the
-active process. Accepted semantic notebook revisions now also live only inside
-one process-local application service: a fresh service starts without accepted
-state after the prior owner is dropped, and its Debug projection does not expose
-private notebook text. Browser edits send complete authenticated replacements
-and no browser persistence API is used.
+Current executable evidence composes source-preparation draft text and accepted
+semantic notebook revisions under one `SessionApplication` instance owned by
+the live process. The localhost runtime still consumes only the established
+draft inbound port, while the same application owner retains the accepted
+semantic authority for later admitted routes. Dropping that owner and creating a
+fresh application yields empty draft fields and no accepted revision, and its
+Debug projection does not expose private draft text. Browser edits send complete
+authenticated replacements and no browser persistence API is used.
 
-The task remains open until the accepted-revision service is composed into the
-live session and assets, history, previews, diagnostics, renders, and plans all
-exist with the same executable lifecycle invariant.
+The task remains open until assets, history, previews, diagnostics, renders, and
+plans all join the same executable lifecycle invariant.
 
 ### TODO - Implement explicit import and export
 

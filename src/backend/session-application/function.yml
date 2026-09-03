@@ -1,0 +1,9 @@
+identity:
+  id: function:session-application
+  name: session-application
+  path: src/backend/session-application
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: application

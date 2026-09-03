@@ -15,6 +15,7 @@ members = [
     "src/backend/semantic-notebook",
     "src/backend/semantic-notebook-port",
     "src/backend/semantic-notebook-session",
+    "src/backend/session-application",
     "src/backend/session-draft",
     "src/backend/session-draft-port",
     "src/backend/session-handshake",

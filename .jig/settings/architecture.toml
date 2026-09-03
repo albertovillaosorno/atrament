@@ -44,7 +44,10 @@ depends_on = ["atrament_semantic_command_graph", "atrament_semantic_notebook"]
 depends_on = ["atrament_mathematics_source", "atrament_semantic_command_graph", "atrament_semantic_notebook", "atrament_semantic_notebook_port"]
 
 [component.atrament_runtime_bootstrap]
-depends_on = ["atrament_browser_launch", "atrament_session_draft", "atrament_session_handshake", "atrament_session_runtime", "atrament_session_secret"]
+depends_on = ["atrament_browser_launch", "atrament_session_application", "atrament_session_handshake", "atrament_session_runtime", "atrament_session_secret"]
+
+[component.atrament_session_application]
+depends_on = ["atrament_semantic_notebook", "atrament_semantic_notebook_port", "atrament_semantic_notebook_session", "atrament_session_draft", "atrament_session_draft_port"]
 
 [component.atrament_session_draft]
 depends_on = ["atrament_diagnostic", "atrament_session_draft_port"]
