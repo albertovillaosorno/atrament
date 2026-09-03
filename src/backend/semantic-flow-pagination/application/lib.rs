@@ -35,6 +35,8 @@
 
 //! Accepted-flow binding for deterministic measured-flow pagination.
 
+use std::collections::BTreeMap;
+
 use atrament_flow_pagination::{
     MeasuredFlowUnit, PageRegion, PaginationError, PaginationPlan, paginate,
 };
@@ -168,14 +170,15 @@ fn page_regions(
     revision: &AcceptedRevision,
     start_page_index: usize,
 ) -> Result<Vec<PageRegion<AcceptedIdentity>>, SemanticPaginationError> {
-    let mut regions = Vec::new();
+    let mut profiles = BTreeMap::new();
+    for profile in &revision.notebook.page_profiles {
+        let _existing = profiles.entry(profile.id).or_insert(profile);
+    }
+    let remaining_pages =
+        revision.notebook.pages.len().saturating_sub(start_page_index);
+    let mut regions = Vec::with_capacity(remaining_pages);
     for page in revision.notebook.pages.iter().skip(start_page_index) {
-        let Some(profile) = revision
-            .notebook
-            .page_profiles
-            .iter()
-            .find(|profile| profile.id == page.page_profile)
-        else {
+        let Some(profile) = profiles.get(&page.page_profile).copied() else {
             return Err(SemanticPaginationError::MissingPageProfile {
                 page: page.id,
                 profile: page.page_profile,

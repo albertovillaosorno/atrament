@@ -238,6 +238,72 @@ fn accepted_page_profile_derives_exact_writable_top_and_page_identity() {
 }
 
 #[test]
+fn defensive_duplicate_profile_keeps_first_match_semantics() {
+    let ids = IdentityAllocator::new();
+    let fixture = candidate_fixture(&ids);
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(fixture.notebook)
+    else {
+        panic!("candidate must be accepted");
+    };
+    let flow = accepted_for(&mapping, fixture.flow);
+    let owner = accepted_for(&mapping, fixture.block);
+    let page_one = accepted_for(&mapping, fixture.page_one);
+    let profile_one = accepted_for(&mapping, fixture.profile_one);
+    let measured = measurement(revision, flow, owner, &[(165_000, 1_000)]);
+    let mut defensive = session.current().expect("accepted revision").clone();
+    defensive.notebook.page_profiles.push(PaperProfile {
+        geometry: geometry(40_000),
+        id: profile_one,
+    });
+
+    let plan = paginate_revision(&defensive, &measured)
+        .expect("first matching accepted profile remains authoritative");
+    assert_eq!(plan.placements.len(), 1);
+    assert_eq!(plan.placements[0].page, page_one);
+}
+
+#[test]
+fn large_page_profile_index_preserves_pagination() {
+    const EXTRA_PAGES: usize = 10_000;
+
+    let ids = IdentityAllocator::new();
+    let mut fixture = candidate_fixture(&ids);
+    for _ in 0..EXTRA_PAGES {
+        let profile = ids.allocate_candidate().expect("large profile");
+        let page = ids.allocate_candidate().expect("large page");
+        fixture.notebook.page_profiles.push(PaperProfile {
+            geometry: geometry(20_000),
+            id: profile,
+        });
+        fixture.notebook.pages.push(Page {
+            flows: Vec::new(),
+            id: page,
+            page_profile: profile,
+        });
+    }
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(fixture.notebook)
+    else {
+        panic!("large-page candidate must be accepted");
+    };
+    let flow = accepted_for(&mapping, fixture.flow);
+    let owner = accepted_for(&mapping, fixture.block);
+    let page_one = accepted_for(&mapping, fixture.page_one);
+    let measured = measurement(revision, flow, owner, &[(1, 1)]);
+
+    let plan = paginate_revision(
+        session.current().expect("accepted revision"),
+        &measured,
+    )
+    .expect("large profile index must preserve pagination");
+    assert_eq!(plan.placements.len(), 1);
+    assert_eq!(plan.placements[0].page, page_one);
+}
+
+#[test]
 fn measured_flow_spills_to_next_accepted_page_in_notebook_order() {
     let ids = IdentityAllocator::new();
     let fixture = candidate_fixture(&ids);
