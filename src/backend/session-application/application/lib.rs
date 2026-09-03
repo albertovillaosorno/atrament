@@ -41,7 +41,8 @@ use atrament_semantic_notebook::{
     AcceptedRevision, CandidateIdentity, Notebook, RevisionIdentity,
 };
 use atrament_semantic_notebook_port::{
-    AcceptanceOutcome, HistoryAvailabilityOutcome, HistoryDirection,
+    AcceptanceOutcome, DirectEditBatchApplyOutcome, DirectEditBatchProposal,
+    HistoryAvailabilityOutcome, HistoryDirection,
     HistoryTraversalOutcome, SemanticNotebookHistory as _,
     SemanticNotebookSession as _,
 };
@@ -75,6 +76,17 @@ impl SessionApplication {
     #[must_use]
     pub fn accepted_revision(&self) -> Option<&AcceptedRevision> {
         self.semantic.current()
+    }
+
+    /// Apply one transport-neutral semantic batch through the owned authority.
+    pub fn apply_direct_edit_batch<CommandIdentity>(
+        &mut self,
+        batch: DirectEditBatchProposal<CommandIdentity>,
+    ) -> DirectEditBatchApplyOutcome<CommandIdentity>
+    where
+        CommandIdentity: Clone + Ord,
+    {
+        self.semantic.apply_direct_edit_batch(batch)
     }
 
     /// Inspect in-memory semantic Undo and Redo availability.

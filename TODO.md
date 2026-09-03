@@ -19,13 +19,18 @@ active session with no database, autosave, hidden recovery file, or cloud copy.
 
 Current executable evidence composes source-preparation draft text, accepted
 semantic notebook revisions, and semantic Undo/Redo history under one
-`SessionApplication` instance owned by the live process. The localhost runtime
-still consumes only the established draft inbound port, while the same
-application owner retains accepted semantic and history authority for later
-admitted routes. Dropping that owner and creating a fresh application yields
-empty draft fields, no accepted revision, and no history position; its Debug
-projection does not expose private draft text. Browser edits send complete
-authenticated replacements and no browser persistence API is used.
+`SessionApplication` instance owned by the live process. Transport-neutral
+atomic
+batch application also routes through that owner without exposing the concrete
+semantic service. The localhost runtime still consumes only the established
+draft inbound port, while the same application owner retains accepted semantic
+and history authority for later admitted routes.
+
+Dropping that owner and creating a fresh application yields empty draft fields,
+no accepted revision, and no history position; its Debug projection does not
+expose private draft text. Browser edits send complete authenticated
+replacements
+and no browser persistence API is used.
 
 The task remains open until assets, previews, diagnostics, renders, and plans
 all join the same executable lifecycle invariant.

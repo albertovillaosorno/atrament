@@ -37,7 +37,8 @@ use atrament_semantic_notebook::{
     CandidateIdentity, IdentityAllocator, Notebook,
 };
 use atrament_semantic_notebook_port::{
-    AcceptanceOutcome, HistoryAvailability, HistoryAvailabilityOutcome,
+    AcceptanceOutcome, CommandBehaviorVersion, DirectEditBatchApplyOutcome,
+    DirectEditBatchProposal, HistoryAvailability, HistoryAvailabilityOutcome,
 };
 use atrament_session_draft_port::{DraftField, DraftMutation, SessionDraft};
 
@@ -177,6 +178,42 @@ fn process_restart_drops_accepted_revision_and_history() {
     let status = forced.wait().expect("wait forced child");
     assert!(!status.success());
     assert_fresh_process_empty();
+}
+
+#[test]
+fn application_routes_atomic_batch_apply_through_owned_semantic_authority() {
+    let identities = IdentityAllocator::new();
+    let mut session = application::SessionApplication::default();
+    let AcceptanceOutcome::Accepted { revision, .. } =
+        session.accept_candidate(minimal_candidate(&identities))
+    else {
+        panic!("minimal candidate must be accepted");
+    };
+    let empty = DirectEditBatchProposal::<u32> {
+        base: revision,
+        capability_version: CommandBehaviorVersion(1),
+        commands: Vec::new(),
+    };
+
+    assert_eq!(
+        session.apply_direct_edit_batch(empty.clone()),
+        DirectEditBatchApplyOutcome::NoOp {
+            commands: Vec::new(),
+            revision,
+        },
+    );
+    assert_eq!(
+        session.accepted_revision().map(|current| current.id),
+        Some(revision),
+    );
+    assert_eq!(
+        session.history_availability(),
+        HistoryAvailabilityOutcome::Available(HistoryAvailability {
+            can_redo: false,
+            can_undo: false,
+            revision,
+        }),
+    );
 }
 
 #[test]
