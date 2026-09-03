@@ -42,7 +42,7 @@ use atrament_semantic_notebook::{
     AcceptedIdentity, AcceptedRevision, CandidateIdentity, FormulaMode,
     IdentityExhausted, MathSyntaxError, Notebook, PhysicalPageProfile,
     PhysicalPageProfileError, RevisionIdentity, SemanticIdentityDescriptor,
-    SemanticIdentityKind, TableRowRole,
+    SemanticIdentityKind, TableCellSpan, TableGridError, TableRowRole,
 };
 
 /// Maximum admitted block-containment depth for one candidate acceptance.
@@ -265,6 +265,62 @@ pub enum PageProfileEditOutcome {
         /// Unchanged current revision identity.
         revision: RevisionIdentity,
         /// Existing non-profile semantic identity that rejected replacement.
+        target: AcceptedIdentity,
+    },
+}
+
+/// Result of one direct accepted semantic table-cell span replacement.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum TableCellSpanEditOutcome {
+    /// Cell span changed and one new accepted revision committed.
+    Applied {
+        /// Accepted revision used as the edit precondition.
+        base: RevisionIdentity,
+        /// New accepted revision produced by the edit.
+        revision: RevisionIdentity,
+        /// Existing semantic table-cell identity whose span changed.
+        target: AcceptedIdentity,
+    },
+    /// Revision identity allocation exhausted before commit.
+    IdentityExhausted {
+        /// Identity sequence that could not allocate another value.
+        sequence: IdentityExhausted,
+    },
+    /// Replacement would make the owning merged table structurally invalid.
+    InvalidTableGrid {
+        /// Typed accepted-table structural failure.
+        reason: TableGridError<AcceptedIdentity>,
+        /// Unchanged current revision identity.
+        revision: RevisionIdentity,
+        /// Existing table-cell identity that rejected replacement.
+        target: AcceptedIdentity,
+    },
+    /// Session has no accepted semantic revision to edit.
+    NoAcceptedRevision,
+    /// Replacement equals current span; no revision churn occurred.
+    NoOp {
+        /// Unchanged current revision identity.
+        revision: RevisionIdentity,
+        /// Existing table-cell identity whose span already matched.
+        target: AcceptedIdentity,
+    },
+    /// Caller precondition names a revision that is no longer current.
+    StaleBase {
+        /// Current accepted revision identity that rejected the stale edit.
+        current: RevisionIdentity,
+    },
+    /// Requested accepted identity is absent from the current revision.
+    TargetNotFound {
+        /// Unchanged current revision identity.
+        revision: RevisionIdentity,
+        /// Requested semantic identity absent from the current revision.
+        target: AcceptedIdentity,
+    },
+    /// Requested accepted identity exists but is not a semantic table cell.
+    TargetNotTableCell {
+        /// Unchanged current revision identity.
+        revision: RevisionIdentity,
+        /// Existing non-cell semantic identity that rejected span replacement.
         target: AcceptedIdentity,
     },
 }
@@ -1594,6 +1650,14 @@ pub trait SemanticNotebookSession {
         target: AcceptedIdentity,
         geometry: PhysicalPageProfile,
     ) -> PageProfileEditOutcome;
+
+    /// Replace one table-cell span against an exact base revision.
+    fn replace_table_cell_span(
+        &mut self,
+        base: RevisionIdentity,
+        target: AcceptedIdentity,
+        span: TableCellSpan,
+    ) -> TableCellSpanEditOutcome;
 
     /// Replace one semantic table-row role against an exact base revision.
     fn replace_table_row_role(

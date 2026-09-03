@@ -51,7 +51,8 @@ use atrament_semantic_notebook::{
     CandidateIdentity, Constraint, Figure, Flow, Formula, FormulaMode,
     IdentityAllocator, IdentityExhausted, InlineSpan, List, ListItem, Notebook,
     OutputProfile, Page, PaperProfile, Provenance, SemanticIdentityDescriptor,
-    SemanticIdentityKind, Style, Table, TableCell, TableGridError, TableRow,
+    SemanticIdentityKind, Style, Table, TableCell, TableCellSpan,
+    TableGridError, TableRow,
     TableRowRole,
     semantic_identity_descriptor,
 };
@@ -81,7 +82,7 @@ use atrament_semantic_notebook_port::{
     IdentityPreconditionOutcome, PageProfileEditOutcome,
     SemanticCommandCapabilitySnapshot, SemanticCommandFamily,
     SemanticNotebookHistory, SemanticNotebookSession,
-    TableRowRoleEditOutcome, TextEditOutcome,
+    TableCellSpanEditOutcome, TableRowRoleEditOutcome, TextEditOutcome,
 };
 
 #[derive(Default)]
@@ -1034,6 +1035,75 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
             },
         };
         PageProfileEditOutcome::Applied { base, revision, target }
+    }
+
+    fn replace_table_cell_span(
+        &mut self,
+        base: atrament_semantic_notebook::RevisionIdentity,
+        target: AcceptedIdentity,
+        span: TableCellSpan,
+    ) -> TableCellSpanEditOutcome {
+        let Some(current) = self.current.as_ref() else {
+            return TableCellSpanEditOutcome::NoAcceptedRevision;
+        };
+        if current.id != base {
+            return TableCellSpanEditOutcome::StaleBase {
+                current: current.id,
+            };
+        }
+        let Some(descriptor) = semantic_identity_descriptor(
+            &current.notebook,
+            target,
+        ) else {
+            return TableCellSpanEditOutcome::TargetNotFound {
+                revision: current.id,
+                target,
+            };
+        };
+        if descriptor.kind != SemanticIdentityKind::TableCell {
+            return TableCellSpanEditOutcome::TargetNotTableCell {
+                revision: current.id,
+                target,
+            };
+        }
+        let Some(actual) =
+            table_cell_span_value(&current.notebook, target)
+        else {
+            return TableCellSpanEditOutcome::TargetNotFound {
+                revision: current.id,
+                target,
+            };
+        };
+        if actual == span {
+            return TableCellSpanEditOutcome::NoOp {
+                revision: current.id,
+                target,
+            };
+        }
+        let mut notebook = current.notebook.clone();
+        match replace_table_cell_span_value(&mut notebook, target, span) {
+            Ok(true) => {},
+            Ok(false) => {
+                return TableCellSpanEditOutcome::TargetNotFound {
+                    revision: current.id,
+                    target,
+                };
+            },
+            Err(reason) => {
+                return TableCellSpanEditOutcome::InvalidTableGrid {
+                    reason,
+                    revision: current.id,
+                    target,
+                };
+            },
+        }
+        let revision = match self.commit_semantic_edit(notebook) {
+            Ok(revision) => revision,
+            Err(sequence) => {
+                return TableCellSpanEditOutcome::IdentityExhausted { sequence };
+            },
+        };
+        TableCellSpanEditOutcome::Applied { base, revision, target }
     }
 
     fn replace_table_row_role(
@@ -3182,6 +3252,177 @@ fn replace_page_profile_value(
     };
     profile.geometry = geometry;
     true
+}
+
+fn replace_table_cell_span_blocks(
+    blocks: &mut [Block<AcceptedIdentity>],
+    target: AcceptedIdentity,
+    span: TableCellSpan,
+) -> Result<bool, TableGridError<AcceptedIdentity>> {
+    for block in blocks {
+        if replace_table_cell_span_content(&mut block.content, target, span)? {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
+fn replace_table_cell_span_content(
+    content: &mut BlockContent<AcceptedIdentity>,
+    target: AcceptedIdentity,
+    span: TableCellSpan,
+) -> Result<bool, TableGridError<AcceptedIdentity>> {
+    match content {
+        BlockContent::Callout(blocks) | BlockContent::Freeform(blocks) => {
+            replace_table_cell_span_blocks(blocks, target, span)
+        },
+        BlockContent::List(list) => {
+            for item in &mut list.items {
+                if replace_table_cell_span_blocks(
+                    &mut item.blocks,
+                    target,
+                    span,
+                )? {
+                    return Ok(true);
+                }
+            }
+            Ok(false)
+        },
+        BlockContent::Table(table) => {
+            let mut changed = false;
+            for row in &mut table.rows {
+                for cell in &mut row.cells {
+                    if cell.id == target {
+                        cell.span = span;
+                        changed = true;
+                        break;
+                    }
+                }
+                if changed {
+                    break;
+                }
+            }
+            if changed {
+                table.validate_grid()?;
+                return Ok(true);
+            }
+            for row in &mut table.rows {
+                for cell in &mut row.cells {
+                    if replace_table_cell_span_blocks(
+                        &mut cell.blocks,
+                        target,
+                        span,
+                    )? {
+                        return Ok(true);
+                    }
+                }
+            }
+            Ok(false)
+        },
+        BlockContent::Date(_)
+        | BlockContent::Figure(_)
+        | BlockContent::Heading(_)
+        | BlockContent::Mathematics(_)
+        | BlockContent::Paragraph(_)
+        | BlockContent::Rule
+        | BlockContent::Unresolved(_) => Ok(false),
+    }
+}
+
+fn replace_table_cell_span_value(
+    notebook: &mut Notebook<AcceptedIdentity>,
+    target: AcceptedIdentity,
+    span: TableCellSpan,
+) -> Result<bool, TableGridError<AcceptedIdentity>> {
+    for page in &mut notebook.pages {
+        for flow in &mut page.flows {
+            if replace_table_cell_span_blocks(
+                &mut flow.blocks,
+                target,
+                span,
+            )? {
+                return Ok(true);
+            }
+        }
+    }
+    Ok(false)
+}
+
+fn table_cell_span_blocks_value(
+    blocks: &[Block<AcceptedIdentity>],
+    target: AcceptedIdentity,
+) -> Option<TableCellSpan> {
+    for block in blocks {
+        if let Some(span) =
+            table_cell_span_content_value(&block.content, target)
+        {
+            return Some(span);
+        }
+    }
+    None
+}
+
+fn table_cell_span_content_value(
+    content: &BlockContent<AcceptedIdentity>,
+    target: AcceptedIdentity,
+) -> Option<TableCellSpan> {
+    match content {
+        BlockContent::Callout(blocks) | BlockContent::Freeform(blocks) => {
+            table_cell_span_blocks_value(blocks, target)
+        },
+        BlockContent::List(list) => {
+            for item in &list.items {
+                if let Some(span) =
+                    table_cell_span_blocks_value(&item.blocks, target)
+                {
+                    return Some(span);
+                }
+            }
+            None
+        },
+        BlockContent::Table(table) => {
+            for row in &table.rows {
+                for cell in &row.cells {
+                    if cell.id == target {
+                        return Some(cell.span);
+                    }
+                }
+            }
+            for row in &table.rows {
+                for cell in &row.cells {
+                    if let Some(span) =
+                        table_cell_span_blocks_value(&cell.blocks, target)
+                    {
+                        return Some(span);
+                    }
+                }
+            }
+            None
+        },
+        BlockContent::Date(_)
+        | BlockContent::Figure(_)
+        | BlockContent::Heading(_)
+        | BlockContent::Mathematics(_)
+        | BlockContent::Paragraph(_)
+        | BlockContent::Rule
+        | BlockContent::Unresolved(_) => None,
+    }
+}
+
+fn table_cell_span_value(
+    notebook: &Notebook<AcceptedIdentity>,
+    target: AcceptedIdentity,
+) -> Option<TableCellSpan> {
+    for page in &notebook.pages {
+        for flow in &page.flows {
+            if let Some(span) =
+                table_cell_span_blocks_value(&flow.blocks, target)
+            {
+                return Some(span);
+            }
+        }
+    }
+    None
 }
 
 fn replace_table_row_role_blocks(

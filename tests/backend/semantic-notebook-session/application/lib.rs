@@ -51,8 +51,8 @@ use atrament_semantic_notebook::{
     MathSyntaxError, MathSyntaxErrorKind, Notebook, OutputProfile, Page,
     PaperProfile, Provenance, ProvenanceKind, SemanticBlockKind,
     SemanticIdentityDescriptor, SemanticIdentityKind, Style, Table, TableCell,
-    TableCellSpan,
-    TableRow, TableRowRole, UnresolvedBlock, UnresolvedReason,
+    TableCellSpan, TableGridError, TableRow, TableRowRole, UnresolvedBlock,
+    UnresolvedReason,
 };
 use atrament_semantic_notebook_port::{
     AcceptanceOutcome, CANDIDATE_BLOCK_NESTING_LIMIT, CandidateGraphError,
@@ -75,8 +75,8 @@ use atrament_semantic_notebook_port::{
     HistoryDirection, HistoryTraversalOutcome, IdentityInspectOutcome,
     IdentityKindInspectOutcome, IdentityOwnerExpectation, IdentityPrecondition,
     IdentityPreconditionOutcome, PageProfileEditOutcome, SemanticCommandFamily,
-    SemanticNotebookHistory, SemanticNotebookSession, TableRowRoleEditOutcome,
-    TextEditOutcome,
+    SemanticNotebookHistory, SemanticNotebookSession,
+    TableCellSpanEditOutcome, TableRowRoleEditOutcome, TextEditOutcome,
 };
 use atrament_semantic_notebook_session::SemanticNotebookSessionService;
 
@@ -4788,6 +4788,176 @@ fn direct_formula_edit_reaches_nested_structures_across_revisions() {
     };
     assert_eq!(table_math.source, "c = 30");
     assert_eq!(current.id, revision);
+}
+
+#[test]
+fn direct_table_cell_span_edit_commits_and_enters_history() {
+    let ids = IdentityAllocator::new();
+    let (candidate, _, _) =
+        candidate_table_notebook(&ids, TableRowRole::Header);
+    let BlockContent::Table(candidate_table) =
+        &candidate.pages[0].flows[0].blocks[0].content
+    else {
+        panic!("fixture must contain a table");
+    };
+    let candidate_cell = candidate_table.rows[0].cells[0].id;
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision: base } =
+        session.accept(candidate)
+    else {
+        panic!("table candidate must be accepted");
+    };
+    let target = accepted_for(&mapping, candidate_cell);
+    let before = session.current().expect("base table revision");
+    let BlockContent::Table(before_table) =
+        &before.notebook.pages[0].flows[0].blocks[0].content
+    else {
+        panic!("base block must remain a table");
+    };
+    let child_blocks = before_table.rows[0].cells[0].blocks.clone();
+    let replacement = table_cell_span(2, 1);
+
+    let outcome = session.replace_table_cell_span(base, target, replacement);
+    let TableCellSpanEditOutcome::Applied { revision: edited, .. } = outcome
+    else {
+        panic!("valid cell span edit must apply: {outcome:?}");
+    };
+    let current = session.current().expect("edited table revision");
+    let BlockContent::Table(table) =
+        &current.notebook.pages[0].flows[0].blocks[0].content
+    else {
+        panic!("edited block must remain a table");
+    };
+    assert_eq!(table.rows[0].cells[0].blocks, child_blocks);
+    assert_eq!(table.rows[0].cells[0].id, target);
+    assert_eq!(table.rows[0].cells[0].span, replacement);
+    assert!(matches!(
+        session.history_availability(),
+        HistoryAvailabilityOutcome::Available(HistoryAvailability {
+            can_undo: true,
+            revision,
+            ..
+        }) if revision == edited
+    ));
+
+    let HistoryTraversalOutcome::Traversed { revision: undone, .. } =
+        session.traverse_history(edited, HistoryDirection::Undo)
+    else {
+        panic!("cell span edit must be undoable");
+    };
+    let current = session.current().expect("Undo table revision");
+    let BlockContent::Table(table) =
+        &current.notebook.pages[0].flows[0].blocks[0].content
+    else {
+        panic!("Undo block must remain a table");
+    };
+    assert_eq!(table.rows[0].cells[0].id, target);
+    assert_eq!(table.rows[0].cells[0].span, TableCellSpan::SINGLE);
+    assert_ne!(undone, base);
+}
+
+#[test]
+fn direct_table_cell_span_edit_rejects_invalid_grid_atomically() {
+    let ids = IdentityAllocator::new();
+    let (candidate, _, _) =
+        candidate_table_notebook(&ids, TableRowRole::Body);
+    let BlockContent::Table(candidate_table) =
+        &candidate.pages[0].flows[0].blocks[0].content
+    else {
+        panic!("fixture must contain a table");
+    };
+    let candidate_cell = candidate_table.rows[0].cells[0].id;
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(candidate)
+    else {
+        panic!("table candidate must be accepted");
+    };
+    let target = accepted_for(&mapping, candidate_cell);
+    let before = session.current().expect("base table revision").clone();
+
+    assert_eq!(
+        session.replace_table_cell_span(
+            revision,
+            target,
+            table_cell_span(1, 2),
+        ),
+        TableCellSpanEditOutcome::InvalidTableGrid {
+            reason: TableGridError::RowSpan { cell: target },
+            revision,
+            target,
+        },
+    );
+    assert_eq!(session.current(), Some(&before));
+}
+
+#[test]
+fn direct_table_cell_span_edit_preserves_typed_no_effects() {
+    let ids = IdentityAllocator::new();
+    let (candidate, row, _) =
+        candidate_table_notebook(&ids, TableRowRole::Body);
+    let BlockContent::Table(candidate_table) =
+        &candidate.pages[0].flows[0].blocks[0].content
+    else {
+        panic!("fixture must contain a table");
+    };
+    let candidate_cell = candidate_table.rows[0].cells[0].id;
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision: base } =
+        session.accept(candidate)
+    else {
+        panic!("table candidate must be accepted");
+    };
+    let target = accepted_for(&mapping, candidate_cell);
+    let row = accepted_for(&mapping, row);
+    assert_eq!(
+        session.replace_table_cell_span(base, target, TableCellSpan::SINGLE),
+        TableCellSpanEditOutcome::NoOp { revision: base, target },
+    );
+    assert_eq!(
+        session.replace_table_cell_span(base, row, TableCellSpan::SINGLE),
+        TableCellSpanEditOutcome::TargetNotTableCell {
+            revision: base,
+            target: row,
+        },
+    );
+    let TableCellSpanEditOutcome::Applied { revision: edited, .. } =
+        session.replace_table_cell_span(base, target, table_cell_span(2, 1))
+    else {
+        panic!("valid span edit must apply");
+    };
+    assert_eq!(
+        session.replace_table_cell_span(base, target, TableCellSpan::SINGLE),
+        TableCellSpanEditOutcome::StaleBase { current: edited },
+    );
+
+    let replacement = candidate_notebook(&ids, "replacement");
+    let AcceptanceOutcome::Accepted { revision: current, .. } =
+        session.accept(replacement)
+    else {
+        panic!("replacement candidate must be accepted");
+    };
+    assert_eq!(
+        session.replace_table_cell_span(
+            current,
+            target,
+            TableCellSpan::SINGLE,
+        ),
+        TableCellSpanEditOutcome::TargetNotFound {
+            revision: current,
+            target,
+        },
+    );
+
+    let mut empty = SemanticNotebookSessionService::default();
+    assert_eq!(
+        empty.replace_table_cell_span(
+            current,
+            target,
+            TableCellSpan::SINGLE,
+        ),
+        TableCellSpanEditOutcome::NoAcceptedRevision,
+    );
 }
 
 #[test]

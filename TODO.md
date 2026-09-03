@@ -344,9 +344,15 @@ spans, and candidate acceptance rejects horizontal conflicts, vertical overflow,
 or rows that leave logical columns uncovered before accepted identity
 allocation. Accepted promotion preserves valid spans exactly.
 
+An exact-base direct cell-span edit reuses that complete table-grid invariant. A
+valid edit preserves cell identity and child blocks, creates one accepted
+revision, and enters Undo history; a structurally invalid replacement is a typed
+no-effect. The generic semantic command simulator does not advertise this span
+edit yet.
+
 The task remains open for cell alignment and wrapping semantics, ruler-like
-border geometry, table measurement/layout, component-level cell content
-commands, and the remaining structured educational block families.
+border geometry, table measurement/layout, command-batch cell span and content
+operations, and the remaining structured educational block families.
 
 ### TODO - Implement English and Spanish text behavior
 

@@ -86,6 +86,13 @@ Candidate acceptance rejects cells that cross reserved columns or table width,
 row spans that extend below the table, and rows that leave logical columns
 uncovered. Accepted identity promotion preserves each span exactly.
 
+The same grid invariant now validates an exact-base direct cell-span edit. A
+valid change preserves the cell identity and child blocks, commits one accepted
+revision, and participates in semantic history. A change that would invalidate
+the owning merged table is a typed no-effect. This direct application path does
+not yet advertise cell-span mutation through the generic semantic command-batch
+simulator.
+
 Cell alignment and wrapping, ruler-like border geometry, table measurement, and
 output consumption remain future verification. The span model does not choose
 wire field names or physical cell geometry.
