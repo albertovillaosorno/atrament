@@ -2915,6 +2915,62 @@ fn bounded_ordered_batch_preserves_capability_and_stale_precedence() {
 }
 
 #[test]
+fn bounded_apply_resource_rejection_borrows_command_ids() {
+    let ids = IdentityAllocator::new();
+    let (candidate, span) = candidate_notebook_with_span(&ids, "base text");
+    let mut service = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        service.accept(candidate)
+    else {
+        panic!("candidate must be accepted");
+    };
+    let span = accepted_for(&mapping, span);
+    let clones = Arc::new(AtomicUsize::new(0));
+    let command = |id, dependencies| DirectEditBatchCommand {
+        dependencies,
+        id: CountingCommandIdentity::new(&clones, id),
+        preconditions: CommandTargetPreconditions {
+            expected_value: Some(EditableSemanticValue::Text(
+                "base text".to_owned(),
+            )),
+            identity: IdentityPrecondition {
+                expected_kind: Some(SemanticIdentityKind::InlineSpan),
+                expected_owner: IdentityOwnerExpectation::Any,
+            },
+            requested_family: SemanticCommandFamily::TextContent,
+        },
+        requested: EditableSemanticValue::Text("changed".to_owned()),
+        target: span,
+    };
+    let batch = DirectEditBatchProposal {
+        base: revision,
+        capability_version: CommandBehaviorVersion(1),
+        commands: vec![
+            command(1, Vec::new()),
+            command(2, vec![CountingCommandIdentity::new(&clones, 1)]),
+        ],
+    };
+    clones.store(0, AtomicOrdering::Relaxed);
+
+    assert_eq!(
+        service.apply_direct_edit_batch_bounded(
+            batch,
+            CommandGraphLimits {
+                commands: 1,
+                dependency_edges: 1,
+            },
+        ),
+        DirectEditBatchApplyOutcome::ResourceRejected {
+            reason: CommandGraphLimitError::CommandCountExceeded {
+                actual: 2,
+                limit: 1,
+            },
+        },
+    );
+    assert_eq!(clones.load(AtomicOrdering::Relaxed), 0);
+}
+
+#[test]
 fn bounded_ordered_batch_resource_rejection_borrows_command_ids() {
     let ids = IdentityAllocator::new();
     let (candidate, span) = candidate_notebook_with_span(&ids, "base text");
@@ -4165,6 +4221,69 @@ fn ordered_direct_edit_batch_rejects_atomic_middle_failure_read_only() {
         DirectEditBatchCommandRejection::Precondition { .. }
     ));
     assert_eq!(session.current(), Some(&before));
+}
+
+#[test]
+fn applied_same_target_chain_moves_command_ids_without_cloning() {
+    let ids = IdentityAllocator::new();
+    let (candidate, span) = candidate_notebook_with_span(&ids, "base");
+    let mut service = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        service.accept(candidate)
+    else {
+        panic!("candidate must be accepted");
+    };
+    let span = accepted_for(&mapping, span);
+    let clones = Arc::new(AtomicUsize::new(0));
+    let command = |id, dependencies, expected: &str, requested: &str| {
+        DirectEditBatchCommand {
+            dependencies,
+            id: CountingCommandIdentity::new(&clones, id),
+            preconditions: CommandTargetPreconditions {
+                expected_value: Some(EditableSemanticValue::Text(
+                    expected.to_owned(),
+                )),
+                identity: IdentityPrecondition {
+                    expected_kind: Some(SemanticIdentityKind::InlineSpan),
+                    expected_owner: IdentityOwnerExpectation::Any,
+                },
+                requested_family: SemanticCommandFamily::TextContent,
+            },
+            requested: EditableSemanticValue::Text(requested.to_owned()),
+            target: span,
+        }
+    };
+    let batch = DirectEditBatchProposal {
+        base: revision,
+        capability_version: CommandBehaviorVersion(1),
+        commands: vec![
+            command(1, Vec::new(), "base", "one"),
+            command(
+                2,
+                vec![CountingCommandIdentity::new(&clones, 1)],
+                "one",
+                "two",
+            ),
+            command(
+                3,
+                vec![CountingCommandIdentity::new(&clones, 2)],
+                "two",
+                "three",
+            ),
+        ],
+    };
+    clones.store(0, AtomicOrdering::Relaxed);
+
+    let DirectEditBatchApplyOutcome::Applied { commands, .. } =
+        service.apply_direct_edit_batch(batch)
+    else {
+        panic!("dependent same-target chain must apply");
+    };
+    assert_eq!(commands.len(), 3);
+    assert_eq!(commands[0].command.id, 1);
+    assert_eq!(commands[1].command.id, 2);
+    assert_eq!(commands[2].command.id, 3);
+    assert_eq!(clones.load(AtomicOrdering::Relaxed), 0);
 }
 
 #[test]

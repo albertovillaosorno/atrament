@@ -231,6 +231,11 @@ families in one transaction: exact text, formula source/mode, physical page
 profile, and table-row role. One accepted revision contains all four changes,
 and one Undo restores all four prior values with stable semantic identities.
 
+Application receipts preserve the simulator's move-oriented command identity
+behavior. Resource-limit rejection borrows caller command identities without
+cloning them, while a successful dependent same-target chain moves all command
+identities into the Apply receipt without additional clones.
+
 Bounded Apply preserves the same global gate order as simulation: capability
 compatibility, accepted-session presence, and exact base authority decide before
 caller resource limits. Once admitted by those gates and limits, an invalid
