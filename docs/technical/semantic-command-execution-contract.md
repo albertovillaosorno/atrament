@@ -522,6 +522,11 @@ optional caller-visible source reference. The command targets that record
 identity directly; it does not rewrite claim text, replace claim identity, or
 change which record a claim references.
 
+Single-target command material resolves revision-owned provenance records before
+the generic page/block descriptor walk. Ordered provenance-only batches likewise
+index those top-level records before block traversal. This changes lookup cost,
+not provenance identity or mutation semantics.
+
 Dependency validation borrows command payloads first; valid commands are then
 consumed in order so caller command IDs and requested values can move into
 prediction/candidate evidence. Local preconditions are compared by reference,

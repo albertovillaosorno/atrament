@@ -2169,6 +2169,20 @@ fn command_target_material_from_notebook(
     revision: atrament_semantic_notebook::RevisionIdentity,
     target: AcceptedIdentity,
 ) -> CommandTargetMaterialOutcome {
+    if let Some(provenance) = provenance_value(notebook, target) {
+        return CommandTargetMaterialOutcome::Prepared {
+            material: CommandTargetMaterial {
+                descriptor: SemanticIdentityDescriptor {
+                    kind: SemanticIdentityKind::Provenance,
+                    owner: Some(notebook.id),
+                },
+                direct_edit_family: Some(SemanticCommandFamily::Provenance),
+                editable_value: Some(editable_provenance_value(provenance)),
+                revision,
+                target,
+            },
+        };
+    }
     let Some(descriptor) = semantic_identity_descriptor(notebook, target)
     else {
         return CommandTargetMaterialOutcome::TargetNotFound {
@@ -2308,10 +2322,7 @@ fn direct_edit_material_index(
                 kind: SemanticIdentityKind::Provenance,
                 owner: Some(notebook.id),
             },
-            EditableSemanticValue::Provenance {
-                kind: provenance.kind,
-                reference: provenance.reference.clone(),
-            },
+            editable_provenance_value(provenance),
             DirectEditImpactScope::Notebook { notebook: notebook.id },
             revision,
         );
@@ -3600,10 +3611,7 @@ fn editable_semantic_value(
                 .map(EditableSemanticValue::PageProfile)
         },
         SemanticIdentityKind::Provenance => provenance_value(notebook, target)
-            .map(|provenance| EditableSemanticValue::Provenance {
-                kind: provenance.kind,
-                reference: provenance.reference.clone(),
-            }),
+            .map(editable_provenance_value),
         SemanticIdentityKind::TableCell => {
             table_cell_span_value(notebook, target)
                 .map(EditableSemanticValue::TableCellSpan)
@@ -3625,6 +3633,15 @@ fn editable_semantic_value(
         | SemanticIdentityKind::Page
         | SemanticIdentityKind::Style
         | SemanticIdentityKind::Table => None,
+    }
+}
+
+fn editable_provenance_value(
+    provenance: &Provenance<AcceptedIdentity>,
+) -> EditableSemanticValue {
+    EditableSemanticValue::Provenance {
+        kind: provenance.kind,
+        reference: provenance.reference.clone(),
     }
 }
 

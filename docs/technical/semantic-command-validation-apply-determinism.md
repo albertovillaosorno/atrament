@@ -190,9 +190,9 @@ simulation evidence instead of being cloned again.
 
 The targeted semantic scan uses document-order borrowed slice frames for blocks,
 list items, table rows, and table cells. It stops once every unique target is
-resolved, bypasses block traversal for profile-only batches, and retains
-ordinary
-semantic material fallback for non-editable targets. Pending traversal state
+resolved, bypasses block traversal for profile- and provenance-only batches,
+and retains ordinary semantic material fallback for non-editable targets.
+Pending traversal state
 follows container depth rather than sibling count.
 
 A pinned release probe measured a first target ahead of 100,000 top-level blocks

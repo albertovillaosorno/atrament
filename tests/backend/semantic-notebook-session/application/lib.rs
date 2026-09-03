@@ -2084,6 +2084,51 @@ fn ordered_asset_reference_chain_replaces_then_removes_one_figure_reference() {
 }
 
 #[test]
+fn provenance_material_stays_exact_with_many_unrelated_blocks() {
+    let ids = IdentityAllocator::new();
+    let (mut candidate, candidate_ids) =
+        candidate_notebook_with_provenance(&ids);
+    for _ in 0..10_000 {
+        candidate.pages[0].flows[0].blocks.push(Block {
+            content: BlockContent::Rule,
+            extensions: vec![],
+            id: candidate_id(&ids),
+            provenance: None,
+            style: None,
+        });
+    }
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(candidate)
+    else {
+        panic!("large provenance candidate must be accepted");
+    };
+    let notebook = accepted_for(&mapping, candidate_ids.notebook);
+    let provenance = accepted_for(&mapping, candidate_ids.edited);
+    let expected = CommandTargetMaterialOutcome::Prepared {
+        material: CommandTargetMaterial {
+            descriptor: SemanticIdentityDescriptor {
+                kind: SemanticIdentityKind::Provenance,
+                owner: Some(notebook),
+            },
+            direct_edit_family: Some(SemanticCommandFamily::Provenance),
+            editable_value: Some(EditableSemanticValue::Provenance {
+                kind: ProvenanceKind::Supplied,
+                reference: Some(String::from("source:old")),
+            }),
+            revision,
+            target: provenance,
+        },
+    };
+    for _ in 0..100 {
+        assert_eq!(
+            session.command_target_material(revision, provenance),
+            expected,
+        );
+    }
+}
+
+#[test]
 fn provenance_source_reference_preserves_exact_unicode() {
     let ids = IdentityAllocator::new();
     let (mut candidate, candidate_ids) =

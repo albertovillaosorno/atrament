@@ -260,7 +260,14 @@ projection; net semantic no-ops emit no seed.
 Ordered simulation consumes indexed target material and impact scopes instead of
 cloning them for each evaluation. Block, list, and table traversal uses borrowed
 slice continuation frames in document order and stops once every unique target
-is indexed. Profile-only batches still resolve before block traversal.
+is indexed. Profile- and provenance-only batches resolve before block
+traversal. Single-target provenance material also resolves revision-owned source
+records before the generic page/block descriptor walk.
+
+A release probe over 20,000 unrelated rule blocks measured 500 single-target
+provenance-material reads at about 94-95 microseconds each before that fast path
+and about 0.05 microseconds each after it. These measurements are implementation
+evidence rather than a latency promise.
 
 A pinned release probe with the target first measured about 20 microseconds with
 100,000 unrelated top-level blocks versus 1,099 microseconds before traversal
