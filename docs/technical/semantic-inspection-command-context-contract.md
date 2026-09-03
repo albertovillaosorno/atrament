@@ -203,6 +203,13 @@ successful read returns the named revision, target identity, semantic kind, and
 direct owner without changing accepted state. Stale revisions, missing targets,
 and an empty session return typed read-only outcomes.
 
+A second internal Inspect foundation walks only the target's backend-owned
+structural-owner ancestry. The caller supplies a result bound; the response is
+explicitly complete when it reaches the notebook root or incomplete when the
+bound stops earlier, naming the first omitted target-or-owner chain identity.
+That identity remains ordinary semantic data and is not a continuation token,
+retry identity, credential, or writable-scope grant.
+
 A read-only local-precondition checker can require an exact semantic kind, an
 exact direct owner, notebook-root ownership, or no owner constraint. Wrong kind
 and wrong owner are distinct typed failures, and stale revision rejection occurs

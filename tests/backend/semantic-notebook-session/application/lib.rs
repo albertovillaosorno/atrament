@@ -73,8 +73,10 @@ use atrament_semantic_notebook_port::{
     DirectEditSimulationOutcome, EditableSemanticValue,
     EditableSemanticValueKind, EditableValuePreconditionOutcome,
     FormulaEditOutcome, HistoryAvailability, HistoryAvailabilityOutcome,
-    HistoryDirection, HistoryTraversalOutcome, IdentityInspectOutcome,
-    IdentityKindInspectOutcome, IdentityOwnerExpectation, IdentityPrecondition,
+    HistoryDirection, HistoryTraversalOutcome, IdentityAncestryCompleteness,
+    IdentityAncestryEntry, IdentityAncestryInspectOutcome,
+    IdentityInspectOutcome, IdentityKindInspectOutcome,
+    IdentityOwnerExpectation, IdentityPrecondition,
     IdentityPreconditionOutcome, PageProfileEditOutcome, SemanticCommandFamily,
     SemanticNotebookHistory, SemanticNotebookSession,
     TableCellSpanEditOutcome, TableRowRoleEditOutcome, TextEditOutcome,
@@ -715,6 +717,182 @@ fn unsupported_mathematics_can_be_preserved_as_exact_unresolved_source() {
     };
     assert_eq!(unresolved.reason, UnresolvedReason::Unsupported);
     assert_eq!(unresolved.source, source);
+}
+
+#[test]
+fn bounded_identity_ancestry_reports_explicit_complete_and_incomplete_chains() {
+    let ids = IdentityAllocator::new();
+    let (candidate, _, _) =
+        candidate_table_notebook(&ids, TableRowRole::Header);
+    let notebook = candidate.id;
+    let page = candidate.pages[0].id;
+    let flow = candidate.pages[0].flows[0].id;
+    let block = candidate.pages[0].flows[0].blocks[0].id;
+    let BlockContent::Table(table) =
+        &candidate.pages[0].flows[0].blocks[0].content
+    else {
+        panic!("fixture must contain table");
+    };
+    let table_id = table.id;
+    let row = table.rows[0].id;
+    let cell = table.rows[0].cells[0].id;
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(candidate)
+    else {
+        panic!("table candidate must be accepted");
+    };
+    let notebook = accepted_for(&mapping, notebook);
+    let page = accepted_for(&mapping, page);
+    let flow = accepted_for(&mapping, flow);
+    let block = accepted_for(&mapping, block);
+    let table = accepted_for(&mapping, table_id);
+    let row = accepted_for(&mapping, row);
+    let cell = accepted_for(&mapping, cell);
+    let before = session.current().expect("accepted revision").clone();
+
+    assert_eq!(
+        session.inspect_identity_ancestry_bounded(revision, cell, 0),
+        IdentityAncestryInspectOutcome::Inspected {
+            completeness: IdentityAncestryCompleteness::Incomplete {
+                remaining_identity: cell,
+            },
+            entries: Vec::new(),
+            revision,
+            target: cell,
+        },
+    );
+    assert_eq!(
+        session.inspect_identity_ancestry_bounded(revision, cell, 3),
+        IdentityAncestryInspectOutcome::Inspected {
+            completeness: IdentityAncestryCompleteness::Incomplete {
+                remaining_identity: block,
+            },
+            entries: vec![
+                IdentityAncestryEntry {
+                    descriptor: SemanticIdentityDescriptor {
+                        kind: SemanticIdentityKind::TableCell,
+                        owner: Some(row),
+                    },
+                    identity: cell,
+                },
+                IdentityAncestryEntry {
+                    descriptor: SemanticIdentityDescriptor {
+                        kind: SemanticIdentityKind::TableRow,
+                        owner: Some(table),
+                    },
+                    identity: row,
+                },
+                IdentityAncestryEntry {
+                    descriptor: SemanticIdentityDescriptor {
+                        kind: SemanticIdentityKind::Table,
+                        owner: Some(block),
+                    },
+                    identity: table,
+                },
+            ],
+            revision,
+            target: cell,
+        },
+    );
+    assert_eq!(
+        session.inspect_identity_ancestry_bounded(revision, cell, 7),
+        IdentityAncestryInspectOutcome::Inspected {
+            completeness: IdentityAncestryCompleteness::Complete,
+            entries: vec![
+                IdentityAncestryEntry {
+                    descriptor: SemanticIdentityDescriptor {
+                        kind: SemanticIdentityKind::TableCell,
+                        owner: Some(row),
+                    },
+                    identity: cell,
+                },
+                IdentityAncestryEntry {
+                    descriptor: SemanticIdentityDescriptor {
+                        kind: SemanticIdentityKind::TableRow,
+                        owner: Some(table),
+                    },
+                    identity: row,
+                },
+                IdentityAncestryEntry {
+                    descriptor: SemanticIdentityDescriptor {
+                        kind: SemanticIdentityKind::Table,
+                        owner: Some(block),
+                    },
+                    identity: table,
+                },
+                IdentityAncestryEntry {
+                    descriptor: SemanticIdentityDescriptor {
+                        kind: SemanticIdentityKind::Block(
+                            SemanticBlockKind::Table,
+                        ),
+                        owner: Some(flow),
+                    },
+                    identity: block,
+                },
+                IdentityAncestryEntry {
+                    descriptor: SemanticIdentityDescriptor {
+                        kind: SemanticIdentityKind::Flow,
+                        owner: Some(page),
+                    },
+                    identity: flow,
+                },
+                IdentityAncestryEntry {
+                    descriptor: SemanticIdentityDescriptor {
+                        kind: SemanticIdentityKind::Page,
+                        owner: Some(notebook),
+                    },
+                    identity: page,
+                },
+                IdentityAncestryEntry {
+                    descriptor: SemanticIdentityDescriptor {
+                        kind: SemanticIdentityKind::Notebook,
+                        owner: None,
+                    },
+                    identity: notebook,
+                },
+            ],
+            revision,
+            target: cell,
+        },
+    );
+    assert_eq!(session.current(), Some(&before));
+}
+
+#[test]
+fn bounded_identity_ancestry_preserves_global_inspection_precedence() {
+    let ids = IdentityAllocator::new();
+    let (candidate, row, _) =
+        candidate_table_notebook(&ids, TableRowRole::Body);
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(candidate)
+    else {
+        panic!("table candidate must be accepted");
+    };
+    let row = accepted_for(&mapping, row);
+    let replacement = candidate_notebook(&ids, "replacement");
+    let AcceptanceOutcome::Accepted { revision: current, .. } =
+        session.accept(replacement)
+    else {
+        panic!("replacement must be accepted");
+    };
+    assert_eq!(
+        session.inspect_identity_ancestry_bounded(revision, row, 0),
+        IdentityAncestryInspectOutcome::StaleBase { current },
+    );
+    assert_eq!(
+        session.inspect_identity_ancestry_bounded(current, row, 0),
+        IdentityAncestryInspectOutcome::TargetNotFound {
+            revision: current,
+            target: row,
+        },
+    );
+    let empty = SemanticNotebookSessionService::default();
+    assert_eq!(
+        empty.inspect_identity_ancestry_bounded(current, row, 0),
+        IdentityAncestryInspectOutcome::NoAcceptedRevision,
+    );
 }
 
 #[test]

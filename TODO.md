@@ -133,9 +133,11 @@ allocating accepted authority.
 A read-only semantic descriptor now classifies stable identities and their
 direct structural owners without exposing storage or wire shape. Exact-revision
 inspection returns that kind-and-owner descriptor with typed stale, missing, and
-empty-session outcomes and no mutation. A local-precondition check can require
-an exact semantic kind and direct owner, including explicit notebook-root
-ownership, before a future command family may mutate that target.
+empty-session outcomes and no mutation. Caller-bounded owner ancestry can also
+walk target-first structural owners with explicit complete/incomplete status; it
+does not invent a continuation token or writable scope. A local-precondition
+check can require an exact semantic kind and direct owner, including explicit
+notebook-root ownership, before a future command family may mutate that target.
 
 A second read-only precondition compares exact accepted base values for the four
 families with established direct-edit authority: inline text, formula mode and

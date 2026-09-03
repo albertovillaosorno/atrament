@@ -77,8 +77,9 @@ use atrament_semantic_notebook_port::{
     EditableSemanticValue, EditableSemanticValueKind,
     EditableValuePreconditionOutcome, FormulaEditOutcome,
     HistoryAvailability, HistoryAvailabilityOutcome, HistoryDirection,
-    HistoryTraversalOutcome, IdentityInspectOutcome,
-    IdentityKindInspectOutcome, IdentityMapping,
+    HistoryTraversalOutcome, IdentityAncestryCompleteness,
+    IdentityAncestryEntry, IdentityAncestryInspectOutcome,
+    IdentityInspectOutcome, IdentityKindInspectOutcome, IdentityMapping,
     IdentityOwnerExpectation, IdentityPrecondition,
     IdentityPreconditionOutcome, PageProfileEditOutcome,
     SemanticCommandCapabilitySnapshot, SemanticCommandFamily,
@@ -783,6 +784,63 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
             descriptor,
             revision,
             target,
+        }
+    }
+
+    fn inspect_identity_ancestry_bounded(
+        &self,
+        revision: atrament_semantic_notebook::RevisionIdentity,
+        target: AcceptedIdentity,
+        maximum_results: usize,
+    ) -> IdentityAncestryInspectOutcome {
+        let Some(current) = self.current.as_ref() else {
+            return IdentityAncestryInspectOutcome::NoAcceptedRevision;
+        };
+        if current.id != revision {
+            return IdentityAncestryInspectOutcome::StaleBase {
+                current: current.id,
+            };
+        }
+        let mut identity = target;
+        let Some(mut descriptor) =
+            semantic_identity_descriptor(&current.notebook, identity)
+        else {
+            return IdentityAncestryInspectOutcome::TargetNotFound {
+                revision,
+                target,
+            };
+        };
+        let mut entries = Vec::new();
+        loop {
+            if entries.len() == maximum_results {
+                return IdentityAncestryInspectOutcome::Inspected {
+                    completeness: IdentityAncestryCompleteness::Incomplete {
+                        remaining_identity: identity,
+                    },
+                    entries,
+                    revision,
+                    target,
+                };
+            }
+            entries.push(IdentityAncestryEntry { descriptor, identity });
+            let Some(owner) = descriptor.owner else {
+                return IdentityAncestryInspectOutcome::Inspected {
+                    completeness: IdentityAncestryCompleteness::Complete,
+                    entries,
+                    revision,
+                    target,
+                };
+            };
+            identity = owner;
+            let Some(owner_descriptor) =
+                semantic_identity_descriptor(&current.notebook, identity)
+            else {
+                return IdentityAncestryInspectOutcome::TargetNotFound {
+                    revision,
+                    target: identity,
+                };
+            };
+            descriptor = owner_descriptor;
         }
     }
 

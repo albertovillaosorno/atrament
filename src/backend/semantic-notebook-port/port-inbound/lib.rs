@@ -1448,6 +1448,58 @@ pub enum IdentityPreconditionOutcome {
     },
 }
 
+/// One identity and descriptor in a semantic structural-owner chain.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct IdentityAncestryEntry {
+    /// Semantic kind and direct owner for this identity.
+    pub descriptor: SemanticIdentityDescriptor<AcceptedIdentity>,
+    /// Accepted semantic identity at this owner-chain position.
+    pub identity: AcceptedIdentity,
+}
+
+/// Completeness of one caller-bounded semantic owner-chain inspection.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum IdentityAncestryCompleteness {
+    /// The inspected chain reaches the semantic notebook root.
+    Complete,
+    /// The caller bound stopped inspection before the root was returned.
+    Incomplete {
+        /// First omitted target-or-owner chain identity. This is semantic data,
+        /// not a continuation token, credential, retry identity, or write grant.
+        remaining_identity: AcceptedIdentity,
+    },
+}
+
+/// Result of one exact-revision, caller-bounded owner-chain inspection.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum IdentityAncestryInspectOutcome {
+    /// The requested target exists and its bounded owner chain was inspected.
+    Inspected {
+        /// Explicit complete or incomplete status for the returned chain.
+        completeness: IdentityAncestryCompleteness,
+        /// Target-first semantic identities up through returned direct owners.
+        entries: Vec<IdentityAncestryEntry>,
+        /// Accepted revision inspected without mutation.
+        revision: RevisionIdentity,
+        /// Requested accepted semantic identity anchoring this inspection.
+        target: AcceptedIdentity,
+    },
+    /// Session has no accepted semantic revision to inspect.
+    NoAcceptedRevision,
+    /// Caller names an accepted revision that is no longer current.
+    StaleBase {
+        /// Current accepted revision that rejected stale inspection.
+        current: RevisionIdentity,
+    },
+    /// Requested target is absent from the named accepted revision.
+    TargetNotFound {
+        /// Accepted revision inspected without mutation.
+        revision: RevisionIdentity,
+        /// Requested or structurally required identity that was absent.
+        target: AcceptedIdentity,
+    },
+}
+
 /// Result of one exact-revision, single-identity semantic inspection.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum IdentityInspectOutcome {
@@ -1717,6 +1769,14 @@ pub trait SemanticNotebookSession {
         revision: RevisionIdentity,
         target: AcceptedIdentity,
     ) -> IdentityInspectOutcome;
+
+    /// Inspect one target-first structural owner chain under a caller bound.
+    fn inspect_identity_ancestry_bounded(
+        &self,
+        revision: RevisionIdentity,
+        target: AcceptedIdentity,
+        maximum_results: usize,
+    ) -> IdentityAncestryInspectOutcome;
 
     /// Inspect one semantic identity kind against an exact accepted revision.
     fn inspect_identity_kind(
