@@ -87,6 +87,13 @@ struct DirectEditBatchIndex {
     materials: BTreeMap<AcceptedIdentity, CommandTargetMaterial>,
 }
 
+#[derive(Clone, Copy)]
+struct DirectEditBatchMaterialMetadata {
+    descriptor: SemanticIdentityDescriptor<AcceptedIdentity>,
+    direct_edit_family: Option<SemanticCommandFamily>,
+    indexed: bool,
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum DirectEditBatchAuthorityError {
     CapabilityMismatch {
@@ -2321,13 +2328,17 @@ where
             },
         ));
     }
-    let prepared = match batch_command_target_material(
+    let (prepared, indexed) = match batch_command_target_material(
         notebook, materials, revision, target,
     ) {
         Ok(material) => material,
         Err(reason) => return Err((id, reason)),
     };
-    let kind = prepared.descriptor.kind;
+    let metadata = DirectEditBatchMaterialMetadata {
+        descriptor: prepared.descriptor,
+        direct_edit_family: prepared.direct_edit_family,
+        indexed,
+    };
     let checked = match check_command_target_preconditions_material(
         prepared,
         &preconditions,
@@ -2347,23 +2358,25 @@ where
         },
     };
     let simulation = simulate_prepared_direct_edit(checked, requested);
-    batch_command_prediction(materials, id, kind, simulation)
+    batch_command_prediction(materials, id, metadata, simulation)
 }
 
 fn batch_command_target_material<CommandIdentity>(
     notebook: &Notebook<AcceptedIdentity>,
-    materials: &BTreeMap<AcceptedIdentity, CommandTargetMaterial>,
+    materials: &mut BTreeMap<AcceptedIdentity, CommandTargetMaterial>,
     revision: atrament_semantic_notebook::RevisionIdentity,
     target: AcceptedIdentity,
 ) -> Result<
-    CommandTargetMaterial,
+    (CommandTargetMaterial, bool),
     DirectEditBatchCommandRejection<CommandIdentity>,
 > {
-    if let Some(material) = materials.get(&target) {
-        return Ok(material.clone());
+    if let Some(material) = materials.remove(&target) {
+        return Ok((material, true));
     }
     match command_target_material_from_notebook(notebook, revision, target) {
-        CommandTargetMaterialOutcome::Prepared { material } => Ok(material),
+        CommandTargetMaterialOutcome::Prepared { material } => {
+            Ok((material, false))
+        },
         CommandTargetMaterialOutcome::TargetNotFound {
             revision: missing_revision,
             target: missing_target,
@@ -2393,7 +2406,7 @@ fn batch_command_target_material<CommandIdentity>(
 fn batch_command_prediction<CommandIdentity>(
     materials: &mut BTreeMap<AcceptedIdentity, CommandTargetMaterial>,
     command: CommandIdentity,
-    kind: SemanticIdentityKind,
+    metadata: DirectEditBatchMaterialMetadata,
     simulation: DirectEditSimulation,
 ) -> Result<
     DirectEditBatchCommandPrediction<CommandIdentity>,
@@ -2416,7 +2429,7 @@ fn batch_command_prediction<CommandIdentity>(
                         outcome: Box::new(
                             DirectEditSimulationOutcome::
                                 TargetNotEditableValue {
-                                kind,
+                                kind: metadata.descriptor.kind,
                                 revision,
                                 target,
                             },
@@ -2424,13 +2437,7 @@ fn batch_command_prediction<CommandIdentity>(
                     },
                 ));
             };
-            let change = DirectEditSemanticChange {
-                after: requested.clone(),
-                before,
-                family,
-                target,
-            };
-            let Some(material) = materials.get_mut(&target) else {
+            if !metadata.indexed {
                 return Err((
                     command,
                     DirectEditBatchCommandRejection::Simulation {
@@ -2442,8 +2449,16 @@ fn batch_command_prediction<CommandIdentity>(
                         ),
                     },
                 ));
+            }
+            let change = DirectEditSemanticChange {
+                after: requested.clone(),
+                before,
+                family,
+                target,
             };
-            material.editable_value = Some(requested);
+            restore_direct_edit_batch_material(
+                materials, metadata, requested, revision, target,
+            );
             Ok(DirectEditBatchCommandPrediction {
                 change: Some(change),
                 command,
@@ -2451,7 +2466,27 @@ fn batch_command_prediction<CommandIdentity>(
                 target,
             })
         },
-        DirectEditSimulationOutcome::NoOp { family, target, .. } => {
+        DirectEditSimulationOutcome::NoOp { family, revision, target } => {
+            if metadata.indexed {
+                let Some(before) = simulation.before else {
+                    return Err((
+                        command,
+                        DirectEditBatchCommandRejection::Simulation {
+                            outcome: Box::new(
+                                DirectEditSimulationOutcome::
+                                    TargetNotEditableValue {
+                                    kind: metadata.descriptor.kind,
+                                    revision,
+                                    target,
+                                },
+                            ),
+                        },
+                    ));
+                };
+                restore_direct_edit_batch_material(
+                    materials, metadata, before, revision, target,
+                );
+            }
             Ok(DirectEditBatchCommandPrediction {
                 change: None,
                 command,
@@ -2480,6 +2515,22 @@ fn batch_command_prediction<CommandIdentity>(
             outcome: Box::new(outcome),
         })),
     }
+}
+
+fn restore_direct_edit_batch_material(
+    materials: &mut BTreeMap<AcceptedIdentity, CommandTargetMaterial>,
+    metadata: DirectEditBatchMaterialMetadata,
+    editable_value: EditableSemanticValue,
+    revision: atrament_semantic_notebook::RevisionIdentity,
+    target: AcceptedIdentity,
+) {
+    let _previous = materials.insert(target, CommandTargetMaterial {
+        descriptor: metadata.descriptor,
+        direct_edit_family: metadata.direct_edit_family,
+        editable_value: Some(editable_value),
+        revision,
+        target,
+    });
 }
 
 fn record_direct_edit_batch_change_index(
