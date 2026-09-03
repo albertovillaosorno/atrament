@@ -2395,6 +2395,54 @@ fn bounded_ordered_batch_rejects_resources_before_graph_or_semantics() {
 }
 
 #[test]
+fn bounded_ordered_batch_counts_repeated_dependency_edges() {
+    let ids = IdentityAllocator::new();
+    let (candidate, first, second, _) =
+        candidate_notebook_with_three_spans(&ids);
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(candidate)
+    else {
+        panic!("three-span candidate must be accepted");
+    };
+    let first = accepted_for(&mapping, first);
+    let second = accepted_for(&mapping, second);
+    let batch = DirectEditBatchProposal {
+        base: revision,
+        capability_version: CommandBehaviorVersion(1),
+        commands: vec![
+            text_batch_command(1, &[], first, "one", "ONE"),
+            text_batch_command(2, &[1, 1], second, "two", "TWO"),
+        ],
+    };
+    assert_eq!(
+        session.simulate_direct_edit_batch_bounded(
+            batch.clone(),
+            CommandGraphLimits {
+                commands: 2,
+                dependency_edges: 1,
+            },
+        ),
+        DirectEditBatchSimulationOutcome::ResourceRejected {
+            reason: CommandGraphLimitError::DependencyEdgeCountExceeded {
+                actual: 2,
+                limit: 1,
+            },
+        },
+    );
+    assert_eq!(
+        session.simulate_direct_edit_batch_bounded(
+            batch.clone(),
+            CommandGraphLimits {
+                commands: 2,
+                dependency_edges: 2,
+            },
+        ),
+        session.simulate_direct_edit_batch(batch),
+    );
+}
+
+#[test]
 fn bounded_ordered_batch_preserves_capability_and_stale_precedence() {
     let ids = IdentityAllocator::new();
     let (candidate, span) = candidate_notebook_with_span(&ids, "base text");
