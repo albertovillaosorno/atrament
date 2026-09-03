@@ -2112,7 +2112,7 @@ where
     };
     let impact_seeds = direct_edit_impact_seeds_indexed(
         &current.notebook,
-        &batch_index.impacts,
+        batch_index.impacts,
         &changes,
     );
     DirectEditBatchSimulationOutcome::Predicted {
@@ -2126,13 +2126,12 @@ where
 
 fn direct_edit_impact_seeds_indexed(
     notebook: &Notebook<AcceptedIdentity>,
-    impacts: &BTreeMap<AcceptedIdentity, DirectEditImpactScope>,
+    mut impacts: BTreeMap<AcceptedIdentity, DirectEditImpactScope>,
     changes: &[DirectEditSemanticChange],
 ) -> Vec<DirectEditImpactSeed> {
     collect_direct_edit_impact_seeds(changes, |change| {
         let scope = impacts
-            .get(&change.target)
-            .cloned()
+            .remove(&change.target)
             .unwrap_or_else(|| direct_edit_impact_scope(notebook, change));
         (scope, direct_edit_impact_authorities(change.family))
     })
