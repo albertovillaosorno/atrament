@@ -1590,6 +1590,128 @@ fn asset_reference_batch_applies_atomically_and_undo_restores_reference() {
 }
 
 #[test]
+fn asset_reference_batch_reaches_deeply_nested_figure() {
+    let ids = IdentityAllocator::new();
+    let (mut candidate, candidate_ids) =
+        candidate_notebook_with_figure_assets(&ids);
+    let figure_block = candidate.pages[0].flows[0].blocks.remove(0);
+    let freeform_block = candidate_id(&ids);
+    let table_block = candidate_id(&ids);
+    let table_id = candidate_id(&ids);
+    let row_id = candidate_id(&ids);
+    let cell_id = candidate_id(&ids);
+    let list_block = candidate_id(&ids);
+    let list_id = candidate_id(&ids);
+    let list_item = candidate_id(&ids);
+    let callout_block = candidate_id(&ids);
+    candidate.pages[0].flows[0].blocks = vec![Block {
+        content: BlockContent::Callout(vec![Block {
+            content: BlockContent::List(List {
+                id: list_id,
+                items: vec![ListItem {
+                    blocks: vec![Block {
+                        content: BlockContent::Table(Table {
+                            id: table_id,
+                            rows: vec![TableRow {
+                                cells: vec![TableCell {
+                                    blocks: vec![Block {
+                                        content: BlockContent::Freeform(vec![
+                                            figure_block,
+                                        ]),
+                                        extensions: vec![],
+                                        id: freeform_block,
+                                        provenance: None,
+                                        style: None,
+                                    }],
+                                    id: cell_id,
+                                    span: TableCellSpan::SINGLE,
+                                }],
+                                id: row_id,
+                                role: TableRowRole::Body,
+                            }],
+                        }),
+                        extensions: vec![],
+                        id: table_block,
+                        provenance: None,
+                        style: None,
+                    }],
+                    id: list_item,
+                }],
+                ordered: false,
+            }),
+            extensions: vec![],
+            id: list_block,
+            provenance: None,
+            style: None,
+        }]),
+        extensions: vec![],
+        id: callout_block,
+        provenance: None,
+        style: None,
+    }];
+
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision: base } =
+        session.accept(candidate)
+    else {
+        panic!("nested figure candidate must be accepted");
+    };
+    let figure = accepted_for(&mapping, candidate_ids.figure);
+    let first_asset = accepted_for(&mapping, candidate_ids.asset_one);
+    let second_asset = accepted_for(&mapping, candidate_ids.asset_two);
+    let batch = DirectEditBatchProposal {
+        base,
+        capability_version: CommandBehaviorVersion(3),
+        commands: vec![DirectEditBatchCommand {
+            dependencies: vec![],
+            id: 1_u32,
+            preconditions: CommandTargetPreconditions {
+                expected_value: Some(EditableSemanticValue::AssetReference(
+                    Some(first_asset),
+                )),
+                identity: IdentityPrecondition {
+                    expected_kind: Some(SemanticIdentityKind::Figure),
+                    expected_owner: IdentityOwnerExpectation::Any,
+                },
+                requested_family: SemanticCommandFamily::AssetReference,
+            },
+            requested: EditableSemanticValue::AssetReference(
+                Some(second_asset),
+            ),
+            target: figure,
+        }],
+    };
+    let DirectEditBatchApplyOutcome::Applied { revision, .. } =
+        session.apply_direct_edit_batch(batch)
+    else {
+        panic!("nested figure asset reference must apply");
+    };
+    let current = session.current().expect("nested figure revision");
+    let BlockContent::Callout(callout) =
+        &current.notebook.pages[0].flows[0].blocks[0].content
+    else {
+        panic!("outer block must remain callout");
+    };
+    let BlockContent::List(list) = &callout[0].content else {
+        panic!("callout child must remain list");
+    };
+    let BlockContent::Table(table) = &list.items[0].blocks[0].content else {
+        panic!("list child must remain table");
+    };
+    let BlockContent::Freeform(freeform) =
+        &table.rows[0].cells[0].blocks[0].content
+    else {
+        panic!("table child must remain freeform");
+    };
+    let BlockContent::Figure(current_figure) = &freeform[0].content else {
+        panic!("freeform child must remain figure");
+    };
+    assert_eq!(current_figure.id, figure);
+    assert_eq!(current_figure.asset, Some(second_asset));
+    assert_eq!(current.id, revision);
+}
+
+#[test]
 fn ordered_asset_reference_chain_replaces_then_removes_one_figure_reference() {
     let ids = IdentityAllocator::new();
     let (candidate, candidate_ids) =
