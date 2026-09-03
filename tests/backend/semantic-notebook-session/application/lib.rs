@@ -2326,6 +2326,86 @@ fn provenance_source_reference_preserves_exact_unicode() {
 }
 
 #[test]
+fn provenance_change_then_revert_is_net_noop_without_history_churn() {
+    let ids = IdentityAllocator::new();
+    let (candidate, candidate_ids) = candidate_notebook_with_provenance(&ids);
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(candidate)
+    else {
+        panic!("provenance no-op candidate must be accepted");
+    };
+    let provenance = accepted_for(&mapping, candidate_ids.edited);
+    let before = session.current().expect("provenance no-op base").clone();
+    let original = EditableSemanticValue::Provenance {
+        kind: ProvenanceKind::Supplied,
+        reference: Some(String::from("source:old")),
+    };
+    let temporary = EditableSemanticValue::Provenance {
+        kind: ProvenanceKind::Cited,
+        reference: Some(String::from("source:temporary")),
+    };
+    let command = |id, dependencies, expected, requested| {
+        DirectEditBatchCommand {
+            dependencies,
+            id,
+            preconditions: CommandTargetPreconditions {
+                expected_value: Some(expected),
+                identity: IdentityPrecondition {
+                    expected_kind: Some(SemanticIdentityKind::Provenance),
+                    expected_owner: IdentityOwnerExpectation::Any,
+                },
+                requested_family: SemanticCommandFamily::Provenance,
+            },
+            requested,
+            target: provenance,
+        }
+    };
+    let batch = DirectEditBatchProposal {
+        base: revision,
+        capability_version: CommandBehaviorVersion(4),
+        commands: vec![
+            command(1_u32, vec![], original.clone(), temporary.clone()),
+            command(2_u32, vec![1], temporary, original),
+        ],
+    };
+    let DirectEditBatchSimulationOutcome::Predicted {
+        changes,
+        commands,
+        effect: DirectEditEffectClass::NoOp,
+        impact_seeds,
+        revision: predicted_revision,
+    } = session.simulate_direct_edit_batch(batch.clone())
+    else {
+        panic!("provenance change-then-revert must simulate as no-op");
+    };
+    assert_eq!(predicted_revision, revision);
+    assert_eq!(commands.len(), 2);
+    assert!(changes.is_empty());
+    assert!(impact_seeds.is_empty());
+    assert_eq!(session.current(), Some(&before));
+
+    let DirectEditBatchApplyOutcome::NoOp {
+        commands,
+        revision: unchanged,
+    } = session.apply_direct_edit_batch(batch)
+    else {
+        panic!("provenance change-then-revert must apply as no-op");
+    };
+    assert_eq!(commands.len(), 2);
+    assert_eq!(unchanged, revision);
+    assert_eq!(session.current(), Some(&before));
+    assert_eq!(
+        session.history_availability(),
+        HistoryAvailabilityOutcome::Available(HistoryAvailability {
+            can_redo: false,
+            can_undo: false,
+            revision,
+        }),
+    );
+}
+
+#[test]
 fn independent_provenance_changes_merge_notebook_impact_seed() {
     let ids = IdentityAllocator::new();
     let (candidate, candidate_ids) = candidate_notebook_with_provenance(&ids);
