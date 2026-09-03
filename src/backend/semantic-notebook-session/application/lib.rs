@@ -35,6 +35,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
+use std::num::NonZeroU64;
 use std::slice::from_ref;
 
 use atrament_mathematics_source::analyze;
@@ -95,6 +96,13 @@ struct DirectEditBatchTableContext {
     flow: AcceptedIdentity,
     page: AcceptedIdentity,
     table: AcceptedIdentity,
+}
+
+#[derive(Clone, Copy)]
+struct CandidateTableActiveSpan {
+    end: u64,
+    start: u64,
+    until_row: u64,
 }
 
 #[derive(Clone, Copy)]
@@ -1696,6 +1704,7 @@ fn accept_table_cell(
     Ok(TableCell {
         blocks: accept_blocks(cell.blocks, identities)?,
         id: accepted_id(cell.id, identities)?,
+        span: cell.span,
     })
 }
 
@@ -3617,6 +3626,7 @@ fn candidate_graph_blocks_frame<'candidate>(
         BlockContent::Rule | BlockContent::Unresolved(_) => {},
         BlockContent::Table(table) => {
             graph.register(table.id, CandidateReferenceKind::Semantic)?;
+            validate_candidate_table(table)?;
             if !table.rows.is_empty() {
                 stack.push(CandidateGraphFrame::TableRows {
                     child_depth,
@@ -3649,6 +3659,105 @@ fn candidate_graph_list_items_frame<'candidate>(
             blocks: &item.blocks,
             depth: child_depth,
         });
+    }
+    Ok(())
+}
+
+fn candidate_table_advance_cursor(
+    mut cursor: u64,
+    active: &[CandidateTableActiveSpan],
+) -> u64 {
+    for span in active {
+        if cursor < span.start {
+            break;
+        }
+        if cursor < span.end {
+            cursor = span.end;
+        }
+    }
+    cursor
+}
+
+fn candidate_table_width(
+    table: &Table<CandidateIdentity>,
+) -> Result<u64, CandidateGraphError> {
+    let Some(first_row) = table.rows.first() else {
+        return Ok(0);
+    };
+    first_row.cells.iter().try_fold(0u64, |width, cell| {
+        let columns = NonZeroU64::from(cell.span.columns).get();
+        width
+            .checked_add(columns)
+            .ok_or(CandidateGraphError::InvalidTableColumnSpan {
+                candidate: cell.id,
+            })
+    })
+}
+
+fn validate_candidate_table(
+    table: &Table<CandidateIdentity>,
+) -> Result<(), CandidateGraphError> {
+    let row_count = u64::try_from(table.rows.len()).map_err(
+        |_conversion_error| CandidateGraphError::InvalidTableRowSpan {
+            candidate: table.id,
+        },
+    )?;
+    let width = candidate_table_width(table)?;
+    let mut active = Vec::<CandidateTableActiveSpan>::new();
+    let mut current_row = 0u64;
+    for row in &table.rows {
+        active.retain(|span| current_row < span.until_row);
+        active.sort_unstable_by_key(|span| span.start);
+        let mut cursor = 0u64;
+        let mut additions = Vec::<CandidateTableActiveSpan>::new();
+        for cell in &row.cells {
+            cursor = candidate_table_advance_cursor(cursor, &active);
+            let columns = NonZeroU64::from(cell.span.columns).get();
+            let end = cursor.checked_add(columns).ok_or(
+                CandidateGraphError::InvalidTableColumnSpan {
+                    candidate: cell.id,
+                },
+            )?;
+            if end > width
+                || active
+                    .iter()
+                    .any(|span| span.start < end && cursor < span.end)
+            {
+                return Err(CandidateGraphError::InvalidTableColumnSpan {
+                    candidate: cell.id,
+                });
+            }
+            let until_row = current_row
+                .checked_add(NonZeroU64::from(cell.span.rows).get())
+                .ok_or(CandidateGraphError::InvalidTableRowSpan {
+                    candidate: cell.id,
+                })?;
+            if until_row > row_count {
+                return Err(CandidateGraphError::InvalidTableRowSpan {
+                    candidate: cell.id,
+                });
+            }
+            if cell.span.rows.get() > 1 {
+                additions.push(CandidateTableActiveSpan {
+                    end,
+                    start: cursor,
+                    until_row,
+                });
+            }
+            cursor = end;
+        }
+        cursor = candidate_table_advance_cursor(cursor, &active);
+        if cursor != width {
+            return Err(CandidateGraphError::InvalidTableRowWidth {
+                candidate: row.id,
+            });
+        }
+        active.extend(additions);
+        current_row = current_row.checked_add(1).ok_or(
+            CandidateGraphError::InvalidTableRowSpan {
+                candidate: row.id,
+            },
+        )?;
     }
     Ok(())
 }

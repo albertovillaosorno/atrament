@@ -35,7 +35,7 @@
 //! Typed semantic notebook values for candidate and accepted application state.
 
 use std::cell::Cell;
-use std::num::NonZeroU64;
+use std::num::{NonZeroU32, NonZeroU64};
 
 pub use atrament_mathematics_source::{
     FormulaMode, MathSyntaxError, MathSyntaxErrorKind,
@@ -394,6 +394,31 @@ pub struct TableCell<Identity> {
     pub blocks: Vec<Block<Identity>>,
     /// Stable or candidate-local semantic identity.
     pub id: Identity,
+    /// Logical rectangular coverage in table rows and columns.
+    pub span: TableCellSpan,
+}
+
+/// Nonzero logical row and column coverage for one semantic table cell.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub struct TableCellSpan {
+    /// Number of logical table columns covered by the cell.
+    pub columns: NonZeroU32,
+    /// Number of logical table rows covered by the cell.
+    pub rows: NonZeroU32,
+}
+
+impl TableCellSpan {
+    /// Ordinary unmerged table-cell coverage.
+    pub const SINGLE: Self = Self {
+        columns: NonZeroU32::MIN,
+        rows: NonZeroU32::MIN,
+    };
+}
+
+impl Default for TableCellSpan {
+    fn default() -> Self {
+        Self::SINGLE
+    }
 }
 
 /// One semantic table row.

@@ -31,6 +31,7 @@
 //
 use std::cmp::Ordering;
 use std::collections::BTreeSet;
+use std::num::NonZeroU32;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering as AtomicOrdering};
 
@@ -50,6 +51,7 @@ use atrament_semantic_notebook::{
     MathSyntaxError, MathSyntaxErrorKind, Notebook, OutputProfile, Page,
     PaperProfile, Provenance, ProvenanceKind, SemanticBlockKind,
     SemanticIdentityDescriptor, SemanticIdentityKind, Style, Table, TableCell,
+    TableCellSpan,
     TableRow, TableRowRole, UnresolvedBlock, UnresolvedReason,
 };
 use atrament_semantic_notebook_port::{
@@ -354,6 +356,38 @@ fn candidate_math_notebook(
     (notebook, formula_id)
 }
 
+fn table_cell_span(columns: u32, rows: u32) -> TableCellSpan {
+    let Some(columns) = NonZeroU32::new(columns) else {
+        panic!("fixture column span must be nonzero");
+    };
+    let Some(rows) = NonZeroU32::new(rows) else {
+        panic!("fixture row span must be nonzero");
+    };
+    TableCellSpan { columns, rows }
+}
+
+fn empty_table_cell(
+    identities: &IdentityAllocator,
+    span: TableCellSpan,
+) -> TableCell<CandidateIdentity> {
+    TableCell {
+        blocks: vec![],
+        id: candidate_id(identities),
+        span,
+    }
+}
+
+fn table_row(
+    identities: &IdentityAllocator,
+    cells: Vec<TableCell<CandidateIdentity>>,
+) -> TableRow<CandidateIdentity> {
+    TableRow {
+        cells,
+        id: candidate_id(identities),
+        role: TableRowRole::Body,
+    }
+}
+
 fn candidate_table_notebook(
     identities: &IdentityAllocator,
     role: TableRowRole,
@@ -382,12 +416,150 @@ fn candidate_table_notebook(
                     style: None,
                 }],
                 id: cell_id,
+                span: TableCellSpan::SINGLE,
             }],
             id: row_id,
             role,
         }],
     });
     (notebook, row_id, table_id)
+}
+
+#[test]
+fn candidate_merged_table_spans_promote_without_rewriting() {
+    let ids = IdentityAllocator::new();
+    let (mut candidate, _, _) =
+        candidate_table_notebook(&ids, TableRowRole::Header);
+    let BlockContent::Table(table) =
+        &mut candidate.pages[0].flows[0].blocks[0].content
+    else {
+        panic!("fixture must contain a table");
+    };
+    let first_span = table_cell_span(2, 2);
+    table.rows[0].cells[0].span = first_span;
+    table.rows[0]
+        .cells
+        .push(empty_table_cell(&ids, TableCellSpan::SINGLE));
+    table.rows.push(table_row(
+        &ids,
+        vec![empty_table_cell(&ids, TableCellSpan::SINGLE)],
+    ));
+    let last_span = table_cell_span(2, 1);
+    table.rows.push(table_row(
+        &ids,
+        vec![
+            empty_table_cell(&ids, TableCellSpan::SINGLE),
+            empty_table_cell(&ids, last_span),
+        ],
+    ));
+
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { .. } = session.accept(candidate) else {
+        panic!("rectangular merged table must be accepted");
+    };
+    let current = session.current().expect("accepted merged table");
+    let BlockContent::Table(table) =
+        &current.notebook.pages[0].flows[0].blocks[0].content
+    else {
+        panic!("accepted block must remain a table");
+    };
+    assert_eq!(table.rows[0].cells[0].span, first_span);
+    assert_eq!(table.rows[0].cells[1].span, TableCellSpan::SINGLE);
+    assert_eq!(table.rows[1].cells.len(), 1);
+    assert_eq!(table.rows[2].cells[1].span, last_span);
+}
+
+#[test]
+fn candidate_table_row_span_cannot_extend_beyond_table() {
+    let ids = IdentityAllocator::new();
+    let baseline = candidate_notebook(&ids, "accepted baseline");
+    let (mut invalid, _, _) =
+        candidate_table_notebook(&ids, TableRowRole::Body);
+    let BlockContent::Table(table) =
+        &mut invalid.pages[0].flows[0].blocks[0].content
+    else {
+        panic!("fixture must contain a table");
+    };
+    let cell = table.rows[0].cells[0].id;
+    table.rows[0].cells[0].span = table_cell_span(1, 2);
+    let mut session = SemanticNotebookSessionService::default();
+    assert!(matches!(
+        session.accept(baseline),
+        AcceptanceOutcome::Accepted { .. }
+    ));
+    let before = session.current().expect("baseline revision").clone();
+
+    assert_eq!(
+        session.accept(invalid),
+        AcceptanceOutcome::InvalidCandidate {
+            reason: CandidateGraphError::InvalidTableRowSpan {
+                candidate: cell,
+            },
+        },
+    );
+    assert_eq!(session.current(), Some(&before));
+}
+
+#[test]
+fn candidate_table_cell_cannot_cross_inherited_row_span() {
+    let ids = IdentityAllocator::new();
+    let (mut candidate, _, _) =
+        candidate_table_notebook(&ids, TableRowRole::Body);
+    let BlockContent::Table(table) =
+        &mut candidate.pages[0].flows[0].blocks[0].content
+    else {
+        panic!("fixture must contain a table");
+    };
+    table.rows[0].cells[0].span = table_cell_span(1, 2);
+    table.rows[0]
+        .cells
+        .push(empty_table_cell(&ids, TableCellSpan::SINGLE));
+    let crossing = empty_table_cell(&ids, table_cell_span(2, 1));
+    let crossing_id = crossing.id;
+    table.rows.push(table_row(&ids, vec![crossing]));
+    let mut session = SemanticNotebookSessionService::default();
+
+    assert_eq!(
+        session.accept(candidate),
+        AcceptanceOutcome::InvalidCandidate {
+            reason: CandidateGraphError::InvalidTableColumnSpan {
+                candidate: crossing_id,
+            },
+        },
+    );
+    assert!(session.current().is_none());
+}
+
+#[test]
+fn candidate_table_rows_must_cover_the_established_width() {
+    let ids = IdentityAllocator::new();
+    let (mut candidate, _, _) =
+        candidate_table_notebook(&ids, TableRowRole::Body);
+    let BlockContent::Table(table) =
+        &mut candidate.pages[0].flows[0].blocks[0].content
+    else {
+        panic!("fixture must contain a table");
+    };
+    table.rows[0]
+        .cells
+        .push(empty_table_cell(&ids, TableCellSpan::SINGLE));
+    let incomplete = table_row(
+        &ids,
+        vec![empty_table_cell(&ids, TableCellSpan::SINGLE)],
+    );
+    let incomplete_id = incomplete.id;
+    table.rows.push(incomplete);
+    let mut session = SemanticNotebookSessionService::default();
+
+    assert_eq!(
+        session.accept(candidate),
+        AcceptanceOutcome::InvalidCandidate {
+            reason: CandidateGraphError::InvalidTableRowWidth {
+                candidate: incomplete_id,
+            },
+        },
+    );
+    assert!(session.current().is_none());
 }
 
 #[test]
@@ -4543,6 +4715,7 @@ fn direct_formula_edit_reaches_nested_structures_across_revisions() {
                                         style: None,
                                     }],
                                     id: table_cell,
+                                    span: TableCellSpan::SINGLE,
                                 }],
                                 id: table_row,
                                 role: TableRowRole::Body,
@@ -4769,6 +4942,7 @@ fn candidate_table_block(
                             style: None,
                         }],
                         id: cell_id,
+                        span: TableCellSpan::SINGLE,
                     }],
                     id: row_id,
                     role,
@@ -4830,6 +5004,7 @@ fn direct_table_row_role_edit_reaches_nested_structures_across_revisions() {
                     cells: vec![TableCell {
                         blocks: vec![cell_table],
                         id: outer_cell_id,
+                        span: TableCellSpan::SINGLE,
                     }],
                     id: outer_row_id,
                     role: TableRowRole::Body,
@@ -5180,6 +5355,7 @@ fn nested_semantic_families_promote_all_owned_and_referenced_identities() {
                                         style: None,
                                     }],
                                     id: table_cell_id,
+                                    span: TableCellSpan::SINGLE,
                                 }],
                                 id: table_row_id,
                                 role: TableRowRole::Header,
@@ -5840,6 +6016,7 @@ fn direct_text_edit_reaches_nested_text_families_across_revisions() {
                                         style: None,
                                     }],
                                     id: cell_id,
+                                    span: TableCellSpan::SINGLE,
                                 }],
                                 id: row_id,
                                 role: TableRowRole::Body,

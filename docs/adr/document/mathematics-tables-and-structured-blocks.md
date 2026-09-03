@@ -77,6 +77,15 @@ candidate acceptance. The accepted application boundary can replace that role
 against an exact base revision without changing the row identity or cell
 contents, including rows inside callouts, list items, and nested table cells.
 
-Merged-cell span representation, cell alignment and wrapping, ruler-like border
-geometry, table measurement, and output consumption remain future verification;
-those details are not inferred from the current representative fixture.
+Table cells now own explicit nonzero logical row and column spans. The first row
+establishes the table's logical width from its ordered cell spans. Later rows
+fill every unoccupied logical column from left to right while row spans from
+prior rows reserve their covered columns.
+
+Candidate acceptance rejects cells that cross reserved columns or table width,
+row spans that extend below the table, and rows that leave logical columns
+uncovered. Accepted identity promotion preserves each span exactly.
+
+Cell alignment and wrapping, ruler-like border geometry, table measurement, and
+output consumption remain future verification. The span model does not choose
+wire field names or physical cell geometry.

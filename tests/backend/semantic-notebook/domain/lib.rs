@@ -38,6 +38,7 @@ use atrament_semantic_notebook::{
     Block, BlockContent, ExtensionData, Flow, IdentityAllocator, InlineSpan,
     Notebook, Page, PaperProfile, SemanticBlockKind,
     SemanticIdentityDescriptor, SemanticIdentityKind, Table, TableCell,
+    TableCellSpan,
     TableRow, TableRowRole, UnresolvedBlock, UnresolvedReason,
     semantic_identity_descriptor, semantic_identity_kind,
 };
@@ -239,6 +240,7 @@ fn semantic_identity_kind_reaches_nested_table_owners() {
                                     style: None,
                                 }],
                                 id: cell_id,
+                                span: TableCellSpan::SINGLE,
                             }],
                             id: row_id,
                             role: TableRowRole::Header,

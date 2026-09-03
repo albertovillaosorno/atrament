@@ -338,10 +338,15 @@ and treats no-op, stale, absent, non-row, and empty-session requests as typed
 no-effects. Nested tables remain addressable through callouts, list items, and
 table cells across successive revisions.
 
-The task remains open for a frozen merged-cell span model, cell alignment and
-wrapping semantics, ruler-like border geometry, table measurement/layout,
-component-level cell content commands, and the remaining structured educational
-block families.
+Merged cells now carry nonzero logical row and column spans. The first row fixes
+logical table width, later rows fill unoccupied columns around inherited row
+spans, and candidate acceptance rejects horizontal conflicts, vertical overflow,
+or rows that leave logical columns uncovered before accepted identity
+allocation. Accepted promotion preserves valid spans exactly.
+
+The task remains open for cell alignment and wrapping semantics, ruler-like
+border geometry, table measurement/layout, component-level cell content
+commands, and the remaining structured educational block families.
 
 ### TODO - Implement English and Spanish text behavior
 

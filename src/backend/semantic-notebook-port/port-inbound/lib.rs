@@ -92,6 +92,21 @@ pub enum CandidateGraphError {
         /// Typed physical geometry validation failure.
         reason: PhysicalPageProfileError,
     },
+    /// One cell cannot fit the table's logical columns without overlap.
+    InvalidTableColumnSpan {
+        /// Candidate-local cell identity with invalid horizontal coverage.
+        candidate: CandidateIdentity,
+    },
+    /// One cell's logical row coverage extends beyond the table.
+    InvalidTableRowSpan {
+        /// Candidate-local cell identity with invalid vertical coverage.
+        candidate: CandidateIdentity,
+    },
+    /// One row leaves logical table columns uncovered.
+    InvalidTableRowWidth {
+        /// Candidate-local row identity that does not cover the table width.
+        candidate: CandidateIdentity,
+    },
     /// One candidate semantic reference does not name an owned candidate
     /// object.
     MissingReference {
