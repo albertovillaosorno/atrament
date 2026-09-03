@@ -3827,6 +3827,110 @@ fn direct_edit_batch_apply_net_noop_keeps_revision_and_history_position() {
 }
 
 #[test]
+fn noncommitting_batch_attempts_preserve_an_existing_redo_branch() {
+    let ids = IdentityAllocator::new();
+    let (candidate, span) = candidate_notebook_with_span(&ids, "zero");
+    let mut service = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision: base } =
+        service.accept(candidate)
+    else {
+        panic!("candidate must be accepted");
+    };
+    let target = accepted_for(&mapping, span);
+    let TextEditOutcome::Applied { revision: first, .. } =
+        service.replace_text(base, target, String::from("one"))
+    else {
+        panic!("first edit must apply");
+    };
+    let TextEditOutcome::Applied { revision: second, .. } =
+        service.replace_text(first, target, String::from("two"))
+    else {
+        panic!("second edit must apply");
+    };
+    let HistoryTraversalOutcome::Traversed {
+        revision: branch_base,
+        ..
+    } = service.traverse_history(second, HistoryDirection::Undo)
+    else {
+        panic!("second edit must Undo");
+    };
+    let expected_history = HistoryAvailabilityOutcome::Available(
+        HistoryAvailability {
+            can_redo: true,
+            can_undo: true,
+            revision: branch_base,
+        },
+    );
+    assert_eq!(service.history_availability(), expected_history);
+
+    let no_op = DirectEditBatchProposal {
+        base: branch_base,
+        capability_version: CommandBehaviorVersion(1),
+        commands: vec![text_batch_command(1, &[], target, "one", "one")],
+    };
+    assert!(matches!(
+        service.apply_direct_edit_batch(no_op),
+        DirectEditBatchApplyOutcome::NoOp {
+            revision,
+            ..
+        } if revision == branch_base
+    ));
+    assert_eq!(service.history_availability(), expected_history);
+
+    let rejected = DirectEditBatchProposal {
+        base: branch_base,
+        capability_version: CommandBehaviorVersion(1),
+        commands: vec![text_batch_command(2, &[], target, "wrong", "changed")],
+    };
+    assert!(matches!(
+        service.apply_direct_edit_batch(rejected),
+        DirectEditBatchApplyOutcome::Rejected { revision, .. }
+            if revision == branch_base
+    ));
+    assert_eq!(service.history_availability(), expected_history);
+
+    let over_limit = DirectEditBatchProposal {
+        base: branch_base,
+        capability_version: CommandBehaviorVersion(1),
+        commands: vec![
+            text_batch_command(3, &[], target, "one", "temporary"),
+            text_batch_command(4, &[3], target, "temporary", "changed"),
+        ],
+    };
+    assert_eq!(
+        service.apply_direct_edit_batch_bounded(
+            over_limit,
+            CommandGraphLimits {
+                commands: 1,
+                dependency_edges: 1,
+            },
+        ),
+        DirectEditBatchApplyOutcome::ResourceRejected {
+            reason: CommandGraphLimitError::CommandCountExceeded {
+                actual: 2,
+                limit: 1,
+            },
+        },
+    );
+    assert_eq!(service.history_availability(), expected_history);
+
+    let HistoryTraversalOutcome::Traversed { revision: redone, .. } =
+        service.traverse_history(branch_base, HistoryDirection::Redo)
+    else {
+        panic!("preserved redo branch must remain traversable");
+    };
+    let current = service.current().expect("redone revision");
+    let BlockContent::Paragraph(spans) =
+        &current.notebook.pages[0].flows[0].blocks[0].content
+    else {
+        panic!("redo fixture must remain paragraph");
+    };
+    assert_eq!(spans[0].id, target);
+    assert_eq!(spans[0].text, "two");
+    assert_eq!(current.id, redone);
+}
+
+#[test]
 fn repeated_batch_apply_history_round_trip_preserves_every_snapshot() {
     const TRANSACTIONS: u32 = 64;
 
