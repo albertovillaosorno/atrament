@@ -140,6 +140,10 @@ pub fn paginate_revision(
     }
     let scope = flow_scope(revision, measurement.flow)?;
     validate_measurement_blocks(scope.blocks, measurement)?;
+    if scope.blocks.is_empty() {
+        return paginate(&[], &measurement.units)
+            .map_err(SemanticPaginationError::Pagination);
+    }
     let pages = page_regions(revision, scope.page_index)?;
     paginate(&pages, &measurement.units)
         .map_err(SemanticPaginationError::Pagination)

@@ -185,6 +185,34 @@ fn measurement(
 }
 
 #[test]
+fn empty_accepted_flow_needs_no_page_profile_authority() {
+    let ids = IdentityAllocator::new();
+    let mut fixture = candidate_fixture(&ids);
+    fixture.notebook.pages[0].flows[0].blocks.clear();
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(fixture.notebook)
+    else {
+        panic!("empty-flow candidate must be accepted");
+    };
+    let flow = accepted_for(&mapping, fixture.flow);
+    let measured = RevisionFlowMeasurement {
+        flow,
+        revision,
+        units: vec![MeasuredFlowUnit {
+            fragments: Vec::new(),
+            policy: FlowUnitPolicy::KeepTogetherWhenPossible,
+        }],
+    };
+    let mut defensive = session.current().expect("accepted revision").clone();
+    defensive.page_profiles_forget_for_test();
+
+    let plan = paginate_revision(&defensive, &measured)
+        .expect("empty flow must not require page geometry");
+    assert!(plan.placements.is_empty());
+}
+
+#[test]
 fn accepted_page_profile_derives_exact_writable_top_and_page_identity() {
     let ids = IdentityAllocator::new();
     let fixture = candidate_fixture(&ids);
