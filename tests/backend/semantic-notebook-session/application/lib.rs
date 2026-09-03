@@ -5416,6 +5416,67 @@ fn direct_text_edit_changes_one_span_and_preserves_all_semantic_identities() {
 }
 
 #[test]
+fn semantic_history_traverses_candidate_replacement_snapshots() {
+    let candidate_ids = IdentityAllocator::new();
+    let (first_candidate, first_span) =
+        candidate_notebook_with_span(&candidate_ids, "first candidate");
+    let (second_candidate, second_span) =
+        candidate_notebook_with_span(&candidate_ids, "second candidate");
+    let mut session = SemanticNotebookSessionService::default();
+
+    let AcceptanceOutcome::Accepted {
+        mapping: first_mapping,
+        revision: first_revision,
+    } = session.accept(first_candidate)
+    else {
+        panic!("first candidate must be accepted");
+    };
+    let first_span = accepted_for(&first_mapping, first_span);
+    let AcceptanceOutcome::Accepted {
+        mapping: second_mapping,
+        revision: second_revision,
+    } = session.accept(second_candidate)
+    else {
+        panic!("second candidate must be accepted");
+    };
+    let second_span = accepted_for(&second_mapping, second_span);
+    assert_ne!(first_span, second_span);
+
+    let HistoryTraversalOutcome::Traversed {
+        revision: undone, ..
+    } = session.traverse_history(second_revision, HistoryDirection::Undo)
+    else {
+        panic!("candidate replacement must be undoable");
+    };
+    assert_ne!(undone, first_revision);
+    assert_ne!(undone, second_revision);
+    let current = session.current().expect("Undo revision");
+    let BlockContent::Paragraph(spans) =
+        &current.notebook.pages[0].flows[0].blocks[0].content
+    else {
+        panic!("Undo must restore first candidate paragraph");
+    };
+    assert_eq!(spans[0].id, first_span);
+    assert_eq!(spans[0].text, "first candidate");
+
+    let HistoryTraversalOutcome::Traversed {
+        revision: redone, ..
+    } = session.traverse_history(undone, HistoryDirection::Redo)
+    else {
+        panic!("candidate replacement must be redoable");
+    };
+    assert_ne!(redone, second_revision);
+    let current = session.current().expect("Redo revision");
+    let BlockContent::Paragraph(spans) =
+        &current.notebook.pages[0].flows[0].blocks[0].content
+    else {
+        panic!("Redo must restore second candidate paragraph");
+    };
+    assert_eq!(spans[0].id, second_span);
+    assert_eq!(spans[0].text, "second candidate");
+}
+
+#[test]
 fn semantic_history_undo_redo_preserves_stable_text_identity() {
     let candidate_ids = IdentityAllocator::new();
     let (candidate, candidate_span) =
