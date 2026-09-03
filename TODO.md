@@ -373,6 +373,13 @@ and language-aware wrapping remain open.
 Report every unsupported grapheme by profile and offer only a visible declared
 fallback, profile repair, content replacement, or export refusal.
 
+This task is currently blocked on an executable handwriting-profile coverage
+authority. The accepted language ADR requires profiles to declare coverage per
+grapheme or compositional rule, but the backend does not yet implement a
+handwriting-profile domain or admitted fallback identity. Glyph validation must
+not infer support from an installed font, renderer behavior, or successful text
+acceptance.
+
 ## P3 — The dual human and LLM editor
 
 ### TODO - Build the responsive 16:9 split shell
