@@ -467,6 +467,23 @@ fn keep_together_remainder_matches_reference_oracle() {
 fn empty_flow_needs_no_page_authority() {
     let plan = paginate::<u64, u64>(&[], &[]).expect("empty flow");
     assert!(plan.placements.is_empty());
+
+    let invalid_pages = [PageRegion {
+        page: 7_u64,
+        writable: Rect {
+            height: Length::ZERO,
+            width: Length::ZERO,
+            x: Length::from_micrometres(u64::MAX),
+            y: Length::from_micrometres(u64::MAX),
+        },
+    }];
+    let empty_units = [unit(
+        FlowUnitPolicy::KeepTogetherWhenPossible,
+        Vec::new(),
+    )];
+    let plan = paginate(&invalid_pages, &empty_units)
+        .expect("empty measured flow must not inspect unused page authority");
+    assert!(plan.placements.is_empty());
 }
 
 #[test]

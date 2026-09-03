@@ -134,6 +134,9 @@ struct GroupExtent {
 /// single remaining page can contain the whole unit, the unit falls back to
 /// fragment-boundary pagination without splitting any fragment.
 ///
+/// When every supplied unit has no measured fragments, pagination returns an
+/// empty plan without consulting page authority because no placement exists.
+///
 /// # Errors
 ///
 /// Returns a typed failure for invalid writable regions, an indivisible
@@ -150,6 +153,11 @@ where
     Identity: Copy,
     PageIdentity: Copy,
 {
+    if units.iter().all(|unit| unit.fragments.is_empty()) {
+        return Ok(PaginationPlan {
+            placements: Vec::new(),
+        });
+    }
     validate_pages(pages)?;
     let mut cursor = Cursor {
         page_index: 0,
