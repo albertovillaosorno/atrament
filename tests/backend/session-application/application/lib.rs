@@ -38,12 +38,19 @@ use atrament_semantic_notebook::{
     SemanticIdentityKind,
 };
 use atrament_semantic_notebook_port::{
-    AcceptanceOutcome, CommandBehaviorVersion, CommandTargetMaterialOutcome,
-    DirectEditBatchApplyOutcome, DirectEditBatchProposal,
-    DirectEditBatchSimulationOutcome, DirectEditEffectClass,
+    AcceptanceOutcome, CommandBehaviorVersion,
+    CommandCapabilityCompatibilityOutcome, CommandFamilyAdmissionOutcome,
+    CommandTargetMaterialOutcome, CommandTargetPreconditionOutcome,
+    CommandTargetPreconditions, DirectEditBatchApplyOutcome,
+    DirectEditBatchProposal, DirectEditBatchSimulationOutcome,
+    DirectEditChangePreviewOutcome, DirectEditEffectClass, DirectEditProposal,
+    DirectEditProposalOutcome, DirectEditSimulationOutcome,
+    EditableSemanticValue, EditableValuePreconditionOutcome,
     HistoryAvailability, HistoryAvailabilityOutcome,
     IdentityAncestryCompleteness, IdentityAncestryEntry,
     IdentityAncestryInspectOutcome, IdentityInspectOutcome,
+    IdentityKindInspectOutcome, IdentityOwnerExpectation,
+    IdentityPrecondition, IdentityPreconditionOutcome, SemanticCommandFamily,
 };
 use atrament_session_draft_port::{DraftField, DraftMutation, SessionDraft};
 
@@ -315,6 +322,151 @@ fn application_routes_history_traversal_through_owned_semantic_authority() {
         session.accepted_revision().map(|revision| revision.id),
         Some(redone),
     );
+}
+
+#[test]
+fn application_routes_local_command_review_through_owned_semantic_authority() {
+    let identities = IdentityAllocator::new();
+    let candidate = minimal_candidate(&identities);
+    let candidate_notebook = candidate.id;
+    let mut session = application::SessionApplication::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept_candidate(candidate)
+    else {
+        panic!("minimal candidate must be accepted");
+    };
+    let notebook = mapping
+        .iter()
+        .find(|entry| entry.candidate == candidate_notebook)
+        .expect("notebook identity must map")
+        .accepted;
+    let before = session
+        .accepted_revision()
+        .expect("accepted revision")
+        .clone();
+    let descriptor = SemanticIdentityDescriptor {
+        kind: SemanticIdentityKind::Notebook,
+        owner: None,
+    };
+
+    let snapshot = session.command_capability_snapshot();
+    assert_eq!(
+        session.check_command_capability_compatibility(
+            snapshot.behavior_version,
+        ),
+        CommandCapabilityCompatibilityOutcome::Compatible {
+            snapshot: snapshot.clone(),
+        },
+    );
+    assert_eq!(
+        session.check_command_capability_compatibility(
+            CommandBehaviorVersion(1),
+        ),
+        CommandCapabilityCompatibilityOutcome::Mismatch {
+            current: CommandBehaviorVersion(2),
+            expected: CommandBehaviorVersion(1),
+        },
+    );
+    assert_eq!(
+        session.inspect_identity_kind(revision, notebook),
+        IdentityKindInspectOutcome::Inspected {
+            kind: SemanticIdentityKind::Notebook,
+            revision,
+            target: notebook,
+        },
+    );
+    assert_eq!(
+        session.check_identity_precondition(
+            revision,
+            notebook,
+            IdentityPrecondition {
+                expected_kind: Some(SemanticIdentityKind::Notebook),
+                expected_owner: IdentityOwnerExpectation::Root,
+            },
+        ),
+        IdentityPreconditionOutcome::Satisfied {
+            descriptor,
+            revision,
+            target: notebook,
+        },
+    );
+    assert_eq!(
+        session.check_command_family_admission(
+            revision,
+            notebook,
+            SemanticCommandFamily::TextContent,
+        ),
+        CommandFamilyAdmissionOutcome::FamilyNotExecutable {
+            available: None,
+            requested: SemanticCommandFamily::TextContent,
+            revision,
+            target: notebook,
+        },
+    );
+    let text = EditableSemanticValue::Text(String::from("notebook root text"));
+    assert_eq!(
+        session.check_editable_value_precondition(
+            revision,
+            notebook,
+            text.clone(),
+        ),
+        EditableValuePreconditionOutcome::TargetNotEditableValue {
+            kind: SemanticIdentityKind::Notebook,
+            revision,
+            target: notebook,
+        },
+    );
+    let preconditions = CommandTargetPreconditions {
+        expected_value: None,
+        identity: IdentityPrecondition {
+            expected_kind: Some(SemanticIdentityKind::Notebook),
+            expected_owner: IdentityOwnerExpectation::Root,
+        },
+        requested_family: SemanticCommandFamily::TextContent,
+    };
+    let family_rejection =
+        CommandTargetPreconditionOutcome::FamilyNotExecutable {
+        available: None,
+        requested: SemanticCommandFamily::TextContent,
+        revision,
+        target: notebook,
+    };
+    assert_eq!(
+        session.check_command_target_preconditions(
+            revision,
+            notebook,
+            preconditions.clone(),
+        ),
+        family_rejection.clone(),
+    );
+    let simulation = DirectEditSimulationOutcome::TargetNotEditableValue {
+        kind: SemanticIdentityKind::Notebook,
+        revision,
+        target: notebook,
+    };
+    assert_eq!(
+        session.simulate_direct_edit(revision, notebook, text.clone()),
+        simulation.clone(),
+    );
+    assert_eq!(
+        session.preview_direct_edit_changes(revision, notebook, text.clone()),
+        DirectEditChangePreviewOutcome::Rejected {
+            outcome: Box::new(simulation),
+        },
+    );
+    assert_eq!(
+        session.simulate_direct_edit_proposal(DirectEditProposal {
+            capability_version: snapshot.behavior_version,
+            preconditions,
+            requested: text,
+            revision,
+            target: notebook,
+        }),
+        DirectEditProposalOutcome::PreconditionRejected {
+            outcome: family_rejection,
+        },
+    );
+    assert_eq!(session.accepted_revision(), Some(&before));
 }
 
 #[test]

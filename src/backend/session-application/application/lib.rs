@@ -43,13 +43,18 @@ use atrament_semantic_notebook::{
     RevisionIdentity,
 };
 use atrament_semantic_notebook_port::{
-    AcceptanceOutcome, CommandTargetMaterialOutcome,
+    AcceptanceOutcome, CommandCapabilityCompatibilityOutcome,
+    CommandFamilyAdmissionOutcome, CommandTargetMaterialOutcome,
+    CommandTargetPreconditionOutcome, CommandTargetPreconditions,
     DirectEditBatchApplyOutcome, DirectEditBatchProposal,
-    DirectEditBatchSimulationOutcome, HistoryAvailabilityOutcome,
-    HistoryDirection,
-    HistoryTraversalOutcome,
+    DirectEditBatchSimulationOutcome, DirectEditChangePreviewOutcome,
+    DirectEditProposal, DirectEditProposalOutcome, DirectEditSimulationOutcome,
+    EditableSemanticValue, EditableValuePreconditionOutcome,
+    HistoryAvailabilityOutcome, HistoryDirection, HistoryTraversalOutcome,
     IdentityAncestryInspectOutcome, IdentityInspectOutcome,
-    SemanticCommandCapabilitySnapshot, SemanticNotebookHistory as _,
+    IdentityKindInspectOutcome, IdentityPrecondition,
+    IdentityPreconditionOutcome, SemanticCommandCapabilitySnapshot,
+    SemanticCommandFamily, SemanticNotebookHistory as _,
     SemanticNotebookSession as _,
 };
 use atrament_semantic_notebook_session::SemanticNotebookSessionService;
@@ -93,6 +98,63 @@ impl SessionApplication {
         CommandIdentity: Clone + Ord,
     {
         self.semantic.apply_direct_edit_batch(batch)
+    }
+
+    /// Check one previously bound semantic command behavior version.
+    #[must_use]
+    pub fn check_command_capability_compatibility(
+        &self,
+        expected: atrament_semantic_notebook_port::CommandBehaviorVersion,
+    ) -> CommandCapabilityCompatibilityOutcome {
+        self.semantic.check_command_capability_compatibility(expected)
+    }
+
+    /// Check whether one semantic command family is executable for a target.
+    #[must_use]
+    pub fn check_command_family_admission(
+        &self,
+        revision: RevisionIdentity,
+        target: AcceptedIdentity,
+        requested: SemanticCommandFamily,
+    ) -> CommandFamilyAdmissionOutcome {
+        self.semantic
+            .check_command_family_admission(revision, target, requested)
+    }
+
+    /// Check complete local command-target preconditions without mutation.
+    #[must_use]
+    pub fn check_command_target_preconditions(
+        &self,
+        revision: RevisionIdentity,
+        target: AcceptedIdentity,
+        preconditions: CommandTargetPreconditions,
+    ) -> CommandTargetPreconditionOutcome {
+        self.semantic
+            .check_command_target_preconditions(revision, target, preconditions)
+    }
+
+    /// Compare one exact editable semantic value without mutation.
+    #[must_use]
+    pub fn check_editable_value_precondition(
+        &self,
+        revision: RevisionIdentity,
+        target: AcceptedIdentity,
+        expected: EditableSemanticValue,
+    ) -> EditableValuePreconditionOutcome {
+        self.semantic
+            .check_editable_value_precondition(revision, target, expected)
+    }
+
+    /// Check one exact local semantic identity precondition without mutation.
+    #[must_use]
+    pub fn check_identity_precondition(
+        &self,
+        revision: RevisionIdentity,
+        target: AcceptedIdentity,
+        precondition: IdentityPrecondition,
+    ) -> IdentityPreconditionOutcome {
+        self.semantic
+            .check_identity_precondition(revision, target, precondition)
     }
 
     /// Discover current transport-neutral semantic command behavior.
@@ -144,6 +206,39 @@ impl SessionApplication {
         )
     }
 
+    /// Inspect one accepted semantic identity kind without mutation.
+    #[must_use]
+    pub fn inspect_identity_kind(
+        &self,
+        revision: RevisionIdentity,
+        target: AcceptedIdentity,
+    ) -> IdentityKindInspectOutcome {
+        self.semantic.inspect_identity_kind(revision, target)
+    }
+
+    /// Preview one exact direct semantic change without mutation.
+    #[must_use]
+    pub fn preview_direct_edit_changes(
+        &self,
+        revision: RevisionIdentity,
+        target: AcceptedIdentity,
+        requested: EditableSemanticValue,
+    ) -> DirectEditChangePreviewOutcome {
+        self.semantic
+            .preview_direct_edit_changes(revision, target, requested)
+    }
+
+    /// Simulate one established direct semantic edit without mutation.
+    #[must_use]
+    pub fn simulate_direct_edit(
+        &self,
+        revision: RevisionIdentity,
+        target: AcceptedIdentity,
+        requested: EditableSemanticValue,
+    ) -> DirectEditSimulationOutcome {
+        self.semantic.simulate_direct_edit(revision, target, requested)
+    }
+
     /// Simulate one transport-neutral direct-edit batch without mutation.
     pub fn simulate_direct_edit_batch<CommandIdentity>(
         &self,
@@ -153,6 +248,15 @@ impl SessionApplication {
         CommandIdentity: Clone + Ord,
     {
         self.semantic.simulate_direct_edit_batch(batch)
+    }
+
+    /// Validate and simulate one version-bound direct-edit proposal read-only.
+    #[must_use]
+    pub fn simulate_direct_edit_proposal(
+        &self,
+        proposal: DirectEditProposal,
+    ) -> DirectEditProposalOutcome {
+        self.semantic.simulate_direct_edit_proposal(proposal)
     }
 
     /// Traverse one in-memory semantic history transaction.
