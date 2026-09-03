@@ -167,18 +167,29 @@ evaluated.
 
 Dependent same-target commands can observe earlier simulated candidate values
 only through an explicit command dependency. Per-command changes retain their
-local before/after values while aggregate changes compare the accepted base with
-the final candidate. Successful predictions classify the net effect as Mutation
-or NoOp. An empty ordered batch returns NoOp before semantic target indexing.
+local before/after values while aggregate coalescing stores first/last mutating
+prediction indexes per target. Final aggregate changes still compare accepted
+base with final candidate. An empty ordered batch returns NoOp before semantic
+target indexing.
 
 The same simulation derives conservative backend-owned impact seeds for text,
 structured-content, and page-profile changes. Single-target review and ordered
-batches share those seeds, and net no-ops emit none. The ordered overlay caches
-impact scopes only for requested targets, stops once every unique target is
-resolved, and bypasses unrelated block traversal for profile-only batches while
-retaining ordinary semantic material lookup for non-editable targets. Prepared
-material and accepted base values move into later evidence instead of being
-cloned before replacement simulation.
+batches share those seeds, and net no-ops emit none. Indexed target material and
+impact scopes move through final simulation evidence instead of being cloned
+again.
+
+The targeted semantic scan uses document-order borrowed slice frames for blocks,
+list items, table rows, and table cells. It stops once every unique target is
+resolved, bypasses block traversal for profile-only batches, and retains
+ordinary
+semantic material fallback for non-editable targets. Pending traversal state
+follows container depth rather than sibling count.
+
+A pinned release probe measured a first target ahead of 100,000 top-level blocks
+at about 20 microseconds after traversal hardening versus 1,099 microseconds
+before it. The equivalent first child ahead of 100,000 callout siblings measured
+about 19 microseconds with slice frames versus 186 microseconds before them.
+These are implementation measurements, not product guarantees.
 
 Graph validation now avoids cycle-state allocation for the ordinary ordered
 case where every explicit dependency points backward, while preserving cycle

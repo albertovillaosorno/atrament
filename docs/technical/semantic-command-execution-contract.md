@@ -508,9 +508,10 @@ untouched.
 When a later command edits a target changed earlier in the same candidate, it
 must explicitly depend on the previous target writer before observing that
 candidate value. A preceding semantic no-op does not manufacture such a
-dependency. Per-command changes remain visible while the aggregate semantic
-change set coalesces each target from accepted base value to final candidate
-value, including an empty net set for a change-then-revert sequence.
+dependency. Per-command changes remain visible while aggregate coalescing stores
+only first/last mutating prediction indexes per target. Final changes still
+compare accepted base to final candidate, including an empty net set for a
+change-then-revert sequence.
 
 Successful direct-edit predictions now classify their net effect explicitly as
 Mutation or NoOp. They also derive conservative impact seeds from backend-owned
@@ -525,15 +526,24 @@ are omitted for a net semantic no-op. They are inputs to future dependency
 expansion, not the final authoritative Validate impact set.
 
 The ordered overlay copies accepted values only for identities named by the
-batch and stops semantic traversal once every unique target is indexed.
-Profile-only batches resolve page references without walking unrelated blocks,
-while mixed batches continue until all requested targets resolve. Prepared
-material and accepted base values are moved through simulation instead of being
-cloned again.
+batch and stops semantic traversal once every unique target is indexed. Indexed
+material and impact scopes are consumed through simulation rather than cloned
+again. Profile-only batches resolve page references without walking unrelated
+blocks.
 
-Later same-target commands update the cached value while non-editable targets
-fall back to ordinary semantic material resolution. This is internal simulation
-hardening, not a new capability or numeric product-limit decision.
+Block, list-item, table-row, and table-cell traversal uses borrowed slice
+continuation frames in document order. Pending traversal state therefore follows
+container depth rather than sibling count, while mixed batches still continue
+until every requested target resolves. Non-editable targets retain ordinary
+semantic material fallback.
+
+In one pinned release probe, a first-block target with 100,000 unrelated
+trailing
+blocks measured about 20 microseconds after traversal hardening versus 1,099
+microseconds before it. A first-child target with 100,000 callout siblings
+measured about 19 microseconds with slice frames versus 186 microseconds before
+them. These measurements are implementation evidence, not a capability, latency
+promise, or numeric product-limit decision.
 
 A separate transport-neutral command-graph domain validates duplicate command
 identities, direct self-dependencies, missing dependencies, cycles, and acyclic

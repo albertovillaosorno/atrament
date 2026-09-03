@@ -168,22 +168,33 @@ local preconditions are borrowed, and only additional typed failure evidence is
 cloned.
 
 The simulation stops atomically on the first failure and coalesces accepted-base
-to final-candidate net changes. An empty batch returns the frozen NoOp
-prediction before semantic target indexing. Explicit dependencies are required
-before a
-later command can observe an earlier same-target candidate change; prior no-ops
-do not manufacture dependencies.
+to final-candidate net changes. Net coalescing stores first/last mutating
+prediction indexes instead of cloning every intermediate semantic change. The
+same per-target index state enforces prior-writer dependencies.
+
+An empty batch returns the frozen NoOp prediction before semantic target
+indexing. Explicit dependencies are required before a later command can observe
+an earlier same-target candidate change; prior no-ops do not manufacture
+dependencies.
 
 Successful direct-edit predictions classify their net effect as Mutation or
 NoOp and derive conservative impact seeds from backend-owned semantic ownership.
-Text seeds identify the owning flow/page dependency region, while structured
-edits seed the nearest block/flow/page, while page-profile changes seed
-referencing pages. Single-target review and ordered batches share the same seed
-projection;
-net semantic no-ops emit no seed. Ordered simulation indexes only targeted
-editable values and cached impact scopes, resolves profile-only batches before
-block traversal, and stops its semantic scan once every unique target is
-indexed.
+Text seeds identify the owning flow/page dependency region, structured edits
+seed the nearest block/flow/page, and page-profile changes seed referencing
+pages. Single-target review and ordered batches share the same seed projection;
+net semantic no-ops emit no seed.
+
+Ordered simulation consumes indexed target material and impact scopes instead of
+cloning them for each evaluation. Block, list, and table traversal uses borrowed
+slice continuation frames in document order and stops once every unique target
+is indexed. Profile-only batches still resolve before block traversal.
+
+A pinned release probe with the target first measured about 20 microseconds with
+100,000 unrelated top-level blocks versus 1,099 microseconds before traversal
+hardening. A nested first-child probe measured about 19 microseconds with
+100,000
+siblings versus 186 microseconds before slice frames. These are implementation
+measurements, not product latency or resource guarantees.
 
 This is still not an admitted normalized command batch. Protocol normalization,
 command context and writable scope, published limits, complete impact expansion,
