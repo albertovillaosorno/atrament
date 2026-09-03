@@ -17,17 +17,18 @@ screenshots are never a substitute for semantic or geometric correctness.
 Hold documents, assets, undo history, previews, and derived plans only for the
 active session with no database, autosave, hidden recovery file, or cloud copy.
 
-Current executable evidence composes source-preparation draft text and accepted
-semantic notebook revisions under one `SessionApplication` instance owned by
-the live process. The localhost runtime still consumes only the established
-draft inbound port, while the same application owner retains the accepted
-semantic authority for later admitted routes. Dropping that owner and creating a
-fresh application yields empty draft fields and no accepted revision, and its
-Debug projection does not expose private draft text. Browser edits send complete
+Current executable evidence composes source-preparation draft text, accepted
+semantic notebook revisions, and semantic Undo/Redo history under one
+`SessionApplication` instance owned by the live process. The localhost runtime
+still consumes only the established draft inbound port, while the same
+application owner retains accepted semantic and history authority for later
+admitted routes. Dropping that owner and creating a fresh application yields
+empty draft fields, no accepted revision, and no history position; its Debug
+projection does not expose private draft text. Browser edits send complete
 authenticated replacements and no browser persistence API is used.
 
-The task remains open until assets, history, previews, diagnostics, renders, and
-plans all join the same executable lifecycle invariant.
+The task remains open until assets, previews, diagnostics, renders, and plans
+all join the same executable lifecycle invariant.
 
 ### TODO - Implement explicit import and export
 
@@ -404,11 +405,17 @@ stable semantic identities plus deterministic recomputation across history.
 Expose undo and redo as application-history commands, not semantic operations
 embedded in a new batch.
 
-Current design evidence freezes new revision identities for every accepted
-history traversal, stable semantic identity restoration, branch invalidation,
-transaction provenance, typed traversal outcomes, read-only traversal
-availability, same-retry lost-receipt recovery, concurrency, and session-only
-history lifetime. Backend history storage and execution remain open.
+Current executable evidence now stores semantic history only in the active
+backend session. Accepted candidate replacement and direct semantic edits append
+in-memory prior snapshots, Undo and Redo require the exact current revision and
+allocate fresh revision identities, restored semantic identities remain stable,
+read-only availability exposes traversal boundaries, and a new edit after Undo
+discards the old redo branch. Dropping the session destroys populated history.
+
+The task remains open for transaction provenance, dependency-expanded derived
+impact, bounded history resource policy, retry/lost-receipt recovery, command
+Apply integration, cancellation/concurrency evidence, and browser/CLI/MCP
+parity.
 
 ### TODO - Implement rich clipboard intake
 

@@ -9,20 +9,19 @@
 //
 // Boundary-Contract:
 // - Owns:
-//   - Inbound application contract for explicit candidate notebook acceptance.
+//   - Inbound contracts for accepted semantic state, edits, and history.
 // - Must-Not:
 //   - Parse model text, choose wire IDs, persist revisions, or perform layout.
 // - Allows:
-//   - Inputs: One already-constructed candidate semantic notebook.
-//   - Outputs: Atomic acceptance outcome, identity mapping, and current
-//     revision.
-//   - Side effects: Application-owned in-memory accepted revision mutation.
+//   - Inputs: Typed semantic candidates, edits, and history traversal intent.
+//   - Outputs: Typed semantic outcomes, accepted state, and history bounds.
+//   - Side effects: Application-owned in-memory semantic state mutation.
 // - Split-When:
-//   - Candidate review and semantic command Apply need separate capabilities.
+//   - Semantic command Apply needs an independently bounded transaction port.
 // - Merge-When:
-//   - Candidate acceptance becomes part of another semantic application port.
+//   - One broader port subsumes accepted semantic application authority.
 // - Summary:
-//   - Defines the application boundary that promotes candidate semantics.
+//   - Defines accepted semantic application and history boundaries.
 // - Description:
 //   - Keeps candidate-local identities distinct until explicit acceptance.
 // - Usage:
@@ -31,7 +30,7 @@
 //   - Rejected candidates leave the current accepted revision unchanged.
 //
 
-//! Inbound application port for transactional semantic candidate acceptance.
+//! Inbound application ports for accepted semantic session authority.
 
 use std::collections::BTreeSet;
 
@@ -1354,6 +1353,83 @@ pub enum IdentityKindInspectOutcome {
         /// Requested identity absent from that revision.
         target: AcceptedIdentity,
     },
+}
+
+/// Direction of one accepted semantic history traversal.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum HistoryDirection {
+    /// Restore the semantic state before the latest accepted transaction.
+    Undo,
+    /// Restore the semantic state from the admitted redo branch.
+    Redo,
+}
+
+/// Read-only availability of semantic history at one accepted revision.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct HistoryAvailability {
+    /// Whether one redo traversal is currently admitted.
+    pub can_redo: bool,
+    /// Whether one undo traversal is currently admitted.
+    pub can_undo: bool,
+    /// Current accepted revision whose history position was inspected.
+    pub revision: RevisionIdentity,
+}
+
+/// Result of read-only semantic history availability inspection.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum HistoryAvailabilityOutcome {
+    /// Session has accepted state and reports its current traversal bounds.
+    Available(HistoryAvailability),
+    /// Session has no accepted semantic revision or history position.
+    NoAcceptedRevision,
+}
+
+/// Result of one exact-base Undo or Redo application command.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum HistoryTraversalOutcome {
+    /// No traversal exists in the requested direction at the current position.
+    Boundary {
+        /// Direction that reached its current history boundary.
+        direction: HistoryDirection,
+        /// Current accepted revision left unchanged.
+        revision: RevisionIdentity,
+    },
+    /// Revision allocation failed before any history mutation occurred.
+    IdentityExhausted {
+        /// Backend-owned identity sequence that could not allocate.
+        sequence: IdentityExhausted,
+    },
+    /// Session has no accepted semantic revision to traverse.
+    NoAcceptedRevision,
+    /// Caller names an accepted revision that is no longer current.
+    StaleBase {
+        /// Current accepted revision that rejected stale traversal.
+        current: RevisionIdentity,
+        /// Accepted revision supplied by the caller.
+        requested: RevisionIdentity,
+    },
+    /// Exactly one history transaction was traversed and committed.
+    Traversed {
+        /// Accepted revision that preconditioned this traversal.
+        base: RevisionIdentity,
+        /// Direction that committed exactly one history step.
+        direction: HistoryDirection,
+        /// Fresh accepted revision identity produced by traversal.
+        revision: RevisionIdentity,
+    },
+}
+
+/// Dedicated application authority for in-memory semantic Undo and Redo.
+pub trait SemanticNotebookHistory {
+    /// Inspect current Undo and Redo availability without mutation.
+    fn history_availability(&self) -> HistoryAvailabilityOutcome;
+
+    /// Traverse exactly one history transaction against one exact base.
+    fn traverse_history(
+        &mut self,
+        base: RevisionIdentity,
+        direction: HistoryDirection,
+    ) -> HistoryTraversalOutcome;
 }
 
 /// One candidate-local identity promoted to a new accepted semantic identity.

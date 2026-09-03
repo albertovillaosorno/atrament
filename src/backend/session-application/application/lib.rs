@@ -38,10 +38,11 @@
 use std::fmt;
 
 use atrament_semantic_notebook::{
-    AcceptedRevision, CandidateIdentity, Notebook,
+    AcceptedRevision, CandidateIdentity, Notebook, RevisionIdentity,
 };
 use atrament_semantic_notebook_port::{
-    AcceptanceOutcome, SemanticNotebookSession,
+    AcceptanceOutcome, HistoryAvailabilityOutcome, HistoryDirection,
+    HistoryTraversalOutcome, SemanticNotebookHistory, SemanticNotebookSession,
 };
 use atrament_semantic_notebook_session::SemanticNotebookSessionService;
 use atrament_session_draft::SessionDraftService;
@@ -73,6 +74,21 @@ impl SessionApplication {
     #[must_use]
     pub fn accepted_revision(&self) -> Option<&AcceptedRevision> {
         self.semantic.current()
+    }
+
+    /// Inspect in-memory semantic Undo and Redo availability.
+    #[must_use]
+    pub fn history_availability(&self) -> HistoryAvailabilityOutcome {
+        self.semantic.history_availability()
+    }
+
+    /// Traverse one in-memory semantic history transaction.
+    pub fn traverse_history(
+        &mut self,
+        base: RevisionIdentity,
+        direction: HistoryDirection,
+    ) -> HistoryTraversalOutcome {
+        self.semantic.traverse_history(base, direction)
     }
 }
 

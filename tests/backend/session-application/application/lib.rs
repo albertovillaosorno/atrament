@@ -17,14 +17,14 @@
 //   - Outputs: Assertions over shared lifecycle ownership and fresh defaults.
 //   - Side effects: Process-local test allocations only.
 // - Split-When:
-//   - Assets, history, previews, or derived plans join the session owner.
+//   - Assets, previews, renders, or derived plans join the session owner.
 // - Merge-When:
 //   - Full process lifecycle fixtures supersede this application-level proof.
 // - Summary:
-//   - Verifies draft and accepted notebook state share one disposable owner.
+//   - Verifies draft, accepted notebook, and history share one owner.
 // - Description:
 //   - Proves the live-session application can hold both state classes and a
-//     fresh application cannot observe either after the prior owner is dropped.
+//     fresh application cannot observe them after the prior owner is dropped.
 // - Usage:
 //   - Compile against the session application and semantic inbound-port crates.
 // - Defaults:
@@ -33,7 +33,9 @@
 use atrament_semantic_notebook::{
     CandidateIdentity, IdentityAllocator, Notebook,
 };
-use atrament_semantic_notebook_port::AcceptanceOutcome;
+use atrament_semantic_notebook_port::{
+    AcceptanceOutcome, HistoryAvailability, HistoryAvailabilityOutcome,
+};
 use atrament_session_draft_port::{DraftField, DraftMutation, SessionDraft};
 
 #[allow(dead_code)]
@@ -87,7 +89,18 @@ fn dropping_application_leaves_a_fresh_session_empty() {
             first.accept_candidate(minimal_candidate(&identities)),
             AcceptanceOutcome::Accepted { .. }
         ));
+        assert!(matches!(
+            first.accept_candidate(minimal_candidate(&identities)),
+            AcceptanceOutcome::Accepted { .. }
+        ));
         assert!(first.accepted_revision().is_some());
+        assert!(matches!(
+            first.history_availability(),
+            HistoryAvailabilityOutcome::Available(HistoryAvailability {
+                can_undo: true,
+                ..
+            })
+        ));
     }
 
     let fresh = application::SessionApplication::default();
@@ -95,6 +108,10 @@ fn dropping_application_leaves_a_fresh_session_empty() {
         assert_eq!(fresh.value(field), "");
     }
     assert!(fresh.accepted_revision().is_none());
+    assert_eq!(
+        fresh.history_availability(),
+        HistoryAvailabilityOutcome::NoAcceptedRevision,
+    );
 }
 
 #[test]

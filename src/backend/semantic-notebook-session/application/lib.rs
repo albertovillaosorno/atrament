@@ -9,21 +9,20 @@
 //
 // Boundary-Contract:
 // - Owns:
-//   - Active-session accepted semantic revision and candidate promotion.
+//   - Active-session accepted semantic revision, promotion, and history.
 // - Must-Not:
 //   - Persist notebooks, parse transport text, perform layout, or reuse IDs.
 // - Allows:
 //   - Inputs: Complete candidate semantic notebook values from prior
 //     validation.
-//   - Outputs: Current accepted revision and candidate-to-accepted ID mapping.
-//   - Side effects: Atomic process-memory accepted revision replacement only.
+//   - Outputs: Accepted revision, identity mapping, and history traversal.
+//   - Side effects: Atomic process-memory revision and history mutation only.
 // - Split-When:
-//   - Semantic command Apply or history requires independent transaction state.
+//   - Semantic command Apply requires independently bounded transaction state.
 // - Merge-When:
 //   - One application authority subsumes all accepted semantic transactions.
 // - Summary:
-//   - Promotes one candidate notebook into accepted in-memory session
-//     authority.
+//   - Owns accepted semantic authority and in-memory Undo/Redo state.
 // - Description:
 //   - Validates candidate identity graph before allocating accepted authority.
 // - Usage:
@@ -32,7 +31,7 @@
 //   - Starts without an accepted revision and never persists session state.
 //
 
-//! Atomic in-memory acceptance of complete semantic notebook candidates.
+//! In-memory accepted semantic authority and history traversal.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
@@ -74,11 +73,14 @@ use atrament_semantic_notebook_port::{
     DirectEditSemanticChange, DirectEditSimulationOutcome,
     EditableSemanticValue, EditableSemanticValueKind,
     EditableValuePreconditionOutcome, FormulaEditOutcome,
-    IdentityInspectOutcome, IdentityKindInspectOutcome, IdentityMapping,
+    HistoryAvailability, HistoryAvailabilityOutcome, HistoryDirection,
+    HistoryTraversalOutcome, IdentityInspectOutcome,
+    IdentityKindInspectOutcome, IdentityMapping,
     IdentityOwnerExpectation, IdentityPrecondition,
     IdentityPreconditionOutcome, PageProfileEditOutcome,
     SemanticCommandCapabilitySnapshot, SemanticCommandFamily,
-    SemanticNotebookSession, TableRowRoleEditOutcome, TextEditOutcome,
+    SemanticNotebookHistory, SemanticNotebookSession,
+    TableRowRoleEditOutcome, TextEditOutcome,
 };
 
 #[derive(Default)]
@@ -242,6 +244,8 @@ impl CandidateGraph {
 pub struct SemanticNotebookSessionService {
     current: Option<AcceptedRevision>,
     identities: IdentityAllocator,
+    redo_notebooks: Vec<Notebook<AcceptedIdentity>>,
+    undo_notebooks: Vec<Notebook<AcceptedIdentity>>,
 }
 
 impl fmt::Debug for SemanticNotebookSessionService {
@@ -281,6 +285,10 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
                 return AcceptanceOutcome::IdentityExhausted { sequence };
             },
         };
+        if let Some(current) = self.current.as_ref() {
+            self.undo_notebooks.push(current.notebook.clone());
+        }
+        self.redo_notebooks.clear();
         self.current = Some(AcceptedRevision { id: revision, notebook });
         AcceptanceOutcome::Accepted { mapping, revision }
     }
@@ -936,13 +944,12 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
                 target,
             };
         }
-        let revision = match self.identities.allocate_revision() {
+        let revision = match self.commit_semantic_edit(notebook) {
             Ok(revision) => revision,
             Err(sequence) => {
                 return FormulaEditOutcome::IdentityExhausted { sequence };
             },
         };
-        self.current = Some(AcceptedRevision { id: revision, notebook });
         FormulaEditOutcome::Applied { base, revision, target }
     }
 
@@ -1019,13 +1026,12 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
                 target,
             };
         }
-        let revision = match self.identities.allocate_revision() {
+        let revision = match self.commit_semantic_edit(notebook) {
             Ok(revision) => revision,
             Err(sequence) => {
                 return PageProfileEditOutcome::IdentityExhausted { sequence };
             },
         };
-        self.current = Some(AcceptedRevision { id: revision, notebook });
         PageProfileEditOutcome::Applied { base, revision, target }
     }
 
@@ -1092,13 +1098,12 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
                 target,
             };
         }
-        let revision = match self.identities.allocate_revision() {
+        let revision = match self.commit_semantic_edit(notebook) {
             Ok(revision) => revision,
             Err(sequence) => {
                 return TableRowRoleEditOutcome::IdentityExhausted { sequence };
             },
         };
-        self.current = Some(AcceptedRevision { id: revision, notebook });
         TableRowRoleEditOutcome::Applied { base, revision, target }
     }
 
@@ -1165,13 +1170,12 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
                 target,
             };
         }
-        let revision = match self.identities.allocate_revision() {
+        let revision = match self.commit_semantic_edit(notebook) {
             Ok(revision) => revision,
             Err(sequence) => {
                 return TextEditOutcome::IdentityExhausted { sequence };
             },
         };
-        self.current = Some(AcceptedRevision { id: revision, notebook });
         TextEditOutcome::Applied { base, revision, target }
     }
 
@@ -1293,7 +1297,96 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
     }
 }
 
+impl SemanticNotebookHistory for SemanticNotebookSessionService {
+    fn history_availability(&self) -> HistoryAvailabilityOutcome {
+        let Some(current) = self.current.as_ref() else {
+            return HistoryAvailabilityOutcome::NoAcceptedRevision;
+        };
+        HistoryAvailabilityOutcome::Available(HistoryAvailability {
+            can_redo: !self.redo_notebooks.is_empty(),
+            can_undo: !self.undo_notebooks.is_empty(),
+            revision: current.id,
+        })
+    }
+
+    fn traverse_history(
+        &mut self,
+        base: atrament_semantic_notebook::RevisionIdentity,
+        direction: HistoryDirection,
+    ) -> HistoryTraversalOutcome {
+        let Some(current) = self.current.as_ref() else {
+            return HistoryTraversalOutcome::NoAcceptedRevision;
+        };
+        if current.id != base {
+            return HistoryTraversalOutcome::StaleBase {
+                current: current.id,
+                requested: base,
+            };
+        }
+        let source_is_empty = match direction {
+            HistoryDirection::Undo => self.undo_notebooks.is_empty(),
+            HistoryDirection::Redo => self.redo_notebooks.is_empty(),
+        };
+        if source_is_empty {
+            return HistoryTraversalOutcome::Boundary {
+                direction,
+                revision: current.id,
+            };
+        }
+        let revision = match self.identities.allocate_revision() {
+            Ok(revision) => revision,
+            Err(sequence) => {
+                return HistoryTraversalOutcome::IdentityExhausted { sequence };
+            },
+        };
+        let current_notebook = current.notebook.clone();
+        let restored = match direction {
+            HistoryDirection::Undo => {
+                let restored = self
+                    .undo_notebooks
+                    .pop()
+                    .expect("non-empty Undo history checked before commit");
+                self.redo_notebooks.push(current_notebook);
+                restored
+            },
+            HistoryDirection::Redo => {
+                let restored = self
+                    .redo_notebooks
+                    .pop()
+                    .expect("non-empty Redo history checked before commit");
+                self.undo_notebooks.push(current_notebook);
+                restored
+            },
+        };
+        self.current = Some(AcceptedRevision {
+            id: revision,
+            notebook: restored,
+        });
+        HistoryTraversalOutcome::Traversed {
+            base,
+            direction,
+            revision,
+        }
+    }
+}
+
 impl SemanticNotebookSessionService {
+    fn commit_semantic_edit(
+        &mut self,
+        notebook: Notebook<AcceptedIdentity>,
+    ) -> Result<
+        atrament_semantic_notebook::RevisionIdentity,
+        IdentityExhausted,
+    > {
+        let revision = self.identities.allocate_revision()?;
+        if let Some(current) = self.current.as_ref() {
+            self.undo_notebooks.push(current.notebook.clone());
+        }
+        self.redo_notebooks.clear();
+        self.current = Some(AcceptedRevision { id: revision, notebook });
+        Ok(revision)
+    }
+
     fn allocate_mapping(
         &self,
         owners: &[CandidateIdentity],

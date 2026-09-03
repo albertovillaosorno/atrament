@@ -9,21 +9,21 @@
 //
 // Boundary-Contract:
 // - Owns:
-//   - Regression evidence for transactional candidate notebook acceptance.
+//   - Regression evidence for accepted semantic authority and history.
 // - Must-Not:
 //   - Parse model output, persist revisions, or define layout/render behavior.
 // - Allows:
-//   - Inputs: Deterministic candidate semantic notebooks and invalid ID graphs.
-//   - Outputs: Assertions over atomic acceptance and stable identity promotion.
+//   - Inputs: Candidate notebooks, direct edits, and history traversals.
+//   - Outputs: Assertions over acceptance, edits, history, and stable IDs.
 //   - Side effects: Process-local test allocation and accepted-state mutation.
 // - Split-When:
-//   - Candidate acceptance needs independently versioned negative fixtures.
+//   - History retry or command Apply needs independent transaction fixtures.
 // - Merge-When:
-//   - Semantic acceptance is covered by a broader application transaction test.
+//   - A broader semantic transaction suite subsumes these application fixtures.
 // - Summary:
-//   - Verifies candidate identities become accepted only through one commit.
+//   - Verifies accepted semantic changes and history remain transactional.
 // - Description:
-//   - Covers first acceptance, replacement, duplicate IDs, and dangling refs.
+//   - Covers acceptance, direct edits, history traversal, and graph rejection.
 // - Usage:
 //   - Compile directly against semantic notebook application components.
 // - Defaults:
@@ -69,10 +69,12 @@ use atrament_semantic_notebook_port::{
     DirectEditProposal, DirectEditProposalOutcome, DirectEditSemanticChange,
     DirectEditSimulationOutcome, EditableSemanticValue,
     EditableSemanticValueKind, EditableValuePreconditionOutcome,
-    FormulaEditOutcome, IdentityInspectOutcome, IdentityKindInspectOutcome,
-    IdentityOwnerExpectation, IdentityPrecondition,
+    FormulaEditOutcome, HistoryAvailability, HistoryAvailabilityOutcome,
+    HistoryDirection, HistoryTraversalOutcome, IdentityInspectOutcome,
+    IdentityKindInspectOutcome, IdentityOwnerExpectation, IdentityPrecondition,
     IdentityPreconditionOutcome, PageProfileEditOutcome, SemanticCommandFamily,
-    SemanticNotebookSession, TableRowRoleEditOutcome, TextEditOutcome,
+    SemanticNotebookHistory, SemanticNotebookSession, TableRowRoleEditOutcome,
+    TextEditOutcome,
 };
 use atrament_semantic_notebook_session::SemanticNotebookSessionService;
 
@@ -5315,19 +5317,41 @@ fn wrong_reference_kind_rejects_without_changing_current_revision() {
 #[test]
 fn dropped_semantic_session_does_not_seed_a_fresh_service() {
     let candidate_ids = IdentityAllocator::new();
-    let candidate =
-        candidate_notebook(&candidate_ids, "ephemeral accepted text");
+    let (candidate, candidate_span) = candidate_notebook_with_span(
+        &candidate_ids,
+        "ephemeral accepted text",
+    );
     {
         let mut first = SemanticNotebookSessionService::default();
+        let AcceptanceOutcome::Accepted { mapping, revision } =
+            first.accept(candidate)
+        else {
+            panic!("candidate must be accepted");
+        };
+        let target = accepted_for(&mapping, candidate_span);
         assert!(matches!(
-            first.accept(candidate),
-            AcceptanceOutcome::Accepted { .. }
+            first.replace_text(
+                revision,
+                target,
+                String::from("ephemeral history text"),
+            ),
+            TextEditOutcome::Applied { .. }
         ));
-        assert!(first.current().is_some());
+        assert!(matches!(
+            first.history_availability(),
+            HistoryAvailabilityOutcome::Available(HistoryAvailability {
+                can_undo: true,
+                ..
+            })
+        ));
     }
 
     let fresh = SemanticNotebookSessionService::default();
     assert!(fresh.current().is_none());
+    assert_eq!(
+        fresh.history_availability(),
+        HistoryAvailabilityOutcome::NoAcceptedRevision,
+    );
 }
 
 #[test]
@@ -5389,6 +5413,164 @@ fn direct_text_edit_changes_one_span_and_preserves_all_semantic_identities() {
     assert_eq!(after_spans[0].provenance, before_spans[0].provenance);
     assert_eq!(after_spans[0].style, before_spans[0].style);
     assert_eq!(after.notebook.extensions, before.notebook.extensions);
+}
+
+#[test]
+fn semantic_history_undo_redo_preserves_stable_text_identity() {
+    let candidate_ids = IdentityAllocator::new();
+    let (candidate, candidate_span) =
+        candidate_notebook_with_span(&candidate_ids, "original");
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision: base } =
+        session.accept(candidate)
+    else {
+        panic!("candidate must be accepted");
+    };
+    let target = accepted_for(&mapping, candidate_span);
+    assert_eq!(
+        session.history_availability(),
+        HistoryAvailabilityOutcome::Available(HistoryAvailability {
+            can_redo: false,
+            can_undo: false,
+            revision: base,
+        }),
+    );
+
+    let TextEditOutcome::Applied { revision: edited, .. } =
+        session.replace_text(base, target, String::from("corrected"))
+    else {
+        panic!("text edit must apply");
+    };
+    assert_eq!(
+        session.history_availability(),
+        HistoryAvailabilityOutcome::Available(HistoryAvailability {
+            can_redo: false,
+            can_undo: true,
+            revision: edited,
+        }),
+    );
+
+    let HistoryTraversalOutcome::Traversed {
+        revision: undone, ..
+    } = session.traverse_history(edited, HistoryDirection::Undo)
+    else {
+        panic!("Undo must traverse one transaction");
+    };
+    assert_ne!(undone, base);
+    assert_ne!(undone, edited);
+    let current = session.current().expect("Undo revision");
+    let BlockContent::Paragraph(spans) =
+        &current.notebook.pages[0].flows[0].blocks[0].content
+    else {
+        panic!("Undo must restore paragraph state");
+    };
+    assert_eq!(spans[0].id, target);
+    assert_eq!(spans[0].text, "original");
+    assert_eq!(
+        session.history_availability(),
+        HistoryAvailabilityOutcome::Available(HistoryAvailability {
+            can_redo: true,
+            can_undo: false,
+            revision: undone,
+        }),
+    );
+
+    let HistoryTraversalOutcome::Traversed {
+        revision: redone, ..
+    } = session.traverse_history(undone, HistoryDirection::Redo)
+    else {
+        panic!("Redo must traverse one transaction");
+    };
+    assert_ne!(redone, undone);
+    assert_ne!(redone, edited);
+    let current = session.current().expect("Redo revision");
+    let BlockContent::Paragraph(spans) =
+        &current.notebook.pages[0].flows[0].blocks[0].content
+    else {
+        panic!("Redo must restore paragraph state");
+    };
+    assert_eq!(spans[0].id, target);
+    assert_eq!(spans[0].text, "corrected");
+}
+
+#[test]
+fn semantic_history_rejects_stale_base_without_traversal() {
+    let candidate_ids = IdentityAllocator::new();
+    let (candidate, candidate_span) =
+        candidate_notebook_with_span(&candidate_ids, "original");
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision: base } =
+        session.accept(candidate)
+    else {
+        panic!("candidate must be accepted");
+    };
+    let target = accepted_for(&mapping, candidate_span);
+    let TextEditOutcome::Applied { revision: edited, .. } =
+        session.replace_text(base, target, String::from("edited"))
+    else {
+        panic!("text edit must apply");
+    };
+    let before = session.current().expect("edited revision").clone();
+
+    assert_eq!(
+        session.traverse_history(base, HistoryDirection::Undo),
+        HistoryTraversalOutcome::StaleBase {
+            current: edited,
+            requested: base,
+        },
+    );
+    assert_eq!(session.current(), Some(&before));
+}
+
+#[test]
+fn semantic_history_new_edit_after_undo_discards_redo_branch() {
+    let candidate_ids = IdentityAllocator::new();
+    let (candidate, candidate_span) =
+        candidate_notebook_with_span(&candidate_ids, "zero");
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision: base } =
+        session.accept(candidate)
+    else {
+        panic!("candidate must be accepted");
+    };
+    let target = accepted_for(&mapping, candidate_span);
+    let TextEditOutcome::Applied { revision: first, .. } =
+        session.replace_text(base, target, String::from("one"))
+    else {
+        panic!("first edit must apply");
+    };
+    let TextEditOutcome::Applied { revision: second, .. } =
+        session.replace_text(first, target, String::from("two"))
+    else {
+        panic!("second edit must apply");
+    };
+    let HistoryTraversalOutcome::Traversed {
+        revision: undone, ..
+    } = session.traverse_history(second, HistoryDirection::Undo)
+    else {
+        panic!("Undo must restore first edit");
+    };
+    let TextEditOutcome::Applied { revision: branched, .. } =
+        session.replace_text(undone, target, String::from("branch"))
+    else {
+        panic!("branch edit must apply");
+    };
+
+    assert_eq!(
+        session.history_availability(),
+        HistoryAvailabilityOutcome::Available(HistoryAvailability {
+            can_redo: false,
+            can_undo: true,
+            revision: branched,
+        }),
+    );
+    assert_eq!(
+        session.traverse_history(branched, HistoryDirection::Redo),
+        HistoryTraversalOutcome::Boundary {
+            direction: HistoryDirection::Redo,
+            revision: branched,
+        },
+    );
 }
 
 #[test]
