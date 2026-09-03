@@ -231,6 +231,17 @@ fn cloned_semantic_state_preserves_stable_identity() {
 }
 
 #[test]
+fn maximum_logical_colspan_stays_compact() {
+    let maximum = NonZeroU32::MAX.get();
+    let table = Table {
+        id: 100u32,
+        rows: vec![grid_row(1, vec![grid_cell(10, maximum, 1)])],
+    };
+
+    assert_eq!(table.validate_grid(), Ok(()));
+}
+
+#[test]
 fn merged_table_grid_validation_is_identity_generic() {
     let table = Table {
         id: 100u32,

@@ -342,7 +342,8 @@ Merged cells now carry nonzero logical row and column spans. The first row fixes
 logical table width, later rows fill unoccupied columns around inherited row
 spans, and candidate acceptance rejects horizontal conflicts, vertical overflow,
 or rows that leave logical columns uncovered before accepted identity
-allocation. Accepted promotion preserves valid spans exactly.
+allocation. Accepted promotion preserves valid spans exactly, and validation
+keeps logical coverage compact instead of allocating per spanned column.
 
 An exact-base direct cell-span edit reuses that complete table-grid invariant. A
 valid edit preserves cell identity and child blocks, creates one accepted

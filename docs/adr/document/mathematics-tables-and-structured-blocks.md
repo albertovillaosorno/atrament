@@ -84,7 +84,9 @@ prior rows reserve their covered columns.
 
 Candidate acceptance rejects cells that cross reserved columns or table width,
 row spans that extend below the table, and rows that leave logical columns
-uncovered. Accepted identity promotion preserves each span exactly.
+uncovered. Accepted identity promotion preserves each span exactly. Grid
+validation tracks occupied span intervals rather than expanding one object per
+logical column, including at the maximum admitted column-span value.
 
 The same grid invariant now validates an exact-base direct cell-span edit. A
 valid change preserves the cell identity and child blocks, commits one accepted
