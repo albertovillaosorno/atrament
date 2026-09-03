@@ -156,11 +156,14 @@ still performs the same authoritative validation and simulation before commit.
 The current application foundation can deterministically simulate an ordered
 batch of the four established direct replacement value families against one
 immutable accepted revision. It validates generic command dependencies first,
-then derives a private value-and-impact overlay for only the editable identities
-targeted by the batch. Successful commands update that overlay rather than a
-cloned notebook. A middle failure leaves accepted state unchanged and marks
-later
-commands as not evaluated.
+then consumes valid commands through a private value-and-impact overlay for only
+the editable identities targeted by the batch. Command IDs and requested values
+move into owned prediction/candidate evidence, local preconditions are borrowed,
+and only extra typed failure evidence is cloned.
+
+Successful commands update the overlay rather than a cloned notebook. A middle
+failure leaves accepted state unchanged and marks later commands as not
+evaluated.
 
 Dependent same-target commands can observe earlier simulated candidate values
 only through an explicit command dependency. Per-command changes retain their
@@ -173,7 +176,9 @@ structured-content, and page-profile changes. Single-target review and ordered
 batches share those seeds, and net no-ops emit none. The ordered overlay caches
 impact scopes only for requested targets, stops once every unique target is
 resolved, and bypasses unrelated block traversal for profile-only batches while
-retaining ordinary semantic material lookup for non-editable targets.
+retaining ordinary semantic material lookup for non-editable targets. Prepared
+material and accepted base values move into later evidence instead of being
+cloned before replacement simulation.
 
 Graph validation now avoids cycle-state allocation for the ordinary ordered
 case where every explicit dependency points backward, while preserving cycle

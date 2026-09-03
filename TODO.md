@@ -162,13 +162,17 @@ accepted-state, and exact-base authority gate.
 
 Direct-edit simulation now also projects exact before/after semantic changes. An
 ordered in-memory direct-edit batch validates the generic dependency graph,
-replays replacements against a private targeted value overlay, stops atomically
-on the first failure, and coalesces accepted-base to final-candidate net
-changes. An empty batch returns the frozen NoOp prediction before semantic
-target
-indexing. Explicit dependencies are required before a later command can observe
-an earlier same-target candidate change; prior no-ops do not manufacture
-dependencies.
+then consumes valid command payloads through a private targeted value overlay.
+Caller command IDs and requested values move into result/candidate evidence;
+local preconditions are borrowed, and only additional typed failure evidence is
+cloned.
+
+The simulation stops atomically on the first failure and coalesces accepted-base
+to final-candidate net changes. An empty batch returns the frozen NoOp
+prediction before semantic target indexing. Explicit dependencies are required
+before a
+later command can observe an earlier same-target candidate change; prior no-ops
+do not manufacture dependencies.
 
 Successful direct-edit predictions classify their net effect as Mutation or
 NoOp and derive conservative impact seeds from backend-owned semantic ownership.

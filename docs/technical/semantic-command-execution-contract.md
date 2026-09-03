@@ -495,10 +495,15 @@ no-op, while preserving typed simulation rejection.
 
 A transport-neutral ordered direct-edit batch now combines those primitives with
 the generic dependency graph. It derives a private overlay for only targeted
-editable values and their impact scopes. It simulates commands against that
-overlay, stops after the first semantic rejection, and reports later command
-identities as
-not evaluated. The accepted revision and identity allocator remain untouched.
+editable values and their impact scopes. Dependency validation borrows command
+payloads first; valid commands are then consumed in order so caller command IDs
+and requested values can move into prediction/candidate evidence. Local
+preconditions are compared by reference, and only additional typed failure
+evidence is cloned.
+
+Simulation stops after the first semantic rejection and reports later command
+identities as not evaluated. The accepted revision and identity allocator remain
+untouched.
 
 When a later command edits a target changed earlier in the same candidate, it
 must explicitly depend on the previous target writer before observing that
@@ -519,14 +524,16 @@ Those seeds are shared by single-target review and ordered batch simulation and
 are omitted for a net semantic no-op. They are inputs to future dependency
 expansion, not the final authoritative Validate impact set.
 
-The ordered overlay clones values only for identities named by the batch and
-stops semantic traversal once every unique target is indexed. Profile-only
-batches resolve page references without walking unrelated blocks, while mixed
-batches continue until all requested targets resolve. Later same-target commands
-update the cached value while non-editable targets fall back to ordinary
-semantic
-material resolution. This is internal simulation hardening, not a new capability
-or numeric product-limit decision.
+The ordered overlay copies accepted values only for identities named by the
+batch and stops semantic traversal once every unique target is indexed.
+Profile-only batches resolve page references without walking unrelated blocks,
+while mixed batches continue until all requested targets resolve. Prepared
+material and accepted base values are moved through simulation instead of being
+cloned again.
+
+Later same-target commands update the cached value while non-editable targets
+fall back to ordinary semantic material resolution. This is internal simulation
+hardening, not a new capability or numeric product-limit decision.
 
 A separate transport-neutral command-graph domain validates duplicate command
 identities, direct self-dependencies, missing dependencies, cycles, and acyclic
