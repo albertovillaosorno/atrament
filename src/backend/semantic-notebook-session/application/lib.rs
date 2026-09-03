@@ -288,8 +288,8 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
                 return AcceptanceOutcome::IdentityExhausted { sequence };
             },
         };
-        if let Some(current) = self.current.as_ref() {
-            self.undo_notebooks.push(current.notebook.clone());
+        if let Some(current) = self.current.take() {
+            self.undo_notebooks.push(current.notebook);
         }
         self.redo_notebooks.clear();
         self.current = Some(AcceptedRevision { id: revision, notebook });
@@ -1434,26 +1434,31 @@ impl SemanticNotebookHistory for SemanticNotebookSessionService {
                 return HistoryTraversalOutcome::IdentityExhausted { sequence };
             },
         };
-        let current_notebook = current.notebook.clone();
+        let current_id = current.id;
+        let Some(current_revision) = self.current.take() else {
+            return HistoryTraversalOutcome::NoAcceptedRevision;
+        };
         let restored = match direction {
             HistoryDirection::Redo => {
                 let Some(restored) = self.redo_notebooks.pop() else {
+                    self.current = Some(current_revision);
                     return HistoryTraversalOutcome::Boundary {
                         direction,
-                        revision: current.id,
+                        revision: current_id,
                     };
                 };
-                self.undo_notebooks.push(current_notebook);
+                self.undo_notebooks.push(current_revision.notebook);
                 restored
             },
             HistoryDirection::Undo => {
                 let Some(restored) = self.undo_notebooks.pop() else {
+                    self.current = Some(current_revision);
                     return HistoryTraversalOutcome::Boundary {
                         direction,
-                        revision: current.id,
+                        revision: current_id,
                     };
                 };
-                self.redo_notebooks.push(current_notebook);
+                self.redo_notebooks.push(current_revision.notebook);
                 restored
             },
         };
@@ -1600,8 +1605,8 @@ impl SemanticNotebookSessionService {
         IdentityExhausted,
     > {
         let revision = self.identities.allocate_revision()?;
-        if let Some(current) = self.current.as_ref() {
-            self.undo_notebooks.push(current.notebook.clone());
+        if let Some(current) = self.current.take() {
+            self.undo_notebooks.push(current.notebook);
         }
         self.redo_notebooks.clear();
         self.current = Some(AcceptedRevision { id: revision, notebook });
