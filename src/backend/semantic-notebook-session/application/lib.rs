@@ -2065,14 +2065,14 @@ where
         Vec::<DirectEditBatchCommandPrediction<CommandIdentity>>::with_capacity(
             commands.len(),
         );
-    let mut previous_by_target = BTreeMap::<AcceptedIdentity, usize>::new();
-    let mut aggregate = BTreeMap::<AcceptedIdentity, (usize, usize)>::new();
+    let mut changed_targets =
+        BTreeMap::<AcceptedIdentity, (usize, usize)>::new();
     let mut remaining = commands.into_iter();
     while let Some(command) = remaining.next() {
         let target = command.target;
-        let previous = previous_by_target
+        let previous = changed_targets
             .get(&target)
-            .and_then(|index| evaluated.get(*index))
+            .and_then(|(_, last)| evaluated.get(*last))
             .map(|prediction| &prediction.command);
         let result = simulate_direct_edit_batch_command(
             &current.notebook,
@@ -2096,15 +2096,15 @@ where
         let command_index = evaluated.len();
         if prediction.change.is_some() {
             record_direct_edit_batch_change_index(
-                &mut aggregate,
+                &mut changed_targets,
                 command_index,
                 target,
             );
-            let _previous = previous_by_target.insert(target, command_index);
         }
         evaluated.push(prediction);
     }
-    let changes = collect_direct_edit_batch_changes(&evaluated, aggregate);
+    let changes =
+        collect_direct_edit_batch_changes(&evaluated, changed_targets);
     let effect = if changes.is_empty() {
         DirectEditEffectClass::NoOp
     } else {
