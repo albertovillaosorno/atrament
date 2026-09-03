@@ -51,7 +51,8 @@ use atrament_semantic_notebook_port::{
     CommandCapabilityCompatibilityOutcome, CommandFamilyAdmissionOutcome,
     CommandFamilyCapability, CommandResourceLimits, CommandTargetMaterial,
     CommandTargetMaterialOutcome, CommandTargetPreconditionOutcome,
-    CommandTargetPreconditions, DirectEditProposal, DirectEditProposalOutcome,
+    CommandTargetPreconditions, DirectEditChangePreviewOutcome,
+    DirectEditProposal, DirectEditProposalOutcome, DirectEditSemanticChange,
     DirectEditSimulationOutcome, EditableSemanticValue,
     EditableSemanticValueKind, EditableValuePreconditionOutcome,
     FormulaEditOutcome, IdentityInspectOutcome, IdentityKindInspectOutcome,
@@ -86,6 +87,11 @@ enum CandidateGraphFrame<'candidate> {
         child_depth: usize,
         rows: &'candidate [TableRow<CandidateIdentity>],
     },
+}
+
+struct DirectEditSimulation {
+    before: Option<EditableSemanticValue>,
+    outcome: DirectEditSimulationOutcome,
 }
 
 impl CandidateGraph {
@@ -535,6 +541,50 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
         }
     }
 
+    fn preview_direct_edit_changes(
+        &self,
+        revision: atrament_semantic_notebook::RevisionIdentity,
+        target: AcceptedIdentity,
+        requested: EditableSemanticValue,
+    ) -> DirectEditChangePreviewOutcome {
+        let simulation = simulate_direct_edit_material(
+            self.command_target_material(revision, target),
+            requested,
+        );
+        match (simulation.before, simulation.outcome) {
+            (
+                Some(before),
+                DirectEditSimulationOutcome::Applicable {
+                    family,
+                    requested: simulated_requested,
+                    revision: simulated_revision,
+                    target: simulated_target,
+                },
+            ) => DirectEditChangePreviewOutcome::Predicted {
+                changes: vec![DirectEditSemanticChange {
+                    after: simulated_requested,
+                    before,
+                    family,
+                    target: simulated_target,
+                }],
+                revision: simulated_revision,
+            },
+            (
+                _,
+                DirectEditSimulationOutcome::NoOp {
+                    revision: simulated_revision,
+                    ..
+                },
+            ) => DirectEditChangePreviewOutcome::Predicted {
+                changes: Vec::new(),
+                revision: simulated_revision,
+            },
+            (_, outcome) => DirectEditChangePreviewOutcome::Rejected {
+                outcome: Box::new(outcome),
+            },
+        }
+    }
+
     fn replace_formula(
         &mut self,
         base: atrament_semantic_notebook::RevisionIdentity,
@@ -871,86 +921,11 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
         target: AcceptedIdentity,
         requested: EditableSemanticValue,
     ) -> DirectEditSimulationOutcome {
-        let material = match self.command_target_material(revision, target) {
-            CommandTargetMaterialOutcome::NoAcceptedRevision => {
-                return DirectEditSimulationOutcome::NoAcceptedRevision;
-            },
-            CommandTargetMaterialOutcome::Prepared { material } => material,
-            CommandTargetMaterialOutcome::StaleBase { current } => {
-                return DirectEditSimulationOutcome::StaleBase { current };
-            },
-            CommandTargetMaterialOutcome::TargetNotFound {
-                revision: inspected_revision,
-                target: missing_target,
-            } => {
-                return DirectEditSimulationOutcome::TargetNotFound {
-                    revision: inspected_revision,
-                    target: missing_target,
-                };
-            },
-        };
-        let Some(actual) = material.editable_value else {
-            return DirectEditSimulationOutcome::TargetNotEditableValue {
-                kind: material.descriptor.kind,
-                revision,
-                target,
-            };
-        };
-        let actual_kind = editable_value_kind(&actual);
-        let requested_kind = editable_value_kind(&requested);
-        if actual_kind != requested_kind {
-            return DirectEditSimulationOutcome::ValueFamilyMismatch {
-                actual: actual_kind,
-                requested: requested_kind,
-                revision,
-                target,
-            };
-        }
-        match &requested {
-            EditableSemanticValue::Formula { mode, source } => {
-                let analyzed = match analyze(source, *mode) {
-                    Ok(analyzed) => analyzed,
-                    Err(reason) => {
-                        return DirectEditSimulationOutcome::InvalidMathematics {
-                            reason,
-                            revision,
-                            target,
-                        };
-                    },
-                };
-                if !analyzed.is_supported() {
-                    return DirectEditSimulationOutcome::UnsupportedMathematics {
-                        revision,
-                        target,
-                    };
-                }
-            },
-            EditableSemanticValue::PageProfile(profile) => {
-                if let Err(reason) = profile.validate() {
-                    return DirectEditSimulationOutcome::InvalidPageProfile {
-                        reason,
-                        revision,
-                        target,
-                    };
-                }
-            },
-            EditableSemanticValue::TableRowRole(_)
-            | EditableSemanticValue::Text(_) => {},
-        }
-        let family = direct_edit_family(&requested);
-        if actual == requested {
-            return DirectEditSimulationOutcome::NoOp {
-                family,
-                revision,
-                target,
-            };
-        }
-        DirectEditSimulationOutcome::Applicable {
-            family,
+        simulate_direct_edit_material(
+            self.command_target_material(revision, target),
             requested,
-            revision,
-            target,
-        }
+        )
+        .outcome
     }
 
     fn simulate_direct_edit_proposal(
@@ -1406,6 +1381,124 @@ const fn editable_value_kind(
         },
         EditableSemanticValue::Text(_) => EditableSemanticValueKind::Text,
     }
+}
+
+fn simulate_direct_edit_material(
+    material_outcome: CommandTargetMaterialOutcome,
+    requested: EditableSemanticValue,
+) -> DirectEditSimulation {
+    match material_outcome {
+        CommandTargetMaterialOutcome::NoAcceptedRevision => {
+            DirectEditSimulation {
+                before: None,
+                outcome: DirectEditSimulationOutcome::NoAcceptedRevision,
+            }
+        },
+        CommandTargetMaterialOutcome::Prepared { material: prepared } => {
+            simulate_prepared_direct_edit(prepared, requested)
+        },
+        CommandTargetMaterialOutcome::StaleBase { current } => {
+            DirectEditSimulation {
+                before: None,
+                outcome: DirectEditSimulationOutcome::StaleBase { current },
+            }
+        },
+        CommandTargetMaterialOutcome::TargetNotFound { revision, target } => {
+            DirectEditSimulation {
+                before: None,
+                outcome: DirectEditSimulationOutcome::TargetNotFound {
+                    revision,
+                    target,
+                },
+            }
+        },
+    }
+}
+
+fn simulate_prepared_direct_edit(
+    material: CommandTargetMaterial,
+    requested: EditableSemanticValue,
+) -> DirectEditSimulation {
+    let revision = material.revision;
+    let target = material.target;
+    let before = material.editable_value.clone();
+    let Some(actual) = material.editable_value else {
+        return DirectEditSimulation {
+            before,
+            outcome: DirectEditSimulationOutcome::TargetNotEditableValue {
+                kind: material.descriptor.kind,
+                revision,
+                target,
+            },
+        };
+    };
+    let actual_kind = editable_value_kind(&actual);
+    let requested_kind = editable_value_kind(&requested);
+    if actual_kind != requested_kind {
+        return DirectEditSimulation {
+            before,
+            outcome: DirectEditSimulationOutcome::ValueFamilyMismatch {
+                actual: actual_kind,
+                requested: requested_kind,
+                revision,
+                target,
+            },
+        };
+    }
+    match &requested {
+        EditableSemanticValue::Formula { mode, source } => {
+            let analyzed = match analyze(source, *mode) {
+                Ok(analyzed) => analyzed,
+                Err(reason) => {
+                    return DirectEditSimulation {
+                        before,
+                        outcome:
+                            DirectEditSimulationOutcome::InvalidMathematics {
+                                reason,
+                                revision,
+                                target,
+                            },
+                    };
+                },
+            };
+            if !analyzed.is_supported() {
+                return DirectEditSimulation {
+                    before,
+                    outcome:
+                        DirectEditSimulationOutcome::UnsupportedMathematics {
+                            revision,
+                            target,
+                        },
+                };
+            }
+        },
+        EditableSemanticValue::PageProfile(profile) => {
+            if let Err(reason) = profile.validate() {
+                return DirectEditSimulation {
+                    before,
+                    outcome: DirectEditSimulationOutcome::InvalidPageProfile {
+                        reason,
+                        revision,
+                        target,
+                    },
+                };
+            }
+        },
+        EditableSemanticValue::TableRowRole(_)
+        | EditableSemanticValue::Text(_) => {},
+    }
+    let family = direct_edit_family(&requested);
+    let outcome = if actual == requested {
+        DirectEditSimulationOutcome::NoOp { family, revision, target }
+    } else {
+        DirectEditSimulationOutcome::Applicable {
+            family,
+            requested,
+            revision,
+            target,
+        }
+    };
+    DirectEditSimulation { before, outcome }
 }
 
 const fn direct_edit_family(

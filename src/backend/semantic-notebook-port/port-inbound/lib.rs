@@ -375,6 +375,25 @@ pub enum EditableSemanticValue {
     Text(String),
 }
 
+/// Read-only semantic change-set preview for one established direct edit.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum DirectEditChangePreviewOutcome {
+    /// Simulation succeeded as either one exact change or an empty no-op set.
+    Predicted {
+        /// Ordered direct semantic changes; empty means semantic no-op.
+        changes: Vec<DirectEditSemanticChange>,
+        /// Accepted revision whose immutable state was previewed.
+        revision: RevisionIdentity,
+    },
+    /// Direct-edit simulation rejected before any change set could be
+    /// predicted.
+    Rejected {
+        /// Existing typed simulation rejection, preserved without
+        /// reinterpretation.
+        outcome: Box<DirectEditSimulationOutcome>,
+    },
+}
+
 /// One version-bound single-target direct-edit proposal.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct DirectEditProposal {
@@ -410,6 +429,19 @@ pub enum DirectEditProposalOutcome {
         /// Read-only replacement simulation result.
         outcome: DirectEditSimulationOutcome,
     },
+}
+
+/// Exact semantic before/after change predicted for one direct edit.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct DirectEditSemanticChange {
+    /// Exact requested semantic value after the predicted edit.
+    pub after: EditableSemanticValue,
+    /// Exact accepted semantic value before the predicted edit.
+    pub before: EditableSemanticValue,
+    /// Executable semantic command family owning this change.
+    pub family: SemanticCommandFamily,
+    /// Stable accepted semantic identity whose revision-owned value changes.
+    pub target: AcceptedIdentity,
 }
 
 /// Read-only semantic simulation result for one established direct edit.
@@ -1017,6 +1049,14 @@ pub trait SemanticNotebookSession {
         revision: RevisionIdentity,
         target: AcceptedIdentity,
     ) -> IdentityKindInspectOutcome;
+
+    /// Preview the exact direct semantic change set without mutation.
+    fn preview_direct_edit_changes(
+        &self,
+        revision: RevisionIdentity,
+        target: AcceptedIdentity,
+        requested: EditableSemanticValue,
+    ) -> DirectEditChangePreviewOutcome;
 
     /// Replace one mathematical source against an exact base revision.
     fn replace_formula(
