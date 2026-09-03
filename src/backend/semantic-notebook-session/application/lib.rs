@@ -2327,26 +2327,32 @@ where
             },
         ));
     }
-    let material = match batch_command_target_material(
+    let prepared = match batch_command_target_material(
         notebook, materials, revision, target,
     ) {
         Ok(material) => material,
         Err(reason) => return Err((id, reason)),
     };
-    let kind = material.descriptor.kind;
-    let precondition = check_command_target_preconditions_material(
-        material.clone(),
+    let kind = prepared.descriptor.kind;
+    let checked = match check_command_target_preconditions_material(
+        prepared,
         &preconditions,
-    );
-    if !matches!(
-        precondition,
-        CommandTargetPreconditionOutcome::Satisfied { .. }
     ) {
-        return Err((id, DirectEditBatchCommandRejection::Precondition {
-            outcome: Box::new(precondition),
-        }));
-    }
-    let simulation = simulate_prepared_direct_edit(material, requested);
+        CommandTargetPreconditionOutcome::Satisfied { material } => material,
+        outcome @ (CommandTargetPreconditionOutcome::FamilyNotExecutable { .. }
+        | CommandTargetPreconditionOutcome::KindMismatch { .. }
+        | CommandTargetPreconditionOutcome::NoAcceptedRevision
+        | CommandTargetPreconditionOutcome::OwnerMismatch { .. }
+        | CommandTargetPreconditionOutcome::StaleBase { .. }
+        | CommandTargetPreconditionOutcome::TargetNotEditableValue { .. }
+        | CommandTargetPreconditionOutcome::TargetNotFound { .. }
+        | CommandTargetPreconditionOutcome::ValueMismatch { .. }) => {
+            return Err((id, DirectEditBatchCommandRejection::Precondition {
+                outcome: Box::new(outcome),
+            }));
+        },
+    };
+    let simulation = simulate_prepared_direct_edit(checked, requested);
     batch_command_prediction(materials, id, kind, simulation)
 }
 
