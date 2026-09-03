@@ -1477,9 +1477,9 @@ where
         };
         if let Some(change) = prediction.change.as_ref() {
             record_direct_edit_batch_change(&mut aggregate, index, change);
+            let _previous =
+                previous_by_target.insert(command.target, command.id.clone());
         }
-        let _previous =
-            previous_by_target.insert(command.target, command.id.clone());
         evaluated.push(prediction);
     }
     let mut ordered_changes = aggregate.into_values().collect::<Vec<_>>();

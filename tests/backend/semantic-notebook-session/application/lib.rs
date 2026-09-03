@@ -1840,6 +1840,39 @@ fn ordered_direct_edit_batch_graph_rejects_before_candidate_replay() {
 }
 
 #[test]
+fn ordered_direct_edit_batch_noop_does_not_manufacture_dependency() {
+    let ids = IdentityAllocator::new();
+    let (candidate, span) = candidate_notebook_with_span(&ids, "base");
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(candidate)
+    else {
+        panic!("text candidate must be accepted");
+    };
+    let span = accepted_for(&mapping, span);
+    let before = session.current().expect("accepted revision").clone();
+    let outcome = session.simulate_direct_edit_batch(DirectEditBatchProposal {
+        base: revision,
+        capability_version: CommandBehaviorVersion(1),
+        commands: vec![
+            text_batch_command(1, &[], span, "base", "base"),
+            text_batch_command(2, &[], span, "base", "final"),
+        ],
+    });
+    let DirectEditBatchSimulationOutcome::Predicted {
+        changes, commands, ..
+    } = outcome
+    else {
+        panic!("no-op predecessor must not require a dependency");
+    };
+    assert_eq!(commands.len(), 2);
+    assert!(commands[0].change.is_none());
+    assert!(commands[1].change.is_some());
+    assert_eq!(changes.len(), 1);
+    assert_eq!(session.current(), Some(&before));
+}
+
+#[test]
 fn ordered_direct_edit_batch_coalesces_net_noop_across_commands() {
     let ids = IdentityAllocator::new();
     let (candidate, span) = candidate_notebook_with_span(&ids, "base");
