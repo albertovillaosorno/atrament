@@ -30,6 +30,8 @@
 // - Defaults:
 //   - The fixture uses A4-like portrait physical geometry in micrometres.
 //
+use std::collections::BTreeMap;
+
 use atrament_flow_pagination::{
     FlowUnitPolicy, MeasuredFlowUnit, MeasuredFragment, PaginationError,
 };
@@ -489,6 +491,65 @@ fn candidate_two_block_fixture(
         style: None,
     });
     (fixture, second_block)
+}
+
+#[test]
+fn large_complete_measurement_streams_in_semantic_block_order() {
+    const BLOCKS: usize = 10_000;
+
+    let ids = IdentityAllocator::new();
+    let mut fixture = candidate_fixture(&ids);
+    let mut candidates = Vec::with_capacity(BLOCKS);
+    candidates.push(fixture.block);
+    for _ in 1..BLOCKS {
+        let block = ids.allocate_candidate().expect("large-flow block");
+        fixture.notebook.pages[0].flows[0].blocks.push(Block {
+            content: BlockContent::Rule,
+            extensions: vec![],
+            id: block,
+            provenance: None,
+            style: None,
+        });
+        candidates.push(block);
+    }
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(fixture.notebook)
+    else {
+        panic!("large-flow candidate must be accepted");
+    };
+    let accepted = mapping
+        .iter()
+        .map(|entry| (entry.candidate, entry.accepted))
+        .collect::<BTreeMap<_, _>>();
+    let flow = *accepted.get(&fixture.flow).expect("accepted flow");
+    let fragments = candidates
+        .iter()
+        .map(|candidate| MeasuredFragment {
+            height: Length::from_micrometres(1),
+            owner: *accepted.get(candidate).expect("accepted block"),
+            width: Length::from_micrometres(1),
+        })
+        .collect::<Vec<_>>();
+    let first = fragments.first().expect("first measured block").owner;
+    let last = fragments.last().expect("last measured block").owner;
+    let measured = RevisionFlowMeasurement {
+        flow,
+        revision,
+        units: vec![MeasuredFlowUnit {
+            fragments,
+            policy: FlowUnitPolicy::Independent,
+        }],
+    };
+
+    let plan = paginate_revision(
+        session.current().expect("accepted revision"),
+        &measured,
+    )
+    .expect("large complete measurement must paginate");
+    assert_eq!(plan.placements.len(), BLOCKS);
+    assert_eq!(plan.placements.first().map(|item| item.owner), Some(first));
+    assert_eq!(plan.placements.last().map(|item| item.owner), Some(last));
 }
 
 #[test]
