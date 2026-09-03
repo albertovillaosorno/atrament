@@ -519,12 +519,14 @@ Those seeds are shared by single-target review and ordered batch simulation and
 are omitted for a net semantic no-op. They are inputs to future dependency
 expansion, not the final authoritative Validate impact set.
 
-The ordered overlay is populated by one semantic-structure scan but clones
-values only for identities named by the batch. Later same-target commands update
-the
-cached value while non-editable targets fall back to ordinary semantic material
-resolution. This is internal simulation hardening, not a new capability or
-numeric product-limit decision.
+The ordered overlay clones values only for identities named by the batch and
+stops semantic traversal once every unique target is indexed. Profile-only
+batches resolve page references without walking unrelated blocks, while mixed
+batches continue until all requested targets resolve. Later same-target commands
+update the cached value while non-editable targets fall back to ordinary
+semantic
+material resolution. This is internal simulation hardening, not a new capability
+or numeric product-limit decision.
 
 A separate transport-neutral command-graph domain validates duplicate command
 identities, direct self-dependencies, missing dependencies, cycles, and acyclic
@@ -550,7 +552,10 @@ Graph validation fast-paths the normal ordered case where every dependency
 points to an earlier command and reuses borrowed source positions for subset
 analysis. Its read-only node-view contract lets application preflight borrow
 command IDs and dependency slices instead of allocating per-command edge views.
-Complete requirement closure still uses positional bitmaps.
+A complete selection skips closure bitmaps after complete-graph validation,
+while
+an empty selection still validates the source graph before reporting no required
+commands. Partial requirement closure continues to use positional bitmaps.
 
 A caller-bounded report counts omitted edges before materializing pairs and
 rejects one over the supplied bound without truncation. Ordered batch graph

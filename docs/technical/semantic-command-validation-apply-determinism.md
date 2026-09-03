@@ -171,8 +171,9 @@ or NoOp. An empty ordered batch returns NoOp before semantic target indexing.
 The same simulation derives conservative backend-owned impact seeds for text,
 structured-content, and page-profile changes. Single-target review and ordered
 batches share those seeds, and net no-ops emit none. The ordered overlay caches
-impact scopes during the same structural scan and retains ordinary semantic
-material lookup as the fallback for non-editable targets.
+impact scopes only for requested targets, stops once every unique target is
+resolved, and bypasses unrelated block traversal for profile-only batches while
+retaining ordinary semantic material lookup for non-editable targets.
 
 Graph validation now avoids cycle-state allocation for the ordinary ordered
 case where every explicit dependency points backward, while preserving cycle
@@ -181,7 +182,8 @@ report complete transitive requirements or summarize closure size against an
 exact base revision without creating a replacement batch. Generic report bounds
 reject oversized identity-pair materialization before allocation, and session
 analysis borrows proposal identities until concrete detail or failure is
-returned.
+returned. Complete selections skip transitive closure work after source-graph
+validation; empty selections still preserve complete-graph failure precedence.
 
 Session graph-resource preflight derives exact command/dependency counts
 directly

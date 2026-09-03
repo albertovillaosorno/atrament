@@ -176,8 +176,10 @@ Text seeds identify the owning flow/page dependency region, while structured
 edits seed the nearest block/flow/page, while page-profile changes seed
 referencing pages. Single-target review and ordered batches share the same seed
 projection;
-net semantic no-ops emit no seed. Ordered simulation now indexes only targeted
-editable values and cached impact scopes during one semantic scan.
+net semantic no-ops emit no seed. Ordered simulation indexes only targeted
+editable values and cached impact scopes, resolves profile-only batches before
+block traversal, and stops its semantic scan once every unique target is
+indexed.
 
 This is still not an admitted normalized command batch. Protocol normalization,
 command context and writable scope, published limits, complete impact expansion,
