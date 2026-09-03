@@ -184,22 +184,34 @@ fn run_process_fixture_child(mode: &str) {
     }
     assert_eq!(mode, "populated");
     let identities = IdentityAllocator::new();
+    let (candidate, candidate_span) =
+        editable_text_candidate(&identities, "process-private before");
     let mut session = application::SessionApplication::default();
-    assert!(matches!(
-        session.accept_candidate(minimal_candidate(&identities)),
-        AcceptanceOutcome::Accepted { .. }
-    ));
-    assert!(matches!(
-        session.accept_candidate(minimal_candidate(&identities)),
-        AcceptanceOutcome::Accepted { .. }
-    ));
-    assert!(matches!(
+    let AcceptanceOutcome::Accepted { mapping, revision: base } =
+        session.accept_candidate(candidate)
+    else {
+        panic!("process fixture candidate must be accepted");
+    };
+    let span = mapping
+        .iter()
+        .find(|entry| entry.candidate == candidate_span)
+        .expect("process fixture span identity must map")
+        .accepted;
+    let TextEditOutcome::Applied { revision, .. } = session.replace_text(
+        base,
+        span,
+        String::from("process-private after"),
+    ) else {
+        panic!("process fixture text edit must apply");
+    };
+    assert_eq!(
         session.history_availability(),
         HistoryAvailabilityOutcome::Available(HistoryAvailability {
+            can_redo: false,
             can_undo: true,
-            ..
-        })
-    ));
+            revision,
+        }),
+    );
     println!("{PROCESS_POPULATED_READY}");
     std::io::stdout().flush().expect("flush populated marker");
     let mut release = [0_u8; 1];
