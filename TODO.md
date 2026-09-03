@@ -20,11 +20,14 @@ active session with no database, autosave, hidden recovery file, or cloud copy.
 Current executable evidence composes source-preparation draft text, accepted
 semantic notebook revisions, and semantic Undo/Redo history under one
 `SessionApplication` instance owned by the live process. Transport-neutral
-atomic
-batch application also routes through that owner without exposing the concrete
-semantic service. The localhost runtime still consumes only the established
-draft inbound port, while the same application owner retains accepted semantic
-and history authority for later admitted routes.
+command review, exact and caller-bounded batch analysis and simulation,
+selection analysis, and atomic batch application also route through that owner
+without exposing the concrete semantic service.
+
+The localhost runtime still consumes only the established draft inbound port,
+while the same application owner retains accepted semantic and history
+authority for later admitted routes. No command transport or writable scope is
+published by this composition evidence.
 
 Dropping that owner and creating a fresh application yields empty draft fields,
 no accepted revision, and no history position; its Debug projection does not
@@ -187,6 +190,12 @@ apply the same caller-supplied bounds before graph and semantic work. Coarse
 resource sizing reads command/dependency counts directly without graph-node
 views or command-ID ordering. All batch read-only APIs share one capability,
 accepted-state, and exact-base authority gate.
+
+The active-process application owner now delegates these exact graph size and
+caller-bounded preflight checks, exact and bounded simulation, selection
+requirements and summaries, local target review, and bounded or unbounded Apply
+to the same semantic authority. This adds no backend product limit, command
+context identity, writable scope, or transport admission.
 
 Direct-edit simulation now also projects exact before/after semantic changes. An
 ordered in-memory direct-edit batch validates the generic dependency graph,

@@ -599,6 +599,13 @@ successful semantic change/impact-seed evidence matches prior simulation. A
 caller-bounded application path reuses the graph-limit preflight before any
 candidate replay or history mutation.
 
+The active-process `SessionApplication` delegates local command review, direct
+simulation and preview, proposal review, graph sizing and caller-bounded
+preflight, selection analysis, exact and bounded batch simulation, and exact or
+bounded Apply to the same owned semantic authority. This composition evidence
+does not advertise a command protocol, command context, writable scope, or
+backend-owned product limit.
+
 No protocol normalizer, command-context/writable-scope admission, retry
 identity, selective-rebatch capability, published product limit, full Validate
 service, or discoverable Apply capability is admitted yet.

@@ -211,10 +211,15 @@ That identity remains ordinary semantic data and is not a continuation token,
 retry identity, credential, or writable-scope grant.
 
 The active-process `SessionApplication` delegates exact identity inspection,
-bounded ancestry, capability discovery, and exact command-target material to its
-owned semantic authority. This keeps runtime composition from reaching into the
-concrete semantic service while still adding no transport route or advertised
-Inspect or command-context protocol.
+bounded ancestry, capability discovery, exact command-target material, and local
+identity, value, family, and aggregate precondition review to its owned semantic
+authority. It also delegates single-target simulation, change preview, and
+version-bound proposal review.
+
+Exact and caller-bounded batch graph review, selection analysis, simulation, and
+Apply route through the same owner. This keeps runtime composition from reaching
+into the concrete semantic service while still adding no transport route,
+writable scope, or advertised Inspect or command-context protocol.
 
 A read-only local-precondition checker can require an exact semantic kind, an
 exact direct owner, notebook-root ownership, or no owner constraint. Wrong kind
