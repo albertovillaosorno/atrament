@@ -32,8 +32,10 @@
 use std::collections::BTreeSet;
 
 use atrament_semantic_command_graph::{
-    CommandGraphError, CommandNode, DependencySelectionError,
-    validate_command_graph, validate_dependency_closed_selection,
+    CommandGraphError, CommandGraphLimitError, CommandGraphLimits,
+    CommandGraphSize, CommandNode, DependencySelectionError,
+    command_graph_size, validate_command_graph, validate_command_graph_limits,
+    validate_dependency_closed_selection,
 };
 
 fn node(id: u32, dependencies: &[u32]) -> CommandNode<u32> {
@@ -108,6 +110,67 @@ fn cycles_reject_without_reordering_input() {
         Err(CommandGraphError::Cycle)
     );
     assert_eq!(nodes, before);
+}
+
+#[test]
+fn command_graph_size_counts_commands_and_explicit_edges_exactly() {
+    let nodes = [node(1, &[]), node(2, &[1, 1]), node(3, &[1, 2])];
+    assert_eq!(
+        command_graph_size(&nodes),
+        Ok(CommandGraphSize {
+            commands: 3,
+            dependency_edges: 4,
+        }),
+    );
+    assert_eq!(
+        command_graph_size::<u32>(&[]),
+        Ok(CommandGraphSize {
+            commands: 0,
+            dependency_edges: 0,
+        }),
+    );
+}
+
+#[test]
+fn graph_resource_limits_accept_exact_bounds_without_truncation() {
+    let nodes = [node(1, &[]), node(2, &[1]), node(3, &[1, 2])];
+    let before = nodes.clone();
+    assert_eq!(
+        validate_command_graph_limits(&nodes, CommandGraphLimits {
+            commands: 3,
+            dependency_edges: 3,
+        },),
+        Ok(CommandGraphSize {
+            commands: 3,
+            dependency_edges: 3,
+        }),
+    );
+    assert_eq!(nodes, before);
+}
+
+#[test]
+fn graph_resource_limits_reject_one_command_or_edge_over() {
+    let nodes = [node(1, &[]), node(2, &[1]), node(3, &[1, 2])];
+    assert_eq!(
+        validate_command_graph_limits(&nodes, CommandGraphLimits {
+            commands: 2,
+            dependency_edges: 3,
+        },),
+        Err(CommandGraphLimitError::CommandCountExceeded {
+            actual: 3,
+            limit: 2,
+        }),
+    );
+    assert_eq!(
+        validate_command_graph_limits(&nodes, CommandGraphLimits {
+            commands: 3,
+            dependency_edges: 2,
+        },),
+        Err(CommandGraphLimitError::DependencyEdgeCountExceeded {
+            actual: 3,
+            limit: 2,
+        }),
+    );
 }
 
 #[test]

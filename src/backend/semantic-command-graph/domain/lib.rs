@@ -44,6 +44,45 @@ pub struct CommandNode<Identity> {
     pub id: Identity,
 }
 
+/// Caller-supplied coarse resource bounds for one command graph.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct CommandGraphLimits {
+    /// Maximum ordered commands admitted by the calling capability.
+    pub commands: usize,
+    /// Maximum explicit dependency edges admitted by the calling capability.
+    pub dependency_edges: usize,
+}
+
+/// Exact coarse size of one in-memory command graph.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct CommandGraphSize {
+    /// Ordered command count.
+    pub commands: usize,
+    /// Explicit dependency-edge count, including repeated explicit edges.
+    pub dependency_edges: usize,
+}
+
+/// Typed coarse command-graph resource failure.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum CommandGraphLimitError {
+    /// Ordered command count exceeds the supplied capability limit.
+    CommandCountExceeded {
+        /// Exact ordered command count.
+        actual: usize,
+        /// Maximum ordered commands admitted by the caller.
+        limit: usize,
+    },
+    /// Explicit dependency-edge count exceeds the supplied capability limit.
+    DependencyEdgeCountExceeded {
+        /// Exact explicit dependency-edge count.
+        actual: usize,
+        /// Maximum explicit dependencies admitted by the caller.
+        limit: usize,
+    },
+    /// Explicit dependency-edge counting exceeded addressable `usize` range.
+    DependencyEdgeCountOverflow,
+}
+
 /// Typed failure while checking one selected command subset.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum DependencySelectionError<Identity> {
@@ -95,6 +134,59 @@ pub enum CommandGraphError<Identity> {
         /// Self-dependent command identity.
         command: Identity,
     },
+}
+
+/// Measure exact coarse command and dependency-edge counts.
+///
+/// # Errors
+///
+/// Returns [`CommandGraphLimitError::DependencyEdgeCountOverflow`] if summing
+/// explicit dependency edges exceeds addressable `usize` range.
+pub fn command_graph_size<Identity>(
+    nodes: &[CommandNode<Identity>],
+) -> Result<CommandGraphSize, CommandGraphLimitError> {
+    let mut dependency_edges = 0usize;
+    for node in nodes {
+        let Some(next) = dependency_edges.checked_add(node.dependencies.len())
+        else {
+            return Err(CommandGraphLimitError::DependencyEdgeCountOverflow);
+        };
+        dependency_edges = next;
+    }
+    Ok(CommandGraphSize {
+        commands: nodes.len(),
+        dependency_edges,
+    })
+}
+
+/// Enforce caller-owned command-count and dependency-edge resource limits.
+///
+/// This function does not choose product limits and does not validate graph
+/// semantics. It only rejects a complete in-memory graph when exact coarse size
+/// exceeds a supplied capability bound; it never truncates nodes or edges.
+///
+/// # Errors
+///
+/// Returns a typed exact count overflow or at the first exceeded supplied
+/// bound.
+pub fn validate_command_graph_limits<Identity>(
+    nodes: &[CommandNode<Identity>],
+    limits: CommandGraphLimits,
+) -> Result<CommandGraphSize, CommandGraphLimitError> {
+    if nodes.len() > limits.commands {
+        return Err(CommandGraphLimitError::CommandCountExceeded {
+            actual: nodes.len(),
+            limit: limits.commands,
+        });
+    }
+    let size = command_graph_size(nodes)?;
+    if size.dependency_edges > limits.dependency_edges {
+        return Err(CommandGraphLimitError::DependencyEdgeCountExceeded {
+            actual: size.dependency_edges,
+            limit: limits.dependency_edges,
+        });
+    }
+    Ok(size)
 }
 
 /// Validate one complete command dependency graph without changing node order.
