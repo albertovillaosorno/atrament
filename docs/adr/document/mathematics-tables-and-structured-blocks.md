@@ -91,9 +91,12 @@ logical column, including at the maximum admitted column-span value.
 The same grid invariant now validates an exact-base direct cell-span edit. A
 valid change preserves the cell identity and child blocks, commits one accepted
 revision, and participates in semantic history. A change that would invalidate
-the owning merged table is a typed no-effect. This direct application path does
-not yet advertise cell-span mutation through the generic semantic command-batch
-simulator.
+the owning merged table is a typed no-effect. Cell spans are also admitted as
+generic Structured-content editable values.
+
+Ordered command simulation validates a cloned owning-table candidate, while
+batch Apply overlays coalesced span changes and validates every affected final
+table before one atomic commit.
 
 Cell alignment and wrapping, ruler-like border geometry, table measurement, and
 output consumption remain future verification. The span model does not choose

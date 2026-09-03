@@ -139,9 +139,10 @@ does not invent a continuation token or writable scope. A local-precondition
 check can require an exact semantic kind and direct owner, including explicit
 notebook-root ownership, before a future command family may mutate that target.
 
-A second read-only precondition compares exact accepted base values for the four
+A second read-only precondition compares exact accepted base values for five
 families with established direct-edit authority: inline text, formula mode and
-source, table-row role, and physical page-profile geometry. Text and formula
+source, table-row role, table-cell span, and physical page-profile geometry.
+Text and formula
 checks preserve exact authored source because no Unicode normalization form is
 yet frozen. Backend-derived command-target material now combines semantic kind,
 direct owner, exact editable base value when available, and the currently
@@ -149,16 +150,20 @@ executable direct-edit command family for one exact revision and target.
 
 The frozen command-family taxonomy is represented without choosing final wire
 operation names. Current executable targets admit Text content for inline text,
-Structured content for formulas and table-row roles, and Document constraint for
-page profiles. A combined local checker validates family, kind, owner, and an
+Structured content for formulas, table-row roles, and table-cell spans, and
+Document constraint for page profiles. A combined local checker validates
+family, kind, owner, and an
 optional exact base value in one read-only snapshot with stale-base precedence.
 
 Deterministic capability discovery reports only those three family behaviors and
 supports read-only behavior-version drift checks. It deliberately advertises no
 command protocol, normalizer, command context, Validate, Apply, rebatching, or
-numeric command/context limits yet. A version-bound single-target proposal
-combines capability, exact local preconditions, and direct-edit simulation
-read-only; all four direct mutation paths consume that simulator before commit.
+numeric command/context limits yet. Structured content, aggregate command
+behavior, and typed-result behavior are version 2 after admitting table-cell
+spans; older version-1 contexts reject instead of being reinterpreted. A
+version-bound single-target proposal combines capability, exact local
+preconditions, and direct-edit simulation read-only; all five direct mutation
+paths consume that simulator before commit.
 
 A separate generic command-graph domain validates duplicate command identities,
 self-dependencies, missing dependencies, cycles, and dependency direction
@@ -186,7 +191,9 @@ accepted-state, and exact-base authority gate.
 Direct-edit simulation now also projects exact before/after semantic changes. An
 ordered in-memory direct-edit batch validates the generic dependency graph,
 then consumes valid command payloads through a private targeted value overlay.
-Caller command IDs and requested values move into result/candidate evidence;
+Targeted table cells additionally clone their owning table once so ordered span
+commands validate the complete candidate grid. Caller command IDs and requested
+values move into result/candidate evidence;
 local preconditions are borrowed, and only additional typed failure evidence is
 cloned.
 
@@ -221,9 +228,13 @@ measurements, not product latency or resource guarantees.
 
 The same transport-neutral direct-edit batch can now be applied atomically after
 re-running its validation and simulation. Net mutations replay only the
-coalesced final semantic changes into a cloned accepted notebook, commit exactly
-one revision, and enter Undo history as one transaction. Net no-ops keep the
-current revision and history position, while middle-command failure and stale
+coalesced final semantic changes into a cloned accepted notebook. Coalesced
+cell-span changes are overlaid before each affected table is validated once,
+then the batch commits exactly one revision and enters Undo history as one
+transaction.
+
+Net no-ops keep the current revision and history position, while middle-command
+failure and stale
 base remain no-effects. The discoverable `Apply` capability remains disabled.
 
 This is still not an admitted normalized command batch. Protocol normalization,
@@ -397,11 +408,13 @@ keeps logical coverage compact instead of allocating per spanned column.
 An exact-base direct cell-span edit reuses that complete table-grid invariant. A
 valid edit preserves cell identity and child blocks, creates one accepted
 revision, and enters Undo history; a structurally invalid replacement is a typed
-no-effect. The generic semantic command simulator does not advertise this span
-edit yet.
+no-effect. Table-cell spans are now Structured-content editable values in the
+generic simulator. Ordered span commands validate cloned owning-table candidate
+grids, Apply revalidates affected final tables atomically, and one Undo restores
+the complete batch.
 
 The task remains open for cell alignment and wrapping semantics, ruler-like
-border geometry, table measurement/layout, command-batch cell span and content
+border geometry, table measurement/layout, command-batch cell content
 operations, and the remaining structured educational block families.
 
 ### TODO - Implement English and Spanish text behavior

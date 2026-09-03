@@ -461,30 +461,35 @@ CLI and MCP enter through the same application services.
 The current semantic session foundation can check one accepted identity against
 one exact revision for expected semantic kind and direct structural owner. A
 separate compare-and-set check covers exact accepted inline text, formula mode
-and source, table-row role, and physical page-profile geometry without mutating
-accepted state. Stale revision rejection precedes every local comparison.
+and source, table-row role, table-cell span, and physical page-profile geometry
+without mutating accepted state. Stale revision rejection precedes every local
+comparison.
 
 The frozen application-level command-family taxonomy is now represented as a
 typed value without choosing serialized operation names. Current direct-edit
 targets expose only executable family admission: Text content for inline text,
-Structured content for formulas and table-row roles, and Document constraint for
-page profiles. One aggregate read-only check validates requested family, kind,
+Structured content for formulas, table-row roles, and table-cell spans, and
+Document constraint for page profiles. One aggregate read-only check validates
+requested family, kind,
 owner, and optional exact base value against backend-derived target material.
 
 A deterministic capability snapshot now reports those three discoverable family
-behaviors and one top-level behavior version. Because no serialized command
+behaviors and one top-level behavior version. Aggregate command behavior and
+typed-result behavior are version 2, as is Structured content after table-cell
+span admission; Text content and Document constraint retain family behavior
+version 1. Because no serialized command
 protocol is implemented, the snapshot advertises no protocol or normalization
 version, no command-context, Validate, Apply, or selective-rebatch capability,
 and no guessed command/context numeric limits. A read-only compatibility check
 rejects an older capability behavior version independently from notebook
 revision changes.
 
-A separate single-target direct-edit simulator classifies the four established
+A separate single-target direct-edit simulator classifies five established
 replacement value families as applicable, no-op, domain-invalid, unavailable,
-or value-family mismatched without mutation. All four existing direct mutation
-paths now consume that same simulator before cloning accepted state or
-allocating
-a revision, so target, domain, and no-op validation are shared with proposal
+or value-family mismatched without mutation. Table-cell spans additionally
+return the owning table's typed grid failure. All five existing direct mutation
+paths consume that same simulator before cloning accepted state or allocating a
+revision, so target, domain, and no-op validation are shared with proposal
 evidence.
 
 A version-bound direct-edit proposal now composes capability compatibility,
@@ -495,11 +500,14 @@ no-op, while preserving typed simulation rejection.
 
 A transport-neutral ordered direct-edit batch now combines those primitives with
 the generic dependency graph. It derives a private overlay for only targeted
-editable values and their impact scopes. Dependency validation borrows command
-payloads first; valid commands are then consumed in order so caller command IDs
-and requested values can move into prediction/candidate evidence. Local
-preconditions are compared by reference, and only additional typed failure
-evidence is cloned.
+editable values and their impact scopes. A targeted table cell also retains a
+cloned owning-table overlay, so every ordered span command validates the
+complete candidate grid before its value becomes observable.
+
+Dependency validation borrows command payloads first; valid commands are then
+consumed in order so caller command IDs and requested values can move into
+prediction/candidate evidence. Local preconditions are compared by reference,
+and only additional typed failure evidence is cloned.
 
 Simulation stops after the first semantic rejection and reports later command
 identities as not evaluated. The accepted revision and identity allocator remain
@@ -528,8 +536,8 @@ expansion, not the final authoritative Validate impact set.
 The ordered overlay copies accepted values only for identities named by the
 batch and stops semantic traversal once every unique target is indexed. Indexed
 material and impact scopes are consumed through simulation rather than cloned
-again. Profile-only batches resolve page references without walking unrelated
-blocks.
+again. Each affected table is cloned once regardless of targeted cell count.
+Profile-only batches resolve page references without walking unrelated blocks.
 
 Block, list-item, table-row, and table-cell traversal uses borrowed slice
 continuation frames in document order. Pending traversal state therefore follows
