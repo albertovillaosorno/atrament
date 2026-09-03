@@ -160,20 +160,6 @@ fn flow_scope(
     Err(SemanticPaginationError::FlowNotFound { flow: target })
 }
 
-fn measured_owner_runs(
-    measurement: &RevisionFlowMeasurement,
-) -> Vec<AcceptedIdentity> {
-    let mut runs = Vec::new();
-    for unit in &measurement.units {
-        for fragment in &unit.fragments {
-            if runs.last().copied() != Some(fragment.owner) {
-                runs.push(fragment.owner);
-            }
-        }
-    }
-    runs
-}
-
 fn page_regions(
     revision: &AcceptedRevision,
     start_page_index: usize,
@@ -212,43 +198,48 @@ fn validate_measurement_blocks(
     blocks: &[Block<AcceptedIdentity>],
     measurement: &RevisionFlowMeasurement,
 ) -> Result<(), SemanticPaginationError> {
-    let measured = measured_owner_runs(measurement);
-    for (index, owner) in measured.iter().enumerate() {
-        let Some(expected) = blocks.get(index) else {
-            return if blocks.iter().any(|block| block.id == *owner) {
-                Err(SemanticPaginationError::MeasurementBlockSequenceMismatch {
-                    flow: measurement.flow,
-                })
-            } else {
-                Err(SemanticPaginationError::MeasuredBlockNotInFlow {
-                    flow: measurement.flow,
-                    owner: *owner,
-                })
+    let mut previous_owner = None;
+    let mut run_index = 0usize;
+    for unit in &measurement.units {
+        for fragment in &unit.fragments {
+            let owner = fragment.owner;
+            if previous_owner == Some(owner) {
+                continue;
+            }
+            previous_owner = Some(owner);
+            let Some(expected) = blocks.get(run_index) else {
+                return if blocks.iter().any(|block| block.id == owner) {
+                    Err(
+                        SemanticPaginationError::
+                            MeasurementBlockSequenceMismatch {
+                                flow: measurement.flow,
+                            },
+                    )
+                } else {
+                    Err(SemanticPaginationError::MeasuredBlockNotInFlow {
+                        flow: measurement.flow,
+                        owner,
+                    })
+                };
             };
-        };
-        if expected.id == *owner {
-            continue;
-        }
-        if blocks.iter().any(|block| block.id == *owner) {
-            return Err(
-                SemanticPaginationError::MeasurementBlockSequenceMismatch {
+            if expected.id != owner {
+                if blocks.iter().any(|block| block.id == owner) {
+                    return Err(
+                        SemanticPaginationError::
+                            MeasurementBlockSequenceMismatch {
+                                flow: measurement.flow,
+                            },
+                    );
+                }
+                return Err(SemanticPaginationError::MeasuredBlockNotInFlow {
                     flow: measurement.flow,
-                },
-            );
+                    owner,
+                });
+            }
+            run_index = run_index.saturating_add(1);
         }
-        return Err(SemanticPaginationError::MeasuredBlockNotInFlow {
-            flow: measurement.flow,
-            owner: *owner,
-        });
     }
-    if measured.len() < blocks.len() {
-        let Some(missing) = blocks.get(measured.len()) else {
-            return Err(
-                SemanticPaginationError::MeasurementBlockSequenceMismatch {
-                    flow: measurement.flow,
-                },
-            );
-        };
+    if let Some(missing) = blocks.get(run_index) {
         return Err(SemanticPaginationError::MeasurementIncomplete {
             flow: measurement.flow,
             missing: missing.id,

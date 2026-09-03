@@ -558,6 +558,107 @@ fn reordered_measurement_cannot_change_semantic_flow_order() {
 }
 
 #[test]
+fn repeated_owner_across_measurement_units_remains_one_owner_run() {
+    let ids = IdentityAllocator::new();
+    let (fixture, second_block) = candidate_two_block_fixture(&ids);
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(fixture.notebook)
+    else {
+        panic!("candidate must be accepted");
+    };
+    let flow = accepted_for(&mapping, fixture.flow);
+    let first = accepted_for(&mapping, fixture.block);
+    let second = accepted_for(&mapping, second_block);
+    let measured = RevisionFlowMeasurement {
+        flow,
+        revision,
+        units: vec![
+            MeasuredFlowUnit {
+                fragments: vec![MeasuredFragment {
+                    height: Length::from_micrometres(1),
+                    owner: first,
+                    width: Length::from_micrometres(1),
+                }],
+                policy: FlowUnitPolicy::Independent,
+            },
+            MeasuredFlowUnit {
+                fragments: vec![
+                    MeasuredFragment {
+                        height: Length::from_micrometres(2),
+                        owner: first,
+                        width: Length::from_micrometres(2),
+                    },
+                    MeasuredFragment {
+                        height: Length::from_micrometres(3),
+                        owner: second,
+                        width: Length::from_micrometres(3),
+                    },
+                ],
+                policy: FlowUnitPolicy::Independent,
+            },
+        ],
+    };
+
+    let plan = paginate_revision(
+        session.current().expect("accepted revision"),
+        &measured,
+    )
+    .expect("cross-unit owner run must remain complete");
+    assert_eq!(plan.placements.len(), 3);
+    assert_eq!(plan.placements[0].owner, first);
+    assert_eq!(plan.placements[1].owner, first);
+    assert_eq!(plan.placements[2].owner, second);
+}
+
+#[test]
+fn nonconsecutive_owner_recurrence_remains_sequence_mismatch() {
+    let ids = IdentityAllocator::new();
+    let (fixture, second_block) = candidate_two_block_fixture(&ids);
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(fixture.notebook)
+    else {
+        panic!("candidate must be accepted");
+    };
+    let flow = accepted_for(&mapping, fixture.flow);
+    let first = accepted_for(&mapping, fixture.block);
+    let second = accepted_for(&mapping, second_block);
+    let measured = RevisionFlowMeasurement {
+        flow,
+        revision,
+        units: vec![MeasuredFlowUnit {
+            fragments: vec![
+                MeasuredFragment {
+                    height: Length::from_micrometres(1),
+                    owner: first,
+                    width: Length::from_micrometres(1),
+                },
+                MeasuredFragment {
+                    height: Length::from_micrometres(1),
+                    owner: second,
+                    width: Length::from_micrometres(1),
+                },
+                MeasuredFragment {
+                    height: Length::from_micrometres(1),
+                    owner: first,
+                    width: Length::from_micrometres(1),
+                },
+            ],
+            policy: FlowUnitPolicy::Independent,
+        }],
+    };
+
+    assert_eq!(
+        paginate_revision(
+            session.current().expect("accepted revision"),
+            &measured,
+        ),
+        Err(SemanticPaginationError::MeasurementBlockSequenceMismatch { flow }),
+    );
+}
+
+#[test]
 fn repeated_fragments_for_one_block_remain_one_semantic_owner_run() {
     let ids = IdentityAllocator::new();
     let (fixture, second_block) = candidate_two_block_fixture(&ids);
