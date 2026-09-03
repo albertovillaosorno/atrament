@@ -298,6 +298,48 @@ fn dependency_requirements_report_complete_transitive_closure_without_mutation()
 }
 
 #[test]
+fn empty_selection_still_validates_the_complete_source_graph() {
+    let valid = [node(1, &[]), node(2, &[1])];
+    let selected = BTreeSet::new();
+    assert_eq!(
+        validate_dependency_closed_selection(&valid, &selected),
+        Ok(()),
+    );
+    assert_eq!(
+        dependency_selection_requirements(&valid, &selected),
+        Ok(Vec::new()),
+    );
+    assert_eq!(
+        dependency_selection_summary(&valid, &selected),
+        Ok(DependencySelectionSummary {
+            missing_dependency_edges: 0,
+            required_commands: 0,
+            selected_commands: 0,
+        }),
+    );
+
+    let invalid = [node(1, &[2]), node(2, &[])];
+    assert_eq!(
+        dependency_selection_requirements(&invalid, &selected),
+        Err(DependencyRequirementsError::Graph {
+            reason: CommandGraphError::DependencyAfterCommand {
+                command: 1,
+                dependency: 2,
+            },
+        }),
+    );
+    assert_eq!(
+        dependency_selection_summary(&invalid, &selected),
+        Err(DependencySummaryError::Graph {
+            reason: CommandGraphError::DependencyAfterCommand {
+                command: 1,
+                dependency: 2,
+            },
+        }),
+    );
+}
+
+#[test]
 fn dependency_requirements_are_empty_for_closed_or_independent_selection() {
     let nodes = [node(1, &[]), node(2, &[1]), node(3, &[])];
     assert_eq!(
@@ -472,48 +514,65 @@ fn bounded_dependency_requirements_reject_before_pair_materialization() {
     );
 }
 
-static IDENTITY_CLONES: AtomicUsize = AtomicUsize::new(0);
+#[derive(Debug)]
+struct CountingIdentity<'counter> {
+    clones: &'counter AtomicUsize,
+    value: u32,
+}
 
-#[derive(Debug, Eq, PartialEq)]
-struct CountingIdentity(u32);
-
-impl Clone for CountingIdentity {
+impl Clone for CountingIdentity<'_> {
     fn clone(&self) -> Self {
-        let _previous = IDENTITY_CLONES.fetch_add(1, AtomicOrdering::Relaxed);
-        Self(self.0)
+        let _previous = self.clones.fetch_add(1, AtomicOrdering::Relaxed);
+        Self {
+            clones: self.clones,
+            value: self.value,
+        }
     }
 }
 
-impl Ord for CountingIdentity {
+impl Eq for CountingIdentity<'_> {}
+
+impl Ord for CountingIdentity<'_> {
     fn cmp(&self, other: &Self) -> Ordering {
-        self.0.cmp(&other.0)
+        self.value.cmp(&other.value)
     }
 }
 
-impl PartialOrd for CountingIdentity {
+impl PartialEq for CountingIdentity<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        self.value == other.value
+    }
+}
+
+impl PartialOrd for CountingIdentity<'_> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
+fn counting_identity(clones: &AtomicUsize, value: u32) -> CountingIdentity<'_> {
+    CountingIdentity { clones, value }
+}
+
 #[test]
 fn bounded_requirement_rejection_does_not_clone_identity_pairs() {
+    let clones = AtomicUsize::new(0);
     let nodes = [
         CommandNode {
             dependencies: Vec::new(),
-            id: CountingIdentity(1),
+            id: counting_identity(&clones, 1),
         },
         CommandNode {
-            dependencies: vec![CountingIdentity(1)],
-            id: CountingIdentity(2),
+            dependencies: vec![counting_identity(&clones, 1)],
+            id: counting_identity(&clones, 2),
         },
         CommandNode {
-            dependencies: vec![CountingIdentity(2)],
-            id: CountingIdentity(3),
+            dependencies: vec![counting_identity(&clones, 2)],
+            id: counting_identity(&clones, 3),
         },
     ];
-    let selected = BTreeSet::from([CountingIdentity(3)]);
-    IDENTITY_CLONES.store(0, AtomicOrdering::Relaxed);
+    let selected = BTreeSet::from([counting_identity(&clones, 3)]);
+    clones.store(0, AtomicOrdering::Relaxed);
     assert_eq!(
         dependency_selection_requirements_bounded(&nodes, &selected, 1),
         Err(
@@ -523,7 +582,7 @@ fn bounded_requirement_rejection_does_not_clone_identity_pairs() {
             }
         ),
     );
-    assert_eq!(IDENTITY_CLONES.load(AtomicOrdering::Relaxed), 0);
+    assert_eq!(clones.load(AtomicOrdering::Relaxed), 0);
 }
 
 #[derive(Clone, Copy)]
