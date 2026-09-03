@@ -2084,6 +2084,124 @@ fn ordered_asset_reference_chain_replaces_then_removes_one_figure_reference() {
 }
 
 #[test]
+fn independent_provenance_changes_merge_notebook_impact_seed() {
+    let ids = IdentityAllocator::new();
+    let (candidate, candidate_ids) = candidate_notebook_with_provenance(&ids);
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision: base } =
+        session.accept(candidate)
+    else {
+        panic!("provenance impact candidate must be accepted");
+    };
+    let notebook = accepted_for(&mapping, candidate_ids.notebook);
+    let edited = accepted_for(&mapping, candidate_ids.edited);
+    let unrelated = accepted_for(&mapping, candidate_ids.unrelated);
+    let before = session.current().expect("provenance impact base").clone();
+    let value = |kind, reference: &str| EditableSemanticValue::Provenance {
+        kind,
+        reference: Some(reference.to_owned()),
+    };
+    let command = |id, target, expected, requested| DirectEditBatchCommand {
+        dependencies: vec![],
+        id,
+        preconditions: CommandTargetPreconditions {
+            expected_value: Some(expected),
+            identity: IdentityPrecondition {
+                expected_kind: Some(SemanticIdentityKind::Provenance),
+                expected_owner: IdentityOwnerExpectation::Direct(notebook),
+            },
+            requested_family: SemanticCommandFamily::Provenance,
+        },
+        requested,
+        target,
+    };
+    let first_before = value(ProvenanceKind::Supplied, "source:old");
+    let first_after = value(ProvenanceKind::Cited, "source:first");
+    let second_before = value(ProvenanceKind::Derived, "source:unrelated");
+    let second_after = value(ProvenanceKind::Unresolved, "source:second");
+    let batch = DirectEditBatchProposal {
+        base,
+        capability_version: CommandBehaviorVersion(4),
+        commands: vec![
+            command(1_u32, edited, first_before.clone(), first_after.clone()),
+            command(
+                2_u32,
+                unrelated,
+                second_before.clone(),
+                second_after.clone(),
+            ),
+        ],
+    };
+    let DirectEditBatchSimulationOutcome::Predicted {
+        changes,
+        impact_seeds,
+        effect: DirectEditEffectClass::Mutation,
+        ..
+    } = session.simulate_direct_edit_batch(batch.clone())
+    else {
+        panic!("independent provenance changes must simulate");
+    };
+    assert_eq!(changes, vec![
+        DirectEditSemanticChange {
+            after: first_after,
+            before: first_before,
+            family: SemanticCommandFamily::Provenance,
+            target: edited,
+        },
+        DirectEditSemanticChange {
+            after: second_after,
+            before: second_before,
+            family: SemanticCommandFamily::Provenance,
+            target: unrelated,
+        },
+    ]);
+    assert_eq!(impact_seeds, vec![DirectEditImpactSeed {
+        authorities: vec![
+            DirectEditDerivedAuthority::Diagnostics,
+            DirectEditDerivedAuthority::Output,
+        ],
+        scope: DirectEditImpactScope::Notebook { notebook },
+    }]);
+    assert_eq!(session.current(), Some(&before));
+
+    let DirectEditBatchApplyOutcome::Applied { revision: applied, .. } =
+        session.apply_direct_edit_batch(batch)
+    else {
+        panic!("independent provenance changes must apply");
+    };
+    let current = session.current().expect("provenance impact revision");
+    assert_eq!(
+        current
+            .notebook
+            .provenance
+            .iter()
+            .find(|record| record.id == edited)
+            .expect("first provenance record")
+            .kind,
+        ProvenanceKind::Cited,
+    );
+    assert_eq!(
+        current
+            .notebook
+            .provenance
+            .iter()
+            .find(|record| record.id == unrelated)
+            .expect("second provenance record")
+            .kind,
+        ProvenanceKind::Unresolved,
+    );
+    let HistoryTraversalOutcome::Traversed { .. } =
+        session.traverse_history(applied, HistoryDirection::Undo)
+    else {
+        panic!("independent provenance batch must Undo");
+    };
+    assert_eq!(
+        session.current().expect("provenance impact Undo").notebook,
+        before.notebook,
+    );
+}
+
+#[test]
 fn ordered_provenance_chain_requires_dependency_and_coalesces() {
     let ids = IdentityAllocator::new();
     let (candidate, candidate_ids) = candidate_notebook_with_provenance(&ids);
