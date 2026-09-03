@@ -39,8 +39,9 @@ use atrament_semantic_notebook::{
 };
 use atrament_semantic_notebook_port::{
     AcceptanceOutcome, CommandBehaviorVersion, CommandTargetMaterialOutcome,
-    DirectEditBatchApplyOutcome, DirectEditBatchProposal, HistoryAvailability,
-    HistoryAvailabilityOutcome,
+    DirectEditBatchApplyOutcome, DirectEditBatchProposal,
+    DirectEditBatchSimulationOutcome, DirectEditEffectClass,
+    HistoryAvailability, HistoryAvailabilityOutcome,
     IdentityAncestryCompleteness, IdentityAncestryEntry,
     IdentityAncestryInspectOutcome, IdentityInspectOutcome,
 };
@@ -331,6 +332,16 @@ fn application_routes_atomic_batch_apply_through_owned_semantic_authority() {
         commands: Vec::new(),
     };
 
+    assert_eq!(
+        session.simulate_direct_edit_batch(empty.clone()),
+        DirectEditBatchSimulationOutcome::Predicted {
+            changes: Vec::new(),
+            commands: Vec::new(),
+            effect: DirectEditEffectClass::NoOp,
+            impact_seeds: Vec::new(),
+            revision,
+        },
+    );
     assert_eq!(
         session.apply_direct_edit_batch(empty.clone()),
         DirectEditBatchApplyOutcome::NoOp {

@@ -153,6 +153,11 @@ still performs the same authoritative validation and simulation before commit.
 
 ### Implementation evidence
 
+The active-process `SessionApplication` delegates unbounded transport-neutral
+batch simulation through the same owned semantic authority as Apply. This is an
+internal Validate foundation only; it does not publish protocol normalization,
+command context, diagnostics, or a discoverable Validate capability.
+
 The current application foundation can deterministically simulate an ordered
 batch of the four established direct replacement value families against one
 immutable accepted revision. It validates generic command dependencies first,

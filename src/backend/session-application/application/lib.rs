@@ -45,7 +45,8 @@ use atrament_semantic_notebook::{
 use atrament_semantic_notebook_port::{
     AcceptanceOutcome, CommandTargetMaterialOutcome,
     DirectEditBatchApplyOutcome, DirectEditBatchProposal,
-    HistoryAvailabilityOutcome, HistoryDirection,
+    DirectEditBatchSimulationOutcome, HistoryAvailabilityOutcome,
+    HistoryDirection,
     HistoryTraversalOutcome,
     IdentityAncestryInspectOutcome, IdentityInspectOutcome,
     SemanticCommandCapabilitySnapshot, SemanticNotebookHistory as _,
@@ -141,6 +142,17 @@ impl SessionApplication {
             target,
             maximum_results,
         )
+    }
+
+    /// Simulate one transport-neutral direct-edit batch without mutation.
+    pub fn simulate_direct_edit_batch<CommandIdentity>(
+        &self,
+        batch: DirectEditBatchProposal<CommandIdentity>,
+    ) -> DirectEditBatchSimulationOutcome<CommandIdentity>
+    where
+        CommandIdentity: Clone + Ord,
+    {
+        self.semantic.simulate_direct_edit_batch(batch)
     }
 
     /// Traverse one in-memory semantic history transaction.
