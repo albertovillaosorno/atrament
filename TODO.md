@@ -234,6 +234,10 @@ invalid rounded joins, and unspecified custom geometry fail with typed results.
 
 The task remains open for seeded calibrated ruler-path synthesis, additional
 profile-specific visual appearance, and renderer or live-output consumption.
+Seeded path synthesis is blocked on an executable calibrated variation model:
+the accepted contracts define a maximum ruler-error envelope and deterministic
+seed, but not the profile-derived distribution or correlation behavior inside
+that envelope. Independent point jitter must not be invented as a substitute.
 
 ### TODO - Implement measured text flow and pagination
 
