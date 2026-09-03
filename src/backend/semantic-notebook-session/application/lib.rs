@@ -1324,8 +1324,8 @@ impl SemanticNotebookHistory for SemanticNotebookSessionService {
             };
         }
         let source_is_empty = match direction {
-            HistoryDirection::Undo => self.undo_notebooks.is_empty(),
             HistoryDirection::Redo => self.redo_notebooks.is_empty(),
+            HistoryDirection::Undo => self.undo_notebooks.is_empty(),
         };
         if source_is_empty {
             return HistoryTraversalOutcome::Boundary {
@@ -1341,20 +1341,24 @@ impl SemanticNotebookHistory for SemanticNotebookSessionService {
         };
         let current_notebook = current.notebook.clone();
         let restored = match direction {
-            HistoryDirection::Undo => {
-                let restored = self
-                    .undo_notebooks
-                    .pop()
-                    .expect("non-empty Undo history checked before commit");
-                self.redo_notebooks.push(current_notebook);
+            HistoryDirection::Redo => {
+                let Some(restored) = self.redo_notebooks.pop() else {
+                    return HistoryTraversalOutcome::Boundary {
+                        direction,
+                        revision: current.id,
+                    };
+                };
+                self.undo_notebooks.push(current_notebook);
                 restored
             },
-            HistoryDirection::Redo => {
-                let restored = self
-                    .redo_notebooks
-                    .pop()
-                    .expect("non-empty Redo history checked before commit");
-                self.undo_notebooks.push(current_notebook);
+            HistoryDirection::Undo => {
+                let Some(restored) = self.undo_notebooks.pop() else {
+                    return HistoryTraversalOutcome::Boundary {
+                        direction,
+                        revision: current.id,
+                    };
+                };
+                self.redo_notebooks.push(current_notebook);
                 restored
             },
         };
@@ -1371,22 +1375,6 @@ impl SemanticNotebookHistory for SemanticNotebookSessionService {
 }
 
 impl SemanticNotebookSessionService {
-    fn commit_semantic_edit(
-        &mut self,
-        notebook: Notebook<AcceptedIdentity>,
-    ) -> Result<
-        atrament_semantic_notebook::RevisionIdentity,
-        IdentityExhausted,
-    > {
-        let revision = self.identities.allocate_revision()?;
-        if let Some(current) = self.current.as_ref() {
-            self.undo_notebooks.push(current.notebook.clone());
-        }
-        self.redo_notebooks.clear();
-        self.current = Some(AcceptedRevision { id: revision, notebook });
-        Ok(revision)
-    }
-
     fn allocate_mapping(
         &self,
         owners: &[CandidateIdentity],
@@ -1409,6 +1397,22 @@ impl SemanticNotebookSessionService {
             });
         }
         Ok((identity_map, mapping))
+    }
+
+    fn commit_semantic_edit(
+        &mut self,
+        notebook: Notebook<AcceptedIdentity>,
+    ) -> Result<
+        atrament_semantic_notebook::RevisionIdentity,
+        IdentityExhausted,
+    > {
+        let revision = self.identities.allocate_revision()?;
+        if let Some(current) = self.current.as_ref() {
+            self.undo_notebooks.push(current.notebook.clone());
+        }
+        self.redo_notebooks.clear();
+        self.current = Some(AcceptedRevision { id: revision, notebook });
+        Ok(revision)
     }
 }
 

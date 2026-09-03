@@ -48,6 +48,11 @@ impl fmt::Display for SecretGenerationError {
     }
 }
 
+#[allow(
+    clippy::allow_attributes,
+    clippy::missing_trait_methods,
+    reason = "Error has stable defaults plus a nightly-only provide hook",
+)]
 impl Error for SecretGenerationError {
     fn cause(&self) -> Option<&dyn Error> {
         Some(&self.0)

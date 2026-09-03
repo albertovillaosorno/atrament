@@ -72,6 +72,11 @@ impl fmt::Display for LaunchError {
     }
 }
 
+#[allow(
+    clippy::allow_attributes,
+    clippy::missing_trait_methods,
+    reason = "Error has stable defaults plus a nightly-only provide hook",
+)]
 impl Error for LaunchError {
     fn cause(&self) -> Option<&dyn Error> {
         match self {

@@ -1358,10 +1358,10 @@ pub enum IdentityKindInspectOutcome {
 /// Direction of one accepted semantic history traversal.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum HistoryDirection {
-    /// Restore the semantic state before the latest accepted transaction.
-    Undo,
     /// Restore the semantic state from the admitted redo branch.
     Redo,
+    /// Restore the semantic state before the latest accepted transaction.
+    Undo,
 }
 
 /// Read-only availability of semantic history at one accepted revision.

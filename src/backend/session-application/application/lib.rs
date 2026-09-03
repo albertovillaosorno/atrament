@@ -42,7 +42,8 @@ use atrament_semantic_notebook::{
 };
 use atrament_semantic_notebook_port::{
     AcceptanceOutcome, HistoryAvailabilityOutcome, HistoryDirection,
-    HistoryTraversalOutcome, SemanticNotebookHistory, SemanticNotebookSession,
+    HistoryTraversalOutcome, SemanticNotebookHistory as _,
+    SemanticNotebookSession as _,
 };
 use atrament_semantic_notebook_session::SemanticNotebookSessionService;
 use atrament_session_draft::SessionDraftService;
