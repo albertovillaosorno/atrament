@@ -237,9 +237,11 @@ fn keep_together_pagination_matches_fresh_page_reference_oracle() {
                                                     KeepTogetherWhenPossible,
                                                 fragments.clone(),
                                             )];
-                                            let actual =
-                                                paginate(&pages, &units)
-                                                    .map(|plan| plan.placements);
+                                            let actual = paginate(
+                                                &pages,
+                                                &units,
+                                            )
+                                            .map(|plan| plan.placements);
                                             let expected =
                                                 reference_keep_together_fresh(
                                                     &pages,
