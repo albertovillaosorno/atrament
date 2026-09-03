@@ -51,8 +51,9 @@ use atrament_semantic_notebook_port::{
     CommandGraphLimits,
     CommandTargetMaterialOutcome, CommandTargetPreconditionOutcome,
     CommandTargetPreconditions, DirectEditBatchApplyOutcome,
-    DirectEditBatchGraphLimitsOutcome, DirectEditBatchGraphSizeOutcome,
-    DirectEditBatchProposal, DirectEditBatchSelectionBoundedOutcome,
+    DirectEditBatchCommand, DirectEditBatchGraphLimitsOutcome,
+    DirectEditBatchGraphSizeOutcome, DirectEditBatchProposal,
+    DirectEditBatchSelectionBoundedOutcome,
     DirectEditBatchSelectionRequirementsOutcome,
     DirectEditBatchSelectionSummaryOutcome, DirectEditBatchSimulationOutcome,
     DirectEditChangePreviewOutcome, DirectEditEffectClass, DirectEditProposal,
@@ -832,12 +833,19 @@ fn application_routes_local_command_review_through_owned_semantic_authority() {
 #[test]
 fn application_routes_atomic_batch_apply_through_owned_semantic_authority() {
     let identities = IdentityAllocator::new();
+    let (candidate, candidate_span) =
+        editable_text_candidate(&identities, "bounded before");
     let mut session = application::SessionApplication::default();
-    let AcceptanceOutcome::Accepted { revision, .. } =
-        session.accept_candidate(minimal_candidate(&identities))
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept_candidate(candidate)
     else {
-        panic!("minimal candidate must be accepted");
+        panic!("editable candidate must be accepted");
     };
+    let span = mapping
+        .iter()
+        .find(|entry| entry.candidate == candidate_span)
+        .expect("bounded span identity must map")
+        .accepted;
     let empty = DirectEditBatchProposal::<u32> {
         base: revision,
         capability_version: CommandBehaviorVersion(2),
@@ -912,6 +920,47 @@ fn application_routes_atomic_batch_apply_through_owned_semantic_authority() {
             revision,
         },
     );
+
+    let bounded = DirectEditBatchProposal {
+        base: revision,
+        capability_version: CommandBehaviorVersion(2),
+        commands: vec![DirectEditBatchCommand {
+            dependencies: vec![],
+            id: 1_u32,
+            preconditions: CommandTargetPreconditions {
+                expected_value: Some(EditableSemanticValue::Text(String::from(
+                    "bounded before",
+                ))),
+                identity: IdentityPrecondition {
+                    expected_kind: Some(SemanticIdentityKind::InlineSpan),
+                    expected_owner: IdentityOwnerExpectation::Any,
+                },
+                requested_family: SemanticCommandFamily::TextContent,
+            },
+            requested: EditableSemanticValue::Text(String::from(
+                "bounded after",
+            )),
+            target: span,
+        }],
+    };
+    let before_rejection =
+        session.accepted_revision().expect("bounded base").clone();
+    assert!(matches!(
+        session.direct_edit_batch_graph_limits(&bounded, zero_limits),
+        DirectEditBatchGraphLimitsOutcome::Rejected { .. }
+    ));
+    assert!(matches!(
+        session.simulate_direct_edit_batch_bounded(
+            bounded.clone(),
+            zero_limits,
+        ),
+        DirectEditBatchSimulationOutcome::ResourceRejected { .. }
+    ));
+    assert!(matches!(
+        session.apply_direct_edit_batch_bounded(bounded, zero_limits),
+        DirectEditBatchApplyOutcome::ResourceRejected { .. }
+    ));
+    assert_eq!(session.accepted_revision(), Some(&before_rejection));
 
     assert_eq!(
         session.simulate_direct_edit_batch(empty.clone()),
