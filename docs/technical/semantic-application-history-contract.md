@@ -224,6 +224,11 @@ semantic-rejected, and resource-rejected Apply attempts. None changes the
 current revision or destroys the branch, and the original Redo remains
 traversable.
 
+Candidate replacement also branches through the same history authority. After
+Undo abandons one candidate snapshot, accepting another candidate clears Redo
+without reusing any accepted semantic identity still present in that abandoned
+snapshot.
+
 ## Failure Modes
 
 The contract fails if Undo or Redo mutates DOM or preview snapshots as document

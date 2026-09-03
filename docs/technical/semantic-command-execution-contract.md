@@ -618,12 +618,13 @@ nesting-limit failure before identity promotion or accepted mutation, and their
 recursive structures are dismantled iteratively so rejection itself cannot
 consume unbounded process stack depth.
 
-These primitives do not implement command-context generation, protocol-owned
-normalization, writable-scope admission, complete impact expansion,
-deterministic command diagnostics, retry identity, Validate, Apply, undo/redo,
-or adapter parity. The
-ordered direct-edit simulator is an internal application foundation, not an
-advertised command-mode capability. Those parts of this contract remain open.
+These primitives still do not implement command-context generation,
+protocol-owned normalization, writable-scope admission, complete impact
+expansion, deterministic command diagnostics, retry identity, a full Validate
+service, or adapter parity. Atomic batch Apply and semantic Undo/Redo now exist
+inside the transport-neutral application core, but they are not advertised as a
+finalized command-mode protocol capability. Those external contract parts remain
+open.
 
 ## Failure Modes
 

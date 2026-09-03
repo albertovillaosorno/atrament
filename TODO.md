@@ -483,9 +483,13 @@ in-process fixture races Undo against Apply from one shared current revision;
 exactly one commits and the loser reports the winner's fresh revision as stale.
 
 No-op, semantic-rejected, and resource-rejected batch attempts preserve an
-existing Redo branch after Undo. The task remains open for transaction
-provenance, dependency-expanded derived impact, bounded history resource policy,
-retry/lost-receipt recovery, cancellation, and browser/CLI/MCP parity.
+existing Redo branch after Undo. Candidate replacement on a new branch clears
+Redo while never reusing semantic identities still stored in the abandoned
+branch.
+
+The task remains open for transaction provenance, dependency-expanded derived
+impact, bounded history resource policy, retry/lost-receipt recovery,
+cancellation, and browser/CLI/MCP parity.
 
 ### TODO - Implement rich clipboard intake
 
