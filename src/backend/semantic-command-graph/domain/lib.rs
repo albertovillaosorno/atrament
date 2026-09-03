@@ -33,7 +33,7 @@
 
 //! Transport-neutral semantic command dependency graph validation.
 
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 /// One ordered command and the command identities it explicitly depends on.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -202,77 +202,86 @@ pub fn validate_command_graph<Identity>(
 where
     Identity: Clone + Ord,
 {
-    let mut indegrees = BTreeMap::new();
     let mut positions = BTreeMap::new();
     for (position, node) in nodes.iter().enumerate() {
-        if indegrees.insert(node.id.clone(), 0usize).is_some() {
+        if positions.insert(&node.id, position).is_some() {
             return Err(CommandGraphError::DuplicateIdentity {
                 command: node.id.clone(),
             });
         }
-        let _previous = positions.insert(node.id.clone(), position);
     }
 
-    let mut dependents: BTreeMap<Identity, Vec<Identity>> = BTreeMap::new();
-    for node in nodes {
+    let mut first_forward = None;
+    for (position, node) in nodes.iter().enumerate() {
         for dependency in &node.dependencies {
             if dependency == &node.id {
                 return Err(CommandGraphError::SelfDependency {
                     command: node.id.clone(),
                 });
             }
-            if !positions.contains_key(dependency) {
+            let Some(dependency_position) = positions.get(dependency).copied()
+            else {
                 return Err(CommandGraphError::MissingDependency {
                     command: node.id.clone(),
                     dependency: dependency.clone(),
                 });
+            };
+            if dependency_position > position && first_forward.is_none() {
+                first_forward = Some((node.id.clone(), dependency.clone()));
             }
-            if let Some(degree) = indegrees.get_mut(&node.id) {
+        }
+    }
+    let Some((forward_command, forward_dependency)) = first_forward else {
+        return Ok(());
+    };
+
+    let mut indegrees = vec![0usize; nodes.len()];
+    let mut dependents = vec![Vec::new(); nodes.len()];
+    for (position, node) in nodes.iter().enumerate() {
+        for dependency in &node.dependencies {
+            let Some(dependency_position) = positions.get(dependency).copied()
+            else {
+                continue;
+            };
+            if let Some(degree) = indegrees.get_mut(position) {
                 *degree = degree.saturating_add(1);
             }
-            dependents
-                .entry(dependency.clone())
-                .or_default()
-                .push(node.id.clone());
+            if let Some(next_commands) = dependents.get_mut(dependency_position)
+            {
+                next_commands.push(position);
+            }
         }
     }
 
-    let mut ready = BTreeSet::new();
-    for (command, degree) in &indegrees {
+    let mut ready = VecDeque::new();
+    for (position, degree) in indegrees.iter().enumerate() {
         if *degree == 0 {
-            let _inserted = ready.insert(command.clone());
+            ready.push_back(position);
         }
     }
     let mut processed = 0usize;
-    while let Some(command) = ready.pop_first() {
+    while let Some(position) = ready.pop_front() {
         processed = processed.saturating_add(1);
-        if let Some(next_commands) = dependents.get(&command) {
-            for next in next_commands {
-                if let Some(degree) = indegrees.get_mut(next) {
-                    *degree = degree.saturating_sub(1);
-                    if *degree == 0 {
-                        let _inserted = ready.insert(next.clone());
-                    }
-                }
+        let Some(next_commands) = dependents.get(position) else {
+            continue;
+        };
+        for next_position in next_commands {
+            let Some(degree) = indegrees.get_mut(*next_position) else {
+                continue;
+            };
+            *degree = degree.saturating_sub(1);
+            if *degree == 0 {
+                ready.push_back(*next_position);
             }
         }
     }
     if processed != nodes.len() {
         return Err(CommandGraphError::Cycle);
     }
-    for (position, node) in nodes.iter().enumerate() {
-        for dependency in &node.dependencies {
-            if let Some(dependency_position) = positions.get(dependency)
-                && *dependency_position > position
-            {
-                return Err(CommandGraphError::DependencyAfterCommand {
-                    command: node.id.clone(),
-                    dependency: dependency.clone(),
-                });
-            }
-        }
-    }
-    Ok(())
+    Err(CommandGraphError::DependencyAfterCommand {
+        command: forward_command,
+        dependency: forward_dependency,
+    })
 }
 
 /// Check that one selected subset contains every explicit command dependency.
@@ -295,10 +304,7 @@ where
     if let Err(reason) = validate_command_graph(nodes) {
         return Err(DependencySelectionError::Graph { reason });
     }
-    let known = nodes
-        .iter()
-        .map(|node| node.id.clone())
-        .collect::<BTreeSet<_>>();
+    let known = nodes.iter().map(|node| &node.id).collect::<BTreeSet<_>>();
     if let Some(command) =
         selected.iter().find(|command| !known.contains(*command))
     {
