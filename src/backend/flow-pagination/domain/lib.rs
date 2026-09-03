@@ -320,38 +320,37 @@ where
     Identity: Copy,
     PageIdentity: Copy,
 {
-    if !pages
-        .iter()
-        .skip(cursor.page_index)
-        .any(|page| fragment_fits_region(&fragment, page.writable))
-    {
-        return Err(PaginationError::FragmentDoesNotFitAnyPage {
-            owner: fragment.owner,
-        });
-    }
-
+    let mut fits_fresh_page = false;
     loop {
         let Some(page) = pages.get(cursor.page_index) else {
-            return Err(PaginationError::NoPageAvailable {
-                owner: fragment.owner,
-            });
-        };
-        if !fragment_fits_region(&fragment, page.writable) {
-            if !advance_cursor(cursor) {
-                return Err(PaginationError::FragmentDoesNotFitAnyPage {
+            return if fits_fresh_page {
+                Err(PaginationError::NoPageAvailable {
                     owner: fragment.owner,
-                });
+                })
+            } else {
+                Err(PaginationError::FragmentDoesNotFitAnyPage {
+                    owner: fragment.owner,
+                })
+            };
+        };
+        if fragment_fits_region(&fragment, page.writable) {
+            fits_fresh_page = true;
+            let remaining =
+                remaining_height(page.writable, cursor.used_height);
+            if fragment.height <= remaining {
+                return place_on_current(fragment, *page, cursor, placements);
             }
-            continue;
-        }
-        let remaining = remaining_height(page.writable, cursor.used_height);
-        if fragment.height <= remaining {
-            return place_on_current(fragment, *page, cursor, placements);
         }
         if !advance_cursor(cursor) {
-            return Err(PaginationError::NoPageAvailable {
-                owner: fragment.owner,
-            });
+            return if fits_fresh_page {
+                Err(PaginationError::NoPageAvailable {
+                    owner: fragment.owner,
+                })
+            } else {
+                Err(PaginationError::FragmentDoesNotFitAnyPage {
+                    owner: fragment.owner,
+                })
+            };
         }
     }
 }

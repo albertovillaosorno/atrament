@@ -211,6 +211,20 @@ fn fresh_page_exhaustion_is_distinct_from_unplaceable_measurement() {
 }
 
 #[test]
+fn fresh_fit_exhaustion_stays_distinct_when_later_pages_are_too_narrow() {
+    let pages = [page(1, 0, 100, 100), page(2, 1_000, 50, 100)];
+    let units = [unit(FlowUnitPolicy::Independent, vec![
+        fragment(1, 80, 80),
+        fragment(2, 80, 30),
+    ])];
+
+    assert_eq!(
+        paginate(&pages, &units),
+        Err(PaginationError::NoPageAvailable { owner: 2 }),
+    );
+}
+
+#[test]
 fn fragment_larger_than_every_remaining_page_is_typed_failure() {
     let pages = [page(1, 0, 100, 100), page(2, 1_000, 120, 90)];
     let units = [unit(FlowUnitPolicy::Independent, vec![fragment(
