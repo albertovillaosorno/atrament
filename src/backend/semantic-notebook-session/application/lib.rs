@@ -317,7 +317,7 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
                 };
             },
         };
-        check_command_target_preconditions_material(material, preconditions)
+        check_command_target_preconditions_material(material, &preconditions)
     }
 
     fn check_editable_value_precondition(
@@ -1752,7 +1752,7 @@ fn command_target_material_from_notebook(
 
 fn check_command_target_preconditions_material(
     material: CommandTargetMaterial,
-    preconditions: CommandTargetPreconditions,
+    preconditions: &CommandTargetPreconditions,
 ) -> CommandTargetPreconditionOutcome {
     let revision = material.revision;
     let target = material.target;
@@ -1789,7 +1789,7 @@ fn check_command_target_preconditions_material(
             target,
         };
     }
-    if let Some(expected) = preconditions.expected_value {
+    if let Some(expected) = preconditions.expected_value.as_ref() {
         let Some(actual) = material.editable_value.as_ref() else {
             return CommandTargetPreconditionOutcome::TargetNotEditableValue {
                 kind: material.descriptor.kind,
@@ -1797,10 +1797,10 @@ fn check_command_target_preconditions_material(
                 target,
             };
         };
-        if actual != &expected {
+        if actual != expected {
             return CommandTargetPreconditionOutcome::ValueMismatch {
                 actual: actual.clone(),
-                expected,
+                expected: expected.clone(),
                 revision,
                 target,
             };
@@ -2329,7 +2329,7 @@ where
     let kind = material.descriptor.kind;
     let precondition = check_command_target_preconditions_material(
         material.clone(),
-        command.preconditions.clone(),
+        &command.preconditions,
     );
     if !matches!(
         precondition,
