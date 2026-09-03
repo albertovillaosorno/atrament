@@ -256,6 +256,24 @@ fn merged_table_grid_validation_is_identity_generic() {
 }
 
 #[test]
+fn staggered_row_spans_expire_and_fill_gaps_deterministically() {
+    let table = Table {
+        id: 200u32,
+        rows: vec![
+            grid_row(1, vec![
+                grid_cell(10, 1, 3),
+                grid_cell(11, 1, 1),
+                grid_cell(12, 2, 2),
+            ]),
+            grid_row(2, vec![grid_cell(20, 1, 1)]),
+            grid_row(3, vec![grid_cell(30, 3, 1)]),
+        ],
+    };
+
+    assert_eq!(table.validate_grid(), Ok(()));
+}
+
+#[test]
 fn table_grid_validation_reports_semantic_owner_of_each_failure() {
     let row_span = Table {
         id: 100u32,
