@@ -1464,8 +1464,9 @@ pub enum IdentityAncestryCompleteness {
     Complete,
     /// The caller bound stopped inspection before the root was returned.
     Incomplete {
-        /// First omitted target-or-owner chain identity. This is semantic data,
-        /// not a continuation token, credential, retry identity, or write grant.
+        /// First omitted target-or-owner chain identity. This is semantic
+        /// data, not a continuation token, credential, retry identity, or
+        /// write grant.
         remaining_identity: AcceptedIdentity,
     },
 }
