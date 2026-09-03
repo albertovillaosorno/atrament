@@ -487,6 +487,18 @@ existing Redo branch after Undo. Candidate replacement on a new branch clears
 Redo while never reusing semantic identities still stored in the abandoned
 branch.
 
+Repeating a completed traversal against its old exact base now returns stale and
+cannot advance history twice. That is a duplicate-effect safety property, not
+lost-receipt recovery: the history protocol still owns no retry-identity type,
+and base plus direction cannot distinguish a retry from a genuinely new caller.
+
+Bounded history storage is also blocked on policy rather than mechanics. The
+frozen history contract explicitly leaves depth limits and storage structure
+unfrozen, so the application must not silently choose eviction semantics that
+change which Undo/Redo steps remain admitted. Cancellation likewise awaits an
+owning operation-cancellation boundary instead of being inferred from transport
+disconnect.
+
 The task remains open for transaction provenance, dependency-expanded derived
 impact, bounded history resource policy, retry/lost-receipt recovery,
 cancellation, and browser/CLI/MCP parity.
