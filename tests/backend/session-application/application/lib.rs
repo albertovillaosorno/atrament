@@ -34,8 +34,14 @@ use std::collections::BTreeSet;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::process::{Command, Stdio};
 
+use atrament_physical_page_profile::{
+    BindingEdge, BorderShape, Length, Orientation, PageProfile,
+    PaperMarkAppearance, PaperMarkJoin, PaperMarkLayer, PaperPattern, Rect,
+    SheetSize,
+};
 use atrament_semantic_notebook::{
-    CandidateIdentity, IdentityAllocator, Notebook, SemanticIdentityDescriptor,
+    Block, BlockContent, CandidateIdentity, Flow, IdentityAllocator, InlineSpan,
+    Notebook, Page, PaperProfile, SemanticIdentityDescriptor,
     SemanticIdentityKind,
 };
 use atrament_semantic_notebook_port::{
@@ -49,6 +55,7 @@ use atrament_semantic_notebook_port::{
     DirectEditBatchSelectionRequirementsOutcome,
     DirectEditBatchSelectionSummaryOutcome, DirectEditBatchSimulationOutcome,
     DirectEditChangePreviewOutcome, DirectEditEffectClass, DirectEditProposal,
+    DirectEditSemanticChange,
     DirectEditProposalOutcome, DirectEditSimulationOutcome,
     EditableSemanticValue, EditableValuePreconditionOutcome,
     HistoryAvailability, HistoryAvailabilityOutcome,
@@ -62,6 +69,81 @@ use atrament_session_draft_port::{DraftField, DraftMutation, SessionDraft};
 #[allow(dead_code)]
 #[path = "../../../../src/backend/session-application/application/lib.rs"]
 mod application;
+
+fn physical_page_profile() -> PageProfile {
+    PageProfile {
+        binding_edge: BindingEdge::Left,
+        border_shape: BorderShape::Rectangle,
+        corner_roundness: Length::ZERO,
+        orientation: Orientation::Portrait,
+        outer_margin: Length::from_micrometres(10_000),
+        paper_mark_appearance: PaperMarkAppearance {
+            join: PaperMarkJoin::Sharp,
+            maximum_ruler_error: Length::ZERO,
+        },
+        paper_mark_layer: PaperMarkLayer::BelowInk,
+        paper_pattern: PaperPattern::Blank,
+        printable_region: Rect {
+            height: Length::from_micrometres(277_000),
+            width: Length::from_micrometres(190_000),
+            x: Length::from_micrometres(10_000),
+            y: Length::from_micrometres(10_000),
+        },
+        sheet: SheetSize {
+            height: Length::from_micrometres(297_000),
+            width: Length::from_micrometres(210_000),
+        },
+        top_clearance: Length::from_micrometres(10_000),
+        writing_inset: Length::from_micrometres(5_000),
+    }
+}
+
+fn editable_text_candidate(
+    identities: &IdentityAllocator,
+    text: &str,
+) -> (Notebook<CandidateIdentity>, CandidateIdentity) {
+    let notebook = identities.allocate_candidate().expect("notebook id");
+    let profile = identities.allocate_candidate().expect("profile id");
+    let page = identities.allocate_candidate().expect("page id");
+    let flow = identities.allocate_candidate().expect("flow id");
+    let block = identities.allocate_candidate().expect("block id");
+    let span = identities.allocate_candidate().expect("span id");
+    (
+        Notebook {
+            assets: vec![],
+            constraints: vec![],
+            extensions: vec![],
+            id: notebook,
+            output_profiles: vec![],
+            page_profiles: vec![PaperProfile {
+                geometry: physical_page_profile(),
+                id: profile,
+            }],
+            pages: vec![Page {
+                flows: vec![Flow {
+                    blocks: vec![Block {
+                        content: BlockContent::Paragraph(vec![InlineSpan {
+                            id: span,
+                            provenance: None,
+                            style: None,
+                            text: text.to_owned(),
+                        }]),
+                        extensions: vec![],
+                        id: block,
+                        provenance: None,
+                        style: None,
+                    }],
+                    id: flow,
+                }],
+                id: page,
+                page_profile: profile,
+            }],
+            provenance: vec![],
+            styles: vec![],
+        },
+        span,
+    )
+}
 
 fn minimal_candidate(
     identities: &IdentityAllocator,
@@ -330,6 +412,102 @@ fn application_routes_history_traversal_through_owned_semantic_authority() {
 }
 
 #[test]
+fn application_reviews_editable_text_through_owned_semantic_authority() {
+    let identities = IdentityAllocator::new();
+    let (candidate, candidate_span) =
+        editable_text_candidate(&identities, "before");
+    let mut session = application::SessionApplication::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept_candidate(candidate)
+    else {
+        panic!("text candidate must be accepted");
+    };
+    let span = mapping
+        .iter()
+        .find(|entry| entry.candidate == candidate_span)
+        .expect("span identity must map")
+        .accepted;
+    let before_revision =
+        session.accepted_revision().expect("accepted revision").clone();
+    let preconditions = CommandTargetPreconditions {
+        expected_value: Some(EditableSemanticValue::Text(String::from(
+            "before",
+        ))),
+        identity: IdentityPrecondition {
+            expected_kind: Some(SemanticIdentityKind::InlineSpan),
+            expected_owner: IdentityOwnerExpectation::Any,
+        },
+        requested_family: SemanticCommandFamily::TextContent,
+    };
+    assert!(matches!(
+        session.check_command_target_preconditions(
+            revision,
+            span,
+            preconditions.clone(),
+        ),
+        CommandTargetPreconditionOutcome::Satisfied { .. }
+    ));
+    let requested = EditableSemanticValue::Text(String::from("after"));
+    assert_eq!(
+        session.simulate_direct_edit(revision, span, requested.clone()),
+        DirectEditSimulationOutcome::Applicable {
+            family: SemanticCommandFamily::TextContent,
+            requested: requested.clone(),
+            revision,
+            target: span,
+        },
+    );
+    let DirectEditChangePreviewOutcome::Predicted {
+        changes,
+        effect,
+        impact_seeds,
+        revision: preview_revision,
+    } = session.preview_direct_edit_changes(revision, span, requested.clone())
+    else {
+        panic!("editable text preview must predict a change");
+    };
+    assert_eq!(preview_revision, revision);
+    assert_eq!(effect, DirectEditEffectClass::Mutation);
+    assert_eq!(changes, vec![DirectEditSemanticChange {
+        after: requested.clone(),
+        before: EditableSemanticValue::Text(String::from("before")),
+        family: SemanticCommandFamily::TextContent,
+        target: span,
+    }]);
+    assert!(!impact_seeds.is_empty());
+    assert_eq!(
+        session.simulate_direct_edit(
+            revision,
+            span,
+            EditableSemanticValue::Text(String::from("before")),
+        ),
+        DirectEditSimulationOutcome::NoOp {
+            family: SemanticCommandFamily::TextContent,
+            revision,
+            target: span,
+        },
+    );
+    assert_eq!(
+        session.simulate_direct_edit_proposal(DirectEditProposal {
+            capability_version: CommandBehaviorVersion(2),
+            preconditions,
+            requested: requested.clone(),
+            revision,
+            target: span,
+        }),
+        DirectEditProposalOutcome::Simulated {
+            outcome: DirectEditSimulationOutcome::Applicable {
+                family: SemanticCommandFamily::TextContent,
+                requested,
+                revision,
+                target: span,
+            },
+        },
+    );
+    assert_eq!(session.accepted_revision(), Some(&before_revision));
+}
+
+#[test]
 fn application_routes_local_command_review_through_owned_semantic_authority() {
     let identities = IdentityAllocator::new();
     let candidate = minimal_candidate(&identities);
@@ -360,7 +538,7 @@ fn application_routes_local_command_review_through_owned_semantic_authority() {
             snapshot.behavior_version,
         ),
         CommandCapabilityCompatibilityOutcome::Compatible {
-            snapshot: snapshot.clone(),
+            snapshot,
         },
     );
     assert_eq!(
