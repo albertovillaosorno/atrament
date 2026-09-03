@@ -769,6 +769,12 @@ pub enum DirectEditBatchSimulationOutcome<CommandIdentity> {
         /// Immutable accepted base revision used for isolated simulation.
         revision: RevisionIdentity,
     },
+    /// Caller-supplied coarse resource limits rejected before graph simulation.
+    ResourceRejected {
+        /// Typed exact command/dependency limit failure; nothing was
+        /// truncated.
+        reason: CommandGraphLimitError,
+    },
     /// Batch base revision is no longer the current accepted revision.
     StaleBase {
         /// Current accepted revision that rejected the stale batch.
@@ -1531,6 +1537,15 @@ pub trait SemanticNotebookSession {
     fn simulate_direct_edit_batch<CommandIdentity>(
         &self,
         batch: DirectEditBatchProposal<CommandIdentity>,
+    ) -> DirectEditBatchSimulationOutcome<CommandIdentity>
+    where
+        CommandIdentity: Clone + Ord;
+
+    /// Enforce caller graph limits before ordered direct-edit simulation.
+    fn simulate_direct_edit_batch_bounded<CommandIdentity>(
+        &self,
+        batch: DirectEditBatchProposal<CommandIdentity>,
+        limits: CommandGraphLimits,
     ) -> DirectEditBatchSimulationOutcome<CommandIdentity>
     where
         CommandIdentity: Clone + Ord;

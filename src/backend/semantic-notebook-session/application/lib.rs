@@ -1140,13 +1140,39 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
                 current: current.id,
             };
         }
+        simulate_direct_edit_batch_after_base(current, &batch.commands)
+    }
+
+    fn simulate_direct_edit_batch_bounded<CommandIdentity>(
+        &self,
+        batch: DirectEditBatchProposal<CommandIdentity>,
+        limits: CommandGraphLimits,
+    ) -> DirectEditBatchSimulationOutcome<CommandIdentity>
+    where
+        CommandIdentity: Clone + Ord,
+    {
+        let snapshot = self.command_capability_snapshot();
+        if snapshot.behavior_version != batch.capability_version {
+            return DirectEditBatchSimulationOutcome::CapabilityMismatch {
+                current: snapshot.behavior_version,
+                expected: batch.capability_version,
+            };
+        }
+        let Some(current) = self.current.as_ref() else {
+            return DirectEditBatchSimulationOutcome::NoAcceptedRevision;
+        };
+        if current.id != batch.base {
+            return DirectEditBatchSimulationOutcome::StaleBase {
+                current: current.id,
+            };
+        }
         let nodes = direct_edit_command_graph_nodes(&batch.commands);
-        if let Err(reason) = validate_command_graph(&nodes) {
-            return DirectEditBatchSimulationOutcome::DependencyGraphRejected {
+        if let Err(reason) = validate_command_graph_limits(&nodes, limits) {
+            return DirectEditBatchSimulationOutcome::ResourceRejected {
                 reason,
             };
         }
-        simulate_direct_edit_batch_commands(current, &batch.commands)
+        simulate_direct_edit_batch_after_base(current, &batch.commands)
     }
 
     fn simulate_direct_edit_proposal(
@@ -1872,6 +1898,22 @@ fn insert_direct_edit_material(
             revision,
             target,
         });
+}
+
+fn simulate_direct_edit_batch_after_base<CommandIdentity>(
+    current: &AcceptedRevision,
+    commands: &[DirectEditBatchCommand<CommandIdentity>],
+) -> DirectEditBatchSimulationOutcome<CommandIdentity>
+where
+    CommandIdentity: Clone + Ord,
+{
+    let nodes = direct_edit_command_graph_nodes(commands);
+    if let Err(reason) = validate_command_graph(&nodes) {
+        return DirectEditBatchSimulationOutcome::DependencyGraphRejected {
+            reason,
+        };
+    }
+    simulate_direct_edit_batch_commands(current, commands)
 }
 
 fn simulate_direct_edit_batch_commands<CommandIdentity>(

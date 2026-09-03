@@ -2327,6 +2327,186 @@ fn invalid_batch_graph_clones_only_reported_command_identities() {
 }
 
 #[test]
+fn bounded_ordered_batch_matches_unbounded_at_exact_graph_limits() {
+    let ids = IdentityAllocator::new();
+    let (candidate, first, second, _) =
+        candidate_notebook_with_three_spans(&ids);
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(candidate)
+    else {
+        panic!("three-span candidate must be accepted");
+    };
+    let first = accepted_for(&mapping, first);
+    let second = accepted_for(&mapping, second);
+    let batch = DirectEditBatchProposal {
+        base: revision,
+        capability_version: CommandBehaviorVersion(1),
+        commands: vec![
+            text_batch_command(1, &[], first, "one", "ONE"),
+            text_batch_command(2, &[1], second, "two", "TWO"),
+        ],
+    };
+    let before = session.current().expect("accepted revision").clone();
+    let expected = session.simulate_direct_edit_batch(batch.clone());
+    assert_eq!(
+        session.simulate_direct_edit_batch_bounded(batch, CommandGraphLimits {
+            commands: 2,
+            dependency_edges: 1,
+        },),
+        expected,
+    );
+    assert_eq!(session.current(), Some(&before));
+}
+
+#[test]
+fn bounded_ordered_batch_rejects_resources_before_graph_or_semantics() {
+    let ids = IdentityAllocator::new();
+    let (candidate, span) = candidate_notebook_with_span(&ids, "base text");
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(candidate)
+    else {
+        panic!("candidate must be accepted");
+    };
+    let span = accepted_for(&mapping, span);
+    let batch = DirectEditBatchProposal {
+        base: revision,
+        capability_version: CommandBehaviorVersion(1),
+        commands: vec![
+            text_batch_command(1, &[2], span, "wrong base", "one"),
+            text_batch_command(2, &[], span, "base text", "two"),
+        ],
+    };
+    let before = session.current().expect("accepted revision").clone();
+    assert_eq!(
+        session.simulate_direct_edit_batch_bounded(batch, CommandGraphLimits {
+            commands: 1,
+            dependency_edges: 1,
+        },),
+        DirectEditBatchSimulationOutcome::ResourceRejected {
+            reason: CommandGraphLimitError::CommandCountExceeded {
+                actual: 2,
+                limit: 1,
+            },
+        },
+    );
+    assert_eq!(session.current(), Some(&before));
+}
+
+#[test]
+fn bounded_ordered_batch_preserves_capability_and_stale_precedence() {
+    let ids = IdentityAllocator::new();
+    let (candidate, span) = candidate_notebook_with_span(&ids, "base text");
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(candidate)
+    else {
+        panic!("candidate must be accepted");
+    };
+    let span = accepted_for(&mapping, span);
+    let incompatible = DirectEditBatchProposal {
+        base: revision,
+        capability_version: CommandBehaviorVersion(0),
+        commands: vec![text_batch_command(
+            1,
+            &[],
+            span,
+            "base text",
+            "changed",
+        )],
+    };
+    assert_eq!(
+        session.simulate_direct_edit_batch_bounded(
+            incompatible,
+            CommandGraphLimits {
+                commands: 0,
+                dependency_edges: 0,
+            },
+        ),
+        DirectEditBatchSimulationOutcome::CapabilityMismatch {
+            current: CommandBehaviorVersion(1),
+            expected: CommandBehaviorVersion(0),
+        },
+    );
+    let stale = DirectEditBatchProposal {
+        base: revision,
+        capability_version: CommandBehaviorVersion(1),
+        commands: vec![text_batch_command(
+            1,
+            &[],
+            span,
+            "base text",
+            "changed",
+        )],
+    };
+    let replacement = candidate_notebook(&ids, "new revision");
+    let AcceptanceOutcome::Accepted { revision: current, .. } =
+        session.accept(replacement)
+    else {
+        panic!("replacement candidate must be accepted");
+    };
+    assert_eq!(
+        session.simulate_direct_edit_batch_bounded(stale, CommandGraphLimits {
+            commands: 0,
+            dependency_edges: 0,
+        },),
+        DirectEditBatchSimulationOutcome::StaleBase { current },
+    );
+}
+
+#[test]
+fn bounded_ordered_batch_resource_rejection_borrows_command_ids() {
+    let ids = IdentityAllocator::new();
+    let (candidate, span) = candidate_notebook_with_span(&ids, "base text");
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(candidate)
+    else {
+        panic!("candidate must be accepted");
+    };
+    let span = accepted_for(&mapping, span);
+    let clones = Arc::new(AtomicUsize::new(0));
+    let command = |id, dependencies| DirectEditBatchCommand {
+        dependencies,
+        id: CountingCommandIdentity::new(&clones, id),
+        preconditions: CommandTargetPreconditions {
+            expected_value: Some(EditableSemanticValue::Text(
+                "base text".to_owned(),
+            )),
+            identity: IdentityPrecondition {
+                expected_kind: Some(SemanticIdentityKind::InlineSpan),
+                expected_owner: IdentityOwnerExpectation::Any,
+            },
+            requested_family: SemanticCommandFamily::TextContent,
+        },
+        requested: EditableSemanticValue::Text("changed".to_owned()),
+        target: span,
+    };
+    let batch = DirectEditBatchProposal {
+        base: revision,
+        capability_version: CommandBehaviorVersion(1),
+        commands: vec![
+            command(1, Vec::new()),
+            command(2, vec![CountingCommandIdentity::new(&clones, 1)]),
+        ],
+    };
+    assert_eq!(
+        session.simulate_direct_edit_batch_bounded(batch, CommandGraphLimits {
+            commands: 1,
+            dependency_edges: 1,
+        },),
+        DirectEditBatchSimulationOutcome::ResourceRejected {
+            reason: CommandGraphLimitError::CommandCountExceeded {
+                actual: 2,
+                limit: 1,
+            },
+        },
+    );
+    assert_eq!(clones.load(AtomicOrdering::Relaxed), 0);
+}
+
+#[test]
 fn ordered_direct_edit_batch_material_overlay_reaches_nested_text() {
     let ids = IdentityAllocator::new();
     let (candidate, _, span) = candidate_nested_text_notebook(
