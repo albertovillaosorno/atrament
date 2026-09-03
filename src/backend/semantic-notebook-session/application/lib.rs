@@ -1452,6 +1452,7 @@ fn check_command_target_preconditions_material(
 
 fn direct_edit_material_index(
     notebook: &Notebook<AcceptedIdentity>,
+    targets: &BTreeSet<AcceptedIdentity>,
     revision: atrament_semantic_notebook::RevisionIdentity,
 ) -> DirectEditBatchIndex {
     let mut index = DirectEditBatchIndex::default();
@@ -1464,6 +1465,9 @@ fn direct_edit_material_index(
             .push(page.id);
     }
     for profile in &notebook.page_profiles {
+        if !targets.contains(&profile.id) {
+            continue;
+        }
         let pages = profile_pages.remove(&profile.id).unwrap_or_default();
         let impact = if pages.is_empty() {
             DirectEditImpactScope::Notebook { notebook: notebook.id }
@@ -1492,7 +1496,7 @@ fn direct_edit_material_index(
     }
     while let Some((block, flow, page)) = stack.pop() {
         index_direct_edit_block(
-            &mut index, &mut stack, block, flow, page, revision,
+            &mut index, &mut stack, block, targets, flow, page, revision,
         );
     }
     index
@@ -1506,6 +1510,7 @@ fn index_direct_edit_block<'notebook>(
         AcceptedIdentity,
     )>,
     block: &'notebook Block<AcceptedIdentity>,
+    targets: &BTreeSet<AcceptedIdentity>,
     flow: AcceptedIdentity,
     page: AcceptedIdentity,
     revision: atrament_semantic_notebook::RevisionIdentity,
@@ -1518,13 +1523,14 @@ fn index_direct_edit_block<'notebook>(
         | BlockContent::Heading(spans)
         | BlockContent::Paragraph(spans) => {
             index_direct_edit_spans(
-                index, spans, block.id, flow, page, revision,
+                index, spans, targets, block.id, flow, page, revision,
             );
         },
         BlockContent::Figure(figure) => {
             index_direct_edit_spans(
                 index,
                 &figure.caption,
+                targets,
                 figure.id,
                 flow,
                 page,
@@ -1539,35 +1545,18 @@ fn index_direct_edit_block<'notebook>(
             }
         },
         BlockContent::Mathematics(formula) => {
-            insert_direct_edit_material(
-                index,
-                formula.id,
-                SemanticIdentityDescriptor {
-                    kind: SemanticIdentityKind::Formula,
-                    owner: Some(block.id),
-                },
-                EditableSemanticValue::Formula {
-                    mode: formula.mode,
-                    source: formula.source.clone(),
-                },
-                DirectEditImpactScope::BlockFlow {
-                    block: block.id,
-                    flow,
-                    page,
-                },
-                revision,
-            );
-        },
-        BlockContent::Table(table) => {
-            for row in &table.rows {
+            if targets.contains(&formula.id) {
                 insert_direct_edit_material(
                     index,
-                    row.id,
+                    formula.id,
                     SemanticIdentityDescriptor {
-                        kind: SemanticIdentityKind::TableRow,
-                        owner: Some(table.id),
+                        kind: SemanticIdentityKind::Formula,
+                        owner: Some(block.id),
                     },
-                    EditableSemanticValue::TableRowRole(row.role),
+                    EditableSemanticValue::Formula {
+                        mode: formula.mode,
+                        source: formula.source.clone(),
+                    },
                     DirectEditImpactScope::BlockFlow {
                         block: block.id,
                         flow,
@@ -1575,6 +1564,27 @@ fn index_direct_edit_block<'notebook>(
                     },
                     revision,
                 );
+            }
+        },
+        BlockContent::Table(table) => {
+            for row in &table.rows {
+                if targets.contains(&row.id) {
+                    insert_direct_edit_material(
+                        index,
+                        row.id,
+                        SemanticIdentityDescriptor {
+                            kind: SemanticIdentityKind::TableRow,
+                            owner: Some(table.id),
+                        },
+                        EditableSemanticValue::TableRowRole(row.role),
+                        DirectEditImpactScope::BlockFlow {
+                            block: block.id,
+                            flow,
+                            page,
+                        },
+                        revision,
+                    );
+                }
                 for cell in &row.cells {
                     stack.extend(
                         cell.blocks.iter().map(|child| (child, flow, page)),
@@ -1589,12 +1599,16 @@ fn index_direct_edit_block<'notebook>(
 fn index_direct_edit_spans(
     index: &mut DirectEditBatchIndex,
     spans: &[InlineSpan<AcceptedIdentity>],
+    targets: &BTreeSet<AcceptedIdentity>,
     owner: AcceptedIdentity,
     flow: AcceptedIdentity,
     page: AcceptedIdentity,
     revision: atrament_semantic_notebook::RevisionIdentity,
 ) {
     for span in spans {
+        if !targets.contains(&span.id) {
+            continue;
+        }
         insert_direct_edit_material(
             index,
             span.id,
@@ -1637,8 +1651,12 @@ where
     CommandIdentity: Clone + Ord,
 {
     let revision = current.id;
+    let targets = commands
+        .iter()
+        .map(|command| command.target)
+        .collect::<BTreeSet<_>>();
     let mut batch_index =
-        direct_edit_material_index(&current.notebook, revision);
+        direct_edit_material_index(&current.notebook, &targets, revision);
     let mut evaluated = Vec::with_capacity(commands.len());
     let mut previous_by_target = BTreeMap::new();
     let mut aggregate = BTreeMap::new();
