@@ -3293,6 +3293,123 @@ fn ordered_batch_index_waits_until_every_requested_target_is_resolved() {
 }
 
 #[test]
+fn bounded_apply_preserves_authority_and_graph_rejection_precedence() {
+    let ids = IdentityAllocator::new();
+    let (candidate, span) = candidate_notebook_with_span(&ids, "base text");
+    let mut service = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision: base } =
+        service.accept(candidate)
+    else {
+        panic!("candidate must be accepted");
+    };
+    let target = accepted_for(&mapping, span);
+    let before = service.current().expect("accepted revision").clone();
+    let zero_limits = CommandGraphLimits {
+        commands: 0,
+        dependency_edges: 0,
+    };
+    assert_eq!(
+        service.apply_direct_edit_batch_bounded(
+            DirectEditBatchProposal {
+                base,
+                capability_version: CommandBehaviorVersion(0),
+                commands: vec![text_batch_command(
+                    1,
+                    &[],
+                    target,
+                    "base text",
+                    "changed",
+                )],
+            },
+            zero_limits,
+        ),
+        DirectEditBatchApplyOutcome::CapabilityMismatch {
+            current: CommandBehaviorVersion(1),
+            expected: CommandBehaviorVersion(0),
+        },
+    );
+    assert_eq!(service.current(), Some(&before));
+
+    let stale = DirectEditBatchProposal {
+        base,
+        capability_version: CommandBehaviorVersion(1),
+        commands: vec![text_batch_command(
+            1,
+            &[],
+            target,
+            "base text",
+            "changed",
+        )],
+    };
+    let AcceptanceOutcome::Accepted { revision: current, .. } =
+        service.accept(candidate_notebook(&ids, "replacement"))
+    else {
+        panic!("replacement candidate must be accepted");
+    };
+    let before_stale = service.current().expect("replacement revision").clone();
+    assert_eq!(
+        service.apply_direct_edit_batch_bounded(stale, zero_limits),
+        DirectEditBatchApplyOutcome::StaleBase { current },
+    );
+    assert_eq!(service.current(), Some(&before_stale));
+
+    let (candidate, span) = candidate_notebook_with_span(&ids, "graph base");
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        service.accept(candidate)
+    else {
+        panic!("graph candidate must be accepted");
+    };
+    let target = accepted_for(&mapping, span);
+    let invalid_graph = DirectEditBatchProposal {
+        base: revision,
+        capability_version: CommandBehaviorVersion(1),
+        commands: vec![text_batch_command(
+            1,
+            &[1],
+            target,
+            "graph base",
+            "never applied",
+        )],
+    };
+    let before_graph = service.current().expect("graph revision").clone();
+    assert_eq!(
+        service.apply_direct_edit_batch_bounded(
+            invalid_graph,
+            CommandGraphLimits {
+                commands: 1,
+                dependency_edges: 1,
+            },
+        ),
+        DirectEditBatchApplyOutcome::DependencyGraphRejected {
+            reason: CommandGraphError::SelfDependency { command: 1 },
+        },
+    );
+    assert_eq!(service.current(), Some(&before_graph));
+
+    let empty_ids = IdentityAllocator::new();
+    let empty_base = empty_ids.allocate_revision().expect("synthetic revision");
+    let empty_target = empty_ids.allocate_accepted().expect("synthetic target");
+    let mut empty = SemanticNotebookSessionService::default();
+    assert_eq!(
+        empty.apply_direct_edit_batch_bounded(
+            DirectEditBatchProposal {
+                base: empty_base,
+                capability_version: CommandBehaviorVersion(1),
+                commands: vec![text_batch_command(
+                    1,
+                    &[],
+                    empty_target,
+                    "missing",
+                    "changed",
+                )],
+            },
+            zero_limits,
+        ),
+        DirectEditBatchApplyOutcome::NoAcceptedRevision,
+    );
+}
+
+#[test]
 fn bounded_direct_edit_batch_apply_rejects_resources_before_commit() {
     let ids = IdentityAllocator::new();
     let (candidate, first, second, _) =

@@ -231,6 +231,11 @@ families in one transaction: exact text, formula source/mode, physical page
 profile, and table-row role. One accepted revision contains all four changes,
 and one Undo restores all four prior values with stable semantic identities.
 
+Bounded Apply preserves the same global gate order as simulation: capability
+compatibility, accepted-session presence, and exact base authority decide before
+caller resource limits. Once admitted by those gates and limits, an invalid
+dependency graph still rejects before semantic replay or history mutation.
+
 A synchronized in-process concurrency fixture releases two Apply attempts bound
 to the same accepted base together. Exactly one commits; after that commit the
 other observes the winning revision as its typed stale-base result. One Undo
