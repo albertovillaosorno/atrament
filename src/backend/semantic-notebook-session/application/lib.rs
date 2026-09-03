@@ -2578,10 +2578,9 @@ fn simulate_prepared_direct_edit(
 ) -> DirectEditSimulation {
     let revision = material.revision;
     let target = material.target;
-    let before = material.editable_value.clone();
     let Some(actual) = material.editable_value else {
         return DirectEditSimulation {
-            before,
+            before: None,
             outcome: DirectEditSimulationOutcome::TargetNotEditableValue {
                 kind: material.descriptor.kind,
                 revision,
@@ -2593,7 +2592,7 @@ fn simulate_prepared_direct_edit(
     let requested_kind = editable_value_kind(&requested);
     if actual_kind != requested_kind {
         return DirectEditSimulation {
-            before,
+            before: Some(actual),
             outcome: DirectEditSimulationOutcome::ValueFamilyMismatch {
                 actual: actual_kind,
                 requested: requested_kind,
@@ -2608,7 +2607,7 @@ fn simulate_prepared_direct_edit(
                 Ok(analyzed) => analyzed,
                 Err(reason) => {
                     return DirectEditSimulation {
-                        before,
+                        before: Some(actual),
                         outcome:
                             DirectEditSimulationOutcome::InvalidMathematics {
                                 reason,
@@ -2620,7 +2619,7 @@ fn simulate_prepared_direct_edit(
             };
             if !analyzed.is_supported() {
                 return DirectEditSimulation {
-                    before,
+                    before: Some(actual),
                     outcome:
                         DirectEditSimulationOutcome::UnsupportedMathematics {
                             revision,
@@ -2632,7 +2631,7 @@ fn simulate_prepared_direct_edit(
         EditableSemanticValue::PageProfile(profile) => {
             if let Err(reason) = profile.validate() {
                 return DirectEditSimulation {
-                    before,
+                    before: Some(actual),
                     outcome: DirectEditSimulationOutcome::InvalidPageProfile {
                         reason,
                         revision,
@@ -2645,17 +2644,26 @@ fn simulate_prepared_direct_edit(
         | EditableSemanticValue::Text(_) => {},
     }
     let family = direct_edit_family(&requested);
-    let outcome = if actual == requested {
-        DirectEditSimulationOutcome::NoOp { family, revision, target }
-    } else {
-        DirectEditSimulationOutcome::Applicable {
-            family,
-            requested,
-            revision,
-            target,
+    if actual == requested {
+        DirectEditSimulation {
+            before: Some(actual),
+            outcome: DirectEditSimulationOutcome::NoOp {
+                family,
+                revision,
+                target,
+            },
         }
-    };
-    DirectEditSimulation { before, outcome }
+    } else {
+        DirectEditSimulation {
+            before: Some(actual),
+            outcome: DirectEditSimulationOutcome::Applicable {
+                family,
+                requested,
+                revision,
+                target,
+            },
+        }
+    }
 }
 
 const fn direct_edit_family(
