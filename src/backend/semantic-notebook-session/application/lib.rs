@@ -88,6 +88,40 @@ struct DirectEditBatchIndex {
 }
 
 #[derive(Clone, Copy)]
+struct DirectEditBatchTableContext {
+    block: AcceptedIdentity,
+    flow: AcceptedIdentity,
+    page: AcceptedIdentity,
+    table: AcceptedIdentity,
+}
+
+#[derive(Clone, Copy)]
+enum DirectEditBatchIndexFrame<'notebook> {
+    Blocks {
+        blocks: &'notebook [Block<AcceptedIdentity>],
+        flow: AcceptedIdentity,
+        page: AcceptedIdentity,
+    },
+    ListItems {
+        flow: AcceptedIdentity,
+        items: &'notebook [ListItem<AcceptedIdentity>],
+        page: AcceptedIdentity,
+    },
+    TableCells {
+        cells: &'notebook [TableCell<AcceptedIdentity>],
+        flow: AcceptedIdentity,
+        page: AcceptedIdentity,
+    },
+    TableRows {
+        block: AcceptedIdentity,
+        flow: AcceptedIdentity,
+        page: AcceptedIdentity,
+        rows: &'notebook [TableRow<AcceptedIdentity>],
+        table: AcceptedIdentity,
+    },
+}
+
+#[derive(Clone, Copy)]
 struct DirectEditBatchMaterialMetadata {
     descriptor: SemanticIdentityDescriptor<AcceptedIdentity>,
     direct_edit_family: Option<SemanticCommandFamily>,
@@ -1862,22 +1896,19 @@ fn direct_edit_material_index(
     let mut stack = Vec::new();
     'pages: for page in &notebook.pages {
         for flow in &page.flows {
-            for block in &flow.blocks {
-                index_direct_edit_block(
-                    &mut index, &mut stack, block, targets, flow.id, page.id,
-                    revision,
+            if !flow.blocks.is_empty() {
+                stack.push(DirectEditBatchIndexFrame::Blocks {
+                    blocks: &flow.blocks,
+                    flow: flow.id,
+                    page: page.id,
+                });
+            }
+            while let Some(frame) = stack.pop() {
+                index_direct_edit_frame(
+                    frame, &mut index, targets, revision, &mut stack,
                 );
                 if index.materials.len() == targets.len() {
                     break 'pages;
-                }
-                while let Some((child, child_flow, child_page)) = stack.pop() {
-                    index_direct_edit_block(
-                        &mut index, &mut stack, child, targets, child_flow,
-                        child_page, revision,
-                    );
-                    if index.materials.len() == targets.len() {
-                        break 'pages;
-                    }
                 }
             }
         }
@@ -1885,23 +1916,72 @@ fn direct_edit_material_index(
     index
 }
 
-fn index_direct_edit_block<'notebook>(
+fn index_direct_edit_frame<'notebook>(
+    frame: DirectEditBatchIndexFrame<'notebook>,
     index: &mut DirectEditBatchIndex,
-    stack: &mut Vec<(
-        &'notebook Block<AcceptedIdentity>,
-        AcceptedIdentity,
-        AcceptedIdentity,
-    )>,
-    block: &'notebook Block<AcceptedIdentity>,
     targets: &BTreeSet<AcceptedIdentity>,
+    revision: atrament_semantic_notebook::RevisionIdentity,
+    stack: &mut Vec<DirectEditBatchIndexFrame<'notebook>>,
+) {
+    match frame {
+        DirectEditBatchIndexFrame::Blocks { blocks, flow, page } => {
+            index_direct_edit_blocks_frame(
+                blocks, flow, page, index, targets, revision, stack,
+            );
+        },
+        DirectEditBatchIndexFrame::ListItems { flow, items, page } => {
+            index_direct_edit_list_items_frame(items, flow, page, stack);
+        },
+        DirectEditBatchIndexFrame::TableCells { cells, flow, page } => {
+            index_direct_edit_table_cells_frame(cells, flow, page, stack);
+        },
+        DirectEditBatchIndexFrame::TableRows {
+            block,
+            flow,
+            page,
+            rows,
+            table,
+        } => {
+            index_direct_edit_table_rows_frame(
+                rows,
+                DirectEditBatchTableContext { block, flow, page, table },
+                index,
+                targets,
+                revision,
+                stack,
+            );
+        },
+    }
+}
+
+fn index_direct_edit_blocks_frame<'notebook>(
+    current: &'notebook [Block<AcceptedIdentity>],
     flow: AcceptedIdentity,
     page: AcceptedIdentity,
+    index: &mut DirectEditBatchIndex,
+    targets: &BTreeSet<AcceptedIdentity>,
     revision: atrament_semantic_notebook::RevisionIdentity,
+    stack: &mut Vec<DirectEditBatchIndexFrame<'notebook>>,
 ) {
+    let Some((block, remaining)) = current.split_first() else {
+        return;
+    };
+    if !remaining.is_empty() {
+        stack.push(DirectEditBatchIndexFrame::Blocks {
+            blocks: remaining,
+            flow,
+            page,
+        });
+    }
     match &block.content {
         BlockContent::Callout(children) | BlockContent::Freeform(children) => {
-            stack
-                .extend(children.iter().rev().map(|child| (child, flow, page)));
+            if !children.is_empty() {
+                stack.push(DirectEditBatchIndexFrame::Blocks {
+                    blocks: children,
+                    flow,
+                    page,
+                });
+            }
         },
         BlockContent::Date(spans)
         | BlockContent::Heading(spans)
@@ -1922,10 +2002,12 @@ fn index_direct_edit_block<'notebook>(
             );
         },
         BlockContent::List(list) => {
-            for item in list.items.iter().rev() {
-                stack.extend(
-                    item.blocks.iter().rev().map(|child| (child, flow, page)),
-                );
+            if !list.items.is_empty() {
+                stack.push(DirectEditBatchIndexFrame::ListItems {
+                    flow,
+                    items: &list.items,
+                    page,
+                });
             }
         },
         BlockContent::Mathematics(formula) => {
@@ -1951,40 +2033,113 @@ fn index_direct_edit_block<'notebook>(
             }
         },
         BlockContent::Table(table) => {
-            for row in &table.rows {
-                if targets.contains(&row.id) {
-                    insert_direct_edit_material(
-                        index,
-                        row.id,
-                        SemanticIdentityDescriptor {
-                            kind: SemanticIdentityKind::TableRow,
-                            owner: Some(table.id),
-                        },
-                        EditableSemanticValue::TableRowRole(row.role),
-                        DirectEditImpactScope::BlockFlow {
-                            block: block.id,
-                            flow,
-                            page,
-                        },
-                        revision,
-                    );
-                    if index.materials.len() == targets.len() {
-                        return;
-                    }
-                }
-            }
-            for row in table.rows.iter().rev() {
-                for cell in row.cells.iter().rev() {
-                    stack.extend(
-                        cell.blocks
-                            .iter()
-                            .rev()
-                            .map(|child| (child, flow, page)),
-                    );
-                }
+            if !table.rows.is_empty() {
+                stack.push(DirectEditBatchIndexFrame::TableRows {
+                    block: block.id,
+                    flow,
+                    page,
+                    rows: &table.rows,
+                    table: table.id,
+                });
             }
         },
         BlockContent::Rule | BlockContent::Unresolved(_) => {},
+    }
+}
+
+fn index_direct_edit_list_items_frame<'notebook>(
+    current: &'notebook [ListItem<AcceptedIdentity>],
+    flow: AcceptedIdentity,
+    page: AcceptedIdentity,
+    stack: &mut Vec<DirectEditBatchIndexFrame<'notebook>>,
+) {
+    let Some((item, remaining)) = current.split_first() else {
+        return;
+    };
+    if !remaining.is_empty() {
+        stack.push(DirectEditBatchIndexFrame::ListItems {
+            flow,
+            items: remaining,
+            page,
+        });
+    }
+    if !item.blocks.is_empty() {
+        stack.push(DirectEditBatchIndexFrame::Blocks {
+            blocks: &item.blocks,
+            flow,
+            page,
+        });
+    }
+}
+
+fn index_direct_edit_table_cells_frame<'notebook>(
+    current: &'notebook [TableCell<AcceptedIdentity>],
+    flow: AcceptedIdentity,
+    page: AcceptedIdentity,
+    stack: &mut Vec<DirectEditBatchIndexFrame<'notebook>>,
+) {
+    let Some((cell, remaining)) = current.split_first() else {
+        return;
+    };
+    if !remaining.is_empty() {
+        stack.push(DirectEditBatchIndexFrame::TableCells {
+            cells: remaining,
+            flow,
+            page,
+        });
+    }
+    if !cell.blocks.is_empty() {
+        stack.push(DirectEditBatchIndexFrame::Blocks {
+            blocks: &cell.blocks,
+            flow,
+            page,
+        });
+    }
+}
+
+fn index_direct_edit_table_rows_frame<'notebook>(
+    current: &'notebook [TableRow<AcceptedIdentity>],
+    context: DirectEditBatchTableContext,
+    index: &mut DirectEditBatchIndex,
+    targets: &BTreeSet<AcceptedIdentity>,
+    revision: atrament_semantic_notebook::RevisionIdentity,
+    stack: &mut Vec<DirectEditBatchIndexFrame<'notebook>>,
+) {
+    let DirectEditBatchTableContext { block, flow, page, table } = context;
+    let Some((row, remaining)) = current.split_first() else {
+        return;
+    };
+    if !remaining.is_empty() {
+        stack.push(DirectEditBatchIndexFrame::TableRows {
+            block,
+            flow,
+            page,
+            rows: remaining,
+            table,
+        });
+    }
+    if targets.contains(&row.id) {
+        insert_direct_edit_material(
+            index,
+            row.id,
+            SemanticIdentityDescriptor {
+                kind: SemanticIdentityKind::TableRow,
+                owner: Some(table),
+            },
+            EditableSemanticValue::TableRowRole(row.role),
+            DirectEditImpactScope::BlockFlow { block, flow, page },
+            revision,
+        );
+        if index.materials.len() == targets.len() {
+            return;
+        }
+    }
+    if !row.cells.is_empty() {
+        stack.push(DirectEditBatchIndexFrame::TableCells {
+            cells: &row.cells,
+            flow,
+            page,
+        });
     }
 }
 
