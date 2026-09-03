@@ -151,6 +151,22 @@ same semantic Apply result independent of adapter transport.
 An adapter may omit a separate Validate call and invoke Apply directly. Apply
 still performs the same authoritative validation and simulation before commit.
 
+### Implementation evidence
+
+The current application foundation can deterministically simulate an ordered
+batch of the four established direct replacement value families against one
+immutable accepted revision. It validates generic command dependencies first,
+then applies successful commands only to an isolated cloned notebook candidate.
+A middle failure leaves accepted state unchanged and marks later commands as not
+evaluated.
+
+Dependent same-target commands can observe earlier simulated candidate values
+only through an explicit command dependency. Per-command changes retain their
+local before/after values while aggregate changes compare the accepted base with
+the final candidate. This does not yet satisfy full Validate determinism because
+protocol normalization, command context, impact expansion, diagnostics, and
+Apply revalidation are not implemented.
+
 ## Failure Modes
 
 The contract fails if unchanged validated inputs can commit a different semantic

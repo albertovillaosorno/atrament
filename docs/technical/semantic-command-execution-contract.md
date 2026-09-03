@@ -491,8 +491,20 @@ A version-bound direct-edit proposal now composes capability compatibility,
 complete local target preconditions, and replacement simulation in one read-only
 operation. A direct change preview uses the same target-material snapshot to
 report one exact before/after semantic change, or an empty change set for a
-no-op, while preserving typed simulation rejection. This remains below full
-batch Validate: it has no normalized batch, impact set, or command diagnostics.
+no-op, while preserving typed simulation rejection.
+
+A transport-neutral ordered direct-edit batch now combines those primitives with
+the generic dependency graph. It clones only the accepted notebook snapshot,
+simulates each command in isolated candidate state, stops after the first
+semantic rejection, and reports later command identities as not evaluated. The
+accepted revision and identity allocator remain untouched.
+
+When a later command edits a target changed earlier in the same candidate, it
+must explicitly depend on the previous target writer before observing that
+candidate value. A preceding semantic no-op does not manufacture such a
+dependency. Per-command changes remain visible while the aggregate semantic
+change set coalesces each target from accepted base value to final candidate
+value, including an empty net set for a change-then-revert sequence.
 
 A separate transport-neutral command-graph domain validates duplicate command
 identities, direct self-dependencies, missing dependencies, cycles, and acyclic
@@ -504,8 +516,10 @@ The graph layer also checks whether an interactive command-ID selection contains
 all required dependencies; omissions are reported instead of silently adding
 commands. It measures exact command and explicit dependency-edge counts and can
 enforce caller-supplied coarse bounds without choosing product limits or
-truncating input. These graph primitives are not yet connected to a protocol,
-normalizer, proposal batch, Validate, or Apply path.
+truncating input. Structural graph validation now feeds the in-memory
+direct-edit batch simulator, but no protocol normalizer, published product
+limit, Validate,
+or Apply capability is admitted yet.
 
 Exact authored text and formula source are compared as currently accepted bytes;
 no Unicode normalization form is implied by this implementation evidence. The
@@ -517,10 +531,11 @@ nesting-limit failure before identity promotion or accepted mutation, and their
 recursive structures are dismantled iteratively so rejection itself cannot
 consume unbounded process stack depth.
 
-These primitives do not implement command-context generation, ordered batch
-simulation, retry identity, Validate, Apply, undo/redo, or adapter parity. Graph
-validation exists independently but is not yet part of an admitted batch path.
-Those parts of this contract remain open.
+These primitives do not implement command-context generation, protocol-owned
+normalization, writable-scope admission, impact expansion, deterministic command
+diagnostics, retry identity, Validate, Apply, undo/redo, or adapter parity. The
+ordered direct-edit simulator is an internal application foundation, not an
+advertised command-mode capability. Those parts of this contract remain open.
 
 ## Failure Modes
 
