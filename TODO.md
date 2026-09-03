@@ -33,9 +33,8 @@ writable scope is published by this composition evidence.
 Dropping that owner and creating a fresh application yields empty draft fields,
 no accepted revision, and no history position; its Debug projection does not
 expose private draft text. A process fixture now creates a real accepted text
-mutation and Undo history before both orderly and forced termination, then
-proves
-a fresh process has neither accepted state nor history. Browser edits send
+mutation and Undo history before both orderly and forced termination. A fresh
+process then has neither accepted state nor history. Browser edits send
 complete authenticated replacements and no browser persistence API is used.
 
 The task remains open until assets, previews, diagnostics, renders, and plans
@@ -148,8 +147,8 @@ notebook-root ownership, before a future command family may mutate that target.
 A second read-only precondition compares exact accepted base values for five
 families with established direct-edit authority: inline text, formula mode and
 source, table-row role, table-cell span, and physical page-profile geometry.
-Text and formula
-checks preserve exact authored source because no Unicode normalization form is
+Text and formula checks preserve exact authored source because no Unicode
+normalization form is
 yet frozen. Backend-derived command-target material now combines semantic kind,
 direct owner, exact editable base value when available, and the currently
 executable direct-edit command family for one exact revision and target.
@@ -158,8 +157,8 @@ The frozen command-family taxonomy is represented without choosing final wire
 operation names. Current executable targets admit Text content for inline text,
 Structured content for formulas, table-row roles, and table-cell spans, and
 Document constraint for page profiles. A combined local checker validates
-family, kind, owner, and an
-optional exact base value in one read-only snapshot with stale-base precedence.
+family, kind, owner, and an optional exact base value in one read-only snapshot
+with stale-base precedence.
 
 Deterministic capability discovery reports only those three family behaviors and
 supports read-only behavior-version drift checks. It deliberately advertises no
@@ -246,8 +245,8 @@ then the batch commits exactly one revision and enters Undo history as one
 transaction.
 
 Net no-ops keep the current revision and history position, while middle-command
-failure and stale
-base remain no-effects. The discoverable `Apply` capability remains disabled.
+failure and stale base remain no-effects. The discoverable `Apply` capability
+remains disabled.
 
 This is still not an admitted normalized command batch. Protocol normalization,
 command context and writable scope, published limits, complete impact expansion,
