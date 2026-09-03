@@ -1063,11 +1063,11 @@ fn application_routes_local_command_review_through_owned_semantic_authority() {
     );
     assert_eq!(
         session.check_command_capability_compatibility(
-            CommandBehaviorVersion(2),
+            CommandBehaviorVersion(3),
         ),
         CommandCapabilityCompatibilityOutcome::Mismatch {
             current: CommandBehaviorVersion(4),
-            expected: CommandBehaviorVersion(2),
+            expected: CommandBehaviorVersion(3),
         },
     );
     assert_eq!(

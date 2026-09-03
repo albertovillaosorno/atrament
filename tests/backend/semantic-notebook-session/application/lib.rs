@@ -2915,10 +2915,10 @@ fn command_capability_version_detects_drift_independently_of_revision() {
     );
     assert_eq!(
         session
-            .check_command_capability_compatibility(CommandBehaviorVersion(2),),
+            .check_command_capability_compatibility(CommandBehaviorVersion(3),),
         CommandCapabilityCompatibilityOutcome::Mismatch {
             current: CommandBehaviorVersion(4),
-            expected: CommandBehaviorVersion(2),
+            expected: CommandBehaviorVersion(3),
         },
     );
 
