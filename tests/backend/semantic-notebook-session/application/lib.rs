@@ -1648,6 +1648,94 @@ fn direct_edit_proposal_stale_base_precedes_local_simulation() {
 }
 
 #[test]
+fn ordered_direct_edit_batch_material_overlay_reaches_nested_text() {
+    let ids = IdentityAllocator::new();
+    let (candidate, _, span) = candidate_nested_text_notebook(
+        &ids,
+        CANDIDATE_BLOCK_NESTING_LIMIT.saturating_sub(1),
+    );
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(candidate)
+    else {
+        panic!("nested candidate must be accepted");
+    };
+    let span = accepted_for(&mapping, span);
+    let before = session.current().expect("accepted revision").clone();
+    let outcome = session.simulate_direct_edit_batch(DirectEditBatchProposal {
+        base: revision,
+        capability_version: CommandBehaviorVersion(1),
+        commands: vec![text_batch_command(
+            1,
+            &[],
+            span,
+            "nested text",
+            "indexed nested text",
+        )],
+    });
+    let DirectEditBatchSimulationOutcome::Predicted { changes, effect, .. } =
+        outcome
+    else {
+        panic!("nested indexed target must simulate");
+    };
+    assert_eq!(changes.len(), 1);
+    assert_eq!(effect, DirectEditEffectClass::Mutation);
+    assert_eq!(session.current(), Some(&before));
+}
+
+#[test]
+fn ordered_direct_edit_batch_material_overlay_preserves_noneditable_rejection()
+{
+    let ids = IdentityAllocator::new();
+    let (candidate, block, _) = candidate_nested_text_notebook(&ids, 1);
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(candidate)
+    else {
+        panic!("candidate must be accepted");
+    };
+    let block = accepted_for(&mapping, block);
+    let before = session.current().expect("accepted revision").clone();
+    let outcome = session.simulate_direct_edit_batch(DirectEditBatchProposal {
+        base: revision,
+        capability_version: CommandBehaviorVersion(1),
+        commands: vec![text_batch_command(
+            1,
+            &[],
+            block,
+            "nested text",
+            "not permitted",
+        )],
+    });
+    let DirectEditBatchSimulationOutcome::Rejected {
+        reason,
+        evaluated,
+        not_evaluated,
+        ..
+    } = outcome
+    else {
+        panic!("non-editable block must reject");
+    };
+    assert!(evaluated.is_empty());
+    assert!(not_evaluated.is_empty());
+    assert!(matches!(
+        *reason,
+        DirectEditBatchCommandRejection::Precondition {
+            outcome: boxed,
+        } if matches!(
+            *boxed,
+            CommandTargetPreconditionOutcome::FamilyNotExecutable {
+                available: None,
+                requested: SemanticCommandFamily::TextContent,
+                target,
+                ..
+            } if target == block
+        )
+    ));
+    assert_eq!(session.current(), Some(&before));
+}
+
+#[test]
 fn ordered_direct_edit_batch_simulates_independent_changes_read_only() {
     let ids = IdentityAllocator::new();
     let (candidate, first, second, _) =

@@ -44,8 +44,9 @@ use atrament_semantic_notebook::{
     AcceptedIdentity, AcceptedRevision, Asset, Block, BlockContent,
     CandidateIdentity, Constraint, Figure, Flow, Formula, FormulaMode,
     IdentityAllocator, IdentityExhausted, InlineSpan, List, ListItem, Notebook,
-    OutputProfile, Page, PaperProfile, Provenance, Style, Table, TableCell,
-    TableRow, TableRowRole, semantic_identity_descriptor,
+    OutputProfile, Page, PaperProfile, Provenance, SemanticIdentityDescriptor,
+    SemanticIdentityKind, Style, Table, TableCell, TableRow, TableRowRole,
+    semantic_identity_descriptor,
 };
 use atrament_semantic_notebook_port::{
     AcceptanceOutcome, CANDIDATE_BLOCK_NESTING_LIMIT, CandidateGraphError,
@@ -1443,25 +1444,134 @@ fn check_command_target_preconditions_material(
     CommandTargetPreconditionOutcome::Satisfied { material }
 }
 
-fn apply_direct_edit_value(
-    notebook: &mut Notebook<AcceptedIdentity>,
-    target: AcceptedIdentity,
-    requested: EditableSemanticValue,
-) -> bool {
-    match requested {
-        EditableSemanticValue::Formula { mode, source } => {
-            replace_formula_value(notebook, target, mode, source)
-        },
-        EditableSemanticValue::PageProfile(profile) => {
-            replace_page_profile_value(notebook, target, profile)
-        },
-        EditableSemanticValue::TableRowRole(role) => {
-            replace_table_row_role_value(notebook, target, role)
-        },
-        EditableSemanticValue::Text(text) => {
-            replace_text_value(notebook, target, text)
-        },
+fn direct_edit_material_index(
+    notebook: &Notebook<AcceptedIdentity>,
+    revision: atrament_semantic_notebook::RevisionIdentity,
+) -> BTreeMap<AcceptedIdentity, CommandTargetMaterial> {
+    let mut materials = BTreeMap::new();
+    for profile in &notebook.page_profiles {
+        insert_direct_edit_material(
+            &mut materials,
+            profile.id,
+            SemanticIdentityDescriptor {
+                kind: SemanticIdentityKind::PageProfile,
+                owner: Some(notebook.id),
+            },
+            EditableSemanticValue::PageProfile(profile.geometry),
+            revision,
+        );
     }
+    let mut stack = notebook
+        .pages
+        .iter()
+        .flat_map(|page| page.flows.iter())
+        .flat_map(|flow| flow.blocks.iter())
+        .collect::<Vec<_>>();
+    while let Some(block) = stack.pop() {
+        index_direct_edit_block(&mut materials, &mut stack, block, revision);
+    }
+    materials
+}
+
+fn index_direct_edit_block<'notebook>(
+    materials: &mut BTreeMap<AcceptedIdentity, CommandTargetMaterial>,
+    stack: &mut Vec<&'notebook Block<AcceptedIdentity>>,
+    block: &'notebook Block<AcceptedIdentity>,
+    revision: atrament_semantic_notebook::RevisionIdentity,
+) {
+    match &block.content {
+        BlockContent::Callout(children) | BlockContent::Freeform(children) => {
+            stack.extend(children.iter());
+        },
+        BlockContent::Date(spans)
+        | BlockContent::Heading(spans)
+        | BlockContent::Paragraph(spans) => {
+            index_direct_edit_spans(materials, spans, block.id, revision);
+        },
+        BlockContent::Figure(figure) => {
+            index_direct_edit_spans(
+                materials,
+                &figure.caption,
+                figure.id,
+                revision,
+            );
+        },
+        BlockContent::List(list) => {
+            for item in &list.items {
+                stack.extend(item.blocks.iter());
+            }
+        },
+        BlockContent::Mathematics(formula) => {
+            insert_direct_edit_material(
+                materials,
+                formula.id,
+                SemanticIdentityDescriptor {
+                    kind: SemanticIdentityKind::Formula,
+                    owner: Some(block.id),
+                },
+                EditableSemanticValue::Formula {
+                    mode: formula.mode,
+                    source: formula.source.clone(),
+                },
+                revision,
+            );
+        },
+        BlockContent::Table(table) => {
+            for row in &table.rows {
+                insert_direct_edit_material(
+                    materials,
+                    row.id,
+                    SemanticIdentityDescriptor {
+                        kind: SemanticIdentityKind::TableRow,
+                        owner: Some(table.id),
+                    },
+                    EditableSemanticValue::TableRowRole(row.role),
+                    revision,
+                );
+                for cell in &row.cells {
+                    stack.extend(cell.blocks.iter());
+                }
+            }
+        },
+        BlockContent::Rule | BlockContent::Unresolved(_) => {},
+    }
+}
+
+fn index_direct_edit_spans(
+    materials: &mut BTreeMap<AcceptedIdentity, CommandTargetMaterial>,
+    spans: &[InlineSpan<AcceptedIdentity>],
+    owner: AcceptedIdentity,
+    revision: atrament_semantic_notebook::RevisionIdentity,
+) {
+    for span in spans {
+        insert_direct_edit_material(
+            materials,
+            span.id,
+            SemanticIdentityDescriptor {
+                kind: SemanticIdentityKind::InlineSpan,
+                owner: Some(owner),
+            },
+            EditableSemanticValue::Text(span.text.clone()),
+            revision,
+        );
+    }
+}
+
+fn insert_direct_edit_material(
+    materials: &mut BTreeMap<AcceptedIdentity, CommandTargetMaterial>,
+    target: AcceptedIdentity,
+    descriptor: SemanticIdentityDescriptor<AcceptedIdentity>,
+    editable_value: EditableSemanticValue,
+    revision: atrament_semantic_notebook::RevisionIdentity,
+) {
+    let direct_edit_family = Some(direct_edit_family(&editable_value));
+    let _previous = materials.insert(target, CommandTargetMaterial {
+        descriptor,
+        direct_edit_family,
+        editable_value: Some(editable_value),
+        revision,
+        target,
+    });
 }
 
 fn simulate_direct_edit_batch_commands<CommandIdentity>(
@@ -1472,13 +1582,14 @@ where
     CommandIdentity: Clone + Ord,
 {
     let revision = current.id;
-    let mut candidate = current.notebook.clone();
+    let mut materials = direct_edit_material_index(&current.notebook, revision);
     let mut evaluated = Vec::with_capacity(commands.len());
     let mut previous_by_target = BTreeMap::new();
     let mut aggregate = BTreeMap::new();
     for (index, command) in commands.iter().enumerate() {
         let result = simulate_direct_edit_batch_command(
-            &mut candidate,
+            &current.notebook,
+            &mut materials,
             command,
             previous_by_target.get(&command.target),
             revision,
@@ -1635,16 +1746,12 @@ fn direct_edit_ancestor_scope(
     let mut current = target;
     loop {
         let descriptor = semantic_identity_descriptor(notebook, current)?;
-        if matches!(
-            descriptor.kind,
-            atrament_semantic_notebook::SemanticIdentityKind::Block(_)
-        ) && block.is_none()
+        if matches!(descriptor.kind, SemanticIdentityKind::Block(_))
+            && block.is_none()
         {
             block = Some(current);
         }
-        if descriptor.kind
-            == atrament_semantic_notebook::SemanticIdentityKind::Flow
-        {
+        if descriptor.kind == SemanticIdentityKind::Flow {
             return descriptor.owner.map(|page| (block, current, page));
         }
         current = descriptor.owner?;
@@ -1652,7 +1759,8 @@ fn direct_edit_ancestor_scope(
 }
 
 fn simulate_direct_edit_batch_command<CommandIdentity>(
-    candidate: &mut Notebook<AcceptedIdentity>,
+    notebook: &Notebook<AcceptedIdentity>,
+    materials: &mut BTreeMap<AcceptedIdentity, CommandTargetMaterial>,
     command: &DirectEditBatchCommand<CommandIdentity>,
     previous: Option<&CommandIdentity>,
     revision: atrament_semantic_notebook::RevisionIdentity,
@@ -1673,8 +1781,12 @@ where
             },
         );
     }
-    let material =
-        batch_command_target_material(candidate, revision, command.target)?;
+    let material = batch_command_target_material(
+        notebook,
+        materials,
+        revision,
+        command.target,
+    )?;
     let kind = material.descriptor.kind;
     let precondition = check_command_target_preconditions_material(
         material.clone(),
@@ -1690,18 +1802,22 @@ where
     }
     let simulation =
         simulate_prepared_direct_edit(material, command.requested.clone());
-    batch_command_prediction(candidate, command.id.clone(), kind, simulation)
+    batch_command_prediction(materials, command.id.clone(), kind, simulation)
 }
 
 fn batch_command_target_material<CommandIdentity>(
-    candidate: &Notebook<AcceptedIdentity>,
+    notebook: &Notebook<AcceptedIdentity>,
+    materials: &BTreeMap<AcceptedIdentity, CommandTargetMaterial>,
     revision: atrament_semantic_notebook::RevisionIdentity,
     target: AcceptedIdentity,
 ) -> Result<
     CommandTargetMaterial,
     DirectEditBatchCommandRejection<CommandIdentity>,
 > {
-    match command_target_material_from_notebook(candidate, revision, target) {
+    if let Some(material) = materials.get(&target) {
+        return Ok(material.clone());
+    }
+    match command_target_material_from_notebook(notebook, revision, target) {
         CommandTargetMaterialOutcome::Prepared { material } => Ok(material),
         CommandTargetMaterialOutcome::TargetNotFound {
             revision: missing_revision,
@@ -1730,9 +1846,9 @@ fn batch_command_target_material<CommandIdentity>(
 }
 
 fn batch_command_prediction<CommandIdentity>(
-    candidate: &mut Notebook<AcceptedIdentity>,
+    materials: &mut BTreeMap<AcceptedIdentity, CommandTargetMaterial>,
     command: CommandIdentity,
-    kind: atrament_semantic_notebook::SemanticIdentityKind,
+    kind: SemanticIdentityKind,
     simulation: DirectEditSimulation,
 ) -> Result<
     DirectEditBatchCommandPrediction<CommandIdentity>,
@@ -1762,7 +1878,7 @@ fn batch_command_prediction<CommandIdentity>(
                 family,
                 target,
             };
-            if !apply_direct_edit_value(candidate, target, requested) {
+            let Some(material) = materials.get_mut(&target) else {
                 return Err(DirectEditBatchCommandRejection::Simulation {
                     outcome: Box::new(
                         DirectEditSimulationOutcome::TargetNotFound {
@@ -1771,7 +1887,8 @@ fn batch_command_prediction<CommandIdentity>(
                         },
                     ),
                 });
-            }
+            };
+            material.editable_value = Some(requested);
             Ok(DirectEditBatchCommandPrediction {
                 change: Some(change),
                 command,
@@ -2003,10 +2120,10 @@ const fn direct_edit_family(
 fn editable_semantic_value(
     notebook: &Notebook<AcceptedIdentity>,
     target: AcceptedIdentity,
-    kind: atrament_semantic_notebook::SemanticIdentityKind,
+    kind: SemanticIdentityKind,
 ) -> Option<EditableSemanticValue> {
     match kind {
-        atrament_semantic_notebook::SemanticIdentityKind::Formula => {
+        SemanticIdentityKind::Formula => {
             formula_value(notebook, target).map(|formula| {
                 EditableSemanticValue::Formula {
                     mode: formula.mode,
@@ -2014,32 +2131,30 @@ fn editable_semantic_value(
                 }
             })
         },
-        atrament_semantic_notebook::SemanticIdentityKind::InlineSpan => {
-            text_value(notebook, target)
-                .map(|value| EditableSemanticValue::Text(value.to_owned()))
-        },
-        atrament_semantic_notebook::SemanticIdentityKind::PageProfile => {
+        SemanticIdentityKind::InlineSpan => text_value(notebook, target)
+            .map(|value| EditableSemanticValue::Text(value.to_owned())),
+        SemanticIdentityKind::PageProfile => {
             page_profile_value(notebook, target)
                 .map(EditableSemanticValue::PageProfile)
         },
-        atrament_semantic_notebook::SemanticIdentityKind::TableRow => {
+        SemanticIdentityKind::TableRow => {
             table_row_role_value(notebook, target)
                 .map(EditableSemanticValue::TableRowRole)
         },
-        atrament_semantic_notebook::SemanticIdentityKind::Asset
-        | atrament_semantic_notebook::SemanticIdentityKind::Block(_)
-        | atrament_semantic_notebook::SemanticIdentityKind::Constraint
-        | atrament_semantic_notebook::SemanticIdentityKind::Figure
-        | atrament_semantic_notebook::SemanticIdentityKind::Flow
-        | atrament_semantic_notebook::SemanticIdentityKind::List
-        | atrament_semantic_notebook::SemanticIdentityKind::ListItem
-        | atrament_semantic_notebook::SemanticIdentityKind::Notebook
-        | atrament_semantic_notebook::SemanticIdentityKind::OutputProfile
-        | atrament_semantic_notebook::SemanticIdentityKind::Page
-        | atrament_semantic_notebook::SemanticIdentityKind::Provenance
-        | atrament_semantic_notebook::SemanticIdentityKind::Style
-        | atrament_semantic_notebook::SemanticIdentityKind::Table
-        | atrament_semantic_notebook::SemanticIdentityKind::TableCell => None,
+        SemanticIdentityKind::Asset
+        | SemanticIdentityKind::Block(_)
+        | SemanticIdentityKind::Constraint
+        | SemanticIdentityKind::Figure
+        | SemanticIdentityKind::Flow
+        | SemanticIdentityKind::List
+        | SemanticIdentityKind::ListItem
+        | SemanticIdentityKind::Notebook
+        | SemanticIdentityKind::OutputProfile
+        | SemanticIdentityKind::Page
+        | SemanticIdentityKind::Provenance
+        | SemanticIdentityKind::Style
+        | SemanticIdentityKind::Table
+        | SemanticIdentityKind::TableCell => None,
     }
 }
 
