@@ -71,6 +71,13 @@ pub enum DependencySelectionError<Identity> {
 pub enum CommandGraphError<Identity> {
     /// One or more commands participate in a dependency cycle.
     Cycle,
+    /// One command depends on a command that appears later in source order.
+    DependencyAfterCommand {
+        /// Command containing the invalid forward dependency.
+        command: Identity,
+        /// Dependency whose command appears later in the ordered batch.
+        dependency: Identity,
+    },
     /// One command identity is owned by more than one command node.
     DuplicateIdentity {
         /// Duplicated command identity.
@@ -95,7 +102,8 @@ pub enum CommandGraphError<Identity> {
 /// # Errors
 ///
 /// Returns a typed failure for duplicate command identities, direct
-/// self-dependencies, missing dependency identities, or dependency cycles.
+/// self-dependencies, missing or forward dependency identities, or dependency
+/// cycles.
 pub fn validate_command_graph<Identity>(
     nodes: &[CommandNode<Identity>],
 ) -> Result<(), CommandGraphError<Identity>>
@@ -103,12 +111,14 @@ where
     Identity: Clone + Ord,
 {
     let mut indegrees = BTreeMap::new();
-    for node in nodes {
+    let mut positions = BTreeMap::new();
+    for (position, node) in nodes.iter().enumerate() {
         if indegrees.insert(node.id.clone(), 0usize).is_some() {
             return Err(CommandGraphError::DuplicateIdentity {
                 command: node.id.clone(),
             });
         }
+        let _previous = positions.insert(node.id.clone(), position);
     }
 
     let mut dependents: BTreeMap<Identity, Vec<Identity>> = BTreeMap::new();
@@ -119,7 +129,7 @@ where
                     command: node.id.clone(),
                 });
             }
-            if !indegrees.contains_key(dependency) {
+            if !positions.contains_key(dependency) {
                 return Err(CommandGraphError::MissingDependency {
                     command: node.id.clone(),
                     dependency: dependency.clone(),
@@ -157,6 +167,18 @@ where
     }
     if processed != nodes.len() {
         return Err(CommandGraphError::Cycle);
+    }
+    for (position, node) in nodes.iter().enumerate() {
+        for dependency in &node.dependencies {
+            if let Some(dependency_position) = positions.get(dependency)
+                && *dependency_position > position
+            {
+                return Err(CommandGraphError::DependencyAfterCommand {
+                    command: node.id.clone(),
+                    dependency: dependency.clone(),
+                });
+            }
+        }
     }
     Ok(())
 }

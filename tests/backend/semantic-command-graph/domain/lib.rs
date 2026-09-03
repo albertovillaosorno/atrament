@@ -77,6 +77,20 @@ fn missing_dependency_is_typed() {
 }
 
 #[test]
+fn dependency_on_later_command_is_typed_without_reordering() {
+    let nodes = [node(1, &[2]), node(2, &[])];
+    let before = nodes.clone();
+    assert_eq!(
+        validate_command_graph(&nodes),
+        Err(CommandGraphError::DependencyAfterCommand {
+            command: 1,
+            dependency: 2,
+        }),
+    );
+    assert_eq!(nodes, before);
+}
+
+#[test]
 fn direct_self_dependency_is_typed() {
     assert_eq!(
         validate_command_graph(&[node(7, &[7])]),
@@ -179,11 +193,14 @@ fn unknown_selection_and_invalid_source_graph_are_typed() {
         validate_dependency_closed_selection(&nodes, &BTreeSet::from([9])),
         Err(DependencySelectionError::UnknownSelection { command: 9 }),
     );
-    let invalid = [node(1, &[2]), node(2, &[1])];
+    let invalid = [node(1, &[2]), node(2, &[])];
     assert_eq!(
         validate_dependency_closed_selection(&invalid, &BTreeSet::from([1])),
         Err(DependencySelectionError::Graph {
-            reason: CommandGraphError::Cycle,
+            reason: CommandGraphError::DependencyAfterCommand {
+                command: 1,
+                dependency: 2,
+            },
         }),
     );
 }
