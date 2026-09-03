@@ -257,8 +257,8 @@ bound and iteratively dismantles rejected deep candidates before mutation.
 
 The task remains open for the complete first-release semantic vocabulary,
 format parsing and canonical serialization, migrations and round-trip fixtures,
-full semantic command/history integration, measured layout/render consumers,
-and format-compatible import/export.
+adapter-level semantic command/history transport, measured layout/render
+consumers, and format-compatible import/export.
 
 ### TODO - Implement calibrated grid and rule geometry
 
@@ -524,9 +524,14 @@ read-only availability exposes traversal boundaries, and a new edit after Undo
 discards the old redo branch. Dropping the session destroys populated history.
 
 Transport-neutral direct-edit batch application now enters this same semantic
-history as one transaction, including multi-command batches. A synchronized
-in-process fixture races Undo against Apply from one shared current revision;
-exactly one commits and the loser reports the winner's fresh revision as stale.
+history as one transaction, including multi-command batches. All five
+established exact-base direct mutation families also route through the active
+`SessionApplication` owner; a live text edit proves commit, stale review, Undo
+availability, and exact restoration share that authority.
+
+A synchronized in-process fixture races Undo against Apply from one shared
+current revision; exactly one commits and the loser reports the winner's fresh
+revision as stale.
 
 No-op, semantic-rejected, and resource-rejected batch attempts preserve an
 existing Redo branch after Undo. Candidate replacement on a new branch clears
