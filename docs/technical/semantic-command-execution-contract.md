@@ -600,6 +600,7 @@ recovery compare normalized batch identity; equating those two representations
 would weaken the frozen retry contract.
 Executable capability evidence confirms that a successful internal batch Apply
 does not change this snapshot or populate `admitted_applications`.
+
 Semantic Apply currently returns typed result classes without a shared
 `DiagnosticSet`. The diagnostic domain already reserves Semantic Apply/Validate
 operation bindings and command locations, but it has not frozen a command
