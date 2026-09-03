@@ -7446,6 +7446,71 @@ fn semantic_history_rejects_stale_base_without_traversal() {
 }
 
 #[test]
+fn repeated_completed_history_request_is_stale_without_advancing_again() {
+    let candidate_ids = IdentityAllocator::new();
+    let (candidate, candidate_span) =
+        candidate_notebook_with_span(&candidate_ids, "zero");
+    let mut service = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision: base } =
+        service.accept(candidate)
+    else {
+        panic!("candidate must be accepted");
+    };
+    let target = accepted_for(&mapping, candidate_span);
+    let TextEditOutcome::Applied { revision: first, .. } =
+        service.replace_text(base, target, String::from("one"))
+    else {
+        panic!("first edit must apply");
+    };
+    let TextEditOutcome::Applied { revision: second, .. } =
+        service.replace_text(first, target, String::from("two"))
+    else {
+        panic!("second edit must apply");
+    };
+
+    let HistoryTraversalOutcome::Traversed { revision: undone, .. } =
+        service.traverse_history(second, HistoryDirection::Undo)
+    else {
+        panic!("Undo must traverse once");
+    };
+    assert_eq!(
+        service.traverse_history(second, HistoryDirection::Undo),
+        HistoryTraversalOutcome::StaleBase {
+            current: undone,
+            requested: second,
+        },
+    );
+    let current = service.current().expect("single Undo revision");
+    let BlockContent::Paragraph(spans) =
+        &current.notebook.pages[0].flows[0].blocks[0].content
+    else {
+        panic!("Undo fixture must remain paragraph");
+    };
+    assert_eq!(spans[0].text, "one");
+
+    let HistoryTraversalOutcome::Traversed { revision: redone, .. } =
+        service.traverse_history(undone, HistoryDirection::Redo)
+    else {
+        panic!("Redo must traverse once");
+    };
+    assert_eq!(
+        service.traverse_history(undone, HistoryDirection::Redo),
+        HistoryTraversalOutcome::StaleBase {
+            current: redone,
+            requested: undone,
+        },
+    );
+    let current = service.current().expect("single Redo revision");
+    let BlockContent::Paragraph(spans) =
+        &current.notebook.pages[0].flows[0].blocks[0].content
+    else {
+        panic!("Redo fixture must remain paragraph");
+    };
+    assert_eq!(spans[0].id, target);
+    assert_eq!(spans[0].text, "two");
+}
+
+#[test]
 fn semantic_history_new_edit_after_undo_discards_redo_branch() {
     let candidate_ids = IdentityAllocator::new();
     let (candidate, candidate_span) =
