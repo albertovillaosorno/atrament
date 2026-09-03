@@ -831,6 +831,105 @@ fn application_routes_local_command_review_through_owned_semantic_authority() {
 }
 
 #[test]
+fn application_routes_nonempty_selection_analysis_read_only() {
+    let identities = IdentityAllocator::new();
+    let (candidate, candidate_span) =
+        editable_text_candidate(&identities, "selection base");
+    let mut session = application::SessionApplication::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept_candidate(candidate)
+    else {
+        panic!("selection candidate must be accepted");
+    };
+    let span = mapping
+        .iter()
+        .find(|entry| entry.candidate == candidate_span)
+        .expect("selection span identity must map")
+        .accepted;
+    let command = |
+        id: u32,
+        dependencies: Vec<u32>,
+        expected: &str,
+        requested: &str,
+    | DirectEditBatchCommand {
+        dependencies,
+        id,
+        preconditions: CommandTargetPreconditions {
+            expected_value: Some(EditableSemanticValue::Text(
+                expected.to_owned(),
+            )),
+            identity: IdentityPrecondition {
+                expected_kind: Some(SemanticIdentityKind::InlineSpan),
+                expected_owner: IdentityOwnerExpectation::Any,
+            },
+            requested_family: SemanticCommandFamily::TextContent,
+        },
+        requested: EditableSemanticValue::Text(requested.to_owned()),
+        target: span,
+    };
+    let batch = DirectEditBatchProposal {
+        base: revision,
+        capability_version: CommandBehaviorVersion(2),
+        commands: vec![
+            command(1, vec![], "selection base", "one"),
+            command(2, vec![1], "one", "two"),
+            command(3, vec![2], "two", "three"),
+        ],
+    };
+    let selected = BTreeSet::from([3_u32]);
+    let before = session.accepted_revision().expect("selection base").clone();
+
+    let DirectEditBatchSelectionRequirementsOutcome::Requirements {
+        missing,
+        revision: requirement_revision,
+    } = session.direct_edit_batch_selection_requirements(&batch, &selected)
+    else {
+        panic!("live owner must route nonempty selection requirements");
+    };
+    assert_eq!(requirement_revision, revision);
+    assert_eq!(missing.len(), 2);
+    assert_eq!(missing[0].command, 2);
+    assert_eq!(missing[0].dependency, 1);
+    assert_eq!(missing[1].command, 3);
+    assert_eq!(missing[1].dependency, 2);
+    assert!(matches!(
+        session.direct_edit_batch_selection_requirements_bounded(
+            &batch,
+            &selected,
+            1,
+        ),
+        DirectEditBatchSelectionBoundedOutcome::RequirementCountExceeded {
+            actual: 2,
+            limit: 1,
+        }
+    ));
+    let DirectEditBatchSelectionBoundedOutcome::Requirements {
+        missing: bounded_missing,
+        revision: bounded_revision,
+    } = session.direct_edit_batch_selection_requirements_bounded(
+        &batch,
+        &selected,
+        2,
+    ) else {
+        panic!("exact selection edge bound must admit the report");
+    };
+    assert_eq!(bounded_revision, revision);
+    assert_eq!(bounded_missing, missing);
+    let DirectEditBatchSelectionSummaryOutcome::Summarized {
+        revision: summary_revision,
+        summary,
+    } = session.direct_edit_batch_selection_summary(&batch, &selected)
+    else {
+        panic!("live owner must route nonempty selection summary");
+    };
+    assert_eq!(summary_revision, revision);
+    assert_eq!(summary.selected_commands, 1);
+    assert_eq!(summary.required_commands, 3);
+    assert_eq!(summary.missing_dependency_edges, 2);
+    assert_eq!(session.accepted_revision(), Some(&before));
+}
+
+#[test]
 fn application_routes_atomic_batch_apply_through_owned_semantic_authority() {
     let identities = IdentityAllocator::new();
     let (candidate, candidate_span) =
