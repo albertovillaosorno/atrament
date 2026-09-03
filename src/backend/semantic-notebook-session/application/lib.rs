@@ -41,8 +41,9 @@ use std::slice::from_ref;
 use atrament_mathematics_source::analyze;
 use atrament_semantic_command_graph::{
     BoundedDependencyRequirementsError, CommandDependencyNode,
-    CommandGraphLimits, DependencyRequirementsError, DependencySummaryError,
-    command_graph_size, dependency_selection_requirements,
+    CommandGraphLimitError, CommandGraphLimits, DependencyRequirementsError,
+    DependencySummaryError, command_graph_size,
+    dependency_selection_requirements,
     dependency_selection_requirements_bounded, dependency_selection_summary,
     validate_command_graph, validate_command_graph_limits,
 };
@@ -484,6 +485,11 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
             return DirectEditBatchGraphLimitsOutcome::StaleBase {
                 current: current.id,
             };
+        }
+        if let Some(reason) =
+            direct_edit_command_count_limit(batch.commands.len(), limits)
+        {
+            return DirectEditBatchGraphLimitsOutcome::Rejected { reason };
         }
         let nodes = direct_edit_command_graph_nodes(&batch.commands);
         match validate_command_graph_limits(&nodes, limits) {
@@ -1166,6 +1172,13 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
                 current: current.id,
             };
         }
+        if let Some(reason) =
+            direct_edit_command_count_limit(batch.commands.len(), limits)
+        {
+            return DirectEditBatchSimulationOutcome::ResourceRejected {
+                reason,
+            };
+        }
         let nodes = direct_edit_command_graph_nodes(&batch.commands);
         if let Err(reason) = validate_command_graph_limits(&nodes, limits) {
             return DirectEditBatchSimulationOutcome::ResourceRejected {
@@ -1615,6 +1628,18 @@ fn formula_content_value(
         | BlockContent::Rule
         | BlockContent::Unresolved(_) => None,
     }
+}
+
+fn direct_edit_command_count_limit(
+    commands: usize,
+    limits: CommandGraphLimits,
+) -> Option<CommandGraphLimitError> {
+    (commands > limits.commands).then_some(
+        CommandGraphLimitError::CommandCountExceeded {
+            actual: commands,
+            limit: limits.commands,
+        },
+    )
 }
 
 fn direct_edit_command_graph_nodes<CommandIdentity>(
