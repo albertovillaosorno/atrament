@@ -15,7 +15,7 @@
 // - Allows:
 //   - Inputs: Bounded draft text and a minimal valid semantic candidate.
 //   - Outputs: Assertions over shared lifecycle ownership and fresh defaults.
-//   - Side effects: Process-local test allocations only.
+//   - Side effects: Test subprocesses and process-local allocations only.
 // - Split-When:
 //   - Assets, previews, renders, or derived plans join the session owner.
 // - Merge-When:
@@ -30,6 +30,9 @@
 // - Defaults:
 //   - Starts with empty draft fields and no accepted semantic revision.
 //
+use std::io::{BufRead, BufReader, Read, Write};
+use std::process::{Command, Stdio};
+
 use atrament_semantic_notebook::{
     CandidateIdentity, IdentityAllocator, Notebook,
 };
@@ -56,6 +59,124 @@ fn minimal_candidate(
         provenance: vec![],
         styles: vec![],
     }
+}
+
+const PROCESS_FIXTURE_MODE: &str = "ATRAMENT_SESSION_APPLICATION_FIXTURE";
+const PROCESS_POPULATED_READY: &str = "atrament-populated-session-ready";
+const PROCESS_FRESH_EMPTY: &str = "atrament-fresh-session-empty";
+const PROCESS_TEST_NAME: &str =
+    "process_restart_drops_accepted_revision_and_history";
+
+fn run_process_fixture_child(mode: &str) {
+    if mode == "fresh" {
+        let fresh = application::SessionApplication::default();
+        assert!(fresh.accepted_revision().is_none());
+        assert_eq!(
+            fresh.history_availability(),
+            HistoryAvailabilityOutcome::NoAcceptedRevision,
+        );
+        println!("{PROCESS_FRESH_EMPTY}");
+        return;
+    }
+    assert_eq!(mode, "populated");
+    let identities = IdentityAllocator::new();
+    let mut session = application::SessionApplication::default();
+    assert!(matches!(
+        session.accept_candidate(minimal_candidate(&identities)),
+        AcceptanceOutcome::Accepted { .. }
+    ));
+    assert!(matches!(
+        session.accept_candidate(minimal_candidate(&identities)),
+        AcceptanceOutcome::Accepted { .. }
+    ));
+    assert!(matches!(
+        session.history_availability(),
+        HistoryAvailabilityOutcome::Available(HistoryAvailability {
+            can_undo: true,
+            ..
+        })
+    ));
+    println!("{PROCESS_POPULATED_READY}");
+    std::io::stdout().flush().expect("flush populated marker");
+    let mut release = [0_u8; 1];
+    let _ = std::io::stdin().read(&mut release);
+}
+
+fn spawn_process_fixture(mode: &str) -> std::process::Child {
+    Command::new(std::env::current_exe().expect("current test executable"))
+        .arg("--exact")
+        .arg(PROCESS_TEST_NAME)
+        .arg("--nocapture")
+        .env(PROCESS_FIXTURE_MODE, mode)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .expect("spawn session process fixture")
+}
+
+fn await_populated_marker(
+    child: &mut std::process::Child,
+) -> BufReader<std::process::ChildStdout> {
+    let stdout = child.stdout.take().expect("child stdout");
+    let mut reader = BufReader::new(stdout);
+    let mut line = String::new();
+    loop {
+        let read = reader.read_line(&mut line).expect("read child stdout");
+        assert_ne!(read, 0, "child exited before populated marker");
+        if line.contains(PROCESS_POPULATED_READY) {
+            return reader;
+        }
+        line.clear();
+    }
+}
+
+fn assert_fresh_process_empty() {
+    let output = Command::new(
+        std::env::current_exe().expect("current test executable"),
+    )
+    .arg("--exact")
+    .arg(PROCESS_TEST_NAME)
+    .arg("--nocapture")
+    .env(PROCESS_FIXTURE_MODE, "fresh")
+    .output()
+    .expect("run fresh session process fixture");
+    assert!(output.status.success());
+    let stdout = String::from_utf8(output.stdout).expect("child stdout UTF-8");
+    assert!(stdout.contains(PROCESS_FRESH_EMPTY));
+}
+
+#[test]
+fn process_restart_drops_accepted_revision_and_history() {
+    if let Some(mode) = std::env::var_os(PROCESS_FIXTURE_MODE) {
+        run_process_fixture_child(&mode.to_string_lossy());
+        return;
+    }
+
+    let mut orderly = spawn_process_fixture("populated");
+    let mut orderly_stdout = await_populated_marker(&mut orderly);
+    orderly
+        .stdin
+        .take()
+        .expect("orderly child stdin")
+        .write_all(b"x")
+        .expect("release orderly child");
+    let mut orderly_tail = String::new();
+    orderly_stdout
+        .read_to_string(&mut orderly_tail)
+        .expect("drain orderly child stdout");
+    assert!(orderly.wait().expect("wait orderly child").success());
+    assert_fresh_process_empty();
+
+    let mut forced = spawn_process_fixture("populated");
+    let mut forced_stdout = await_populated_marker(&mut forced);
+    forced.kill().expect("force session child termination");
+    let mut forced_tail = String::new();
+    forced_stdout
+        .read_to_string(&mut forced_tail)
+        .expect("drain forced child stdout");
+    let status = forced.wait().expect("wait forced child");
+    assert!(!status.success());
+    assert_fresh_process_empty();
 }
 
 #[test]
