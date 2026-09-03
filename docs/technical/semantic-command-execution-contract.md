@@ -534,12 +534,24 @@ graph traversal.
 
 The graph layer also checks whether an interactive command-ID selection contains
 all required dependencies; omissions are reported instead of silently adding
-commands. It measures exact command and explicit dependency-edge counts and can
+commands. A read-only requirement report derives the complete transitive
+explicit
+dependency closure omitted by a selection while preserving caller selection and
+source/dependency order.
+
+Session-level selection analysis binds that requirement report to the current
+capability behavior and exact accepted base revision before graph inspection. It
+reports stale, invalid-graph, or unknown-selection failures without constructing
+or normalizing a replacement batch.
+
+Graph validation fast-paths the normal ordered case where every dependency
+points
+to an earlier command and reuses borrowed source positions for subset analysis.
+It also measures exact command and explicit dependency-edge counts and can
 enforce caller-supplied coarse bounds without choosing product limits or
-truncating input. Structural graph validation now feeds the in-memory
-direct-edit batch simulator, but no protocol normalizer, published product
-limit, Validate,
-or Apply capability is admitted yet.
+truncating input.
+No protocol normalizer, selective-rebatch capability, published product limit,
+Validate, or Apply capability is admitted yet.
 
 Exact authored text and formula source are compared as currently accepted bytes;
 no Unicode normalization form is implied by this implementation evidence. The

@@ -174,8 +174,14 @@ batches share those seeds, and net no-ops emit none. The ordered overlay caches
 impact scopes during the same structural scan and retains ordinary semantic
 material lookup as the fallback for non-editable targets.
 
-This optimization changes no capability or published resource limit. Full
-Validate still requires protocol normalization, command context, complete
+Graph validation now avoids cycle-state allocation for the ordinary ordered
+case where every explicit dependency points backward, while preserving cycle
+precedence when a forward dependency exists. Interactive selection analysis can
+report the complete omitted transitive dependency requirements against an exact
+base revision without creating a replacement batch.
+
+These foundations change no advertised capability or published resource limit.
+Full Validate still requires protocol normalization, command context, complete
 dependency impact expansion, diagnostics, and Apply revalidation.
 
 ## Failure Modes

@@ -140,9 +140,14 @@ read-only; all four direct mutation paths consume that simulator before commit.
 A separate generic command-graph domain validates duplicate command identities,
 self-dependencies, missing dependencies, cycles, and dependency direction
 without choosing command-ID syntax or changing command order. Interactive
-command-ID selections can be checked for dependency closure without silently
-adding omitted commands. Exact command and explicit edge counts can be measured
-and checked against caller-supplied bounds without choosing product limits.
+command-ID selections can report their complete transitive omitted dependency
+requirements without silently changing the caller's selection.
+
+Session-level selection analysis binds those requirements to capability behavior
+and the exact accepted base revision, but does not construct a replacement
+batch.
+Exact command and explicit edge counts can be measured and checked against
+caller-supplied bounds without choosing product limits.
 
 Direct-edit simulation now also projects exact before/after semantic changes. An
 ordered in-memory direct-edit batch validates the generic dependency graph,
