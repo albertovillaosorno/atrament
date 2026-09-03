@@ -98,9 +98,14 @@ semantic object/page locations, typed boundary and physical-length evidence,
 operation binding, and complete-set semantics. A layout-only Export preflight
 preserves those diagnostics rather than interpreting prose.
 
-The task remains open because semantic-command, Render, full Export, and Plan
-producers do not exist yet, and CLI/MCP parity fixtures therefore cannot prove
-that those capabilities preserve the same diagnostic semantics.
+A transport-neutral semantic-command Apply producer now exists, but its typed
+results do not yet carry `DiagnosticSet`. The shared envelope already names
+Semantic Validate/Apply operations and command locations, while its current
+`DiagnosticCode` and `Evidence` vocabularies still have no semantic-command
+precondition condition/evidence family. The frozen diagnostic fixture requires a
+stable command code plus typed precondition evidence, so the application must
+not invent that taxonomy locally. Render, full Export, and Plan producers also
+remain open, and CLI/MCP parity cannot yet prove cross-capability semantics.
 
 ## P2 — Semantic notebook and physical layout
 

@@ -600,6 +600,12 @@ recovery compare normalized batch identity; equating those two representations
 would weaken the frozen retry contract.
 Executable capability evidence confirms that a successful internal batch Apply
 does not change this snapshot or populate `admitted_applications`.
+Semantic Apply currently returns typed result classes without a shared
+`DiagnosticSet`. The diagnostic domain already reserves Semantic Apply/Validate
+operation bindings and command locations, but it has not frozen a command
+precondition diagnostic code or typed precondition evidence family. That missing
+taxonomy blocks diagnostic projection without weakening the shared-envelope
+contract.
 
 Exact authored text and formula source are compared as currently accepted bytes;
 no Unicode normalization form is implied by this implementation evidence. The
