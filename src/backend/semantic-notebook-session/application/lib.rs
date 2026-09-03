@@ -69,6 +69,12 @@ use atrament_semantic_notebook_port::{
     SemanticNotebookSession, TableRowRoleEditOutcome, TextEditOutcome,
 };
 
+#[derive(Default)]
+struct DirectEditBatchIndex {
+    impacts: BTreeMap<AcceptedIdentity, DirectEditImpactScope>,
+    materials: BTreeMap<AcceptedIdentity, CommandTargetMaterial>,
+}
+
 #[derive(Debug, Default)]
 struct CandidateGraph {
     owners: Vec<CandidateIdentity>,
@@ -1447,63 +1453,90 @@ fn check_command_target_preconditions_material(
 fn direct_edit_material_index(
     notebook: &Notebook<AcceptedIdentity>,
     revision: atrament_semantic_notebook::RevisionIdentity,
-) -> BTreeMap<AcceptedIdentity, CommandTargetMaterial> {
-    let mut materials = BTreeMap::new();
+) -> DirectEditBatchIndex {
+    let mut index = DirectEditBatchIndex::default();
+    let mut profile_pages =
+        BTreeMap::<AcceptedIdentity, Vec<AcceptedIdentity>>::new();
+    for page in &notebook.pages {
+        profile_pages
+            .entry(page.page_profile)
+            .or_default()
+            .push(page.id);
+    }
     for profile in &notebook.page_profiles {
         insert_direct_edit_material(
-            &mut materials,
+            &mut index,
             profile.id,
             SemanticIdentityDescriptor {
                 kind: SemanticIdentityKind::PageProfile,
                 owner: Some(notebook.id),
             },
             EditableSemanticValue::PageProfile(profile.geometry),
+            DirectEditImpactScope::Pages {
+                pages: profile_pages.remove(&profile.id).unwrap_or_default(),
+            },
             revision,
         );
     }
-    let mut stack = notebook
-        .pages
-        .iter()
-        .flat_map(|page| page.flows.iter())
-        .flat_map(|flow| flow.blocks.iter())
-        .collect::<Vec<_>>();
-    while let Some(block) = stack.pop() {
-        index_direct_edit_block(&mut materials, &mut stack, block, revision);
+    let mut stack = Vec::new();
+    for page in &notebook.pages {
+        for flow in &page.flows {
+            stack.extend(
+                flow.blocks.iter().map(|block| (block, flow.id, page.id)),
+            );
+        }
     }
-    materials
+    while let Some((block, flow, page)) = stack.pop() {
+        index_direct_edit_block(
+            &mut index, &mut stack, block, flow, page, revision,
+        );
+    }
+    index
 }
 
 fn index_direct_edit_block<'notebook>(
-    materials: &mut BTreeMap<AcceptedIdentity, CommandTargetMaterial>,
-    stack: &mut Vec<&'notebook Block<AcceptedIdentity>>,
+    index: &mut DirectEditBatchIndex,
+    stack: &mut Vec<(
+        &'notebook Block<AcceptedIdentity>,
+        AcceptedIdentity,
+        AcceptedIdentity,
+    )>,
     block: &'notebook Block<AcceptedIdentity>,
+    flow: AcceptedIdentity,
+    page: AcceptedIdentity,
     revision: atrament_semantic_notebook::RevisionIdentity,
 ) {
     match &block.content {
         BlockContent::Callout(children) | BlockContent::Freeform(children) => {
-            stack.extend(children.iter());
+            stack.extend(children.iter().map(|child| (child, flow, page)));
         },
         BlockContent::Date(spans)
         | BlockContent::Heading(spans)
         | BlockContent::Paragraph(spans) => {
-            index_direct_edit_spans(materials, spans, block.id, revision);
+            index_direct_edit_spans(
+                index, spans, block.id, flow, page, revision,
+            );
         },
         BlockContent::Figure(figure) => {
             index_direct_edit_spans(
-                materials,
+                index,
                 &figure.caption,
                 figure.id,
+                flow,
+                page,
                 revision,
             );
         },
         BlockContent::List(list) => {
             for item in &list.items {
-                stack.extend(item.blocks.iter());
+                stack.extend(
+                    item.blocks.iter().map(|child| (child, flow, page)),
+                );
             }
         },
         BlockContent::Mathematics(formula) => {
             insert_direct_edit_material(
-                materials,
+                index,
                 formula.id,
                 SemanticIdentityDescriptor {
                     kind: SemanticIdentityKind::Formula,
@@ -1513,23 +1546,35 @@ fn index_direct_edit_block<'notebook>(
                     mode: formula.mode,
                     source: formula.source.clone(),
                 },
+                DirectEditImpactScope::BlockFlow {
+                    block: block.id,
+                    flow,
+                    page,
+                },
                 revision,
             );
         },
         BlockContent::Table(table) => {
             for row in &table.rows {
                 insert_direct_edit_material(
-                    materials,
+                    index,
                     row.id,
                     SemanticIdentityDescriptor {
                         kind: SemanticIdentityKind::TableRow,
                         owner: Some(table.id),
                     },
                     EditableSemanticValue::TableRowRole(row.role),
+                    DirectEditImpactScope::BlockFlow {
+                        block: block.id,
+                        flow,
+                        page,
+                    },
                     revision,
                 );
                 for cell in &row.cells {
-                    stack.extend(cell.blocks.iter());
+                    stack.extend(
+                        cell.blocks.iter().map(|child| (child, flow, page)),
+                    );
                 }
             }
         },
@@ -1538,40 +1583,46 @@ fn index_direct_edit_block<'notebook>(
 }
 
 fn index_direct_edit_spans(
-    materials: &mut BTreeMap<AcceptedIdentity, CommandTargetMaterial>,
+    index: &mut DirectEditBatchIndex,
     spans: &[InlineSpan<AcceptedIdentity>],
     owner: AcceptedIdentity,
+    flow: AcceptedIdentity,
+    page: AcceptedIdentity,
     revision: atrament_semantic_notebook::RevisionIdentity,
 ) {
     for span in spans {
         insert_direct_edit_material(
-            materials,
+            index,
             span.id,
             SemanticIdentityDescriptor {
                 kind: SemanticIdentityKind::InlineSpan,
                 owner: Some(owner),
             },
             EditableSemanticValue::Text(span.text.clone()),
+            DirectEditImpactScope::Flow { flow, page },
             revision,
         );
     }
 }
 
 fn insert_direct_edit_material(
-    materials: &mut BTreeMap<AcceptedIdentity, CommandTargetMaterial>,
+    index: &mut DirectEditBatchIndex,
     target: AcceptedIdentity,
     descriptor: SemanticIdentityDescriptor<AcceptedIdentity>,
     editable_value: EditableSemanticValue,
+    impact: DirectEditImpactScope,
     revision: atrament_semantic_notebook::RevisionIdentity,
 ) {
     let direct_edit_family = Some(direct_edit_family(&editable_value));
-    let _previous = materials.insert(target, CommandTargetMaterial {
-        descriptor,
-        direct_edit_family,
-        editable_value: Some(editable_value),
-        revision,
-        target,
-    });
+    let _previous_impact = index.impacts.insert(target, impact);
+    let _previous_material =
+        index.materials.insert(target, CommandTargetMaterial {
+            descriptor,
+            direct_edit_family,
+            editable_value: Some(editable_value),
+            revision,
+            target,
+        });
 }
 
 fn simulate_direct_edit_batch_commands<CommandIdentity>(
@@ -1582,14 +1633,15 @@ where
     CommandIdentity: Clone + Ord,
 {
     let revision = current.id;
-    let mut materials = direct_edit_material_index(&current.notebook, revision);
+    let mut batch_index =
+        direct_edit_material_index(&current.notebook, revision);
     let mut evaluated = Vec::with_capacity(commands.len());
     let mut previous_by_target = BTreeMap::new();
     let mut aggregate = BTreeMap::new();
-    for (index, command) in commands.iter().enumerate() {
+    for (command_index, command) in commands.iter().enumerate() {
         let result = simulate_direct_edit_batch_command(
             &current.notebook,
-            &mut materials,
+            &mut batch_index.materials,
             command,
             previous_by_target.get(&command.target),
             revision,
@@ -1599,7 +1651,7 @@ where
             Err(reason) => {
                 return reject_direct_edit_batch(
                     command.id.clone(),
-                    commands.iter().skip(index.saturating_add(1)),
+                    commands.iter().skip(command_index.saturating_add(1)),
                     evaluated,
                     reason,
                     revision,
@@ -1607,7 +1659,11 @@ where
             },
         };
         if let Some(change) = prediction.change.as_ref() {
-            record_direct_edit_batch_change(&mut aggregate, index, change);
+            record_direct_edit_batch_change(
+                &mut aggregate,
+                command_index,
+                change,
+            );
             let _previous =
                 previous_by_target.insert(command.target, command.id.clone());
         }
@@ -1625,7 +1681,11 @@ where
     } else {
         DirectEditEffectClass::Mutation
     };
-    let impact_seeds = direct_edit_impact_seeds(&current.notebook, &changes);
+    let impact_seeds = direct_edit_impact_seeds_indexed(
+        &current.notebook,
+        &batch_index.impacts,
+        &changes,
+    );
     DirectEditBatchSimulationOutcome::Predicted {
         changes,
         commands: evaluated,
@@ -1635,16 +1695,47 @@ where
     }
 }
 
+fn direct_edit_impact_seeds_indexed(
+    notebook: &Notebook<AcceptedIdentity>,
+    impacts: &BTreeMap<AcceptedIdentity, DirectEditImpactScope>,
+    changes: &[DirectEditSemanticChange],
+) -> Vec<DirectEditImpactSeed> {
+    collect_direct_edit_impact_seeds(changes, |change| {
+        let scope = impacts
+            .get(&change.target)
+            .cloned()
+            .unwrap_or_else(|| direct_edit_impact_scope(notebook, change));
+        (scope, direct_edit_impact_authorities(change.family))
+    })
+}
+
 fn direct_edit_impact_seeds(
     notebook: &Notebook<AcceptedIdentity>,
     changes: &[DirectEditSemanticChange],
+) -> Vec<DirectEditImpactSeed> {
+    collect_direct_edit_impact_seeds(changes, |change| {
+        (
+            direct_edit_impact_scope(notebook, change),
+            direct_edit_impact_authorities(change.family),
+        )
+    })
+}
+
+fn collect_direct_edit_impact_seeds(
+    changes: &[DirectEditSemanticChange],
+    mut seed_for: impl FnMut(
+        &DirectEditSemanticChange,
+    ) -> (
+        DirectEditImpactScope,
+        &'static [DirectEditDerivedAuthority],
+    ),
 ) -> Vec<DirectEditImpactSeed> {
     let mut seeds = BTreeMap::<
         DirectEditImpactScope,
         BTreeSet<DirectEditDerivedAuthority>,
     >::new();
     for change in changes {
-        let (scope, authorities) = direct_edit_impact_seed(notebook, change);
+        let (scope, authorities) = seed_for(change);
         seeds.entry(scope).or_default().extend(authorities);
     }
     seeds
@@ -1656,42 +1747,58 @@ fn direct_edit_impact_seeds(
         .collect()
 }
 
-fn direct_edit_impact_seed(
+fn direct_edit_impact_scope(
     notebook: &Notebook<AcceptedIdentity>,
     change: &DirectEditSemanticChange,
-) -> (DirectEditImpactScope, &'static [DirectEditDerivedAuthority]) {
+) -> DirectEditImpactScope {
     match change.family {
-        SemanticCommandFamily::DocumentConstraint => (
-            direct_edit_document_constraint_scope(notebook, change.target),
-            &[DirectEditDerivedAuthority::AllDerived],
-        ),
+        SemanticCommandFamily::DocumentConstraint => {
+            direct_edit_document_constraint_scope(notebook, change.target)
+        },
         SemanticCommandFamily::StructuredContent => {
-            (direct_edit_structured_scope(notebook, change.target), &[
-                DirectEditDerivedAuthority::Layout,
-                DirectEditDerivedAuthority::Output,
-                DirectEditDerivedAuthority::StructureValidation,
-            ])
+            direct_edit_structured_scope(notebook, change.target)
         },
         SemanticCommandFamily::TextContent => {
-            (direct_edit_text_scope(notebook, change.target), &[
-                DirectEditDerivedAuthority::Diagnostics,
-                DirectEditDerivedAuthority::FlowGeometry,
-                DirectEditDerivedAuthority::Handwriting,
-                DirectEditDerivedAuthority::Motion,
-                DirectEditDerivedAuthority::Rendering,
-                DirectEditDerivedAuthority::Shaping,
-                DirectEditDerivedAuthority::Wrapping,
-            ])
+            direct_edit_text_scope(notebook, change.target)
         },
         SemanticCommandFamily::AssetReference
         | SemanticCommandFamily::BlockInsertionAndDeletion
         | SemanticCommandFamily::OrderingAndGrouping
         | SemanticCommandFamily::Provenance
         | SemanticCommandFamily::SpatialConstraint
-        | SemanticCommandFamily::StyleRole => (
-            DirectEditImpactScope::Notebook { notebook: notebook.id },
-            &[DirectEditDerivedAuthority::AllDerived],
-        ),
+        | SemanticCommandFamily::StyleRole => {
+            DirectEditImpactScope::Notebook { notebook: notebook.id }
+        },
+    }
+}
+
+const fn direct_edit_impact_authorities(
+    family: SemanticCommandFamily,
+) -> &'static [DirectEditDerivedAuthority] {
+    match family {
+        SemanticCommandFamily::DocumentConstraint
+        | SemanticCommandFamily::AssetReference
+        | SemanticCommandFamily::BlockInsertionAndDeletion
+        | SemanticCommandFamily::OrderingAndGrouping
+        | SemanticCommandFamily::Provenance
+        | SemanticCommandFamily::SpatialConstraint
+        | SemanticCommandFamily::StyleRole => {
+            &[DirectEditDerivedAuthority::AllDerived]
+        },
+        SemanticCommandFamily::StructuredContent => &[
+            DirectEditDerivedAuthority::Layout,
+            DirectEditDerivedAuthority::Output,
+            DirectEditDerivedAuthority::StructureValidation,
+        ],
+        SemanticCommandFamily::TextContent => &[
+            DirectEditDerivedAuthority::Diagnostics,
+            DirectEditDerivedAuthority::FlowGeometry,
+            DirectEditDerivedAuthority::Handwriting,
+            DirectEditDerivedAuthority::Motion,
+            DirectEditDerivedAuthority::Rendering,
+            DirectEditDerivedAuthority::Shaping,
+            DirectEditDerivedAuthority::Wrapping,
+        ],
     }
 }
 
