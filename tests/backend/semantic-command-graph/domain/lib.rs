@@ -34,9 +34,11 @@ use std::collections::BTreeSet;
 use atrament_semantic_command_graph::{
     CommandGraphError, CommandGraphLimitError, CommandGraphLimits,
     CommandGraphSize, CommandNode, DependencyRequirementsError,
-    DependencySelectionError, MissingDependencyRequirement, command_graph_size,
-    dependency_selection_requirements, validate_command_graph,
-    validate_command_graph_limits, validate_dependency_closed_selection,
+    DependencySelectionError, DependencySelectionSummary,
+    DependencySummaryError, MissingDependencyRequirement, command_graph_size,
+    dependency_selection_requirements, dependency_selection_summary,
+    validate_command_graph, validate_command_graph_limits,
+    validate_dependency_closed_selection,
 };
 
 fn node(id: u32, dependencies: &[u32]) -> CommandNode<u32> {
@@ -368,4 +370,52 @@ fn one_hundred_thousand_selection_requirements_are_iterative() {
         }),
     );
     assert_eq!(selected, before);
+}
+
+#[test]
+fn dependency_selection_summary_counts_closure_without_materializing_pairs() {
+    let nodes = [node(1, &[]), node(2, &[1]), node(3, &[2]), node(4, &[1])];
+    let selected = BTreeSet::from([3]);
+    let before = selected.clone();
+    assert_eq!(
+        dependency_selection_summary(&nodes, &selected),
+        Ok(DependencySelectionSummary {
+            missing_dependency_edges: 2,
+            required_commands: 3,
+            selected_commands: 1,
+        }),
+    );
+    assert_eq!(selected, before);
+}
+
+#[test]
+fn dependency_selection_summary_preserves_duplicate_edge_count() {
+    let nodes = [node(1, &[]), node(2, &[1, 1])];
+    assert_eq!(
+        dependency_selection_summary(&nodes, &BTreeSet::from([2])),
+        Ok(DependencySelectionSummary {
+            missing_dependency_edges: 2,
+            required_commands: 2,
+            selected_commands: 1,
+        }),
+    );
+}
+
+#[test]
+fn dependency_selection_summary_rejects_unknown_and_invalid_graph() {
+    let nodes = [node(1, &[]), node(2, &[1])];
+    assert_eq!(
+        dependency_selection_summary(&nodes, &BTreeSet::from([9])),
+        Err(DependencySummaryError::UnknownSelection { command: 9 }),
+    );
+    let invalid = [node(1, &[2]), node(2, &[])];
+    assert_eq!(
+        dependency_selection_summary(&invalid, &BTreeSet::from([1])),
+        Err(DependencySummaryError::Graph {
+            reason: CommandGraphError::DependencyAfterCommand {
+                command: 1,
+                dependency: 2,
+            },
+        }),
+    );
 }
