@@ -77,7 +77,7 @@ use atrament_session_draft_port::{DraftField, DraftMutation, SessionDraft};
 mod application;
 
 const CURRENT_COMMAND_BEHAVIOR_VERSION: CommandBehaviorVersion =
-    CommandBehaviorVersion(25);
+    CommandBehaviorVersion(26);
 
 fn physical_page_profile() -> PageProfile {
     PageProfile {

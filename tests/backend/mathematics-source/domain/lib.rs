@@ -187,18 +187,21 @@ fn named_symbol_vocabulary_is_supported_without_rewriting() {
     for source in [
         r"\Delta", r"\Gamma", r"\Lambda", r"\Leftrightarrow", r"\Omega",
         r"\Phi", r"\Pi", r"\Psi", r"\Rightarrow", r"\Sigma", r"\Theta",
-        r"\Upsilon", r"\Xi", r"\alpha", r"\approx", r"\beta", r"\cap",
-        r"\cdot", r"\chi", r"\cong", r"\cup", r"\delta", r"\emptyset",
+        r"\Upsilon", r"\Xi", r"\alpha", r"\approx", r"\ast", r"\beta",
+        r"\bullet", r"\cap", r"\cdot", r"\chi", r"\circ", r"\cong",
+        r"\cup", r"\delta", r"\div", r"\emptyset",
         r"\epsilon", r"\equiv", r"\eta", r"\exists", r"\forall", r"\gamma",
         r"\ge", r"\geq", r"\in", r"\infty", r"\iota", r"\kappa",
         r"\lambda", r"\land", r"\le", r"\leftarrow", r"\leq", r"\lor",
-        r"\mid", r"\mu", r"\nabla", r"\ne", r"\neg", r"\neq", r"\notin",
-        r"\nu", r"\omega", r"\parallel", r"\partial", r"\perp", r"\phi",
+        r"\mid", r"\mp", r"\mu", r"\nabla", r"\ne", r"\neg", r"\neq",
+        r"\notin", r"\nu", r"\omega", r"\oplus", r"\otimes", r"\parallel",
+        r"\partial", r"\perp", r"\phi",
         r"\pi", r"\pm", r"\propto", r"\psi", r"\rho", r"\rightarrow",
-        r"\sigma", r"\sim", r"\subset",
+        r"\setminus", r"\sigma", r"\sim", r"\star", r"\subset",
         r"\subseteq", r"\supset", r"\supseteq", r"\tau", r"\theta",
         r"\times", r"\to", r"\upsilon", r"\varepsilon", r"\varphi",
-        r"\varpi", r"\varrho", r"\varsigma", r"\vartheta", r"\xi", r"\zeta",
+        r"\varpi", r"\varrho", r"\varsigma", r"\vartheta", r"\vee", r"\wedge",
+        r"\xi", r"\zeta",
     ] {
         let analyzed =
             analyze(source, FormulaMode::Inline).expect("named symbol formula");
@@ -217,6 +220,30 @@ fn named_symbol_vocabulary_is_supported_without_rewriting() {
             "{source}",
         );
     }
+}
+
+#[test]
+fn common_binary_operator_symbols_compose_without_rewriting() {
+    let source = concat!(
+        r"a \ast b + c \bullet d + e \circ f; ",
+        r"x \div y \mp z; A \oplus B \otimes C; ",
+        r"S \setminus T; p \star q; P \vee Q \wedge R",
+    );
+    let analyzed = analyze(source, FormulaMode::Display)
+        .expect("binary operator symbol expression");
+    assert!(analyzed.is_supported());
+    assert_eq!(reconstructed(&analyzed), source);
+    assert_eq!(
+        analyzed
+            .tokens
+            .iter()
+            .filter(|token| {
+                token.kind
+                    == MathTokenKind::Command(SupportedCommand::NamedSymbol)
+            })
+            .count(),
+        11,
+    );
 }
 
 #[test]

@@ -44,17 +44,20 @@ const NAMED_OPERATOR_COMMANDS: &[&str] = &[
 const NAMED_SYMBOL_COMMANDS: &[&str] = &[
     "\\Delta", "\\Gamma", "\\Lambda", "\\Leftrightarrow", "\\Omega", "\\Phi",
     "\\Pi", "\\Psi", "\\Rightarrow", "\\Sigma", "\\Theta", "\\Upsilon",
-    "\\Xi", "\\alpha", "\\approx", "\\beta", "\\cap", "\\cdot", "\\chi",
-    "\\cong", "\\cup", "\\delta", "\\emptyset", "\\epsilon", "\\equiv",
+    "\\Xi", "\\alpha", "\\approx", "\\ast", "\\beta", "\\bullet",
+    "\\cap", "\\cdot", "\\chi", "\\circ", "\\cong", "\\cup", "\\delta",
+    "\\div", "\\emptyset", "\\epsilon", "\\equiv",
     "\\eta", "\\exists", "\\forall", "\\gamma", "\\ge", "\\geq",
     "\\in", "\\infty", "\\iota", "\\kappa", "\\lambda", "\\land", "\\le",
-    "\\leftarrow", "\\leq", "\\lor", "\\mid", "\\mu", "\\nabla", "\\ne",
-    "\\neg", "\\neq", "\\notin", "\\nu", "\\omega", "\\parallel",
+    "\\leftarrow", "\\leq", "\\lor", "\\mid", "\\mp", "\\mu", "\\nabla",
+    "\\ne", "\\neg", "\\neq", "\\notin", "\\nu", "\\omega", "\\oplus",
+    "\\otimes", "\\parallel",
     "\\partial", "\\perp", "\\phi", "\\pi", "\\pm", "\\propto", "\\psi",
-    "\\rho", "\\rightarrow", "\\sigma", "\\sim",
+    "\\rho", "\\rightarrow", "\\setminus", "\\sigma", "\\sim", "\\star",
     "\\subset", "\\subseteq", "\\supset", "\\supseteq", "\\tau", "\\theta",
     "\\times", "\\to", "\\upsilon", "\\varepsilon", "\\varphi",
-    "\\varpi", "\\varrho", "\\varsigma", "\\vartheta", "\\xi", "\\zeta",
+    "\\varpi", "\\varrho", "\\varsigma", "\\vartheta", "\\vee", "\\wedge",
+    "\\xi", "\\zeta",
 ];
 
 const STRUCTURED_COMMANDS: &[(&str, SupportedCommand)] = &[
