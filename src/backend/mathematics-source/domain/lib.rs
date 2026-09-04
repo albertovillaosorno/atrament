@@ -151,12 +151,20 @@ pub enum SupportedCommand {
     BeginMatrix,
     /// Two-group binomial coefficient command.
     Binomial,
+    /// One-group blackboard-bold mathematical alphabet.
+    BlackboardBold,
+    /// One-group bold mathematical alphabet.
+    Bold,
+    /// One-group calligraphic mathematical alphabet.
+    Calligraphic,
     /// End of an explicit matrix environment.
     EndMatrix,
     /// Escaped TeX special character preserved as literal source.
     EscapedSpecial,
     /// Two-group fraction command.
     Fraction,
+    /// One-group italic mathematical alphabet.
+    Italic,
     /// Admitted no-argument named mathematical operator.
     NamedOperator,
     /// Admitted no-argument named mathematical symbol.
@@ -206,8 +214,9 @@ impl AnalyzedFormula {
 ///
 /// Supported source includes ordinary Unicode mathematics, groups, scripts,
 /// `\\frac{...}{...}`, `\\binom{...}{...}`, `\\sqrt{...}`,
-/// `\\mathrm{...}`, `\\operatorname{...}`, `\\text{...}`,
-/// grouped vector, overline, and underline decorations, escaped TeX special
+/// grouped mathematical alphabets, `\\mathrm{...}`,
+/// `\\operatorname{...}`, `\\text{...}`, grouped vector, overline, and
+/// underline decorations, escaped TeX special
 /// characters, common named mathematical operators and
 /// symbols, aligned separators, and `\\begin{matrix}...\\end{matrix}`.
 /// Math-only alignment, script, and row-break markers remain literal inside
@@ -405,6 +414,10 @@ fn scan_command(source: &str, start: usize) -> ScannedCommand {
         ("\\binom", SupportedCommand::Binomial),
         ("\\end{matrix}", SupportedCommand::EndMatrix),
         ("\\frac", SupportedCommand::Fraction),
+        ("\\mathbb", SupportedCommand::BlackboardBold),
+        ("\\mathbf", SupportedCommand::Bold),
+        ("\\mathcal", SupportedCommand::Calligraphic),
+        ("\\mathit", SupportedCommand::Italic),
         ("\\mathrm", SupportedCommand::Roman),
         ("\\operatorname", SupportedCommand::OperatorName),
         ("\\overline", SupportedCommand::Overline),
@@ -651,7 +664,11 @@ fn validate_command_groups(
         | SupportedCommand::NamedOperator
         | SupportedCommand::NamedSymbol => 0usize,
         SupportedCommand::Binomial | SupportedCommand::Fraction => 2usize,
-        SupportedCommand::OperatorName
+        SupportedCommand::BlackboardBold
+        | SupportedCommand::Bold
+        | SupportedCommand::Calligraphic
+        | SupportedCommand::Italic
+        | SupportedCommand::OperatorName
         | SupportedCommand::Overline
         | SupportedCommand::Roman
         | SupportedCommand::SquareRoot

@@ -353,6 +353,39 @@ fn required_groups_allow_ascii_whitespace_without_rewriting() {
 }
 
 #[test]
+fn grouped_math_alphabets_are_structural_and_require_one_group() {
+    let source = r"x \in \mathbb{R}, \mathbf{v}, \mathcal{F}, \mathit{x}";
+    let analyzed = analyze(source, FormulaMode::Display)
+        .expect("grouped mathematical alphabets");
+    assert!(analyzed.is_supported());
+    assert_eq!(reconstructed(&analyzed), source);
+    for (spelling, kind) in [
+        (r"\mathbb", SupportedCommand::BlackboardBold),
+        (r"\mathbf", SupportedCommand::Bold),
+        (r"\mathcal", SupportedCommand::Calligraphic),
+        (r"\mathit", SupportedCommand::Italic),
+    ] {
+        assert!(analyzed.tokens.iter().any(|token| {
+            token.kind == MathTokenKind::Command(kind)
+                && analyzed.token_source(*token) == Some(spelling)
+        }));
+        assert_eq!(
+            analyze(spelling, FormulaMode::Inline),
+            Err(MathSyntaxError {
+                byte_offset: spelling.len(),
+                kind: MathSyntaxErrorKind::MissingRequiredGroup,
+            }),
+            "{spelling}",
+        );
+    }
+
+    let prefixed = analyze(r"\mathbboard{R}", FormulaMode::Inline)
+        .expect("balanced longer math-alphabet command");
+    assert!(!prefixed.is_supported());
+    assert_eq!(prefixed.unsupported[0].name, r"\mathbboard");
+}
+
+#[test]
 fn custom_operator_name_is_structural_and_requires_one_group() {
     let source = r"\operatorname{Var}(X) + \operatorname{Cov}(X,Y)";
     let analyzed = analyze(source, FormulaMode::Display)
