@@ -1390,26 +1390,26 @@ fn text_scope_remains_literal_inside_cases_environment() {
 }
 
 #[test]
-fn deep_alternating_environments_are_iterative_and_ordered() {
+fn deep_ordered_environments_are_iterative_and_balanced() {
     let depth = 1_024usize;
     let mut source = String::new();
     for level in 0..depth {
-        if level & 1 == 0 {
-            source.push_str(r"\begin{cases}");
-        } else {
-            source.push_str(r"\begin{matrix}");
+        match level % 3 {
+            0 => source.push_str(r"\begin{aligned}"),
+            1 => source.push_str(r"\begin{cases}"),
+            _ => source.push_str(r"\begin{matrix}"),
         }
     }
     source.push('x');
     for level in (0..depth).rev() {
-        if level & 1 == 0 {
-            source.push_str(r"\end{cases}");
-        } else {
-            source.push_str(r"\end{matrix}");
+        match level % 3 {
+            0 => source.push_str(r"\end{aligned}"),
+            1 => source.push_str(r"\end{cases}"),
+            _ => source.push_str(r"\end{matrix}"),
         }
     }
     let analyzed = analyze(&source, FormulaMode::Display)
-        .expect("deep alternating environments");
+        .expect("deep ordered environments");
     assert!(analyzed.is_supported());
     assert_eq!(reconstructed(&analyzed), source);
     assert_eq!(
@@ -1419,7 +1419,8 @@ fn deep_alternating_environments_are_iterative_and_ordered() {
             .filter(|token| matches!(
                 token.kind,
                 MathTokenKind::Command(
-                    SupportedCommand::BeginCases
+                    SupportedCommand::BeginAligned
+                        | SupportedCommand::BeginCases
                         | SupportedCommand::BeginMatrix
                 )
             ))
