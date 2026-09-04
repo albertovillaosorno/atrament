@@ -497,8 +497,9 @@ decorations, escaped TeX special characters, standard and variant Greek
 control-sequence notation, common named and delimiter symbols, binary-operator
 symbols, arrow and ellipsis symbols, relation and logic symbols, operators,
 calculus, set notation, aligned row and column separators, and matrix
-environments. Math-only alignment, script, and row-break
-markers remain literal inside grouped text.
+environments. Paired delimiter-sizing controls remain explicit unsupported input
+rather than being inferred from admitted delimiter glyph names. Math-only
+alignment, script, and row-break markers remain literal inside grouped text.
 Inline, display, and aligned presentation modes are semantic values rather than
 renderer guesses. Unknown control words remain explicit unsupported constructs;
 malformed groups, required arguments, alignment use, and matrix boundaries
