@@ -1292,6 +1292,86 @@ fn crossed_environment_closes_are_typed() {
 }
 
 #[test]
+fn environment_alignment_scope_does_not_leak_after_close() {
+    let prefix = r"\begin{cases}a & b\end{cases} ";
+    let source = format!("{prefix}& c");
+    assert_eq!(
+        analyze(&source, FormulaMode::Display),
+        Err(MathSyntaxError {
+            byte_offset: prefix.len(),
+            kind: MathSyntaxErrorKind::AlignmentOutsideStructure,
+        }),
+    );
+}
+
+#[test]
+fn text_scope_remains_literal_inside_cases_environment() {
+    let source = concat!(
+        r"\begin{cases}\text{a & b \\ c} & d \\ ",
+        r"e & f\end{cases}",
+    );
+    let analyzed = analyze(source, FormulaMode::Display)
+        .expect("cases containing text scope");
+    assert!(analyzed.is_supported());
+    assert_eq!(reconstructed(&analyzed), source);
+    assert_eq!(
+        analyzed
+            .tokens
+            .iter()
+            .filter(|token| token.kind == MathTokenKind::AlignmentPoint)
+            .count(),
+        2,
+    );
+    assert_eq!(
+        analyzed
+            .tokens
+            .iter()
+            .filter(|token| token.kind == MathTokenKind::RowBreak)
+            .count(),
+        1,
+    );
+}
+
+#[test]
+fn deep_alternating_environments_are_iterative_and_ordered() {
+    let depth = 1_024usize;
+    let mut source = String::new();
+    for level in 0..depth {
+        if level & 1 == 0 {
+            source.push_str(r"\begin{cases}");
+        } else {
+            source.push_str(r"\begin{matrix}");
+        }
+    }
+    source.push('x');
+    for level in (0..depth).rev() {
+        if level & 1 == 0 {
+            source.push_str(r"\end{cases}");
+        } else {
+            source.push_str(r"\end{matrix}");
+        }
+    }
+    let analyzed = analyze(&source, FormulaMode::Display)
+        .expect("deep alternating environments");
+    assert!(analyzed.is_supported());
+    assert_eq!(reconstructed(&analyzed), source);
+    assert_eq!(
+        analyzed
+            .tokens
+            .iter()
+            .filter(|token| matches!(
+                token.kind,
+                MathTokenKind::Command(
+                    SupportedCommand::BeginCases
+                        | SupportedCommand::BeginMatrix
+                )
+            ))
+            .count(),
+        depth,
+    );
+}
+
+#[test]
 fn matrix_admits_alignment_inside_display_mode() {
     let source = r"A = \begin{matrix}a & b \\ c & d\end{matrix}";
     let analyzed =
