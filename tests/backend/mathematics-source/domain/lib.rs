@@ -1484,6 +1484,33 @@ fn crossed_environment_closes_are_typed() {
 }
 
 #[test]
+fn environments_must_close_before_their_owning_group() {
+    for (begin, end) in [
+        (r"\begin{aligned}", r"\end{aligned}"),
+        (r"\begin{cases}", r"\end{cases}"),
+        (r"\begin{gathered}", r"\end{gathered}"),
+        (r"\begin{matrix}", r"\end{matrix}"),
+    ] {
+        let prefix = format!("{{{begin}a");
+        let source = format!("{prefix}}}{end}");
+        assert_eq!(
+            analyze(&source, FormulaMode::Display),
+            Err(MathSyntaxError {
+                byte_offset: prefix.len(),
+                kind: MathSyntaxErrorKind::EnvironmentCrossesGroupClose,
+            }),
+            "{source}",
+        );
+    }
+
+    let nested_group = r"{\begin{matrix}{a}\end{matrix}}";
+    let analyzed = analyze(nested_group, FormulaMode::Display)
+        .expect("ordinary group nested inside environment");
+    assert!(analyzed.is_supported());
+    assert_eq!(reconstructed(&analyzed), nested_group);
+}
+
+#[test]
 fn environment_alignment_scope_does_not_leak_after_close() {
     let prefix = r"\begin{cases}a & b\end{cases} ";
     let source = format!("{prefix}& c");
