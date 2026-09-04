@@ -84,8 +84,10 @@ position. This does not yet model raw imported media bytes or their cleanup.
 While private draft text is live, the runtime holds no writable regular-file
 descriptor and changes no declared repository runtime-root file.
 
-A checked-in browser policy test also guards `pagehide` credential invalidation,
-pending-work invalidation, session-text clearing, and bfcache subtree scrubbing.
+Checked-in browser policy tests guard one-time launch-credential fragment
+consumption, `pagehide` credential invalidation, pending-work invalidation,
+session-text clearing, and bfcache subtree scrubbing. Refresh therefore cannot
+recover the launch credential from the rewritten browser URL or persistence API.
 
 The task remains open until temporary media exist and end-to-end fixtures also
 cover browser close, refresh, cancellation, media cleanup, and explicit-export

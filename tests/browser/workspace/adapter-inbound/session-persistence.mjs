@@ -84,3 +84,47 @@ test("page exit invalidates credential, work, and session text", async () => {
         );
     }
 });
+
+
+test("session credential fragment is one-time browser handoff", async () => {
+    const source = await readFile(MAIN_MODULE, "utf8");
+    const urlStart = source.indexOf("function fragmentFreeLocalUrl() {");
+    assert.notEqual(urlStart, -1, "workspace must derive a fragment-free URL");
+    const handoffStart = source.indexOf(
+        "function consumeSessionSecretFragment() {",
+    );
+    assert.notEqual(
+        handoffStart,
+        -1,
+        "workspace must consume launch credential",
+    );
+    const handoffEnd = source.indexOf(
+        "\nlet sessionSecret = consumeSessionSecretFragment();",
+        handoffStart,
+    );
+    assert.notEqual(
+        handoffEnd,
+        -1,
+        "credential handoff must have bounded body",
+    );
+    const urlHelper = source.slice(urlStart, handoffStart);
+    assert.equal(urlHelper.includes("window.location.pathname"), true);
+    assert.equal(urlHelper.includes("window.location.search"), true);
+    assert.equal(urlHelper.includes("window.location.hash"), false);
+
+    const handoff = source.slice(handoffStart, handoffEnd);
+    for (const required of [
+        'const hash = window.location.hash;',
+        'hash.startsWith("#session=")',
+        "const localUrl = fragmentFreeLocalUrl();",
+        'window.history.replaceState(window.history.state, "", localUrl);',
+        "window.location.replace(localUrl);",
+        "return sessionSecret;",
+    ]) {
+        assert.equal(
+            handoff.includes(required),
+            true,
+            `credential handoff must retain ${required}`,
+        );
+    }
+});
