@@ -60,8 +60,8 @@ The backend now has a dependency-free mathematical source analyzer that retains
 exact UTF-8 source and exposes structural spans for the admitted first slice:
 groups, scripts, fractions, square roots, upright unit or label groups, grouped
 text, vector, overline, and underline decorations, escaped TeX special
-characters, common named symbols, relations, operators, calculus notation,
-aligned separators, and matrix environments. Unknown control words and
+characters, common named symbols, relations, operators, calculus, set, and logic
+notation, aligned separators, and matrix environments. Unknown control words and
 unadmitted control symbols remain explicit unsupported constructs, and malformed
 source returns typed syntax failures.
 

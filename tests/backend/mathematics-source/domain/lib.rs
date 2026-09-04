@@ -185,11 +185,14 @@ fn calculus_commands_compose_with_scripts_without_rewriting() {
 #[test]
 fn named_symbol_vocabulary_is_supported_without_rewriting() {
     for source in [
-        r"\alpha", r"\approx", r"\beta", r"\cdot", r"\delta",
-        r"\epsilon", r"\gamma", r"\ge", r"\geq", r"\infty",
-        r"\lambda", r"\le", r"\leq", r"\mu", r"\nabla", r"\ne",
-        r"\neq", r"\omega", r"\partial", r"\phi", r"\pi", r"\pm",
-        r"\rho", r"\sigma", r"\theta", r"\times", r"\to",
+        r"\Leftrightarrow", r"\Rightarrow", r"\alpha", r"\approx",
+        r"\beta", r"\cap", r"\cdot", r"\cup", r"\delta", r"\emptyset",
+        r"\epsilon", r"\exists", r"\forall", r"\gamma", r"\ge", r"\geq",
+        r"\in", r"\infty", r"\lambda", r"\le", r"\leq", r"\leftarrow",
+        r"\mu", r"\nabla", r"\ne", r"\neq", r"\notin", r"\omega",
+        r"\partial", r"\phi", r"\pi", r"\pm", r"\rho", r"\rightarrow",
+        r"\sigma", r"\subset", r"\subseteq", r"\supset", r"\supseteq",
+        r"\theta", r"\times", r"\to",
     ] {
         let analyzed =
             analyze(source, FormulaMode::Inline).expect("named symbol formula");
@@ -208,6 +211,35 @@ fn named_symbol_vocabulary_is_supported_without_rewriting() {
             "{source}",
         );
     }
+}
+
+#[test]
+fn set_logic_and_arrow_symbols_compose_without_rewriting() {
+    let source = concat!(
+        r"\forall x \in A \cup B, x \notin \emptyset \Rightarrow ",
+        r"A \subseteq B \Leftrightarrow B \supseteq A",
+    );
+    let analyzed = analyze(source, FormulaMode::Display)
+        .expect("set and logic expression");
+    assert!(analyzed.is_supported());
+    assert_eq!(reconstructed(&analyzed), source);
+    assert_eq!(
+        analyzed
+            .tokens
+            .iter()
+            .filter(|token| {
+                token.kind
+                    == MathTokenKind::Command(SupportedCommand::NamedSymbol)
+            })
+            .count(),
+        9,
+    );
+
+    let arrows = r"a \leftarrow b \rightarrow c \to d";
+    let analyzed = analyze(arrows, FormulaMode::Inline)
+        .expect("arrow expression");
+    assert!(analyzed.is_supported());
+    assert_eq!(reconstructed(&analyzed), arrows);
 }
 
 #[test]

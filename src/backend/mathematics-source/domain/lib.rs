@@ -377,11 +377,14 @@ fn scan_command(source: &str, start: usize) -> ScannedCommand {
         }
     }
     for spelling in [
-        "\\alpha", "\\approx", "\\beta", "\\cdot", "\\delta",
-        "\\epsilon", "\\gamma", "\\ge", "\\geq", "\\infty",
-        "\\lambda", "\\le", "\\leq", "\\mu", "\\nabla", "\\ne",
-        "\\neq", "\\omega", "\\partial", "\\phi", "\\pi", "\\pm",
-        "\\rho", "\\sigma", "\\theta", "\\times", "\\to",
+        "\\Leftrightarrow", "\\Rightarrow", "\\alpha", "\\approx",
+        "\\beta", "\\cap", "\\cdot", "\\cup", "\\delta", "\\emptyset",
+        "\\epsilon", "\\exists", "\\forall", "\\gamma", "\\ge", "\\geq",
+        "\\in", "\\infty", "\\lambda", "\\le", "\\leq", "\\leftarrow",
+        "\\mu", "\\nabla", "\\ne", "\\neq", "\\notin", "\\omega",
+        "\\partial", "\\phi", "\\pi", "\\pm", "\\rho", "\\rightarrow",
+        "\\sigma", "\\subset", "\\subseteq", "\\supset", "\\supseteq",
+        "\\theta", "\\times", "\\to",
     ] {
         if command_matches(source, start, spelling) {
             return ScannedCommand {
