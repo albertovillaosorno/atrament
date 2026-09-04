@@ -936,6 +936,95 @@ fn substack_rows_are_scoped_to_their_group() {
 }
 
 #[test]
+fn substack_scope_composes_with_text_and_matrix_structure() {
+    let with_text = r"\substack{a\\\text{b\\c}\\d}";
+    let analyzed = analyze(with_text, FormulaMode::Inline)
+        .expect("substack containing text scope");
+    assert!(analyzed.is_supported());
+    assert_eq!(reconstructed(&analyzed), with_text);
+    assert_eq!(
+        analyzed
+            .tokens
+            .iter()
+            .filter(|token| token.kind == MathTokenKind::RowBreak)
+            .count(),
+        2,
+    );
+
+    let with_matrix = concat!(
+        r"\substack{\begin{matrix}a & b\\c & d\end{matrix}",
+        r"\\e}",
+    );
+    let analyzed = analyze(with_matrix, FormulaMode::Inline)
+        .expect("substack containing matrix");
+    assert!(analyzed.is_supported());
+    assert_eq!(reconstructed(&analyzed), with_matrix);
+    assert_eq!(
+        analyzed
+            .tokens
+            .iter()
+            .filter(|token| token.kind == MathTokenKind::RowBreak)
+            .count(),
+        2,
+    );
+    assert_eq!(
+        analyzed
+            .tokens
+            .iter()
+            .filter(|token| token.kind == MathTokenKind::AlignmentPoint)
+            .count(),
+        2,
+    );
+
+    let in_matrix = r"\begin{matrix}\substack{a\\b} & c\end{matrix}";
+    let analyzed = analyze(in_matrix, FormulaMode::Display)
+        .expect("matrix containing substack");
+    assert!(analyzed.is_supported());
+    assert_eq!(reconstructed(&analyzed), in_matrix);
+    assert_eq!(
+        analyzed
+            .tokens
+            .iter()
+            .filter(|token| token.kind == MathTokenKind::RowBreak)
+            .count(),
+        1,
+    );
+    assert_eq!(
+        analyzed
+            .tokens
+            .iter()
+            .filter(|token| token.kind == MathTokenKind::AlignmentPoint)
+            .count(),
+        1,
+    );
+}
+
+#[test]
+fn deep_substack_scopes_are_iterative_and_do_not_leak() {
+    let depth = 1_024usize;
+    let mut source = String::new();
+    for _ in 0..depth {
+        source.push_str(r"\substack{a\\");
+    }
+    source.push('x');
+    for _ in 0..depth {
+        source.push_str(r"\\b}");
+    }
+    let analyzed = analyze(&source, FormulaMode::Inline)
+        .expect("deep nested substack source");
+    assert!(analyzed.is_supported());
+    assert_eq!(reconstructed(&analyzed), source);
+    assert_eq!(
+        analyzed
+            .tokens
+            .iter()
+            .filter(|token| token.kind == MathTokenKind::RowBreak)
+            .count(),
+        depth * 2,
+    );
+}
+
+#[test]
 fn text_scope_still_makes_substack_row_breaks_literal() {
     let source = r"\text{label \substack{a\\b}}";
     let analyzed = analyze(source, FormulaMode::Inline)
