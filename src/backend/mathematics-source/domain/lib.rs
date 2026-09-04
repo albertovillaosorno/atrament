@@ -208,13 +208,19 @@ enum StructuredEnvironmentKind {
     Matrix,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct StructuredEnvironmentScope {
+    group_depth: usize,
+    kind: StructuredEnvironmentKind,
+}
+
 #[derive(Debug)]
 struct GroupIndex {
     pairs: Vec<(usize, usize)>,
 }
 
 struct ScanState {
-    environment_stack: Vec<StructuredEnvironmentKind>,
+    environment_stack: Vec<StructuredEnvironmentScope>,
     group_depth: usize,
     index: usize,
     literal_start: usize,
@@ -673,9 +679,13 @@ fn scan_alignment(
     tokens: &mut Vec<MathToken>,
     width: usize,
 ) -> Result<(), MathSyntaxError> {
-    if state.environment_stack.is_empty()
-        && (mode != FormulaMode::Aligned
-            || !state.substack_group_depths.is_empty())
+    let environment = state.environment_stack.last().copied();
+    let substack_depth = state.substack_group_depths.last().copied();
+    let substack_owns_scope = substack_depth.is_some_and(|depth| {
+        environment.is_none_or(|scope| scope.group_depth < depth)
+    });
+    if substack_owns_scope
+        || (environment.is_none() && mode != FormulaMode::Aligned)
     {
         return Err(error(
             state.index,
@@ -807,7 +817,10 @@ fn scan_supported_command(
         state.pending_text_group = true;
     }
     if let Some(environment) = beginning_environment(supported) {
-        state.environment_stack.push(environment);
+        state.environment_stack.push(StructuredEnvironmentScope {
+            group_depth: state.group_depth,
+            kind: environment,
+        });
     }
     Ok(())
 }
@@ -877,13 +890,13 @@ fn close_environment(
     let Some(actual) = state.environment_stack.last().copied() else {
         return Err(error(state.index, environment_extra_end_error(expected)));
     };
-    if actual != expected {
+    if actual.kind != expected {
         return Err(error(
             state.index,
             MathSyntaxErrorKind::MismatchedEnvironmentEnd,
         ));
     }
-    let _: Option<StructuredEnvironmentKind> = state.environment_stack.pop();
+    let _: Option<StructuredEnvironmentScope> = state.environment_stack.pop();
     Ok(())
 }
 
@@ -980,6 +993,6 @@ fn validate_final_state(
     };
     Err(error(
         source_len,
-        environment_missing_end_error(environment),
+        environment_missing_end_error(environment.kind),
     ))
 }

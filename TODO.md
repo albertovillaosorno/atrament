@@ -190,11 +190,12 @@ supports read-only behavior-version drift checks. It deliberately advertises no
 command protocol, normalizer, command context, Validate, Apply, rebatching, or
 numeric command/context limits yet.
 
-Aggregate command behavior and typed-result behavior are version 36 after
-admitting ordered TeX aligned environments. Asset reference, Ordering and
+Aggregate command behavior and typed-result behavior are version 37 after
+preventing outer TeX environments from leaking column alignment into grouped
+substacks. Asset reference, Ordering and
 grouping, and Text content retain family behavior version 1; Provenance and
 Style role are version 2, Document constraint is version 3, and Structured
-content is version 29. The immediately previous aggregate version 35 rejects
+content is version 30. The immediately previous aggregate version 36 rejects
 instead of being reinterpreted.
 
 A version-bound single-target proposal combines capability, exact local
@@ -503,7 +504,9 @@ admitted delimiter glyph names.
 
 Math-only alignment, script, and row-break markers remain literal inside grouped
 text. Row breaks are structural inside grouped substacks without admitting
-column alignment there. Inline, display, and aligned presentation modes are
+column alignment there, including when a column-capable environment surrounds
+the substack; an environment opened inside the substack owns its own columns.
+Inline, display, and aligned presentation modes are
 semantic values rather than renderer guesses. Unknown control words remain
 explicit unsupported constructs; malformed groups, required arguments,
 alignment use, environment ordering, and aligned, cases, or matrix boundaries

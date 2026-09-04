@@ -936,6 +936,25 @@ fn substack_rows_are_scoped_to_their_group() {
 }
 
 #[test]
+fn outer_environments_do_not_leak_alignment_into_substack_scope() {
+    for (begin, end) in [
+        (r"\begin{aligned}", r"\end{aligned}"),
+        (r"\begin{cases}", r"\end{cases}"),
+        (r"\begin{matrix}", r"\end{matrix}"),
+    ] {
+        let source = format!(r"{begin}\substack{{a & b}}{end}");
+        assert_eq!(
+            analyze(&source, FormulaMode::Display),
+            Err(MathSyntaxError {
+                byte_offset: source.find('&').expect("alignment marker"),
+                kind: MathSyntaxErrorKind::AlignmentOutsideStructure,
+            }),
+            "{source}",
+        );
+    }
+}
+
+#[test]
 fn substack_scope_composes_with_text_and_matrix_structure() {
     let with_text = r"\substack{a\\\text{b\\c}\\d}";
     let analyzed = analyze(with_text, FormulaMode::Inline)
