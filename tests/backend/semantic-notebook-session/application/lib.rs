@@ -5143,6 +5143,69 @@ fn command_target_material_stale_missing_and_empty_are_typed() {
 }
 
 #[test]
+fn family_specific_target_material_preserves_authority_precedence() {
+    let ids = IdentityAllocator::new();
+    let (candidate, span) = candidate_notebook_with_span(&ids, "base text");
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(candidate)
+    else {
+        panic!("text candidate must be accepted");
+    };
+    let span = accepted_for(&mapping, span);
+    let before = session.current().expect("accepted revision").clone();
+    let CommandTargetMaterialOutcome::Prepared { material } =
+        session.command_target_material_for_family(
+            revision,
+            span,
+            SemanticCommandFamily::StyleRole,
+        )
+    else {
+        panic!("span style material must be prepared");
+    };
+    assert_eq!(
+        material.editable_value,
+        Some(EditableSemanticValue::StyleReference(None)),
+    );
+    assert_eq!(session.current(), Some(&before));
+
+    let replacement = candidate_notebook(&ids, "new revision");
+    let AcceptanceOutcome::Accepted { revision: current, .. } =
+        session.accept(replacement)
+    else {
+        panic!("replacement candidate must be accepted");
+    };
+    assert_eq!(
+        session.command_target_material_for_family(
+            revision,
+            span,
+            SemanticCommandFamily::StyleRole,
+        ),
+        CommandTargetMaterialOutcome::StaleBase { current },
+    );
+    assert_eq!(
+        session.command_target_material_for_family(
+            current,
+            span,
+            SemanticCommandFamily::StyleRole,
+        ),
+        CommandTargetMaterialOutcome::TargetNotFound {
+            revision: current,
+            target: span,
+        },
+    );
+    let empty = SemanticNotebookSessionService::default();
+    assert_eq!(
+        empty.command_target_material_for_family(
+            current,
+            span,
+            SemanticCommandFamily::StyleRole,
+        ),
+        CommandTargetMaterialOutcome::NoAcceptedRevision,
+    );
+}
+
+#[test]
 fn local_identity_precondition_accepts_exact_kind_and_owner_read_only() {
     let ids = IdentityAllocator::new();
     let (candidate, row, table) =
