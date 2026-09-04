@@ -99,6 +99,13 @@ struct DirectEditBatchIndex {
 }
 
 #[derive(Clone, Copy)]
+struct DirectEditBatchBlockContext {
+    block: AcceptedIdentity,
+    flow: AcceptedIdentity,
+    page: AcceptedIdentity,
+}
+
+#[derive(Clone, Copy)]
 struct DirectEditBatchTableContext<'notebook> {
     block: AcceptedIdentity,
     flow: AcceptedIdentity,
@@ -500,8 +507,8 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
     }
 
     fn command_capability_snapshot(&self) -> SemanticCommandCapabilitySnapshot {
-        const VERSION: CommandBehaviorVersion = CommandBehaviorVersion(6);
-        const FAMILY_CAPABILITIES: [CommandFamilyCapability; 6] = [
+        const VERSION: CommandBehaviorVersion = CommandBehaviorVersion(7);
+        const FAMILY_CAPABILITIES: [CommandFamilyCapability; 7] = [
             CommandFamilyCapability {
                 behavior_version: CommandBehaviorVersion(1),
                 family: SemanticCommandFamily::AssetReference,
@@ -509,6 +516,10 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
             CommandFamilyCapability {
                 behavior_version: CommandBehaviorVersion(2),
                 family: SemanticCommandFamily::DocumentConstraint,
+            },
+            CommandFamilyCapability {
+                behavior_version: CommandBehaviorVersion(1),
+                family: SemanticCommandFamily::OrderingAndGrouping,
             },
             CommandFamilyCapability {
                 behavior_version: CommandBehaviorVersion(1),
@@ -2520,15 +2531,18 @@ fn index_direct_edit_blocks_frame<'notebook>(
         BlockContent::Figure(figure) => index_direct_edit_figure(
             figure, block.id, flow, page, index, targets, revision,
         ),
-        BlockContent::List(list) => {
-            if !list.items.is_empty() {
-                stack.push(DirectEditBatchIndexFrame::ListItems {
-                    flow,
-                    items: &list.items,
-                    page,
-                });
-            }
-        },
+        BlockContent::List(list) => index_direct_edit_list(
+            list,
+            DirectEditBatchBlockContext {
+                block: block.id,
+                flow,
+                page,
+            },
+            index,
+            targets,
+            revision,
+            stack,
+        ),
         BlockContent::Mathematics(formula) => {
             if targets.contains(&formula.id) {
                 insert_direct_edit_material(
@@ -2563,6 +2577,40 @@ fn index_direct_edit_blocks_frame<'notebook>(
             }
         },
         BlockContent::Rule | BlockContent::Unresolved(_) => {},
+    }
+}
+
+fn index_direct_edit_list<'notebook>(
+    list: &'notebook List<AcceptedIdentity>,
+    context: DirectEditBatchBlockContext,
+    index: &mut DirectEditBatchIndex,
+    targets: &BTreeSet<AcceptedIdentity>,
+    revision: atrament_semantic_notebook::RevisionIdentity,
+    stack: &mut Vec<DirectEditBatchIndexFrame<'notebook>>,
+) {
+    let DirectEditBatchBlockContext { block, flow, page } = context;
+    if targets.contains(&list.id) {
+        insert_direct_edit_material(
+            index,
+            list.id,
+            SemanticIdentityDescriptor {
+                kind: SemanticIdentityKind::List,
+                owner: Some(block),
+            },
+            EditableSemanticValue::ListOrdering(list.ordered),
+            DirectEditImpactScope::BlockFlow { block, flow, page },
+            revision,
+        );
+        if index.materials.len() == targets.len() {
+            return;
+        }
+    }
+    if !list.items.is_empty() {
+        stack.push(DirectEditBatchIndexFrame::ListItems {
+            flow,
+            items: &list.items,
+            page,
+        });
     }
 }
 
@@ -2944,6 +2992,7 @@ fn direct_edit_impact_scope(
             direct_edit_document_constraint_scope(notebook, change.target)
         },
         SemanticCommandFamily::AssetReference
+        | SemanticCommandFamily::OrderingAndGrouping
         | SemanticCommandFamily::StructuredContent
         | SemanticCommandFamily::StyleRole => {
             direct_edit_structured_scope(notebook, change.target)
@@ -2952,7 +3001,6 @@ fn direct_edit_impact_scope(
             direct_edit_text_scope(notebook, change.target)
         },
         SemanticCommandFamily::BlockInsertionAndDeletion
-        | SemanticCommandFamily::OrderingAndGrouping
         | SemanticCommandFamily::Provenance
         | SemanticCommandFamily::SpatialConstraint => {
             DirectEditImpactScope::Notebook { notebook: notebook.id }
@@ -3375,6 +3423,9 @@ const fn editable_value_kind(
         EditableSemanticValue::Formula { .. } => {
             EditableSemanticValueKind::Formula
         },
+        EditableSemanticValue::ListOrdering(_) => {
+            EditableSemanticValueKind::ListOrdering
+        },
         EditableSemanticValue::StyleReference(_) => {
             EditableSemanticValueKind::StyleReference
         },
@@ -3664,6 +3715,7 @@ fn simulate_prepared_direct_edit(
         },
         EditableSemanticValue::AssetReference(_)
         | EditableSemanticValue::ConstraintKind(_)
+        | EditableSemanticValue::ListOrdering(_)
         | EditableSemanticValue::StyleReference(_)
         | EditableSemanticValue::Provenance { .. }
         | EditableSemanticValue::TableCellSpan(_)
@@ -3709,6 +3761,9 @@ const fn direct_edit_family(
         | EditableSemanticValue::PageProfile(_) => {
             SemanticCommandFamily::DocumentConstraint
         },
+        EditableSemanticValue::ListOrdering(_) => {
+            SemanticCommandFamily::OrderingAndGrouping
+        },
         EditableSemanticValue::Provenance { .. } => {
             SemanticCommandFamily::Provenance
         },
@@ -3739,6 +3794,8 @@ fn editable_semantic_value(
         },
         SemanticIdentityKind::InlineSpan => text_value(notebook, target)
             .map(|value| EditableSemanticValue::Text(value.to_owned())),
+        SemanticIdentityKind::List => list_ordering_value(notebook, target)
+            .map(EditableSemanticValue::ListOrdering),
         SemanticIdentityKind::PageProfile => {
             page_profile_value(notebook, target)
                 .map(EditableSemanticValue::PageProfile)
@@ -3758,7 +3815,6 @@ fn editable_semantic_value(
         SemanticIdentityKind::Block(_) => block_style_value(notebook, target),
         SemanticIdentityKind::Asset
         | SemanticIdentityKind::Flow
-        | SemanticIdentityKind::List
         | SemanticIdentityKind::ListItem
         | SemanticIdentityKind::Notebook
         | SemanticIdentityKind::OutputProfile
@@ -3795,6 +3851,134 @@ fn provenance_value(
         .provenance
         .iter()
         .find(|provenance| provenance.id == target)
+}
+
+fn list_ordering_blocks_value(
+    blocks: &[Block<AcceptedIdentity>],
+    target: AcceptedIdentity,
+) -> Option<bool> {
+    for block in blocks {
+        match &block.content {
+            BlockContent::Callout(children)
+            | BlockContent::Freeform(children) => {
+                if let Some(ordered) =
+                    list_ordering_blocks_value(children, target)
+                {
+                    return Some(ordered);
+                }
+            },
+            BlockContent::List(list) => {
+                if list.id == target {
+                    return Some(list.ordered);
+                }
+                for item in &list.items {
+                    if let Some(ordered) =
+                        list_ordering_blocks_value(&item.blocks, target)
+                    {
+                        return Some(ordered);
+                    }
+                }
+            },
+            BlockContent::Table(table) => {
+                for row in &table.rows {
+                    for cell in &row.cells {
+                        if let Some(ordered) =
+                            list_ordering_blocks_value(&cell.blocks, target)
+                        {
+                            return Some(ordered);
+                        }
+                    }
+                }
+            },
+            BlockContent::Date(_)
+            | BlockContent::Figure(_)
+            | BlockContent::Heading(_)
+            | BlockContent::Mathematics(_)
+            | BlockContent::Paragraph(_)
+            | BlockContent::Rule
+            | BlockContent::Unresolved(_) => {},
+        }
+    }
+    None
+}
+
+fn list_ordering_value(
+    notebook: &Notebook<AcceptedIdentity>,
+    target: AcceptedIdentity,
+) -> Option<bool> {
+    for page in &notebook.pages {
+        for flow in &page.flows {
+            if let Some(ordered) =
+                list_ordering_blocks_value(&flow.blocks, target)
+            {
+                return Some(ordered);
+            }
+        }
+    }
+    None
+}
+
+fn replace_list_ordering_blocks(
+    blocks: &mut [Block<AcceptedIdentity>],
+    target: AcceptedIdentity,
+    ordered: bool,
+) -> bool {
+    for block in blocks {
+        match &mut block.content {
+            BlockContent::Callout(children)
+            | BlockContent::Freeform(children) => {
+                if replace_list_ordering_blocks(children, target, ordered) {
+                    return true;
+                }
+            },
+            BlockContent::List(list) => {
+                if list.id == target {
+                    list.ordered = ordered;
+                    return true;
+                }
+                for item in &mut list.items {
+                    if replace_list_ordering_blocks(
+                        &mut item.blocks, target, ordered,
+                    ) {
+                        return true;
+                    }
+                }
+            },
+            BlockContent::Table(table) => {
+                for row in &mut table.rows {
+                    for cell in &mut row.cells {
+                        if replace_list_ordering_blocks(
+                            &mut cell.blocks,
+                            target,
+                            ordered,
+                        ) {
+                            return true;
+                        }
+                    }
+                }
+            },
+            BlockContent::Date(_)
+            | BlockContent::Figure(_)
+            | BlockContent::Heading(_)
+            | BlockContent::Mathematics(_)
+            | BlockContent::Paragraph(_)
+            | BlockContent::Rule
+            | BlockContent::Unresolved(_) => {},
+        }
+    }
+    false
+}
+
+fn replace_list_ordering_value(
+    notebook: &mut Notebook<AcceptedIdentity>,
+    target: AcceptedIdentity,
+    ordered: bool,
+) -> bool {
+    notebook.pages.iter_mut().any(|page| {
+        page.flows.iter_mut().any(|flow| {
+            replace_list_ordering_blocks(&mut flow.blocks, target, ordered)
+        })
+    })
 }
 
 fn block_style_blocks_value(
@@ -4191,6 +4375,9 @@ fn apply_direct_edit_change(
                 *mode,
                 source.clone(),
             )
+        },
+        EditableSemanticValue::ListOrdering(ordered) => {
+            replace_list_ordering_value(notebook, change.target, *ordered)
         },
         EditableSemanticValue::PageProfile(profile) => {
             replace_page_profile_value(

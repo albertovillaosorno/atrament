@@ -154,11 +154,12 @@ does not invent a continuation token or writable scope. A local-precondition
 check can require an exact semantic kind and direct owner, including explicit
 notebook-root ownership, before a future command family may mutate that target.
 
-A second read-only precondition compares exact accepted base values for nine
+A second read-only precondition compares exact accepted base values for ten
 generic edit families: an existing figure's optional admitted asset reference,
-revision-owned constraint kind, block style reference, inline text, formula mode
-and source, provenance kind and source reference, table-row role, table-cell
-span, and physical page-profile geometry.
+revision-owned constraint kind, one list's ordering-significance flag, block
+style reference, inline text, formula mode and source, provenance kind and
+source
+reference, table-row role, table-cell span, and physical page-profile geometry.
 Text and formula checks preserve exact authored source because no Unicode
 normalization form is
 yet frozen. Backend-derived command-target material now combines semantic kind,
@@ -169,22 +170,24 @@ The frozen command-family taxonomy is represented without choosing final wire
 operation names. Current executable targets admit Asset reference for a figure's
 existing optional asset identity, Text content for inline text, Structured
 content for formulas, table-row roles, and table-cell spans, Provenance for
-revision-owned source records, Style role for block-level admitted style
+revision-owned source records, Ordering and grouping for one existing list's
+ordering-significance flag, Style role for block-level admitted style
 references, and Document constraint for page profiles and broad revision-owned
-constraint kinds. A combined local checker validates
+constraint
+kinds. A combined local checker validates
 family, kind, owner, and an optional exact base value in one read-only snapshot
 with stale-base precedence.
 
-Deterministic capability discovery reports only those six family behaviors and
+Deterministic capability discovery reports only those seven family behaviors and
 supports read-only behavior-version drift checks. It deliberately advertises no
 command protocol, normalizer, command context, Validate, Apply, rebatching, or
 numeric command/context limits yet.
 
-Aggregate command behavior and typed-result behavior are version 6 after
-admitting block style-reference edits. Asset reference, Provenance, Style role,
-and Text content retain family behavior version 1; Document constraint and
-Structured content are version 2. Older aggregate version-5 contexts reject
-instead of being reinterpreted.
+Aggregate command behavior and typed-result behavior are version 7 after
+admitting list ordering-significance edits. Asset reference, Ordering and
+grouping, Provenance, Style role, and Text content retain family behavior
+version 1; Document constraint and Structured content are version 2. Older
+aggregate version-6 contexts reject instead of being reinterpreted.
 
 A version-bound single-target proposal combines capability, exact local
 preconditions, and direct-edit simulation read-only. All five dedicated direct
@@ -269,6 +272,15 @@ content as their single executable generic family; this change does not invent
 multi-family target material or mutate style names. Aggregate behavior version
 5 rejects after this admission.
 
+Existing semantic `List` identities now expose only their boolean ordering
+significance through Ordering and grouping. The edit can switch ordered versus
+unordered semantics while preserving list identity, item order, item identities,
+and child content. Item moves, new grouping relationships, insertion/deletion,
+and anchor semantics remain open.
+
+Changed lists seed their containing block/flow/page region with `AllDerived`.
+Aggregate behavior version 6 rejects after this admission.
+
 An empty batch returns the frozen NoOp prediction before semantic target
 indexing. Explicit dependencies are required before a later command can observe
 an earlier same-target candidate change; prior no-ops do not manufacture
@@ -276,10 +288,10 @@ dependencies.
 
 Successful direct-edit predictions classify their net effect as Mutation or
 NoOp and derive conservative impact seeds from backend-owned semantic ownership.
-Text seeds identify the owning flow/page dependency region, structured edits
-figure asset-reference and block style-reference edits seed the nearest
-block/flow/page, page-profile changes seed referencing pages, and semantic
-constraint-kind changes seed the notebook.
+Text seeds identify the owning flow/page dependency region. Structured edits,
+figure asset references, block style references, and list ordering-significance
+edits seed the nearest block/flow/page; page-profile changes seed referencing
+pages, and semantic constraint-kind changes seed the notebook.
 
 Asset-reference seeds conservatively require all derived authorities.
 Provenance-record edits seed the notebook for only diagnostic and output

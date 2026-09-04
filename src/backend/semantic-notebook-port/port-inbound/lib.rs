@@ -432,6 +432,8 @@ pub enum EditableSemanticValueKind {
     ConstraintKind,
     /// Structured mathematical source and presentation family.
     Formula,
+    /// Whether one semantic list has significant ordering.
+    ListOrdering,
     /// Complete exact physical page-profile geometry.
     PageProfile,
     /// Revision-owned semantic provenance kind and source reference.
@@ -460,6 +462,8 @@ pub enum EditableSemanticValue {
         /// Exact accepted authored source.
         source: String,
     },
+    /// Whether one semantic list has significant ordering.
+    ListOrdering(bool),
     /// Complete exact physical page-profile geometry.
     PageProfile(PhysicalPageProfile),
     /// Revision-owned semantic provenance kind and optional source reference.

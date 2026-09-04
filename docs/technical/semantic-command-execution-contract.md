@@ -472,17 +472,21 @@ typed value without choosing serialized operation names. Current generic edit
 targets expose only executable family admission: Asset reference for a figure's
 optional admitted asset identity, Text content for inline text, Structured
 content for formulas, table-row roles, and table-cell spans, Provenance for
-revision-owned source records, Style role for block-level style references, and
+revision-owned source records, Ordering and grouping for an existing list's
+ordering-significance flag, Style role for block-level style references, and
 Document constraint for page profiles and revision-owned constraint kinds. One
 aggregate read-only check validates
 requested family, kind,
 owner, and optional exact base value against backend-derived target material.
 
-A deterministic capability snapshot now reports those six discoverable family
+A deterministic capability snapshot now reports those seven discoverable
+family
 behaviors and one top-level behavior version. Aggregate command behavior and
-typed-result behavior are version 6 after block style-reference admission. Asset
-reference, Provenance, Style role, and Text content retain family behavior
-version 1; Document constraint and Structured content are version 2.
+typed-result behavior are version 7 after list ordering admission. Asset
+reference, Ordering and grouping, Provenance, Style role, and Text content
+retain
+family behavior version 1; Document constraint and Structured content are
+version 2.
 
 Because no serialized command protocol is implemented, the snapshot advertises
 no protocol or normalization version, no command-context, Validate, Apply, or
@@ -490,7 +494,7 @@ selective-rebatch capability, and no guessed command/context numeric limits. A
 read-only compatibility check rejects an older capability behavior version
 independently from notebook revision changes.
 
-A separate single-target direct-edit simulator classifies nine established
+A separate single-target direct-edit simulator classifies ten established
 replacement value families as applicable, no-op, domain-invalid, unavailable,
 or value-family mismatched without mutation. Figure Asset references
 additionally reject missing or non-Asset accepted identities, while table-cell
@@ -535,6 +539,12 @@ identities reject before mutation. Inline-span style references remain outside
 this slice because those identities already expose Text content through the
 current single-family target-material projection.
 
+A List Ordering-and-grouping value is only the existing list's boolean ordering
+significance. Changing it preserves list identity, current item order, item
+identities, and child blocks. It does not move items, create a grouping, choose
+an insertion anchor, or allocate semantic identities. Nested list targets remain
+addressable through stable list identity.
+
 Single-target command material resolves revision-owned provenance records before
 the generic page/block descriptor walk. Ordered provenance-only batches likewise
 index those top-level records before block traversal. This changes lookup cost,
@@ -564,8 +574,9 @@ identify the owning flow and page plus shaping, wrapping, geometry, diagnostic,
 rendering, handwriting, and motion authorities.
 
 Structured edits seed their nearest block, flow, and page for structure, layout,
-and output dependencies. Block style-reference edits seed that same block/flow
-region conservatively with `AllDerived`. Provenance-record edits seed notebook
+and output dependencies. Block style-reference and list ordering-significance
+edits seed that same block/flow region conservatively with `AllDerived`.
+Provenance-record edits seed notebook
 scope for diagnostic and output authorities only; later dependency expansion
 may narrow
 affected claims and outputs.
