@@ -791,26 +791,8 @@ fn scan_supported_command(
     command: ScannedCommand,
     supported: SupportedCommand,
 ) -> Result<(), MathSyntaxError> {
-    if supported == SupportedCommand::EndAligned {
-        close_environment(
-            state,
-            StructuredEnvironmentKind::Aligned,
-            MathSyntaxErrorKind::ExtraAlignedEnd,
-        )?;
-    }
-    if supported == SupportedCommand::EndCases {
-        close_environment(
-            state,
-            StructuredEnvironmentKind::Cases,
-            MathSyntaxErrorKind::ExtraCasesEnd,
-        )?;
-    }
-    if supported == SupportedCommand::EndMatrix {
-        close_environment(
-            state,
-            StructuredEnvironmentKind::Matrix,
-            MathSyntaxErrorKind::ExtraMatrixEnd,
-        )?;
+    if let Some(environment) = ending_environment(supported) {
+        close_environment(state, environment)?;
     }
     tokens.push(token(
         state.index,
@@ -824,25 +806,76 @@ fn scan_supported_command(
     if supported == SupportedCommand::Text {
         state.pending_text_group = true;
     }
-    if supported == SupportedCommand::BeginAligned {
-        state.environment_stack.push(StructuredEnvironmentKind::Aligned);
-    }
-    if supported == SupportedCommand::BeginCases {
-        state.environment_stack.push(StructuredEnvironmentKind::Cases);
-    }
-    if supported == SupportedCommand::BeginMatrix {
-        state.environment_stack.push(StructuredEnvironmentKind::Matrix);
+    if let Some(environment) = beginning_environment(supported) {
+        state.environment_stack.push(environment);
     }
     Ok(())
+}
+
+fn beginning_environment(
+    command: SupportedCommand,
+) -> Option<StructuredEnvironmentKind> {
+    if command == SupportedCommand::BeginAligned {
+        Some(StructuredEnvironmentKind::Aligned)
+    } else if command == SupportedCommand::BeginCases {
+        Some(StructuredEnvironmentKind::Cases)
+    } else if command == SupportedCommand::BeginMatrix {
+        Some(StructuredEnvironmentKind::Matrix)
+    } else {
+        None
+    }
+}
+
+fn ending_environment(
+    command: SupportedCommand,
+) -> Option<StructuredEnvironmentKind> {
+    if command == SupportedCommand::EndAligned {
+        Some(StructuredEnvironmentKind::Aligned)
+    } else if command == SupportedCommand::EndCases {
+        Some(StructuredEnvironmentKind::Cases)
+    } else if command == SupportedCommand::EndMatrix {
+        Some(StructuredEnvironmentKind::Matrix)
+    } else {
+        None
+    }
+}
+
+const fn environment_extra_end_error(
+    environment: StructuredEnvironmentKind,
+) -> MathSyntaxErrorKind {
+    match environment {
+        StructuredEnvironmentKind::Aligned => {
+            MathSyntaxErrorKind::ExtraAlignedEnd
+        },
+        StructuredEnvironmentKind::Cases => MathSyntaxErrorKind::ExtraCasesEnd,
+        StructuredEnvironmentKind::Matrix => {
+            MathSyntaxErrorKind::ExtraMatrixEnd
+        },
+    }
+}
+
+const fn environment_missing_end_error(
+    environment: StructuredEnvironmentKind,
+) -> MathSyntaxErrorKind {
+    match environment {
+        StructuredEnvironmentKind::Aligned => {
+            MathSyntaxErrorKind::MissingAlignedEnd
+        },
+        StructuredEnvironmentKind::Cases => {
+            MathSyntaxErrorKind::MissingCasesEnd
+        },
+        StructuredEnvironmentKind::Matrix => {
+            MathSyntaxErrorKind::MissingMatrixEnd
+        },
+    }
 }
 
 fn close_environment(
     state: &mut ScanState,
     expected: StructuredEnvironmentKind,
-    extra: MathSyntaxErrorKind,
 ) -> Result<(), MathSyntaxError> {
     let Some(actual) = state.environment_stack.last().copied() else {
-        return Err(error(state.index, extra));
+        return Err(error(state.index, environment_extra_end_error(expected)));
     };
     if actual != expected {
         return Err(error(
@@ -942,16 +975,11 @@ fn validate_final_state(
     if state.group_depth != 0 {
         return Err(error(source_len, MathSyntaxErrorKind::UnclosedGroup));
     }
-    match state.environment_stack.last() {
-        Some(StructuredEnvironmentKind::Aligned) => {
-            Err(error(source_len, MathSyntaxErrorKind::MissingAlignedEnd))
-        },
-        Some(StructuredEnvironmentKind::Cases) => {
-            Err(error(source_len, MathSyntaxErrorKind::MissingCasesEnd))
-        },
-        Some(StructuredEnvironmentKind::Matrix) => {
-            Err(error(source_len, MathSyntaxErrorKind::MissingMatrixEnd))
-        },
-        None => Ok(()),
-    }
+    let Some(environment) = state.environment_stack.last().copied() else {
+        return Ok(());
+    };
+    Err(error(
+        source_len,
+        environment_missing_end_error(environment),
+    ))
 }
