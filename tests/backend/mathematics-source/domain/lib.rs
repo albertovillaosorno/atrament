@@ -651,6 +651,34 @@ fn text_fragments_preserve_unicode_and_require_one_group() {
 }
 
 #[test]
+fn escaped_braces_do_not_close_text_scope() {
+    let source = r"\text{\{label_a\}} + x_1";
+    let analyzed = analyze(source, FormulaMode::Inline)
+        .expect("escaped braces inside text");
+    assert!(analyzed.is_supported());
+    assert_eq!(reconstructed(&analyzed), source);
+    assert_eq!(
+        analyzed
+            .tokens
+            .iter()
+            .filter(|token| {
+                token.kind
+                    == MathTokenKind::Command(SupportedCommand::EscapedSpecial)
+            })
+            .count(),
+        2,
+    );
+    assert_eq!(
+        analyzed
+            .tokens
+            .iter()
+            .filter(|token| token.kind == MathTokenKind::Subscript)
+            .count(),
+        1,
+    );
+}
+
+#[test]
 fn nested_text_groups_keep_math_markers_literal_until_outer_close() {
     let source = concat!(
         r"\text{outer_a^2 & \text{inner_b^3 & value} tail_c} + ",
