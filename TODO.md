@@ -495,9 +495,8 @@ one-group accents, upright unit or label groups, explicit `\text{...}`
 fragments, grouped custom operator names, vector, overline, and underline
 decorations, escaped TeX special characters, standard and variant Greek
 control-sequence notation, common named symbols, relation and logic symbols,
-operators, calculus,
-set notation, aligned row and column
-separators, and matrix environments. Math-only alignment, script, and row-break
+operators, calculus, set notation, aligned row and column separators, and matrix
+environments. Math-only alignment, script, and row-break
 markers remain literal inside grouped text.
 Inline, display, and aligned presentation modes are semantic values rather than
 renderer guesses. Unknown control words remain explicit unsupported constructs;
