@@ -651,6 +651,48 @@ fn text_fragments_preserve_unicode_and_require_one_group() {
 }
 
 #[test]
+fn nested_text_groups_keep_math_markers_literal_until_outer_close() {
+    let source = concat!(
+        r"\text{outer_a^2 & \text{inner_b^3 & value} tail_c} + ",
+        r"y^2 & z",
+    );
+    let analyzed = analyze(source, FormulaMode::Aligned)
+        .expect("nested text followed by aligned mathematics");
+    assert!(analyzed.is_supported());
+    assert_eq!(reconstructed(&analyzed), source);
+    assert_eq!(
+        analyzed
+            .tokens
+            .iter()
+            .filter(|token| {
+                token.kind == MathTokenKind::Command(SupportedCommand::Text)
+            })
+            .count(),
+        2,
+    );
+    assert_eq!(
+        analyzed
+            .tokens
+            .iter()
+            .filter(|token| token.kind == MathTokenKind::Superscript)
+            .count(),
+        1,
+    );
+    assert_eq!(
+        analyzed
+            .tokens
+            .iter()
+            .filter(|token| token.kind == MathTokenKind::AlignmentPoint)
+            .count(),
+        1,
+    );
+    assert!(!analyzed
+        .tokens
+        .iter()
+        .any(|token| token.kind == MathTokenKind::Subscript));
+}
+
+#[test]
 fn text_group_scope_ends_before_following_math_structure() {
     let source = r"\text{{texto_a}&valor} + x^2 & y";
     let analyzed =
