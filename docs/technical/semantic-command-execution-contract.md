@@ -460,9 +460,10 @@ CLI and MCP enter through the same application services.
 
 The current semantic session foundation can check one accepted identity against
 one exact revision for expected semantic kind and direct structural owner. A
-separate compare-and-set check covers accepted constraint kind, exact inline
-text, formula mode and source, provenance kind and source reference, table-row
-role, table-cell span, and physical page-profile geometry
+separate compare-and-set check covers accepted constraint kind, block style
+reference, exact inline text, formula mode and source, provenance kind and
+source reference, table-row role, table-cell span, and physical page-profile
+geometry
 without mutating accepted state. Stale revision rejection precedes every local
 comparison.
 
@@ -471,16 +472,17 @@ typed value without choosing serialized operation names. Current generic edit
 targets expose only executable family admission: Asset reference for a figure's
 optional admitted asset identity, Text content for inline text, Structured
 content for formulas, table-row roles, and table-cell spans, Provenance for
-revision-owned source records, and Document constraint for page profiles and
-revision-owned constraint kinds. One aggregate read-only check validates
+revision-owned source records, Style role for block-level style references, and
+Document constraint for page profiles and revision-owned constraint kinds. One
+aggregate read-only check validates
 requested family, kind,
 owner, and optional exact base value against backend-derived target material.
 
-A deterministic capability snapshot now reports those five discoverable family
+A deterministic capability snapshot now reports those six discoverable family
 behaviors and one top-level behavior version. Aggregate command behavior and
-typed-result behavior are version 5 after constraint-kind admission. Asset
-reference, Provenance, and Text content retain family behavior version 1;
-Document constraint and Structured content are version 2.
+typed-result behavior are version 6 after block style-reference admission. Asset
+reference, Provenance, Style role, and Text content retain family behavior
+version 1; Document constraint and Structured content are version 2.
 
 Because no serialized command protocol is implemented, the snapshot advertises
 no protocol or normalization version, no command-context, Validate, Apply, or
@@ -488,7 +490,7 @@ selective-rebatch capability, and no guessed command/context numeric limits. A
 read-only compatibility check rejects an older capability behavior version
 independently from notebook revision changes.
 
-A separate single-target direct-edit simulator classifies eight established
+A separate single-target direct-edit simulator classifies nine established
 replacement value families as applicable, no-op, domain-invalid, unavailable,
 or value-family mismatched without mutation. Figure Asset references
 additionally reject missing or non-Asset accepted identities, while table-cell
@@ -526,6 +528,13 @@ Document-constraint family. The revision-owned constraint identity and its
 semantic target stay unchanged; target reassignment and detailed paper, style,
 placement, or output values are not inferred from this broad classification.
 
+A block Style-role value carries only `None` or an accepted `Style` identity in
+the same current revision. It changes the block's style reference while keeping
+block identity and content stable; wrong-kind and prior-revision style
+identities reject before mutation. Inline-span style references remain outside
+this slice because those identities already expose Text content through the
+current single-family target-material projection.
+
 Single-target command material resolves revision-owned provenance records before
 the generic page/block descriptor walk. Ordered provenance-only batches likewise
 index those top-level records before block traversal. This changes lookup cost,
@@ -555,8 +564,10 @@ identify the owning flow and page plus shaping, wrapping, geometry, diagnostic,
 rendering, handwriting, and motion authorities.
 
 Structured edits seed their nearest block, flow, and page for structure, layout,
-and output dependencies. Provenance-record edits seed notebook scope for
-diagnostic and output authorities only; later dependency expansion may narrow
+and output dependencies. Block style-reference edits seed that same block/flow
+region conservatively with `AllDerived`. Provenance-record edits seed notebook
+scope for diagnostic and output authorities only; later dependency expansion
+may narrow
 affected claims and outputs.
 
 Constraint-kind edits seed notebook scope with `AllDerived`; page-profile edits

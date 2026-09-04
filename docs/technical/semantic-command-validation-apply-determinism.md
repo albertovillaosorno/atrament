@@ -160,7 +160,7 @@ protocol normalization, command context, diagnostics, or a discoverable
 Validate capability.
 
 The current application foundation can deterministically simulate an ordered
-batch of the eight established generic replacement value families against one
+batch of the nine established generic replacement value families against one
 immutable accepted revision. It validates generic command dependencies first,
 then consumes valid commands through a private value-and-impact overlay for only
 the editable identities targeted by the batch. Command IDs and requested values
@@ -179,9 +179,10 @@ base with final candidate. An empty ordered batch returns NoOp before semantic
 target indexing.
 
 The same simulation derives conservative backend-owned impact seeds for text,
-structured-content, figure asset-reference, provenance-record, semantic
-constraint-kind, and page-profile changes. Asset-reference changes use
-figure-local block/flow scope with `AllDerived` authority.
+structured-content, figure asset-reference, block style-reference,
+provenance-record, semantic constraint-kind, and page-profile changes. Asset and
+block-style reference changes use local block/flow scope with `AllDerived`
+authority.
 
 Provenance changes use notebook scope with only Diagnostics and Output
 authorities, while constraint-kind changes use notebook scope with `AllDerived`.

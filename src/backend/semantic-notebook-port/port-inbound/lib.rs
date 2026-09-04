@@ -436,6 +436,8 @@ pub enum EditableSemanticValueKind {
     PageProfile,
     /// Revision-owned semantic provenance kind and source reference.
     Provenance,
+    /// Optional reference to one already-admitted semantic style.
+    StyleReference,
     /// Logical row and column coverage owned by one table cell.
     TableCellSpan,
     /// Semantic table-row header/body role.
@@ -467,6 +469,8 @@ pub enum EditableSemanticValue {
         /// Optional caller-visible source reference.
         reference: Option<String>,
     },
+    /// Optional reference to one already-admitted semantic style.
+    StyleReference(Option<AcceptedIdentity>),
     /// Logical row and column coverage owned by one table cell.
     TableCellSpan(TableCellSpan),
     /// Semantic table-row header/body role.
@@ -1046,6 +1050,17 @@ pub enum DirectEditSimulationOutcome {
         /// Accepted revision simulated without mutation.
         revision: RevisionIdentity,
         /// Existing semantic target simulated without mutation.
+        target: AcceptedIdentity,
+    },
+    /// Requested style reference does not name an admitted style identity.
+    InvalidStyleReference {
+        /// Semantic kind currently owned by the requested reference, when any.
+        actual: Option<SemanticIdentityKind>,
+        /// Requested accepted identity that is not an admitted semantic style.
+        reference: AcceptedIdentity,
+        /// Accepted revision simulated without mutation.
+        revision: RevisionIdentity,
+        /// Existing semantic block simulated without mutation.
         target: AcceptedIdentity,
     },
     /// Requested table-cell span would make its owning table invalid.
