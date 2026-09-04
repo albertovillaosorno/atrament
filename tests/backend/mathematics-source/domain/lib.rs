@@ -216,24 +216,24 @@ fn named_symbol_vocabulary_is_supported_without_rewriting() {
         r"\Longrightarrow", r"\Omega", r"\Phi", r"\Pi", r"\Psi",
         r"\Rightarrow", r"\Sigma", r"\Theta", r"\Uparrow", r"\Updownarrow",
         r"\Upsilon", r"\Vert", r"\Xi", r"\alpha", r"\approx", r"\ast",
-        r"\beta", r"\bullet", r"\cap", r"\cdot", r"\chi", r"\circ", r"\cong",
-        r"\cup", r"\delta", r"\div", r"\downarrow", r"\emptyset", r"\epsilon",
-        r"\equiv", r"\eta", r"\exists", r"\forall", r"\gamma", r"\ge",
-        r"\geq", r"\hookleftarrow", r"\hookrightarrow", r"\in", r"\infty",
-        r"\iota", r"\kappa", r"\lambda", r"\land", r"\langle", r"\lbrace",
-        r"\lceil", r"\le", r"\leftarrow", r"\leftrightarrow", r"\leq",
-        r"\lfloor", r"\longleftarrow", r"\longleftrightarrow",
-        r"\longrightarrow", r"\lor", r"\mapsto", r"\mid", r"\mp", r"\mu",
-        r"\nabla", r"\ne", r"\nearrow", r"\neg", r"\neq", r"\notin", r"\nu",
-        r"\nwarrow", r"\omega", r"\oplus", r"\otimes", r"\parallel",
-        r"\partial", r"\perp", r"\phi", r"\pi", r"\pm", r"\propto", r"\psi",
-        r"\rangle", r"\rbrace", r"\rceil", r"\rfloor", r"\rho",
-        r"\rightarrow", r"\searrow", r"\setminus", r"\sigma", r"\sim",
-        r"\star", r"\subset", r"\subseteq", r"\supset", r"\supseteq",
-        r"\swarrow", r"\tau", r"\theta", r"\times", r"\to", r"\uparrow",
-        r"\updownarrow", r"\upsilon", r"\varepsilon", r"\varphi", r"\varpi",
-        r"\varrho", r"\varsigma", r"\vartheta", r"\vee", r"\vert", r"\wedge",
-        r"\xi", r"\zeta",
+        r"\beta", r"\bullet", r"\cap", r"\cdot", r"\cdots", r"\chi", r"\circ",
+        r"\cong", r"\cup", r"\ddots", r"\delta", r"\div", r"\dots",
+        r"\downarrow", r"\emptyset", r"\epsilon", r"\equiv", r"\eta",
+        r"\exists", r"\forall", r"\gamma", r"\ge", r"\geq", r"\hookleftarrow",
+        r"\hookrightarrow", r"\in", r"\infty", r"\iota", r"\kappa",
+        r"\lambda", r"\land", r"\langle", r"\lbrace", r"\lceil", r"\ldots",
+        r"\le", r"\leftarrow", r"\leftrightarrow", r"\leq", r"\lfloor",
+        r"\longleftarrow", r"\longleftrightarrow", r"\longrightarrow",
+        r"\lor", r"\mapsto", r"\mid", r"\mp", r"\mu", r"\nabla", r"\ne",
+        r"\nearrow", r"\neg", r"\neq", r"\notin", r"\nu", r"\nwarrow",
+        r"\omega", r"\oplus", r"\otimes", r"\parallel", r"\partial", r"\perp",
+        r"\phi", r"\pi", r"\pm", r"\propto", r"\psi", r"\rangle", r"\rbrace",
+        r"\rceil", r"\rfloor", r"\rho", r"\rightarrow", r"\searrow",
+        r"\setminus", r"\sigma", r"\sim", r"\star", r"\subset", r"\subseteq",
+        r"\supset", r"\supseteq", r"\swarrow", r"\tau", r"\theta", r"\times",
+        r"\to", r"\uparrow", r"\updownarrow", r"\upsilon", r"\varepsilon",
+        r"\varphi", r"\varpi", r"\varrho", r"\varsigma", r"\vartheta",
+        r"\vdots", r"\vee", r"\vert", r"\wedge", r"\xi", r"\zeta",
     ] {
         let analyzed =
             analyze(source, FormulaMode::Inline).expect("named symbol formula");
@@ -252,6 +252,30 @@ fn named_symbol_vocabulary_is_supported_without_rewriting() {
             "{source}",
         );
     }
+}
+
+#[test]
+fn ellipsis_symbols_compose_in_matrix_notation_without_rewriting() {
+    let source = concat!(
+        r"\begin{matrix}a_1 & \cdots & a_n \\ ",
+        r"\vdots & \ddots & \vdots \\ ",
+        r"b_1 & \dots & b_n\end{matrix}; x \ldots y",
+    );
+    let analyzed = analyze(source, FormulaMode::Display)
+        .expect("ellipsis matrix expression");
+    assert!(analyzed.is_supported());
+    assert_eq!(reconstructed(&analyzed), source);
+    assert_eq!(
+        analyzed
+            .tokens
+            .iter()
+            .filter(|token| {
+                token.kind
+                    == MathTokenKind::Command(SupportedCommand::NamedSymbol)
+            })
+            .count(),
+        6,
+    );
 }
 
 #[test]
