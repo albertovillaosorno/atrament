@@ -923,6 +923,20 @@ fn malformed_groups_and_required_arguments_are_typed() {
 }
 
 #[test]
+fn unknown_matrix_environment_remains_explicit_unsupported_source() {
+    let source = r"\begin{pmatrix}a & b";
+    let analyzed = analyze(source, FormulaMode::Aligned)
+        .expect("balanced unknown matrix environment source");
+    assert!(!analyzed.is_supported());
+    assert_eq!(reconstructed(&analyzed), source);
+    assert_eq!(analyzed.unsupported.len(), 1);
+    assert_eq!(analyzed.unsupported[0].name, r"\begin");
+    assert!(!analyzed.tokens.iter().any(|token| {
+        token.kind == MathTokenKind::Command(SupportedCommand::BeginMatrix)
+    }));
+}
+
+#[test]
 fn malformed_matrix_boundaries_are_typed() {
     assert_eq!(
         analyze(r"\end{matrix}", FormulaMode::Display),
