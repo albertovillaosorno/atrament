@@ -1133,6 +1133,21 @@ fn token_source_is_sliced_only_from_its_own_unchanged_analysis() {
 }
 
 #[test]
+fn ascii_control_words_remain_case_sensitive() {
+    let source = r"\Pr(A) + \pr(A)";
+    let analyzed = analyze(source, FormulaMode::Display)
+        .expect("case-sensitive control-word source");
+    assert!(!analyzed.is_supported());
+    assert_eq!(reconstructed(&analyzed), source);
+    assert_eq!(analyzed.unsupported.len(), 1);
+    assert_eq!(analyzed.unsupported[0].name, r"\pr");
+    assert!(analyzed.tokens.iter().any(|token| {
+        token.kind == MathTokenKind::Command(SupportedCommand::NamedOperator)
+            && analyzed.token_source(*token) == Some(r"\Pr")
+    }));
+}
+
+#[test]
 fn ascii_control_word_boundary_preserves_adjacent_unicode() {
     let source = r"\alphaβ + \detñ + \mathbb{R}λ";
     let analyzed = analyze(source, FormulaMode::Inline)
