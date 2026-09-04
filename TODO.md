@@ -596,6 +596,12 @@ change which Undo/Redo steps remain admitted. Cancellation likewise awaits an
 owning operation-cancellation boundary instead of being inferred from transport
 disconnect.
 
+Transaction provenance has frozen origin classes for direct human,
+clipboard-assisted model, CLI, and MCP mutations, but no trusted application
+entry-path authority currently reaches the semantic history service. The batch
+payload must not self-attest that origin, so provenance recording remains
+blocked until an admitted adapter/application boundary supplies it.
+
 The task remains open for transaction provenance, dependency-expanded derived
 impact, bounded history resource policy, retry/lost-receipt recovery,
 cancellation, and browser/CLI/MCP parity.

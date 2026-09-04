@@ -233,9 +233,12 @@ edit family. A combined checker validates requested family, kind, owner, and an
 optional exact base value against that one projection.
 
 Command capability discovery is now deterministic and versioned independently
-from notebook revisions. It reports only the three family behaviors with current
-direct-edit targets, while command protocol, normalization, context generation,
-Validate, Apply, selective rebatching, and their numeric resource limits remain
+from notebook revisions. It reports the five currently executable family
+behaviors: Asset reference, Document constraint, Provenance, Structured content,
+and Text content.
+
+Command protocol, normalization, context generation, Validate, discoverable
+Apply, selective rebatching, and their numeric resource limits remain
 unadvertised. A caller can detect a bound capability-version mismatch read-only.
 This still does not define final command-context identity, readable-neighbor
 selection, or wire fields.
