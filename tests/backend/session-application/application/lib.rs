@@ -785,9 +785,21 @@ fn application_routes_asset_reference_batch_through_owned_authority() {
     };
     assert_eq!(current_figure.id, figure);
     assert_eq!(current_figure.asset, Some(second_asset));
+    assert_eq!(current.notebook.assets.len(), 2);
+    assert!(current
+        .notebook
+        .assets
+        .iter()
+        .any(|asset| asset.id == first_asset));
+    assert!(current
+        .notebook
+        .assets
+        .iter()
+        .any(|asset| asset.id == second_asset));
 
-    let HistoryTraversalOutcome::Traversed { .. } =
-        session.traverse_history(applied, HistoryDirection::Undo)
+    let HistoryTraversalOutcome::Traversed {
+        revision: undone, ..
+    } = session.traverse_history(applied, HistoryDirection::Undo)
     else {
         panic!("live asset-reference batch must Undo");
     };
@@ -799,6 +811,42 @@ fn application_routes_asset_reference_batch_through_owned_authority() {
     };
     assert_eq!(current_figure.id, figure);
     assert_eq!(current_figure.asset, Some(first_asset));
+    assert_eq!(current.notebook.assets.len(), 2);
+    assert!(current
+        .notebook
+        .assets
+        .iter()
+        .any(|asset| asset.id == first_asset));
+    assert!(current
+        .notebook
+        .assets
+        .iter()
+        .any(|asset| asset.id == second_asset));
+
+    let HistoryTraversalOutcome::Traversed { .. } =
+        session.traverse_history(undone, HistoryDirection::Redo)
+    else {
+        panic!("live asset-reference batch must Redo");
+    };
+    let current = session.accepted_revision().expect("asset reference Redo");
+    let BlockContent::Figure(current_figure) =
+        &current.notebook.pages[0].flows[0].blocks[0].content
+    else {
+        panic!("live Redo fixture must remain a figure");
+    };
+    assert_eq!(current_figure.id, figure);
+    assert_eq!(current_figure.asset, Some(second_asset));
+    assert_eq!(current.notebook.assets.len(), 2);
+    assert!(current
+        .notebook
+        .assets
+        .iter()
+        .any(|asset| asset.id == first_asset));
+    assert!(current
+        .notebook
+        .assets
+        .iter()
+        .any(|asset| asset.id == second_asset));
 }
 
 #[test]
