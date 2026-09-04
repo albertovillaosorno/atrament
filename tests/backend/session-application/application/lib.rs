@@ -268,26 +268,117 @@ fn run_process_fixture_child(mode: &str) {
     }
     assert_eq!(mode, "populated");
     let identities = IdentityAllocator::new();
-    let (candidate, candidate_span) =
+    let (mut candidate, candidate_span) =
         editable_text_candidate(&identities, "process-private before");
+    let candidate_figure = identities.allocate_candidate().expect("figure id");
+    let candidate_figure_block =
+        identities.allocate_candidate().expect("figure block id");
+    let candidate_first_asset =
+        identities.allocate_candidate().expect("first asset id");
+    let candidate_second_asset =
+        identities.allocate_candidate().expect("second asset id");
+    candidate.assets.extend([
+        Asset {
+            id: candidate_first_asset,
+            media_type: String::from("image/png"),
+        },
+        Asset {
+            id: candidate_second_asset,
+            media_type: String::from("image/webp"),
+        },
+    ]);
+    candidate.pages[0].flows[0].blocks.push(Block {
+        content: BlockContent::Figure(Figure {
+            asset: Some(candidate_first_asset),
+            caption: vec![],
+            id: candidate_figure,
+        }),
+        extensions: vec![],
+        id: candidate_figure_block,
+        provenance: None,
+        style: None,
+    });
     let mut session = application::SessionApplication::default();
     let AcceptanceOutcome::Accepted { mapping, revision: base } =
         session.accept_candidate(candidate)
     else {
         panic!("process fixture candidate must be accepted");
     };
-    let span = mapping
-        .iter()
-        .find(|entry| entry.candidate == candidate_span)
-        .expect("process fixture span identity must map")
-        .accepted;
-    let TextEditOutcome::Applied { revision, .. } = session.replace_text(
+    let accepted = |candidate| {
+        mapping
+            .iter()
+            .find(|entry| entry.candidate == candidate)
+            .expect("process fixture identity must map")
+            .accepted
+    };
+    let span = accepted(candidate_span);
+    let figure = accepted(candidate_figure);
+    let first_asset = accepted(candidate_first_asset);
+    let second_asset = accepted(candidate_second_asset);
+    let TextEditOutcome::Applied {
+        revision: text_revision,
+        ..
+    } = session.replace_text(
         base,
         span,
         String::from("process-private after"),
     ) else {
         panic!("process fixture text edit must apply");
     };
+    let asset_batch = DirectEditBatchProposal {
+        base: text_revision,
+        capability_version: CommandBehaviorVersion(4),
+        commands: vec![DirectEditBatchCommand {
+            dependencies: vec![],
+            id: 1_u32,
+            preconditions: CommandTargetPreconditions {
+                expected_value: Some(EditableSemanticValue::AssetReference(
+                    Some(first_asset),
+                )),
+                identity: IdentityPrecondition {
+                    expected_kind: Some(SemanticIdentityKind::Figure),
+                    expected_owner: IdentityOwnerExpectation::Any,
+                },
+                requested_family: SemanticCommandFamily::AssetReference,
+            },
+            requested: EditableSemanticValue::AssetReference(
+                Some(second_asset),
+            ),
+            target: figure,
+        }],
+    };
+    let DirectEditBatchApplyOutcome::Applied { revision, .. } =
+        session.apply_direct_edit_batch(asset_batch)
+    else {
+        panic!("process fixture asset-reference edit must apply");
+    };
+    let current = session
+        .accepted_revision()
+        .expect("process fixture accepted revision");
+    assert_eq!(current.notebook.assets.len(), 2);
+    assert!(current
+        .notebook
+        .assets
+        .iter()
+        .any(|asset| asset.id == first_asset));
+    assert!(current
+        .notebook
+        .assets
+        .iter()
+        .any(|asset| asset.id == second_asset));
+    let BlockContent::Paragraph(spans) =
+        &current.notebook.pages[0].flows[0].blocks[0].content
+    else {
+        panic!("process fixture first block must remain paragraph");
+    };
+    assert_eq!(spans[0].text, "process-private after");
+    let BlockContent::Figure(current_figure) =
+        &current.notebook.pages[0].flows[0].blocks[1].content
+    else {
+        panic!("process fixture second block must remain figure");
+    };
+    assert_eq!(current_figure.id, figure);
+    assert_eq!(current_figure.asset, Some(second_asset));
     assert_eq!(
         session.history_availability(),
         HistoryAvailabilityOutcome::Available(HistoryAvailability {

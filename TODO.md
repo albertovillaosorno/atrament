@@ -32,13 +32,18 @@ writable scope is published by this composition evidence.
 
 Dropping that owner and creating a fresh application yields empty draft fields,
 no accepted revision, and no history position; its Debug projection does not
-expose private draft text. A process fixture now creates a real accepted text
-mutation and Undo history before both orderly and forced termination. A fresh
-process then has neither accepted state nor history. Browser edits send
-complete authenticated replacements and no browser persistence API is used.
+expose private draft text. A process fixture now accepts two semantic asset
+records plus a referencing figure, commits both a text mutation and an
+asset-reference mutation, and retains Undo history before orderly or forced
+termination. A fresh process then has no accepted revision or history, so those
+revision-owned semantic asset records and references cannot survive restart.
+Browser edits send complete authenticated replacements and no browser
+persistence API is used.
 
-The task remains open until assets, previews, diagnostics, renders, and plans
-all join the same executable lifecycle invariant.
+This asset evidence covers revision-owned semantic metadata only; raw imported
+media bytes do not yet have an executable session owner. The task remains open
+until those media bytes, previews, diagnostics, renders, and plans all join the
+same lifecycle invariant.
 
 ### TODO - Implement explicit import and export
 
@@ -71,8 +76,11 @@ credential cannot authenticate to the new process. Process-level draft fixtures
 also write and read task, source, and raw-response text, then verify both
 orderly restart and forced process death yield empty fields in the fresh
 session. A checked-in application-process fixture now also populates an accepted
-semantic revision plus Undo history, then proves orderly exit and forced process
-death both leave a fresh owner with no accepted revision or history position.
+semantic revision containing two semantic asset records and a figure reference,
+commits text and asset-reference history, then proves orderly exit and forced
+process death both leave a fresh owner with no accepted revision or history
+position. This does not yet model raw imported media bytes or their cleanup.
+
 While private draft text is live, the runtime holds no writable regular-file
 descriptor and changes no declared repository runtime-root file.
 
