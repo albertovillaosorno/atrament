@@ -266,8 +266,8 @@ or inline span while preserving that target's identity and authored text.
 Wrong-kind or no-longer-current references reject before mutation, and Undo
 restores either prior value.
 
-The Provenance family remains behavior version 2;
-the aggregate command behavior version is now 11.
+The Provenance family remains behavior version 2; later admissions advance the
+aggregate command behavior independently.
 
 Revision-owned semantic constraints now expose their broad `ConstraintKind` as a
 Document-constraint editable value. The constraint identity and semantic target
@@ -283,9 +283,9 @@ mutation. A span keeps Text content as its default command-target material, but
 family-specific material exposes Style role without replacing the text review
 surface.
 
-Same-span Text, Style, and Provenance batch changes are tracked
-independently by target and family. Style-role behavior version remains 2; the
-aggregate command behavior version is now 11.
+Same-span Text, Style, and Provenance batch changes are tracked independently by
+target and family. Style-role behavior version remains 2; later admissions
+advance the aggregate command behavior independently.
 
 Existing semantic `List` identities now expose only their boolean ordering
 significance through Ordering and grouping. The edit can switch ordered versus
