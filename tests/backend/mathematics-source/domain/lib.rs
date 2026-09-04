@@ -1326,6 +1326,62 @@ fn gathered_scope_yields_to_nested_column_environment() {
 }
 
 #[test]
+fn gathered_scope_overrides_outer_column_environment() {
+    let source = concat!(
+        r"\begin{aligned}x &= \begin{gathered}a & b",
+        r"\end{gathered}\end{aligned}",
+    );
+    assert_eq!(
+        analyze(source, FormulaMode::Display),
+        Err(MathSyntaxError {
+            byte_offset: source.rfind('&').expect("gathered alignment marker"),
+            kind: MathSyntaxErrorKind::AlignmentOutsideStructure,
+        }),
+    );
+}
+
+#[test]
+fn text_scope_remains_literal_inside_gathered_environment() {
+    let source = concat!(
+        r"\begin{gathered}\text{a & b \\ c} \\ ",
+        r"d\end{gathered}",
+    );
+    let analyzed = analyze(source, FormulaMode::Display)
+        .expect("gathered rows containing text scope");
+    assert!(analyzed.is_supported());
+    assert_eq!(reconstructed(&analyzed), source);
+    assert_eq!(
+        analyzed
+            .tokens
+            .iter()
+            .filter(|token| token.kind == MathTokenKind::AlignmentPoint)
+            .count(),
+        0,
+    );
+    assert_eq!(
+        analyzed
+            .tokens
+            .iter()
+            .filter(|token| token.kind == MathTokenKind::RowBreak)
+            .count(),
+        1,
+    );
+}
+
+#[test]
+fn gathered_row_scope_does_not_leak_after_close() {
+    let prefix = r"\begin{gathered}a \\ b\end{gathered}";
+    let source = format!(r"{prefix} \\ c");
+    assert_eq!(
+        analyze(&source, FormulaMode::Display),
+        Err(MathSyntaxError {
+            byte_offset: prefix.len() + 1,
+            kind: MathSyntaxErrorKind::AlignmentOutsideStructure,
+        }),
+    );
+}
+
+#[test]
 fn cases_environment_admits_rows_and_alignment() {
     let source = concat!(
         r"f(x)=\begin{cases}x & x>0 \\ ",
@@ -1473,17 +1529,19 @@ fn deep_ordered_environments_are_iterative_and_balanced() {
     let depth = 1_024usize;
     let mut source = String::new();
     for level in 0..depth {
-        match level % 3 {
+        match level % 4 {
             0 => source.push_str(r"\begin{aligned}"),
             1 => source.push_str(r"\begin{cases}"),
+            2 => source.push_str(r"\begin{gathered}"),
             _ => source.push_str(r"\begin{matrix}"),
         }
     }
     source.push('x');
     for level in (0..depth).rev() {
-        match level % 3 {
+        match level % 4 {
             0 => source.push_str(r"\end{aligned}"),
             1 => source.push_str(r"\end{cases}"),
+            2 => source.push_str(r"\end{gathered}"),
             _ => source.push_str(r"\end{matrix}"),
         }
     }
@@ -1500,6 +1558,7 @@ fn deep_ordered_environments_are_iterative_and_balanced() {
                 MathTokenKind::Command(
                     SupportedCommand::BeginAligned
                         | SupportedCommand::BeginCases
+                        | SupportedCommand::BeginGathered
                         | SupportedCommand::BeginMatrix
                 )
             ))
