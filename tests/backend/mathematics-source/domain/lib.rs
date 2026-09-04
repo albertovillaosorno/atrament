@@ -309,6 +309,24 @@ fn admitted_control_words_never_match_longer_ascii_names() {
 }
 
 #[test]
+fn unsupported_control_symbols_preserve_utf8_and_trailing_slash() {
+    for (source, unsupported) in [(r"x \🙂 y", r"\🙂"), (r"z \", r"\")] {
+        let analyzed = analyze(source, FormulaMode::Inline)
+            .expect("balanced unsupported control symbol");
+        assert!(!analyzed.is_supported(), "{source:?}");
+        assert_eq!(reconstructed(&analyzed), source);
+        assert_eq!(analyzed.unsupported.len(), 1, "{source:?}");
+        assert_eq!(analyzed.unsupported[0].name, unsupported, "{source:?}");
+        assert_eq!(
+            source.get(
+                analyzed.unsupported[0].start..analyzed.unsupported[0].end
+            ),
+            Some(unsupported),
+        );
+    }
+}
+
+#[test]
 fn unknown_control_symbol_stays_explicitly_unsupported() {
     let source = r"x \@ y";
     let analyzed = analyze(source, FormulaMode::Inline)
