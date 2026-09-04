@@ -70,7 +70,8 @@ calculus, set notation, aligned separators, and matrix environments. Paired
 delimiter-sizing controls remain explicit unsupported input rather than being
 inferred from admitted delimiter glyph names. Unknown control words and
 unadmitted control symbols remain explicit unsupported constructs, and malformed
-source returns typed syntax failures.
+source returns typed syntax failures. Substack row breaks are structural only
+inside their owning group and do not admit column alignment.
 
 Semantic formulas carry an explicit inline, display, or aligned mode. Candidate
 acceptance validates supported mathematics before identity promotion, while the

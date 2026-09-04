@@ -876,6 +876,83 @@ fn fraction_scripts_and_roman_units_are_structural_without_rewriting() {
 }
 
 #[test]
+fn substack_rows_are_scoped_to_their_group() {
+    let source = r"\sum_{\substack{i=1\\j=2}} a_{ij}";
+    let analyzed = analyze(source, FormulaMode::Inline)
+        .expect("substack row formula");
+    assert!(analyzed.is_supported());
+    assert_eq!(reconstructed(&analyzed), source);
+    assert!(analyzed.tokens.iter().any(|token| {
+        token.kind == MathTokenKind::Command(SupportedCommand::Substack)
+            && analyzed.token_source(*token) == Some(r"\substack")
+    }));
+    assert_eq!(
+        analyzed
+            .tokens
+            .iter()
+            .filter(|token| token.kind == MathTokenKind::RowBreak)
+            .count(),
+        1,
+    );
+    assert_eq!(
+        analyze(r"\substack", FormulaMode::Inline),
+        Err(MathSyntaxError {
+            byte_offset: 9,
+            kind: MathSyntaxErrorKind::MissingRequiredGroup,
+        }),
+    );
+
+    let nested = r"\substack{a\\\substack{b\\c}\\d}";
+    let analyzed = analyze(nested, FormulaMode::Inline)
+        .expect("nested substack rows");
+    assert!(analyzed.is_supported());
+    assert_eq!(reconstructed(&analyzed), nested);
+    assert_eq!(
+        analyzed
+            .tokens
+            .iter()
+            .filter(|token| token.kind == MathTokenKind::RowBreak)
+            .count(),
+        3,
+    );
+
+    let aligned_column = r"\substack{a & b}";
+    assert_eq!(
+        analyze(aligned_column, FormulaMode::Aligned),
+        Err(MathSyntaxError {
+            byte_offset: r"\substack{a ".len(),
+            kind: MathSyntaxErrorKind::AlignmentOutsideStructure,
+        }),
+    );
+
+    let escaped_scope = r"\substack{a\\b}\\c";
+    assert_eq!(
+        analyze(escaped_scope, FormulaMode::Inline),
+        Err(MathSyntaxError {
+            byte_offset: r"\substack{a\\b}".len(),
+            kind: MathSyntaxErrorKind::AlignmentOutsideStructure,
+        }),
+    );
+}
+
+#[test]
+fn text_scope_still_makes_substack_row_breaks_literal() {
+    let source = r"\text{label \substack{a\\b}}";
+    let analyzed = analyze(source, FormulaMode::Inline)
+        .expect("substack command nested in text scope");
+    assert!(analyzed.is_supported());
+    assert_eq!(reconstructed(&analyzed), source);
+    assert_eq!(
+        analyzed
+            .tokens
+            .iter()
+            .filter(|token| token.kind == MathTokenKind::RowBreak)
+            .count(),
+        0,
+    );
+}
+
+#[test]
 fn text_fragments_preserve_unicode_and_require_one_group() {
     let source = r"E = mc2\text{energía {trabajo_a} & dirección^2 \\ línea}";
     let analyzed =

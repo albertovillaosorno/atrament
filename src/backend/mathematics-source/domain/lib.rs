@@ -90,6 +90,7 @@ const STRUCTURED_CONTROL_WORD_COMMANDS: &[(&str, SupportedCommand)] = &[
     ("\\overline", SupportedCommand::Overline),
     ("\\overset", SupportedCommand::Overset),
     ("\\sqrt", SupportedCommand::SquareRoot),
+    ("\\substack", SupportedCommand::Substack),
     ("\\text", SupportedCommand::Text),
     ("\\tfrac", SupportedCommand::TextFraction),
     ("\\tilde", SupportedCommand::Tilde),
@@ -191,13 +192,14 @@ struct GroupIndex {
     pairs: Vec<(usize, usize)>,
 }
 
-#[derive(Clone, Copy)]
 struct ScanState {
     group_depth: usize,
     index: usize,
     literal_start: usize,
     matrix_depth: usize,
+    pending_substack_group: bool,
     pending_text_group: bool,
+    substack_group_depths: Vec<usize>,
     text_group_depth: Option<usize>,
 }
 
@@ -267,6 +269,8 @@ pub enum SupportedCommand {
     SansSerif,
     /// One-group square-root command.
     SquareRoot,
+    /// One grouped multi-row substack expression.
+    Substack,
     /// One grouped text fragment preserved exactly inside mathematics.
     Text,
     /// Two-group text-style fraction command.
@@ -315,8 +319,9 @@ impl AnalyzedFormula {
 /// Supported source includes ordinary Unicode mathematics, groups, scripts,
 /// `\\frac{...}{...}`, `\\binom{...}{...}`, `\\sqrt{...}`,
 /// grouped mathematical alphabets, common one-group accents, `\\mathrm{...}`,
-/// `\\operatorname{...}`, `\\text{...}`, grouped vector, overline, and
-/// underline decorations, escaped TeX special characters, common named
+/// `\\operatorname{...}`, `\\text{...}`, grouped substacks, vector,
+/// overline, and underline decorations, escaped TeX special characters, common
+/// named
 /// mathematical operators and symbols, aligned separators, and
 /// `\\begin{matrix}...\\end{matrix}`.
 /// Math-only alignment, script, and row-break markers remain literal inside
@@ -339,7 +344,9 @@ pub fn analyze(
         index: 0,
         literal_start: 0,
         matrix_depth: 0,
+        pending_substack_group: false,
         pending_text_group: false,
+        substack_group_depths: Vec::new(),
         text_group_depth: None,
     };
     let mut tokens = Vec::new();
@@ -368,7 +375,7 @@ pub fn analyze(
         state.literal_start = state.index;
     }
     push_literal(&mut tokens, state.literal_start, source.len());
-    validate_final_state(source.len(), state)?;
+    validate_final_state(source.len(), &state)?;
     debug_assert!(
         token_coverage(&tokens) == source.len(),
         "mathematical token spans must cover the unchanged source"
@@ -609,6 +616,10 @@ fn scan_structural(
         },
         '{' => {
             state.group_depth = state.group_depth.saturating_add(1);
+            if state.pending_substack_group {
+                state.substack_group_depths.push(state.group_depth);
+                state.pending_substack_group = false;
+            }
             if state.pending_text_group {
                 if state.text_group_depth.is_none() {
                     state.text_group_depth = Some(state.group_depth);
@@ -633,7 +644,10 @@ fn scan_alignment(
     tokens: &mut Vec<MathToken>,
     width: usize,
 ) -> Result<(), MathSyntaxError> {
-    if mode != FormulaMode::Aligned && state.matrix_depth == 0 {
+    if state.matrix_depth == 0
+        && (mode != FormulaMode::Aligned
+            || !state.substack_group_depths.is_empty())
+    {
         return Err(error(
             state.index,
             MathSyntaxErrorKind::AlignmentOutsideStructure,
@@ -651,8 +665,18 @@ fn scan_group_close(
     if state.group_depth == 0 {
         return Err(error(state.index, MathSyntaxErrorKind::ExtraGroupClose));
     }
+    let closes_substack = state
+        .substack_group_depths
+        .last()
+        .copied()
+        == Some(state.group_depth);
     let closes_text = state.text_group_depth == Some(state.group_depth);
     state.group_depth = state.group_depth.saturating_sub(1);
+    if closes_substack {
+        state.substack_group_depths.truncate(
+            state.substack_group_depths.len().saturating_sub(1),
+        );
+    }
     if closes_text {
         state.text_group_depth = None;
     }
@@ -689,7 +713,10 @@ fn scan_slash(
                     MathTokenKind::Literal,
                 ));
             } else {
-                if mode != FormulaMode::Aligned && state.matrix_depth == 0 {
+                if mode != FormulaMode::Aligned
+                    && state.matrix_depth == 0
+                    && state.substack_group_depths.is_empty()
+                {
                     return Err(error(
                         state.index,
                         MathSyntaxErrorKind::AlignmentOutsideStructure,
@@ -750,6 +777,9 @@ fn scan_supported_command(
         MathTokenKind::Command(supported),
     ));
     validate_command_groups(source, groups, command.end, supported)?;
+    if supported == SupportedCommand::Substack {
+        state.pending_substack_group = true;
+    }
     if supported == SupportedCommand::Text {
         state.pending_text_group = true;
     }
@@ -814,6 +844,7 @@ fn validate_command_groups(
         | SupportedCommand::Roman
         | SupportedCommand::SansSerif
         | SupportedCommand::SquareRoot
+        | SupportedCommand::Substack
         | SupportedCommand::Text
         | SupportedCommand::Tilde
         | SupportedCommand::Typewriter
@@ -837,7 +868,7 @@ fn validate_command_groups(
 
 const fn validate_final_state(
     source_len: usize,
-    state: ScanState,
+    state: &ScanState,
 ) -> Result<(), MathSyntaxError> {
     if state.group_depth != 0 {
         return Err(error(source_len, MathSyntaxErrorKind::UnclosedGroup));
