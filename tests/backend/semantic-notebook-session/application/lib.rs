@@ -459,6 +459,7 @@ fn candidate_nested_text_notebook(
 struct ListOrderingCandidateIds {
     block: CandidateIdentity,
     first_item: CandidateIdentity,
+    first_span: CandidateIdentity,
     flow: CandidateIdentity,
     list: CandidateIdentity,
     page: CandidateIdentity,
@@ -518,6 +519,7 @@ fn candidate_list_ordering_notebook(
     (notebook, ListOrderingCandidateIds {
         block,
         first_item,
+        first_span,
         flow,
         list,
         page,
@@ -3565,6 +3567,173 @@ fn list_ordering_applies_atomically_and_undoes() {
         restored.items.iter().map(|item| item.id).collect::<Vec<_>>(),
         [first_item, second_item],
     );
+}
+
+#[test]
+fn ordered_batch_indexes_list_and_owning_block_style_together() {
+    let ids = IdentityAllocator::new();
+    let (mut candidate, candidate_ids) = candidate_list_ordering_notebook(&ids);
+    let candidate_style = candidate_id(&ids);
+    candidate.styles.push(Style {
+        id: candidate_style,
+        name: String::from("ordered-list-style"),
+    });
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision: base } =
+        session.accept(candidate)
+    else {
+        panic!("list/block-style candidate must be accepted");
+    };
+    let list = accepted_for(&mapping, candidate_ids.list);
+    let block = accepted_for(&mapping, candidate_ids.block);
+    let style = accepted_for(&mapping, candidate_style);
+    let before = session.current().expect("list/block-style base").clone();
+    let batch = DirectEditBatchProposal {
+        base,
+        capability_version: CommandBehaviorVersion(7),
+        commands: vec![
+            DirectEditBatchCommand {
+                dependencies: vec![],
+                id: 1_u32,
+                preconditions: CommandTargetPreconditions {
+                    expected_value: Some(EditableSemanticValue::StyleReference(
+                        None,
+                    )),
+                    identity: IdentityPrecondition {
+                        expected_kind: None,
+                        expected_owner: IdentityOwnerExpectation::Any,
+                    },
+                    requested_family: SemanticCommandFamily::StyleRole,
+                },
+                requested: EditableSemanticValue::StyleReference(Some(style)),
+                target: block,
+            },
+            DirectEditBatchCommand {
+                dependencies: vec![],
+                id: 2_u32,
+                preconditions: CommandTargetPreconditions {
+                    expected_value: Some(
+                        EditableSemanticValue::ListOrdering(false),
+                    ),
+                    identity: IdentityPrecondition {
+                        expected_kind: Some(SemanticIdentityKind::List),
+                        expected_owner: IdentityOwnerExpectation::Direct(block),
+                    },
+                    requested_family:
+                        SemanticCommandFamily::OrderingAndGrouping,
+                },
+                requested: EditableSemanticValue::ListOrdering(true),
+                target: list,
+            },
+        ],
+    };
+    let DirectEditBatchSimulationOutcome::Predicted { changes, .. } =
+        session.simulate_direct_edit_batch(batch.clone())
+    else {
+        panic!("list/block-style batch must simulate");
+    };
+    assert_eq!(changes.len(), 2);
+    let DirectEditBatchApplyOutcome::Applied { revision, .. } =
+        session.apply_direct_edit_batch(batch)
+    else {
+        panic!("list/block-style batch must apply");
+    };
+    let current = session.current().expect("list/block-style revision");
+    let changed_block = &current.notebook.pages[0].flows[0].blocks[0];
+    assert_eq!(changed_block.id, block);
+    assert_eq!(changed_block.style, Some(style));
+    let BlockContent::List(changed_list) = &changed_block.content else {
+        panic!("styled block must remain list");
+    };
+    assert_eq!(changed_list.id, list);
+    assert!(changed_list.ordered);
+
+    let HistoryTraversalOutcome::Traversed { .. } =
+        session.traverse_history(revision, HistoryDirection::Undo)
+    else {
+        panic!("list/block-style batch must Undo");
+    };
+    let restored = session.current().expect("list/block-style Undo");
+    assert_ne!(restored.id, before.id);
+    assert_eq!(restored.notebook, before.notebook);
+}
+
+#[test]
+fn ordered_batch_indexes_list_and_child_text_together() {
+    let ids = IdentityAllocator::new();
+    let (candidate, candidate_ids) = candidate_list_ordering_notebook(&ids);
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision: base } =
+        session.accept(candidate)
+    else {
+        panic!("mixed list/text candidate must be accepted");
+    };
+    let list = accepted_for(&mapping, candidate_ids.list);
+    let text = accepted_for(&mapping, candidate_ids.first_span);
+    let before = session.current().expect("mixed list/text base").clone();
+    let batch = DirectEditBatchProposal {
+        base,
+        capability_version: CommandBehaviorVersion(7),
+        commands: vec![
+            DirectEditBatchCommand {
+                dependencies: vec![],
+                id: 1_u32,
+                preconditions: CommandTargetPreconditions {
+                    expected_value: Some(
+                        EditableSemanticValue::ListOrdering(false),
+                    ),
+                    identity: IdentityPrecondition {
+                        expected_kind: Some(SemanticIdentityKind::List),
+                        expected_owner: IdentityOwnerExpectation::Any,
+                    },
+                    requested_family:
+                        SemanticCommandFamily::OrderingAndGrouping,
+                },
+                requested: EditableSemanticValue::ListOrdering(true),
+                target: list,
+            },
+            text_batch_command(
+                2,
+                &[],
+                text,
+                "first item",
+                "first item changed",
+            ),
+        ],
+    };
+    let DirectEditBatchSimulationOutcome::Predicted { changes, .. } =
+        session.simulate_direct_edit_batch(batch.clone())
+    else {
+        panic!("mixed list/text batch must simulate");
+    };
+    assert_eq!(changes.len(), 2);
+    let DirectEditBatchApplyOutcome::Applied { revision, .. } =
+        session.apply_direct_edit_batch(batch)
+    else {
+        panic!("mixed list/text batch must apply");
+    };
+    let current = session.current().expect("mixed list/text revision");
+    let BlockContent::List(changed) =
+        &current.notebook.pages[0].flows[0].blocks[0].content
+    else {
+        panic!("mixed block must remain list");
+    };
+    assert!(changed.ordered);
+    let BlockContent::Paragraph(spans) = &changed.items[0].blocks[0].content
+    else {
+        panic!("first list child must remain paragraph");
+    };
+    assert_eq!(spans[0].id, text);
+    assert_eq!(spans[0].text, "first item changed");
+
+    let HistoryTraversalOutcome::Traversed { .. } =
+        session.traverse_history(revision, HistoryDirection::Undo)
+    else {
+        panic!("mixed list/text batch must Undo");
+    };
+    let restored = session.current().expect("mixed list/text Undo");
+    assert_ne!(restored.id, before.id);
+    assert_eq!(restored.notebook, before.notebook);
 }
 
 #[test]
