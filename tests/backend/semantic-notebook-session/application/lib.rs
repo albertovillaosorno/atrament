@@ -2659,6 +2659,111 @@ fn inline_span_batches_text_style_and_provenance_independently() {
 }
 
 #[test]
+fn mixed_family_net_noop_preserves_sibling_span_change() {
+    let ids = IdentityAllocator::new();
+    let (mut candidate, span) = candidate_notebook_with_span(&ids, "before");
+    let block = candidate.pages[0].flows[0].blocks[0].id;
+    let style = candidate_id(&ids);
+    candidate.styles.push(Style {
+        id: style,
+        name: String::from("temporary-emphasis"),
+    });
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision: base } =
+        session.accept(candidate)
+    else {
+        panic!("mixed-family no-op candidate must be accepted");
+    };
+    let block = accepted_for(&mapping, block);
+    let span = accepted_for(&mapping, span);
+    let style = accepted_for(&mapping, style);
+    let batch = DirectEditBatchProposal {
+        base,
+        capability_version: CommandBehaviorVersion(9),
+        commands: vec![
+            text_batch_command(1, &[], span, "before", "after"),
+            DirectEditBatchCommand {
+                dependencies: vec![],
+                id: 2_u32,
+                preconditions: CommandTargetPreconditions {
+                    expected_value: Some(EditableSemanticValue::StyleReference(
+                        None,
+                    )),
+                    identity: IdentityPrecondition {
+                        expected_kind: Some(SemanticIdentityKind::InlineSpan),
+                        expected_owner: IdentityOwnerExpectation::Direct(block),
+                    },
+                    requested_family: SemanticCommandFamily::StyleRole,
+                },
+                requested: EditableSemanticValue::StyleReference(Some(style)),
+                target: span,
+            },
+            DirectEditBatchCommand {
+                dependencies: vec![2_u32],
+                id: 3_u32,
+                preconditions: CommandTargetPreconditions {
+                    expected_value: Some(EditableSemanticValue::StyleReference(
+                        Some(style),
+                    )),
+                    identity: IdentityPrecondition {
+                        expected_kind: Some(SemanticIdentityKind::InlineSpan),
+                        expected_owner: IdentityOwnerExpectation::Direct(block),
+                    },
+                    requested_family: SemanticCommandFamily::StyleRole,
+                },
+                requested: EditableSemanticValue::StyleReference(None),
+                target: span,
+            },
+        ],
+    };
+    let DirectEditBatchSimulationOutcome::Predicted {
+        changes,
+        commands,
+        effect: DirectEditEffectClass::Mutation,
+        ..
+    } = session.simulate_direct_edit_batch(batch.clone())
+    else {
+        panic!("mixed-family no-op batch must simulate");
+    };
+    assert_eq!(commands.len(), 3);
+    assert_eq!(changes, vec![DirectEditSemanticChange {
+        after: EditableSemanticValue::Text(String::from("after")),
+        before: EditableSemanticValue::Text(String::from("before")),
+        family: SemanticCommandFamily::TextContent,
+        target: span,
+    }]);
+
+    let DirectEditBatchApplyOutcome::Applied { revision, .. } =
+        session.apply_direct_edit_batch(batch)
+    else {
+        panic!("mixed-family no-op batch must apply text change");
+    };
+    let current = session.current().expect("mixed-family no-op revision");
+    let BlockContent::Paragraph(spans) =
+        &current.notebook.pages[0].flows[0].blocks[0].content
+    else {
+        panic!("mixed-family no-op target must remain paragraph");
+    };
+    assert_eq!(spans[0].id, span);
+    assert_eq!(spans[0].text, "after");
+    assert_eq!(spans[0].style, None);
+
+    let HistoryTraversalOutcome::Traversed { .. } =
+        session.traverse_history(revision, HistoryDirection::Undo)
+    else {
+        panic!("mixed-family no-op batch must Undo");
+    };
+    let current = session.current().expect("mixed-family no-op Undo");
+    let BlockContent::Paragraph(spans) =
+        &current.notebook.pages[0].flows[0].blocks[0].content
+    else {
+        panic!("Undo target must remain paragraph");
+    };
+    assert_eq!(spans[0].text, "before");
+    assert_eq!(spans[0].style, None);
+}
+
+#[test]
 fn provenance_material_stays_exact_with_many_unrelated_blocks() {
     let ids = IdentityAllocator::new();
     let (mut candidate, candidate_ids) =
