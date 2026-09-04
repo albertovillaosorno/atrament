@@ -101,8 +101,10 @@ const STRUCTURED_CONTROL_WORD_COMMANDS: &[(&str, SupportedCommand)] = &[
 ];
 
 const STRUCTURED_ENVIRONMENT_COMMANDS: &[(&str, SupportedCommand)] = &[
+    ("\\begin{aligned}", SupportedCommand::BeginAligned),
     ("\\begin{cases}", SupportedCommand::BeginCases),
     ("\\begin{matrix}", SupportedCommand::BeginMatrix),
+    ("\\end{aligned}", SupportedCommand::EndAligned),
     ("\\end{cases}", SupportedCommand::EndCases),
     ("\\end{matrix}", SupportedCommand::EndMatrix),
 ];
@@ -145,6 +147,8 @@ pub struct MathSyntaxError {
 pub enum MathSyntaxErrorKind {
     /// Alignment marker appears outside aligned or environment content.
     AlignmentOutsideStructure,
+    /// Aligned environment closes without a matching aligned start.
+    ExtraAlignedEnd,
     /// Cases environment closes without a matching cases start.
     ExtraCasesEnd,
     /// A closing group appears without a matching open group.
@@ -153,6 +157,8 @@ pub enum MathSyntaxErrorKind {
     ExtraMatrixEnd,
     /// An environment closes while a different environment is still innermost.
     MismatchedEnvironmentEnd,
+    /// Aligned environment remains open at end of source.
+    MissingAlignedEnd,
     /// Cases environment remains open at end of source.
     MissingCasesEnd,
     /// Matrix environment remains open at end of source.
@@ -197,6 +203,7 @@ pub enum MathTokenKind {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum StructuredEnvironmentKind {
+    Aligned,
     Cases,
     Matrix,
 }
@@ -235,6 +242,8 @@ enum ScannedCommandKind {
 pub enum SupportedCommand {
     /// One-group bar accent.
     Bar,
+    /// Start of an explicit aligned environment.
+    BeginAligned,
     /// Start of an explicit cases environment.
     BeginCases,
     /// Start of an explicit matrix environment.
@@ -255,6 +264,8 @@ pub enum SupportedCommand {
     Dot,
     /// One-group double-dot accent.
     DoubleDot,
+    /// End of an explicit aligned environment.
+    EndAligned,
     /// End of an explicit cases environment.
     EndCases,
     /// End of an explicit matrix environment.
@@ -780,6 +791,13 @@ fn scan_supported_command(
     command: ScannedCommand,
     supported: SupportedCommand,
 ) -> Result<(), MathSyntaxError> {
+    if supported == SupportedCommand::EndAligned {
+        close_environment(
+            state,
+            StructuredEnvironmentKind::Aligned,
+            MathSyntaxErrorKind::ExtraAlignedEnd,
+        )?;
+    }
     if supported == SupportedCommand::EndCases {
         close_environment(
             state,
@@ -805,6 +823,9 @@ fn scan_supported_command(
     }
     if supported == SupportedCommand::Text {
         state.pending_text_group = true;
+    }
+    if supported == SupportedCommand::BeginAligned {
+        state.environment_stack.push(StructuredEnvironmentKind::Aligned);
     }
     if supported == SupportedCommand::BeginCases {
         state.environment_stack.push(StructuredEnvironmentKind::Cases);
@@ -861,8 +882,10 @@ fn validate_command_groups(
     command: SupportedCommand,
 ) -> Result<(), MathSyntaxError> {
     let required = match command {
-        SupportedCommand::BeginCases
+        SupportedCommand::BeginAligned
+        | SupportedCommand::BeginCases
         | SupportedCommand::BeginMatrix
+        | SupportedCommand::EndAligned
         | SupportedCommand::EndCases
         | SupportedCommand::EndMatrix
         | SupportedCommand::EscapedSpecial
@@ -920,6 +943,9 @@ fn validate_final_state(
         return Err(error(source_len, MathSyntaxErrorKind::UnclosedGroup));
     }
     match state.environment_stack.last() {
+        Some(StructuredEnvironmentKind::Aligned) => {
+            Err(error(source_len, MathSyntaxErrorKind::MissingAlignedEnd))
+        },
         Some(StructuredEnvironmentKind::Cases) => {
             Err(error(source_len, MathSyntaxErrorKind::MissingCasesEnd))
         },

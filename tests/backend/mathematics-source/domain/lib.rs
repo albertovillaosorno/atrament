@@ -1213,6 +1213,40 @@ fn aligned_derivation_preserves_rows_and_alignment_points() {
 }
 
 #[test]
+fn aligned_environment_admits_rows_and_alignment_in_display_mode() {
+    let source = concat!(
+        r"\begin{aligned}y &= (3x^2+1)^5 \\ ",
+        r"y' &= 30x(3x^2+1)^4\end{aligned}",
+    );
+    let analyzed = analyze(source, FormulaMode::Display)
+        .expect("aligned environment in display formula");
+    assert!(analyzed.is_supported());
+    assert_eq!(reconstructed(&analyzed), source);
+    assert!(analyzed.tokens.iter().any(|token| {
+        token.kind == MathTokenKind::Command(SupportedCommand::BeginAligned)
+    }));
+    assert!(analyzed.tokens.iter().any(|token| {
+        token.kind == MathTokenKind::Command(SupportedCommand::EndAligned)
+    }));
+    assert_eq!(
+        analyzed
+            .tokens
+            .iter()
+            .filter(|token| token.kind == MathTokenKind::AlignmentPoint)
+            .count(),
+        2,
+    );
+    assert_eq!(
+        analyzed
+            .tokens
+            .iter()
+            .filter(|token| token.kind == MathTokenKind::RowBreak)
+            .count(),
+        1,
+    );
+}
+
+#[test]
 fn cases_environment_admits_rows_and_alignment() {
     let source = concat!(
         r"f(x)=\begin{cases}x & x>0 \\ ",
@@ -1247,6 +1281,19 @@ fn cases_environment_admits_rows_and_alignment() {
 }
 
 #[test]
+fn aligned_cases_and_matrix_environments_nest_in_order() {
+    let source = concat!(
+        r"\begin{aligned}f(x) &= \begin{cases}x & x>0 \\ ",
+        r"\begin{matrix}a & b \\ c & d\end{matrix} & x<=0",
+        r"\end{cases}\end{aligned}",
+    );
+    let analyzed = analyze(source, FormulaMode::Inline)
+        .expect("ordered nested aligned cases and matrix environments");
+    assert!(analyzed.is_supported());
+    assert_eq!(reconstructed(&analyzed), source);
+}
+
+#[test]
 fn cases_and_matrix_environments_nest_in_order() {
     let source = concat!(
         r"\begin{cases}a & \begin{matrix}b & c \\ d & e",
@@ -1270,6 +1317,16 @@ fn cases_and_matrix_environments_nest_in_order() {
 
 #[test]
 fn crossed_environment_closes_are_typed() {
+    let aligned_first = r"\begin{aligned}\begin{cases}x";
+    let aligned_source = format!(r"{aligned_first}\end{{aligned}}");
+    assert_eq!(
+        analyze(&aligned_source, FormulaMode::Display),
+        Err(MathSyntaxError {
+            byte_offset: aligned_first.len(),
+            kind: MathSyntaxErrorKind::MismatchedEnvironmentEnd,
+        }),
+    );
+
     let first = r"\begin{matrix}\begin{cases}x";
     let source = format!(r"{first}\end{{matrix}}");
     assert_eq!(
@@ -1449,7 +1506,7 @@ fn unknown_command_remains_exact_explicit_unsupported_input() {
 }
 
 #[test]
-fn alignment_is_rejected_outside_aligned_or_matrix_structure() {
+fn alignment_is_rejected_outside_admitted_structure() {
     assert_eq!(
         analyze("a & b", FormulaMode::Display),
         Err(MathSyntaxError {
@@ -1501,6 +1558,7 @@ fn malformed_groups_and_required_arguments_are_typed() {
 #[test]
 fn environment_names_require_exact_braced_spelling() {
     for (source, unsupported) in [
+        (r"\begin{alignedx}a & b", r"\begin"),
         (r"\begin{casesx}a & b", r"\begin"),
         (r"a & b\end{casesx}", r"\end"),
         (r"\begin{matrixx}a & b", r"\begin"),
@@ -1546,6 +1604,25 @@ fn missing_environment_reports_innermost_open_boundary() {
         Err(MathSyntaxError {
             byte_offset: matrix_inside_cases.len(),
             kind: MathSyntaxErrorKind::MissingMatrixEnd,
+        }),
+    );
+}
+
+#[test]
+fn malformed_aligned_boundaries_are_typed() {
+    assert_eq!(
+        analyze(r"\end{aligned}", FormulaMode::Display),
+        Err(MathSyntaxError {
+            byte_offset: 0,
+            kind: MathSyntaxErrorKind::ExtraAlignedEnd,
+        }),
+    );
+    let source = r"\begin{aligned}a &= b";
+    assert_eq!(
+        analyze(source, FormulaMode::Display),
+        Err(MathSyntaxError {
+            byte_offset: source.len(),
+            kind: MathSyntaxErrorKind::MissingAlignedEnd,
         }),
     );
 }
