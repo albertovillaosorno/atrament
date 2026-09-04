@@ -58,9 +58,11 @@ representative bilingual assignment must exercise every initial block family.
 
 The backend now has a dependency-free mathematical source analyzer that retains
 exact UTF-8 source and exposes structural spans for the admitted first slice:
-groups, scripts, fractions, square roots, upright unit or label groups, aligned
-separators, and matrix environments. Unknown control words remain explicit
-unsupported constructs, and malformed source returns typed syntax failures.
+groups, scripts, fractions, square roots, upright unit or label groups, grouped
+text, escaped TeX special characters, aligned separators, and matrix
+environments. Unknown control words and unadmitted control symbols remain
+explicit unsupported constructs, and malformed source returns typed syntax
+failures.
 
 Semantic formulas carry an explicit inline, display, or aligned mode. Candidate
 acceptance validates supported mathematics before identity promotion, while the

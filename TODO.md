@@ -190,12 +190,12 @@ supports read-only behavior-version drift checks. It deliberately advertises no
 command protocol, normalizer, command context, Validate, Apply, rebatching, or
 numeric command/context limits yet.
 
-Aggregate command behavior and typed-result behavior are version 11 after
-making grouped mathematical text opaque to math-only structural markers. Asset
-reference, Ordering and grouping, and Text content retain family behavior
-version 1; Provenance and Style role are version 2, Document constraint is
-version 3, and Structured content is version 4. The immediately previous
-aggregate version 10 rejects instead of being reinterpreted.
+Aggregate command behavior and typed-result behavior are version 12 after
+admitting escaped TeX special characters without treating them as mathematical
+structure. Asset reference, Ordering and grouping, and Text content retain
+family behavior version 1; Provenance and Style role are version 2, Document
+constraint is version 3, and Structured content is version 5. The immediately
+previous aggregate version 11 rejects instead of being reinterpreted.
 
 A version-bound single-target proposal combines capability, exact local
 preconditions, and direct-edit simulation read-only. All five dedicated direct
@@ -491,8 +491,9 @@ derivation content while exposing unsupported constructs without rewriting.
 Current executable evidence preserves exact UTF-8 mathematical source while
 structurally recognizing ordinary Unicode notation, groups, scripts, fractions,
 square roots, upright unit or label groups, explicit `\text{...}` fragments,
-aligned row and column separators, and matrix environments. Math-only
-alignment, script, and row-break markers remain literal inside grouped text.
+escaped TeX special characters, aligned row and column separators, and matrix
+environments. Math-only alignment, script, and row-break markers remain literal
+inside grouped text.
 Inline, display, and aligned presentation modes are semantic values rather than
 renderer guesses. Unknown control words remain explicit unsupported constructs;
 malformed groups, required arguments, alignment use, and matrix boundaries

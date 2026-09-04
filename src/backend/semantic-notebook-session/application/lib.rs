@@ -544,7 +544,7 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
     }
 
     fn command_capability_snapshot(&self) -> SemanticCommandCapabilitySnapshot {
-        const VERSION: CommandBehaviorVersion = CommandBehaviorVersion(11);
+        const VERSION: CommandBehaviorVersion = CommandBehaviorVersion(12);
         const FAMILY_CAPABILITIES: [CommandFamilyCapability; 7] = [
             CommandFamilyCapability {
                 behavior_version: CommandBehaviorVersion(1),
@@ -563,7 +563,7 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
                 family: SemanticCommandFamily::Provenance,
             },
             CommandFamilyCapability {
-                behavior_version: CommandBehaviorVersion(4),
+                behavior_version: CommandBehaviorVersion(5),
                 family: SemanticCommandFamily::StructuredContent,
             },
             CommandFamilyCapability {

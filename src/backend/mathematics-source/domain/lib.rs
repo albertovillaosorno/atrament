@@ -151,6 +151,8 @@ pub enum SupportedCommand {
     BeginMatrix,
     /// End of an explicit matrix environment.
     EndMatrix,
+    /// Escaped TeX special character preserved as literal source.
+    EscapedSpecial,
     /// Two-group fraction command.
     Fraction,
     /// Roman/upright grouped content, useful for units and labels.
@@ -190,7 +192,8 @@ impl AnalyzedFormula {
 ///
 /// Supported source includes ordinary Unicode mathematics, groups, scripts,
 /// `\\frac{...}{...}`, `\\sqrt{...}`, `\\mathrm{...}`, `\\text{...}`,
-/// aligned separators, and `\\begin{matrix}...\\end{matrix}`. Math-only
+/// escaped TeX special characters, aligned separators, and
+/// `\\begin{matrix}...\\end{matrix}`. Math-only
 /// alignment, script, and row-break markers remain literal inside grouped text.
 /// Other commands remain present in the token stream and are reported through
 /// [`AnalyzedFormula::unsupported`].
@@ -335,6 +338,16 @@ fn scan_command(source: &str, start: usize) -> ScannedCommand {
         return ScannedCommand {
             end: after_slash.saturating_add(1),
             kind: ScannedCommandKind::RowBreak,
+        };
+    }
+    if source.as_bytes().get(after_slash).is_some_and(|byte| {
+        matches!(byte, b'{' | b'}' | b'%' | b'$' | b'#' | b'&' | b'_')
+    }) {
+        return ScannedCommand {
+            end: after_slash.saturating_add(1),
+            kind: ScannedCommandKind::Supported(
+                SupportedCommand::EscapedSpecial,
+            ),
         };
     }
     for (spelling, supported) in [
@@ -577,7 +590,9 @@ fn validate_command_groups(
     command: SupportedCommand,
 ) -> Result<(), MathSyntaxError> {
     let required = match command {
-        SupportedCommand::BeginMatrix | SupportedCommand::EndMatrix => 0usize,
+        SupportedCommand::BeginMatrix
+        | SupportedCommand::EndMatrix
+        | SupportedCommand::EscapedSpecial => 0usize,
         SupportedCommand::Fraction => 2usize,
         SupportedCommand::Roman
         | SupportedCommand::SquareRoot

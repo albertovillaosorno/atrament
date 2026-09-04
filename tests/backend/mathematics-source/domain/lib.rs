@@ -58,20 +58,58 @@ fn unicode_school_formula_is_preserved_byte_for_byte() {
 }
 
 #[test]
-fn escaped_braces_do_not_corrupt_required_group_indexing() {
+fn escaped_braces_are_supported_without_corrupting_group_indexing() {
     let source = r"\frac{\{x\}}{2}";
-    let analyzed = analyze(source, FormulaMode::Display)
-        .expect("escaped brace commands remain balanced unsupported input");
-    assert!(!analyzed.is_supported());
+    let analyzed =
+        analyze(source, FormulaMode::Display).expect("escaped braces formula");
+    assert!(analyzed.is_supported());
     assert_eq!(reconstructed(&analyzed), source);
     assert_eq!(
         analyzed
-            .unsupported
+            .tokens
             .iter()
-            .map(|item| item.name.as_str())
-            .collect::<Vec<_>>(),
-        vec![r"\{", r"\}"],
+            .filter(|token| {
+                token.kind
+                    == MathTokenKind::Command(SupportedCommand::EscapedSpecial)
+            })
+            .count(),
+        2,
     );
+}
+
+#[test]
+fn escaped_tex_specials_remain_literal_in_math_and_text() {
+    let source = r"\{x \& y\} = 50\% \#1 + a\_b + \$5 + \text{A \& B}";
+    let analyzed = analyze(source, FormulaMode::Display)
+        .expect("escaped specials formula");
+    assert!(analyzed.is_supported());
+    assert_eq!(reconstructed(&analyzed), source);
+    assert_eq!(
+        analyzed
+            .tokens
+            .iter()
+            .filter(|token| {
+                token.kind
+                    == MathTokenKind::Command(SupportedCommand::EscapedSpecial)
+            })
+            .count(),
+        8,
+    );
+    assert!(!analyzed
+        .tokens
+        .iter()
+        .any(|token| token.kind == MathTokenKind::AlignmentPoint));
+}
+
+#[test]
+fn unknown_control_symbol_stays_explicitly_unsupported() {
+    let source = r"x \@ y";
+    let analyzed = analyze(source, FormulaMode::Inline)
+        .expect("balanced unknown control symbol");
+    assert!(!analyzed.is_supported());
+    assert_eq!(reconstructed(&analyzed), source);
+    assert_eq!(analyzed.unsupported.len(), 1);
+    assert_eq!(analyzed.unsupported[0].name, r"\@");
 }
 
 #[test]
