@@ -190,12 +190,12 @@ supports read-only behavior-version drift checks. It deliberately advertises no
 command protocol, normalizer, command context, Validate, Apply, rebatching, or
 numeric command/context limits yet.
 
-Aggregate command behavior and typed-result behavior are version 22 after
-completing the standard Greek TeX control-sequence vocabulary. Asset reference,
-Ordering and grouping, and Text content retain family behavior version 1;
-Provenance and Style role are version 2, Document constraint is version 3, and
-Structured content is version 15. The immediately previous aggregate version 21
-rejects instead of being reinterpreted.
+Aggregate command behavior and typed-result behavior are version 23 after
+admitting common relation and logic TeX symbols. Asset reference, Ordering and
+grouping, and Text content retain family behavior version 1; Provenance and
+Style role are version 2, Document constraint is version 3, and Structured
+content is version 16. The immediately previous aggregate version 22 rejects
+instead of being reinterpreted.
 
 A version-bound single-target proposal combines capability, exact local
 preconditions, and direct-edit simulation read-only. All five dedicated direct
@@ -494,8 +494,8 @@ binomial coefficients, square roots, grouped mathematical alphabets, common
 one-group accents, upright unit or label groups, explicit `\text{...}`
 fragments, grouped custom operator names, vector, overline, and underline
 decorations, escaped TeX special characters, standard Greek control-sequence
-notation, common named symbols, relations, operators, calculus, set, and logic
-notation, aligned row and column
+notation, common named symbols, relation and logic symbols, operators, calculus,
+set notation, aligned row and column
 separators, and matrix environments. Math-only alignment, script, and row-break
 markers remain literal inside grouped text.
 Inline, display, and aligned presentation modes are semantic values rather than

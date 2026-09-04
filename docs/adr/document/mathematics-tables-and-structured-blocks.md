@@ -62,8 +62,9 @@ groups, scripts, fractions, binomial coefficients, square roots, grouped
 mathematical alphabets, common one-group accents, upright unit or label groups,
 grouped text and custom operator names, vector, overline, and underline
 decorations, escaped TeX special characters, standard Greek control-sequence
-notation, common named symbols, relations, operators, calculus, set, and logic
-notation, aligned separators, and matrix environments. Unknown control words and
+notation, common named symbols, relation and logic symbols, operators, calculus,
+set notation, aligned separators, and matrix environments. Unknown control words
+and
 unadmitted control symbols remain
 explicit unsupported constructs, and malformed source returns typed syntax
 failures.
