@@ -65,7 +65,7 @@ vector, overline, and underline decorations, escaped TeX special characters,
 standard and variant Greek control-sequence notation, common named and delimiter
 symbols, binary-operator symbols, arrow and ellipsis symbols, relation and logic
 symbols, operators, calculus, set notation, aligned separators, and ordered
-aligned, cases, and matrix environments. Paired
+aligned, cases, gathered, and matrix environments. Paired
 delimiter-sizing controls remain explicit unsupported input rather than being
 inferred from admitted delimiter glyph names. Unknown control words and
 unadmitted control symbols remain explicit unsupported constructs, and malformed
@@ -73,7 +73,9 @@ source returns typed syntax failures.
 
 Environment closes are order-sensitive, with typed extra, missing, and
 mismatched-boundary failures. Substack row breaks are structural only inside
-their owning group and do not admit column alignment.
+their owning group and do not inherit column alignment from an outer
+environment. Gathered rows also remain row-only unless a column-capable
+environment is nested inside.
 
 Semantic formulas carry an explicit inline, display, or aligned mode. Candidate
 acceptance validates supported mathematics before identity promotion, while the

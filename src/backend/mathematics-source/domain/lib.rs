@@ -103,9 +103,11 @@ const STRUCTURED_CONTROL_WORD_COMMANDS: &[(&str, SupportedCommand)] = &[
 const STRUCTURED_ENVIRONMENT_COMMANDS: &[(&str, SupportedCommand)] = &[
     ("\\begin{aligned}", SupportedCommand::BeginAligned),
     ("\\begin{cases}", SupportedCommand::BeginCases),
+    ("\\begin{gathered}", SupportedCommand::BeginGathered),
     ("\\begin{matrix}", SupportedCommand::BeginMatrix),
     ("\\end{aligned}", SupportedCommand::EndAligned),
     ("\\end{cases}", SupportedCommand::EndCases),
+    ("\\end{gathered}", SupportedCommand::EndGathered),
     ("\\end{matrix}", SupportedCommand::EndMatrix),
 ];
 
@@ -151,6 +153,8 @@ pub enum MathSyntaxErrorKind {
     ExtraAlignedEnd,
     /// Cases environment closes without a matching cases start.
     ExtraCasesEnd,
+    /// Gathered environment closes without a matching gathered start.
+    ExtraGatheredEnd,
     /// A closing group appears without a matching open group.
     ExtraGroupClose,
     /// Matrix environment closes without a matching matrix start.
@@ -161,6 +165,8 @@ pub enum MathSyntaxErrorKind {
     MissingAlignedEnd,
     /// Cases environment remains open at end of source.
     MissingCasesEnd,
+    /// Gathered environment remains open at end of source.
+    MissingGatheredEnd,
     /// Matrix environment remains open at end of source.
     MissingMatrixEnd,
     /// A supported command is missing one or more required braced arguments.
@@ -205,6 +211,7 @@ pub enum MathTokenKind {
 enum StructuredEnvironmentKind {
     Aligned,
     Cases,
+    Gathered,
     Matrix,
 }
 
@@ -252,6 +259,8 @@ pub enum SupportedCommand {
     BeginAligned,
     /// Start of an explicit cases environment.
     BeginCases,
+    /// Start of an explicit gathered environment.
+    BeginGathered,
     /// Start of an explicit matrix environment.
     BeginMatrix,
     /// Two-group binomial coefficient command.
@@ -274,6 +283,8 @@ pub enum SupportedCommand {
     EndAligned,
     /// End of an explicit cases environment.
     EndCases,
+    /// End of an explicit gathered environment.
+    EndGathered,
     /// End of an explicit matrix environment.
     EndMatrix,
     /// Escaped TeX special character preserved as literal source.
@@ -684,8 +695,12 @@ fn scan_alignment(
     let substack_owns_scope = substack_depth.is_some_and(|depth| {
         environment.is_none_or(|scope| scope.group_depth < depth)
     });
+    let environment_allows_columns = environment
+        .is_some_and(|scope| environment_allows_alignment(scope.kind));
+    let mode_allows_columns =
+        environment.is_none() && mode == FormulaMode::Aligned;
     if substack_owns_scope
-        || (environment.is_none() && mode != FormulaMode::Aligned)
+        || !(environment_allows_columns || mode_allows_columns)
     {
         return Err(error(
             state.index,
@@ -832,6 +847,8 @@ fn beginning_environment(
         Some(StructuredEnvironmentKind::Aligned)
     } else if command == SupportedCommand::BeginCases {
         Some(StructuredEnvironmentKind::Cases)
+    } else if command == SupportedCommand::BeginGathered {
+        Some(StructuredEnvironmentKind::Gathered)
     } else if command == SupportedCommand::BeginMatrix {
         Some(StructuredEnvironmentKind::Matrix)
     } else {
@@ -846,10 +863,23 @@ fn ending_environment(
         Some(StructuredEnvironmentKind::Aligned)
     } else if command == SupportedCommand::EndCases {
         Some(StructuredEnvironmentKind::Cases)
+    } else if command == SupportedCommand::EndGathered {
+        Some(StructuredEnvironmentKind::Gathered)
     } else if command == SupportedCommand::EndMatrix {
         Some(StructuredEnvironmentKind::Matrix)
     } else {
         None
+    }
+}
+
+const fn environment_allows_alignment(
+    environment: StructuredEnvironmentKind,
+) -> bool {
+    match environment {
+        StructuredEnvironmentKind::Aligned
+        | StructuredEnvironmentKind::Cases
+        | StructuredEnvironmentKind::Matrix => true,
+        StructuredEnvironmentKind::Gathered => false,
     }
 }
 
@@ -861,6 +891,9 @@ const fn environment_extra_end_error(
             MathSyntaxErrorKind::ExtraAlignedEnd
         },
         StructuredEnvironmentKind::Cases => MathSyntaxErrorKind::ExtraCasesEnd,
+        StructuredEnvironmentKind::Gathered => {
+            MathSyntaxErrorKind::ExtraGatheredEnd
+        },
         StructuredEnvironmentKind::Matrix => {
             MathSyntaxErrorKind::ExtraMatrixEnd
         },
@@ -876,6 +909,9 @@ const fn environment_missing_end_error(
         },
         StructuredEnvironmentKind::Cases => {
             MathSyntaxErrorKind::MissingCasesEnd
+        },
+        StructuredEnvironmentKind::Gathered => {
+            MathSyntaxErrorKind::MissingGatheredEnd
         },
         StructuredEnvironmentKind::Matrix => {
             MathSyntaxErrorKind::MissingMatrixEnd
@@ -930,9 +966,11 @@ fn validate_command_groups(
     let required = match command {
         SupportedCommand::BeginAligned
         | SupportedCommand::BeginCases
+        | SupportedCommand::BeginGathered
         | SupportedCommand::BeginMatrix
         | SupportedCommand::EndAligned
         | SupportedCommand::EndCases
+        | SupportedCommand::EndGathered
         | SupportedCommand::EndMatrix
         | SupportedCommand::EscapedSpecial
         | SupportedCommand::NamedOperator

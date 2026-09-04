@@ -1266,6 +1266,66 @@ fn aligned_environment_admits_rows_and_alignment_in_display_mode() {
 }
 
 #[test]
+fn gathered_environment_admits_rows_but_not_column_alignment() {
+    let source = r"\begin{gathered}a \\ b\end{gathered}";
+    let analyzed = analyze(source, FormulaMode::Display)
+        .expect("gathered row structure");
+    assert!(analyzed.is_supported());
+    assert_eq!(reconstructed(&analyzed), source);
+    assert_eq!(
+        analyzed
+            .tokens
+            .iter()
+            .filter(|token| token.kind == MathTokenKind::RowBreak)
+            .count(),
+        1,
+    );
+    assert!(analyzed.tokens.iter().any(|token| {
+        token.kind == MathTokenKind::Command(SupportedCommand::BeginGathered)
+    }));
+    assert!(analyzed.tokens.iter().any(|token| {
+        token.kind == MathTokenKind::Command(SupportedCommand::EndGathered)
+    }));
+
+    let column = r"\begin{gathered}a & b\end{gathered}";
+    assert_eq!(
+        analyze(column, FormulaMode::Aligned),
+        Err(MathSyntaxError {
+            byte_offset: column.find('&').expect("alignment marker"),
+            kind: MathSyntaxErrorKind::AlignmentOutsideStructure,
+        }),
+    );
+}
+
+#[test]
+fn gathered_scope_yields_to_nested_column_environment() {
+    let source = concat!(
+        r"\begin{gathered}\begin{matrix}a & b\end{matrix} \\ ",
+        r"c\end{gathered}",
+    );
+    let analyzed = analyze(source, FormulaMode::Display)
+        .expect("matrix nested inside gathered rows");
+    assert!(analyzed.is_supported());
+    assert_eq!(reconstructed(&analyzed), source);
+    assert_eq!(
+        analyzed
+            .tokens
+            .iter()
+            .filter(|token| token.kind == MathTokenKind::AlignmentPoint)
+            .count(),
+        1,
+    );
+    assert_eq!(
+        analyzed
+            .tokens
+            .iter()
+            .filter(|token| token.kind == MathTokenKind::RowBreak)
+            .count(),
+        1,
+    );
+}
+
+#[test]
 fn cases_environment_admits_rows_and_alignment() {
     let source = concat!(
         r"f(x)=\begin{cases}x & x>0 \\ ",
@@ -1662,6 +1722,25 @@ fn malformed_cases_boundaries_are_typed() {
         Err(MathSyntaxError {
             byte_offset: source.len(),
             kind: MathSyntaxErrorKind::MissingCasesEnd,
+        }),
+    );
+}
+
+#[test]
+fn malformed_gathered_boundaries_are_typed() {
+    assert_eq!(
+        analyze(r"\end{gathered}", FormulaMode::Display),
+        Err(MathSyntaxError {
+            byte_offset: 0,
+            kind: MathSyntaxErrorKind::ExtraGatheredEnd,
+        }),
+    );
+    let source = r"\begin{gathered}a \\ b";
+    assert_eq!(
+        analyze(source, FormulaMode::Display),
+        Err(MathSyntaxError {
+            byte_offset: source.len(),
+            kind: MathSyntaxErrorKind::MissingGatheredEnd,
         }),
     );
 }
