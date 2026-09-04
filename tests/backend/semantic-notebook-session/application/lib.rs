@@ -84,7 +84,7 @@ use atrament_semantic_notebook_port::{
 use atrament_semantic_notebook_session::SemanticNotebookSessionService;
 
 const CURRENT_COMMAND_BEHAVIOR_VERSION: CommandBehaviorVersion =
-    CommandBehaviorVersion(26);
+    CommandBehaviorVersion(27);
 
 #[derive(Debug)]
 struct CountingCommandIdentity {
@@ -1044,7 +1044,7 @@ fn named_tex_symbols_are_admitted_and_directly_editable() {
 #[test]
 fn named_tex_operators_are_admitted_and_directly_editable() {
     let ids = IdentityAllocator::new();
-    let initial = r"y = \sin(\theta)";
+    let initial = r"y = \det(A) + \ker(T) + \sinh(x)";
     let (candidate, formula) =
         candidate_math_notebook(&ids, initial, FormulaMode::Display);
     let mut session = SemanticNotebookSessionService::default();
@@ -1063,7 +1063,10 @@ fn named_tex_operators_are_admitted_and_directly_editable() {
         initial,
     );
 
-    let edited_source = r"y = \log(x) + \cos(\phi)";
+    let edited_source = concat!(
+        r"y = \gcd(a,b) + \dim(V) + \liminf a_n + ",
+        r"\limsup b_n + \Pr(A)",
+    );
     let outcome = session.replace_formula(
         revision,
         formula,
@@ -5966,7 +5969,7 @@ fn command_capability_snapshot_is_deterministic_and_does_not_overclaim() {
             family: SemanticCommandFamily::Provenance,
         },
         CommandFamilyCapability {
-            behavior_version: CommandBehaviorVersion(19),
+            behavior_version: CommandBehaviorVersion(20),
             family: SemanticCommandFamily::StructuredContent,
         },
         CommandFamilyCapability {
@@ -6034,11 +6037,11 @@ fn command_capability_version_detects_drift_independently_of_revision() {
     );
     assert_eq!(
         session.check_command_capability_compatibility(
-            CommandBehaviorVersion(25),
+            CommandBehaviorVersion(26),
         ),
         CommandCapabilityCompatibilityOutcome::Mismatch {
             current: CURRENT_COMMAND_BEHAVIOR_VERSION,
-            expected: CommandBehaviorVersion(25),
+            expected: CommandBehaviorVersion(26),
         },
     );
     assert_eq!(

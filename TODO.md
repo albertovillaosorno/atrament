@@ -190,11 +190,11 @@ supports read-only behavior-version drift checks. It deliberately advertises no
 command protocol, normalizer, command context, Validate, Apply, rebatching, or
 numeric command/context limits yet.
 
-Aggregate command behavior and typed-result behavior are version 26 after
-admitting common TeX binary-operator symbols. Asset reference, Ordering and
+Aggregate command behavior and typed-result behavior are version 27 after
+admitting additional standard TeX named operators. Asset reference, Ordering and
 grouping, and Text content retain family behavior version 1; Provenance and
 Style role are version 2, Document constraint is version 3, and Structured
-content is version 19. The immediately previous aggregate version 25 rejects
+content is version 20. The immediately previous aggregate version 26 rejects
 instead of being reinterpreted.
 
 A version-bound single-target proposal combines capability, exact local

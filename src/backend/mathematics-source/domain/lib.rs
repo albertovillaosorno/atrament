@@ -36,9 +36,11 @@
 
 // Keep command tables lexically sorted for reviewable vocabulary changes.
 const NAMED_OPERATOR_COMMANDS: &[&str] = &[
-    "\\arccos", "\\arcsin", "\\arctan", "\\cos", "\\exp", "\\int",
-    "\\lim", "\\ln", "\\log", "\\max", "\\min", "\\prod", "\\sin",
-    "\\sum", "\\tan",
+    "\\Pr", "\\arccos", "\\arcsin", "\\arctan", "\\arg", "\\cos", "\\cosh",
+    "\\cot", "\\coth", "\\csc", "\\deg", "\\det", "\\dim", "\\exp", "\\gcd",
+    "\\hom", "\\inf", "\\int", "\\ker", "\\lg", "\\lim", "\\liminf",
+    "\\limsup", "\\ln", "\\log", "\\max", "\\min", "\\prod", "\\sec", "\\sin",
+    "\\sinh", "\\sum", "\\sup", "\\tan", "\\tanh",
 ];
 
 const NAMED_SYMBOL_COMMANDS: &[&str] = &[

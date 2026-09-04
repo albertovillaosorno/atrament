@@ -104,9 +104,11 @@ fn escaped_tex_specials_remain_literal_in_math_and_text() {
 #[test]
 fn named_operator_vocabulary_is_supported_without_rewriting() {
     for source in [
-        r"\arccos", r"\arcsin", r"\arctan", r"\cos", r"\exp",
-        r"\int", r"\lim", r"\ln", r"\log", r"\max", r"\min",
-        r"\prod", r"\sin", r"\sum", r"\tan",
+        r"\Pr", r"\arccos", r"\arcsin", r"\arctan", r"\arg", r"\cos",
+        r"\cosh", r"\cot", r"\coth", r"\csc", r"\deg", r"\det", r"\dim",
+        r"\exp", r"\gcd", r"\hom", r"\inf", r"\int", r"\ker", r"\lg", r"\lim",
+        r"\liminf", r"\limsup", r"\ln", r"\log", r"\max", r"\min", r"\prod",
+        r"\sec", r"\sin", r"\sinh", r"\sum", r"\sup", r"\tan", r"\tanh",
     ] {
         let analyzed = analyze(source, FormulaMode::Inline)
             .expect("named operator formula");
@@ -150,6 +152,30 @@ fn named_operators_compose_with_symbols_and_groups() {
             })
             .count(),
         3,
+    );
+}
+
+#[test]
+fn extended_named_operators_compose_without_rewriting() {
+    let source = concat!(
+        r"\det(A) + \gcd(a,b) + \ker(T) + \dim(V); ",
+        r"\sinh(x) + \cosh(x) + \tanh(x); ",
+        r"\liminf a_n \le \limsup a_n; \Pr(A)",
+    );
+    let analyzed = analyze(source, FormulaMode::Display)
+        .expect("extended named operator expression");
+    assert!(analyzed.is_supported());
+    assert_eq!(reconstructed(&analyzed), source);
+    assert_eq!(
+        analyzed
+            .tokens
+            .iter()
+            .filter(|token| {
+                token.kind
+                    == MathTokenKind::Command(SupportedCommand::NamedOperator)
+            })
+            .count(),
+        10,
     );
 }
 
