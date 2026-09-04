@@ -353,6 +353,40 @@ fn required_groups_allow_ascii_whitespace_without_rewriting() {
 }
 
 #[test]
+fn common_accents_are_structural_and_require_one_group() {
+    let source = r"\bar{x} + \hat{p} + \dot{x} + \ddot{x} + \tilde{y}";
+    let analyzed = analyze(source, FormulaMode::Display)
+        .expect("common accent formula");
+    assert!(analyzed.is_supported());
+    assert_eq!(reconstructed(&analyzed), source);
+    for (spelling, kind) in [
+        (r"\bar", SupportedCommand::Bar),
+        (r"\hat", SupportedCommand::Hat),
+        (r"\dot", SupportedCommand::Dot),
+        (r"\ddot", SupportedCommand::DoubleDot),
+        (r"\tilde", SupportedCommand::Tilde),
+    ] {
+        assert!(analyzed.tokens.iter().any(|token| {
+            token.kind == MathTokenKind::Command(kind)
+                && analyzed.token_source(*token) == Some(spelling)
+        }));
+        assert_eq!(
+            analyze(spelling, FormulaMode::Inline),
+            Err(MathSyntaxError {
+                byte_offset: spelling.len(),
+                kind: MathSyntaxErrorKind::MissingRequiredGroup,
+            }),
+            "{spelling}",
+        );
+    }
+
+    let prefixed = analyze(r"\hatted{x}", FormulaMode::Inline)
+        .expect("balanced longer accent command");
+    assert!(!prefixed.is_supported());
+    assert_eq!(prefixed.unsupported[0].name, r"\hatted");
+}
+
+#[test]
 fn grouped_math_alphabets_are_structural_and_require_one_group() {
     let source = r"x \in \mathbb{R}, \mathbf{v}, \mathcal{F}, \mathit{x}";
     let analyzed = analyze(source, FormulaMode::Display)

@@ -59,9 +59,9 @@ representative bilingual assignment must exercise every initial block family.
 The backend now has a dependency-free mathematical source analyzer that retains
 exact UTF-8 source and exposes structural spans for the admitted first slice:
 groups, scripts, fractions, binomial coefficients, square roots, grouped
-mathematical alphabets, upright unit or label groups, grouped text and custom
-operator names, vector, overline, and underline decorations, escaped TeX special
-characters, common named symbols,
+mathematical alphabets, common one-group accents, upright unit or label groups,
+grouped text and custom operator names, vector, overline, and underline
+decorations, escaped TeX special characters, common named symbols,
 relations, operators, calculus, set, and logic notation, aligned separators, and
 matrix environments. Unknown control words and unadmitted control symbols remain
 explicit unsupported constructs, and malformed source returns typed syntax

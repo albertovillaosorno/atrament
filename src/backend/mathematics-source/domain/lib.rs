@@ -147,6 +147,8 @@ enum ScannedCommandKind {
 /// One supported TeX-compatible control sequence or environment marker.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum SupportedCommand {
+    /// One-group bar accent.
+    Bar,
     /// Start of an explicit matrix environment.
     BeginMatrix,
     /// Two-group binomial coefficient command.
@@ -157,12 +159,18 @@ pub enum SupportedCommand {
     Bold,
     /// One-group calligraphic mathematical alphabet.
     Calligraphic,
+    /// One-group dot accent.
+    Dot,
+    /// One-group double-dot accent.
+    DoubleDot,
     /// End of an explicit matrix environment.
     EndMatrix,
     /// Escaped TeX special character preserved as literal source.
     EscapedSpecial,
     /// Two-group fraction command.
     Fraction,
+    /// One-group hat accent.
+    Hat,
     /// One-group italic mathematical alphabet.
     Italic,
     /// Admitted no-argument named mathematical operator.
@@ -179,6 +187,8 @@ pub enum SupportedCommand {
     SquareRoot,
     /// One grouped text fragment preserved exactly inside mathematics.
     Text,
+    /// One-group tilde accent.
+    Tilde,
     /// One-group underline decoration.
     Underline,
     /// One-group vector decoration.
@@ -214,7 +224,7 @@ impl AnalyzedFormula {
 ///
 /// Supported source includes ordinary Unicode mathematics, groups, scripts,
 /// `\\frac{...}{...}`, `\\binom{...}{...}`, `\\sqrt{...}`,
-/// grouped mathematical alphabets, `\\mathrm{...}`,
+/// grouped mathematical alphabets, common one-group accents, `\\mathrm{...}`,
 /// `\\operatorname{...}`, `\\text{...}`, grouped vector, overline, and
 /// underline decorations, escaped TeX special
 /// characters, common named mathematical operators and
@@ -410,10 +420,14 @@ fn scan_command(source: &str, start: usize) -> ScannedCommand {
         }
     }
     for (spelling, supported) in [
+        ("\\bar", SupportedCommand::Bar),
         ("\\begin{matrix}", SupportedCommand::BeginMatrix),
         ("\\binom", SupportedCommand::Binomial),
+        ("\\ddot", SupportedCommand::DoubleDot),
+        ("\\dot", SupportedCommand::Dot),
         ("\\end{matrix}", SupportedCommand::EndMatrix),
         ("\\frac", SupportedCommand::Fraction),
+        ("\\hat", SupportedCommand::Hat),
         ("\\mathbb", SupportedCommand::BlackboardBold),
         ("\\mathbf", SupportedCommand::Bold),
         ("\\mathcal", SupportedCommand::Calligraphic),
@@ -423,6 +437,7 @@ fn scan_command(source: &str, start: usize) -> ScannedCommand {
         ("\\overline", SupportedCommand::Overline),
         ("\\sqrt", SupportedCommand::SquareRoot),
         ("\\text", SupportedCommand::Text),
+        ("\\tilde", SupportedCommand::Tilde),
         ("\\underline", SupportedCommand::Underline),
         ("\\vec", SupportedCommand::Vector),
     ] {
@@ -664,15 +679,20 @@ fn validate_command_groups(
         | SupportedCommand::NamedOperator
         | SupportedCommand::NamedSymbol => 0usize,
         SupportedCommand::Binomial | SupportedCommand::Fraction => 2usize,
-        SupportedCommand::BlackboardBold
+        SupportedCommand::Bar
+        | SupportedCommand::BlackboardBold
         | SupportedCommand::Bold
         | SupportedCommand::Calligraphic
+        | SupportedCommand::Dot
+        | SupportedCommand::DoubleDot
+        | SupportedCommand::Hat
         | SupportedCommand::Italic
         | SupportedCommand::OperatorName
         | SupportedCommand::Overline
         | SupportedCommand::Roman
         | SupportedCommand::SquareRoot
         | SupportedCommand::Text
+        | SupportedCommand::Tilde
         | SupportedCommand::Underline
         | SupportedCommand::Vector => 1usize,
     };
