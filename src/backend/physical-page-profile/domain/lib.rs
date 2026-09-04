@@ -131,6 +131,22 @@ pub enum PaperMarkJoin {
     Sharp,
 }
 
+impl PaperMarkAppearance {
+    /// Validate this ruler appearance independently from a page profile.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed failure when a rounded intersection has zero radius.
+    pub fn validate(self) -> Result<Self, PageProfileError> {
+        if let PaperMarkJoin::Rounded { radius } = self.join
+            && radius == Length::ZERO
+        {
+            return Err(PageProfileError::PaperMarkRoundedJoinRadiusIsZero);
+        }
+        Ok(self)
+    }
+}
+
 /// Whether page marks are composited below or above simulated ink.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum PaperMarkLayer {
@@ -245,7 +261,7 @@ impl PageProfile {
     pub fn validate(self) -> Result<Self, PageProfileError> {
         let oriented = self.oriented_sheet()?;
         validate_rect_inside(self.printable_region, oriented)?;
-        validate_paper_mark_appearance(self.paper_mark_appearance)?;
+        let _appearance = self.paper_mark_appearance.validate()?;
         validate_pattern(self.paper_pattern)?;
         validate_corner_roundness(
             self.border_shape,
@@ -399,17 +415,6 @@ fn validate_corner_roundness(
         || doubled > printable.height.micrometres()
     {
         return Err(PageProfileError::CornerRoundnessExceedsPrintableRegion);
-    }
-    Ok(())
-}
-
-fn validate_paper_mark_appearance(
-    appearance: PaperMarkAppearance,
-) -> Result<(), PageProfileError> {
-    if let PaperMarkJoin::Rounded { radius } = appearance.join
-        && radius == Length::ZERO
-    {
-        return Err(PageProfileError::PaperMarkRoundedJoinRadiusIsZero);
     }
     Ok(())
 }

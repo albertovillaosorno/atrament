@@ -214,6 +214,29 @@ fn ruler_deviation_is_bounded_without_mutating_nominal_grid_anchors() {
 }
 
 #[test]
+fn ruler_sample_rejects_invalid_appearance_before_sample_geometry() {
+    let invalid = PaperMarkAppearance {
+        join: PaperMarkJoin::Rounded {
+            radius: Length::ZERO,
+        },
+        maximum_ruler_error: Length::from_micrometres(200),
+    };
+    assert_eq!(
+        validate_ruler_sample(
+            RulerSample {
+                along: Length::from_micrometres(17_001),
+                normal_offset: RulerOffset::from_micrometres(201),
+            },
+            Length::from_micrometres(17_000),
+            invalid,
+        ),
+        Err(RulerSampleError::InvalidAppearance(
+            PageProfileError::PaperMarkRoundedJoinRadiusIsZero,
+        )),
+    );
+}
+
+#[test]
 fn ruler_sample_rejects_excess_error_outside_span_and_signed_overflow() {
     let appearance = rounded_appearance(Length::from_micrometres(200));
     assert_eq!(

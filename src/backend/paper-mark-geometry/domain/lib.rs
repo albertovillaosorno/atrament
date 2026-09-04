@@ -172,6 +172,8 @@ pub struct Span {
 pub enum RulerSampleError {
     /// Absolute normal displacement exceeds the profile-owned bound.
     ErrorBoundExceeded,
+    /// Supplied ruler appearance is not a valid physical-profile appearance.
+    InvalidAppearance(PageProfileError),
     /// Signed offset magnitude cannot be represented as a physical length.
     OffsetMagnitudeOverflow,
     /// Sample distance lies beyond the nominal line span.
@@ -271,6 +273,9 @@ pub fn validate_ruler_sample(
     line_length: Length,
     appearance: PaperMarkAppearance,
 ) -> Result<RulerSample, RulerSampleError> {
+    let valid_appearance = appearance
+        .validate()
+        .map_err(RulerSampleError::InvalidAppearance)?;
     if sample.along > line_length {
         return Err(RulerSampleError::OutsideSpan);
     }
@@ -282,7 +287,7 @@ pub fn validate_ruler_sample(
     let Ok(magnitude) = u64::try_from(signed_magnitude) else {
         return Err(RulerSampleError::OffsetMagnitudeOverflow);
     };
-    if magnitude > appearance.maximum_ruler_error.micrometres() {
+    if magnitude > valid_appearance.maximum_ruler_error.micrometres() {
         return Err(RulerSampleError::ErrorBoundExceeded);
     }
     Ok(sample)

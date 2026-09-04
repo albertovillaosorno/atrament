@@ -387,6 +387,9 @@ and mark layer.
 
 Validated ruler samples cannot move nominal anchors. Overflow, zero spacing,
 invalid rounded joins, and unspecified custom geometry fail with typed results.
+Standalone ruler-sample validation now reuses the physical-profile appearance
+validator, so a zero-radius rounded join rejects before sample span or error
+checks instead of bypassing profile-owned appearance authority.
 
 The task remains open for seeded calibrated ruler-path synthesis, additional
 profile-specific visual appearance, and renderer or live-output consumption.

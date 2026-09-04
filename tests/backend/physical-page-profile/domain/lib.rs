@@ -252,6 +252,34 @@ fn nonrounded_border_rejects_nonzero_corner_roundness() {
 }
 
 #[test]
+fn paper_mark_appearance_validates_without_complete_page_profile() {
+    let rounded = PaperMarkAppearance {
+        join: PaperMarkJoin::Rounded {
+            radius: Length::from_micrometres(250),
+        },
+        maximum_ruler_error: Length::from_micrometres(200),
+    };
+    assert_eq!(rounded.validate(), Ok(rounded));
+
+    let sharp = PaperMarkAppearance {
+        join: PaperMarkJoin::Sharp,
+        maximum_ruler_error: Length::from_micrometres(200),
+    };
+    assert_eq!(sharp.validate(), Ok(sharp));
+
+    let invalid = PaperMarkAppearance {
+        join: PaperMarkJoin::Rounded {
+            radius: Length::ZERO,
+        },
+        maximum_ruler_error: Length::from_micrometres(200),
+    };
+    assert_eq!(
+        invalid.validate(),
+        Err(PageProfileError::PaperMarkRoundedJoinRadiusIsZero),
+    );
+}
+
+#[test]
 fn rounded_paper_mark_join_requires_positive_radius() {
     let mut profile = base_profile(BindingEdge::Left);
     profile.paper_mark_appearance.join =
