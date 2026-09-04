@@ -287,6 +287,28 @@ fn named_symbols_compose_with_scripts_and_relations() {
 }
 
 #[test]
+fn admitted_control_words_never_match_longer_ascii_names() {
+    for (source, unsupported) in [
+        (r"\binomial{n}{k}", r"\binomial"),
+        (r"\integral_0^1", r"\integral"),
+        (r"\infinite", r"\infinite"),
+        (r"\subsetequal", r"\subsetequal"),
+        (r"\overlined{x}", r"\overlined"),
+        (r"\vectored{x}", r"\vectored"),
+        (r"\Rightarrowed", r"\Rightarrowed"),
+        (r"\emptysets", r"\emptysets"),
+        (r"\nablax", r"\nablax"),
+    ] {
+        let analyzed = analyze(source, FormulaMode::Inline)
+            .expect("balanced longer control word");
+        assert!(!analyzed.is_supported(), "{source}");
+        assert_eq!(reconstructed(&analyzed), source);
+        assert_eq!(analyzed.unsupported.len(), 1, "{source}");
+        assert_eq!(analyzed.unsupported[0].name, unsupported, "{source}");
+    }
+}
+
+#[test]
 fn unknown_control_symbol_stays_explicitly_unsupported() {
     let source = r"x \@ y";
     let analyzed = analyze(source, FormulaMode::Inline)
