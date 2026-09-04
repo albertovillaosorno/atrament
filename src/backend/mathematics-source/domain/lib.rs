@@ -366,19 +366,14 @@ pub fn analyze(
     })
 }
 
-fn command_matches(source: &str, start: usize, spelling: &str) -> bool {
-    let Some(tail) = source.get(start..) else {
-        return false;
-    };
-    if !tail.starts_with(spelling) {
-        return false;
-    }
-    if spelling.ends_with('}') {
-        return true;
-    }
-    tail.get(spelling.len()..)
-        .and_then(|rest| rest.chars().next())
-        .is_none_or(|character| !character.is_ascii_alphabetic())
+fn environment_command_matches(
+    source: &str,
+    start: usize,
+    spelling: &str,
+) -> bool {
+    source
+        .get(start..)
+        .is_some_and(|tail| tail.starts_with(spelling))
 }
 
 const fn error(
@@ -500,10 +495,11 @@ fn scan_structured_environment_command(
     STRUCTURED_ENVIRONMENT_COMMANDS
         .iter()
         .find_map(|(spelling, supported)| {
-            command_matches(source, start, spelling).then(|| ScannedCommand {
-                end: start.saturating_add(spelling.len()),
-                kind: ScannedCommandKind::Supported(*supported),
-            })
+            environment_command_matches(source, start, spelling)
+                .then(|| ScannedCommand {
+                    end: start.saturating_add(spelling.len()),
+                    kind: ScannedCommandKind::Supported(*supported),
+                })
         })
 }
 
