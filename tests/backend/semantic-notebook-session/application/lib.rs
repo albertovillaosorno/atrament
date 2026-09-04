@@ -2947,6 +2947,97 @@ fn global_constraint_kind_edit_preserves_target_and_seeds_notebook() {
 }
 
 #[test]
+fn constraint_kind_change_then_revert_is_net_noop() {
+    let ids = IdentityAllocator::new();
+    let (mut candidate, _) = candidate_notebook_with_span(&ids, "authored");
+    let constraint = candidate_id(&ids);
+    let notebook = candidate.id;
+    candidate.constraints.push(Constraint {
+        id: constraint,
+        kind: ConstraintKind::Paper,
+        target: notebook,
+    });
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(candidate)
+    else {
+        panic!("constraint no-op candidate must be accepted");
+    };
+    let constraint = accepted_for(&mapping, constraint);
+    let notebook = accepted_for(&mapping, notebook);
+    let before = session.current().expect("constraint no-op base").clone();
+    let paper = EditableSemanticValue::ConstraintKind(ConstraintKind::Paper);
+    let style = EditableSemanticValue::ConstraintKind(ConstraintKind::Style);
+    let command = |id, dependencies, expected, requested| {
+        DirectEditBatchCommand {
+            dependencies,
+            id,
+            preconditions: CommandTargetPreconditions {
+                expected_value: Some(expected),
+                identity: IdentityPrecondition {
+                    expected_kind: Some(SemanticIdentityKind::Constraint),
+                    expected_owner: IdentityOwnerExpectation::Direct(notebook),
+                },
+                requested_family: SemanticCommandFamily::DocumentConstraint,
+            },
+            requested,
+            target: constraint,
+        }
+    };
+    let batch = DirectEditBatchProposal {
+        base: revision,
+        capability_version: CommandBehaviorVersion(5),
+        commands: vec![
+            command(1_u32, vec![], paper.clone(), style.clone()),
+            command(2_u32, vec![1], style, paper),
+        ],
+    };
+    let DirectEditBatchSimulationOutcome::Predicted {
+        changes,
+        commands,
+        effect: DirectEditEffectClass::NoOp,
+        impact_seeds,
+        revision: predicted_revision,
+    } = session.simulate_direct_edit_batch(batch.clone())
+    else {
+        panic!("constraint change-then-revert must simulate as no-op");
+    };
+    assert_eq!(commands.len(), 2);
+    assert!(changes.is_empty());
+    assert!(impact_seeds.is_empty());
+    assert_eq!(predicted_revision, revision);
+    assert_eq!(session.current(), Some(&before));
+
+    let DirectEditBatchApplyOutcome::NoOp {
+        commands,
+        revision: unchanged,
+    } = session.apply_direct_edit_batch(batch)
+    else {
+        panic!("constraint change-then-revert must apply as no-op");
+    };
+    assert_eq!(commands.len(), 2);
+    assert_eq!(unchanged, revision);
+    assert_eq!(session.current(), Some(&before));
+    assert_eq!(
+        session.history_availability(),
+        HistoryAvailabilityOutcome::Available(HistoryAvailability {
+            can_redo: false,
+            can_undo: false,
+            revision,
+        }),
+    );
+    let current = session.current().expect("constraint no-op current");
+    let value = current
+        .notebook
+        .constraints
+        .iter()
+        .find(|value| value.id == constraint)
+        .expect("constraint no-op value");
+    assert_eq!(value.kind, ConstraintKind::Paper);
+    assert_eq!(value.target, notebook);
+}
+
+#[test]
 fn command_capability_snapshot_is_deterministic_and_does_not_overclaim() {
     let mut session = SemanticNotebookSessionService::default();
     let snapshot = session.command_capability_snapshot();
