@@ -491,11 +491,12 @@ derivation content while exposing unsupported constructs without rewriting.
 Current executable evidence preserves exact UTF-8 mathematical source while
 structurally recognizing ordinary Unicode notation, groups, scripts, fractions,
 square roots, upright unit or label groups, explicit `\text{...}` fragments,
-aligned row and column separators, and matrix environments. Inline, display, and
-aligned presentation modes are semantic values rather than renderer guesses.
-Unknown control words remain explicit unsupported constructs, while malformed
-groups, required arguments, alignment use, and matrix boundaries return typed
-syntax failures.
+aligned row and column separators, and matrix environments. Math-only
+alignment, script, and row-break markers remain literal inside grouped text.
+Inline, display, and aligned presentation modes are semantic values rather than
+renderer guesses. Unknown control words remain explicit unsupported constructs;
+malformed groups, required arguments, alignment use, and matrix boundaries return
+typed syntax failures.
 
 Semantic candidate acceptance analyzes every `Mathematics` block before accepted
 identity allocation. Unsupported or malformed mathematical candidates reject
@@ -556,10 +557,9 @@ Current executable evidence preserves exact authored Unicode through
 candidate acceptance, exact-base text replacement, ordered batch Apply, and
 Undo, including English and Spanish punctuation, curly quotes, guillemets,
 accents, en/em dashes, a decomposed accent sequence, and multi-code-point emoji.
-Existing precondition
-fixtures also keep NFC and NFD spellings distinct instead of inventing a
-normalization form. Normalization policy, grapheme-indexed mutation, punctuation
-generation, and language-aware wrapping remain open.
+Existing precondition fixtures also keep NFC and NFD spellings distinct rather
+than inventing a normalization form. Normalization policy, grapheme-indexed
+mutation, punctuation generation, and language-aware wrapping remain open.
 
 ### TODO - Make missing glyph coverage impossible to miss
 
