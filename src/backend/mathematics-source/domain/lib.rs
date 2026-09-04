@@ -161,6 +161,8 @@ pub enum SupportedCommand {
     NamedOperator,
     /// Admitted no-argument named mathematical symbol.
     NamedSymbol,
+    /// One grouped custom mathematical operator name.
+    OperatorName,
     /// One-group overline decoration.
     Overline,
     /// Roman/upright grouped content, useful for units and labels.
@@ -204,7 +206,7 @@ impl AnalyzedFormula {
 ///
 /// Supported source includes ordinary Unicode mathematics, groups, scripts,
 /// `\\frac{...}{...}`, `\\binom{...}{...}`, `\\sqrt{...}`,
-/// `\\mathrm{...}`, `\\text{...}`,
+/// `\\mathrm{...}`, `\\operatorname{...}`, `\\text{...}`,
 /// grouped vector, overline, and underline decorations, escaped TeX special
 /// characters, common named mathematical operators and
 /// symbols, aligned separators, and `\\begin{matrix}...\\end{matrix}`.
@@ -404,6 +406,7 @@ fn scan_command(source: &str, start: usize) -> ScannedCommand {
         ("\\end{matrix}", SupportedCommand::EndMatrix),
         ("\\frac", SupportedCommand::Fraction),
         ("\\mathrm", SupportedCommand::Roman),
+        ("\\operatorname", SupportedCommand::OperatorName),
         ("\\overline", SupportedCommand::Overline),
         ("\\sqrt", SupportedCommand::SquareRoot),
         ("\\text", SupportedCommand::Text),
@@ -648,7 +651,8 @@ fn validate_command_groups(
         | SupportedCommand::NamedOperator
         | SupportedCommand::NamedSymbol => 0usize,
         SupportedCommand::Binomial | SupportedCommand::Fraction => 2usize,
-        SupportedCommand::Overline
+        SupportedCommand::OperatorName
+        | SupportedCommand::Overline
         | SupportedCommand::Roman
         | SupportedCommand::SquareRoot
         | SupportedCommand::Text

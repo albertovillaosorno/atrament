@@ -320,6 +320,38 @@ fn unknown_control_symbol_stays_explicitly_unsupported() {
 }
 
 #[test]
+fn custom_operator_name_is_structural_and_requires_one_group() {
+    let source = r"\operatorname{Var}(X) + \operatorname{Cov}(X,Y)";
+    let analyzed = analyze(source, FormulaMode::Display)
+        .expect("custom operator formula");
+    assert!(analyzed.is_supported());
+    assert_eq!(reconstructed(&analyzed), source);
+    assert_eq!(
+        analyzed
+            .tokens
+            .iter()
+            .filter(|token| {
+                token.kind
+                    == MathTokenKind::Command(SupportedCommand::OperatorName)
+            })
+            .count(),
+        2,
+    );
+    assert_eq!(
+        analyze(r"\operatorname", FormulaMode::Inline),
+        Err(MathSyntaxError {
+            byte_offset: 13,
+            kind: MathSyntaxErrorKind::MissingRequiredGroup,
+        }),
+    );
+
+    let prefixed = analyze(r"\operatornamed{rank}", FormulaMode::Inline)
+        .expect("balanced longer operator-name command");
+    assert!(!prefixed.is_supported());
+    assert_eq!(prefixed.unsupported[0].name, r"\operatornamed");
+}
+
+#[test]
 fn grouped_decorations_are_structural_and_require_one_group() {
     let source = r"\vec{v} + \overline{AB} + \underline{x_1}";
     let analyzed = analyze(source, FormulaMode::Display)

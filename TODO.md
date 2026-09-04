@@ -190,12 +190,12 @@ supports read-only behavior-version drift checks. It deliberately advertises no
 command protocol, normalizer, command context, Validate, Apply, rebatching, or
 numeric command/context limits yet.
 
-Aggregate command behavior and typed-result behavior are version 18 after
-admitting two-group binomial coefficient structure. Asset reference, Ordering
-and grouping, and Text content retain family behavior version 1; Provenance and
-Style role are version 2, Document constraint is version 3, and Structured
-content is version 11. The immediately previous aggregate version 17 rejects
-instead of being reinterpreted.
+Aggregate command behavior and typed-result behavior are version 19 after
+admitting grouped custom operator names. Asset reference, Ordering and grouping,
+and Text content retain family behavior version 1; Provenance and Style role are
+version 2, Document constraint is version 3, and Structured content is version
+12. The immediately previous aggregate version 18 rejects instead of being
+reinterpreted.
 
 A version-bound single-target proposal combines capability, exact local
 preconditions, and direct-edit simulation read-only. All five dedicated direct
@@ -491,9 +491,9 @@ derivation content while exposing unsupported constructs without rewriting.
 Current executable evidence preserves exact UTF-8 mathematical source while
 structurally recognizing ordinary Unicode notation, groups, scripts, fractions,
 binomial coefficients, square roots, upright unit or label groups, explicit
-`\text{...}` fragments, grouped vector, overline, and underline decorations,
-escaped TeX special characters, common named symbols, relations, operators,
-calculus, set, and logic
+`\text{...}` fragments, grouped custom operator names, vector, overline, and
+underline decorations, escaped TeX special characters, common named symbols,
+relations, operators, calculus, set, and logic
 notation, aligned row and column separators, and matrix environments. Math-only
 alignment, script, and row-break markers remain literal inside grouped text.
 Inline, display, and aligned presentation modes are semantic values rather than
