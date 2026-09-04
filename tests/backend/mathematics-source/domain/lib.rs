@@ -913,6 +913,13 @@ fn malformed_groups_and_required_arguments_are_typed() {
             kind: MathSyntaxErrorKind::MissingRequiredGroup,
         }),
     );
+    assert_eq!(
+        analyze(r"\mathrm", FormulaMode::Inline),
+        Err(MathSyntaxError {
+            byte_offset: 7,
+            kind: MathSyntaxErrorKind::MissingRequiredGroup,
+        }),
+    );
 }
 
 #[test]
