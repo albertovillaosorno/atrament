@@ -1133,6 +1133,23 @@ fn token_source_is_sliced_only_from_its_own_unchanged_analysis() {
 }
 
 #[test]
+fn ascii_control_word_boundary_preserves_adjacent_unicode() {
+    let source = r"\alphaβ + \detñ + \mathbb{R}λ";
+    let analyzed = analyze(source, FormulaMode::Inline)
+        .expect("supported commands followed by Unicode");
+    assert!(analyzed.is_supported());
+    assert_eq!(reconstructed(&analyzed), source);
+
+    let unsupported_source = r"\alphaZβ";
+    let unsupported = analyze(unsupported_source, FormulaMode::Inline)
+        .expect("balanced longer ASCII control word with Unicode suffix");
+    assert!(!unsupported.is_supported());
+    assert_eq!(reconstructed(&unsupported), unsupported_source);
+    assert_eq!(unsupported.unsupported.len(), 1);
+    assert_eq!(unsupported.unsupported[0].name, r"\alphaZ");
+}
+
+#[test]
 fn longer_unknown_control_word_is_not_accepted_as_supported_prefix() {
     let analyzed = analyze(r"\fraction{x}", FormulaMode::Display)
         .expect("balanced unsupported source");
