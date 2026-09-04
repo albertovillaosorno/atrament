@@ -85,10 +85,12 @@ const STRUCTURED_CONTROL_WORD_COMMANDS: &[(&str, SupportedCommand)] = &[
     ("\\mathtt", SupportedCommand::Typewriter),
     ("\\operatorname", SupportedCommand::OperatorName),
     ("\\overline", SupportedCommand::Overline),
+    ("\\overset", SupportedCommand::Overset),
     ("\\sqrt", SupportedCommand::SquareRoot),
     ("\\text", SupportedCommand::Text),
     ("\\tilde", SupportedCommand::Tilde),
     ("\\underline", SupportedCommand::Underline),
+    ("\\underset", SupportedCommand::Underset),
     ("\\vec", SupportedCommand::Vector),
 ];
 
@@ -246,6 +248,8 @@ pub enum SupportedCommand {
     OperatorName,
     /// One-group overline decoration.
     Overline,
+    /// One annotation group placed above one grouped mathematical base.
+    Overset,
     /// Roman/upright grouped content, useful for units and labels.
     Roman,
     /// One-group sans-serif mathematical alphabet.
@@ -260,6 +264,8 @@ pub enum SupportedCommand {
     Typewriter,
     /// One-group underline decoration.
     Underline,
+    /// One annotation group placed below one grouped mathematical base.
+    Underset,
     /// One-group vector decoration.
     Vector,
 }
@@ -775,7 +781,10 @@ fn validate_command_groups(
         | SupportedCommand::EscapedSpecial
         | SupportedCommand::NamedOperator
         | SupportedCommand::NamedSymbol => 0usize,
-        SupportedCommand::Binomial | SupportedCommand::Fraction => 2usize,
+        SupportedCommand::Binomial
+        | SupportedCommand::Fraction
+        | SupportedCommand::Overset
+        | SupportedCommand::Underset => 2usize,
         SupportedCommand::Bar
         | SupportedCommand::BlackboardBold
         | SupportedCommand::Bold

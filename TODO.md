@@ -190,12 +190,12 @@ supports read-only behavior-version drift checks. It deliberately advertises no
 command protocol, normalizer, command context, Validate, Apply, rebatching, or
 numeric command/context limits yet.
 
-Aggregate command behavior and typed-result behavior are version 30 after
-admitting common TeX ellipsis symbols. Asset reference, Ordering and grouping,
-and Text content retain family behavior version 1; Provenance and Style role are
-version 2, Document constraint is version 3, and Structured content is version
-23. The immediately previous aggregate version 29 rejects instead of being
-reinterpreted.
+Aggregate command behavior and typed-result behavior are version 31 after
+admitting grouped TeX stacked annotations. Asset reference, Ordering and
+grouping, and Text content retain family behavior version 1; Provenance and
+Style role are version 2, Document constraint is version 3, and Structured
+content is version 24. The immediately previous aggregate version 30 rejects
+instead of being reinterpreted.
 
 A version-bound single-target proposal combines capability, exact local
 preconditions, and direct-edit simulation read-only. All five dedicated direct
@@ -492,8 +492,9 @@ Current executable evidence preserves exact UTF-8 mathematical source while
 structurally recognizing ordinary Unicode notation, groups, scripts, fractions,
 binomial coefficients, square roots, grouped mathematical alphabets, common
 one-group accents, upright unit or label groups, explicit `\text{...}`
-fragments, grouped custom operator names, vector, overline, and underline
-decorations, escaped TeX special characters, standard and variant Greek
+fragments, grouped custom operator names, stacked annotations, vector, overline,
+and underline decorations, escaped TeX special characters, standard and variant
+Greek
 control-sequence notation, common named and delimiter symbols, binary-operator
 symbols, arrow and ellipsis symbols, relation and logic symbols, operators,
 calculus, set notation, aligned row and column separators, and matrix
@@ -504,8 +505,7 @@ Math-only alignment, script, and row-break markers remain literal inside grouped
 text. Inline, display, and aligned presentation modes are semantic values rather
 than renderer guesses. Unknown control words remain explicit unsupported
 constructs; malformed groups, required arguments, alignment use, and matrix
-boundaries
-return typed syntax failures.
+boundaries return typed syntax failures.
 
 Semantic candidate acceptance analyzes every `Mathematics` block before accepted
 identity allocation. Unsupported or malformed mathematical candidates reject

@@ -60,8 +60,9 @@ The backend now has a dependency-free mathematical source analyzer that retains
 exact UTF-8 source and exposes structural spans for the admitted first slice:
 groups, scripts, fractions, binomial coefficients, square roots, grouped
 mathematical alphabets, common one-group accents, upright unit or label groups,
-grouped text and custom operator names, vector, overline, and underline
-decorations, escaped TeX special characters, standard and variant Greek
+grouped text and custom operator names, stacked annotations, vector, overline,
+and underline decorations, escaped TeX special characters, standard and variant
+Greek
 control-sequence notation, common named and delimiter symbols, binary-operator
 symbols, arrow and ellipsis symbols, relation and logic symbols, operators,
 calculus, set notation, aligned separators, and matrix environments. Paired

@@ -727,6 +727,34 @@ fn grouped_decorations_are_structural_and_require_one_group() {
 }
 
 #[test]
+fn stacked_annotations_are_structural_and_require_two_groups() {
+    let source = r"\overset{!}{=} + \underset{n\to\infty}{\lim}";
+    let analyzed = analyze(source, FormulaMode::Display)
+        .expect("stacked annotation formula");
+    assert!(analyzed.is_supported());
+    assert_eq!(reconstructed(&analyzed), source);
+    for (spelling, kind) in [
+        (r"\overset", SupportedCommand::Overset),
+        (r"\underset", SupportedCommand::Underset),
+    ] {
+        assert!(analyzed.tokens.iter().any(|token| {
+            token.kind == MathTokenKind::Command(kind)
+                && analyzed.token_source(*token) == Some(spelling)
+        }));
+    }
+    for source in [r"\overset{!}", r"\underset{n}"] {
+        assert_eq!(
+            analyze(source, FormulaMode::Inline),
+            Err(MathSyntaxError {
+                byte_offset: source.len(),
+                kind: MathSyntaxErrorKind::MissingRequiredGroup,
+            }),
+            "{source}",
+        );
+    }
+}
+
+#[test]
 fn square_root_is_structural_and_requires_one_group() {
     let source = r"x = \sqrt{a^2 + b^2}";
     let analyzed =
