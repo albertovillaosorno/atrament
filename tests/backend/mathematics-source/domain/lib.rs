@@ -185,14 +185,17 @@ fn calculus_commands_compose_with_scripts_without_rewriting() {
 #[test]
 fn named_symbol_vocabulary_is_supported_without_rewriting() {
     for source in [
-        r"\Leftrightarrow", r"\Rightarrow", r"\alpha", r"\approx",
-        r"\beta", r"\cap", r"\cdot", r"\cup", r"\delta", r"\emptyset",
-        r"\epsilon", r"\exists", r"\forall", r"\gamma", r"\ge", r"\geq",
-        r"\in", r"\infty", r"\lambda", r"\le", r"\leq", r"\leftarrow",
-        r"\mu", r"\nabla", r"\ne", r"\neq", r"\notin", r"\omega",
-        r"\partial", r"\phi", r"\pi", r"\pm", r"\rho", r"\rightarrow",
-        r"\sigma", r"\subset", r"\subseteq", r"\supset", r"\supseteq",
-        r"\theta", r"\times", r"\to",
+        r"\Delta", r"\Gamma", r"\Lambda", r"\Leftrightarrow", r"\Omega",
+        r"\Phi", r"\Pi", r"\Psi", r"\Rightarrow", r"\Sigma", r"\Theta",
+        r"\Upsilon", r"\Xi", r"\alpha", r"\approx", r"\beta", r"\cap",
+        r"\cdot", r"\chi", r"\cup", r"\delta", r"\emptyset", r"\epsilon",
+        r"\eta", r"\exists", r"\forall", r"\gamma", r"\ge", r"\geq",
+        r"\in", r"\infty", r"\iota", r"\kappa", r"\lambda", r"\le",
+        r"\leq", r"\leftarrow", r"\mu", r"\nabla", r"\ne", r"\neq",
+        r"\notin", r"\nu", r"\omega", r"\partial", r"\phi", r"\pi",
+        r"\pm", r"\psi", r"\rho", r"\rightarrow", r"\sigma", r"\subset",
+        r"\subseteq", r"\supset", r"\supseteq", r"\tau", r"\theta",
+        r"\times", r"\to", r"\upsilon", r"\xi", r"\zeta",
     ] {
         let analyzed =
             analyze(source, FormulaMode::Inline).expect("named symbol formula");
@@ -211,6 +214,30 @@ fn named_symbol_vocabulary_is_supported_without_rewriting() {
             "{source}",
         );
     }
+}
+
+#[test]
+fn standard_greek_symbols_compose_without_rewriting() {
+    let source = concat!(
+        r"\Delta x = \Sigma_i \Gamma_i + \Omega; ",
+        r"\eta + \iota + \kappa + \nu + \xi + \tau + ",
+        r"\upsilon + \chi + \psi + \zeta",
+    );
+    let analyzed = analyze(source, FormulaMode::Display)
+        .expect("standard Greek symbol expression");
+    assert!(analyzed.is_supported());
+    assert_eq!(reconstructed(&analyzed), source);
+    assert_eq!(
+        analyzed
+            .tokens
+            .iter()
+            .filter(|token| {
+                token.kind
+                    == MathTokenKind::Command(SupportedCommand::NamedSymbol)
+            })
+            .count(),
+        14,
+    );
 }
 
 #[test]

@@ -34,6 +34,48 @@
 
 //! Exact-source structural analysis for editable mathematical content.
 
+const NAMED_OPERATOR_COMMANDS: &[&str] = &[
+    "\\arccos", "\\arcsin", "\\arctan", "\\cos", "\\exp", "\\int",
+    "\\lim", "\\ln", "\\log", "\\max", "\\min", "\\prod", "\\sin",
+    "\\sum", "\\tan",
+];
+
+const NAMED_SYMBOL_COMMANDS: &[&str] = &[
+    "\\Delta", "\\Gamma", "\\Lambda", "\\Leftrightarrow", "\\Omega", "\\Phi",
+    "\\Pi", "\\Psi", "\\Rightarrow", "\\Sigma", "\\Theta", "\\Upsilon",
+    "\\Xi", "\\alpha", "\\approx", "\\beta", "\\cap", "\\cdot", "\\chi",
+    "\\cup", "\\delta", "\\emptyset", "\\epsilon", "\\eta", "\\exists",
+    "\\forall", "\\gamma", "\\ge", "\\geq", "\\in", "\\infty", "\\iota",
+    "\\kappa", "\\lambda", "\\le", "\\leq", "\\leftarrow", "\\mu",
+    "\\nabla", "\\ne", "\\neq", "\\notin", "\\nu", "\\omega", "\\partial",
+    "\\phi", "\\pi", "\\pm", "\\psi", "\\rho", "\\rightarrow", "\\sigma",
+    "\\subset", "\\subseteq", "\\supset", "\\supseteq", "\\tau", "\\theta",
+    "\\times", "\\to", "\\upsilon", "\\xi", "\\zeta",
+];
+
+const STRUCTURED_COMMANDS: &[(&str, SupportedCommand)] = &[
+    ("\\bar", SupportedCommand::Bar),
+    ("\\begin{matrix}", SupportedCommand::BeginMatrix),
+    ("\\binom", SupportedCommand::Binomial),
+    ("\\ddot", SupportedCommand::DoubleDot),
+    ("\\dot", SupportedCommand::Dot),
+    ("\\end{matrix}", SupportedCommand::EndMatrix),
+    ("\\frac", SupportedCommand::Fraction),
+    ("\\hat", SupportedCommand::Hat),
+    ("\\mathbb", SupportedCommand::BlackboardBold),
+    ("\\mathbf", SupportedCommand::Bold),
+    ("\\mathcal", SupportedCommand::Calligraphic),
+    ("\\mathit", SupportedCommand::Italic),
+    ("\\mathrm", SupportedCommand::Roman),
+    ("\\operatorname", SupportedCommand::OperatorName),
+    ("\\overline", SupportedCommand::Overline),
+    ("\\sqrt", SupportedCommand::SquareRoot),
+    ("\\text", SupportedCommand::Text),
+    ("\\tilde", SupportedCommand::Tilde),
+    ("\\underline", SupportedCommand::Underline),
+    ("\\vec", SupportedCommand::Vector),
+];
+
 /// Complete source-preserving analysis of one mathematical unit.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AnalyzedFormula {
@@ -226,9 +268,9 @@ impl AnalyzedFormula {
 /// `\\frac{...}{...}`, `\\binom{...}{...}`, `\\sqrt{...}`,
 /// grouped mathematical alphabets, common one-group accents, `\\mathrm{...}`,
 /// `\\operatorname{...}`, `\\text{...}`, grouped vector, overline, and
-/// underline decorations, escaped TeX special
-/// characters, common named mathematical operators and
-/// symbols, aligned separators, and `\\begin{matrix}...\\end{matrix}`.
+/// underline decorations, escaped TeX special characters, common named
+/// mathematical operators and symbols, aligned separators, and
+/// `\\begin{matrix}...\\end{matrix}`.
 /// Math-only alignment, script, and row-break markers remain literal inside
 /// grouped text.
 /// Other commands remain present in the token stream and are reported through
@@ -291,34 +333,6 @@ pub fn analyze(
     })
 }
 
-fn build_group_index(source: &str) -> GroupIndex {
-    let mut pairs = Vec::new();
-    let mut slash_run = 0usize;
-    let mut stack = Vec::new();
-    for (index, byte) in source.as_bytes().iter().copied().enumerate() {
-        if byte == b'\\' {
-            slash_run = slash_run.saturating_add(1);
-            continue;
-        }
-        let escaped = slash_run & 1 == 1;
-        slash_run = 0;
-        if escaped {
-            continue;
-        }
-        match byte {
-            b'{' => stack.push(index),
-            b'}' => {
-                if let Some(open) = stack.pop() {
-                    pairs.push((open, index.saturating_add(1)));
-                }
-            },
-            _ => {},
-        }
-    }
-    pairs.sort_unstable_by_key(|(open, _)| *open);
-    GroupIndex { pairs }
-}
-
 fn command_matches(source: &str, start: usize, spelling: &str) -> bool {
     let Some(tail) = source.get(start..) else {
         return false;
@@ -368,6 +382,60 @@ fn push_literal(tokens: &mut Vec<MathToken>, start: usize, end: usize) {
     }
 }
 
+fn build_group_index(source: &str) -> GroupIndex {
+    let mut pairs = Vec::new();
+    let mut slash_run = 0usize;
+    let mut stack = Vec::new();
+    for (index, byte) in source.as_bytes().iter().copied().enumerate() {
+        if byte == b'\\' {
+            slash_run = slash_run.saturating_add(1);
+            continue;
+        }
+        let escaped = slash_run & 1 == 1;
+        slash_run = 0;
+        if escaped {
+            continue;
+        }
+        match byte {
+            b'{' => stack.push(index),
+            b'}' => {
+                if let Some(open) = stack.pop() {
+                    pairs.push((open, index.saturating_add(1)));
+                }
+            },
+            _ => {},
+        }
+    }
+    pairs.sort_unstable_by_key(|(open, _)| *open);
+    GroupIndex { pairs }
+}
+
+fn scan_uniform_command(
+    source: &str,
+    start: usize,
+    spellings: &[&str],
+    supported: SupportedCommand,
+) -> Option<ScannedCommand> {
+    spellings.iter().find_map(|spelling| {
+        command_matches(source, start, spelling).then(|| ScannedCommand {
+            end: start.saturating_add(spelling.len()),
+            kind: ScannedCommandKind::Supported(supported),
+        })
+    })
+}
+
+fn scan_structured_command(
+    source: &str,
+    start: usize,
+) -> Option<ScannedCommand> {
+    STRUCTURED_COMMANDS.iter().find_map(|(spelling, supported)| {
+        command_matches(source, start, spelling).then(|| ScannedCommand {
+            end: start.saturating_add(spelling.len()),
+            kind: ScannedCommandKind::Supported(*supported),
+        })
+    })
+}
+
 fn scan_command(source: &str, start: usize) -> ScannedCommand {
     let after_slash = start.saturating_add(1);
     if source.as_bytes().get(after_slash) == Some(&b'\\') {
@@ -386,67 +454,24 @@ fn scan_command(source: &str, start: usize) -> ScannedCommand {
             ),
         };
     }
-    for spelling in [
-        "\\arccos", "\\arcsin", "\\arctan", "\\cos", "\\exp",
-        "\\int", "\\lim", "\\ln", "\\log", "\\max", "\\min",
-        "\\prod", "\\sin", "\\sum", "\\tan",
-    ] {
-        if command_matches(source, start, spelling) {
-            return ScannedCommand {
-                end: start.saturating_add(spelling.len()),
-                kind: ScannedCommandKind::Supported(
-                    SupportedCommand::NamedOperator,
-                ),
-            };
-        }
+    if let Some(command) = scan_uniform_command(
+        source,
+        start,
+        NAMED_OPERATOR_COMMANDS,
+        SupportedCommand::NamedOperator,
+    ) {
+        return command;
     }
-    for spelling in [
-        "\\Leftrightarrow", "\\Rightarrow", "\\alpha", "\\approx",
-        "\\beta", "\\cap", "\\cdot", "\\cup", "\\delta", "\\emptyset",
-        "\\epsilon", "\\exists", "\\forall", "\\gamma", "\\ge", "\\geq",
-        "\\in", "\\infty", "\\lambda", "\\le", "\\leq", "\\leftarrow",
-        "\\mu", "\\nabla", "\\ne", "\\neq", "\\notin", "\\omega",
-        "\\partial", "\\phi", "\\pi", "\\pm", "\\rho", "\\rightarrow",
-        "\\sigma", "\\subset", "\\subseteq", "\\supset", "\\supseteq",
-        "\\theta", "\\times", "\\to",
-    ] {
-        if command_matches(source, start, spelling) {
-            return ScannedCommand {
-                end: start.saturating_add(spelling.len()),
-                kind: ScannedCommandKind::Supported(
-                    SupportedCommand::NamedSymbol,
-                ),
-            };
-        }
+    if let Some(command) = scan_uniform_command(
+        source,
+        start,
+        NAMED_SYMBOL_COMMANDS,
+        SupportedCommand::NamedSymbol,
+    ) {
+        return command;
     }
-    for (spelling, supported) in [
-        ("\\bar", SupportedCommand::Bar),
-        ("\\begin{matrix}", SupportedCommand::BeginMatrix),
-        ("\\binom", SupportedCommand::Binomial),
-        ("\\ddot", SupportedCommand::DoubleDot),
-        ("\\dot", SupportedCommand::Dot),
-        ("\\end{matrix}", SupportedCommand::EndMatrix),
-        ("\\frac", SupportedCommand::Fraction),
-        ("\\hat", SupportedCommand::Hat),
-        ("\\mathbb", SupportedCommand::BlackboardBold),
-        ("\\mathbf", SupportedCommand::Bold),
-        ("\\mathcal", SupportedCommand::Calligraphic),
-        ("\\mathit", SupportedCommand::Italic),
-        ("\\mathrm", SupportedCommand::Roman),
-        ("\\operatorname", SupportedCommand::OperatorName),
-        ("\\overline", SupportedCommand::Overline),
-        ("\\sqrt", SupportedCommand::SquareRoot),
-        ("\\text", SupportedCommand::Text),
-        ("\\tilde", SupportedCommand::Tilde),
-        ("\\underline", SupportedCommand::Underline),
-        ("\\vec", SupportedCommand::Vector),
-    ] {
-        if command_matches(source, start, spelling) {
-            return ScannedCommand {
-                end: start.saturating_add(spelling.len()),
-                kind: ScannedCommandKind::Supported(supported),
-            };
-        }
+    if let Some(command) = scan_structured_command(source, start) {
+        return command;
     }
     let mut end = after_slash;
     let tail = source.get(after_slash..).unwrap_or_default();
