@@ -99,7 +99,7 @@ fn fraction_scripts_and_roman_units_are_structural_without_rewriting() {
 
 #[test]
 fn text_fragments_preserve_unicode_and_require_one_group() {
-    let source = r"E = mc^2\text{ — energía total}";
+    let source = r"E = mc2\text{energía {trabajo_a} & dirección^2 \\ línea}";
     let analyzed =
         analyze(source, FormulaMode::Display).expect("text fragment formula");
     assert!(analyzed.is_supported());
@@ -107,6 +107,13 @@ fn text_fragments_preserve_unicode_and_require_one_group() {
     assert!(analyzed.tokens.iter().any(|token| {
         token.kind == MathTokenKind::Command(SupportedCommand::Text)
     }));
+    assert!(!analyzed.tokens.iter().any(|token| matches!(
+        token.kind,
+        MathTokenKind::AlignmentPoint
+            | MathTokenKind::RowBreak
+            | MathTokenKind::Subscript
+            | MathTokenKind::Superscript
+    )));
     assert_eq!(
         analyze(r"x + \text", FormulaMode::Inline),
         Err(MathSyntaxError {

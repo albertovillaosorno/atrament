@@ -127,6 +127,8 @@ struct ScanState {
     index: usize,
     literal_start: usize,
     matrix_depth: usize,
+    pending_text_group: bool,
+    text_group_depth: Option<usize>,
 }
 
 #[derive(Clone, Copy)]
@@ -188,8 +190,9 @@ impl AnalyzedFormula {
 ///
 /// Supported source includes ordinary Unicode mathematics, groups, scripts,
 /// `\\frac{...}{...}`, `\\sqrt{...}`, `\\mathrm{...}`, `\\text{...}`,
-/// aligned separators, and `\\begin{matrix}...\\end{matrix}`. Other commands
-/// remain present in the token stream and are reported through
+/// aligned separators, and `\\begin{matrix}...\\end{matrix}`. Math-only
+/// alignment, script, and row-break markers remain literal inside grouped text.
+/// Other commands remain present in the token stream and are reported through
 /// [`AnalyzedFormula::unsupported`].
 ///
 /// # Errors
@@ -207,6 +210,8 @@ pub fn analyze(
         index: 0,
         literal_start: 0,
         matrix_depth: 0,
+        pending_text_group: false,
+        text_group_depth: None,
     };
     let mut tokens = Vec::new();
     let mut unsupported = Vec::new();
@@ -379,6 +384,10 @@ fn scan_structural(
 ) -> Result<(), MathSyntaxError> {
     let width = character.len_utf8();
     match character {
+        '&' | '^' | '_' if state.text_group_depth.is_some() => {
+            scan_marker(state, tokens, width, MathTokenKind::Literal);
+            Ok(())
+        },
         '&' => scan_alignment(mode, state, tokens, width),
         '^' => {
             scan_marker(state, tokens, width, MathTokenKind::Superscript);
@@ -390,6 +399,12 @@ fn scan_structural(
         },
         '{' => {
             state.group_depth = state.group_depth.saturating_add(1);
+            if state.pending_text_group {
+                if state.text_group_depth.is_none() {
+                    state.text_group_depth = Some(state.group_depth);
+                }
+                state.pending_text_group = false;
+            }
             scan_marker(state, tokens, width, MathTokenKind::GroupOpen);
             Ok(())
         },
@@ -426,7 +441,11 @@ fn scan_group_close(
     if state.group_depth == 0 {
         return Err(error(state.index, MathSyntaxErrorKind::ExtraGroupClose));
     }
+    let closes_text = state.text_group_depth == Some(state.group_depth);
     state.group_depth = state.group_depth.saturating_sub(1);
+    if closes_text {
+        state.text_group_depth = None;
+    }
     scan_marker(state, tokens, width, MathTokenKind::GroupClose);
     Ok(())
 }
@@ -453,17 +472,25 @@ fn scan_slash(
     let command = scan_command(source, state.index);
     match command.kind {
         ScannedCommandKind::RowBreak => {
-            if mode != FormulaMode::Aligned && state.matrix_depth == 0 {
-                return Err(error(
+            if state.text_group_depth.is_some() {
+                tokens.push(token(
                     state.index,
-                    MathSyntaxErrorKind::AlignmentOutsideStructure,
+                    command.end,
+                    MathTokenKind::Literal,
+                ));
+            } else {
+                if mode != FormulaMode::Aligned && state.matrix_depth == 0 {
+                    return Err(error(
+                        state.index,
+                        MathSyntaxErrorKind::AlignmentOutsideStructure,
+                    ));
+                }
+                tokens.push(token(
+                    state.index,
+                    command.end,
+                    MathTokenKind::RowBreak,
                 ));
             }
-            tokens.push(token(
-                state.index,
-                command.end,
-                MathTokenKind::RowBreak,
-            ));
         },
         ScannedCommandKind::Supported(supported) => {
             scan_supported_command(
@@ -513,6 +540,9 @@ fn scan_supported_command(
         MathTokenKind::Command(supported),
     ));
     validate_command_groups(source, groups, command.end, supported)?;
+    if supported == SupportedCommand::Text {
+        state.pending_text_group = true;
+    }
     if supported == SupportedCommand::BeginMatrix {
         state.matrix_depth = state.matrix_depth.saturating_add(1);
     }

@@ -190,12 +190,12 @@ supports read-only behavior-version drift checks. It deliberately advertises no
 command protocol, normalizer, command context, Validate, Apply, rebatching, or
 numeric command/context limits yet.
 
-Aggregate command behavior and typed-result behavior are version 10 after
-admitting exact grouped text fragments inside mathematics. Asset reference,
-Ordering and grouping, and Text content retain family behavior version 1;
-Provenance and Style role are version 2, Document constraint is version 3, and
-Structured content is version 3. The immediately previous aggregate version 9
-rejects instead of being reinterpreted.
+Aggregate command behavior and typed-result behavior are version 11 after
+making grouped mathematical text opaque to math-only structural markers. Asset
+reference, Ordering and grouping, and Text content retain family behavior
+version 1; Provenance and Style role are version 2, Document constraint is
+version 3, and Structured content is version 4. The immediately previous
+aggregate version 10 rejects instead of being reinterpreted.
 
 A version-bound single-target proposal combines capability, exact local
 preconditions, and direct-edit simulation read-only. All five dedicated direct
@@ -267,7 +267,7 @@ Wrong-kind or no-longer-current references reject before mutation, and Undo
 restores either prior value.
 
 The Provenance family remains behavior version 2;
-the aggregate command behavior version is now 10.
+the aggregate command behavior version is now 11.
 
 Revision-owned semantic constraints now expose their broad `ConstraintKind` as a
 Document-constraint editable value. The constraint identity and semantic target
@@ -285,7 +285,7 @@ surface.
 
 Same-span Text, Style, and Provenance batch changes are tracked
 independently by target and family. Style-role behavior version remains 2; the
-aggregate command behavior version is now 10.
+aggregate command behavior version is now 11.
 
 Existing semantic `List` identities now expose only their boolean ordering
 significance through Ordering and grouping. The edit can switch ordered versus
