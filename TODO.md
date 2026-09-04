@@ -493,9 +493,9 @@ structurally recognizing ordinary Unicode notation, groups, scripts, fractions,
 binomial coefficients, square roots, upright unit or label groups, explicit
 `\text{...}` fragments, grouped custom operator names, vector, overline, and
 underline decorations, escaped TeX special characters, common named symbols,
-relations, operators, calculus, set, and logic
-notation, aligned row and column separators, and matrix environments. Math-only
-alignment, script, and row-break markers remain literal inside grouped text.
+relations, operators, calculus, set, and logic notation, aligned row and column
+separators, and matrix environments. Math-only alignment, script, and row-break
+markers remain literal inside grouped text.
 Inline, display, and aligned presentation modes are semantic values rather than
 renderer guesses. Unknown control words remain explicit unsupported constructs;
 malformed groups, required arguments, alignment use, and matrix boundaries

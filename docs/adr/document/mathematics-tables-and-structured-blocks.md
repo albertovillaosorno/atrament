@@ -63,9 +63,8 @@ label groups, grouped text and custom operator names, vector, overline, and
 underline decorations, escaped TeX special characters, common named symbols,
 relations, operators, calculus, set, and logic notation, aligned separators, and
 matrix environments. Unknown control words and unadmitted control symbols remain
-explicit unsupported
-constructs, and malformed
-source returns typed syntax failures.
+explicit unsupported constructs, and malformed source returns typed syntax
+failures.
 
 Semantic formulas carry an explicit inline, display, or aligned mode. Candidate
 acceptance validates supported mathematics before identity promotion, while the
