@@ -190,12 +190,12 @@ supports read-only behavior-version drift checks. It deliberately advertises no
 command protocol, normalizer, command context, Validate, Apply, rebatching, or
 numeric command/context limits yet.
 
-Aggregate command behavior and typed-result behavior are version 9 after
-admitting family-qualified block/inline-span reference edits. Asset reference,
+Aggregate command behavior and typed-result behavior are version 10 after
+admitting exact grouped text fragments inside mathematics. Asset reference,
 Ordering and grouping, and Text content retain family behavior version 1;
 Provenance and Style role are version 2, Document constraint is version 3, and
-Structured content is version 2. Older aggregate version-8 contexts reject
-instead of being reinterpreted.
+Structured content is version 3. The immediately previous aggregate version 9
+rejects instead of being reinterpreted.
 
 A version-bound single-target proposal combines capability, exact local
 preconditions, and direct-edit simulation read-only. All five dedicated direct
@@ -266,8 +266,8 @@ or inline span while preserving that target's identity and authored text.
 Wrong-kind or no-longer-current references reject before mutation, and Undo
 restores either prior value.
 
-The Provenance family is now behavior version 2;
-the aggregate command behavior version is 9.
+The Provenance family remains behavior version 2;
+the aggregate command behavior version is now 10.
 
 Revision-owned semantic constraints now expose their broad `ConstraintKind` as a
 Document-constraint editable value. The constraint identity and semantic target
@@ -284,8 +284,8 @@ family-specific material exposes Style role without replacing the text review
 surface.
 
 Same-span Text, Style, and Provenance batch changes are tracked
-independently by target and family. Style-role behavior version is now 2; the
-aggregate command behavior version is 9.
+independently by target and family. Style-role behavior version remains 2; the
+aggregate command behavior version is now 10.
 
 Existing semantic `List` identities now expose only their boolean ordering
 significance through Ordering and grouping. The edit can switch ordered versus
@@ -490,11 +490,12 @@ derivation content while exposing unsupported constructs without rewriting.
 
 Current executable evidence preserves exact UTF-8 mathematical source while
 structurally recognizing ordinary Unicode notation, groups, scripts, fractions,
-square roots, upright unit or label groups, aligned row and column separators,
-and matrix environments. Inline, display, and aligned presentation modes are
-semantic values rather than renderer guesses. Unknown control words remain
-explicit unsupported constructs, while malformed groups, required arguments,
-alignment use, and matrix boundaries return typed syntax failures.
+square roots, upright unit or label groups, explicit `\text{...}` fragments,
+aligned row and column separators, and matrix environments. Inline, display, and
+aligned presentation modes are semantic values rather than renderer guesses.
+Unknown control words remain explicit unsupported constructs, while malformed
+groups, required arguments, alignment use, and matrix boundaries return typed
+syntax failures.
 
 Semantic candidate acceptance analyzes every `Mathematics` block before accepted
 identity allocation. Unsupported or malformed mathematical candidates reject

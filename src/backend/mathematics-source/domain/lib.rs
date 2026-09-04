@@ -155,6 +155,8 @@ pub enum SupportedCommand {
     Roman,
     /// One-group square-root command.
     SquareRoot,
+    /// One grouped text fragment preserved exactly inside mathematics.
+    Text,
 }
 
 /// One unknown TeX-like command retained as unsupported input.
@@ -185,9 +187,10 @@ impl AnalyzedFormula {
 /// Analyze one exact mathematical source without normalizing or rewriting it.
 ///
 /// Supported source includes ordinary Unicode mathematics, groups, scripts,
-/// `\\frac{...}{...}`, `\\sqrt{...}`, `\\mathrm{...}`, aligned separators,
-/// and `\\begin{matrix}...\\end{matrix}`. Other commands remain present in the
-/// token stream and are reported through [`AnalyzedFormula::unsupported`].
+/// `\\frac{...}{...}`, `\\sqrt{...}`, `\\mathrm{...}`, `\\text{...}`,
+/// aligned separators, and `\\begin{matrix}...\\end{matrix}`. Other commands
+/// remain present in the token stream and are reported through
+/// [`AnalyzedFormula::unsupported`].
 ///
 /// # Errors
 ///
@@ -335,6 +338,7 @@ fn scan_command(source: &str, start: usize) -> ScannedCommand {
         ("\\frac", SupportedCommand::Fraction),
         ("\\mathrm", SupportedCommand::Roman),
         ("\\sqrt", SupportedCommand::SquareRoot),
+        ("\\text", SupportedCommand::Text),
     ] {
         if command_matches(source, start, spelling) {
             return ScannedCommand {
@@ -545,7 +549,9 @@ fn validate_command_groups(
     let required = match command {
         SupportedCommand::BeginMatrix | SupportedCommand::EndMatrix => 0usize,
         SupportedCommand::Fraction => 2usize,
-        SupportedCommand::Roman | SupportedCommand::SquareRoot => 1usize,
+        SupportedCommand::Roman
+        | SupportedCommand::SquareRoot
+        | SupportedCommand::Text => 1usize,
     };
     let mut cursor = command_end;
     for _ in 0..required {

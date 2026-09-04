@@ -98,6 +98,35 @@ fn fraction_scripts_and_roman_units_are_structural_without_rewriting() {
 }
 
 #[test]
+fn text_fragments_preserve_unicode_and_require_one_group() {
+    let source = r"E = mc^2\text{ — energía total}";
+    let analyzed =
+        analyze(source, FormulaMode::Display).expect("text fragment formula");
+    assert!(analyzed.is_supported());
+    assert_eq!(reconstructed(&analyzed), source);
+    assert!(analyzed.tokens.iter().any(|token| {
+        token.kind == MathTokenKind::Command(SupportedCommand::Text)
+    }));
+    assert_eq!(
+        analyze(r"x + \text", FormulaMode::Inline),
+        Err(MathSyntaxError {
+            byte_offset: 9,
+            kind: MathSyntaxErrorKind::MissingRequiredGroup,
+        }),
+    );
+}
+
+#[test]
+fn longer_text_control_word_is_not_accepted_as_text_prefix() {
+    let analyzed = analyze(r"\textual{x}", FormulaMode::Display)
+        .expect("balanced unsupported text-like source");
+    assert!(!analyzed.is_supported());
+    assert_eq!(analyzed.unsupported.len(), 1);
+    assert_eq!(analyzed.unsupported[0].name, r"\textual");
+    assert_eq!(reconstructed(&analyzed), r"\textual{x}");
+}
+
+#[test]
 fn aligned_derivation_preserves_rows_and_alignment_points() {
     let source = "y &= (3x^2 + 1)^5 \\\\ y' &= 30x(3x^2 + 1)^4";
     let analyzed =
