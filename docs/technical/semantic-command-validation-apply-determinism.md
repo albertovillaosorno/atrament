@@ -160,7 +160,7 @@ protocol normalization, command context, diagnostics, or a discoverable
 Validate capability.
 
 The current application foundation can deterministically simulate an ordered
-batch of the seven established generic replacement value families against one
+batch of the eight established generic replacement value families against one
 immutable accepted revision. It validates generic command dependencies first,
 then consumes valid commands through a private value-and-impact overlay for only
 the editable identities targeted by the batch. Command IDs and requested values
@@ -179,18 +179,20 @@ base with final candidate. An empty ordered batch returns NoOp before semantic
 target indexing.
 
 The same simulation derives conservative backend-owned impact seeds for text,
-structured-content, figure asset-reference, provenance-record, and page-profile
-changes. Asset-reference changes use figure-local block/flow scope with
-`AllDerived` authority.
+structured-content, figure asset-reference, provenance-record, semantic
+constraint-kind, and page-profile changes. Asset-reference changes use
+figure-local block/flow scope with `AllDerived` authority.
 
 Provenance changes use notebook scope with only Diagnostics and Output
-authorities. Single-target review and ordered batches share those seeds, and net
-no-ops emit none. Indexed target material and impact scopes move through final
-simulation evidence instead of being cloned again.
+authorities, while constraint-kind changes use notebook scope with `AllDerived`.
+Single-target review and ordered batches share those seeds, and net no-ops emit
+none. Indexed target material and impact scopes move through final simulation
+evidence instead of being cloned again.
 
 The targeted semantic scan uses document-order borrowed slice frames for blocks,
 list items, table rows, and table cells. It stops once every unique target is
-resolved, bypasses block traversal for profile- and provenance-only batches,
+resolved, bypasses block traversal for constraint-, profile-, and
+provenance-only batches,
 and retains ordinary semantic material fallback for non-editable targets.
 Pending traversal state
 follows container depth rather than sibling count.

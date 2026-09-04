@@ -40,8 +40,9 @@ use atrament_semantic_command_graph::{
     DependencySelectionSummary, MissingDependencyRequirement,
 };
 use atrament_semantic_notebook::{
-    AcceptedIdentity, AcceptedRevision, CandidateIdentity, FormulaMode,
-    IdentityExhausted, MathSyntaxError, Notebook, PhysicalPageProfile,
+    AcceptedIdentity, AcceptedRevision, CandidateIdentity, ConstraintKind,
+    FormulaMode, IdentityExhausted, MathSyntaxError, Notebook,
+    PhysicalPageProfile,
     PhysicalPageProfileError, ProvenanceKind, RevisionIdentity,
     SemanticIdentityDescriptor, SemanticIdentityKind, TableCellSpan,
     TableGridError, TableRowRole,
@@ -427,6 +428,8 @@ pub enum TextEditOutcome {
 pub enum EditableSemanticValueKind {
     /// Optional reference to one already-admitted session asset.
     AssetReference,
+    /// Broad semantic family owned by one revision-owned constraint.
+    ConstraintKind,
     /// Structured mathematical source and presentation family.
     Formula,
     /// Complete exact physical page-profile geometry.
@@ -446,6 +449,8 @@ pub enum EditableSemanticValueKind {
 pub enum EditableSemanticValue {
     /// Optional reference to one already-admitted session asset.
     AssetReference(Option<AcceptedIdentity>),
+    /// Broad semantic family of one revision-owned constraint.
+    ConstraintKind(ConstraintKind),
     /// Structured mathematical source and presentation family.
     Formula {
         /// Semantic mathematical presentation family.

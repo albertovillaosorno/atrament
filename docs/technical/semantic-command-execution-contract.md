@@ -460,9 +460,9 @@ CLI and MCP enter through the same application services.
 
 The current semantic session foundation can check one accepted identity against
 one exact revision for expected semantic kind and direct structural owner. A
-separate compare-and-set check covers exact accepted inline text, formula mode
-and source, provenance kind and source reference, table-row role, table-cell
-span, and physical page-profile geometry
+separate compare-and-set check covers accepted constraint kind, exact inline
+text, formula mode and source, provenance kind and source reference, table-row
+role, table-cell span, and physical page-profile geometry
 without mutating accepted state. Stale revision rejection precedes every local
 comparison.
 
@@ -471,17 +471,16 @@ typed value without choosing serialized operation names. Current generic edit
 targets expose only executable family admission: Asset reference for a figure's
 optional admitted asset identity, Text content for inline text, Structured
 content for formulas, table-row roles, and table-cell spans, Provenance for
-revision-owned source records, and Document constraint for page profiles. One
-aggregate read-only check validates
+revision-owned source records, and Document constraint for page profiles and
+revision-owned constraint kinds. One aggregate read-only check validates
 requested family, kind,
 owner, and optional exact base value against backend-derived target material.
 
 A deterministic capability snapshot now reports those five discoverable family
 behaviors and one top-level behavior version. Aggregate command behavior and
-typed-result behavior are version 4 after provenance-record admission. Asset
-reference, Provenance, Text content, and Document constraint retain family
-behavior version 1; Structured content remains version 2 after table-cell span
-admission.
+typed-result behavior are version 5 after constraint-kind admission. Asset
+reference, Provenance, and Text content retain family behavior version 1;
+Document constraint and Structured content are version 2.
 
 Because no serialized command protocol is implemented, the snapshot advertises
 no protocol or normalization version, no command-context, Validate, Apply, or
@@ -489,7 +488,7 @@ selective-rebatch capability, and no guessed command/context numeric limits. A
 read-only compatibility check rejects an older capability behavior version
 independently from notebook revision changes.
 
-A separate single-target direct-edit simulator classifies seven established
+A separate single-target direct-edit simulator classifies eight established
 replacement value families as applicable, no-op, domain-invalid, unavailable,
 or value-family mismatched without mutation. Figure Asset references
 additionally reject missing or non-Asset accepted identities, while table-cell
@@ -521,6 +520,11 @@ A Provenance value carries one existing record's `ProvenanceKind` plus its
 optional caller-visible source reference. The command targets that record
 identity directly; it does not rewrite claim text, replace claim identity, or
 change which record a claim references.
+
+A semantic Constraint value exposes only its broad `ConstraintKind` through the
+Document-constraint family. The revision-owned constraint identity and its
+semantic target stay unchanged; target reassignment and detailed paper, style,
+placement, or output values are not inferred from this broad classification.
 
 Single-target command material resolves revision-owned provenance records before
 the generic page/block descriptor walk. Ordered provenance-only batches likewise
@@ -555,7 +559,8 @@ and output dependencies. Provenance-record edits seed notebook scope for
 diagnostic and output authorities only; later dependency expansion may narrow
 affected claims and outputs.
 
-Page-profile edits seed every accepted page that references the changed profile.
+Constraint-kind edits seed notebook scope with `AllDerived`; page-profile edits
+seed every accepted page that references the changed profile.
 Those seeds are shared by single-target review and ordered batch simulation and
 are omitted for a net semantic no-op. They are inputs to future dependency
 expansion, not the final authoritative Validate impact set.
@@ -564,7 +569,8 @@ The ordered overlay copies accepted values only for identities named by the
 batch and stops semantic traversal once every unique target is indexed. Indexed
 material and impact scopes are consumed through simulation rather than cloned
 again. Each affected table is cloned once regardless of targeted cell count.
-Profile-only batches resolve page references without walking unrelated blocks.
+Constraint-, profile-, and provenance-only batches resolve before walking
+unrelated blocks.
 
 Block, list-item, table-row, and table-cell traversal uses borrowed slice
 continuation frames in document order. Pending traversal state therefore follows

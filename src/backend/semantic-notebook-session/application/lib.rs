@@ -48,7 +48,8 @@ use atrament_semantic_command_graph::{
 };
 use atrament_semantic_notebook::{
     AcceptedIdentity, AcceptedRevision, Asset, Block, BlockContent,
-    CandidateIdentity, Constraint, Figure, Flow, Formula, FormulaMode,
+    CandidateIdentity, Constraint, ConstraintKind, Figure, Flow, Formula,
+    FormulaMode,
     IdentityAllocator, IdentityExhausted, InlineSpan, List, ListItem, Notebook,
     OutputProfile, Page, PaperProfile, Provenance, ProvenanceKind,
     SemanticIdentityDescriptor, SemanticIdentityKind, Style, Table, TableCell,
@@ -498,14 +499,14 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
     }
 
     fn command_capability_snapshot(&self) -> SemanticCommandCapabilitySnapshot {
-        const VERSION: CommandBehaviorVersion = CommandBehaviorVersion(4);
+        const VERSION: CommandBehaviorVersion = CommandBehaviorVersion(5);
         const FAMILY_CAPABILITIES: [CommandFamilyCapability; 5] = [
             CommandFamilyCapability {
                 behavior_version: CommandBehaviorVersion(1),
                 family: SemanticCommandFamily::AssetReference,
             },
             CommandFamilyCapability {
-                behavior_version: CommandBehaviorVersion(1),
+                behavior_version: CommandBehaviorVersion(2),
                 family: SemanticCommandFamily::DocumentConstraint,
             },
             CommandFamilyCapability {
@@ -2269,6 +2270,15 @@ fn direct_edit_material_index(
     revision: atrament_semantic_notebook::RevisionIdentity,
 ) -> DirectEditBatchIndex {
     let mut index = DirectEditBatchIndex::default();
+    index_direct_edit_constraints(
+        notebook,
+        targets,
+        revision,
+        &mut index,
+    );
+    if index.materials.len() == targets.len() {
+        return index;
+    }
     let targeted_profiles = notebook
         .page_profiles
         .iter()
@@ -2351,6 +2361,30 @@ fn direct_edit_material_index(
         }
     }
     index
+}
+
+fn index_direct_edit_constraints(
+    notebook: &Notebook<AcceptedIdentity>,
+    targets: &BTreeSet<AcceptedIdentity>,
+    revision: atrament_semantic_notebook::RevisionIdentity,
+    index: &mut DirectEditBatchIndex,
+) {
+    for constraint in &notebook.constraints {
+        if !targets.contains(&constraint.id) {
+            continue;
+        }
+        insert_direct_edit_material(
+            index,
+            constraint.id,
+            SemanticIdentityDescriptor {
+                kind: SemanticIdentityKind::Constraint,
+                owner: Some(notebook.id),
+            },
+            EditableSemanticValue::ConstraintKind(constraint.kind),
+            DirectEditImpactScope::Notebook { notebook: notebook.id },
+            revision,
+        );
+    }
 }
 
 fn index_direct_edit_frame<'notebook>(
@@ -3283,6 +3317,9 @@ const fn editable_value_kind(
         EditableSemanticValue::AssetReference(_) => {
             EditableSemanticValueKind::AssetReference
         },
+        EditableSemanticValue::ConstraintKind(_) => {
+            EditableSemanticValueKind::ConstraintKind
+        },
         EditableSemanticValue::Formula { .. } => {
             EditableSemanticValueKind::Formula
         },
@@ -3540,6 +3577,7 @@ fn simulate_prepared_direct_edit(
             }
         },
         EditableSemanticValue::AssetReference(_)
+        | EditableSemanticValue::ConstraintKind(_)
         | EditableSemanticValue::Provenance { .. }
         | EditableSemanticValue::TableCellSpan(_)
         | EditableSemanticValue::TableRowRole(_)
@@ -3580,7 +3618,8 @@ const fn direct_edit_family(
         | EditableSemanticValue::TableRowRole(_) => {
             SemanticCommandFamily::StructuredContent
         },
-        EditableSemanticValue::PageProfile(_) => {
+        EditableSemanticValue::ConstraintKind(_)
+        | EditableSemanticValue::PageProfile(_) => {
             SemanticCommandFamily::DocumentConstraint
         },
         EditableSemanticValue::Provenance { .. } => {
@@ -3596,6 +3635,10 @@ fn editable_semantic_value(
     kind: SemanticIdentityKind,
 ) -> Option<EditableSemanticValue> {
     match kind {
+        SemanticIdentityKind::Constraint => constraint_value(notebook, target)
+            .map(|constraint| {
+                EditableSemanticValue::ConstraintKind(constraint.kind)
+            }),
         SemanticIdentityKind::Formula => {
             formula_value(notebook, target).map(|formula| {
                 EditableSemanticValue::Formula {
@@ -3624,7 +3667,6 @@ fn editable_semantic_value(
             .map(|figure| EditableSemanticValue::AssetReference(figure.asset)),
         SemanticIdentityKind::Asset
         | SemanticIdentityKind::Block(_)
-        | SemanticIdentityKind::Constraint
         | SemanticIdentityKind::Flow
         | SemanticIdentityKind::List
         | SemanticIdentityKind::ListItem
@@ -3634,6 +3676,16 @@ fn editable_semantic_value(
         | SemanticIdentityKind::Style
         | SemanticIdentityKind::Table => None,
     }
+}
+
+fn constraint_value(
+    notebook: &Notebook<AcceptedIdentity>,
+    target: AcceptedIdentity,
+) -> Option<&Constraint<AcceptedIdentity>> {
+    notebook
+        .constraints
+        .iter()
+        .find(|constraint| constraint.id == target)
 }
 
 fn editable_provenance_value(
@@ -3911,6 +3963,9 @@ fn apply_direct_edit_change(
         EditableSemanticValue::AssetReference(reference) => {
             replace_figure_asset_value(notebook, change.target, *reference)
         },
+        EditableSemanticValue::ConstraintKind(kind) => {
+            replace_constraint_kind_value(notebook, change.target, *kind)
+        },
         EditableSemanticValue::Formula { mode, source } => {
             replace_formula_value(
                 notebook,
@@ -3944,6 +3999,22 @@ fn apply_direct_edit_change(
             replace_text_value(notebook, change.target, text.clone())
         },
     }
+}
+
+fn replace_constraint_kind_value(
+    notebook: &mut Notebook<AcceptedIdentity>,
+    target: AcceptedIdentity,
+    kind: ConstraintKind,
+) -> bool {
+    let Some(constraint) = notebook
+        .constraints
+        .iter_mut()
+        .find(|constraint| constraint.id == target)
+    else {
+        return false;
+    };
+    constraint.kind = kind;
+    true
 }
 
 fn replace_formula_value(

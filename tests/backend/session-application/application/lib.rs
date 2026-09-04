@@ -327,7 +327,7 @@ fn run_process_fixture_child(mode: &str) {
     };
     let asset_batch = DirectEditBatchProposal {
         base: text_revision,
-        capability_version: CommandBehaviorVersion(4),
+        capability_version: CommandBehaviorVersion(5),
         commands: vec![DirectEditBatchCommand {
             dependencies: vec![],
             id: 1_u32,
@@ -591,7 +591,7 @@ fn application_routes_provenance_batch_through_owned_authority() {
     let claim = accepted(candidate_claim);
     let provenance = accepted(candidate_provenance);
     let snapshot = session.command_capability_snapshot();
-    assert_eq!(snapshot.behavior_version, CommandBehaviorVersion(4));
+    assert_eq!(snapshot.behavior_version, CommandBehaviorVersion(5));
     assert!(snapshot.family_capabilities.iter().any(|capability| {
         capability.family == SemanticCommandFamily::Provenance
     }));
@@ -717,7 +717,7 @@ fn application_routes_asset_reference_batch_through_owned_authority() {
     let first_asset = accepted(candidate_first);
     let second_asset = accepted(candidate_second);
     let snapshot = session.command_capability_snapshot();
-    assert_eq!(snapshot.behavior_version, CommandBehaviorVersion(4));
+    assert_eq!(snapshot.behavior_version, CommandBehaviorVersion(5));
     assert!(snapshot.family_capabilities.iter().any(|capability| {
         capability.family == SemanticCommandFamily::AssetReference
     }));
@@ -1176,7 +1176,7 @@ fn application_reviews_editable_text_through_owned_semantic_authority() {
     );
     assert_eq!(
         session.simulate_direct_edit_proposal(DirectEditProposal {
-            capability_version: CommandBehaviorVersion(4),
+            capability_version: CommandBehaviorVersion(5),
             preconditions,
             requested: requested.clone(),
             revision,
@@ -1230,11 +1230,11 @@ fn application_routes_local_command_review_through_owned_semantic_authority() {
     );
     assert_eq!(
         session.check_command_capability_compatibility(
-            CommandBehaviorVersion(3),
+            CommandBehaviorVersion(4),
         ),
         CommandCapabilityCompatibilityOutcome::Mismatch {
-            current: CommandBehaviorVersion(4),
-            expected: CommandBehaviorVersion(3),
+            current: CommandBehaviorVersion(5),
+            expected: CommandBehaviorVersion(4),
         },
     );
     assert_eq!(
@@ -1378,7 +1378,7 @@ fn application_routes_nonempty_selection_analysis_read_only() {
     };
     let batch = DirectEditBatchProposal {
         base: revision,
-        capability_version: CommandBehaviorVersion(4),
+        capability_version: CommandBehaviorVersion(5),
         commands: vec![
             command(1, vec![], "selection base", "one"),
             command(2, vec![1], "one", "two"),
@@ -1456,7 +1456,7 @@ fn application_routes_atomic_batch_apply_through_owned_semantic_authority() {
         .accepted;
     let empty = DirectEditBatchProposal::<u32> {
         base: revision,
-        capability_version: CommandBehaviorVersion(4),
+        capability_version: CommandBehaviorVersion(5),
         commands: Vec::new(),
     };
 
@@ -1531,7 +1531,7 @@ fn application_routes_atomic_batch_apply_through_owned_semantic_authority() {
 
     let bounded = DirectEditBatchProposal {
         base: revision,
-        capability_version: CommandBehaviorVersion(4),
+        capability_version: CommandBehaviorVersion(5),
         commands: vec![DirectEditBatchCommand {
             dependencies: vec![],
             id: 1_u32,
