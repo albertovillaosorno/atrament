@@ -597,6 +597,53 @@ fn matrix_admits_alignment_inside_display_mode() {
 }
 
 #[test]
+fn nested_matrix_depth_balances_before_outer_alignment_resumes() {
+    let source = concat!(
+        r"\begin{matrix}a & \begin{matrix}b & c \\ d & e",
+        r"\end{matrix} \\ f & g\end{matrix}",
+    );
+    let analyzed = analyze(source, FormulaMode::Display)
+        .expect("nested matrix formula");
+    assert!(analyzed.is_supported());
+    assert_eq!(reconstructed(&analyzed), source);
+    assert_eq!(
+        analyzed
+            .tokens
+            .iter()
+            .filter(|token| {
+                token.kind
+                    == MathTokenKind::Command(SupportedCommand::BeginMatrix)
+            })
+            .count(),
+        2,
+    );
+    assert_eq!(
+        analyzed
+            .tokens
+            .iter()
+            .filter(|token| {
+                token.kind
+                    == MathTokenKind::Command(SupportedCommand::EndMatrix)
+            })
+            .count(),
+        2,
+    );
+
+    let balanced = r"\begin{matrix}\begin{matrix}x\end{matrix}\end{matrix}";
+    let extra = concat!(
+        r"\begin{matrix}\begin{matrix}x\end{matrix}\end{matrix}",
+        r"\end{matrix}",
+    );
+    assert_eq!(
+        analyze(extra, FormulaMode::Display),
+        Err(MathSyntaxError {
+            byte_offset: balanced.len(),
+            kind: MathSyntaxErrorKind::ExtraMatrixEnd,
+        }),
+    );
+}
+
+#[test]
 fn unknown_command_remains_exact_explicit_unsupported_input() {
     let source = r"x + \mystery{y}";
     let analyzed =
