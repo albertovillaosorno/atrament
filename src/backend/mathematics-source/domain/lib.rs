@@ -71,6 +71,7 @@ const NAMED_SYMBOL_COMMANDS: &[&str] = &[
 const STRUCTURED_CONTROL_WORD_COMMANDS: &[(&str, SupportedCommand)] = &[
     ("\\bar", SupportedCommand::Bar),
     ("\\binom", SupportedCommand::Binomial),
+    ("\\boxed", SupportedCommand::Boxed),
     ("\\ddot", SupportedCommand::DoubleDot),
     ("\\dfrac", SupportedCommand::DisplayFraction),
     ("\\dot", SupportedCommand::Dot),
@@ -85,12 +86,14 @@ const STRUCTURED_CONTROL_WORD_COMMANDS: &[(&str, SupportedCommand)] = &[
     ("\\mathsf", SupportedCommand::SansSerif),
     ("\\mathtt", SupportedCommand::Typewriter),
     ("\\operatorname", SupportedCommand::OperatorName),
+    ("\\overbrace", SupportedCommand::Overbrace),
     ("\\overline", SupportedCommand::Overline),
     ("\\overset", SupportedCommand::Overset),
     ("\\sqrt", SupportedCommand::SquareRoot),
     ("\\text", SupportedCommand::Text),
     ("\\tfrac", SupportedCommand::TextFraction),
     ("\\tilde", SupportedCommand::Tilde),
+    ("\\underbrace", SupportedCommand::Underbrace),
     ("\\underline", SupportedCommand::Underline),
     ("\\underset", SupportedCommand::Underset),
     ("\\vec", SupportedCommand::Vector),
@@ -224,6 +227,8 @@ pub enum SupportedCommand {
     BlackboardBold,
     /// One-group bold mathematical alphabet.
     Bold,
+    /// One-group boxed mathematical expression.
+    Boxed,
     /// One-group calligraphic mathematical alphabet.
     Calligraphic,
     /// Two-group display-style fraction command.
@@ -250,6 +255,8 @@ pub enum SupportedCommand {
     NamedSymbol,
     /// One grouped custom mathematical operator name.
     OperatorName,
+    /// One-group overbrace decoration.
+    Overbrace,
     /// One-group overline decoration.
     Overline,
     /// One annotation group placed above one grouped mathematical base.
@@ -268,6 +275,8 @@ pub enum SupportedCommand {
     Tilde,
     /// One-group typewriter mathematical alphabet.
     Typewriter,
+    /// One-group underbrace decoration.
+    Underbrace,
     /// One-group underline decoration.
     Underline,
     /// One annotation group placed below one grouped mathematical base.
@@ -792,6 +801,7 @@ fn validate_command_groups(
         SupportedCommand::Bar
         | SupportedCommand::BlackboardBold
         | SupportedCommand::Bold
+        | SupportedCommand::Boxed
         | SupportedCommand::Calligraphic
         | SupportedCommand::Dot
         | SupportedCommand::DoubleDot
@@ -799,6 +809,7 @@ fn validate_command_groups(
         | SupportedCommand::Hat
         | SupportedCommand::Italic
         | SupportedCommand::OperatorName
+        | SupportedCommand::Overbrace
         | SupportedCommand::Overline
         | SupportedCommand::Roman
         | SupportedCommand::SansSerif
@@ -806,6 +817,7 @@ fn validate_command_groups(
         | SupportedCommand::Text
         | SupportedCommand::Tilde
         | SupportedCommand::Typewriter
+        | SupportedCommand::Underbrace
         | SupportedCommand::Underline
         | SupportedCommand::Vector => 1usize,
     };

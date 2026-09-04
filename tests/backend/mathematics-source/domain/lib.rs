@@ -694,6 +694,36 @@ fn custom_operator_name_is_structural_and_requires_one_group() {
 }
 
 #[test]
+fn boxed_and_brace_decorations_preserve_grouped_structure() {
+    let source = concat!(
+        r"\boxed{x+1} + \overbrace{a+b}^{sum} + ",
+        r"\underbrace{x+y}_{pair}",
+    );
+    let analyzed = analyze(source, FormulaMode::Display)
+        .expect("boxed and brace decoration formula");
+    assert!(analyzed.is_supported());
+    assert_eq!(reconstructed(&analyzed), source);
+    for (spelling, kind) in [
+        (r"\boxed", SupportedCommand::Boxed),
+        (r"\overbrace", SupportedCommand::Overbrace),
+        (r"\underbrace", SupportedCommand::Underbrace),
+    ] {
+        assert!(analyzed.tokens.iter().any(|token| {
+            token.kind == MathTokenKind::Command(kind)
+                && analyzed.token_source(*token) == Some(spelling)
+        }));
+        assert_eq!(
+            analyze(spelling, FormulaMode::Inline),
+            Err(MathSyntaxError {
+                byte_offset: spelling.len(),
+                kind: MathSyntaxErrorKind::MissingRequiredGroup,
+            }),
+            "{spelling}",
+        );
+    }
+}
+
+#[test]
 fn grouped_decorations_are_structural_and_require_one_group() {
     let source = r"\vec{v} + \overline{AB} + \underline{x_1}";
     let analyzed = analyze(source, FormulaMode::Display)
