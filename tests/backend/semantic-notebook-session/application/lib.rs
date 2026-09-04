@@ -12007,6 +12007,63 @@ fn bilingual_unicode_punctuation_is_preserved_exactly_across_text_edits() {
 }
 
 #[test]
+fn ordered_batch_history_preserves_exact_unicode_text() {
+    let ids = IdentityAllocator::new();
+    let original = "cafe\u{301} «inicio» 👩‍🔬";
+    let replacement = "café — fin 👨‍👩‍👧‍👦";
+    let (candidate, candidate_span) =
+        candidate_notebook_with_span(&ids, original);
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision: base } =
+        session.accept(candidate)
+    else {
+        panic!("Unicode batch candidate must be accepted");
+    };
+    let target = accepted_for(&mapping, candidate_span);
+    let batch = DirectEditBatchProposal {
+        base,
+        capability_version: CommandBehaviorVersion(11),
+        commands: vec![text_batch_command(
+            1,
+            &[],
+            target,
+            original,
+            replacement,
+        )],
+    };
+    let DirectEditBatchApplyOutcome::Applied {
+        revision: applied, ..
+    } = session.apply_direct_edit_batch(batch)
+    else {
+        panic!("Unicode batch must apply");
+    };
+    let current = session.current().expect("Unicode batch revision");
+    let BlockContent::Paragraph(spans) =
+        &current.notebook.pages[0].flows[0].blocks[0].content
+    else {
+        panic!("Unicode batch target must remain paragraph");
+    };
+    assert_eq!(spans[0].id, target);
+    assert_eq!(spans[0].text, replacement);
+
+    let HistoryTraversalOutcome::Traversed { revision: undone, .. } =
+        session.traverse_history(applied, HistoryDirection::Undo)
+    else {
+        panic!("Unicode batch must Undo");
+    };
+    assert_ne!(undone, applied);
+    let current = session.current().expect("Unicode batch Undo");
+    assert_eq!(current.id, undone);
+    let BlockContent::Paragraph(spans) =
+        &current.notebook.pages[0].flows[0].blocks[0].content
+    else {
+        panic!("Unicode Undo target must remain paragraph");
+    };
+    assert_eq!(spans[0].id, target);
+    assert_eq!(spans[0].text, original);
+}
+
+#[test]
 fn direct_text_edit_changes_one_span_and_preserves_all_semantic_identities() {
     let candidate_ids = IdentityAllocator::new();
     let original = concat!(

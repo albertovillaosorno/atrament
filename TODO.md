@@ -552,13 +552,14 @@ operations, and the remaining structured educational block families.
 Normalize Unicode, edit by grapheme, apply language-aware punctuation and
 wrapping, and preserve curly quotes, guillemets, accents, and en or em dashes.
 
-Current executable evidence preserves exact authored Unicode through candidate
-acceptance and exact-base text replacement, including English and Spanish
-punctuation, curly quotes, guillemets, accents, en/em dashes, a decomposed
-accent sequence, and a multi-code-point emoji. Existing precondition fixtures
-also keep NFC and NFD spellings distinct instead of inventing a normalization
-form. Normalization policy, grapheme-indexed mutation, punctuation generation,
-and language-aware wrapping remain open.
+Current executable evidence preserves exact authored Unicode through
+candidate acceptance, exact-base text replacement, ordered batch Apply, and
+Undo, including English and Spanish punctuation, curly quotes, guillemets,
+accents, en/em dashes, a decomposed accent sequence, and multi-code-point emoji.
+Existing precondition
+fixtures also keep NFC and NFD spellings distinct instead of inventing a
+normalization form. Normalization policy, grapheme-indexed mutation, punctuation
+generation, and language-aware wrapping remain open.
 
 ### TODO - Make missing glyph coverage impossible to miss
 
