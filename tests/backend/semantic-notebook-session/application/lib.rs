@@ -1840,11 +1840,17 @@ fn invalid_asset_reference_in_mixed_batch_is_atomic() {
 }
 
 #[test]
-fn asset_reference_batch_reaches_deeply_nested_figure() {
+fn asset_and_style_references_reach_deeply_nested_figure() {
     let ids = IdentityAllocator::new();
     let (mut candidate, candidate_ids) =
         candidate_notebook_with_figure_assets(&ids);
     let figure_block = candidate.pages[0].flows[0].blocks.remove(0);
+    let figure_block_id = figure_block.id;
+    let candidate_style = candidate_id(&ids);
+    candidate.styles.push(Style {
+        id: candidate_style,
+        name: String::from("nested-figure-style"),
+    });
     let freeform_block = candidate_id(&ids);
     let table_block = candidate_id(&ids);
     let table_id = candidate_id(&ids);
@@ -1909,27 +1915,49 @@ fn asset_reference_batch_reaches_deeply_nested_figure() {
     let figure = accepted_for(&mapping, candidate_ids.figure);
     let first_asset = accepted_for(&mapping, candidate_ids.asset_one);
     let second_asset = accepted_for(&mapping, candidate_ids.asset_two);
+    let figure_block_id = accepted_for(&mapping, figure_block_id);
+    let style = accepted_for(&mapping, candidate_style);
     let batch = DirectEditBatchProposal {
         base,
         capability_version: CommandBehaviorVersion(6),
-        commands: vec![DirectEditBatchCommand {
-            dependencies: vec![],
-            id: 1_u32,
-            preconditions: CommandTargetPreconditions {
-                expected_value: Some(EditableSemanticValue::AssetReference(
-                    Some(first_asset),
-                )),
-                identity: IdentityPrecondition {
-                    expected_kind: Some(SemanticIdentityKind::Figure),
-                    expected_owner: IdentityOwnerExpectation::Any,
+        commands: vec![
+            DirectEditBatchCommand {
+                dependencies: vec![],
+                id: 1_u32,
+                preconditions: CommandTargetPreconditions {
+                    expected_value: Some(EditableSemanticValue::AssetReference(
+                        Some(first_asset),
+                    )),
+                    identity: IdentityPrecondition {
+                        expected_kind: Some(SemanticIdentityKind::Figure),
+                        expected_owner: IdentityOwnerExpectation::Any,
+                    },
+                    requested_family: SemanticCommandFamily::AssetReference,
                 },
-                requested_family: SemanticCommandFamily::AssetReference,
+                requested: EditableSemanticValue::AssetReference(
+                    Some(second_asset),
+                ),
+                target: figure,
             },
-            requested: EditableSemanticValue::AssetReference(
-                Some(second_asset),
-            ),
-            target: figure,
-        }],
+            DirectEditBatchCommand {
+                dependencies: vec![],
+                id: 2_u32,
+                preconditions: CommandTargetPreconditions {
+                    expected_value: Some(EditableSemanticValue::StyleReference(
+                        None,
+                    )),
+                    identity: IdentityPrecondition {
+                        expected_kind: Some(SemanticIdentityKind::Block(
+                            SemanticBlockKind::Figure,
+                        )),
+                        expected_owner: IdentityOwnerExpectation::Any,
+                    },
+                    requested_family: SemanticCommandFamily::StyleRole,
+                },
+                requested: EditableSemanticValue::StyleReference(Some(style)),
+                target: figure_block_id,
+            },
+        ],
     };
     let DirectEditBatchApplyOutcome::Applied { revision, .. } =
         session.apply_direct_edit_batch(batch)
@@ -1953,6 +1981,8 @@ fn asset_reference_batch_reaches_deeply_nested_figure() {
     else {
         panic!("table child must remain freeform");
     };
+    assert_eq!(freeform[0].id, figure_block_id);
+    assert_eq!(freeform[0].style, Some(style));
     let BlockContent::Figure(current_figure) = &freeform[0].content else {
         panic!("freeform child must remain figure");
     };
