@@ -155,6 +155,8 @@ pub enum SupportedCommand {
     EscapedSpecial,
     /// Two-group fraction command.
     Fraction,
+    /// Admitted no-argument named mathematical operator.
+    NamedOperator,
     /// Admitted no-argument named mathematical symbol.
     NamedSymbol,
     /// Roman/upright grouped content, useful for units and labels.
@@ -194,9 +196,10 @@ impl AnalyzedFormula {
 ///
 /// Supported source includes ordinary Unicode mathematics, groups, scripts,
 /// `\\frac{...}{...}`, `\\sqrt{...}`, `\\mathrm{...}`, `\\text{...}`,
-/// escaped TeX special characters, common named mathematical symbols, aligned
-/// separators, and `\\begin{matrix}...\\end{matrix}`. Math-only
-/// alignment, script, and row-break markers remain literal inside grouped text.
+/// escaped TeX special characters, common named mathematical operators and
+/// symbols, aligned separators, and `\\begin{matrix}...\\end{matrix}`.
+/// Math-only alignment, script, and row-break markers remain literal inside
+/// grouped text.
 /// Other commands remain present in the token stream and are reported through
 /// [`AnalyzedFormula::unsupported`].
 ///
@@ -351,6 +354,19 @@ fn scan_command(source: &str, start: usize) -> ScannedCommand {
                 SupportedCommand::EscapedSpecial,
             ),
         };
+    }
+    for spelling in [
+        "\\arccos", "\\arcsin", "\\arctan", "\\cos", "\\exp",
+        "\\ln", "\\log", "\\max", "\\min", "\\sin", "\\tan",
+    ] {
+        if command_matches(source, start, spelling) {
+            return ScannedCommand {
+                end: start.saturating_add(spelling.len()),
+                kind: ScannedCommandKind::Supported(
+                    SupportedCommand::NamedOperator,
+                ),
+            };
+        }
     }
     for spelling in [
         "\\alpha", "\\approx", "\\beta", "\\cdot", "\\delta",
@@ -611,6 +627,7 @@ fn validate_command_groups(
         SupportedCommand::BeginMatrix
         | SupportedCommand::EndMatrix
         | SupportedCommand::EscapedSpecial
+        | SupportedCommand::NamedOperator
         | SupportedCommand::NamedSymbol => 0usize,
         SupportedCommand::Fraction => 2usize,
         SupportedCommand::Roman

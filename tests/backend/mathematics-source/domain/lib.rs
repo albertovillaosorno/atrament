@@ -102,6 +102,57 @@ fn escaped_tex_specials_remain_literal_in_math_and_text() {
 }
 
 #[test]
+fn named_operator_vocabulary_is_supported_without_rewriting() {
+    for source in [
+        r"\arccos", r"\arcsin", r"\arctan", r"\cos", r"\exp",
+        r"\ln", r"\log", r"\max", r"\min", r"\sin", r"\tan",
+    ] {
+        let analyzed = analyze(source, FormulaMode::Inline)
+            .expect("named operator formula");
+        assert!(analyzed.is_supported(), "{source}");
+        assert_eq!(reconstructed(&analyzed), source);
+        assert_eq!(
+            analyzed
+                .tokens
+                .iter()
+                .filter(|token| {
+                    token.kind == MathTokenKind::Command(
+                        SupportedCommand::NamedOperator,
+                    )
+                })
+                .count(),
+            1,
+            "{source}",
+        );
+    }
+
+    let prefixed = analyze(r"\sinewave", FormulaMode::Inline)
+        .expect("balanced unsupported operator prefix");
+    assert!(!prefixed.is_supported());
+    assert_eq!(prefixed.unsupported[0].name, r"\sinewave");
+}
+
+#[test]
+fn named_operators_compose_with_symbols_and_groups() {
+    let source = r"\sin(\theta) + \log(x) \le \max{y}";
+    let analyzed =
+        analyze(source, FormulaMode::Display).expect("operator expression");
+    assert!(analyzed.is_supported());
+    assert_eq!(reconstructed(&analyzed), source);
+    assert_eq!(
+        analyzed
+            .tokens
+            .iter()
+            .filter(|token| {
+                token.kind
+                    == MathTokenKind::Command(SupportedCommand::NamedOperator)
+            })
+            .count(),
+        3,
+    );
+}
+
+#[test]
 fn named_symbol_vocabulary_is_supported_without_rewriting() {
     for source in [
         r"\alpha", r"\approx", r"\beta", r"\cdot", r"\delta",
