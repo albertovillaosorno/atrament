@@ -1089,6 +1089,56 @@ fn named_tex_operators_are_admitted_and_directly_editable() {
 }
 
 #[test]
+fn calculus_tex_is_admitted_and_directly_editable() {
+    let ids = IdentityAllocator::new();
+    let initial = r"\sum_{i=1}^n i";
+    let (candidate, formula) =
+        candidate_math_notebook(&ids, initial, FormulaMode::Display);
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(candidate)
+    else {
+        panic!("calculus mathematics must be accepted");
+    };
+    let formula = accepted_for(&mapping, formula);
+    assert_eq!(
+        formula_value_for_test(
+            session.current().expect("accepted calculus mathematics"),
+            formula,
+        )
+        .source,
+        initial,
+    );
+
+    let edited_source = r"\int_0^1 x dx + \lim_{x \to 0} x + \partial f";
+    let outcome = session.replace_formula(
+        revision,
+        formula,
+        FormulaMode::Display,
+        edited_source.to_owned(),
+    );
+    let FormulaEditOutcome::Applied {
+        base,
+        revision: edited,
+        target,
+    } = outcome
+    else {
+        panic!("calculus mathematics edit must apply: {outcome:?}");
+    };
+    assert_eq!(base, revision);
+    assert_ne!(edited, revision);
+    assert_eq!(target, formula);
+    assert_eq!(
+        formula_value_for_test(
+            session.current().expect("edited calculus mathematics"),
+            formula,
+        )
+        .source,
+        edited_source,
+    );
+}
+
+#[test]
 fn unsupported_mathematics_rejects_atomically_instead_of_substituting() {
     let ids = IdentityAllocator::new();
     let valid = candidate_notebook(&ids, "accepted text");
@@ -1904,7 +1954,7 @@ fn asset_reference_batch_applies_atomically_and_undo_restores_reference() {
     let block = accepted_for(&mapping, candidate_ids.block);
     let batch = DirectEditBatchProposal {
         base,
-        capability_version: CommandBehaviorVersion(14),
+        capability_version: CommandBehaviorVersion(15),
         commands: vec![DirectEditBatchCommand {
             dependencies: vec![],
             id: 1_u32,
@@ -2007,7 +2057,7 @@ fn asset_reference_batch_attaches_to_figure_without_reference() {
     );
     let batch = DirectEditBatchProposal {
         base,
-        capability_version: CommandBehaviorVersion(14),
+        capability_version: CommandBehaviorVersion(15),
         commands: vec![DirectEditBatchCommand {
             dependencies: vec![],
             id: 1_u32,
@@ -2085,7 +2135,7 @@ fn invalid_asset_reference_in_mixed_batch_is_atomic() {
     let before = session.current().expect("mixed asset base").clone();
     let batch = DirectEditBatchProposal {
         base,
-        capability_version: CommandBehaviorVersion(14),
+        capability_version: CommandBehaviorVersion(15),
         commands: vec![
             text_batch_command(1, &[], span, "before", "after"),
             DirectEditBatchCommand {
@@ -2216,7 +2266,7 @@ fn asset_and_style_references_reach_deeply_nested_figure() {
     let style = accepted_for(&mapping, candidate_style);
     let batch = DirectEditBatchProposal {
         base,
-        capability_version: CommandBehaviorVersion(14),
+        capability_version: CommandBehaviorVersion(15),
         commands: vec![
             DirectEditBatchCommand {
                 dependencies: vec![],
@@ -2334,14 +2384,14 @@ fn ordered_asset_reference_chain_replaces_then_removes_one_figure_reference() {
             commands: commands.clone(),
         }),
         DirectEditBatchSimulationOutcome::CapabilityMismatch {
-            current: CommandBehaviorVersion(14),
+            current: CommandBehaviorVersion(15),
             expected: CommandBehaviorVersion(2),
         },
     );
 
     let batch = DirectEditBatchProposal {
         base,
-        capability_version: CommandBehaviorVersion(14),
+        capability_version: CommandBehaviorVersion(15),
         commands,
     };
     let DirectEditBatchSimulationOutcome::Predicted {
@@ -2694,7 +2744,7 @@ fn inline_span_batches_text_style_and_provenance_independently() {
 
     let batch = DirectEditBatchProposal {
         base,
-        capability_version: CommandBehaviorVersion(14),
+        capability_version: CommandBehaviorVersion(15),
         commands: vec![
             text_batch_command(
                 1,
@@ -2768,7 +2818,7 @@ fn inline_span_batches_text_style_and_provenance_independently() {
             commands: batch.commands.clone(),
         }),
         DirectEditBatchSimulationOutcome::CapabilityMismatch {
-            current: CommandBehaviorVersion(14),
+            current: CommandBehaviorVersion(15),
             expected: CommandBehaviorVersion(8),
         },
     );
@@ -2891,7 +2941,7 @@ fn figure_caption_multifamily_index_uses_containing_block_scope() {
     let before = session.current().expect("caption base").clone();
     let batch = DirectEditBatchProposal {
         base,
-        capability_version: CommandBehaviorVersion(14),
+        capability_version: CommandBehaviorVersion(15),
         commands: vec![
             DirectEditBatchCommand {
                 dependencies: vec![],
@@ -3055,7 +3105,7 @@ fn large_multifamily_span_batch_preserves_requested_families() {
         ..
     } = session.simulate_direct_edit_batch(DirectEditBatchProposal {
         base,
-        capability_version: CommandBehaviorVersion(14),
+        capability_version: CommandBehaviorVersion(15),
         commands,
     }) else {
         panic!("large multi-family batch must simulate");
@@ -3102,7 +3152,7 @@ fn indexed_valid_family_does_not_admit_unsupported_sibling_family() {
         .clone();
     let batch = DirectEditBatchProposal {
         base,
-        capability_version: CommandBehaviorVersion(14),
+        capability_version: CommandBehaviorVersion(15),
         commands: vec![
             DirectEditBatchCommand {
                 dependencies: vec![],
@@ -3197,7 +3247,7 @@ fn mixed_family_net_noop_preserves_sibling_span_change() {
     let style = accepted_for(&mapping, style);
     let batch = DirectEditBatchProposal {
         base,
-        capability_version: CommandBehaviorVersion(14),
+        capability_version: CommandBehaviorVersion(15),
         commands: vec![
             text_batch_command(1, &[], span, "before", "after"),
             DirectEditBatchCommand {
@@ -3406,7 +3456,7 @@ fn provenance_source_reference_preserves_exact_unicode() {
 
     let batch = DirectEditBatchProposal {
         base: revision,
-        capability_version: CommandBehaviorVersion(14),
+        capability_version: CommandBehaviorVersion(15),
         commands: vec![DirectEditBatchCommand {
             dependencies: vec![],
             id: 1_u32,
@@ -3498,7 +3548,7 @@ fn provenance_change_then_revert_is_net_noop_without_history_churn() {
     };
     let batch = DirectEditBatchProposal {
         base: revision,
-        capability_version: CommandBehaviorVersion(14),
+        capability_version: CommandBehaviorVersion(15),
         commands: vec![
             command(1_u32, vec![], original.clone(), temporary.clone()),
             command(2_u32, vec![1], temporary, original),
@@ -3578,7 +3628,7 @@ fn independent_provenance_changes_merge_notebook_impact_seed() {
     let second_after = value(ProvenanceKind::Unresolved, "source:second");
     let batch = DirectEditBatchProposal {
         base,
-        capability_version: CommandBehaviorVersion(14),
+        capability_version: CommandBehaviorVersion(15),
         commands: vec![
             command(1_u32, edited, first_before.clone(), first_after.clone()),
             command(
@@ -3700,7 +3750,7 @@ fn ordered_provenance_chain_requires_dependency_and_coalesces() {
     let final_value = value(ProvenanceKind::Derived, None);
     let rejected = session.simulate_direct_edit_batch(DirectEditBatchProposal {
         base,
-        capability_version: CommandBehaviorVersion(14),
+        capability_version: CommandBehaviorVersion(15),
         commands: vec![
             command(1_u32, vec![], original.clone(), middle.clone()),
             command(2_u32, vec![], middle.clone(), final_value.clone()),
@@ -3724,7 +3774,7 @@ fn ordered_provenance_chain_requires_dependency_and_coalesces() {
 
     let batch = DirectEditBatchProposal {
         base,
-        capability_version: CommandBehaviorVersion(14),
+        capability_version: CommandBehaviorVersion(15),
         commands: vec![
             command(1_u32, vec![], original.clone(), middle.clone()),
             command(2_u32, vec![1], middle.clone(), final_value.clone()),
@@ -3886,7 +3936,7 @@ fn provenance_only_edit_preserves_claim_and_unrelated_sources() {
     );
     let batch = DirectEditBatchProposal {
         base,
-        capability_version: CommandBehaviorVersion(14),
+        capability_version: CommandBehaviorVersion(15),
         commands: vec![DirectEditBatchCommand {
             dependencies: vec![],
             id: 1_u32,
@@ -3909,7 +3959,7 @@ fn provenance_only_edit_preserves_claim_and_unrelated_sources() {
             commands: batch.commands.clone(),
         }),
         DirectEditBatchSimulationOutcome::CapabilityMismatch {
-            current: CommandBehaviorVersion(14),
+            current: CommandBehaviorVersion(15),
             expected: CommandBehaviorVersion(3),
         },
     );
@@ -4036,7 +4086,7 @@ fn page_profile_reference_applies_atomically_and_undoes() {
 
     let batch = DirectEditBatchProposal {
         base,
-        capability_version: CommandBehaviorVersion(14),
+        capability_version: CommandBehaviorVersion(15),
         commands: vec![DirectEditBatchCommand {
             dependencies: vec![],
             id: 1_u32,
@@ -4096,7 +4146,7 @@ fn invalid_page_profile_reference_in_mixed_batch_is_atomic() {
     let before = session.current().expect("mixed page profile base").clone();
     let batch = DirectEditBatchProposal {
         base,
-        capability_version: CommandBehaviorVersion(14),
+        capability_version: CommandBehaviorVersion(15),
         commands: vec![
             text_batch_command(1, &[], span, "page profile source", "changed"),
             DirectEditBatchCommand {
@@ -4236,7 +4286,7 @@ fn page_profile_reference_change_then_revert_is_net_noop() {
     };
     let batch = DirectEditBatchProposal {
         base: revision,
-        capability_version: CommandBehaviorVersion(14),
+        capability_version: CommandBehaviorVersion(15),
         commands: vec![
             command(1_u32, vec![], first, second),
             command(2_u32, vec![1], second, first),
@@ -4309,14 +4359,14 @@ fn page_profile_reference_rejects_previous_capability_epoch() {
     assert_eq!(
         session.simulate_direct_edit_batch(batch.clone()),
         DirectEditBatchSimulationOutcome::CapabilityMismatch {
-            current: CommandBehaviorVersion(14),
+            current: CommandBehaviorVersion(15),
             expected: CommandBehaviorVersion(8),
         },
     );
     assert_eq!(
         session.apply_direct_edit_batch(batch),
         DirectEditBatchApplyOutcome::CapabilityMismatch {
-            current: CommandBehaviorVersion(14),
+            current: CommandBehaviorVersion(15),
             expected: CommandBehaviorVersion(8),
         },
     );
@@ -4403,7 +4453,7 @@ fn global_constraint_kind_edit_preserves_target_and_seeds_notebook() {
     );
     let batch = DirectEditBatchProposal {
         base,
-        capability_version: CommandBehaviorVersion(14),
+        capability_version: CommandBehaviorVersion(15),
         commands: vec![DirectEditBatchCommand {
             dependencies: vec![],
             id: 1_u32,
@@ -4426,7 +4476,7 @@ fn global_constraint_kind_edit_preserves_target_and_seeds_notebook() {
             commands: batch.commands.clone(),
         }),
         DirectEditBatchSimulationOutcome::CapabilityMismatch {
-            current: CommandBehaviorVersion(14),
+            current: CommandBehaviorVersion(15),
             expected: CommandBehaviorVersion(4),
         },
     );
@@ -4496,7 +4546,7 @@ fn constraint_kind_change_then_revert_is_net_noop() {
     };
     let batch = DirectEditBatchProposal {
         base: revision,
-        capability_version: CommandBehaviorVersion(14),
+        capability_version: CommandBehaviorVersion(15),
         commands: vec![
             command(1_u32, vec![], paper.clone(), style.clone()),
             command(2_u32, vec![1], style, paper),
@@ -4607,7 +4657,7 @@ fn block_style_reference_applies_atomically_and_undoes() {
     );
     let batch = DirectEditBatchProposal {
         base,
-        capability_version: CommandBehaviorVersion(14),
+        capability_version: CommandBehaviorVersion(15),
         commands: vec![DirectEditBatchCommand {
             dependencies: vec![],
             id: 1_u32,
@@ -4692,7 +4742,7 @@ fn block_style_change_then_revert_is_net_noop() {
     };
     let batch = DirectEditBatchProposal {
         base: revision,
-        capability_version: CommandBehaviorVersion(14),
+        capability_version: CommandBehaviorVersion(15),
         commands: vec![
             command(1_u32, vec![], none.clone(), some.clone()),
             command(2_u32, vec![1], some, none),
@@ -4763,7 +4813,7 @@ fn block_style_reference_reaches_deeply_nested_block() {
     );
     let batch = DirectEditBatchProposal {
         base,
-        capability_version: CommandBehaviorVersion(14),
+        capability_version: CommandBehaviorVersion(15),
         commands: vec![DirectEditBatchCommand {
             dependencies: vec![],
             id: 1_u32,
@@ -4908,14 +4958,14 @@ fn list_ordering_rejects_an_older_capability_epoch() {
     assert_eq!(
         session.simulate_direct_edit_batch(batch.clone()),
         DirectEditBatchSimulationOutcome::CapabilityMismatch {
-            current: CommandBehaviorVersion(14),
+            current: CommandBehaviorVersion(15),
             expected: CommandBehaviorVersion(6),
         },
     );
     assert_eq!(
         session.apply_direct_edit_batch(batch),
         DirectEditBatchApplyOutcome::CapabilityMismatch {
-            current: CommandBehaviorVersion(14),
+            current: CommandBehaviorVersion(15),
             expected: CommandBehaviorVersion(6),
         },
     );
@@ -4982,7 +5032,7 @@ fn list_ordering_applies_atomically_and_undoes() {
 
     let batch = DirectEditBatchProposal {
         base,
-        capability_version: CommandBehaviorVersion(14),
+        capability_version: CommandBehaviorVersion(15),
         commands: vec![DirectEditBatchCommand {
             dependencies: vec![],
             id: 1_u32,
@@ -5056,7 +5106,7 @@ fn ordered_batch_indexes_list_and_owning_block_style_together() {
     let before = session.current().expect("list/block-style base").clone();
     let batch = DirectEditBatchProposal {
         base,
-        capability_version: CommandBehaviorVersion(14),
+        capability_version: CommandBehaviorVersion(15),
         commands: vec![
             DirectEditBatchCommand {
                 dependencies: vec![],
@@ -5139,7 +5189,7 @@ fn ordered_batch_indexes_list_and_child_text_together() {
     let before = session.current().expect("mixed list/text base").clone();
     let batch = DirectEditBatchProposal {
         base,
-        capability_version: CommandBehaviorVersion(14),
+        capability_version: CommandBehaviorVersion(15),
         commands: vec![
             DirectEditBatchCommand {
                 dependencies: vec![],
@@ -5271,7 +5321,7 @@ fn list_ordering_reaches_deeply_nested_list() {
     let target_block = accepted_for(&mapping, candidate_ids.block);
     let batch = DirectEditBatchProposal {
         base,
-        capability_version: CommandBehaviorVersion(14),
+        capability_version: CommandBehaviorVersion(15),
         commands: vec![DirectEditBatchCommand {
             dependencies: vec![],
             id: 1_u32,
@@ -5355,7 +5405,7 @@ fn list_ordering_change_then_revert_is_net_noop() {
     };
     let batch = DirectEditBatchProposal {
         base: revision,
-        capability_version: CommandBehaviorVersion(14),
+        capability_version: CommandBehaviorVersion(15),
         commands: vec![
             command(1_u32, vec![], false, true),
             command(2_u32, vec![1], true, false),
@@ -5386,8 +5436,8 @@ fn list_ordering_change_then_revert_is_net_noop() {
 fn command_capability_snapshot_is_deterministic_and_does_not_overclaim() {
     let mut session = SemanticNotebookSessionService::default();
     let snapshot = session.command_capability_snapshot();
-    assert_eq!(snapshot.behavior_version, CommandBehaviorVersion(14));
-    assert_eq!(snapshot.typed_result_version, CommandBehaviorVersion(14));
+    assert_eq!(snapshot.behavior_version, CommandBehaviorVersion(15));
+    assert_eq!(snapshot.typed_result_version, CommandBehaviorVersion(15));
     assert!(snapshot.admitted_applications.is_empty());
     assert!(snapshot.protocol_versions.is_empty());
     assert_eq!(snapshot.normalization_version, None);
@@ -5416,7 +5466,7 @@ fn command_capability_snapshot_is_deterministic_and_does_not_overclaim() {
             family: SemanticCommandFamily::Provenance,
         },
         CommandFamilyCapability {
-            behavior_version: CommandBehaviorVersion(7),
+            behavior_version: CommandBehaviorVersion(8),
             family: SemanticCommandFamily::StructuredContent,
         },
         CommandFamilyCapability {
@@ -5484,18 +5534,18 @@ fn command_capability_version_detects_drift_independently_of_revision() {
     );
     assert_eq!(
         session.check_command_capability_compatibility(
-            CommandBehaviorVersion(13),
+            CommandBehaviorVersion(14),
         ),
         CommandCapabilityCompatibilityOutcome::Mismatch {
-            current: CommandBehaviorVersion(14),
-            expected: CommandBehaviorVersion(13),
+            current: CommandBehaviorVersion(15),
+            expected: CommandBehaviorVersion(14),
         },
     );
     assert_eq!(
         session
             .check_command_capability_compatibility(CommandBehaviorVersion(4),),
         CommandCapabilityCompatibilityOutcome::Mismatch {
-            current: CommandBehaviorVersion(14),
+            current: CommandBehaviorVersion(15),
             expected: CommandBehaviorVersion(4),
         },
     );
@@ -6243,7 +6293,7 @@ fn direct_edit_proposal_binds_capability_preconditions_and_simulation() {
     let requested = EditableSemanticValue::Text(String::from("Idea final"));
     assert_eq!(
         session.simulate_direct_edit_proposal(DirectEditProposal {
-            capability_version: CommandBehaviorVersion(14),
+            capability_version: CommandBehaviorVersion(15),
             preconditions: preconditions.clone(),
             requested: requested.clone(),
             revision,
@@ -6264,7 +6314,7 @@ fn direct_edit_proposal_binds_capability_preconditions_and_simulation() {
         Some(EditableSemanticValue::Text(String::from("wrong base")));
     assert_eq!(
         session.simulate_direct_edit_proposal(DirectEditProposal {
-            capability_version: CommandBehaviorVersion(14),
+            capability_version: CommandBehaviorVersion(15),
             preconditions: wrong_value,
             requested: EditableSemanticValue::Text(String::from("Idea final")),
             revision,
@@ -6286,7 +6336,7 @@ fn direct_edit_proposal_binds_capability_preconditions_and_simulation() {
     wrong_family.requested_family = SemanticCommandFamily::StructuredContent;
     assert_eq!(
         session.simulate_direct_edit_proposal(DirectEditProposal {
-            capability_version: CommandBehaviorVersion(14),
+            capability_version: CommandBehaviorVersion(15),
             preconditions: wrong_family,
             requested: EditableSemanticValue::Text(String::from("Idea final")),
             revision,
@@ -6304,7 +6354,7 @@ fn direct_edit_proposal_binds_capability_preconditions_and_simulation() {
 
     assert_eq!(
         session.simulate_direct_edit_proposal(DirectEditProposal {
-            capability_version: CommandBehaviorVersion(14),
+            capability_version: CommandBehaviorVersion(15),
             preconditions: preconditions.clone(),
             requested: EditableSemanticValue::TableRowRole(TableRowRole::Body),
             revision,
@@ -6329,7 +6379,7 @@ fn direct_edit_proposal_binds_capability_preconditions_and_simulation() {
             target: span,
         }),
         DirectEditProposalOutcome::CapabilityMismatch {
-            current: CommandBehaviorVersion(14),
+            current: CommandBehaviorVersion(15),
             expected: CommandBehaviorVersion(0),
         },
     );
@@ -6356,7 +6406,7 @@ fn direct_edit_proposal_stale_base_precedes_local_simulation() {
     let before = session.current().expect("current revision").clone();
     assert_eq!(
         session.simulate_direct_edit_proposal(DirectEditProposal {
-            capability_version: CommandBehaviorVersion(14),
+            capability_version: CommandBehaviorVersion(15),
             preconditions: CommandTargetPreconditions {
                 expected_value: Some(EditableSemanticValue::Text(
                     String::from("base",)
@@ -6391,7 +6441,7 @@ fn direct_edit_batch_selection_reports_transitive_requirements_read_only() {
     let span = accepted_for(&mapping, span);
     let batch = DirectEditBatchProposal {
         base: revision,
-        capability_version: CommandBehaviorVersion(14),
+        capability_version: CommandBehaviorVersion(15),
         commands: vec![
             text_batch_command(1, &[], span, "base text", "one"),
             text_batch_command(2, &[1], span, "one", "two"),
@@ -6444,7 +6494,7 @@ fn direct_edit_batch_selection_preserves_global_failure_precedence() {
     let span = accepted_for(&mapping, span);
     let valid = DirectEditBatchProposal {
         base: revision,
-        capability_version: CommandBehaviorVersion(14),
+        capability_version: CommandBehaviorVersion(15),
         commands: vec![text_batch_command(
             1,
             &[],
@@ -6464,7 +6514,7 @@ fn direct_edit_batch_selection_preserves_global_failure_precedence() {
             &BTreeSet::from([99]),
         ),
         DirectEditBatchSelectionRequirementsOutcome::CapabilityMismatch {
-            current: CommandBehaviorVersion(14),
+            current: CommandBehaviorVersion(15),
             expected: CommandBehaviorVersion(0),
         },
     );
@@ -6499,7 +6549,7 @@ fn direct_edit_batch_selection_preserves_global_failure_precedence() {
             .id;
     let invalid_graph = DirectEditBatchProposal {
         base: current,
-        capability_version: CommandBehaviorVersion(14),
+        capability_version: CommandBehaviorVersion(15),
         commands: vec![
             text_batch_command(1, &[2], current_target, "new revision", "one"),
             text_batch_command(2, &[], current_target, "new revision", "two"),
@@ -6519,7 +6569,7 @@ fn direct_edit_batch_selection_preserves_global_failure_precedence() {
     );
     let valid_current = DirectEditBatchProposal {
         base: current,
-        capability_version: CommandBehaviorVersion(14),
+        capability_version: CommandBehaviorVersion(15),
         commands: vec![text_batch_command(
             1,
             &[],
@@ -6552,7 +6602,7 @@ fn direct_edit_batch_selection_summary_matches_transitive_requirements() {
     let span = accepted_for(&mapping, span);
     let batch = DirectEditBatchProposal {
         base: revision,
-        capability_version: CommandBehaviorVersion(14),
+        capability_version: CommandBehaviorVersion(15),
         commands: vec![
             text_batch_command(1, &[], span, "base text", "one"),
             text_batch_command(2, &[1], span, "one", "two"),
@@ -6588,7 +6638,7 @@ fn direct_edit_batch_selection_summary_preserves_global_precedence() {
     let span = accepted_for(&mapping, span);
     let valid = DirectEditBatchProposal {
         base: revision,
-        capability_version: CommandBehaviorVersion(14),
+        capability_version: CommandBehaviorVersion(15),
         commands: vec![text_batch_command(
             1,
             &[],
@@ -6608,7 +6658,7 @@ fn direct_edit_batch_selection_summary_preserves_global_precedence() {
             &BTreeSet::from([99]),
         ),
         DirectEditBatchSelectionSummaryOutcome::CapabilityMismatch {
-            current: CommandBehaviorVersion(14),
+            current: CommandBehaviorVersion(15),
             expected: CommandBehaviorVersion(0),
         },
     );
@@ -6640,7 +6690,7 @@ fn direct_edit_batch_graph_resource_preflight_is_exact_and_read_only() {
     let span = accepted_for(&mapping, span);
     let batch = DirectEditBatchProposal {
         base: revision,
-        capability_version: CommandBehaviorVersion(14),
+        capability_version: CommandBehaviorVersion(15),
         commands: vec![
             text_batch_command(1, &[], span, "base text", "one"),
             text_batch_command(2, &[1], span, "one", "two"),
@@ -6719,7 +6769,7 @@ fn graph_resource_preflight_does_not_require_ordered_command_ids() {
     };
     let batch = DirectEditBatchProposal {
         base: revision,
-        capability_version: CommandBehaviorVersion(14),
+        capability_version: CommandBehaviorVersion(15),
         commands: vec![
             command(Vec::new()),
             command(vec![NonOrdCommandIdentity]),
@@ -6766,7 +6816,7 @@ fn batch_read_only_apis_share_capability_and_stale_authority_precedence() {
     };
     let selected = BTreeSet::from([1_u32]);
     let mismatch = CommandBehaviorVersion(0);
-    let current_behavior = CommandBehaviorVersion(14);
+    let current_behavior = CommandBehaviorVersion(15);
     assert_eq!(
         session.direct_edit_batch_graph_size(&incompatible),
         DirectEditBatchGraphSizeOutcome::CapabilityMismatch {
@@ -6905,7 +6955,7 @@ fn direct_edit_batch_graph_resources_preserve_authority_and_structure_layers() {
     };
     let unavailable = DirectEditBatchProposal::<u32> {
         base: unavailable_revision,
-        capability_version: CommandBehaviorVersion(14),
+        capability_version: CommandBehaviorVersion(15),
         commands: Vec::new(),
     };
     assert_eq!(
@@ -6920,7 +6970,7 @@ fn direct_edit_batch_graph_resources_preserve_authority_and_structure_layers() {
     let span = accepted_for(&mapping, span);
     let invalid_graph = DirectEditBatchProposal {
         base: revision,
-        capability_version: CommandBehaviorVersion(14),
+        capability_version: CommandBehaviorVersion(15),
         commands: vec![
             text_batch_command(1, &[2], span, "base text", "one"),
             text_batch_command(2, &[], span, "base text", "two"),
@@ -6952,7 +7002,7 @@ fn direct_edit_batch_graph_resources_preserve_authority_and_structure_layers() {
     assert_eq!(
         session.direct_edit_batch_graph_size(&incompatible),
         DirectEditBatchGraphSizeOutcome::CapabilityMismatch {
-            current: CommandBehaviorVersion(14),
+            current: CommandBehaviorVersion(15),
             expected: CommandBehaviorVersion(0),
         },
     );
@@ -6982,7 +7032,7 @@ fn direct_edit_batch_bounded_selection_enforces_exact_report_limit() {
     let span = accepted_for(&mapping, span);
     let batch = DirectEditBatchProposal {
         base: revision,
-        capability_version: CommandBehaviorVersion(14),
+        capability_version: CommandBehaviorVersion(15),
         commands: vec![
             text_batch_command(1, &[], span, "base text", "one"),
             text_batch_command(2, &[1], span, "one", "two"),
@@ -7051,7 +7101,7 @@ fn graph_resource_preflight_borrows_command_identities() {
     };
     let batch = DirectEditBatchProposal {
         base: revision,
-        capability_version: CommandBehaviorVersion(14),
+        capability_version: CommandBehaviorVersion(15),
         commands: vec![
             command(1, Vec::new()),
             command(2, vec![CountingCommandIdentity::new(&clones, 1)]),
@@ -7113,7 +7163,7 @@ fn selection_summary_and_bounded_rejection_borrow_command_identities() {
     };
     let batch = DirectEditBatchProposal {
         base: revision,
-        capability_version: CommandBehaviorVersion(14),
+        capability_version: CommandBehaviorVersion(15),
         commands: vec![
             command(1, Vec::new(), "base text", "one"),
             command(
@@ -7185,7 +7235,7 @@ fn invalid_batch_graph_clones_only_reported_command_identities() {
     };
     let batch = DirectEditBatchProposal {
         base: revision,
-        capability_version: CommandBehaviorVersion(14),
+        capability_version: CommandBehaviorVersion(15),
         commands: vec![
             command(1, vec![CountingCommandIdentity::new(&clones, 2)]),
             command(2, Vec::new()),
@@ -7219,7 +7269,7 @@ fn bounded_ordered_batch_matches_unbounded_at_exact_graph_limits() {
     let second = accepted_for(&mapping, second);
     let batch = DirectEditBatchProposal {
         base: revision,
-        capability_version: CommandBehaviorVersion(14),
+        capability_version: CommandBehaviorVersion(15),
         commands: vec![
             text_batch_command(1, &[], first, "one", "ONE"),
             text_batch_command(2, &[1], second, "two", "TWO"),
@@ -7250,7 +7300,7 @@ fn bounded_ordered_batch_rejects_resources_before_graph_or_semantics() {
     let span = accepted_for(&mapping, span);
     let batch = DirectEditBatchProposal {
         base: revision,
-        capability_version: CommandBehaviorVersion(14),
+        capability_version: CommandBehaviorVersion(15),
         commands: vec![
             text_batch_command(1, &[2], span, "wrong base", "one"),
             text_batch_command(2, &[], span, "base text", "two"),
@@ -7287,7 +7337,7 @@ fn bounded_ordered_batch_counts_repeated_dependency_edges() {
     let second = accepted_for(&mapping, second);
     let batch = DirectEditBatchProposal {
         base: revision,
-        capability_version: CommandBehaviorVersion(14),
+        capability_version: CommandBehaviorVersion(15),
         commands: vec![
             text_batch_command(1, &[], first, "one", "ONE"),
             text_batch_command(2, &[1, 1], second, "two", "TWO"),
@@ -7351,13 +7401,13 @@ fn bounded_ordered_batch_preserves_capability_and_stale_precedence() {
             },
         ),
         DirectEditBatchSimulationOutcome::CapabilityMismatch {
-            current: CommandBehaviorVersion(14),
+            current: CommandBehaviorVersion(15),
             expected: CommandBehaviorVersion(0),
         },
     );
     let stale = DirectEditBatchProposal {
         base: revision,
-        capability_version: CommandBehaviorVersion(14),
+        capability_version: CommandBehaviorVersion(15),
         commands: vec![text_batch_command(
             1,
             &[],
@@ -7411,7 +7461,7 @@ fn bounded_apply_resource_rejection_borrows_command_ids() {
     };
     let batch = DirectEditBatchProposal {
         base: revision,
-        capability_version: CommandBehaviorVersion(14),
+        capability_version: CommandBehaviorVersion(15),
         commands: vec![
             command(1, Vec::new()),
             command(2, vec![CountingCommandIdentity::new(&clones, 1)]),
@@ -7467,7 +7517,7 @@ fn bounded_ordered_batch_resource_rejection_borrows_command_ids() {
     };
     let batch = DirectEditBatchProposal {
         base: revision,
-        capability_version: CommandBehaviorVersion(14),
+        capability_version: CommandBehaviorVersion(15),
         commands: vec![
             command(1, Vec::new()),
             command(2, vec![CountingCommandIdentity::new(&clones, 1)]),
@@ -7500,7 +7550,7 @@ fn ordered_empty_batch_is_read_only_no_op_at_zero_limits() {
     let before = session.current().expect("accepted revision").clone();
     let batch = DirectEditBatchProposal::<u32> {
         base: revision,
-        capability_version: CommandBehaviorVersion(14),
+        capability_version: CommandBehaviorVersion(15),
         commands: Vec::new(),
     };
     let expected = DirectEditBatchSimulationOutcome::Predicted {
@@ -7538,7 +7588,7 @@ fn ordered_direct_edit_batch_material_overlay_reaches_nested_text() {
     let before = session.current().expect("accepted revision").clone();
     let outcome = session.simulate_direct_edit_batch(DirectEditBatchProposal {
         base: revision,
-        capability_version: CommandBehaviorVersion(14),
+        capability_version: CommandBehaviorVersion(15),
         commands: vec![text_batch_command(
             1,
             &[],
@@ -7581,7 +7631,7 @@ fn ordered_batch_index_reaches_table_cell_text_in_document_order() {
     let span = accepted_for(&mapping, candidate_span);
     let outcome = session.simulate_direct_edit_batch(DirectEditBatchProposal {
         base: revision,
-        capability_version: CommandBehaviorVersion(14),
+        capability_version: CommandBehaviorVersion(15),
         commands: vec![text_batch_command(
             1,
             &[],
@@ -7619,7 +7669,7 @@ fn ordered_batch_overlay_indexes_profile_and_text_targets_together() {
     changed_profile.top_clearance = Length::from_micrometres(14_000);
     let batch = DirectEditBatchProposal {
         base: revision,
-        capability_version: CommandBehaviorVersion(14),
+        capability_version: CommandBehaviorVersion(15),
         commands: vec![
             DirectEditBatchCommand {
                 dependencies: Vec::<u32>::new(),
@@ -7691,7 +7741,7 @@ fn ordered_batch_overlay_keeps_unreferenced_profile_impact() {
     changed.top_clearance = Length::from_micrometres(13_000);
     let outcome = session.simulate_direct_edit_batch(DirectEditBatchProposal {
         base: revision,
-        capability_version: CommandBehaviorVersion(14),
+        capability_version: CommandBehaviorVersion(15),
         commands: vec![DirectEditBatchCommand {
             dependencies: Vec::<u32>::new(),
             id: 1_u32,
@@ -7735,7 +7785,7 @@ fn ordered_direct_edit_batch_material_overlay_preserves_noneditable_rejection()
     let before = session.current().expect("accepted revision").clone();
     let outcome = session.simulate_direct_edit_batch(DirectEditBatchProposal {
         base: revision,
-        capability_version: CommandBehaviorVersion(14),
+        capability_version: CommandBehaviorVersion(15),
         commands: vec![text_batch_command(
             1,
             &[],
@@ -7800,7 +7850,7 @@ fn ordered_batch_index_waits_until_every_requested_target_is_resolved() {
     let second = accepted_for(&mapping, second);
     let outcome = session.simulate_direct_edit_batch(DirectEditBatchProposal {
         base: revision,
-        capability_version: CommandBehaviorVersion(14),
+        capability_version: CommandBehaviorVersion(15),
         commands: vec![
             text_batch_command(1, &[], first, "first", "FIRST"),
             text_batch_command(2, &[], second, "second", "SECOND"),
@@ -7847,7 +7897,7 @@ fn bounded_apply_preserves_authority_and_graph_rejection_precedence() {
             zero_limits,
         ),
         DirectEditBatchApplyOutcome::CapabilityMismatch {
-            current: CommandBehaviorVersion(14),
+            current: CommandBehaviorVersion(15),
             expected: CommandBehaviorVersion(0),
         },
     );
@@ -7855,7 +7905,7 @@ fn bounded_apply_preserves_authority_and_graph_rejection_precedence() {
 
     let stale = DirectEditBatchProposal {
         base,
-        capability_version: CommandBehaviorVersion(14),
+        capability_version: CommandBehaviorVersion(15),
         commands: vec![text_batch_command(
             1,
             &[],
@@ -7885,7 +7935,7 @@ fn bounded_apply_preserves_authority_and_graph_rejection_precedence() {
     let target = accepted_for(&mapping, span);
     let invalid_graph = DirectEditBatchProposal {
         base: revision,
-        capability_version: CommandBehaviorVersion(14),
+        capability_version: CommandBehaviorVersion(15),
         commands: vec![text_batch_command(
             1,
             &[1],
@@ -7917,7 +7967,7 @@ fn bounded_apply_preserves_authority_and_graph_rejection_precedence() {
         empty.apply_direct_edit_batch_bounded(
             DirectEditBatchProposal {
                 base: empty_base,
-                capability_version: CommandBehaviorVersion(14),
+                capability_version: CommandBehaviorVersion(15),
                 commands: vec![text_batch_command(
                     1,
                     &[],
@@ -7947,7 +7997,7 @@ fn bounded_direct_edit_batch_apply_rejects_resources_before_commit() {
     let second = accepted_for(&mapping, second);
     let batch = DirectEditBatchProposal {
         base,
-        capability_version: CommandBehaviorVersion(14),
+        capability_version: CommandBehaviorVersion(15),
         commands: vec![
             text_batch_command(1, &[], first, "one", "ONE"),
             text_batch_command(2, &[1], second, "two", "TWO"),
@@ -8131,7 +8181,7 @@ fn direct_edit_batch_apply_replays_every_established_value_family() {
     changed_profile.top_clearance = Length::from_micrometres(12_000);
     let batch = DirectEditBatchProposal {
         base,
-        capability_version: CommandBehaviorVersion(14),
+        capability_version: CommandBehaviorVersion(15),
         commands: vec![
             text_batch_command(1, &[], text, "before text", "after text"),
             DirectEditBatchCommand {
@@ -8469,7 +8519,7 @@ fn direct_edit_batch_apply_matches_prediction_and_undoes_as_one_transaction() {
     let second = accepted_for(&mapping, second);
     let batch = DirectEditBatchProposal {
         base,
-        capability_version: CommandBehaviorVersion(14),
+        capability_version: CommandBehaviorVersion(15),
         commands: vec![
             text_batch_command(1, &[], first, "one", "ONE"),
             text_batch_command(2, &[], second, "two", "TWO"),
@@ -8553,7 +8603,7 @@ fn direct_edit_batch_apply_net_noop_keeps_revision_and_history_position() {
     let before = session.current().expect("accepted revision").clone();
     let batch = DirectEditBatchProposal {
         base: revision,
-        capability_version: CommandBehaviorVersion(14),
+        capability_version: CommandBehaviorVersion(15),
         commands: vec![
             text_batch_command(1, &[], target, "base text", "changed"),
             text_batch_command(2, &[1], target, "changed", "base text"),
@@ -8696,7 +8746,7 @@ fn noncommitting_batch_attempts_preserve_an_existing_redo_branch() {
 
     let no_op = DirectEditBatchProposal {
         base: branch_base,
-        capability_version: CommandBehaviorVersion(14),
+        capability_version: CommandBehaviorVersion(15),
         commands: vec![text_batch_command(1, &[], target, "one", "one")],
     };
     assert!(matches!(
@@ -8710,7 +8760,7 @@ fn noncommitting_batch_attempts_preserve_an_existing_redo_branch() {
 
     let rejected = DirectEditBatchProposal {
         base: branch_base,
-        capability_version: CommandBehaviorVersion(14),
+        capability_version: CommandBehaviorVersion(15),
         commands: vec![text_batch_command(2, &[], target, "wrong", "changed")],
     };
     assert!(matches!(
@@ -8722,7 +8772,7 @@ fn noncommitting_batch_attempts_preserve_an_existing_redo_branch() {
 
     let over_limit = DirectEditBatchProposal {
         base: branch_base,
-        capability_version: CommandBehaviorVersion(14),
+        capability_version: CommandBehaviorVersion(15),
         commands: vec![
             text_batch_command(3, &[], target, "one", "temporary"),
             text_batch_command(4, &[3], target, "temporary", "changed"),
@@ -8780,7 +8830,7 @@ fn repeated_batch_apply_history_round_trip_preserves_every_snapshot() {
         let next = format!("value-{index}");
         let batch = DirectEditBatchProposal {
             base: *revisions.last().expect("current revision"),
-            capability_version: CommandBehaviorVersion(14),
+            capability_version: CommandBehaviorVersion(15),
             commands: vec![text_batch_command(
                 index,
                 &[],
@@ -8868,7 +8918,7 @@ fn direct_edit_batch_history_redoes_transaction_and_discards_old_branch() {
     let third = accepted_for(&mapping, third);
     let initial = DirectEditBatchProposal {
         base,
-        capability_version: CommandBehaviorVersion(14),
+        capability_version: CommandBehaviorVersion(15),
         commands: vec![
             text_batch_command(1, &[], first, "one", "ONE"),
             text_batch_command(2, &[], second, "two", "TWO"),
@@ -8911,7 +8961,7 @@ fn direct_edit_batch_history_redoes_transaction_and_discards_old_branch() {
     };
     let branch = DirectEditBatchProposal {
         base: branch_base,
-        capability_version: CommandBehaviorVersion(14),
+        capability_version: CommandBehaviorVersion(15),
         commands: vec![text_batch_command(
             3,
             &[],
@@ -8959,7 +9009,7 @@ fn direct_edit_batch_apply_middle_failure_is_atomic() {
     let third = accepted_for(&mapping, third);
     let batch = DirectEditBatchProposal {
         base: revision,
-        capability_version: CommandBehaviorVersion(14),
+        capability_version: CommandBehaviorVersion(15),
         commands: vec![
             text_batch_command(1, &[], first, "one", "ONE"),
             text_batch_command(2, &[], second, "wrong", "TWO"),
@@ -9016,7 +9066,7 @@ fn concurrent_history_undo_and_batch_apply_allow_one_commit_from_one_base() {
     };
     let batch = DirectEditBatchProposal {
         base: shared,
-        capability_version: CommandBehaviorVersion(14),
+        capability_version: CommandBehaviorVersion(15),
         commands: vec![text_batch_command(
             1,
             &[],
@@ -9132,7 +9182,7 @@ fn concurrent_direct_edit_batch_apply_allows_one_commit_from_one_base() {
     let target = accepted_for(&mapping, span);
     let first_batch = DirectEditBatchProposal {
         base,
-        capability_version: CommandBehaviorVersion(14),
+        capability_version: CommandBehaviorVersion(15),
         commands: vec![text_batch_command(
             1,
             &[],
@@ -9143,7 +9193,7 @@ fn concurrent_direct_edit_batch_apply_allows_one_commit_from_one_base() {
     };
     let second_batch = DirectEditBatchProposal {
         base,
-        capability_version: CommandBehaviorVersion(14),
+        capability_version: CommandBehaviorVersion(15),
         commands: vec![text_batch_command(
             2,
             &[],
@@ -9237,7 +9287,7 @@ fn direct_edit_batch_apply_refuses_stale_base_after_another_commit() {
     let target = accepted_for(&mapping, span);
     let batch = DirectEditBatchProposal {
         base,
-        capability_version: CommandBehaviorVersion(14),
+        capability_version: CommandBehaviorVersion(15),
         commands: vec![text_batch_command(
             1,
             &[],
@@ -9351,7 +9401,7 @@ fn table_cell_span_simulation_rejects_invalid_owning_grid() {
     );
     let batch = DirectEditBatchProposal {
         base: revision,
-        capability_version: CommandBehaviorVersion(14),
+        capability_version: CommandBehaviorVersion(15),
         commands: vec![span_batch_command(
             1,
             &[],
@@ -9403,7 +9453,7 @@ fn ordered_table_span_overlay_observes_dependent_candidate_value() {
     let final_span = table_cell_span(3, 1);
     let batch = DirectEditBatchProposal {
         base: revision,
-        capability_version: CommandBehaviorVersion(14),
+        capability_version: CommandBehaviorVersion(15),
         commands: vec![
             span_batch_command(1, &[], cell, TableCellSpan::SINGLE, middle),
             span_batch_command(2, &[1], cell, middle, final_span),
@@ -9465,7 +9515,7 @@ fn ordered_direct_edit_batch_simulates_independent_changes_read_only() {
     let before = session.current().expect("accepted revision").clone();
     let outcome = session.simulate_direct_edit_batch(DirectEditBatchProposal {
         base: revision,
-        capability_version: CommandBehaviorVersion(14),
+        capability_version: CommandBehaviorVersion(15),
         commands: vec![
             text_batch_command(1, &[], first, "one", "ONE"),
             text_batch_command(2, &[], second, "two", "TWO"),
@@ -9519,7 +9569,7 @@ fn ordered_direct_edit_batch_rejects_atomic_middle_failure_read_only() {
     let before = session.current().expect("accepted revision").clone();
     let outcome = session.simulate_direct_edit_batch(DirectEditBatchProposal {
         base: revision,
-        capability_version: CommandBehaviorVersion(14),
+        capability_version: CommandBehaviorVersion(15),
         commands: vec![
             text_batch_command(1, &[], first, "one", "ONE"),
             text_batch_command(2, &[], second, "wrong", "TWO"),
@@ -9580,7 +9630,7 @@ fn applied_same_target_chain_moves_command_ids_without_cloning() {
     };
     let batch = DirectEditBatchProposal {
         base: revision,
-        capability_version: CommandBehaviorVersion(14),
+        capability_version: CommandBehaviorVersion(15),
         commands: vec![
             command(1, Vec::new(), "base", "one"),
             command(
@@ -9643,7 +9693,7 @@ fn ordered_same_target_success_moves_command_ids_without_cloning() {
     };
     let batch = DirectEditBatchProposal {
         base: revision,
-        capability_version: CommandBehaviorVersion(14),
+        capability_version: CommandBehaviorVersion(15),
         commands: vec![
             command(1, Vec::new(), "base", "one"),
             command(
@@ -9704,7 +9754,7 @@ fn ordered_semantic_rejection_moves_result_command_ids_without_cloning() {
         };
     let batch = DirectEditBatchProposal {
         base: revision,
-        capability_version: CommandBehaviorVersion(14),
+        capability_version: CommandBehaviorVersion(15),
         commands: vec![
             command(1, first, "one", "ONE"),
             command(2, second, "wrong", "TWO"),
@@ -9760,7 +9810,7 @@ fn ordered_missing_target_dependency_clones_only_dependency_evidence() {
         };
     let batch = DirectEditBatchProposal {
         base: revision,
-        capability_version: CommandBehaviorVersion(14),
+        capability_version: CommandBehaviorVersion(15),
         commands: vec![
             command(1, "base", "middle"),
             command(2, "middle", "final"),
@@ -9797,7 +9847,7 @@ fn ordered_direct_edit_batch_requires_dependency_for_repeated_target() {
     let rejected =
         session.simulate_direct_edit_batch(DirectEditBatchProposal {
             base: revision,
-            capability_version: CommandBehaviorVersion(14),
+            capability_version: CommandBehaviorVersion(15),
             commands: vec![
                 text_batch_command(1, &[], span, "base", "middle"),
                 text_batch_command(2, &[], span, "middle", "final"),
@@ -9821,7 +9871,7 @@ fn ordered_direct_edit_batch_requires_dependency_for_repeated_target() {
     let predicted =
         session.simulate_direct_edit_batch(DirectEditBatchProposal {
             base: revision,
-            capability_version: CommandBehaviorVersion(14),
+            capability_version: CommandBehaviorVersion(15),
             commands: vec![
                 text_batch_command(1, &[], span, "base", "middle"),
                 text_batch_command(2, &[1], span, "middle", "final"),
@@ -9879,7 +9929,7 @@ fn ordered_batch_index_coalescing_preserves_first_change_order() {
     let third = accepted_for(&mapping, third);
     let outcome = session.simulate_direct_edit_batch(DirectEditBatchProposal {
         base: revision,
-        capability_version: CommandBehaviorVersion(14),
+        capability_version: CommandBehaviorVersion(15),
         commands: vec![
             text_batch_command(1, &[], second, "two", "TWO-1"),
             text_batch_command(2, &[], first, "one", "ONE-1"),
@@ -9932,7 +9982,7 @@ fn ordered_direct_edit_batch_graph_rejects_before_candidate_replay() {
     assert_eq!(
         session.simulate_direct_edit_batch(DirectEditBatchProposal {
             base: revision,
-            capability_version: CommandBehaviorVersion(14),
+            capability_version: CommandBehaviorVersion(15),
             commands: vec![
                 text_batch_command(7, &[], span, "base", "one"),
                 text_batch_command(7, &[], span, "base", "two"),
@@ -9959,7 +10009,7 @@ fn ordered_direct_edit_batch_noop_does_not_manufacture_dependency() {
     let before = session.current().expect("accepted revision").clone();
     let outcome = session.simulate_direct_edit_batch(DirectEditBatchProposal {
         base: revision,
-        capability_version: CommandBehaviorVersion(14),
+        capability_version: CommandBehaviorVersion(15),
         commands: vec![
             text_batch_command(1, &[], span, "base", "base"),
             text_batch_command(2, &[], span, "base", "final"),
@@ -9992,7 +10042,7 @@ fn ordered_direct_edit_batch_coalesces_net_noop_across_commands() {
     let before = session.current().expect("accepted revision").clone();
     let outcome = session.simulate_direct_edit_batch(DirectEditBatchProposal {
         base: revision,
-        capability_version: CommandBehaviorVersion(14),
+        capability_version: CommandBehaviorVersion(15),
         commands: vec![
             text_batch_command(1, &[], span, "base", "temporary"),
             text_batch_command(2, &[1], span, "temporary", "base"),
@@ -10034,7 +10084,7 @@ fn ordered_direct_edit_batch_preserves_global_rejection_precedence() {
             commands: vec![text_batch_command(1, &[], span, "base", "after")],
         }),
         DirectEditBatchSimulationOutcome::CapabilityMismatch {
-            current: CommandBehaviorVersion(14),
+            current: CommandBehaviorVersion(15),
             expected: CommandBehaviorVersion(0),
         },
     );
@@ -10047,7 +10097,7 @@ fn ordered_direct_edit_batch_preserves_global_rejection_precedence() {
     assert_eq!(
         session.simulate_direct_edit_batch(DirectEditBatchProposal {
             base: revision,
-            capability_version: CommandBehaviorVersion(14),
+            capability_version: CommandBehaviorVersion(15),
             commands: vec![text_batch_command(1, &[], span, "base", "after")],
         }),
         DirectEditBatchSimulationOutcome::StaleBase { current },
@@ -10074,7 +10124,7 @@ fn ordered_direct_edit_batch_seeds_structured_and_profile_impacts() {
     let page = accepted_for(&mapping, page);
     let formula_batch = DirectEditBatchProposal {
         base: revision,
-        capability_version: CommandBehaviorVersion(14),
+        capability_version: CommandBehaviorVersion(15),
         commands: vec![DirectEditBatchCommand {
             dependencies: Vec::<u32>::new(),
             id: 1_u32,
@@ -10131,7 +10181,7 @@ fn ordered_direct_edit_batch_seeds_structured_and_profile_impacts() {
     changed.top_clearance = Length::from_micrometres(12_000);
     let profile_batch = DirectEditBatchProposal {
         base: revision,
-        capability_version: CommandBehaviorVersion(14),
+        capability_version: CommandBehaviorVersion(15),
         commands: vec![DirectEditBatchCommand {
             dependencies: Vec::<u32>::new(),
             id: 1_u32,
@@ -12168,7 +12218,7 @@ fn ordered_batch_history_preserves_exact_unicode_text() {
     let target = accepted_for(&mapping, candidate_span);
     let batch = DirectEditBatchProposal {
         base,
-        capability_version: CommandBehaviorVersion(14),
+        capability_version: CommandBehaviorVersion(15),
         commands: vec![text_batch_command(
             1,
             &[],

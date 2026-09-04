@@ -357,7 +357,8 @@ fn scan_command(source: &str, start: usize) -> ScannedCommand {
     }
     for spelling in [
         "\\arccos", "\\arcsin", "\\arctan", "\\cos", "\\exp",
-        "\\ln", "\\log", "\\max", "\\min", "\\sin", "\\tan",
+        "\\int", "\\lim", "\\ln", "\\log", "\\max", "\\min",
+        "\\prod", "\\sin", "\\sum", "\\tan",
     ] {
         if command_matches(source, start, spelling) {
             return ScannedCommand {
@@ -371,9 +372,9 @@ fn scan_command(source: &str, start: usize) -> ScannedCommand {
     for spelling in [
         "\\alpha", "\\approx", "\\beta", "\\cdot", "\\delta",
         "\\epsilon", "\\gamma", "\\ge", "\\geq", "\\infty",
-        "\\lambda", "\\le", "\\leq", "\\mu", "\\ne", "\\neq",
-        "\\omega", "\\phi", "\\pi", "\\pm", "\\rho", "\\sigma",
-        "\\theta", "\\times",
+        "\\lambda", "\\le", "\\leq", "\\mu", "\\nabla", "\\ne",
+        "\\neq", "\\omega", "\\partial", "\\phi", "\\pi", "\\pm",
+        "\\rho", "\\sigma", "\\theta", "\\times", "\\to",
     ] {
         if command_matches(source, start, spelling) {
             return ScannedCommand {

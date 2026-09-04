@@ -105,7 +105,8 @@ fn escaped_tex_specials_remain_literal_in_math_and_text() {
 fn named_operator_vocabulary_is_supported_without_rewriting() {
     for source in [
         r"\arccos", r"\arcsin", r"\arctan", r"\cos", r"\exp",
-        r"\ln", r"\log", r"\max", r"\min", r"\sin", r"\tan",
+        r"\int", r"\lim", r"\ln", r"\log", r"\max", r"\min",
+        r"\prod", r"\sin", r"\sum", r"\tan",
     ] {
         let analyzed = analyze(source, FormulaMode::Inline)
             .expect("named operator formula");
@@ -153,13 +154,42 @@ fn named_operators_compose_with_symbols_and_groups() {
 }
 
 #[test]
+fn calculus_commands_compose_with_scripts_without_rewriting() {
+    let source = concat!(
+        r"\sum_{i=1}^n i + \prod_{k=1}^m k + ",
+        r"\int_0^1 x dx + \lim_{x \to 0} x",
+    );
+    let analyzed = analyze(source, FormulaMode::Display)
+        .expect("calculus expression");
+    assert!(analyzed.is_supported());
+    assert_eq!(reconstructed(&analyzed), source);
+    assert_eq!(
+        analyzed
+            .tokens
+            .iter()
+            .filter(|token| {
+                token.kind
+                    == MathTokenKind::Command(SupportedCommand::NamedOperator)
+            })
+            .count(),
+        4,
+    );
+
+    let supported = r"\partial f + \nabla g";
+    let analyzed = analyze(supported, FormulaMode::Inline)
+        .expect("calculus symbol expression");
+    assert!(analyzed.is_supported());
+    assert_eq!(reconstructed(&analyzed), supported);
+}
+
+#[test]
 fn named_symbol_vocabulary_is_supported_without_rewriting() {
     for source in [
         r"\alpha", r"\approx", r"\beta", r"\cdot", r"\delta",
         r"\epsilon", r"\gamma", r"\ge", r"\geq", r"\infty",
-        r"\lambda", r"\le", r"\leq", r"\mu", r"\ne", r"\neq",
-        r"\omega", r"\phi", r"\pi", r"\pm", r"\rho", r"\sigma",
-        r"\theta", r"\times",
+        r"\lambda", r"\le", r"\leq", r"\mu", r"\nabla", r"\ne",
+        r"\neq", r"\omega", r"\partial", r"\phi", r"\pi", r"\pm",
+        r"\rho", r"\sigma", r"\theta", r"\times", r"\to",
     ] {
         let analyzed =
             analyze(source, FormulaMode::Inline).expect("named symbol formula");
