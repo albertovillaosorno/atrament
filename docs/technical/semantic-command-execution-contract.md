@@ -481,11 +481,11 @@ that exact family, kind, owner, and optional base value.
 
 A deterministic capability snapshot now reports those seven discoverable family
 behaviors and one top-level behavior version. Aggregate command behavior and
-typed-result behavior are version 12 after admitting escaped TeX special
-characters without treating them as mathematical structure. Asset reference,
-Ordering and grouping, and Text content retain family behavior version 1;
-Document constraint is version 3; Structured content is version 5; Provenance
-and Style role are version 2.
+typed-result behavior are version 13 after admitting a finite vocabulary of
+common named TeX mathematical symbols. Asset reference, Ordering and grouping,
+and Text content retain family behavior version 1; Document constraint is
+version 3; Structured content is version 6; Provenance and Style role are
+version 2.
 
 Because no serialized command protocol is implemented, the snapshot advertises
 no protocol or normalization version, no command-context, Validate, Apply, or

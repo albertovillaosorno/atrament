@@ -102,6 +102,78 @@ fn escaped_tex_specials_remain_literal_in_math_and_text() {
 }
 
 #[test]
+fn named_symbol_vocabulary_is_supported_without_rewriting() {
+    for source in [
+        r"\alpha", r"\approx", r"\beta", r"\cdot", r"\delta",
+        r"\epsilon", r"\gamma", r"\ge", r"\geq", r"\infty",
+        r"\lambda", r"\le", r"\leq", r"\mu", r"\ne", r"\neq",
+        r"\omega", r"\phi", r"\pi", r"\pm", r"\rho", r"\sigma",
+        r"\theta", r"\times",
+    ] {
+        let analyzed =
+            analyze(source, FormulaMode::Inline).expect("named symbol formula");
+        assert!(analyzed.is_supported(), "{source}");
+        assert_eq!(reconstructed(&analyzed), source);
+        assert_eq!(
+            analyzed
+                .tokens
+                .iter()
+                .filter(|token| {
+                    token.kind
+                        == MathTokenKind::Command(SupportedCommand::NamedSymbol)
+                })
+                .count(),
+            1,
+            "{source}",
+        );
+    }
+}
+
+#[test]
+fn named_symbols_compose_with_scripts_and_relations() {
+    let source = concat!(
+        r"A = \pi r^2; \theta_1 \le \phi \pm \infty; ",
+        r"a \times b \approx c \cdot d",
+    );
+    let analyzed =
+        analyze(source, FormulaMode::Display).expect("symbol expression");
+    assert!(analyzed.is_supported());
+    assert_eq!(reconstructed(&analyzed), source);
+    assert_eq!(
+        analyzed
+            .tokens
+            .iter()
+            .filter(|token| {
+                token.kind
+                    == MathTokenKind::Command(SupportedCommand::NamedSymbol)
+            })
+            .count(),
+        9,
+    );
+    assert_eq!(
+        analyzed
+            .tokens
+            .iter()
+            .filter(|token| token.kind == MathTokenKind::Superscript)
+            .count(),
+        1,
+    );
+    assert_eq!(
+        analyzed
+            .tokens
+            .iter()
+            .filter(|token| token.kind == MathTokenKind::Subscript)
+            .count(),
+        1,
+    );
+
+    let prefixed = analyze(r"\pioneer", FormulaMode::Inline)
+        .expect("balanced unsupported symbol prefix");
+    assert!(!prefixed.is_supported());
+    assert_eq!(prefixed.unsupported[0].name, r"\pioneer");
+}
+
+#[test]
 fn unknown_control_symbol_stays_explicitly_unsupported() {
     let source = r"x \@ y";
     let analyzed = analyze(source, FormulaMode::Inline)
