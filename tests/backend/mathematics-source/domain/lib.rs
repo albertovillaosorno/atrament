@@ -191,7 +191,7 @@ fn named_symbol_vocabulary_is_supported_without_rewriting() {
         r"\cdot", r"\chi", r"\cong", r"\cup", r"\delta", r"\emptyset",
         r"\epsilon", r"\equiv", r"\eta", r"\exists", r"\forall", r"\gamma",
         r"\ge", r"\geq", r"\in", r"\infty", r"\iota", r"\kappa",
-        r"\lambda", r"\land", r"\le", r"\leq", r"\leftarrow", r"\lor",
+        r"\lambda", r"\land", r"\le", r"\leftarrow", r"\leq", r"\lor",
         r"\mid", r"\mu", r"\nabla", r"\ne", r"\neg", r"\neq", r"\notin",
         r"\nu", r"\omega", r"\parallel", r"\partial", r"\perp", r"\phi",
         r"\pi", r"\pm", r"\propto", r"\psi", r"\rho", r"\rightarrow",

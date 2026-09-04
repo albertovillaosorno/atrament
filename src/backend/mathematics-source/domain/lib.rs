@@ -34,6 +34,7 @@
 
 //! Exact-source structural analysis for editable mathematical content.
 
+// Keep command tables lexically sorted for reviewable vocabulary changes.
 const NAMED_OPERATOR_COMMANDS: &[&str] = &[
     "\\arccos", "\\arcsin", "\\arctan", "\\cos", "\\exp", "\\int",
     "\\lim", "\\ln", "\\log", "\\max", "\\min", "\\prod", "\\sin",
@@ -47,7 +48,7 @@ const NAMED_SYMBOL_COMMANDS: &[&str] = &[
     "\\cong", "\\cup", "\\delta", "\\emptyset", "\\epsilon", "\\equiv",
     "\\eta", "\\exists", "\\forall", "\\gamma", "\\ge", "\\geq",
     "\\in", "\\infty", "\\iota", "\\kappa", "\\lambda", "\\land", "\\le",
-    "\\leq", "\\leftarrow", "\\lor", "\\mid", "\\mu", "\\nabla", "\\ne",
+    "\\leftarrow", "\\leq", "\\lor", "\\mid", "\\mu", "\\nabla", "\\ne",
     "\\neg", "\\neq", "\\notin", "\\nu", "\\omega", "\\parallel",
     "\\partial", "\\perp", "\\phi", "\\pi", "\\pm", "\\propto", "\\psi",
     "\\rho", "\\rightarrow", "\\sigma", "\\sim",
