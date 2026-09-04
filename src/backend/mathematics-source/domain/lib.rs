@@ -68,13 +68,11 @@ const NAMED_SYMBOL_COMMANDS: &[&str] = &[
     "\\xi", "\\zeta",
 ];
 
-const STRUCTURED_COMMANDS: &[(&str, SupportedCommand)] = &[
+const STRUCTURED_CONTROL_WORD_COMMANDS: &[(&str, SupportedCommand)] = &[
     ("\\bar", SupportedCommand::Bar),
-    ("\\begin{matrix}", SupportedCommand::BeginMatrix),
     ("\\binom", SupportedCommand::Binomial),
     ("\\ddot", SupportedCommand::DoubleDot),
     ("\\dot", SupportedCommand::Dot),
-    ("\\end{matrix}", SupportedCommand::EndMatrix),
     ("\\frac", SupportedCommand::Fraction),
     ("\\hat", SupportedCommand::Hat),
     ("\\mathbb", SupportedCommand::BlackboardBold),
@@ -92,6 +90,11 @@ const STRUCTURED_COMMANDS: &[(&str, SupportedCommand)] = &[
     ("\\tilde", SupportedCommand::Tilde),
     ("\\underline", SupportedCommand::Underline),
     ("\\vec", SupportedCommand::Vector),
+];
+
+const STRUCTURED_ENVIRONMENT_COMMANDS: &[(&str, SupportedCommand)] = &[
+    ("\\begin{matrix}", SupportedCommand::BeginMatrix),
+    ("\\end{matrix}", SupportedCommand::EndMatrix),
 ];
 
 /// Complete source-preserving analysis of one mathematical unit.
@@ -468,16 +471,34 @@ fn scan_named_command(
         })
 }
 
-fn scan_structured_command(
+fn scan_structured_control_word(
+    source: &str,
+    start: usize,
+    end: usize,
+) -> Option<ScannedCommand> {
+    let spelling = source.get(start..end)?;
+    let index = STRUCTURED_CONTROL_WORD_COMMANDS
+        .binary_search_by(|(candidate, _)| candidate.cmp(&spelling))
+        .ok()?;
+    let (_, supported) = STRUCTURED_CONTROL_WORD_COMMANDS.get(index)?;
+    Some(ScannedCommand {
+        end,
+        kind: ScannedCommandKind::Supported(*supported),
+    })
+}
+
+fn scan_structured_environment_command(
     source: &str,
     start: usize,
 ) -> Option<ScannedCommand> {
-    STRUCTURED_COMMANDS.iter().find_map(|(spelling, supported)| {
-        command_matches(source, start, spelling).then(|| ScannedCommand {
-            end: start.saturating_add(spelling.len()),
-            kind: ScannedCommandKind::Supported(*supported),
+    STRUCTURED_ENVIRONMENT_COMMANDS
+        .iter()
+        .find_map(|(spelling, supported)| {
+            command_matches(source, start, spelling).then(|| ScannedCommand {
+                end: start.saturating_add(spelling.len()),
+                kind: ScannedCommandKind::Supported(*supported),
+            })
         })
-    })
 }
 
 fn scan_command(source: &str, start: usize) -> ScannedCommand {
@@ -517,7 +538,14 @@ fn scan_command(source: &str, start: usize) -> ScannedCommand {
         ) {
             return command;
         }
-        if let Some(command) = scan_structured_command(source, start) {
+        if let Some(command) = scan_structured_control_word(
+            source, start, end,
+        ) {
+            return command;
+        }
+        if let Some(command) =
+            scan_structured_environment_command(source, start)
+        {
             return command;
         }
         return ScannedCommand {
@@ -525,7 +553,7 @@ fn scan_command(source: &str, start: usize) -> ScannedCommand {
             kind: ScannedCommandKind::Unsupported,
         };
     }
-    if let Some(command) = scan_structured_command(source, start) {
+    if let Some(command) = scan_structured_environment_command(source, start) {
         return command;
     }
     let tail = source.get(after_slash..).unwrap_or_default();
