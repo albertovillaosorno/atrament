@@ -1539,6 +1539,19 @@ fn crossed_environment_closes_are_typed() {
 }
 
 #[test]
+fn mismatched_environment_end_precedes_group_depth_failure() {
+    let prefix = r"\begin{split}{\begin{matrix}x";
+    let source = format!(r"{prefix}\end{{split}}}}");
+    assert_eq!(
+        analyze(&source, FormulaMode::Display),
+        Err(MathSyntaxError {
+            byte_offset: prefix.len(),
+            kind: MathSyntaxErrorKind::MismatchedEnvironmentEnd,
+        }),
+    );
+}
+
+#[test]
 fn environments_cannot_close_inside_a_later_group() {
     for (begin, end) in [
         (r"\begin{aligned}", r"\end{aligned}"),
@@ -1640,20 +1653,22 @@ fn deep_ordered_environments_are_iterative_and_balanced() {
     let depth = 1_024usize;
     let mut source = String::new();
     for level in 0..depth {
-        match level % 4 {
+        match level % 5 {
             0 => source.push_str(r"\begin{aligned}"),
             1 => source.push_str(r"\begin{cases}"),
             2 => source.push_str(r"\begin{gathered}"),
-            _ => source.push_str(r"\begin{matrix}"),
+            3 => source.push_str(r"\begin{matrix}"),
+            _ => source.push_str(r"\begin{split}"),
         }
     }
     source.push('x');
     for level in (0..depth).rev() {
-        match level % 4 {
+        match level % 5 {
             0 => source.push_str(r"\end{aligned}"),
             1 => source.push_str(r"\end{cases}"),
             2 => source.push_str(r"\end{gathered}"),
-            _ => source.push_str(r"\end{matrix}"),
+            3 => source.push_str(r"\end{matrix}"),
+            _ => source.push_str(r"\end{split}"),
         }
     }
     let analyzed = analyze(&source, FormulaMode::Display)
@@ -1671,6 +1686,7 @@ fn deep_ordered_environments_are_iterative_and_balanced() {
                         | SupportedCommand::BeginCases
                         | SupportedCommand::BeginGathered
                         | SupportedCommand::BeginMatrix
+                        | SupportedCommand::BeginSplit
                 )
             ))
             .count(),
@@ -1809,11 +1825,15 @@ fn malformed_groups_and_required_arguments_are_typed() {
 fn environment_names_require_exact_braced_spelling() {
     for (source, unsupported) in [
         (r"\begin{alignedx}a & b", r"\begin"),
+        (r"a & b\end{alignedx}", r"\end"),
         (r"\begin{casesx}a & b", r"\begin"),
         (r"a & b\end{casesx}", r"\end"),
+        (r"\begin{gatheredx}a \\ b", r"\begin"),
+        (r"a \\ b\end{gatheredx}", r"\end"),
         (r"\begin{matrixx}a & b", r"\begin"),
-        (r"\begin{splitx}a & b", r"\begin"),
         (r"a & b\end{matrixx}", r"\end"),
+        (r"\begin{splitx}a & b", r"\begin"),
+        (r"a & b\end{splitx}", r"\end"),
     ] {
         let analyzed = analyze(source, FormulaMode::Aligned)
             .expect("balanced near-match environment source");
