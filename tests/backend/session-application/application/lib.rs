@@ -266,7 +266,7 @@ fn run_process_fixture_child(mode: &str) {
         println!("{PROCESS_FRESH_EMPTY}");
         return;
     }
-    assert_eq!(mode, "populated");
+    assert!(matches!(mode, "populated" | "populated-redo"));
     let identities = IdentityAllocator::new();
     let (mut candidate, candidate_span) =
         editable_text_candidate(&identities, "process-private before");
@@ -379,14 +379,42 @@ fn run_process_fixture_child(mode: &str) {
     };
     assert_eq!(current_figure.id, figure);
     assert_eq!(current_figure.asset, Some(second_asset));
-    assert_eq!(
-        session.history_availability(),
-        HistoryAvailabilityOutcome::Available(HistoryAvailability {
-            can_redo: false,
-            can_undo: true,
-            revision,
-        }),
-    );
+    if mode == "populated-redo" {
+        let HistoryTraversalOutcome::Traversed {
+            revision: undone, ..
+        } = session.traverse_history(revision, HistoryDirection::Undo)
+        else {
+            panic!("process fixture must create a Redo branch");
+        };
+        let current = session
+            .accepted_revision()
+            .expect("process fixture Undo revision");
+        let BlockContent::Figure(current_figure) =
+            &current.notebook.pages[0].flows[0].blocks[1].content
+        else {
+            panic!("process fixture Undo must retain figure");
+        };
+        assert_eq!(current_figure.id, figure);
+        assert_eq!(current_figure.asset, Some(first_asset));
+        assert_eq!(current.notebook.assets.len(), 2);
+        assert_eq!(
+            session.history_availability(),
+            HistoryAvailabilityOutcome::Available(HistoryAvailability {
+                can_redo: true,
+                can_undo: true,
+                revision: undone,
+            }),
+        );
+    } else {
+        assert_eq!(
+            session.history_availability(),
+            HistoryAvailabilityOutcome::Available(HistoryAvailability {
+                can_redo: false,
+                can_undo: true,
+                revision,
+            }),
+        );
+    }
     println!("{PROCESS_POPULATED_READY}");
     std::io::stdout().flush().expect("flush populated marker");
     let mut release = [0_u8; 1];
@@ -458,7 +486,7 @@ fn process_restart_drops_accepted_revision_and_history() {
     assert!(orderly.wait().expect("wait orderly child").success());
     assert_fresh_process_empty();
 
-    let mut forced = spawn_process_fixture("populated");
+    let mut forced = spawn_process_fixture("populated-redo");
     let mut forced_stdout = await_populated_marker(&mut forced);
     forced.kill().expect("force session child termination");
     let mut forced_tail = String::new();
