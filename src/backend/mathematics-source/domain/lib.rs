@@ -101,7 +101,9 @@ const STRUCTURED_CONTROL_WORD_COMMANDS: &[(&str, SupportedCommand)] = &[
 ];
 
 const STRUCTURED_ENVIRONMENT_COMMANDS: &[(&str, SupportedCommand)] = &[
+    ("\\begin{cases}", SupportedCommand::BeginCases),
     ("\\begin{matrix}", SupportedCommand::BeginMatrix),
+    ("\\end{cases}", SupportedCommand::EndCases),
     ("\\end{matrix}", SupportedCommand::EndMatrix),
 ];
 
@@ -141,12 +143,18 @@ pub struct MathSyntaxError {
 /// Structural failure classes for the admitted TeX-compatible subset.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum MathSyntaxErrorKind {
-    /// Alignment marker appears outside aligned or matrix content.
+    /// Alignment marker appears outside aligned or environment content.
     AlignmentOutsideStructure,
+    /// Cases environment closes without a matching cases start.
+    ExtraCasesEnd,
     /// A closing group appears without a matching open group.
     ExtraGroupClose,
     /// Matrix environment closes without a matching matrix start.
     ExtraMatrixEnd,
+    /// An environment closes while a different environment is still innermost.
+    MismatchedEnvironmentEnd,
+    /// Cases environment remains open at end of source.
+    MissingCasesEnd,
     /// Matrix environment remains open at end of source.
     MissingMatrixEnd,
     /// A supported command is missing one or more required braced arguments.
@@ -169,7 +177,7 @@ pub struct MathToken {
 /// Structural token kind with exact source span retained separately.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum MathTokenKind {
-    /// Column alignment point in aligned or matrix content.
+    /// Column alignment point in aligned or admitted environment content.
     AlignmentPoint,
     /// Supported TeX-compatible control sequence.
     Command(SupportedCommand),
@@ -187,16 +195,22 @@ pub enum MathTokenKind {
     Superscript,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum StructuredEnvironmentKind {
+    Cases,
+    Matrix,
+}
+
 #[derive(Debug)]
 struct GroupIndex {
     pairs: Vec<(usize, usize)>,
 }
 
 struct ScanState {
+    environment_stack: Vec<StructuredEnvironmentKind>,
     group_depth: usize,
     index: usize,
     literal_start: usize,
-    matrix_depth: usize,
     pending_substack_group: bool,
     pending_text_group: bool,
     substack_group_depths: Vec<usize>,
@@ -221,6 +235,8 @@ enum ScannedCommandKind {
 pub enum SupportedCommand {
     /// One-group bar accent.
     Bar,
+    /// Start of an explicit cases environment.
+    BeginCases,
     /// Start of an explicit matrix environment.
     BeginMatrix,
     /// Two-group binomial coefficient command.
@@ -239,6 +255,8 @@ pub enum SupportedCommand {
     Dot,
     /// One-group double-dot accent.
     DoubleDot,
+    /// End of an explicit cases environment.
+    EndCases,
     /// End of an explicit matrix environment.
     EndMatrix,
     /// Escaped TeX special character preserved as literal source.
@@ -322,8 +340,8 @@ impl AnalyzedFormula {
 /// `\\operatorname{...}`, `\\text{...}`, grouped substacks, vector,
 /// overline, and underline decorations, escaped TeX special characters, common
 /// named
-/// mathematical operators and symbols, aligned separators, and
-/// `\\begin{matrix}...\\end{matrix}`.
+/// mathematical operators and symbols, aligned separators, cases, and matrix
+/// environments.
 /// Math-only alignment, script, and row-break markers remain literal inside
 /// grouped text.
 /// Other commands remain present in the token stream and are reported through
@@ -331,19 +349,19 @@ impl AnalyzedFormula {
 ///
 /// # Errors
 ///
-/// Returns the first typed structural failure for unmatched groups or matrix
-/// boundaries, missing required braced arguments, or alignment syntax used in a
-/// context that does not admit it.
+/// Returns the first typed structural failure for unmatched groups or admitted
+/// environment boundaries, missing required braced arguments, or alignment used
+/// in a context that does not admit it.
 pub fn analyze(
     source: &str,
     mode: FormulaMode,
 ) -> Result<AnalyzedFormula, MathSyntaxError> {
     let group_index = build_group_index(source);
     let mut state = ScanState {
+        environment_stack: Vec::new(),
         group_depth: 0,
         index: 0,
         literal_start: 0,
-        matrix_depth: 0,
         pending_substack_group: false,
         pending_text_group: false,
         substack_group_depths: Vec::new(),
@@ -644,7 +662,7 @@ fn scan_alignment(
     tokens: &mut Vec<MathToken>,
     width: usize,
 ) -> Result<(), MathSyntaxError> {
-    if state.matrix_depth == 0
+    if state.environment_stack.is_empty()
         && (mode != FormulaMode::Aligned
             || !state.substack_group_depths.is_empty())
     {
@@ -714,7 +732,7 @@ fn scan_slash(
                 ));
             } else {
                 if mode != FormulaMode::Aligned
-                    && state.matrix_depth == 0
+                    && state.environment_stack.is_empty()
                     && state.substack_group_depths.is_empty()
                 {
                     return Err(error(
@@ -762,14 +780,19 @@ fn scan_supported_command(
     command: ScannedCommand,
     supported: SupportedCommand,
 ) -> Result<(), MathSyntaxError> {
+    if supported == SupportedCommand::EndCases {
+        close_environment(
+            state,
+            StructuredEnvironmentKind::Cases,
+            MathSyntaxErrorKind::ExtraCasesEnd,
+        )?;
+    }
     if supported == SupportedCommand::EndMatrix {
-        if state.matrix_depth == 0 {
-            return Err(error(
-                state.index,
-                MathSyntaxErrorKind::ExtraMatrixEnd,
-            ));
-        }
-        state.matrix_depth = state.matrix_depth.saturating_sub(1);
+        close_environment(
+            state,
+            StructuredEnvironmentKind::Matrix,
+            MathSyntaxErrorKind::ExtraMatrixEnd,
+        )?;
     }
     tokens.push(token(
         state.index,
@@ -783,9 +806,30 @@ fn scan_supported_command(
     if supported == SupportedCommand::Text {
         state.pending_text_group = true;
     }
-    if supported == SupportedCommand::BeginMatrix {
-        state.matrix_depth = state.matrix_depth.saturating_add(1);
+    if supported == SupportedCommand::BeginCases {
+        state.environment_stack.push(StructuredEnvironmentKind::Cases);
     }
+    if supported == SupportedCommand::BeginMatrix {
+        state.environment_stack.push(StructuredEnvironmentKind::Matrix);
+    }
+    Ok(())
+}
+
+fn close_environment(
+    state: &mut ScanState,
+    expected: StructuredEnvironmentKind,
+    extra: MathSyntaxErrorKind,
+) -> Result<(), MathSyntaxError> {
+    let Some(actual) = state.environment_stack.last().copied() else {
+        return Err(error(state.index, extra));
+    };
+    if actual != expected {
+        return Err(error(
+            state.index,
+            MathSyntaxErrorKind::MismatchedEnvironmentEnd,
+        ));
+    }
+    let _: Option<StructuredEnvironmentKind> = state.environment_stack.pop();
     Ok(())
 }
 
@@ -817,7 +861,9 @@ fn validate_command_groups(
     command: SupportedCommand,
 ) -> Result<(), MathSyntaxError> {
     let required = match command {
-        SupportedCommand::BeginMatrix
+        SupportedCommand::BeginCases
+        | SupportedCommand::BeginMatrix
+        | SupportedCommand::EndCases
         | SupportedCommand::EndMatrix
         | SupportedCommand::EscapedSpecial
         | SupportedCommand::NamedOperator
@@ -866,15 +912,20 @@ fn validate_command_groups(
     Ok(())
 }
 
-const fn validate_final_state(
+fn validate_final_state(
     source_len: usize,
     state: &ScanState,
 ) -> Result<(), MathSyntaxError> {
     if state.group_depth != 0 {
         return Err(error(source_len, MathSyntaxErrorKind::UnclosedGroup));
     }
-    if state.matrix_depth != 0 {
-        return Err(error(source_len, MathSyntaxErrorKind::MissingMatrixEnd));
+    match state.environment_stack.last() {
+        Some(StructuredEnvironmentKind::Cases) => {
+            Err(error(source_len, MathSyntaxErrorKind::MissingCasesEnd))
+        },
+        Some(StructuredEnvironmentKind::Matrix) => {
+            Err(error(source_len, MathSyntaxErrorKind::MissingMatrixEnd))
+        },
+        None => Ok(()),
     }
-    Ok(())
 }

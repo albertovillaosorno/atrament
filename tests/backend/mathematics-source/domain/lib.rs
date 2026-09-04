@@ -1213,6 +1213,85 @@ fn aligned_derivation_preserves_rows_and_alignment_points() {
 }
 
 #[test]
+fn cases_environment_admits_rows_and_alignment() {
+    let source = concat!(
+        r"f(x)=\begin{cases}x & x>0 \\ ",
+        r"-x & x\le 0\end{cases}",
+    );
+    let analyzed = analyze(source, FormulaMode::Display)
+        .expect("cases formula");
+    assert!(analyzed.is_supported());
+    assert_eq!(reconstructed(&analyzed), source);
+    assert!(analyzed.tokens.iter().any(|token| {
+        token.kind == MathTokenKind::Command(SupportedCommand::BeginCases)
+    }));
+    assert!(analyzed.tokens.iter().any(|token| {
+        token.kind == MathTokenKind::Command(SupportedCommand::EndCases)
+    }));
+    assert_eq!(
+        analyzed
+            .tokens
+            .iter()
+            .filter(|token| token.kind == MathTokenKind::AlignmentPoint)
+            .count(),
+        2,
+    );
+    assert_eq!(
+        analyzed
+            .tokens
+            .iter()
+            .filter(|token| token.kind == MathTokenKind::RowBreak)
+            .count(),
+        1,
+    );
+}
+
+#[test]
+fn cases_and_matrix_environments_nest_in_order() {
+    let source = concat!(
+        r"\begin{cases}a & \begin{matrix}b & c \\ d & e",
+        r"\end{matrix} \\ f & g\end{cases}",
+    );
+    let analyzed = analyze(source, FormulaMode::Display)
+        .expect("nested cases and matrix formula");
+    assert!(analyzed.is_supported());
+    assert_eq!(reconstructed(&analyzed), source);
+    for kind in [
+        SupportedCommand::BeginCases,
+        SupportedCommand::BeginMatrix,
+        SupportedCommand::EndCases,
+        SupportedCommand::EndMatrix,
+    ] {
+        assert!(analyzed.tokens.iter().any(|token| {
+            token.kind == MathTokenKind::Command(kind)
+        }));
+    }
+}
+
+#[test]
+fn crossed_environment_closes_are_typed() {
+    let first = r"\begin{matrix}\begin{cases}x";
+    let source = format!(r"{first}\end{{matrix}}");
+    assert_eq!(
+        analyze(&source, FormulaMode::Display),
+        Err(MathSyntaxError {
+            byte_offset: first.len(),
+            kind: MathSyntaxErrorKind::MismatchedEnvironmentEnd,
+        }),
+    );
+
+    let first = r"\begin{cases}\begin{matrix}x";
+    let source = format!(r"{first}\end{{cases}}");
+    assert_eq!(
+        analyze(&source, FormulaMode::Display),
+        Err(MathSyntaxError {
+            byte_offset: first.len(),
+            kind: MathSyntaxErrorKind::MismatchedEnvironmentEnd,
+        }),
+    );
+}
+
+#[test]
 fn matrix_admits_alignment_inside_display_mode() {
     let source = r"A = \begin{matrix}a & b \\ c & d\end{matrix}";
     let analyzed =
@@ -1340,13 +1419,15 @@ fn malformed_groups_and_required_arguments_are_typed() {
 }
 
 #[test]
-fn matrix_environment_names_require_exact_braced_spelling() {
+fn environment_names_require_exact_braced_spelling() {
     for (source, unsupported) in [
+        (r"\begin{casesx}a & b", r"\begin"),
+        (r"a & b\end{casesx}", r"\end"),
         (r"\begin{matrixx}a & b", r"\begin"),
         (r"a & b\end{matrixx}", r"\end"),
     ] {
         let analyzed = analyze(source, FormulaMode::Aligned)
-            .expect("balanced near-match matrix environment source");
+            .expect("balanced near-match environment source");
         assert!(!analyzed.is_supported(), "{source}");
         assert_eq!(reconstructed(&analyzed), source);
         assert_eq!(analyzed.unsupported.len(), 1, "{source}");
@@ -1366,6 +1447,25 @@ fn unknown_matrix_environment_remains_explicit_unsupported_source() {
     assert!(!analyzed.tokens.iter().any(|token| {
         token.kind == MathTokenKind::Command(SupportedCommand::BeginMatrix)
     }));
+}
+
+#[test]
+fn malformed_cases_boundaries_are_typed() {
+    assert_eq!(
+        analyze(r"\end{cases}", FormulaMode::Display),
+        Err(MathSyntaxError {
+            byte_offset: 0,
+            kind: MathSyntaxErrorKind::ExtraCasesEnd,
+        }),
+    );
+    let source = r"\begin{cases}a & b";
+    assert_eq!(
+        analyze(source, FormulaMode::Display),
+        Err(MathSyntaxError {
+            byte_offset: source.len(),
+            kind: MathSyntaxErrorKind::MissingCasesEnd,
+        }),
+    );
 }
 
 #[test]

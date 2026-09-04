@@ -190,11 +190,11 @@ supports read-only behavior-version drift checks. It deliberately advertises no
 command protocol, normalizer, command context, Validate, Apply, rebatching, or
 numeric command/context limits yet.
 
-Aggregate command behavior and typed-result behavior are version 34 after
-admitting grouped multi-row TeX substacks. Asset reference, Ordering and
+Aggregate command behavior and typed-result behavior are version 35 after
+admitting ordered TeX cases environments. Asset reference, Ordering and
 grouping, and Text content retain family behavior version 1; Provenance and
 Style role are version 2, Document constraint is version 3, and Structured
-content is version 27. The immediately previous aggregate version 33 rejects
+content is version 28. The immediately previous aggregate version 34 rejects
 instead of being reinterpreted.
 
 A version-bound single-target proposal combines capability, exact local
@@ -491,24 +491,23 @@ derivation content while exposing unsupported constructs without rewriting.
 Current executable evidence preserves exact UTF-8 mathematical source while
 structurally recognizing ordinary Unicode notation, groups, scripts, plain and
 styled fractions, binomial coefficients, square roots, grouped mathematical
-alphabets, common
-one-group accents, upright unit or label groups, explicit `\text{...}`
-fragments, grouped custom operator names, stacked annotations, vector, overline,
-and underline decorations, escaped TeX special characters, standard and variant
-Greek
-control-sequence notation, common named and delimiter symbols, binary-operator
-symbols, arrow and ellipsis symbols, relation and logic symbols, operators,
-calculus, set notation, aligned row and column separators, and matrix
-environments. Paired delimiter-sizing controls remain explicit unsupported input
-rather than being inferred from admitted delimiter glyph names.
+alphabets, common one-group accents, upright unit or label groups, explicit
+`\text{...}` fragments, grouped custom operator names, stacked annotations,
+vector, overline, and underline decorations, escaped TeX special characters,
+standard and variant Greek control-sequence notation, common named and delimiter
+symbols, binary-operator symbols, arrow and ellipsis symbols, relation and logic
+symbols, operators, calculus, set notation, aligned row and column separators,
+and ordered cases and matrix environments. Paired delimiter-sizing controls
+remain explicit unsupported input rather than being inferred from admitted
+delimiter glyph names.
 
 Math-only alignment, script, and row-break markers remain literal inside grouped
 text. Row breaks are structural inside grouped substacks without admitting
 column alignment there. Inline, display, and aligned presentation modes are
-semantic values rather
-than renderer guesses. Unknown control words remain explicit unsupported
-constructs; malformed groups, required arguments, alignment use, and matrix
-boundaries return typed syntax failures.
+semantic values rather than renderer guesses. Unknown control words remain
+explicit unsupported constructs; malformed groups, required arguments,
+alignment use, environment ordering, and cases or matrix boundaries return typed
+syntax failures.
 
 Semantic candidate acceptance analyzes every `Mathematics` block before accepted
 identity allocation. Unsupported or malformed mathematical candidates reject
