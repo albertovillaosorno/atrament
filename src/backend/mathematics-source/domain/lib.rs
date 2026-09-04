@@ -69,8 +69,11 @@ const STRUCTURED_COMMANDS: &[(&str, SupportedCommand)] = &[
     ("\\mathbb", SupportedCommand::BlackboardBold),
     ("\\mathbf", SupportedCommand::Bold),
     ("\\mathcal", SupportedCommand::Calligraphic),
+    ("\\mathfrak", SupportedCommand::Fraktur),
     ("\\mathit", SupportedCommand::Italic),
     ("\\mathrm", SupportedCommand::Roman),
+    ("\\mathsf", SupportedCommand::SansSerif),
+    ("\\mathtt", SupportedCommand::Typewriter),
     ("\\operatorname", SupportedCommand::OperatorName),
     ("\\overline", SupportedCommand::Overline),
     ("\\sqrt", SupportedCommand::SquareRoot),
@@ -215,6 +218,8 @@ pub enum SupportedCommand {
     EscapedSpecial,
     /// Two-group fraction command.
     Fraction,
+    /// One-group Fraktur mathematical alphabet.
+    Fraktur,
     /// One-group hat accent.
     Hat,
     /// One-group italic mathematical alphabet.
@@ -229,12 +234,16 @@ pub enum SupportedCommand {
     Overline,
     /// Roman/upright grouped content, useful for units and labels.
     Roman,
+    /// One-group sans-serif mathematical alphabet.
+    SansSerif,
     /// One-group square-root command.
     SquareRoot,
     /// One grouped text fragment preserved exactly inside mathematics.
     Text,
     /// One-group tilde accent.
     Tilde,
+    /// One-group typewriter mathematical alphabet.
+    Typewriter,
     /// One-group underline decoration.
     Underline,
     /// One-group vector decoration.
@@ -714,14 +723,17 @@ fn validate_command_groups(
         | SupportedCommand::Calligraphic
         | SupportedCommand::Dot
         | SupportedCommand::DoubleDot
+        | SupportedCommand::Fraktur
         | SupportedCommand::Hat
         | SupportedCommand::Italic
         | SupportedCommand::OperatorName
         | SupportedCommand::Overline
         | SupportedCommand::Roman
+        | SupportedCommand::SansSerif
         | SupportedCommand::SquareRoot
         | SupportedCommand::Text
         | SupportedCommand::Tilde
+        | SupportedCommand::Typewriter
         | SupportedCommand::Underline
         | SupportedCommand::Vector => 1usize,
     };

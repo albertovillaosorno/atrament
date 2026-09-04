@@ -84,7 +84,7 @@ use atrament_semantic_notebook_port::{
 use atrament_semantic_notebook_session::SemanticNotebookSessionService;
 
 const CURRENT_COMMAND_BEHAVIOR_VERSION: CommandBehaviorVersion =
-    CommandBehaviorVersion(24);
+    CommandBehaviorVersion(25);
 
 #[derive(Debug)]
 struct CountingCommandIdentity {
@@ -1488,7 +1488,7 @@ fn common_tex_accents_are_admitted_and_directly_editable() {
 #[test]
 fn grouped_math_alphabets_are_admitted_and_directly_editable() {
     let ids = IdentityAllocator::new();
-    let initial = r"x \in \mathbb{R}, \mathbf{v}";
+    let initial = r"x \in \mathbb{R}, \mathbf{v}, \mathfrak{g}";
     let (candidate, formula) =
         candidate_math_notebook(&ids, initial, FormulaMode::Display);
     let mut session = SemanticNotebookSessionService::default();
@@ -1507,7 +1507,10 @@ fn grouped_math_alphabets_are_admitted_and_directly_editable() {
         initial,
     );
 
-    let edited_source = r"f \in \mathcal{F}, \mathit{x} \in \mathbb{R}";
+    let edited_source = concat!(
+        r"f \in \mathcal{F}, \mathit{x} \in \mathbb{R}, ",
+        r"\mathsf{A}, \mathtt{id}",
+    );
     let outcome = session.replace_formula(
         revision,
         formula,
@@ -5913,7 +5916,7 @@ fn command_capability_snapshot_is_deterministic_and_does_not_overclaim() {
             family: SemanticCommandFamily::Provenance,
         },
         CommandFamilyCapability {
-            behavior_version: CommandBehaviorVersion(17),
+            behavior_version: CommandBehaviorVersion(18),
             family: SemanticCommandFamily::StructuredContent,
         },
         CommandFamilyCapability {
@@ -5981,11 +5984,11 @@ fn command_capability_version_detects_drift_independently_of_revision() {
     );
     assert_eq!(
         session.check_command_capability_compatibility(
-            CommandBehaviorVersion(23),
+            CommandBehaviorVersion(24),
         ),
         CommandCapabilityCompatibilityOutcome::Mismatch {
             current: CURRENT_COMMAND_BEHAVIOR_VERSION,
-            expected: CommandBehaviorVersion(23),
+            expected: CommandBehaviorVersion(24),
         },
     );
     assert_eq!(

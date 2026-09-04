@@ -465,7 +465,10 @@ fn common_accents_are_structural_and_require_one_group() {
 
 #[test]
 fn grouped_math_alphabets_are_structural_and_require_one_group() {
-    let source = r"x \in \mathbb{R}, \mathbf{v}, \mathcal{F}, \mathit{x}";
+    let source = concat!(
+        r"x \in \mathbb{R}, \mathbf{v}, \mathcal{F}, \mathit{x}, ",
+        r"\mathfrak{g}, \mathsf{A}, \mathtt{id}",
+    );
     let analyzed = analyze(source, FormulaMode::Display)
         .expect("grouped mathematical alphabets");
     assert!(analyzed.is_supported());
@@ -474,7 +477,10 @@ fn grouped_math_alphabets_are_structural_and_require_one_group() {
         (r"\mathbb", SupportedCommand::BlackboardBold),
         (r"\mathbf", SupportedCommand::Bold),
         (r"\mathcal", SupportedCommand::Calligraphic),
+        (r"\mathfrak", SupportedCommand::Fraktur),
         (r"\mathit", SupportedCommand::Italic),
+        (r"\mathsf", SupportedCommand::SansSerif),
+        (r"\mathtt", SupportedCommand::Typewriter),
     ] {
         assert!(analyzed.tokens.iter().any(|token| {
             token.kind == MathTokenKind::Command(kind)
