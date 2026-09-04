@@ -795,6 +795,34 @@ fn binomial_is_structural_and_requires_two_groups() {
 }
 
 #[test]
+fn styled_fractions_are_structural_and_require_two_groups() {
+    let source = r"\dfrac{a}{b} + \tfrac{x+1}{y-1}";
+    let analyzed = analyze(source, FormulaMode::Display)
+        .expect("styled fraction formula");
+    assert!(analyzed.is_supported());
+    assert_eq!(reconstructed(&analyzed), source);
+    for (spelling, kind) in [
+        (r"\dfrac", SupportedCommand::DisplayFraction),
+        (r"\tfrac", SupportedCommand::TextFraction),
+    ] {
+        assert!(analyzed.tokens.iter().any(|token| {
+            token.kind == MathTokenKind::Command(kind)
+                && analyzed.token_source(*token) == Some(spelling)
+        }));
+    }
+    for source in [r"\dfrac{a}", r"\tfrac{x}"] {
+        assert_eq!(
+            analyze(source, FormulaMode::Inline),
+            Err(MathSyntaxError {
+                byte_offset: source.len(),
+                kind: MathSyntaxErrorKind::MissingRequiredGroup,
+            }),
+            "{source}",
+        );
+    }
+}
+
+#[test]
 fn fraction_scripts_and_roman_units_are_structural_without_rewriting() {
     let source = r"E = \frac{1}{2}mv^2\mathrm{m/s^2}";
     let analyzed =

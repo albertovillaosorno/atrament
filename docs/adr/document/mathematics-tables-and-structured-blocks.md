@@ -58,8 +58,9 @@ representative bilingual assignment must exercise every initial block family.
 
 The backend now has a dependency-free mathematical source analyzer that retains
 exact UTF-8 source and exposes structural spans for the admitted first slice:
-groups, scripts, fractions, binomial coefficients, square roots, grouped
-mathematical alphabets, common one-group accents, upright unit or label groups,
+groups, scripts, plain and styled fractions, binomial coefficients, square
+roots, grouped mathematical alphabets, common one-group accents, upright unit or
+label groups,
 grouped text and custom operator names, stacked annotations, vector, overline,
 and underline decorations, escaped TeX special characters, standard and variant
 Greek

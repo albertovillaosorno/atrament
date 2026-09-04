@@ -190,12 +190,12 @@ supports read-only behavior-version drift checks. It deliberately advertises no
 command protocol, normalizer, command context, Validate, Apply, rebatching, or
 numeric command/context limits yet.
 
-Aggregate command behavior and typed-result behavior are version 31 after
-admitting grouped TeX stacked annotations. Asset reference, Ordering and
-grouping, and Text content retain family behavior version 1; Provenance and
-Style role are version 2, Document constraint is version 3, and Structured
-content is version 24. The immediately previous aggregate version 30 rejects
-instead of being reinterpreted.
+Aggregate command behavior and typed-result behavior are version 32 after
+admitting explicit display- and text-style TeX fractions. Asset reference,
+Ordering and grouping, and Text content retain family behavior version 1;
+Provenance and Style role are version 2, Document constraint is version 3, and
+Structured content is version 25. The immediately previous aggregate version 31
+rejects instead of being reinterpreted.
 
 A version-bound single-target proposal combines capability, exact local
 preconditions, and direct-edit simulation read-only. All five dedicated direct
@@ -489,8 +489,9 @@ Parse and preserve TeX-compatible inline, displayed, aligned, matrix, unit, and
 derivation content while exposing unsupported constructs without rewriting.
 
 Current executable evidence preserves exact UTF-8 mathematical source while
-structurally recognizing ordinary Unicode notation, groups, scripts, fractions,
-binomial coefficients, square roots, grouped mathematical alphabets, common
+structurally recognizing ordinary Unicode notation, groups, scripts, plain and
+styled fractions, binomial coefficients, square roots, grouped mathematical
+alphabets, common
 one-group accents, upright unit or label groups, explicit `\text{...}`
 fragments, grouped custom operator names, stacked annotations, vector, overline,
 and underline decorations, escaped TeX special characters, standard and variant

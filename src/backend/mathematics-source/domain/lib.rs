@@ -72,6 +72,7 @@ const STRUCTURED_CONTROL_WORD_COMMANDS: &[(&str, SupportedCommand)] = &[
     ("\\bar", SupportedCommand::Bar),
     ("\\binom", SupportedCommand::Binomial),
     ("\\ddot", SupportedCommand::DoubleDot),
+    ("\\dfrac", SupportedCommand::DisplayFraction),
     ("\\dot", SupportedCommand::Dot),
     ("\\frac", SupportedCommand::Fraction),
     ("\\hat", SupportedCommand::Hat),
@@ -88,6 +89,7 @@ const STRUCTURED_CONTROL_WORD_COMMANDS: &[(&str, SupportedCommand)] = &[
     ("\\overset", SupportedCommand::Overset),
     ("\\sqrt", SupportedCommand::SquareRoot),
     ("\\text", SupportedCommand::Text),
+    ("\\tfrac", SupportedCommand::TextFraction),
     ("\\tilde", SupportedCommand::Tilde),
     ("\\underline", SupportedCommand::Underline),
     ("\\underset", SupportedCommand::Underset),
@@ -224,6 +226,8 @@ pub enum SupportedCommand {
     Bold,
     /// One-group calligraphic mathematical alphabet.
     Calligraphic,
+    /// Two-group display-style fraction command.
+    DisplayFraction,
     /// One-group dot accent.
     Dot,
     /// One-group double-dot accent.
@@ -258,6 +262,8 @@ pub enum SupportedCommand {
     SquareRoot,
     /// One grouped text fragment preserved exactly inside mathematics.
     Text,
+    /// Two-group text-style fraction command.
+    TextFraction,
     /// One-group tilde accent.
     Tilde,
     /// One-group typewriter mathematical alphabet.
@@ -778,8 +784,10 @@ fn validate_command_groups(
         | SupportedCommand::NamedOperator
         | SupportedCommand::NamedSymbol => 0usize,
         SupportedCommand::Binomial
+        | SupportedCommand::DisplayFraction
         | SupportedCommand::Fraction
         | SupportedCommand::Overset
+        | SupportedCommand::TextFraction
         | SupportedCommand::Underset => 2usize,
         SupportedCommand::Bar
         | SupportedCommand::BlackboardBold
