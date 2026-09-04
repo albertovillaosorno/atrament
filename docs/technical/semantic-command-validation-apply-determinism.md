@@ -212,11 +212,12 @@ distinct: the span's direct semantic owner remains the Figure identity for local
 preconditions, while derived Style impact is seeded against the containing
 figure block, flow, and page.
 
-A controlled release probe over 2,000 paragraph spans and 4,000 independent
-Style-role/Provenance commands measured 44,303 microseconds on the prior
-per-command family fallback and 19,331 microseconds with target/family indexing;
-an earlier current-tree run measured 11,231 microseconds. These measurements are
-implementation evidence only, not a latency or throughput guarantee.
+A warmed two-run release matrix over paragraph spans and independent
+Style-role/Provenance commands measured 11,044-11,163 microseconds for 4,000
+commands with target/family indexing versus 19,707-20,231 microseconds on the
+prior per-command family fallback. At 8,000 commands the same probe measured
+33,598-34,433 microseconds versus 63,986-70,713 microseconds. These measurements
+are implementation evidence only, not a latency or throughput guarantee.
 
 A pinned release probe measured a first target ahead of 100,000 top-level blocks
 at about 20 microseconds after traversal hardening versus 1,099 microseconds
