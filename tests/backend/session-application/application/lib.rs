@@ -205,6 +205,29 @@ fn block_style_candidate(
     (candidate, block, flow, style)
 }
 
+fn page_profile_reference_candidate(
+    identities: &IdentityAllocator,
+) -> (
+    Notebook<CandidateIdentity>,
+    CandidateIdentity,
+    CandidateIdentity,
+    CandidateIdentity,
+    CandidateIdentity,
+) {
+    let (mut candidate, _) = editable_text_candidate(identities, "retarget");
+    let notebook = candidate.id;
+    let page = candidate.pages[0].id;
+    let first = candidate.page_profiles[0].id;
+    let second = identities.allocate_candidate().expect("second profile id");
+    let mut geometry = physical_page_profile();
+    geometry.top_clearance = Length::from_micrometres(12_000);
+    candidate.page_profiles.push(PaperProfile {
+        geometry,
+        id: second,
+    });
+    (candidate, notebook, page, first, second)
+}
+
 fn global_constraint_candidate(
     identities: &IdentityAllocator,
 ) -> (Notebook<CandidateIdentity>, CandidateIdentity, CandidateIdentity) {
@@ -398,7 +421,7 @@ fn run_process_fixture_child(mode: &str) {
     };
     let asset_batch = DirectEditBatchProposal {
         base: text_revision,
-        capability_version: CommandBehaviorVersion(7),
+        capability_version: CommandBehaviorVersion(8),
         commands: vec![DirectEditBatchCommand {
             dependencies: vec![],
             id: 1_u32,
@@ -663,7 +686,7 @@ fn application_routes_list_ordering_through_owned_authority() {
     let flow = accepted(candidate_flow);
     let list = accepted(candidate_list);
     let snapshot = session.command_capability_snapshot();
-    assert_eq!(snapshot.behavior_version, CommandBehaviorVersion(7));
+    assert_eq!(snapshot.behavior_version, CommandBehaviorVersion(8));
     assert!(snapshot.family_capabilities.iter().any(|capability| {
         capability.family == SemanticCommandFamily::OrderingAndGrouping
             && capability.behavior_version == CommandBehaviorVersion(1)
@@ -756,7 +779,7 @@ fn application_routes_block_style_through_owned_authority() {
     let flow = accepted(candidate_flow);
     let style = accepted(candidate_style);
     let snapshot = session.command_capability_snapshot();
-    assert_eq!(snapshot.behavior_version, CommandBehaviorVersion(7));
+    assert_eq!(snapshot.behavior_version, CommandBehaviorVersion(8));
     assert!(snapshot.family_capabilities.iter().any(|capability| {
         capability.family == SemanticCommandFamily::StyleRole
             && capability.behavior_version == CommandBehaviorVersion(1)
@@ -828,6 +851,101 @@ fn application_routes_block_style_through_owned_authority() {
 }
 
 #[test]
+fn application_routes_page_profile_reference_through_owned_authority() {
+    let identities = IdentityAllocator::new();
+    let (
+        candidate,
+        candidate_notebook,
+        candidate_page,
+        candidate_first,
+        second,
+    ) = page_profile_reference_candidate(&identities);
+    let mut session = application::SessionApplication::default();
+    let AcceptanceOutcome::Accepted { mapping, revision: base } =
+        session.accept_candidate(candidate)
+    else {
+        panic!("page profile reference candidate must be accepted");
+    };
+    let accepted = |candidate| {
+        mapping
+            .iter()
+            .find(|entry| entry.candidate == candidate)
+            .expect("page profile reference identity must map")
+            .accepted
+    };
+    let notebook = accepted(candidate_notebook);
+    let page = accepted(candidate_page);
+    let first = accepted(candidate_first);
+    let second = accepted(second);
+    let snapshot = session.command_capability_snapshot();
+    assert_eq!(snapshot.behavior_version, CommandBehaviorVersion(8));
+    assert!(snapshot.family_capabilities.iter().any(|capability| {
+        capability.family == SemanticCommandFamily::DocumentConstraint
+            && capability.behavior_version == CommandBehaviorVersion(3)
+    }));
+    let before = EditableSemanticValue::PageProfileReference(first);
+    let requested = EditableSemanticValue::PageProfileReference(second);
+    let CommandTargetMaterialOutcome::Prepared { material } =
+        session.command_target_material(base, page)
+    else {
+        panic!("live owner must expose page profile reference material");
+    };
+    assert_eq!(material.descriptor, SemanticIdentityDescriptor {
+        kind: SemanticIdentityKind::Page,
+        owner: Some(notebook),
+    });
+    assert_eq!(material.editable_value, Some(before.clone()));
+    assert_eq!(
+        material.direct_edit_family,
+        Some(SemanticCommandFamily::DocumentConstraint),
+    );
+    assert_eq!(
+        session.simulate_direct_edit(base, page, requested.clone()),
+        DirectEditSimulationOutcome::Applicable {
+            family: SemanticCommandFamily::DocumentConstraint,
+            requested: requested.clone(),
+            revision: base,
+            target: page,
+        },
+    );
+    let batch = DirectEditBatchProposal {
+        base,
+        capability_version: snapshot.behavior_version,
+        commands: vec![DirectEditBatchCommand {
+            dependencies: vec![],
+            id: 1_u32,
+            preconditions: CommandTargetPreconditions {
+                expected_value: Some(before),
+                identity: IdentityPrecondition {
+                    expected_kind: Some(SemanticIdentityKind::Page),
+                    expected_owner: IdentityOwnerExpectation::Direct(notebook),
+                },
+                requested_family: SemanticCommandFamily::DocumentConstraint,
+            },
+            requested,
+            target: page,
+        }],
+    };
+    let DirectEditBatchApplyOutcome::Applied { revision, .. } =
+        session.apply_direct_edit_batch(batch)
+    else {
+        panic!("live owner must apply page profile reference edit");
+    };
+    let current = session.accepted_revision().expect("retargeted revision");
+    assert_eq!(current.notebook.pages[0].id, page);
+    assert_eq!(current.notebook.pages[0].page_profile, second);
+
+    let HistoryTraversalOutcome::Traversed { .. } =
+        session.traverse_history(revision, HistoryDirection::Undo)
+    else {
+        panic!("live page profile reference edit must Undo");
+    };
+    let current = session.accepted_revision().expect("retarget Undo revision");
+    assert_eq!(current.notebook.pages[0].id, page);
+    assert_eq!(current.notebook.pages[0].page_profile, first);
+}
+
+#[test]
 fn application_routes_global_constraint_through_owned_authority() {
     let identities = IdentityAllocator::new();
     let (candidate, candidate_constraint, candidate_notebook) =
@@ -848,10 +966,10 @@ fn application_routes_global_constraint_through_owned_authority() {
     let constraint = accepted(candidate_constraint);
     let notebook = accepted(candidate_notebook);
     let snapshot = session.command_capability_snapshot();
-    assert_eq!(snapshot.behavior_version, CommandBehaviorVersion(7));
+    assert_eq!(snapshot.behavior_version, CommandBehaviorVersion(8));
     assert!(snapshot.family_capabilities.iter().any(|capability| {
         capability.family == SemanticCommandFamily::DocumentConstraint
-            && capability.behavior_version == CommandBehaviorVersion(2)
+            && capability.behavior_version == CommandBehaviorVersion(3)
     }));
     let current_value = EditableSemanticValue::ConstraintKind(
         ConstraintKind::Paper,
@@ -952,7 +1070,7 @@ fn application_routes_provenance_batch_through_owned_authority() {
     let claim = accepted(candidate_claim);
     let provenance = accepted(candidate_provenance);
     let snapshot = session.command_capability_snapshot();
-    assert_eq!(snapshot.behavior_version, CommandBehaviorVersion(7));
+    assert_eq!(snapshot.behavior_version, CommandBehaviorVersion(8));
     assert!(snapshot.family_capabilities.iter().any(|capability| {
         capability.family == SemanticCommandFamily::Provenance
     }));
@@ -1078,7 +1196,7 @@ fn application_routes_asset_reference_batch_through_owned_authority() {
     let first_asset = accepted(candidate_first);
     let second_asset = accepted(candidate_second);
     let snapshot = session.command_capability_snapshot();
-    assert_eq!(snapshot.behavior_version, CommandBehaviorVersion(7));
+    assert_eq!(snapshot.behavior_version, CommandBehaviorVersion(8));
     assert!(snapshot.family_capabilities.iter().any(|capability| {
         capability.family == SemanticCommandFamily::AssetReference
     }));
@@ -1537,7 +1655,7 @@ fn application_reviews_editable_text_through_owned_semantic_authority() {
     );
     assert_eq!(
         session.simulate_direct_edit_proposal(DirectEditProposal {
-            capability_version: CommandBehaviorVersion(7),
+            capability_version: CommandBehaviorVersion(8),
             preconditions,
             requested: requested.clone(),
             revision,
@@ -1594,7 +1712,7 @@ fn application_routes_local_command_review_through_owned_semantic_authority() {
             CommandBehaviorVersion(4),
         ),
         CommandCapabilityCompatibilityOutcome::Mismatch {
-            current: CommandBehaviorVersion(7),
+            current: CommandBehaviorVersion(8),
             expected: CommandBehaviorVersion(4),
         },
     );
@@ -1739,7 +1857,7 @@ fn application_routes_nonempty_selection_analysis_read_only() {
     };
     let batch = DirectEditBatchProposal {
         base: revision,
-        capability_version: CommandBehaviorVersion(7),
+        capability_version: CommandBehaviorVersion(8),
         commands: vec![
             command(1, vec![], "selection base", "one"),
             command(2, vec![1], "one", "two"),
@@ -1817,7 +1935,7 @@ fn application_routes_atomic_batch_apply_through_owned_semantic_authority() {
         .accepted;
     let empty = DirectEditBatchProposal::<u32> {
         base: revision,
-        capability_version: CommandBehaviorVersion(7),
+        capability_version: CommandBehaviorVersion(8),
         commands: Vec::new(),
     };
 
@@ -1892,7 +2010,7 @@ fn application_routes_atomic_batch_apply_through_owned_semantic_authority() {
 
     let bounded = DirectEditBatchProposal {
         base: revision,
-        capability_version: CommandBehaviorVersion(7),
+        capability_version: CommandBehaviorVersion(8),
         commands: vec![DirectEditBatchCommand {
             dependencies: vec![],
             id: 1_u32,
