@@ -320,6 +320,21 @@ fn unknown_control_symbol_stays_explicitly_unsupported() {
 }
 
 #[test]
+fn required_groups_allow_ascii_whitespace_without_rewriting() {
+    for source in [
+        "\\frac \t{1}  {2}",
+        "\\binom\n{n}\r\n{k}",
+        "\\sqrt \t{x}",
+        "\\operatorname  {rank}",
+    ] {
+        let analyzed = analyze(source, FormulaMode::Display)
+            .expect("whitespace-separated required groups");
+        assert!(analyzed.is_supported(), "{source:?}");
+        assert_eq!(reconstructed(&analyzed), source);
+    }
+}
+
+#[test]
 fn custom_operator_name_is_structural_and_requires_one_group() {
     let source = r"\operatorname{Var}(X) + \operatorname{Cov}(X,Y)";
     let analyzed = analyze(source, FormulaMode::Display)
