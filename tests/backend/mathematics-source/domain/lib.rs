@@ -303,6 +303,34 @@ fn common_arrow_symbols_compose_without_rewriting() {
 }
 
 #[test]
+fn sized_delimiter_commands_remain_explicitly_unsupported() {
+    let source = r"\left\langle x \right\rangle";
+    let analyzed = analyze(source, FormulaMode::Display)
+        .expect("balanced sized-delimiter source");
+    assert!(!analyzed.is_supported());
+    assert_eq!(reconstructed(&analyzed), source);
+    assert_eq!(
+        analyzed
+            .unsupported
+            .iter()
+            .map(|item| item.name.as_str())
+            .collect::<Vec<_>>(),
+        [r"\left", r"\right"],
+    );
+    assert_eq!(
+        analyzed
+            .tokens
+            .iter()
+            .filter(|token| {
+                token.kind
+                    == MathTokenKind::Command(SupportedCommand::NamedSymbol)
+            })
+            .count(),
+        2,
+    );
+}
+
+#[test]
 fn named_delimiters_compose_without_rewriting() {
     let source = concat!(
         r"\langle x, y \rangle; \lceil x \rceil; ",
