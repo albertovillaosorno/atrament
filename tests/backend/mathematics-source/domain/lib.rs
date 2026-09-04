@@ -236,6 +236,26 @@ fn unknown_control_symbol_stays_explicitly_unsupported() {
 }
 
 #[test]
+fn square_root_is_structural_and_requires_one_group() {
+    let source = r"x = \sqrt{a^2 + b^2}";
+    let analyzed =
+        analyze(source, FormulaMode::Display).expect("square-root formula");
+    assert!(analyzed.is_supported());
+    assert_eq!(reconstructed(&analyzed), source);
+    assert!(analyzed.tokens.iter().any(|token| {
+        token.kind == MathTokenKind::Command(SupportedCommand::SquareRoot)
+            && analyzed.token_source(*token) == Some(r"\sqrt")
+    }));
+    assert_eq!(
+        analyze(r"\sqrt", FormulaMode::Inline),
+        Err(MathSyntaxError {
+            byte_offset: 5,
+            kind: MathSyntaxErrorKind::MissingRequiredGroup,
+        }),
+    );
+}
+
+#[test]
 fn fraction_scripts_and_roman_units_are_structural_without_rewriting() {
     let source = r"E = \frac{1}{2}mv^2\mathrm{m/s^2}";
     let analyzed =
