@@ -3465,6 +3465,64 @@ fn block_style_reference_rejects_wrong_kind_and_missing_current_identity() {
 }
 
 #[test]
+fn list_ordering_rejects_the_previous_capability_epoch() {
+    let ids = IdentityAllocator::new();
+    let (candidate, candidate_ids) = candidate_list_ordering_notebook(&ids);
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision: base } =
+        session.accept(candidate)
+    else {
+        panic!("list ordering epoch candidate must be accepted");
+    };
+    let list = accepted_for(&mapping, candidate_ids.list);
+    let before = session.current().expect("list ordering epoch base").clone();
+    let batch = DirectEditBatchProposal {
+        base,
+        capability_version: CommandBehaviorVersion(6),
+        commands: vec![DirectEditBatchCommand {
+            dependencies: vec![],
+            id: 1_u32,
+            preconditions: CommandTargetPreconditions {
+                expected_value: Some(EditableSemanticValue::ListOrdering(
+                    false,
+                )),
+                identity: IdentityPrecondition {
+                    expected_kind: Some(SemanticIdentityKind::List),
+                    expected_owner: IdentityOwnerExpectation::Any,
+                },
+                requested_family:
+                    SemanticCommandFamily::OrderingAndGrouping,
+            },
+            requested: EditableSemanticValue::ListOrdering(true),
+            target: list,
+        }],
+    };
+    assert_eq!(
+        session.simulate_direct_edit_batch(batch.clone()),
+        DirectEditBatchSimulationOutcome::CapabilityMismatch {
+            current: CommandBehaviorVersion(7),
+            expected: CommandBehaviorVersion(6),
+        },
+    );
+    assert_eq!(
+        session.apply_direct_edit_batch(batch),
+        DirectEditBatchApplyOutcome::CapabilityMismatch {
+            current: CommandBehaviorVersion(7),
+            expected: CommandBehaviorVersion(6),
+        },
+    );
+    assert_eq!(session.current(), Some(&before));
+    assert_eq!(
+        session.history_availability(),
+        HistoryAvailabilityOutcome::Available(HistoryAvailability {
+            can_redo: false,
+            can_undo: false,
+            revision: base,
+        }),
+    );
+}
+
+#[test]
 fn list_ordering_applies_atomically_and_undoes() {
     let ids = IdentityAllocator::new();
     let (candidate, candidate_ids) = candidate_list_ordering_notebook(&ids);
