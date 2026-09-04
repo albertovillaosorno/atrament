@@ -72,7 +72,8 @@ unadmitted control symbols remain explicit unsupported constructs, and malformed
 source returns typed syntax failures.
 
 Environment closes are order-sensitive, with typed extra, missing,
-mismatched-boundary, and owning-group-crossing failures. Substack row breaks are
+mismatched-boundary, owning-group-crossing, and later-group-close failures.
+Substack row breaks are
 structural only inside
 their owning group and do not inherit column alignment from an outer
 environment. Gathered rows also remain row-only unless a column-capable

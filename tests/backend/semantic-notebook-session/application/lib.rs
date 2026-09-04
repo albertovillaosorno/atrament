@@ -84,7 +84,7 @@ use atrament_semantic_notebook_port::{
 use atrament_semantic_notebook_session::SemanticNotebookSessionService;
 
 const CURRENT_COMMAND_BEHAVIOR_VERSION: CommandBehaviorVersion =
-    CommandBehaviorVersion(39);
+    CommandBehaviorVersion(40);
 
 #[derive(Debug)]
 struct CountingCommandIdentity {
@@ -2198,6 +2198,32 @@ fn outer_environment_alignment_does_not_leak_into_substack_candidate() {
                 reason: MathSyntaxError {
                     byte_offset: source.find('&').expect("alignment marker"),
                     kind: MathSyntaxErrorKind::AlignmentOutsideStructure,
+                },
+            },
+        },
+    );
+    assert_eq!(session.current(), Some(&before));
+}
+
+#[test]
+fn environment_closing_inside_group_rejects_candidate_atomically() {
+    let ids = IdentityAllocator::new();
+    let valid = candidate_notebook(&ids, "accepted text");
+    let prefix = r"\begin{matrix}{a";
+    let source = format!(r"{prefix}\end{{matrix}}}}");
+    let (invalid, formula) =
+        candidate_math_notebook(&ids, &source, FormulaMode::Display);
+    let mut session = SemanticNotebookSessionService::default();
+    let _ = session.accept(valid);
+    let before = session.current().expect("accepted revision").clone();
+    assert_eq!(
+        session.accept(invalid),
+        AcceptanceOutcome::InvalidCandidate {
+            reason: CandidateGraphError::InvalidMathematics {
+                candidate: formula,
+                reason: MathSyntaxError {
+                    byte_offset: prefix.len(),
+                    kind: MathSyntaxErrorKind::EnvironmentClosesInsideGroup,
                 },
             },
         },
@@ -6515,7 +6541,7 @@ fn command_capability_snapshot_is_deterministic_and_does_not_overclaim() {
             family: SemanticCommandFamily::Provenance,
         },
         CommandFamilyCapability {
-            behavior_version: CommandBehaviorVersion(32),
+            behavior_version: CommandBehaviorVersion(33),
             family: SemanticCommandFamily::StructuredContent,
         },
         CommandFamilyCapability {
@@ -6583,11 +6609,11 @@ fn command_capability_version_detects_drift_independently_of_revision() {
     );
     assert_eq!(
         session.check_command_capability_compatibility(
-            CommandBehaviorVersion(38),
+            CommandBehaviorVersion(39),
         ),
         CommandCapabilityCompatibilityOutcome::Mismatch {
             current: CURRENT_COMMAND_BEHAVIOR_VERSION,
-            expected: CommandBehaviorVersion(38),
+            expected: CommandBehaviorVersion(39),
         },
     );
     assert_eq!(

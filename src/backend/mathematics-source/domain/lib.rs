@@ -149,6 +149,8 @@ pub struct MathSyntaxError {
 pub enum MathSyntaxErrorKind {
     /// Alignment marker appears outside aligned or environment content.
     AlignmentOutsideStructure,
+    /// An environment closes inside a group opened after that environment.
+    EnvironmentClosesInsideGroup,
     /// A group closes while an environment opened in it remains active.
     EnvironmentCrossesGroupClose,
     /// Aligned environment closes without a matching aligned start.
@@ -942,6 +944,12 @@ fn close_environment(
         return Err(error(
             state.index,
             MathSyntaxErrorKind::MismatchedEnvironmentEnd,
+        ));
+    }
+    if actual.group_depth != state.group_depth {
+        return Err(error(
+            state.index,
+            MathSyntaxErrorKind::EnvironmentClosesInsideGroup,
         ));
     }
     let _: Option<StructuredEnvironmentScope> = state.environment_stack.pop();

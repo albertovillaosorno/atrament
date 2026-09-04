@@ -1484,6 +1484,33 @@ fn crossed_environment_closes_are_typed() {
 }
 
 #[test]
+fn environments_cannot_close_inside_a_later_group() {
+    for (begin, end) in [
+        (r"\begin{aligned}", r"\end{aligned}"),
+        (r"\begin{cases}", r"\end{cases}"),
+        (r"\begin{gathered}", r"\end{gathered}"),
+        (r"\begin{matrix}", r"\end{matrix}"),
+    ] {
+        let prefix = format!("{begin}{{a");
+        let source = format!("{prefix}{end}}}");
+        assert_eq!(
+            analyze(&source, FormulaMode::Display),
+            Err(MathSyntaxError {
+                byte_offset: prefix.len(),
+                kind: MathSyntaxErrorKind::EnvironmentClosesInsideGroup,
+            }),
+            "{source}",
+        );
+    }
+
+    let properly_nested = r"\begin{matrix}{a}\end{matrix}";
+    let analyzed = analyze(properly_nested, FormulaMode::Display)
+        .expect("group closes before containing environment");
+    assert!(analyzed.is_supported());
+    assert_eq!(reconstructed(&analyzed), properly_nested);
+}
+
+#[test]
 fn environments_must_close_before_their_owning_group() {
     for (begin, end) in [
         (r"\begin{aligned}", r"\end{aligned}"),
