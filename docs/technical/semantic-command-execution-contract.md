@@ -474,19 +474,18 @@ optional admitted asset identity, Text content for inline text, Structured
 content for formulas, table-row roles, and table-cell spans, Provenance for
 revision-owned source records, Ordering and grouping for an existing list's
 ordering-significance flag, Style role for block-level style references, and
-Document constraint for page profiles and revision-owned constraint kinds. One
-aggregate read-only check validates
+Document constraint for page-profile geometry, per-page profile assignment,
+and revision-owned constraint kinds. One aggregate read-only check validates
 requested family, kind,
 owner, and optional exact base value against backend-derived target material.
 
 A deterministic capability snapshot now reports those seven discoverable
 family
 behaviors and one top-level behavior version. Aggregate command behavior and
-typed-result behavior are version 7 after list ordering admission. Asset
-reference, Ordering and grouping, Provenance, Style role, and Text content
-retain
-family behavior version 1; Document constraint and Structured content are
-version 2.
+typed-result behavior are version 8 after page-profile assignment admission.
+Asset reference, Ordering and grouping, Provenance, Style role, and Text content
+retain family behavior version 1; Document constraint is version 3 and
+Structured content is version 2.
 
 Because no serialized command protocol is implemented, the snapshot advertises
 no protocol or normalization version, no command-context, Validate, Apply, or
@@ -494,7 +493,7 @@ selective-rebatch capability, and no guessed command/context numeric limits. A
 read-only compatibility check rejects an older capability behavior version
 independently from notebook revision changes.
 
-A separate single-target direct-edit simulator classifies ten established
+A separate single-target direct-edit simulator classifies eleven established
 replacement value families as applicable, no-op, domain-invalid, unavailable,
 or value-family mismatched without mutation. Figure Asset references
 additionally reject missing or non-Asset accepted identities, while table-cell
@@ -531,6 +530,15 @@ A semantic Constraint value exposes only its broad `ConstraintKind` through the
 Document-constraint family. The revision-owned constraint identity and its
 semantic target stay unchanged; target reassignment and detailed paper, style,
 placement, or output values are not inferred from this broad classification.
+
+A semantic Page value exposes only the accepted `PageProfile` identity currently
+assigned to that page. Replacement must resolve to a current-revision
+`SemanticIdentityKind::PageProfile`; wrong-kind, missing, and prior-revision
+identities reject before mutation.
+
+Changing that reference preserves page identity, flows, and the profile catalog.
+It does not create/delete profiles or execute reflow; the exact page receives a
+conservative `AllDerived` impact seed for downstream authorities.
 
 A block Style-role value carries only `None` or an accepted `Style` identity in
 the same current revision. It changes the block's style reference while keeping
@@ -581,8 +589,9 @@ scope for diagnostic and output authorities only; later dependency expansion
 may narrow
 affected claims and outputs.
 
-Constraint-kind edits seed notebook scope with `AllDerived`; page-profile edits
-seed every accepted page that references the changed profile.
+Constraint-kind edits seed notebook scope with `AllDerived`. Page-profile
+geometry edits seed every accepted page that references the changed profile,
+while page-profile assignment seeds only the page whose reference changed.
 Those seeds are shared by single-target review and ordered batch simulation and
 are omitted for a net semantic no-op. They are inputs to future dependency
 expansion, not the final authoritative Validate impact set.
@@ -591,8 +600,8 @@ The ordered overlay copies accepted values only for identities named by the
 batch and stops semantic traversal once every unique target is indexed. Indexed
 material and impact scopes are consumed through simulation rather than cloned
 again. Each affected table is cloned once regardless of targeted cell count.
-Constraint-, profile-, and provenance-only batches resolve before walking
-unrelated blocks.
+Constraint-, page-, profile-, and provenance-only batches resolve before
+walking unrelated blocks.
 
 Block, list-item, table-row, and table-cell traversal uses borrowed slice
 continuation frames in document order. Pending traversal state therefore follows

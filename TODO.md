@@ -154,12 +154,12 @@ does not invent a continuation token or writable scope. A local-precondition
 check can require an exact semantic kind and direct owner, including explicit
 notebook-root ownership, before a future command family may mutate that target.
 
-A second read-only precondition compares exact accepted base values for ten
+A second read-only precondition compares exact accepted base values for eleven
 generic edit families: an existing figure's optional admitted asset reference,
 revision-owned constraint kind, one list's ordering-significance flag, block
 style reference, inline text, formula mode and source, provenance kind and
-source
-reference, table-row role, table-cell span, and physical page-profile geometry.
+source reference, table-row role, table-cell span, physical page-profile
+geometry, and one page's admitted page-profile identity.
 Text and formula checks preserve exact authored source because no Unicode
 normalization form is
 yet frozen. Backend-derived command-target material now combines semantic kind,
@@ -172,9 +172,9 @@ existing optional asset identity, Text content for inline text, Structured
 content for formulas, table-row roles, and table-cell spans, Provenance for
 revision-owned source records, Ordering and grouping for one existing list's
 ordering-significance flag, Style role for block-level admitted style
-references, and Document constraint for page profiles and broad revision-owned
-constraint
-kinds. A combined local checker validates
+references, and Document constraint for page-profile geometry, per-page
+page-profile assignment, and broad revision-owned constraint kinds. A combined
+local checker validates
 family, kind, owner, and an optional exact base value in one read-only snapshot
 with stale-base precedence.
 
@@ -183,11 +183,11 @@ supports read-only behavior-version drift checks. It deliberately advertises no
 command protocol, normalizer, command context, Validate, Apply, rebatching, or
 numeric command/context limits yet.
 
-Aggregate command behavior and typed-result behavior are version 7 after
-admitting list ordering-significance edits. Asset reference, Ordering and
+Aggregate command behavior and typed-result behavior are version 8 after
+admitting per-page page-profile assignment. Asset reference, Ordering and
 grouping, Provenance, Style role, and Text content retain family behavior
-version 1; Document constraint and Structured content are version 2. Older
-aggregate version-6 contexts reject instead of being reinterpreted.
+version 1; Document constraint is version 3 and Structured content is version 2.
+Older aggregate version-7 contexts reject instead of being reinterpreted.
 
 A version-bound single-target proposal combines capability, exact local
 preconditions, and direct-edit simulation read-only. All five dedicated direct
@@ -281,6 +281,16 @@ and anchor semantics remain open.
 Changed lists seed their containing block/flow/page region with `AllDerived`.
 Aggregate behavior version 6 rejects after this admission.
 
+Existing semantic `Page` identities now expose only the accepted page-profile
+identity they reference through Document constraint. Replacement must name a
+`PageProfile` identity admitted in the same current revision; missing,
+wrong-kind, or prior-revision identities reject before mutation.
+
+Retargeting preserves page identity, flows, and the page-profile catalog while
+changing only `Page.page_profile`. It seeds that exact page with `AllDerived`;
+downstream reflow remains derived work outside this semantic mutation service.
+Profile creation/deletion and serialized command syntax remain open.
+
 An empty batch returns the frozen NoOp prediction before semantic target
 indexing. Explicit dependencies are required before a later command can observe
 an earlier same-target candidate change; prior no-ops do not manufacture
@@ -290,8 +300,9 @@ Successful direct-edit predictions classify their net effect as Mutation or
 NoOp and derive conservative impact seeds from backend-owned semantic ownership.
 Text seeds identify the owning flow/page dependency region. Structured edits,
 figure asset references, block style references, and list ordering-significance
-edits seed the nearest block/flow/page; page-profile changes seed referencing
-pages, and semantic constraint-kind changes seed the notebook.
+edits seed the nearest block/flow/page. Page-profile geometry changes seed
+referencing pages, page-profile assignment seeds the exact changed page, and
+semantic constraint-kind changes seed the notebook.
 
 Asset-reference seeds conservatively require all derived authorities.
 Provenance-record edits seed the notebook for only diagnostic and output
@@ -302,8 +313,9 @@ projection; net semantic no-ops emit no seed.
 Ordered simulation consumes indexed target material and impact scopes instead of
 cloning them for each evaluation. Block, list, and table traversal uses borrowed
 slice continuation frames in document order and stops once every unique target
-is indexed. Constraint-, profile-, and provenance-only batches resolve before
-block traversal. Single-target provenance material also resolves revision-owned
+is indexed. Constraint-, page-, profile-, and provenance-only batches resolve
+before block traversal. Single-target provenance material also resolves
+revision-owned
 source records before the generic page/block descriptor walk.
 
 A release probe over 20,000 unrelated rule blocks measured 500 single-target

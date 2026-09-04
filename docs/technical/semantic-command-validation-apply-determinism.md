@@ -160,7 +160,7 @@ protocol normalization, command context, diagnostics, or a discoverable
 Validate capability.
 
 The current application foundation can deterministically simulate an ordered
-batch of the ten established generic replacement value families against one
+batch of the eleven established generic replacement value families against one
 immutable accepted revision. It validates generic command dependencies first,
 then consumes valid commands through a private value-and-impact overlay for only
 the editable identities targeted by the batch. Command IDs and requested values
@@ -180,19 +180,25 @@ target indexing.
 
 The same simulation derives conservative backend-owned impact seeds for text,
 structured-content, figure asset-reference, block style-reference, list
-ordering-significance, provenance-record, semantic constraint-kind, and
-page-profile changes. Asset, block-style, and list-ordering changes use local
-block/flow scope with `AllDerived` authority.
+ordering-significance, provenance-record, semantic constraint-kind,
+page-profile geometry, and per-page profile-assignment changes. Asset,
+block-style, and list-ordering changes use local block/flow scope with
+`AllDerived` authority.
 
 Provenance changes use notebook scope with only Diagnostics and Output
 authorities, while constraint-kind changes use notebook scope with `AllDerived`.
+Page-profile geometry changes seed every referencing page with `AllDerived`,
+while a page-profile assignment change seeds only that exact page. These are
+conservative seeds for later dependency expansion; this service does not execute
+reflow.
+
 Single-target review and ordered batches share those seeds, and net no-ops emit
 none. Indexed target material and impact scopes move through final simulation
 evidence instead of being cloned again.
 
 The targeted semantic scan uses document-order borrowed slice frames for blocks,
 list items, table rows, and table cells. It stops once every unique target is
-resolved, bypasses block traversal for constraint-, profile-, and
+resolved, bypasses block traversal for constraint-, page-, profile-, and
 provenance-only batches,
 and retains ordinary semantic material fallback for non-editable targets.
 Pending traversal state
@@ -244,11 +250,12 @@ directions.
 Redo restores the complete multi-command transaction with a fresh revision; a
 new batch applied after Undo clears the abandoned Redo branch.
 
-Replay coverage exercises all ten established generic editable values in one
-transaction: text, formula, page profile, table-row role, table-cell span, asset
-reference, provenance, constraint kind, block style reference, and list ordering
-significance. One accepted revision contains all ten changes, and one Undo
-restores every prior value with stable semantic identities.
+Replay coverage exercises all eleven established generic editable values in
+one transaction: text, formula, page-profile geometry, page-profile assignment,
+table-row role, table-cell span, asset reference, provenance, constraint kind,
+block style reference, and list ordering significance. One accepted revision
+contains all eleven changes, and one Undo restores every prior value with stable
+semantic identities.
 
 Application receipts preserve the simulator's move-oriented command identity
 behavior. Resource-limit rejection borrows caller command identities without

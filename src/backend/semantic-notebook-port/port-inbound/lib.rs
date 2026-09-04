@@ -436,6 +436,8 @@ pub enum EditableSemanticValueKind {
     ListOrdering,
     /// Complete exact physical page-profile geometry.
     PageProfile,
+    /// Existing physical page-profile identity assigned to one page.
+    PageProfileReference,
     /// Revision-owned semantic provenance kind and source reference.
     Provenance,
     /// Optional reference to one already-admitted semantic style.
@@ -466,6 +468,8 @@ pub enum EditableSemanticValue {
     ListOrdering(bool),
     /// Complete exact physical page-profile geometry.
     PageProfile(PhysicalPageProfile),
+    /// Existing physical page-profile identity assigned to one page.
+    PageProfileReference(AcceptedIdentity),
     /// Revision-owned semantic provenance kind and optional source reference.
     Provenance {
         /// Provenance meaning retained independently from presentation.
@@ -1054,6 +1058,17 @@ pub enum DirectEditSimulationOutcome {
         /// Accepted revision simulated without mutation.
         revision: RevisionIdentity,
         /// Existing semantic target simulated without mutation.
+        target: AcceptedIdentity,
+    },
+    /// Requested page-profile reference does not name an admitted profile.
+    InvalidPageProfileReference {
+        /// Semantic kind currently owned by the requested reference, when any.
+        actual: Option<SemanticIdentityKind>,
+        /// Requested accepted identity that is not an admitted page profile.
+        reference: AcceptedIdentity,
+        /// Accepted revision simulated without mutation.
+        revision: RevisionIdentity,
+        /// Existing semantic page simulated without mutation.
         target: AcceptedIdentity,
     },
     /// Requested style reference does not name an admitted style identity.

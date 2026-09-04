@@ -507,14 +507,14 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
     }
 
     fn command_capability_snapshot(&self) -> SemanticCommandCapabilitySnapshot {
-        const VERSION: CommandBehaviorVersion = CommandBehaviorVersion(7);
+        const VERSION: CommandBehaviorVersion = CommandBehaviorVersion(8);
         const FAMILY_CAPABILITIES: [CommandFamilyCapability; 7] = [
             CommandFamilyCapability {
                 behavior_version: CommandBehaviorVersion(1),
                 family: SemanticCommandFamily::AssetReference,
             },
             CommandFamilyCapability {
-                behavior_version: CommandBehaviorVersion(2),
+                behavior_version: CommandBehaviorVersion(3),
                 family: SemanticCommandFamily::DocumentConstraint,
             },
             CommandFamilyCapability {
@@ -989,6 +989,7 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
             } => (requested_mode, requested_source),
             DirectEditSimulationOutcome::Applicable { .. }
             | DirectEditSimulationOutcome::InvalidAssetReference { .. }
+            | DirectEditSimulationOutcome::InvalidPageProfileReference { .. }
             | DirectEditSimulationOutcome::InvalidStyleReference { .. }
             | DirectEditSimulationOutcome::InvalidPageProfile { .. }
             | DirectEditSimulationOutcome::InvalidTableGrid { .. }
@@ -1087,6 +1088,7 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
             } => requested,
             DirectEditSimulationOutcome::Applicable { .. }
             | DirectEditSimulationOutcome::InvalidAssetReference { .. }
+            | DirectEditSimulationOutcome::InvalidPageProfileReference { .. }
             | DirectEditSimulationOutcome::InvalidStyleReference { .. }
             | DirectEditSimulationOutcome::InvalidMathematics { .. }
             | DirectEditSimulationOutcome::InvalidTableGrid { .. }
@@ -1172,6 +1174,7 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
             } => requested,
             DirectEditSimulationOutcome::Applicable { .. }
             | DirectEditSimulationOutcome::InvalidAssetReference { .. }
+            | DirectEditSimulationOutcome::InvalidPageProfileReference { .. }
             | DirectEditSimulationOutcome::InvalidStyleReference { .. }
             | DirectEditSimulationOutcome::InvalidMathematics { .. }
             | DirectEditSimulationOutcome::InvalidPageProfile { .. }
@@ -1271,6 +1274,7 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
             } => requested_role,
             DirectEditSimulationOutcome::Applicable { .. }
             | DirectEditSimulationOutcome::InvalidAssetReference { .. }
+            | DirectEditSimulationOutcome::InvalidPageProfileReference { .. }
             | DirectEditSimulationOutcome::InvalidStyleReference { .. }
             | DirectEditSimulationOutcome::InvalidMathematics { .. }
             | DirectEditSimulationOutcome::InvalidPageProfile { .. }
@@ -1346,6 +1350,7 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
             } => requested_text,
             DirectEditSimulationOutcome::Applicable { .. }
             | DirectEditSimulationOutcome::InvalidAssetReference { .. }
+            | DirectEditSimulationOutcome::InvalidPageProfileReference { .. }
             | DirectEditSimulationOutcome::InvalidStyleReference { .. }
             | DirectEditSimulationOutcome::InvalidMathematics { .. }
             | DirectEditSimulationOutcome::InvalidPageProfile { .. }
@@ -2342,6 +2347,10 @@ fn direct_edit_material_index(
             return index;
         }
     }
+    index_direct_edit_pages(notebook, targets, revision, &mut index);
+    if index.materials.len() == targets.len() {
+        return index;
+    }
     for provenance in &notebook.provenance {
         if !targets.contains(&provenance.id) {
             continue;
@@ -2382,6 +2391,30 @@ fn direct_edit_material_index(
         }
     }
     index
+}
+
+fn index_direct_edit_pages(
+    notebook: &Notebook<AcceptedIdentity>,
+    targets: &BTreeSet<AcceptedIdentity>,
+    revision: atrament_semantic_notebook::RevisionIdentity,
+    index: &mut DirectEditBatchIndex,
+) {
+    for page in &notebook.pages {
+        if !targets.contains(&page.id) {
+            continue;
+        }
+        insert_direct_edit_material(
+            index,
+            page.id,
+            SemanticIdentityDescriptor {
+                kind: SemanticIdentityKind::Page,
+                owner: Some(notebook.id),
+            },
+            EditableSemanticValue::PageProfileReference(page.page_profile),
+            DirectEditImpactScope::Pages { pages: vec![page.id] },
+            revision,
+        );
+    }
 }
 
 fn index_direct_edit_constraints(
@@ -3045,6 +3078,9 @@ fn direct_edit_document_constraint_scope(
     notebook: &Notebook<AcceptedIdentity>,
     target: AcceptedIdentity,
 ) -> DirectEditImpactScope {
+    if notebook.pages.iter().any(|page| page.id == target) {
+        return DirectEditImpactScope::Pages { pages: vec![target] };
+    }
     let pages = notebook
         .pages
         .iter()
@@ -3171,7 +3207,9 @@ where
     };
     let simulation = simulate_prepared_direct_edit(checked, requested);
     let asset_checked = validate_asset_reference(notebook, simulation);
-    let style_checked = validate_style_reference(notebook, asset_checked);
+    let profile_checked =
+        validate_page_profile_reference(notebook, asset_checked);
+    let style_checked = validate_style_reference(notebook, profile_checked);
     let validated_simulation = if metadata.indexed {
         validate_batch_table_cell_span(
             table_by_cell,
@@ -3318,6 +3356,7 @@ fn batch_command_prediction<CommandIdentity>(
             })
         },
         outcome @ (DirectEditSimulationOutcome::InvalidAssetReference { .. }
+        | DirectEditSimulationOutcome::InvalidPageProfileReference { .. }
         | DirectEditSimulationOutcome::InvalidStyleReference { .. }
         | DirectEditSimulationOutcome::InvalidMathematics { .. }
         | DirectEditSimulationOutcome::InvalidPageProfile { .. }
@@ -3432,6 +3471,9 @@ const fn editable_value_kind(
         EditableSemanticValue::PageProfile(_) => {
             EditableSemanticValueKind::PageProfile
         },
+        EditableSemanticValue::PageProfileReference(_) => {
+            EditableSemanticValueKind::PageProfileReference
+        },
         EditableSemanticValue::Provenance { .. } => {
             EditableSemanticValueKind::Provenance
         },
@@ -3487,8 +3529,10 @@ fn simulate_direct_edit_material_in_notebook(
         return simulation;
     };
     let asset_checked = validate_asset_reference(accepted_notebook, simulation);
+    let profile_checked =
+        validate_page_profile_reference(accepted_notebook, asset_checked);
     let style_checked =
-        validate_style_reference(accepted_notebook, asset_checked);
+        validate_style_reference(accepted_notebook, profile_checked);
     validate_single_table_cell_span(accepted_notebook, style_checked)
 }
 
@@ -3513,6 +3557,35 @@ fn validate_asset_reference(
     DirectEditSimulation {
         before: simulation.before,
         outcome: DirectEditSimulationOutcome::InvalidAssetReference {
+            actual,
+            reference: *reference,
+            revision: *revision,
+            target: *target,
+        },
+    }
+}
+
+fn validate_page_profile_reference(
+    notebook: &Notebook<AcceptedIdentity>,
+    simulation: DirectEditSimulation,
+) -> DirectEditSimulation {
+    let DirectEditSimulationOutcome::Applicable {
+        requested: EditableSemanticValue::PageProfileReference(reference),
+        revision,
+        target,
+        ..
+    } = &simulation.outcome
+    else {
+        return simulation;
+    };
+    let actual = semantic_identity_descriptor(notebook, *reference)
+        .map(|descriptor| descriptor.kind);
+    if actual == Some(SemanticIdentityKind::PageProfile) {
+        return simulation;
+    }
+    DirectEditSimulation {
+        before: simulation.before,
+        outcome: DirectEditSimulationOutcome::InvalidPageProfileReference {
             actual,
             reference: *reference,
             revision: *revision,
@@ -3716,6 +3789,7 @@ fn simulate_prepared_direct_edit(
         EditableSemanticValue::AssetReference(_)
         | EditableSemanticValue::ConstraintKind(_)
         | EditableSemanticValue::ListOrdering(_)
+        | EditableSemanticValue::PageProfileReference(_)
         | EditableSemanticValue::StyleReference(_)
         | EditableSemanticValue::Provenance { .. }
         | EditableSemanticValue::TableCellSpan(_)
@@ -3758,7 +3832,8 @@ const fn direct_edit_family(
             SemanticCommandFamily::StructuredContent
         },
         EditableSemanticValue::ConstraintKind(_)
-        | EditableSemanticValue::PageProfile(_) => {
+        | EditableSemanticValue::PageProfile(_)
+        | EditableSemanticValue::PageProfileReference(_) => {
             SemanticCommandFamily::DocumentConstraint
         },
         EditableSemanticValue::ListOrdering(_) => {
@@ -3796,6 +3871,10 @@ fn editable_semantic_value(
             .map(|value| EditableSemanticValue::Text(value.to_owned())),
         SemanticIdentityKind::List => list_ordering_value(notebook, target)
             .map(EditableSemanticValue::ListOrdering),
+        SemanticIdentityKind::Page => page_profile_reference_value(
+            notebook, target,
+        )
+        .map(EditableSemanticValue::PageProfileReference),
         SemanticIdentityKind::PageProfile => {
             page_profile_value(notebook, target)
                 .map(EditableSemanticValue::PageProfile)
@@ -3818,7 +3897,6 @@ fn editable_semantic_value(
         | SemanticIdentityKind::ListItem
         | SemanticIdentityKind::Notebook
         | SemanticIdentityKind::OutputProfile
-        | SemanticIdentityKind::Page
         | SemanticIdentityKind::Style
         | SemanticIdentityKind::Table => None,
     }
@@ -4252,6 +4330,17 @@ fn formula_value(
     None
 }
 
+fn page_profile_reference_value(
+    notebook: &Notebook<AcceptedIdentity>,
+    target: AcceptedIdentity,
+) -> Option<AcceptedIdentity> {
+    notebook
+        .pages
+        .iter()
+        .find(|page| page.id == target)
+        .map(|page| page.page_profile)
+}
+
 fn page_profile_value(
     notebook: &Notebook<AcceptedIdentity>,
     target: AcceptedIdentity,
@@ -4386,6 +4475,13 @@ fn apply_direct_edit_change(
                 *profile,
             )
         },
+        EditableSemanticValue::PageProfileReference(reference) => {
+            replace_page_profile_reference_value(
+                notebook,
+                change.target,
+                *reference,
+            )
+        },
         EditableSemanticValue::Provenance { kind, reference } => {
             replace_provenance_value(
                 notebook,
@@ -4461,6 +4557,19 @@ fn replace_provenance_value(
     };
     provenance.kind = kind;
     provenance.reference = reference;
+    true
+}
+
+fn replace_page_profile_reference_value(
+    notebook: &mut Notebook<AcceptedIdentity>,
+    target: AcceptedIdentity,
+    reference: AcceptedIdentity,
+) -> bool {
+    let Some(page) = notebook.pages.iter_mut().find(|page| page.id == target)
+    else {
+        return false;
+    };
+    page.page_profile = reference;
     true
 }
 
