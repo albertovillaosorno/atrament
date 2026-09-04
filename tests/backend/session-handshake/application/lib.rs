@@ -56,13 +56,18 @@ fn current_version_set_is_compatible() {
 fn every_required_version_mismatch_blocks_with_its_dimension() {
     let service = HandshakeService;
     let current = HandshakeService::current_versions();
+    let product_mismatch = if current.product == "0.0.0" {
+        "atrament-test-product-mismatch"
+    } else {
+        "0.0.0"
+    };
     let cases = [
         (VersionDimension::Capability, Versions {
             capability: "atrament.capability/0",
             ..current
         }),
         (VersionDimension::Product, Versions {
-            product: "0.0.0",
+            product: product_mismatch,
             ..current
         }),
         (VersionDimension::Profile, Versions {
