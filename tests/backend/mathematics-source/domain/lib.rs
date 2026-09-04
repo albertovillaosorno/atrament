@@ -351,6 +351,26 @@ fn square_root_is_structural_and_requires_one_group() {
 }
 
 #[test]
+fn binomial_is_structural_and_requires_two_groups() {
+    let source = r"P(X=k) = \binom{n}{k}p^k(1-p)^{n-k}";
+    let analyzed = analyze(source, FormulaMode::Display)
+        .expect("binomial formula");
+    assert!(analyzed.is_supported());
+    assert_eq!(reconstructed(&analyzed), source);
+    assert!(analyzed.tokens.iter().any(|token| {
+        token.kind == MathTokenKind::Command(SupportedCommand::Binomial)
+            && analyzed.token_source(*token) == Some(r"\binom")
+    }));
+    assert_eq!(
+        analyze(r"\binom{n}", FormulaMode::Inline),
+        Err(MathSyntaxError {
+            byte_offset: 9,
+            kind: MathSyntaxErrorKind::MissingRequiredGroup,
+        }),
+    );
+}
+
+#[test]
 fn fraction_scripts_and_roman_units_are_structural_without_rewriting() {
     let source = r"E = \frac{1}{2}mv^2\mathrm{m/s^2}";
     let analyzed =

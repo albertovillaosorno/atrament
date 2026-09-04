@@ -149,6 +149,8 @@ enum ScannedCommandKind {
 pub enum SupportedCommand {
     /// Start of an explicit matrix environment.
     BeginMatrix,
+    /// Two-group binomial coefficient command.
+    Binomial,
     /// End of an explicit matrix environment.
     EndMatrix,
     /// Escaped TeX special character preserved as literal source.
@@ -201,7 +203,8 @@ impl AnalyzedFormula {
 /// Analyze one exact mathematical source without normalizing or rewriting it.
 ///
 /// Supported source includes ordinary Unicode mathematics, groups, scripts,
-/// `\\frac{...}{...}`, `\\sqrt{...}`, `\\mathrm{...}`, `\\text{...}`,
+/// `\\frac{...}{...}`, `\\binom{...}{...}`, `\\sqrt{...}`,
+/// `\\mathrm{...}`, `\\text{...}`,
 /// grouped vector, overline, and underline decorations, escaped TeX special
 /// characters, common named mathematical operators and
 /// symbols, aligned separators, and `\\begin{matrix}...\\end{matrix}`.
@@ -397,6 +400,7 @@ fn scan_command(source: &str, start: usize) -> ScannedCommand {
     }
     for (spelling, supported) in [
         ("\\begin{matrix}", SupportedCommand::BeginMatrix),
+        ("\\binom", SupportedCommand::Binomial),
         ("\\end{matrix}", SupportedCommand::EndMatrix),
         ("\\frac", SupportedCommand::Fraction),
         ("\\mathrm", SupportedCommand::Roman),
@@ -643,7 +647,7 @@ fn validate_command_groups(
         | SupportedCommand::EscapedSpecial
         | SupportedCommand::NamedOperator
         | SupportedCommand::NamedSymbol => 0usize,
-        SupportedCommand::Fraction => 2usize,
+        SupportedCommand::Binomial | SupportedCommand::Fraction => 2usize,
         SupportedCommand::Overline
         | SupportedCommand::Roman
         | SupportedCommand::SquareRoot
