@@ -495,8 +495,8 @@ aligned row and column separators, and matrix environments. Math-only
 alignment, script, and row-break markers remain literal inside grouped text.
 Inline, display, and aligned presentation modes are semantic values rather than
 renderer guesses. Unknown control words remain explicit unsupported constructs;
-malformed groups, required arguments, alignment use, and matrix boundaries return
-typed syntax failures.
+malformed groups, required arguments, alignment use, and matrix boundaries
+return typed syntax failures.
 
 Semantic candidate acceptance analyzes every `Mathematics` block before accepted
 identity allocation. Unsupported or malformed mathematical candidates reject
