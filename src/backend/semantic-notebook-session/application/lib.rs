@@ -90,10 +90,12 @@ use atrament_semantic_notebook_port::{
     TableCellSpanEditOutcome, TableRowRoleEditOutcome, TextEditOutcome,
 };
 
+type DirectEditMaterialKey = (AcceptedIdentity, SemanticCommandFamily);
+
 #[derive(Default)]
 struct DirectEditBatchIndex {
-    impacts: BTreeMap<AcceptedIdentity, DirectEditImpactScope>,
-    materials: BTreeMap<AcceptedIdentity, CommandTargetMaterial>,
+    impacts: BTreeMap<DirectEditMaterialKey, DirectEditImpactScope>,
+    materials: BTreeMap<DirectEditMaterialKey, CommandTargetMaterial>,
     table_by_cell: BTreeMap<AcceptedIdentity, AcceptedIdentity>,
     table_overlays: BTreeMap<AcceptedIdentity, Table<AcceptedIdentity>>,
 }
@@ -142,7 +144,6 @@ enum DirectEditBatchIndexFrame<'notebook> {
 #[derive(Clone, Copy)]
 struct DirectEditBatchMaterialMetadata {
     descriptor: SemanticIdentityDescriptor<AcceptedIdentity>,
-    direct_edit_family: Option<SemanticCommandFamily>,
     indexed: bool,
 }
 
@@ -352,7 +353,9 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
         target: AcceptedIdentity,
         requested: SemanticCommandFamily,
     ) -> CommandFamilyAdmissionOutcome {
-        let material = match self.command_target_material(revision, target) {
+        let material = match self.command_target_material_for_family(
+            revision, target, requested,
+        ) {
             CommandTargetMaterialOutcome::NoAcceptedRevision => {
                 return CommandFamilyAdmissionOutcome::NoAcceptedRevision;
             },
@@ -387,7 +390,11 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
         target: AcceptedIdentity,
         preconditions: CommandTargetPreconditions,
     ) -> CommandTargetPreconditionOutcome {
-        let material = match self.command_target_material(revision, target) {
+        let material = match self.command_target_material_for_family(
+            revision,
+            target,
+            preconditions.requested_family,
+        ) {
             CommandTargetMaterialOutcome::NoAcceptedRevision => {
                 return CommandTargetPreconditionOutcome::NoAcceptedRevision;
             },
@@ -414,7 +421,10 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
         target: AcceptedIdentity,
         expected: EditableSemanticValue,
     ) -> EditableValuePreconditionOutcome {
-        let material = match self.command_target_material(revision, target) {
+        let family = direct_edit_family(&expected);
+        let material = match self.command_target_material_for_family(
+            revision, target, family,
+        ) {
             CommandTargetMaterialOutcome::NoAcceptedRevision => {
                 return EditableValuePreconditionOutcome::NoAcceptedRevision;
             },
@@ -507,7 +517,7 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
     }
 
     fn command_capability_snapshot(&self) -> SemanticCommandCapabilitySnapshot {
-        const VERSION: CommandBehaviorVersion = CommandBehaviorVersion(8);
+        const VERSION: CommandBehaviorVersion = CommandBehaviorVersion(9);
         const FAMILY_CAPABILITIES: [CommandFamilyCapability; 7] = [
             CommandFamilyCapability {
                 behavior_version: CommandBehaviorVersion(1),
@@ -522,7 +532,7 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
                 family: SemanticCommandFamily::OrderingAndGrouping,
             },
             CommandFamilyCapability {
-                behavior_version: CommandBehaviorVersion(1),
+                behavior_version: CommandBehaviorVersion(2),
                 family: SemanticCommandFamily::Provenance,
             },
             CommandFamilyCapability {
@@ -530,7 +540,7 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
                 family: SemanticCommandFamily::StructuredContent,
             },
             CommandFamilyCapability {
-                behavior_version: CommandBehaviorVersion(1),
+                behavior_version: CommandBehaviorVersion(2),
                 family: SemanticCommandFamily::StyleRole,
             },
             CommandFamilyCapability {
@@ -572,6 +582,28 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
             &current.notebook,
             revision,
             target,
+        )
+    }
+
+    fn command_target_material_for_family(
+        &self,
+        revision: atrament_semantic_notebook::RevisionIdentity,
+        target: AcceptedIdentity,
+        family: SemanticCommandFamily,
+    ) -> CommandTargetMaterialOutcome {
+        let Some(current) = self.current.as_ref() else {
+            return CommandTargetMaterialOutcome::NoAcceptedRevision;
+        };
+        if current.id != revision {
+            return CommandTargetMaterialOutcome::StaleBase {
+                current: current.id,
+            };
+        }
+        command_target_material_for_family_from_notebook(
+            &current.notebook,
+            revision,
+            target,
+            family,
         )
     }
 
@@ -909,9 +941,12 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
         target: AcceptedIdentity,
         requested: EditableSemanticValue,
     ) -> DirectEditChangePreviewOutcome {
+        let requested_family = direct_edit_family(&requested);
         let simulation = simulate_direct_edit_material_in_notebook(
             self.current.as_ref().map(|current| &current.notebook),
-            self.command_target_material(revision, target),
+            self.command_target_material_for_family(
+                revision, target, requested_family,
+            ),
             requested,
         );
         match (simulation.before, simulation.outcome) {
@@ -990,6 +1025,7 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
             DirectEditSimulationOutcome::Applicable { .. }
             | DirectEditSimulationOutcome::InvalidAssetReference { .. }
             | DirectEditSimulationOutcome::InvalidPageProfileReference { .. }
+            | DirectEditSimulationOutcome::InvalidProvenanceReference { .. }
             | DirectEditSimulationOutcome::InvalidStyleReference { .. }
             | DirectEditSimulationOutcome::InvalidPageProfile { .. }
             | DirectEditSimulationOutcome::InvalidTableGrid { .. }
@@ -1089,6 +1125,7 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
             DirectEditSimulationOutcome::Applicable { .. }
             | DirectEditSimulationOutcome::InvalidAssetReference { .. }
             | DirectEditSimulationOutcome::InvalidPageProfileReference { .. }
+            | DirectEditSimulationOutcome::InvalidProvenanceReference { .. }
             | DirectEditSimulationOutcome::InvalidStyleReference { .. }
             | DirectEditSimulationOutcome::InvalidMathematics { .. }
             | DirectEditSimulationOutcome::InvalidTableGrid { .. }
@@ -1175,6 +1212,7 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
             DirectEditSimulationOutcome::Applicable { .. }
             | DirectEditSimulationOutcome::InvalidAssetReference { .. }
             | DirectEditSimulationOutcome::InvalidPageProfileReference { .. }
+            | DirectEditSimulationOutcome::InvalidProvenanceReference { .. }
             | DirectEditSimulationOutcome::InvalidStyleReference { .. }
             | DirectEditSimulationOutcome::InvalidMathematics { .. }
             | DirectEditSimulationOutcome::InvalidPageProfile { .. }
@@ -1275,6 +1313,7 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
             DirectEditSimulationOutcome::Applicable { .. }
             | DirectEditSimulationOutcome::InvalidAssetReference { .. }
             | DirectEditSimulationOutcome::InvalidPageProfileReference { .. }
+            | DirectEditSimulationOutcome::InvalidProvenanceReference { .. }
             | DirectEditSimulationOutcome::InvalidStyleReference { .. }
             | DirectEditSimulationOutcome::InvalidMathematics { .. }
             | DirectEditSimulationOutcome::InvalidPageProfile { .. }
@@ -1351,6 +1390,7 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
             DirectEditSimulationOutcome::Applicable { .. }
             | DirectEditSimulationOutcome::InvalidAssetReference { .. }
             | DirectEditSimulationOutcome::InvalidPageProfileReference { .. }
+            | DirectEditSimulationOutcome::InvalidProvenanceReference { .. }
             | DirectEditSimulationOutcome::InvalidStyleReference { .. }
             | DirectEditSimulationOutcome::InvalidMathematics { .. }
             | DirectEditSimulationOutcome::InvalidPageProfile { .. }
@@ -1414,9 +1454,10 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
         target: AcceptedIdentity,
         requested: EditableSemanticValue,
     ) -> DirectEditSimulationOutcome {
+        let family = direct_edit_family(&requested);
         simulate_direct_edit_material_in_notebook(
             self.current.as_ref().map(|current| &current.notebook),
-            self.command_target_material(revision, target),
+            self.command_target_material_for_family(revision, target, family),
             requested,
         )
         .outcome
@@ -2231,6 +2272,39 @@ fn command_target_material_from_notebook(
     }
 }
 
+fn command_target_material_for_family_from_notebook(
+    notebook: &Notebook<AcceptedIdentity>,
+    revision: atrament_semantic_notebook::RevisionIdentity,
+    target: AcceptedIdentity,
+    family: SemanticCommandFamily,
+) -> CommandTargetMaterialOutcome {
+    let Some(descriptor) = semantic_identity_descriptor(notebook, target) else {
+        return CommandTargetMaterialOutcome::TargetNotFound {
+            revision,
+            target,
+        };
+    };
+    let requested_value = editable_semantic_value_for_family(
+        notebook,
+        target,
+        descriptor.kind,
+        family,
+    );
+    let editable_value = requested_value.or_else(|| {
+        editable_semantic_value(notebook, target, descriptor.kind)
+    });
+    let direct_edit_family = editable_value.as_ref().map(direct_edit_family);
+    CommandTargetMaterialOutcome::Prepared {
+        material: CommandTargetMaterial {
+            descriptor,
+            direct_edit_family,
+            editable_value,
+            revision,
+            target,
+        },
+    }
+}
+
 fn check_command_target_preconditions_material(
     material: CommandTargetMaterial,
     preconditions: &CommandTargetPreconditions,
@@ -2846,10 +2920,12 @@ fn insert_direct_edit_material(
     impact: DirectEditImpactScope,
     revision: atrament_semantic_notebook::RevisionIdentity,
 ) {
-    let direct_edit_family = Some(direct_edit_family(&editable_value));
-    let _previous_impact = index.impacts.insert(target, impact);
+    let family = direct_edit_family(&editable_value);
+    let key = (target, family);
+    let direct_edit_family = Some(family);
+    let _previous_impact = index.impacts.insert(key, impact);
     let _previous_material =
-        index.materials.insert(target, CommandTargetMaterial {
+        index.materials.insert(key, CommandTargetMaterial {
             descriptor,
             direct_edit_family,
             editable_value: Some(editable_value),
@@ -2905,12 +2981,14 @@ where
             commands.len(),
         );
     let mut changed_targets =
-        BTreeMap::<AcceptedIdentity, (usize, usize)>::new();
+        BTreeMap::<DirectEditMaterialKey, (usize, usize)>::new();
     let mut remaining = commands.into_iter();
     while let Some(command) = remaining.next() {
         let target = command.target;
+        let requested_family = command.preconditions.requested_family;
+        let material_key = (target, requested_family);
         let previous = changed_targets
-            .get(&target)
+            .get(&material_key)
             .and_then(|(_, last)| evaluated.get(*last))
             .map(|prediction| &prediction.command);
         let result = simulate_direct_edit_batch_command(
@@ -2939,7 +3017,7 @@ where
             record_direct_edit_batch_change_index(
                 &mut changed_targets,
                 command_index,
-                target,
+                material_key,
             );
         }
         evaluated.push(prediction);
@@ -2967,12 +3045,12 @@ where
 
 fn direct_edit_impact_seeds_indexed(
     notebook: &Notebook<AcceptedIdentity>,
-    mut impacts: BTreeMap<AcceptedIdentity, DirectEditImpactScope>,
+    mut impacts: BTreeMap<DirectEditMaterialKey, DirectEditImpactScope>,
     changes: &[DirectEditSemanticChange],
 ) -> Vec<DirectEditImpactSeed> {
     collect_direct_edit_impact_seeds(changes, |change| {
         let scope = impacts
-            .remove(&change.target)
+            .remove(&(change.target, change.family))
             .unwrap_or_else(|| direct_edit_impact_scope(notebook, change));
         (scope, direct_edit_impact_authorities(change.family))
     })
@@ -3033,8 +3111,17 @@ fn direct_edit_impact_scope(
         SemanticCommandFamily::TextContent => {
             direct_edit_text_scope(notebook, change.target)
         },
+        SemanticCommandFamily::Provenance => {
+            if matches!(
+                change.after,
+                EditableSemanticValue::ProvenanceReference(_)
+            ) {
+                direct_edit_structured_scope(notebook, change.target)
+            } else {
+                DirectEditImpactScope::Notebook { notebook: notebook.id }
+            }
+        },
         SemanticCommandFamily::BlockInsertionAndDeletion
-        | SemanticCommandFamily::Provenance
         | SemanticCommandFamily::SpatialConstraint => {
             DirectEditImpactScope::Notebook { notebook: notebook.id }
         },
@@ -3142,7 +3229,7 @@ fn direct_edit_ancestor_scope(
 
 fn simulate_direct_edit_batch_command<CommandIdentity>(
     notebook: &Notebook<AcceptedIdentity>,
-    materials: &mut BTreeMap<AcceptedIdentity, CommandTargetMaterial>,
+    materials: &mut BTreeMap<DirectEditMaterialKey, CommandTargetMaterial>,
     table_by_cell: &BTreeMap<AcceptedIdentity, AcceptedIdentity>,
     table_overlays: &mut BTreeMap<AcceptedIdentity, Table<AcceptedIdentity>>,
     command: DirectEditBatchCommand<CommandIdentity>,
@@ -3177,14 +3264,17 @@ where
         ));
     }
     let (prepared, indexed) = match batch_command_target_material(
-        notebook, materials, revision, target,
+        notebook,
+        materials,
+        revision,
+        target,
+        preconditions.requested_family,
     ) {
         Ok(material) => material,
         Err(reason) => return Err((id, reason)),
     };
     let metadata = DirectEditBatchMaterialMetadata {
         descriptor: prepared.descriptor,
-        direct_edit_family: prepared.direct_edit_family,
         indexed,
     };
     let checked = match check_command_target_preconditions_material(
@@ -3209,7 +3299,10 @@ where
     let asset_checked = validate_asset_reference(notebook, simulation);
     let profile_checked =
         validate_page_profile_reference(notebook, asset_checked);
-    let style_checked = validate_style_reference(notebook, profile_checked);
+    let provenance_checked = validate_provenance_reference(
+        notebook, profile_checked,
+    );
+    let style_checked = validate_style_reference(notebook, provenance_checked);
     let validated_simulation = if metadata.indexed {
         validate_batch_table_cell_span(
             table_by_cell,
@@ -3224,19 +3317,23 @@ where
 
 fn batch_command_target_material<CommandIdentity>(
     notebook: &Notebook<AcceptedIdentity>,
-    materials: &mut BTreeMap<AcceptedIdentity, CommandTargetMaterial>,
+    materials: &mut BTreeMap<DirectEditMaterialKey, CommandTargetMaterial>,
     revision: atrament_semantic_notebook::RevisionIdentity,
     target: AcceptedIdentity,
+    family: SemanticCommandFamily,
 ) -> Result<
     (CommandTargetMaterial, bool),
     DirectEditBatchCommandRejection<CommandIdentity>,
 > {
-    if let Some(material) = materials.remove(&target) {
+    let key = (target, family);
+    if let Some(material) = materials.remove(&key) {
         return Ok((material, true));
     }
-    match command_target_material_from_notebook(notebook, revision, target) {
+    match command_target_material_for_family_from_notebook(
+        notebook, revision, target, family,
+    ) {
         CommandTargetMaterialOutcome::Prepared { material } => {
-            Ok((material, false))
+            Ok((material, true))
         },
         CommandTargetMaterialOutcome::TargetNotFound {
             revision: missing_revision,
@@ -3265,16 +3362,13 @@ fn batch_command_target_material<CommandIdentity>(
 }
 
 fn batch_command_prediction<CommandIdentity>(
-    materials: &mut BTreeMap<AcceptedIdentity, CommandTargetMaterial>,
+    materials: &mut BTreeMap<DirectEditMaterialKey, CommandTargetMaterial>,
     command: CommandIdentity,
     metadata: DirectEditBatchMaterialMetadata,
     simulation: DirectEditSimulation,
 ) -> Result<
     DirectEditBatchCommandPrediction<CommandIdentity>,
-    (
-        CommandIdentity,
-        DirectEditBatchCommandRejection<CommandIdentity>,
-    ),
+    (CommandIdentity, DirectEditBatchCommandRejection<CommandIdentity>),
 > {
     match simulation.outcome {
         DirectEditSimulationOutcome::Applicable {
@@ -3357,6 +3451,7 @@ fn batch_command_prediction<CommandIdentity>(
         },
         outcome @ (DirectEditSimulationOutcome::InvalidAssetReference { .. }
         | DirectEditSimulationOutcome::InvalidPageProfileReference { .. }
+        | DirectEditSimulationOutcome::InvalidProvenanceReference { .. }
         | DirectEditSimulationOutcome::InvalidStyleReference { .. }
         | DirectEditSimulationOutcome::InvalidMathematics { .. }
         | DirectEditSimulationOutcome::InvalidPageProfile { .. }
@@ -3370,24 +3465,35 @@ fn batch_command_prediction<CommandIdentity>(
         | DirectEditSimulationOutcome::UnsupportedMathematics {
             ..
         }
-        | DirectEditSimulationOutcome::ValueFamilyMismatch {
-            ..
-        }) => Err((command, DirectEditBatchCommandRejection::Simulation {
-            outcome: Box::new(outcome),
-        })),
+        | DirectEditSimulationOutcome::ValueFamilyMismatch { .. }) => {
+            reject_batch_command_simulation(command, outcome)
+        },
     }
 }
 
+fn reject_batch_command_simulation<CommandIdentity>(
+    command: CommandIdentity,
+    outcome: DirectEditSimulationOutcome,
+) -> Result<
+    DirectEditBatchCommandPrediction<CommandIdentity>,
+    (CommandIdentity, DirectEditBatchCommandRejection<CommandIdentity>),
+> {
+    Err((command, DirectEditBatchCommandRejection::Simulation {
+        outcome: Box::new(outcome),
+    }))
+}
+
 fn restore_direct_edit_batch_material(
-    materials: &mut BTreeMap<AcceptedIdentity, CommandTargetMaterial>,
+    materials: &mut BTreeMap<DirectEditMaterialKey, CommandTargetMaterial>,
     metadata: DirectEditBatchMaterialMetadata,
     editable_value: EditableSemanticValue,
     revision: atrament_semantic_notebook::RevisionIdentity,
     target: AcceptedIdentity,
 ) {
-    let _previous = materials.insert(target, CommandTargetMaterial {
+    let family = direct_edit_family(&editable_value);
+    let _previous = materials.insert((target, family), CommandTargetMaterial {
         descriptor: metadata.descriptor,
-        direct_edit_family: metadata.direct_edit_family,
+        direct_edit_family: Some(family),
         editable_value: Some(editable_value),
         revision,
         target,
@@ -3395,26 +3501,26 @@ fn restore_direct_edit_batch_material(
 }
 
 fn record_direct_edit_batch_change_index(
-    aggregate: &mut BTreeMap<AcceptedIdentity, (usize, usize)>,
+    aggregate: &mut BTreeMap<DirectEditMaterialKey, (usize, usize)>,
     index: usize,
-    target: AcceptedIdentity,
+    key: DirectEditMaterialKey,
 ) {
-    if let Some((_, last)) = aggregate.get_mut(&target) {
+    if let Some((_, last)) = aggregate.get_mut(&key) {
         *last = index;
     } else {
-        let _previous = aggregate.insert(target, (index, index));
+        let _previous = aggregate.insert(key, (index, index));
     }
 }
 
 fn collect_direct_edit_batch_changes<CommandIdentity>(
     evaluated: &[DirectEditBatchCommandPrediction<CommandIdentity>],
-    aggregate: BTreeMap<AcceptedIdentity, (usize, usize)>,
+    aggregate: BTreeMap<DirectEditMaterialKey, (usize, usize)>,
 ) -> Vec<DirectEditSemanticChange> {
     let mut ordered = aggregate.into_iter().collect::<Vec<_>>();
     ordered.sort_by_key(|(_, (first, _))| *first);
     ordered
         .into_iter()
-        .filter_map(|(target, (first, last))| {
+        .filter_map(|((target, family), (first, last))| {
             let first_change = evaluated.get(first)?.change.as_ref()?;
             let last_change = evaluated.get(last)?.change.as_ref()?;
             if first_change.before == last_change.after {
@@ -3423,7 +3529,7 @@ fn collect_direct_edit_batch_changes<CommandIdentity>(
             Some(DirectEditSemanticChange {
                 after: last_change.after.clone(),
                 before: first_change.before.clone(),
-                family: first_change.family,
+                family,
                 target,
             })
         })
@@ -3476,6 +3582,9 @@ const fn editable_value_kind(
         },
         EditableSemanticValue::Provenance { .. } => {
             EditableSemanticValueKind::Provenance
+        },
+        EditableSemanticValue::ProvenanceReference(_) => {
+            EditableSemanticValueKind::ProvenanceReference
         },
         EditableSemanticValue::TableCellSpan(_) => {
             EditableSemanticValueKind::TableCellSpan
@@ -3531,8 +3640,10 @@ fn simulate_direct_edit_material_in_notebook(
     let asset_checked = validate_asset_reference(accepted_notebook, simulation);
     let profile_checked =
         validate_page_profile_reference(accepted_notebook, asset_checked);
+    let provenance_checked =
+        validate_provenance_reference(accepted_notebook, profile_checked);
     let style_checked =
-        validate_style_reference(accepted_notebook, profile_checked);
+        validate_style_reference(accepted_notebook, provenance_checked);
     validate_single_table_cell_span(accepted_notebook, style_checked)
 }
 
@@ -3586,6 +3697,35 @@ fn validate_page_profile_reference(
     DirectEditSimulation {
         before: simulation.before,
         outcome: DirectEditSimulationOutcome::InvalidPageProfileReference {
+            actual,
+            reference: *reference,
+            revision: *revision,
+            target: *target,
+        },
+    }
+}
+
+fn validate_provenance_reference(
+    notebook: &Notebook<AcceptedIdentity>,
+    simulation: DirectEditSimulation,
+) -> DirectEditSimulation {
+    let DirectEditSimulationOutcome::Applicable {
+        requested: EditableSemanticValue::ProvenanceReference(Some(reference)),
+        revision,
+        target,
+        ..
+    } = &simulation.outcome
+    else {
+        return simulation;
+    };
+    let actual = semantic_identity_descriptor(notebook, *reference)
+        .map(|descriptor| descriptor.kind);
+    if actual == Some(SemanticIdentityKind::Provenance) {
+        return simulation;
+    }
+    DirectEditSimulation {
+        before: simulation.before,
+        outcome: DirectEditSimulationOutcome::InvalidProvenanceReference {
             actual,
             reference: *reference,
             revision: *revision,
@@ -3790,6 +3930,7 @@ fn simulate_prepared_direct_edit(
         | EditableSemanticValue::ConstraintKind(_)
         | EditableSemanticValue::ListOrdering(_)
         | EditableSemanticValue::PageProfileReference(_)
+        | EditableSemanticValue::ProvenanceReference(_)
         | EditableSemanticValue::StyleReference(_)
         | EditableSemanticValue::Provenance { .. }
         | EditableSemanticValue::TableCellSpan(_)
@@ -3839,7 +3980,8 @@ const fn direct_edit_family(
         EditableSemanticValue::ListOrdering(_) => {
             SemanticCommandFamily::OrderingAndGrouping
         },
-        EditableSemanticValue::Provenance { .. } => {
+        EditableSemanticValue::Provenance { .. }
+        | EditableSemanticValue::ProvenanceReference(_) => {
             SemanticCommandFamily::Provenance
         },
         EditableSemanticValue::StyleReference(_) => {
@@ -3900,6 +4042,175 @@ fn editable_semantic_value(
         | SemanticIdentityKind::Style
         | SemanticIdentityKind::Table => None,
     }
+}
+
+fn editable_semantic_value_for_family(
+    notebook: &Notebook<AcceptedIdentity>,
+    target: AcceptedIdentity,
+    kind: SemanticIdentityKind,
+    family: SemanticCommandFamily,
+) -> Option<EditableSemanticValue> {
+    match (kind, family) {
+        (SemanticIdentityKind::Block(_), SemanticCommandFamily::Provenance) => {
+            block_provenance_reference_value(notebook, target)
+        },
+        (
+            SemanticIdentityKind::InlineSpan,
+            SemanticCommandFamily::Provenance,
+        ) => {
+            inline_span_value(notebook, target).map(|span| {
+                EditableSemanticValue::ProvenanceReference(span.provenance)
+            })
+        },
+        (
+            SemanticIdentityKind::InlineSpan,
+            SemanticCommandFamily::StyleRole,
+        ) => {
+            inline_span_value(notebook, target)
+                .map(|span| EditableSemanticValue::StyleReference(span.style))
+        },
+        _ => {
+            let value = editable_semantic_value(notebook, target, kind)?;
+            (direct_edit_family(&value) == family).then_some(value)
+        },
+    }
+}
+
+fn block_provenance_blocks_value(
+    blocks: &[Block<AcceptedIdentity>],
+    target: AcceptedIdentity,
+) -> Option<EditableSemanticValue> {
+    for block in blocks {
+        if block.id == target {
+            return Some(EditableSemanticValue::ProvenanceReference(
+                block.provenance,
+            ));
+        }
+        match &block.content {
+            BlockContent::Callout(children)
+            | BlockContent::Freeform(children) => {
+                if let Some(reference) =
+                    block_provenance_blocks_value(children, target)
+                {
+                    return Some(reference);
+                }
+            },
+            BlockContent::List(list) => {
+                for item in &list.items {
+                    if let Some(reference) =
+                        block_provenance_blocks_value(&item.blocks, target)
+                    {
+                        return Some(reference);
+                    }
+                }
+            },
+            BlockContent::Table(table) => {
+                for row in &table.rows {
+                    for cell in &row.cells {
+                        if let Some(reference) =
+                            block_provenance_blocks_value(&cell.blocks, target)
+                        {
+                            return Some(reference);
+                        }
+                    }
+                }
+            },
+            BlockContent::Date(_)
+            | BlockContent::Figure(_)
+            | BlockContent::Heading(_)
+            | BlockContent::Mathematics(_)
+            | BlockContent::Paragraph(_)
+            | BlockContent::Rule
+            | BlockContent::Unresolved(_) => {},
+        }
+    }
+    None
+}
+
+fn block_provenance_reference_value(
+    notebook: &Notebook<AcceptedIdentity>,
+    target: AcceptedIdentity,
+) -> Option<EditableSemanticValue> {
+    for page in &notebook.pages {
+        for flow in &page.flows {
+            if let Some(reference) =
+                block_provenance_blocks_value(&flow.blocks, target)
+            {
+                return Some(reference);
+            }
+        }
+    }
+    None
+}
+
+fn inline_span_blocks_value(
+    blocks: &[Block<AcceptedIdentity>],
+    target: AcceptedIdentity,
+) -> Option<&InlineSpan<AcceptedIdentity>> {
+    for block in blocks {
+        if let Some(span) = inline_span_content_value(&block.content, target) {
+            return Some(span);
+        }
+    }
+    None
+}
+
+fn inline_span_content_value(
+    content: &BlockContent<AcceptedIdentity>,
+    target: AcceptedIdentity,
+) -> Option<&InlineSpan<AcceptedIdentity>> {
+    match content {
+        BlockContent::Callout(blocks) | BlockContent::Freeform(blocks) => {
+            inline_span_blocks_value(blocks, target)
+        },
+        BlockContent::Date(spans)
+        | BlockContent::Heading(spans)
+        | BlockContent::Paragraph(spans) => {
+            spans.iter().find(|span| span.id == target)
+        },
+        BlockContent::Figure(figure) => {
+            figure.caption.iter().find(|span| span.id == target)
+        },
+        BlockContent::List(list) => {
+            for item in &list.items {
+                if let Some(span) =
+                    inline_span_blocks_value(&item.blocks, target)
+                {
+                    return Some(span);
+                }
+            }
+            None
+        },
+        BlockContent::Table(table) => {
+            for row in &table.rows {
+                for cell in &row.cells {
+                    if let Some(span) =
+                        inline_span_blocks_value(&cell.blocks, target)
+                    {
+                        return Some(span);
+                    }
+                }
+            }
+            None
+        },
+        BlockContent::Mathematics(_)
+        | BlockContent::Rule
+        | BlockContent::Unresolved(_) => None,
+    }
+}
+
+fn inline_span_value(
+    notebook: &Notebook<AcceptedIdentity>,
+    target: AcceptedIdentity,
+) -> Option<&InlineSpan<AcceptedIdentity>> {
+    for page in &notebook.pages {
+        for flow in &page.flows {
+            if let Some(span) = inline_span_blocks_value(&flow.blocks, target) {
+                return Some(span);
+            }
+        }
+    }
+    None
 }
 
 fn constraint_value(
@@ -4183,6 +4494,177 @@ fn replace_block_style_value(
     notebook.pages.iter_mut().any(|page| {
         page.flows.iter_mut().any(|flow| {
             replace_block_style_blocks(&mut flow.blocks, target, style)
+        })
+    })
+}
+
+fn replace_inline_span_style_blocks(
+    blocks: &mut [Block<AcceptedIdentity>],
+    target: AcceptedIdentity,
+    style: Option<AcceptedIdentity>,
+) -> bool {
+    for block in blocks {
+        match &mut block.content {
+            BlockContent::Callout(children)
+            | BlockContent::Freeform(children) => {
+                if replace_inline_span_style_blocks(children, target, style) {
+                    return true;
+                }
+            },
+            BlockContent::Date(spans)
+            | BlockContent::Heading(spans)
+            | BlockContent::Paragraph(spans) => {
+                if let Some(span) =
+                    spans.iter_mut().find(|span| span.id == target)
+                {
+                    span.style = style;
+                    return true;
+                }
+            },
+            BlockContent::Figure(figure) => {
+                if let Some(span) =
+                    figure.caption.iter_mut().find(|span| span.id == target)
+                {
+                    span.style = style;
+                    return true;
+                }
+            },
+            BlockContent::List(list) => {
+                for item in &mut list.items {
+                    if replace_inline_span_style_blocks(
+                        &mut item.blocks,
+                        target,
+                        style,
+                    ) {
+                        return true;
+                    }
+                }
+            },
+            BlockContent::Table(table) => {
+                for row in &mut table.rows {
+                    for cell in &mut row.cells {
+                        if replace_inline_span_style_blocks(
+                            &mut cell.blocks,
+                            target,
+                            style,
+                        ) {
+                            return true;
+                        }
+                    }
+                }
+            },
+            BlockContent::Mathematics(_)
+            | BlockContent::Rule
+            | BlockContent::Unresolved(_) => {},
+        }
+    }
+    false
+}
+
+fn replace_inline_span_style_value(
+    notebook: &mut Notebook<AcceptedIdentity>,
+    target: AcceptedIdentity,
+    style: Option<AcceptedIdentity>,
+) -> bool {
+    notebook.pages.iter_mut().any(|page| {
+        page.flows.iter_mut().any(|flow| {
+            replace_inline_span_style_blocks(&mut flow.blocks, target, style)
+        })
+    })
+}
+
+fn replace_style_reference_value(
+    notebook: &mut Notebook<AcceptedIdentity>,
+    target: AcceptedIdentity,
+    style: Option<AcceptedIdentity>,
+) -> bool {
+    replace_block_style_value(notebook, target, style)
+        || replace_inline_span_style_value(notebook, target, style)
+}
+
+fn replace_provenance_reference_blocks(
+    blocks: &mut [Block<AcceptedIdentity>],
+    target: AcceptedIdentity,
+    provenance: Option<AcceptedIdentity>,
+) -> bool {
+    for block in blocks {
+        if block.id == target {
+            block.provenance = provenance;
+            return true;
+        }
+        match &mut block.content {
+            BlockContent::Callout(children)
+            | BlockContent::Freeform(children) => {
+                if replace_provenance_reference_blocks(
+                    children,
+                    target,
+                    provenance,
+                ) {
+                    return true;
+                }
+            },
+            BlockContent::Date(spans)
+            | BlockContent::Heading(spans)
+            | BlockContent::Paragraph(spans) => {
+                if let Some(span) =
+                    spans.iter_mut().find(|span| span.id == target)
+                {
+                    span.provenance = provenance;
+                    return true;
+                }
+            },
+            BlockContent::Figure(figure) => {
+                if let Some(span) =
+                    figure.caption.iter_mut().find(|span| span.id == target)
+                {
+                    span.provenance = provenance;
+                    return true;
+                }
+            },
+            BlockContent::List(list) => {
+                for item in &mut list.items {
+                    if replace_provenance_reference_blocks(
+                        &mut item.blocks,
+                        target,
+                        provenance,
+                    ) {
+                        return true;
+                    }
+                }
+            },
+            BlockContent::Table(table) => {
+                for row in &mut table.rows {
+                    for cell in &mut row.cells {
+                        if replace_provenance_reference_blocks(
+                            &mut cell.blocks,
+                            target,
+                            provenance,
+                        ) {
+                            return true;
+                        }
+                    }
+                }
+            },
+            BlockContent::Mathematics(_)
+            | BlockContent::Rule
+            | BlockContent::Unresolved(_) => {},
+        }
+    }
+    false
+}
+
+fn replace_provenance_reference_value(
+    notebook: &mut Notebook<AcceptedIdentity>,
+    target: AcceptedIdentity,
+    provenance: Option<AcceptedIdentity>,
+) -> bool {
+    notebook.pages.iter_mut().any(|page| {
+        page.flows.iter_mut().any(|flow| {
+            replace_provenance_reference_blocks(
+                &mut flow.blocks,
+                target,
+                provenance,
+            )
         })
     })
 }
@@ -4490,8 +4972,15 @@ fn apply_direct_edit_change(
                 reference.clone(),
             )
         },
+        EditableSemanticValue::ProvenanceReference(reference) => {
+            replace_provenance_reference_value(
+                notebook,
+                change.target,
+                *reference,
+            )
+        },
         EditableSemanticValue::StyleReference(reference) => {
-            replace_block_style_value(notebook, change.target, *reference)
+            replace_style_reference_value(notebook, change.target, *reference)
         },
         EditableSemanticValue::TableCellSpan(span) => {
             replace_table_cell_span_raw_value(notebook, change.target, *span)

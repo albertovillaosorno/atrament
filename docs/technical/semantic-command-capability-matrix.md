@@ -267,6 +267,11 @@ unrelated cells. A structural fixture must insert and then move a block through
 stable anchors without using serialized array indexes.
 
 A provenance fixture must correct citation metadata without changing claim text.
+A second fixture must attach, replace, and remove an admitted provenance
+identity
+from an existing claim without changing claim identity or authored text, and
+must reject a non-Provenance identity as linkage. A same-span fixture must prove
+Text, Style role, and Provenance changes remain independent semantic changes.
 An asset fixture must reject raw bytes or a remote URL in a semantic batch, then
 accept a reference to an asset identity admitted by the ingestion boundary.
 

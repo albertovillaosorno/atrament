@@ -421,7 +421,7 @@ fn run_process_fixture_child(mode: &str) {
     };
     let asset_batch = DirectEditBatchProposal {
         base: text_revision,
-        capability_version: CommandBehaviorVersion(8),
+        capability_version: CommandBehaviorVersion(9),
         commands: vec![DirectEditBatchCommand {
             dependencies: vec![],
             id: 1_u32,
@@ -686,7 +686,7 @@ fn application_routes_list_ordering_through_owned_authority() {
     let flow = accepted(candidate_flow);
     let list = accepted(candidate_list);
     let snapshot = session.command_capability_snapshot();
-    assert_eq!(snapshot.behavior_version, CommandBehaviorVersion(8));
+    assert_eq!(snapshot.behavior_version, CommandBehaviorVersion(9));
     assert!(snapshot.family_capabilities.iter().any(|capability| {
         capability.family == SemanticCommandFamily::OrderingAndGrouping
             && capability.behavior_version == CommandBehaviorVersion(1)
@@ -779,10 +779,10 @@ fn application_routes_block_style_through_owned_authority() {
     let flow = accepted(candidate_flow);
     let style = accepted(candidate_style);
     let snapshot = session.command_capability_snapshot();
-    assert_eq!(snapshot.behavior_version, CommandBehaviorVersion(8));
+    assert_eq!(snapshot.behavior_version, CommandBehaviorVersion(9));
     assert!(snapshot.family_capabilities.iter().any(|capability| {
         capability.family == SemanticCommandFamily::StyleRole
-            && capability.behavior_version == CommandBehaviorVersion(1)
+            && capability.behavior_version == CommandBehaviorVersion(2)
     }));
     let before = EditableSemanticValue::StyleReference(None);
     let requested = EditableSemanticValue::StyleReference(Some(style));
@@ -878,7 +878,7 @@ fn application_routes_page_profile_reference_through_owned_authority() {
     let first = accepted(candidate_first);
     let second = accepted(second);
     let snapshot = session.command_capability_snapshot();
-    assert_eq!(snapshot.behavior_version, CommandBehaviorVersion(8));
+    assert_eq!(snapshot.behavior_version, CommandBehaviorVersion(9));
     assert!(snapshot.family_capabilities.iter().any(|capability| {
         capability.family == SemanticCommandFamily::DocumentConstraint
             && capability.behavior_version == CommandBehaviorVersion(3)
@@ -966,7 +966,7 @@ fn application_routes_global_constraint_through_owned_authority() {
     let constraint = accepted(candidate_constraint);
     let notebook = accepted(candidate_notebook);
     let snapshot = session.command_capability_snapshot();
-    assert_eq!(snapshot.behavior_version, CommandBehaviorVersion(8));
+    assert_eq!(snapshot.behavior_version, CommandBehaviorVersion(9));
     assert!(snapshot.family_capabilities.iter().any(|capability| {
         capability.family == SemanticCommandFamily::DocumentConstraint
             && capability.behavior_version == CommandBehaviorVersion(3)
@@ -1070,7 +1070,7 @@ fn application_routes_provenance_batch_through_owned_authority() {
     let claim = accepted(candidate_claim);
     let provenance = accepted(candidate_provenance);
     let snapshot = session.command_capability_snapshot();
-    assert_eq!(snapshot.behavior_version, CommandBehaviorVersion(8));
+    assert_eq!(snapshot.behavior_version, CommandBehaviorVersion(9));
     assert!(snapshot.family_capabilities.iter().any(|capability| {
         capability.family == SemanticCommandFamily::Provenance
     }));
@@ -1175,6 +1175,150 @@ fn application_routes_provenance_batch_through_owned_authority() {
 }
 
 #[test]
+fn application_routes_multifamily_span_references_through_owned_authority() {
+    let identities = IdentityAllocator::new();
+    let (mut candidate, candidate_claim, candidate_provenance) =
+        provenance_claim_candidate(&identities);
+    let candidate_block = candidate.pages[0].flows[0].blocks[0].id;
+    let candidate_style = identities.allocate_candidate().expect("style id");
+    candidate.styles.push(Style {
+        id: candidate_style,
+        name: String::from("claim-emphasis"),
+    });
+    let mut session = application::SessionApplication::default();
+    let AcceptanceOutcome::Accepted { mapping, revision: base } =
+        session.accept_candidate(candidate)
+    else {
+        panic!("multi-family live candidate must be accepted");
+    };
+    let accepted = |candidate| {
+        mapping
+            .iter()
+            .find(|entry| entry.candidate == candidate)
+            .expect("multi-family live identity must map")
+            .accepted
+    };
+    let block = accepted(candidate_block);
+    let claim = accepted(candidate_claim);
+    let provenance = accepted(candidate_provenance);
+    let style = accepted(candidate_style);
+    let snapshot = session.command_capability_snapshot();
+    assert_eq!(snapshot.behavior_version, CommandBehaviorVersion(9));
+    assert!(snapshot.family_capabilities.iter().any(|capability| {
+        capability.family == SemanticCommandFamily::Provenance
+            && capability.behavior_version == CommandBehaviorVersion(2)
+    }));
+    assert!(snapshot.family_capabilities.iter().any(|capability| {
+        capability.family == SemanticCommandFamily::StyleRole
+            && capability.behavior_version == CommandBehaviorVersion(2)
+    }));
+
+    let CommandTargetMaterialOutcome::Prepared { material: style_material } =
+        session.command_target_material_for_family(
+            base,
+            claim,
+            SemanticCommandFamily::StyleRole,
+        )
+    else {
+        panic!("live span style material must be prepared");
+    };
+    assert_eq!(
+        style_material.editable_value,
+        Some(EditableSemanticValue::StyleReference(None)),
+    );
+    let CommandTargetMaterialOutcome::Prepared {
+        material: provenance_material,
+    } = session.command_target_material_for_family(
+        base,
+        claim,
+        SemanticCommandFamily::Provenance,
+    ) else {
+        panic!("live span provenance material must be prepared");
+    };
+    assert_eq!(
+        provenance_material.editable_value,
+        Some(EditableSemanticValue::ProvenanceReference(Some(provenance))),
+    );
+
+    let batch = DirectEditBatchProposal {
+        base,
+        capability_version: snapshot.behavior_version,
+        commands: vec![
+            DirectEditBatchCommand {
+                dependencies: vec![],
+                id: 1_u32,
+                preconditions: CommandTargetPreconditions {
+                    expected_value: Some(EditableSemanticValue::StyleReference(
+                        None,
+                    )),
+                    identity: IdentityPrecondition {
+                        expected_kind: Some(SemanticIdentityKind::InlineSpan),
+                        expected_owner: IdentityOwnerExpectation::Direct(block),
+                    },
+                    requested_family: SemanticCommandFamily::StyleRole,
+                },
+                requested: EditableSemanticValue::StyleReference(Some(style)),
+                target: claim,
+            },
+            DirectEditBatchCommand {
+                dependencies: vec![],
+                id: 2_u32,
+                preconditions: CommandTargetPreconditions {
+                    expected_value: Some(
+                        EditableSemanticValue::ProvenanceReference(Some(
+                            provenance,
+                        )),
+                    ),
+                    identity: IdentityPrecondition {
+                        expected_kind: Some(SemanticIdentityKind::InlineSpan),
+                        expected_owner: IdentityOwnerExpectation::Direct(block),
+                    },
+                    requested_family: SemanticCommandFamily::Provenance,
+                },
+                requested: EditableSemanticValue::ProvenanceReference(None),
+                target: claim,
+            },
+        ],
+    };
+    let DirectEditBatchApplyOutcome::Applied {
+        changes,
+        revision: applied,
+        ..
+    } = session.apply_direct_edit_batch(batch)
+    else {
+        panic!("live multi-family span batch must apply");
+    };
+    assert_eq!(changes.len(), 2);
+    let current = session
+        .accepted_revision()
+        .expect("live multi-family span revision");
+    let BlockContent::Paragraph(spans) =
+        &current.notebook.pages[0].flows[0].blocks[0].content
+    else {
+        panic!("live multi-family claim must remain paragraph");
+    };
+    assert_eq!(spans[0].id, claim);
+    assert_eq!(spans[0].style, Some(style));
+    assert_eq!(spans[0].provenance, None);
+
+    let HistoryTraversalOutcome::Traversed { .. } =
+        session.traverse_history(applied, HistoryDirection::Undo)
+    else {
+        panic!("live multi-family span batch must Undo");
+    };
+    let current = session
+        .accepted_revision()
+        .expect("live multi-family span Undo");
+    let BlockContent::Paragraph(spans) =
+        &current.notebook.pages[0].flows[0].blocks[0].content
+    else {
+        panic!("Undo live multi-family claim must remain paragraph");
+    };
+    assert_eq!(spans[0].style, None);
+    assert_eq!(spans[0].provenance, Some(provenance));
+}
+
+#[test]
 fn application_routes_asset_reference_batch_through_owned_authority() {
     let identities = IdentityAllocator::new();
     let (candidate, candidate_figure, candidate_first, candidate_second) =
@@ -1196,7 +1340,7 @@ fn application_routes_asset_reference_batch_through_owned_authority() {
     let first_asset = accepted(candidate_first);
     let second_asset = accepted(candidate_second);
     let snapshot = session.command_capability_snapshot();
-    assert_eq!(snapshot.behavior_version, CommandBehaviorVersion(8));
+    assert_eq!(snapshot.behavior_version, CommandBehaviorVersion(9));
     assert!(snapshot.family_capabilities.iter().any(|capability| {
         capability.family == SemanticCommandFamily::AssetReference
     }));
@@ -1655,7 +1799,7 @@ fn application_reviews_editable_text_through_owned_semantic_authority() {
     );
     assert_eq!(
         session.simulate_direct_edit_proposal(DirectEditProposal {
-            capability_version: CommandBehaviorVersion(8),
+            capability_version: CommandBehaviorVersion(9),
             preconditions,
             requested: requested.clone(),
             revision,
@@ -1712,7 +1856,7 @@ fn application_routes_local_command_review_through_owned_semantic_authority() {
             CommandBehaviorVersion(4),
         ),
         CommandCapabilityCompatibilityOutcome::Mismatch {
-            current: CommandBehaviorVersion(8),
+            current: CommandBehaviorVersion(9),
             expected: CommandBehaviorVersion(4),
         },
     );
@@ -1857,7 +2001,7 @@ fn application_routes_nonempty_selection_analysis_read_only() {
     };
     let batch = DirectEditBatchProposal {
         base: revision,
-        capability_version: CommandBehaviorVersion(8),
+        capability_version: CommandBehaviorVersion(9),
         commands: vec![
             command(1, vec![], "selection base", "one"),
             command(2, vec![1], "one", "two"),
@@ -1935,7 +2079,7 @@ fn application_routes_atomic_batch_apply_through_owned_semantic_authority() {
         .accepted;
     let empty = DirectEditBatchProposal::<u32> {
         base: revision,
-        capability_version: CommandBehaviorVersion(8),
+        capability_version: CommandBehaviorVersion(9),
         commands: Vec::new(),
     };
 
@@ -2010,7 +2154,7 @@ fn application_routes_atomic_batch_apply_through_owned_semantic_authority() {
 
     let bounded = DirectEditBatchProposal {
         base: revision,
-        capability_version: CommandBehaviorVersion(8),
+        capability_version: CommandBehaviorVersion(9),
         commands: vec![DirectEditBatchCommand {
             dependencies: vec![],
             id: 1_u32,

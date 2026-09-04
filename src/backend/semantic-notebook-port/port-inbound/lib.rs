@@ -440,6 +440,8 @@ pub enum EditableSemanticValueKind {
     PageProfileReference,
     /// Revision-owned semantic provenance kind and source reference.
     Provenance,
+    /// Optional reference to one already-admitted provenance record.
+    ProvenanceReference,
     /// Optional reference to one already-admitted semantic style.
     StyleReference,
     /// Logical row and column coverage owned by one table cell.
@@ -477,6 +479,8 @@ pub enum EditableSemanticValue {
         /// Optional caller-visible source reference.
         reference: Option<String>,
     },
+    /// Optional reference to one already-admitted provenance record.
+    ProvenanceReference(Option<AcceptedIdentity>),
     /// Optional reference to one already-admitted semantic style.
     StyleReference(Option<AcceptedIdentity>),
     /// Logical row and column coverage owned by one table cell.
@@ -1071,6 +1075,18 @@ pub enum DirectEditSimulationOutcome {
         /// Existing semantic page simulated without mutation.
         target: AcceptedIdentity,
     },
+    /// Requested provenance reference does not name an admitted provenance
+    /// record.
+    InvalidProvenanceReference {
+        /// Semantic kind currently owned by the requested reference, when any.
+        actual: Option<SemanticIdentityKind>,
+        /// Requested accepted identity that is not admitted provenance.
+        reference: AcceptedIdentity,
+        /// Accepted revision simulated without mutation.
+        revision: RevisionIdentity,
+        /// Existing semantic owner simulated without mutation.
+        target: AcceptedIdentity,
+    },
     /// Requested style reference does not name an admitted style identity.
     InvalidStyleReference {
         /// Semantic kind currently owned by the requested reference, when any.
@@ -1240,7 +1256,8 @@ pub struct CommandFamilyCapability {
 pub struct CommandResourceLimits {
     /// Maximum commands accepted in one normalized batch, when admitted.
     pub commands_per_batch: Option<usize>,
-    /// Maximum explicit dependency edges per normalized batch, when admitted.
+    /// Maximum explicit dependency edges per normalized batch, when
+    /// admitted.
     pub dependency_edges: Option<usize>,
     /// Maximum parsed command envelope size in bytes, when admitted.
     pub envelope_bytes: Option<usize>,
@@ -1796,6 +1813,14 @@ pub trait SemanticNotebookSession {
         &self,
         revision: RevisionIdentity,
         target: AcceptedIdentity,
+    ) -> CommandTargetMaterialOutcome;
+
+    /// Derive local material for one exact target and requested family.
+    fn command_target_material_for_family(
+        &self,
+        revision: RevisionIdentity,
+        target: AcceptedIdentity,
+        family: SemanticCommandFamily,
     ) -> CommandTargetMaterialOutcome;
 
     /// Read the current accepted revision without creating another revision.

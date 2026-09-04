@@ -227,15 +227,16 @@ and wrong owner are distinct typed failures, and stale revision rejection occurs
 before local comparison.
 
 The session can also derive one target's local command material directly from an
-exact accepted revision. That material combines semantic kind, direct owner,
-exact editable base value when established, and the currently executable direct
-edit family. A combined checker validates requested family, kind, owner, and an
-optional exact base value against that one projection.
+exact accepted revision. Canonical material combines semantic kind, direct
+owner, exact editable base value, and its default executable family. A
+family-qualified read can expose another admitted field on the same identity,
+and combined checks validate that exact family, kind, owner, and base value.
 
-Command capability discovery is now deterministic and versioned independently
-from notebook revisions. It reports the five currently executable family
-behaviors: Asset reference, Document constraint, Provenance, Structured content,
-and Text content.
+Command capability discovery is deterministic and versioned independently from
+notebook revisions. It reports seven executable family behaviors: Asset
+reference, Document constraint, Ordering and grouping, Provenance, Structured
+content, Style role, and Text content. Aggregate and typed-result behavior are
+version 9; family-qualified reads do not advertise a wire protocol.
 
 Command protocol, normalization, context generation, Validate, discoverable
 Apply, selective rebatching, and their numeric resource limits remain

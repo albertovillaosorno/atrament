@@ -196,6 +196,18 @@ impl SessionApplication {
         self.semantic.command_target_material(revision, target)
     }
 
+    /// Derive exact local command material for one target and family.
+    #[must_use]
+    pub fn command_target_material_for_family(
+        &self,
+        revision: RevisionIdentity,
+        target: AcceptedIdentity,
+        family: SemanticCommandFamily,
+    ) -> CommandTargetMaterialOutcome {
+        self.semantic
+            .command_target_material_for_family(revision, target, family)
+    }
+
     /// Enforce caller-supplied coarse batch graph bounds without mutation.
     #[must_use]
     pub fn direct_edit_batch_graph_limits<CommandIdentity>(

@@ -154,27 +154,28 @@ does not invent a continuation token or writable scope. A local-precondition
 check can require an exact semantic kind and direct owner, including explicit
 notebook-root ownership, before a future command family may mutate that target.
 
-A second read-only precondition compares exact accepted base values for eleven
-generic edit families: an existing figure's optional admitted asset reference,
-revision-owned constraint kind, one list's ordering-significance flag, block
-style reference, inline text, formula mode and source, provenance kind and
-source reference, table-row role, table-cell span, physical page-profile
+A second read-only precondition compares exact accepted base values for twelve
+generic editable value shapes: an existing figure's optional admitted asset
+reference, revision-owned constraint kind, one list's ordering-significance
+flag, block or inline-span style reference, inline text, formula mode and
+source, provenance-record kind and source reference, block or inline-span
+provenance reference, table-row role, table-cell span, physical page-profile
 geometry, and one page's admitted page-profile identity.
 Text and formula checks preserve exact authored source because no Unicode
-normalization form is
-yet frozen. Backend-derived command-target material now combines semantic kind,
-direct owner, exact editable base value when available, and the currently
-executable generic edit command family for one exact revision and target.
+normalization form is yet frozen. Default command-target material preserves the
+canonical value for one exact revision and target, while a family-specific
+read-only projection can expose another admitted family on the same stable
+identity without changing that default review surface.
 
 The frozen command-family taxonomy is represented without choosing final wire
 operation names. Current executable targets admit Asset reference for a figure's
 existing optional asset identity, Text content for inline text, Structured
 content for formulas, table-row roles, and table-cell spans, Provenance for
-revision-owned source records, Ordering and grouping for one existing list's
-ordering-significance flag, Style role for block-level admitted style
-references, and Document constraint for page-profile geometry, per-page
-page-profile assignment, and broad revision-owned constraint kinds. A combined
-local checker validates
+revision-owned source records and block/inline-span provenance references,
+Ordering and grouping for one existing list's ordering-significance flag, Style
+role for block- and inline-span admitted style references, and Document
+constraint for page-profile geometry, per-page page-profile assignment, and
+broad revision-owned constraint kinds. A combined local checker validates
 family, kind, owner, and an optional exact base value in one read-only snapshot
 with stale-base precedence.
 
@@ -183,11 +184,12 @@ supports read-only behavior-version drift checks. It deliberately advertises no
 command protocol, normalizer, command context, Validate, Apply, rebatching, or
 numeric command/context limits yet.
 
-Aggregate command behavior and typed-result behavior are version 8 after
-admitting per-page page-profile assignment. Asset reference, Ordering and
-grouping, Provenance, Style role, and Text content retain family behavior
-version 1; Document constraint is version 3 and Structured content is version 2.
-Older aggregate version-7 contexts reject instead of being reinterpreted.
+Aggregate command behavior and typed-result behavior are version 9 after
+admitting family-qualified block/inline-span reference edits. Asset reference,
+Ordering and grouping, and Text content retain family behavior version 1;
+Provenance and Style role are version 2, Document constraint is version 3, and
+Structured content is version 2. Older aggregate version-8 contexts reject
+instead of being reinterpreted.
 
 A version-bound single-target proposal combines capability, exact local
 preconditions, and direct-edit simulation read-only. All five dedicated direct
@@ -234,7 +236,8 @@ cloned.
 The simulation stops atomically on the first failure and coalesces accepted-base
 to final-candidate net changes. Net coalescing stores first/last mutating
 prediction indexes instead of cloning every intermediate semantic change. The
-same per-target index state enforces prior-writer dependencies.
+same per-target-and-family index state enforces prior-writer dependencies
+without coupling independent fields on one identity.
 
 Figure asset-reference commands can only carry `None` or an accepted semantic
 identity already classified as `Asset` in the same current revision. Missing or
@@ -249,11 +252,16 @@ The immediately previous aggregate behavior version 2 rejects. A wrong-kind
 reference in a later mixed-batch command leaves earlier valid predictions and
 history uncommitted.
 
-Provenance commands now replace one existing revision-owned provenance record's
-kind and optional caller-visible source reference without rewriting the claim
-that points at it. Single-target review and batch Apply preserve claim identity,
-authored claim text, and unrelated provenance records; Undo restores the prior
-record. Aggregate behavior version 3 rejects after this new family admission.
+Provenance commands now distinguish record metadata from semantic linkage. One
+value replaces an existing revision-owned provenance record's kind and optional
+caller-visible source reference. A separate `ProvenanceReference` value can
+attach, replace, or remove the admitted provenance identity on an existing block
+or inline span while preserving that target's identity and authored text.
+Wrong-kind or no-longer-current references reject before mutation, and Undo
+restores either prior value.
+
+The Provenance family is now behavior version 2;
+the aggregate command behavior version is 9.
 
 Revision-owned semantic constraints now expose their broad `ConstraintKind` as a
 Document-constraint editable value. The constraint identity and semantic target
@@ -262,15 +270,16 @@ restores the prior kind. Reassigning a constraint target and editing detailed
 paper, style, placement, or output values remain outside this broad constraint
 model. Aggregate behavior version 4 rejects after this admission.
 
-Block identities now expose their optional admitted `Style` reference through
-the Style-role family. Replacement may attach, replace, or remove that
-block-level reference; non-Style or no-longer-current identities reject before
-mutation. Changed blocks seed their block/flow/page region with `AllDerived`.
+Block and inline-span identities now expose their optional admitted `Style`
+reference through the Style-role family. Replacement may attach, replace, or
+remove that reference; non-Style or no-longer-current identities reject before
+mutation. A span keeps Text content as its default command-target material, but
+family-specific material exposes Style role without replacing the text review
+surface.
 
-Inline-span style editing remains open because spans currently expose Text
-content as their single executable generic family; this change does not invent
-multi-family target material or mutate style names. Aggregate behavior version
-5 rejects after this admission.
+Same-span Text, Style, and Provenance batch changes are tracked
+independently by target and family. Style-role behavior version is now 2; the
+aggregate command behavior version is 9.
 
 Existing semantic `List` identities now expose only their boolean ordering
 significance through Ordering and grouping. The edit can switch ordered versus
@@ -307,16 +316,20 @@ semantic constraint-kind changes seed the notebook.
 Asset-reference seeds conservatively require all derived authorities.
 Provenance-record edits seed the notebook for only diagnostic and output
 authorities because reverse claim/source dependency expansion is not yet
-implemented. Single-target review and ordered batches share the same seed
-projection; net semantic no-ops emit no seed.
+implemented. Provenance-reference edits use those same authorities at the
+owning block/flow region. Single-target review and ordered batches share the
+same seed projection; net semantic no-ops emit no seed.
 
 Ordered simulation consumes indexed target material and impact scopes instead of
 cloning them for each evaluation. Block, list, and table traversal uses borrowed
 slice continuation frames in document order and stops once every unique target
-is indexed. Constraint-, page-, profile-, and provenance-only batches resolve
-before block traversal. Single-target provenance material also resolves
-revision-owned
-source records before the generic page/block descriptor walk.
+is indexed. Constraint-, page-, profile-, and revision-owned
+provenance-record-only
+batches resolve before block traversal.
+
+Single-target provenance-record material
+also resolves before the generic page/block descriptor walk. Block and span
+reference families remain addressable through family-qualified material.
 
 A release probe over 20,000 unrelated rule blocks measured 500 single-target
 provenance-material reads at about 94-95 microseconds each before that fast path
@@ -856,11 +869,14 @@ clipboard-assisted model response, CLI, or MCP.
 The provenance-only acceptance case is now executable for one existing
 revision-owned provenance record: kind and optional source reference can change
 while claim text, claim identity, claim-to-record linkage, and unrelated source
-records remain stable. The generic batch remains atomic and Undo restores the
-prior record.
+records remain stable. Claim-level assignment and removal are also executable
+for existing block and inline-span targets through admitted provenance
+identities; they preserve authored content and remain atomic with other generic
+families on the same target. Undo restores the prior linkage.
 
-The task remains open for richer source/citation linkage semantics, claim-level
-assignment and removal workflows, provenance diagnostics, and citation UI.
+The task remains open for richer source/citation linkage semantics, provenance
+diagnostics, citation UI, and any source-authority model beyond existing
+revision-owned provenance records.
 
 ### TODO - Prove complex educational coverage
 

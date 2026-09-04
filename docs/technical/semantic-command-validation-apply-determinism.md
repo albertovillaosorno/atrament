@@ -160,7 +160,7 @@ protocol normalization, command context, diagnostics, or a discoverable
 Validate capability.
 
 The current application foundation can deterministically simulate an ordered
-batch of the eleven established generic replacement value families against one
+batch of the twelve established generic editable value shapes against one
 immutable accepted revision. It validates generic command dependencies first,
 then consumes valid commands through a private value-and-impact overlay for only
 the editable identities targeted by the batch. Command IDs and requested values
@@ -171,12 +171,13 @@ Successful commands update the overlay rather than a cloned notebook. A middle
 failure leaves accepted state unchanged and marks later commands as not
 evaluated.
 
-Dependent same-target commands can observe earlier simulated candidate values
-only through an explicit command dependency. Per-command changes retain their
-local before/after values while aggregate coalescing stores first/last mutating
-prediction indexes per target. Final aggregate changes still compare accepted
-base with final candidate. An empty ordered batch returns NoOp before semantic
-target indexing.
+Dependent commands for the same target and family can observe earlier
+simulated candidate values only through an explicit dependency. Distinct
+families on one target remain independent. Aggregate coalescing stores
+first/last mutating prediction indexes per target-and-family.
+
+Final aggregate changes still compare accepted base with final candidate. An
+empty ordered batch returns NoOp before semantic target indexing.
 
 The same simulation derives conservative backend-owned impact seeds for text,
 structured-content, figure asset-reference, block style-reference, list
@@ -185,8 +186,9 @@ page-profile geometry, and per-page profile-assignment changes. Asset,
 block-style, and list-ordering changes use local block/flow scope with
 `AllDerived` authority.
 
-Provenance changes use notebook scope with only Diagnostics and Output
-authorities, while constraint-kind changes use notebook scope with `AllDerived`.
+Provenance-record changes use notebook scope with only Diagnostics and Output
+authorities, while block/span provenance-reference changes use those authorities
+at local block/flow scope. Constraint-kind changes use notebook `AllDerived`.
 Page-profile geometry changes seed every referencing page with `AllDerived`,
 while a page-profile assignment change seeds only that exact page. These are
 conservative seeds for later dependency expansion; this service does not execute
@@ -199,7 +201,7 @@ evidence instead of being cloned again.
 The targeted semantic scan uses document-order borrowed slice frames for blocks,
 list items, table rows, and table cells. It stops once every unique target is
 resolved, bypasses block traversal for constraint-, page-, profile-, and
-provenance-only batches,
+revision-owned provenance-record-only batches,
 and retains ordinary semantic material fallback for non-editable targets.
 Pending traversal state
 follows container depth rather than sibling count.
@@ -250,12 +252,14 @@ directions.
 Redo restores the complete multi-command transaction with a fresh revision; a
 new batch applied after Undo clears the abandoned Redo branch.
 
-Replay coverage exercises all eleven established generic editable values in
+Replay coverage exercises all twelve established generic editable values in
 one transaction: text, formula, page-profile geometry, page-profile assignment,
-table-row role, table-cell span, asset reference, provenance, constraint kind,
-block style reference, and list ordering significance. One accepted revision
-contains all eleven changes, and one Undo restores every prior value with stable
-semantic identities.
+table-row role, table-cell span, asset reference, provenance record metadata,
+provenance reference, constraint kind, style reference, and list ordering
+significance. The style and provenance-reference changes share one block target
+without collapsing because batch overlays are keyed by target and family. One
+accepted revision contains all twelve changes, and one Undo restores every prior
+value with stable semantic identities.
 
 Application receipts preserve the simulator's move-oriented command identity
 behavior. Resource-limit rejection borrows caller command identities without

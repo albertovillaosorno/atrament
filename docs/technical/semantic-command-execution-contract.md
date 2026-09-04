@@ -460,32 +460,31 @@ CLI and MCP enter through the same application services.
 
 The current semantic session foundation can check one accepted identity against
 one exact revision for expected semantic kind and direct structural owner. A
-separate compare-and-set check covers accepted constraint kind, block style
-reference, exact inline text, formula mode and source, provenance kind and
-source reference, table-row role, table-cell span, and physical page-profile
-geometry
-without mutating accepted state. Stale revision rejection precedes every local
-comparison.
+separate compare-and-set check covers the twelve admitted editable value shapes,
+including style and provenance references projected for block or inline-span
+targets, without mutating accepted state. Stale revision rejection precedes
+every local comparison.
 
 The frozen application-level command-family taxonomy is now represented as a
 typed value without choosing serialized operation names. Current generic edit
 targets expose only executable family admission: Asset reference for a figure's
 optional admitted asset identity, Text content for inline text, Structured
 content for formulas, table-row roles, and table-cell spans, Provenance for
-revision-owned source records, Ordering and grouping for an existing list's
-ordering-significance flag, Style role for block-level style references, and
-Document constraint for page-profile geometry, per-page profile assignment,
-and revision-owned constraint kinds. One aggregate read-only check validates
-requested family, kind,
-owner, and optional exact base value against backend-derived target material.
+revision-owned source records plus block/inline-span provenance references,
+Ordering and grouping for an existing list's ordering-significance flag, Style
+role for block- and inline-span style references, and Document constraint for
+page-profile geometry, per-page profile assignment, and revision-owned
+constraint kinds. The default target-material query preserves one canonical
+editable value per target. A family-specific query can project another admitted
+family for the same identity, and the aggregate precondition check validates
+that exact family, kind, owner, and optional base value.
 
-A deterministic capability snapshot now reports those seven discoverable
-family
+A deterministic capability snapshot now reports those seven discoverable family
 behaviors and one top-level behavior version. Aggregate command behavior and
-typed-result behavior are version 8 after page-profile assignment admission.
-Asset reference, Ordering and grouping, Provenance, Style role, and Text content
-retain family behavior version 1; Document constraint is version 3 and
-Structured content is version 2.
+typed-result behavior are version 9 after multi-family span/reference admission.
+Asset reference, Ordering and grouping, and Text content retain family behavior
+version 1; Document constraint is version 3; Provenance, Structured content, and
+Style role are version 2.
 
 Because no serialized command protocol is implemented, the snapshot advertises
 no protocol or normalization version, no command-context, Validate, Apply, or
@@ -493,15 +492,14 @@ selective-rebatch capability, and no guessed command/context numeric limits. A
 read-only compatibility check rejects an older capability behavior version
 independently from notebook revision changes.
 
-A separate single-target direct-edit simulator classifies eleven established
-replacement value families as applicable, no-op, domain-invalid, unavailable,
-or value-family mismatched without mutation. Figure Asset references
-additionally reject missing or non-Asset accepted identities, while table-cell
-spans return the owning table's typed grid failure. All five existing dedicated
-direct
-mutation paths consume that same simulator before cloning accepted state or
-allocating a revision, so target, domain, and no-op validation are shared with
-proposal evidence.
+A separate single-target direct-edit simulator classifies twelve established
+editable value shapes as applicable, no-op, domain-invalid, unavailable, or
+value-family mismatched without mutation. Asset, page-profile, provenance, and
+style references additionally reject missing or wrong-kind accepted identities,
+while table-cell spans return the owning table's typed grid failure. Existing
+dedicated direct mutation paths consume that same simulator before cloning
+accepted state or allocating a revision, so target, domain, and no-op validation
+are shared with proposal evidence.
 
 A version-bound direct-edit proposal now composes capability compatibility,
 complete local target preconditions, and replacement simulation in one read-only
@@ -510,10 +508,12 @@ report one exact before/after semantic change, or an empty change set for a
 no-op, while preserving typed simulation rejection.
 
 A transport-neutral ordered direct-edit batch now combines those primitives with
-the generic dependency graph. It derives a private overlay for only targeted
-editable values and their impact scopes. A targeted table cell also retains a
-cloned owning-table overlay, so every ordered span command validates the
-complete candidate grid before its value becomes observable.
+the generic dependency graph. Its private material and net-change overlays are
+keyed by target plus command family, so independent Text, Style, and Provenance
+changes can coexist on one inline-span identity without collapsing each other's
+base values. A targeted table cell also retains a cloned owning-table overlay,
+so every ordered span command validates the complete candidate grid before its
+value becomes observable.
 
 A figure Asset-reference value carries only `None` or an accepted identity. A
 nonempty reference must resolve to `SemanticIdentityKind::Asset` in the same
@@ -521,10 +521,13 @@ current revision before simulation succeeds. Raw bytes, base64, filesystem
 paths, and remote URLs remain outside this semantic value; media ingestion is a
 separate capability.
 
-A Provenance value carries one existing record's `ProvenanceKind` plus its
-optional caller-visible source reference. The command targets that record
-identity directly; it does not rewrite claim text, replace claim identity, or
-change which record a claim references.
+A Provenance record value carries one existing record's `ProvenanceKind` plus
+its optional caller-visible source reference and targets that record identity
+directly. A distinct `ProvenanceReference` value targets an existing block or
+inline span and carries only `None` or an accepted provenance identity. It can
+attach, replace, or remove claim linkage without rewriting authored target text;
+a record-metadata value cannot masquerade as a linkage value even though both
+belong to the Provenance command family.
 
 A semantic Constraint value exposes only its broad `ConstraintKind` through the
 Document-constraint family. The revision-owned constraint identity and its
@@ -540,12 +543,12 @@ Changing that reference preserves page identity, flows, and the profile catalog.
 It does not create/delete profiles or execute reflow; the exact page receives a
 conservative `AllDerived` impact seed for downstream authorities.
 
-A block Style-role value carries only `None` or an accepted `Style` identity in
-the same current revision. It changes the block's style reference while keeping
-block identity and content stable; wrong-kind and prior-revision style
-identities reject before mutation. Inline-span style references remain outside
-this slice because those identities already expose Text content through the
-current single-family target-material projection.
+A Style-role reference carries only `None` or an accepted `Style` identity in
+the same current revision. It can target a block or inline span while keeping
+semantic identity and authored content stable; wrong-kind and prior-revision
+style identities reject before mutation. Inline spans retain Text content as
+their default material, while family-specific material exposes the Style-role
+reference when that family is requested.
 
 A List Ordering-and-grouping value is only the existing list's boolean ordering
 significance. Changing it preserves list identity, current item order, item
@@ -554,9 +557,10 @@ an insertion anchor, or allocate semantic identities. Nested list targets remain
 addressable through stable list identity.
 
 Single-target command material resolves revision-owned provenance records before
-the generic page/block descriptor walk. Ordered provenance-only batches likewise
-index those top-level records before block traversal. This changes lookup cost,
-not provenance identity or mutation semantics.
+the generic page/block descriptor walk. Ordered provenance-record-only batches
+likewise index those top-level records before block traversal. Block/span
+reference material remains family-qualified. This changes lookup cost, not
+provenance identity or mutation semantics.
 
 Dependency validation borrows command payloads first; valid commands are then
 consumed in order so caller command IDs and requested values can move into
@@ -567,12 +571,12 @@ Simulation stops after the first semantic rejection and reports later command
 identities as not evaluated. The accepted revision and identity allocator remain
 untouched.
 
-When a later command edits a target changed earlier in the same candidate, it
-must explicitly depend on the previous target writer before observing that
-candidate value. A preceding semantic no-op does not manufacture such a
-dependency. Per-command changes remain visible while aggregate coalescing stores
-only first/last mutating prediction indexes per target. Final changes still
-compare accepted base to final candidate, including an empty net set for a
+When a later command edits the same target and family changed earlier in the
+same candidate, it must explicitly depend on that previous writer before
+observing the candidate value. Different families on one target are independent.
+Per-command changes remain visible while aggregate coalescing stores first/last
+mutating prediction indexes per target-and-family. Final changes still compare
+accepted base to final candidate, including an empty net set for a
 change-then-revert sequence.
 
 Successful direct-edit predictions now classify their net effect explicitly as
@@ -584,10 +588,10 @@ rendering, handwriting, and motion authorities.
 Structured edits seed their nearest block, flow, and page for structure, layout,
 and output dependencies. Block style-reference and list ordering-significance
 edits seed that same block/flow region conservatively with `AllDerived`.
-Provenance-record edits seed notebook
-scope for diagnostic and output authorities only; later dependency expansion
-may narrow
-affected claims and outputs.
+Provenance-record edits seed notebook scope for diagnostic and output
+authorities only. Block/span provenance-reference edits use those authorities at
+the local block/flow region; later dependency expansion may narrow affected
+claims and outputs.
 
 Constraint-kind edits seed notebook scope with `AllDerived`. Page-profile
 geometry edits seed every accepted page that references the changed profile,
@@ -600,8 +604,8 @@ The ordered overlay copies accepted values only for identities named by the
 batch and stops semantic traversal once every unique target is indexed. Indexed
 material and impact scopes are consumed through simulation rather than cloned
 again. Each affected table is cloned once regardless of targeted cell count.
-Constraint-, page-, profile-, and provenance-only batches resolve before
-walking unrelated blocks.
+Constraint-, page-, profile-, and revision-owned provenance-record-only
+batches resolve before walking unrelated blocks.
 
 Block, list-item, table-row, and table-cell traversal uses borrowed slice
 continuation frames in document order. Pending traversal state therefore follows
