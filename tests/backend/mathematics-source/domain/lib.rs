@@ -1530,6 +1530,27 @@ fn unknown_matrix_environment_remains_explicit_unsupported_source() {
 }
 
 #[test]
+fn missing_environment_reports_innermost_open_boundary() {
+    let cases_inside_matrix = r"\begin{matrix}\begin{cases}x";
+    assert_eq!(
+        analyze(cases_inside_matrix, FormulaMode::Display),
+        Err(MathSyntaxError {
+            byte_offset: cases_inside_matrix.len(),
+            kind: MathSyntaxErrorKind::MissingCasesEnd,
+        }),
+    );
+
+    let matrix_inside_cases = r"\begin{cases}\begin{matrix}x";
+    assert_eq!(
+        analyze(matrix_inside_cases, FormulaMode::Display),
+        Err(MathSyntaxError {
+            byte_offset: matrix_inside_cases.len(),
+            kind: MathSyntaxErrorKind::MissingMatrixEnd,
+        }),
+    );
+}
+
+#[test]
 fn malformed_cases_boundaries_are_typed() {
     assert_eq!(
         analyze(r"\end{cases}", FormulaMode::Display),
