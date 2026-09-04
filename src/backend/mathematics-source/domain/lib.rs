@@ -434,18 +434,38 @@ fn build_group_index(source: &str) -> GroupIndex {
     GroupIndex { pairs }
 }
 
-fn scan_uniform_command(
+fn scan_ascii_control_word_end(
+    source: &str,
+    after_slash: usize,
+) -> Option<usize> {
+    let tail = source.get(after_slash..)?;
+    let mut end = after_slash;
+    for (offset, character) in tail.char_indices() {
+        if !character.is_ascii_alphabetic() {
+            break;
+        }
+        end = after_slash
+            .saturating_add(offset)
+            .saturating_add(character.len_utf8());
+    }
+    (end != after_slash).then_some(end)
+}
+
+fn scan_named_command(
     source: &str,
     start: usize,
+    end: usize,
     spellings: &[&str],
     supported: SupportedCommand,
 ) -> Option<ScannedCommand> {
-    spellings.iter().find_map(|spelling| {
-        command_matches(source, start, spelling).then(|| ScannedCommand {
-            end: start.saturating_add(spelling.len()),
+    let spelling = source.get(start..end)?;
+    spellings
+        .binary_search(&spelling)
+        .is_ok()
+        .then_some(ScannedCommand {
+            end,
             kind: ScannedCommandKind::Supported(supported),
         })
-    })
 }
 
 fn scan_structured_command(
@@ -478,40 +498,40 @@ fn scan_command(source: &str, start: usize) -> ScannedCommand {
             ),
         };
     }
-    if let Some(command) = scan_uniform_command(
-        source,
-        start,
-        NAMED_OPERATOR_COMMANDS,
-        SupportedCommand::NamedOperator,
-    ) {
-        return command;
-    }
-    if let Some(command) = scan_uniform_command(
-        source,
-        start,
-        NAMED_SYMBOL_COMMANDS,
-        SupportedCommand::NamedSymbol,
-    ) {
-        return command;
+    if let Some(end) = scan_ascii_control_word_end(source, after_slash) {
+        if let Some(command) = scan_named_command(
+            source,
+            start,
+            end,
+            NAMED_OPERATOR_COMMANDS,
+            SupportedCommand::NamedOperator,
+        ) {
+            return command;
+        }
+        if let Some(command) = scan_named_command(
+            source,
+            start,
+            end,
+            NAMED_SYMBOL_COMMANDS,
+            SupportedCommand::NamedSymbol,
+        ) {
+            return command;
+        }
+        if let Some(command) = scan_structured_command(source, start) {
+            return command;
+        }
+        return ScannedCommand {
+            end,
+            kind: ScannedCommandKind::Unsupported,
+        };
     }
     if let Some(command) = scan_structured_command(source, start) {
         return command;
     }
-    let mut end = after_slash;
     let tail = source.get(after_slash..).unwrap_or_default();
-    for (offset, character) in tail.char_indices() {
-        if !character.is_ascii_alphabetic() {
-            break;
-        }
-        end = after_slash
-            .saturating_add(offset)
-            .saturating_add(character.len_utf8());
-    }
-    if end == after_slash {
-        end = tail.chars().next().map_or(after_slash, |character| {
-            after_slash.saturating_add(character.len_utf8())
-        });
-    }
+    let end = tail.chars().next().map_or(after_slash, |character| {
+        after_slash.saturating_add(character.len_utf8())
+    });
     ScannedCommand {
         end,
         kind: ScannedCommandKind::Unsupported,
