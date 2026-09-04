@@ -124,6 +124,17 @@ fn text_fragments_preserve_unicode_and_require_one_group() {
 }
 
 #[test]
+fn text_fragments_do_not_admit_unknown_control_words() {
+    let source = r"\text{literal \mystery{value}}";
+    let analyzed = analyze(source, FormulaMode::Display)
+        .expect("balanced text with unknown command remains inspectable");
+    assert!(!analyzed.is_supported());
+    assert_eq!(reconstructed(&analyzed), source);
+    assert_eq!(analyzed.unsupported.len(), 1);
+    assert_eq!(analyzed.unsupported[0].name, r"\mystery");
+}
+
+#[test]
 fn longer_text_control_word_is_not_accepted_as_text_prefix() {
     let analyzed = analyze(r"\textual{x}", FormulaMode::Display)
         .expect("balanced unsupported text-like source");
