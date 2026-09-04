@@ -190,11 +190,11 @@ supports read-only behavior-version drift checks. It deliberately advertises no
 command protocol, normalizer, command context, Validate, Apply, rebatching, or
 numeric command/context limits yet.
 
-Aggregate command behavior and typed-result behavior are version 27 after
-admitting additional standard TeX named operators. Asset reference, Ordering and
+Aggregate command behavior and typed-result behavior are version 28 after
+admitting common named TeX delimiter symbols. Asset reference, Ordering and
 grouping, and Text content retain family behavior version 1; Provenance and
 Style role are version 2, Document constraint is version 3, and Structured
-content is version 20. The immediately previous aggregate version 26 rejects
+content is version 21. The immediately previous aggregate version 27 rejects
 instead of being reinterpreted.
 
 A version-bound single-target proposal combines capability, exact local
@@ -494,8 +494,9 @@ binomial coefficients, square roots, grouped mathematical alphabets, common
 one-group accents, upright unit or label groups, explicit `\text{...}`
 fragments, grouped custom operator names, vector, overline, and underline
 decorations, escaped TeX special characters, standard and variant Greek
-control-sequence notation, common named symbols, binary-operator symbols,
-relation and logic symbols, operators, calculus, set notation, aligned row and
+control-sequence notation, common named and delimiter symbols, binary-operator
+symbols, relation and logic symbols, operators, calculus, set notation, aligned
+row and
 column separators, and matrix
 environments. Math-only alignment, script, and row-break
 markers remain literal inside grouped text.

@@ -213,21 +213,21 @@ fn named_symbol_vocabulary_is_supported_without_rewriting() {
     for source in [
         r"\Delta", r"\Gamma", r"\Lambda", r"\Leftrightarrow", r"\Omega",
         r"\Phi", r"\Pi", r"\Psi", r"\Rightarrow", r"\Sigma", r"\Theta",
-        r"\Upsilon", r"\Xi", r"\alpha", r"\approx", r"\ast", r"\beta",
-        r"\bullet", r"\cap", r"\cdot", r"\chi", r"\circ", r"\cong",
-        r"\cup", r"\delta", r"\div", r"\emptyset",
-        r"\epsilon", r"\equiv", r"\eta", r"\exists", r"\forall", r"\gamma",
-        r"\ge", r"\geq", r"\in", r"\infty", r"\iota", r"\kappa",
-        r"\lambda", r"\land", r"\le", r"\leftarrow", r"\leq", r"\lor",
-        r"\mid", r"\mp", r"\mu", r"\nabla", r"\ne", r"\neg", r"\neq",
+        r"\Upsilon", r"\Vert", r"\Xi", r"\alpha", r"\approx", r"\ast",
+        r"\beta", r"\bullet", r"\cap", r"\cdot", r"\chi", r"\circ", r"\cong",
+        r"\cup", r"\delta", r"\div", r"\emptyset", r"\epsilon", r"\equiv",
+        r"\eta", r"\exists", r"\forall", r"\gamma", r"\ge", r"\geq", r"\in",
+        r"\infty", r"\iota", r"\kappa", r"\lambda", r"\land", r"\langle",
+        r"\lbrace", r"\lceil", r"\le", r"\leftarrow", r"\leq", r"\lfloor",
+        r"\lor", r"\mid", r"\mp", r"\mu", r"\nabla", r"\ne", r"\neg", r"\neq",
         r"\notin", r"\nu", r"\omega", r"\oplus", r"\otimes", r"\parallel",
-        r"\partial", r"\perp", r"\phi",
-        r"\pi", r"\pm", r"\propto", r"\psi", r"\rho", r"\rightarrow",
-        r"\setminus", r"\sigma", r"\sim", r"\star", r"\subset",
-        r"\subseteq", r"\supset", r"\supseteq", r"\tau", r"\theta",
-        r"\times", r"\to", r"\upsilon", r"\varepsilon", r"\varphi",
-        r"\varpi", r"\varrho", r"\varsigma", r"\vartheta", r"\vee", r"\wedge",
-        r"\xi", r"\zeta",
+        r"\partial", r"\perp", r"\phi", r"\pi", r"\pm", r"\propto", r"\psi",
+        r"\rangle", r"\rbrace", r"\rceil", r"\rfloor", r"\rho",
+        r"\rightarrow", r"\setminus", r"\sigma", r"\sim", r"\star",
+        r"\subset", r"\subseteq", r"\supset", r"\supseteq", r"\tau",
+        r"\theta", r"\times", r"\to", r"\upsilon", r"\varepsilon", r"\varphi",
+        r"\varpi", r"\varrho", r"\varsigma", r"\vartheta", r"\vee", r"\vert",
+        r"\wedge", r"\xi", r"\zeta",
     ] {
         let analyzed =
             analyze(source, FormulaMode::Inline).expect("named symbol formula");
@@ -246,6 +246,30 @@ fn named_symbol_vocabulary_is_supported_without_rewriting() {
             "{source}",
         );
     }
+}
+
+#[test]
+fn named_delimiters_compose_without_rewriting() {
+    let source = concat!(
+        r"\langle x, y \rangle; \lceil x \rceil; ",
+        r"\lfloor y \rfloor; \lbrace A \rbrace; ",
+        r"\vert x \vert + \Vert v \Vert",
+    );
+    let analyzed = analyze(source, FormulaMode::Display)
+        .expect("named delimiter expression");
+    assert!(analyzed.is_supported());
+    assert_eq!(reconstructed(&analyzed), source);
+    assert_eq!(
+        analyzed
+            .tokens
+            .iter()
+            .filter(|token| {
+                token.kind
+                    == MathTokenKind::Command(SupportedCommand::NamedSymbol)
+            })
+            .count(),
+        12,
+    );
 }
 
 #[test]
