@@ -40,7 +40,8 @@ use atrament_physical_page_profile::{
     SheetSize,
 };
 use atrament_semantic_notebook::{
-    Asset, Block, BlockContent, CandidateIdentity, Figure, Flow, FormulaMode,
+    Asset, Block, BlockContent, CandidateIdentity, Constraint, ConstraintKind,
+    Figure, Flow, FormulaMode,
     IdentityAllocator, InlineSpan, Notebook, Page, PaperProfile, Provenance,
     ProvenanceKind, SemanticIdentityDescriptor, SemanticIdentityKind,
     TableCellSpan, TableRowRole,
@@ -148,6 +149,22 @@ fn editable_text_candidate(
         },
         span,
     )
+}
+
+fn global_constraint_candidate(
+    identities: &IdentityAllocator,
+) -> (Notebook<CandidateIdentity>, CandidateIdentity, CandidateIdentity) {
+    let (mut candidate, _) = editable_text_candidate(identities, "authored");
+    let constraint = identities
+        .allocate_candidate()
+        .expect("constraint id");
+    let notebook = candidate.id;
+    candidate.constraints.push(Constraint {
+        id: constraint,
+        kind: ConstraintKind::Paper,
+        target: notebook,
+    });
+    (candidate, constraint, notebook)
 }
 
 fn provenance_claim_candidate(
@@ -568,6 +585,110 @@ fn application_routes_bounded_inspection_through_owned_semantic_authority() {
         session.accepted_revision().map(|current| current.id),
         Some(revision),
     );
+}
+
+#[test]
+fn application_routes_global_constraint_through_owned_authority() {
+    let identities = IdentityAllocator::new();
+    let (candidate, candidate_constraint, candidate_notebook) =
+        global_constraint_candidate(&identities);
+    let mut session = application::SessionApplication::default();
+    let AcceptanceOutcome::Accepted { mapping, revision: base } =
+        session.accept_candidate(candidate)
+    else {
+        panic!("global constraint candidate must be accepted");
+    };
+    let accepted = |candidate| {
+        mapping
+            .iter()
+            .find(|entry| entry.candidate == candidate)
+            .expect("global constraint identity must map")
+            .accepted
+    };
+    let constraint = accepted(candidate_constraint);
+    let notebook = accepted(candidate_notebook);
+    let snapshot = session.command_capability_snapshot();
+    assert_eq!(snapshot.behavior_version, CommandBehaviorVersion(5));
+    assert!(snapshot.family_capabilities.iter().any(|capability| {
+        capability.family == SemanticCommandFamily::DocumentConstraint
+            && capability.behavior_version == CommandBehaviorVersion(2)
+    }));
+    let current_value = EditableSemanticValue::ConstraintKind(
+        ConstraintKind::Paper,
+    );
+    let requested = EditableSemanticValue::ConstraintKind(
+        ConstraintKind::Style,
+    );
+    let CommandTargetMaterialOutcome::Prepared { material } =
+        session.command_target_material(base, constraint)
+    else {
+        panic!("live owner must expose constraint material");
+    };
+    assert_eq!(material.editable_value, Some(current_value.clone()));
+    assert_eq!(material.descriptor, SemanticIdentityDescriptor {
+        kind: SemanticIdentityKind::Constraint,
+        owner: Some(notebook),
+    });
+    assert_eq!(
+        session.simulate_direct_edit(base, constraint, requested.clone()),
+        DirectEditSimulationOutcome::Applicable {
+            family: SemanticCommandFamily::DocumentConstraint,
+            requested: requested.clone(),
+            revision: base,
+            target: constraint,
+        },
+    );
+    let batch = DirectEditBatchProposal {
+        base,
+        capability_version: snapshot.behavior_version,
+        commands: vec![DirectEditBatchCommand {
+            dependencies: vec![],
+            id: 1_u32,
+            preconditions: CommandTargetPreconditions {
+                expected_value: Some(current_value),
+                identity: IdentityPrecondition {
+                    expected_kind: Some(SemanticIdentityKind::Constraint),
+                    expected_owner: IdentityOwnerExpectation::Direct(notebook),
+                },
+                requested_family: SemanticCommandFamily::DocumentConstraint,
+            },
+            requested,
+            target: constraint,
+        }],
+    };
+    let DirectEditBatchApplyOutcome::Applied { revision: applied, .. } =
+        session.apply_direct_edit_batch(batch)
+    else {
+        panic!("live owner must apply constraint kind edit");
+    };
+    let current = session
+        .accepted_revision()
+        .expect("global constraint revision");
+    let changed = current
+        .notebook
+        .constraints
+        .iter()
+        .find(|value| value.id == constraint)
+        .expect("global constraint value");
+    assert_eq!(changed.kind, ConstraintKind::Style);
+    assert_eq!(changed.target, notebook);
+
+    let HistoryTraversalOutcome::Traversed { .. } =
+        session.traverse_history(applied, HistoryDirection::Undo)
+    else {
+        panic!("live global constraint batch must Undo");
+    };
+    let current = session
+        .accepted_revision()
+        .expect("global constraint Undo");
+    let restored = current
+        .notebook
+        .constraints
+        .iter()
+        .find(|value| value.id == constraint)
+        .expect("restored global constraint");
+    assert_eq!(restored.kind, ConstraintKind::Paper);
+    assert_eq!(restored.target, notebook);
 }
 
 #[test]
