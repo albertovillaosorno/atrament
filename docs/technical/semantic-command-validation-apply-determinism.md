@@ -199,12 +199,18 @@ none. Indexed target material and impact scopes move through final simulation
 evidence instead of being cloned again.
 
 The targeted semantic scan uses document-order borrowed slice frames for blocks,
-list items, table rows, and table cells. It stops once every unique target is
-resolved, bypasses block traversal for constraint-, page-, profile-, and
-revision-owned provenance-record-only batches,
-and retains ordinary semantic material fallback for non-editable targets.
-Pending traversal state
-follows container depth rather than sibling count.
+list items, table rows, and table cells. Its request tracks exact target/family
+pairs, so multi-family commands on one identity are indexed together and the
+scan stops only after every requested editable material pair is resolved. It
+bypasses block traversal for constraint-, page-, profile-, and revision-owned
+provenance-record-only batches and retains ordinary semantic material fallback
+for unsupported target/family combinations. Pending traversal state follows
+container depth rather than sibling count.
+
+A figure-caption style regression proves indexed span material keeps two owners
+distinct: the span's direct semantic owner remains the Figure identity for local
+preconditions, while derived Style impact is seeded against the containing
+figure block, flow, and page.
 
 A pinned release probe measured a first target ahead of 100,000 top-level blocks
 at about 20 microseconds after traversal hardening versus 1,099 microseconds

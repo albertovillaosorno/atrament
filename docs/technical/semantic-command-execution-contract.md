@@ -600,18 +600,23 @@ Those seeds are shared by single-target review and ordered batch simulation and
 are omitted for a net semantic no-op. They are inputs to future dependency
 expansion, not the final authoritative Validate impact set.
 
-The ordered overlay copies accepted values only for identities named by the
-batch and stops semantic traversal once every unique target is indexed. Indexed
+The ordered overlay copies accepted values only for target/family pairs named by
+the batch and stops semantic traversal once every requested editable material is
+indexed. Same-target Text, Style, and Provenance commands therefore share one
+scan without collapsing their distinct base values or impact scopes. Indexed
 material and impact scopes are consumed through simulation rather than cloned
-again. Each affected table is cloned once regardless of targeted cell count.
-Constraint-, page-, profile-, and revision-owned provenance-record-only
-batches resolve before walking unrelated blocks.
+again.
+
+Each affected table is cloned once regardless of targeted cell count.
+Constraint-, page-, profile-, and revision-owned provenance-record-only batches
+resolve before walking unrelated blocks.
 
 Block, list-item, table-row, and table-cell traversal uses borrowed slice
 continuation frames in document order. Pending traversal state therefore follows
-container depth rather than sibling count, while mixed batches still continue
-until every requested target resolves. Non-editable targets retain ordinary
-semantic material fallback.
+container depth rather than sibling count, while unsupported target/family
+combinations retain ordinary semantic material fallback. Figure-caption span
+material preserves its Figure direct owner for preconditions but seeds
+structured impact against the containing figure block.
 
 In one pinned release probe, a first-block target with 100,000 unrelated
 trailing
@@ -685,11 +690,14 @@ Executable capability evidence confirms that a successful internal batch Apply
 does not change this snapshot or populate `admitted_applications`.
 
 Semantic Apply currently returns typed result classes without a shared
-`DiagnosticSet`. The diagnostic domain already reserves Semantic Apply/Validate
-operation bindings and command locations, but it has not frozen a command
-precondition diagnostic code or typed precondition evidence family. That missing
-taxonomy blocks diagnostic projection without weakening the shared-envelope
-contract.
+`DiagnosticSet`. The diagnostic domain now reserves Semantic Apply/Validate
+operation bindings, command locations, the stable semantic-precondition
+rejection code, and typed local-precondition condition/failure evidence.
+Application projection still cannot safely name the failing command and accepted
+target in diagnostic locations: this pre-normalization batch keeps command IDs
+generic and accepted semantic identities opaque. A final command-context or
+other admitted stable identity projection must close that boundary rather than
+using Debug formatting as wire authority.
 
 Exact authored text and formula source are compared as currently accepted bytes;
 no Unicode normalization form is implied by this implementation evidence. The

@@ -82,6 +82,8 @@ pub enum DiagnosticCode {
     HandshakeVersionMismatch,
     /// One placed fixed region crosses an accepted writable page boundary.
     LayoutFixedRegionOverflow,
+    /// One semantic command local precondition rejects candidate validation.
+    SemanticCommandPreconditionRejected,
     /// One complete session draft field exceeds its admitted byte limit.
     SessionDraftResourceLimit,
 }
@@ -105,6 +107,9 @@ impl DiagnosticCode {
             },
             Self::HandshakeVersionMismatch => {
                 "atrament.handshake.version-mismatch"
+            },
+            Self::SemanticCommandPreconditionRejected => {
+                "atrament.semantic-command.precondition-rejected"
             },
             Self::SessionDraftResourceLimit => {
                 "atrament.session-draft.resource-limit"
@@ -144,6 +149,43 @@ pub enum Evidence {
         /// Exact backend-required version identity.
         expected: &'static str,
     },
+    /// Typed semantic-command local precondition rejection evidence.
+    SemanticCommandPrecondition {
+        /// Local semantic precondition that was evaluated.
+        condition: SemanticCommandPreconditionKind,
+        /// Typed reason that precondition rejected candidate validation.
+        failure: SemanticCommandPreconditionFailure,
+    },
+}
+
+/// Local semantic-command precondition represented by diagnostic evidence.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub enum SemanticCommandPreconditionKind {
+    /// Requested command family must be executable for the exact target.
+    Family,
+    /// Existing target must have the expected semantic kind.
+    Kind,
+    /// Existing target must have the expected direct structural owner.
+    Owner,
+    /// Exact semantic target must exist in the accepted base revision.
+    Target,
+    /// Existing target must expose an admitted editable value.
+    TargetEditable,
+    /// Existing editable value must match the caller's expected base value.
+    Value,
+}
+
+/// Typed failure class for one semantic-command local precondition.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub enum SemanticCommandPreconditionFailure {
+    /// Existing semantic evidence differs from the required evidence.
+    Mismatch,
+    /// Existing target has no admitted generic editable value.
+    NotEditable,
+    /// Requested command family is not executable for the exact target.
+    NotExecutable,
+    /// Exact semantic target does not exist in the accepted base revision.
+    NotFound,
 }
 
 /// Unit carried by typed numeric diagnostic evidence.

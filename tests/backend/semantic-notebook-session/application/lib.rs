@@ -2659,6 +2659,335 @@ fn inline_span_batches_text_style_and_provenance_independently() {
 }
 
 #[test]
+fn figure_caption_multifamily_index_uses_containing_block_scope() {
+    let ids = IdentityAllocator::new();
+    let (mut candidate, candidate_ids) =
+        candidate_notebook_with_figure_assets(&ids);
+    let caption = candidate_id(&ids);
+    let provenance = candidate_id(&ids);
+    let style = candidate_id(&ids);
+    candidate.provenance.push(Provenance {
+        id: provenance,
+        kind: ProvenanceKind::Supplied,
+        reference: Some(String::from("caption:source")),
+    });
+    candidate.styles.push(Style {
+        id: style,
+        name: String::from("caption-emphasis"),
+    });
+    let BlockContent::Figure(figure) =
+        &mut candidate.pages[0].flows[0].blocks[0].content
+    else {
+        panic!("caption fixture must contain figure");
+    };
+    figure.caption.push(InlineSpan {
+        id: caption,
+        provenance: Some(provenance),
+        style: None,
+        text: String::from("caption"),
+    });
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision: base } =
+        session.accept(candidate)
+    else {
+        panic!("caption candidate must be accepted");
+    };
+    let block = accepted_for(&mapping, candidate_ids.block);
+    let caption = accepted_for(&mapping, caption);
+    let figure = accepted_for(&mapping, candidate_ids.figure);
+    let flow = accepted_for(&mapping, candidate_ids.flow);
+    let page = accepted_for(&mapping, candidate_ids.page);
+    let provenance = accepted_for(&mapping, provenance);
+    let style = accepted_for(&mapping, style);
+    let before = session.current().expect("caption base").clone();
+    let batch = DirectEditBatchProposal {
+        base,
+        capability_version: CommandBehaviorVersion(9),
+        commands: vec![
+            DirectEditBatchCommand {
+                dependencies: vec![],
+                id: 1_u32,
+                preconditions: CommandTargetPreconditions {
+                    expected_value: Some(EditableSemanticValue::StyleReference(
+                        None,
+                    )),
+                    identity: IdentityPrecondition {
+                        expected_kind: Some(SemanticIdentityKind::InlineSpan),
+                        expected_owner: IdentityOwnerExpectation::Direct(
+                            figure,
+                        ),
+                    },
+                    requested_family: SemanticCommandFamily::StyleRole,
+                },
+                requested: EditableSemanticValue::StyleReference(Some(style)),
+                target: caption,
+            },
+            DirectEditBatchCommand {
+                dependencies: vec![],
+                id: 2_u32,
+                preconditions: CommandTargetPreconditions {
+                    expected_value: Some(
+                        EditableSemanticValue::ProvenanceReference(Some(
+                            provenance,
+                        )),
+                    ),
+                    identity: IdentityPrecondition {
+                        expected_kind: Some(SemanticIdentityKind::InlineSpan),
+                        expected_owner: IdentityOwnerExpectation::Direct(
+                            figure,
+                        ),
+                    },
+                    requested_family: SemanticCommandFamily::Provenance,
+                },
+                requested: EditableSemanticValue::ProvenanceReference(None),
+                target: caption,
+            },
+        ],
+    };
+    let DirectEditBatchSimulationOutcome::Predicted {
+        changes,
+        effect: DirectEditEffectClass::Mutation,
+        impact_seeds,
+        ..
+    } = session.simulate_direct_edit_batch(batch)
+    else {
+        panic!("caption multi-family batch must simulate");
+    };
+    assert_eq!(changes.len(), 2);
+    assert_eq!(impact_seeds.len(), 1);
+    assert_eq!(impact_seeds[0].scope, DirectEditImpactScope::BlockFlow {
+        block,
+        flow,
+        page,
+    });
+    assert!(impact_seeds[0]
+        .authorities
+        .contains(&DirectEditDerivedAuthority::AllDerived));
+    assert!(impact_seeds[0]
+        .authorities
+        .contains(&DirectEditDerivedAuthority::Diagnostics));
+    assert!(impact_seeds[0]
+        .authorities
+        .contains(&DirectEditDerivedAuthority::Output));
+    assert_eq!(session.current(), Some(&before));
+}
+
+#[test]
+fn large_multifamily_span_batch_preserves_requested_families() {
+    const SPAN_COUNT: usize = 2_000;
+
+    let ids = IdentityAllocator::new();
+    let (mut candidate, first_span) =
+        candidate_notebook_with_span(&ids, "span-0");
+    let provenance = candidate_id(&ids);
+    let style = candidate_id(&ids);
+    candidate.provenance.push(Provenance {
+        id: provenance,
+        kind: ProvenanceKind::Supplied,
+        reference: Some(String::from("batch:source")),
+    });
+    candidate.styles.push(Style {
+        id: style,
+        name: String::from("batch-style"),
+    });
+    let BlockContent::Paragraph(spans) =
+        &mut candidate.pages[0].flows[0].blocks[0].content
+    else {
+        panic!("large multi-family fixture must contain paragraph");
+    };
+    spans[0].provenance = Some(provenance);
+    let mut candidate_spans = Vec::with_capacity(SPAN_COUNT);
+    candidate_spans.push(first_span);
+    for index in 1..SPAN_COUNT {
+        let span = candidate_id(&ids);
+        candidate_spans.push(span);
+        spans.push(InlineSpan {
+            id: span,
+            provenance: Some(provenance),
+            style: None,
+            text: format!("span-{index}"),
+        });
+    }
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision: base } =
+        session.accept(candidate)
+    else {
+        panic!("large multi-family candidate must be accepted");
+    };
+    let provenance = accepted_for(&mapping, provenance);
+    let style = accepted_for(&mapping, style);
+    let mut commands = Vec::with_capacity(SPAN_COUNT * 2);
+    for (index, candidate_span) in candidate_spans.into_iter().enumerate() {
+        let span = accepted_for(&mapping, candidate_span);
+        let style_command = u32::try_from(index * 2 + 1)
+            .expect("style command identity must fit u32");
+        let provenance_command = u32::try_from(index * 2 + 2)
+            .expect("provenance command identity must fit u32");
+        commands.push(DirectEditBatchCommand {
+            dependencies: vec![],
+            id: style_command,
+            preconditions: CommandTargetPreconditions {
+                expected_value: Some(EditableSemanticValue::StyleReference(
+                    None,
+                )),
+                identity: IdentityPrecondition {
+                    expected_kind: Some(SemanticIdentityKind::InlineSpan),
+                    expected_owner: IdentityOwnerExpectation::Any,
+                },
+                requested_family: SemanticCommandFamily::StyleRole,
+            },
+            requested: EditableSemanticValue::StyleReference(Some(style)),
+            target: span,
+        });
+        commands.push(DirectEditBatchCommand {
+            dependencies: vec![],
+            id: provenance_command,
+            preconditions: CommandTargetPreconditions {
+                expected_value: Some(
+                    EditableSemanticValue::ProvenanceReference(Some(
+                        provenance,
+                    )),
+                ),
+                identity: IdentityPrecondition {
+                    expected_kind: Some(SemanticIdentityKind::InlineSpan),
+                    expected_owner: IdentityOwnerExpectation::Any,
+                },
+                requested_family: SemanticCommandFamily::Provenance,
+            },
+            requested: EditableSemanticValue::ProvenanceReference(None),
+            target: span,
+        });
+    }
+    let before = session.current().expect("large multi-family base").clone();
+    let DirectEditBatchSimulationOutcome::Predicted {
+        changes,
+        commands: predicted,
+        effect: DirectEditEffectClass::Mutation,
+        ..
+    } = session.simulate_direct_edit_batch(DirectEditBatchProposal {
+        base,
+        capability_version: CommandBehaviorVersion(9),
+        commands,
+    }) else {
+        panic!("large multi-family batch must simulate");
+    };
+    assert_eq!(predicted.len(), SPAN_COUNT * 2);
+    assert_eq!(changes.len(), SPAN_COUNT * 2);
+    assert_eq!(
+        changes
+            .iter()
+            .filter(|change| change.family == SemanticCommandFamily::StyleRole)
+            .count(),
+        SPAN_COUNT,
+    );
+    assert_eq!(
+        changes
+            .iter()
+            .filter(|change| change.family == SemanticCommandFamily::Provenance)
+            .count(),
+        SPAN_COUNT,
+    );
+    assert_eq!(session.current(), Some(&before));
+}
+
+#[test]
+fn indexed_valid_family_does_not_admit_unsupported_sibling_family() {
+    let ids = IdentityAllocator::new();
+    let (mut candidate, span) = candidate_notebook_with_span(&ids, "base");
+    let style = candidate_id(&ids);
+    candidate.styles.push(Style {
+        id: style,
+        name: String::from("valid-style"),
+    });
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision: base } =
+        session.accept(candidate)
+    else {
+        panic!("mixed valid/invalid candidate must be accepted");
+    };
+    let span = accepted_for(&mapping, span);
+    let style = accepted_for(&mapping, style);
+    let before = session
+        .current()
+        .expect("mixed valid/invalid base")
+        .clone();
+    let batch = DirectEditBatchProposal {
+        base,
+        capability_version: CommandBehaviorVersion(9),
+        commands: vec![
+            DirectEditBatchCommand {
+                dependencies: vec![],
+                id: 1_u32,
+                preconditions: CommandTargetPreconditions {
+                    expected_value: Some(EditableSemanticValue::StyleReference(
+                        None,
+                    )),
+                    identity: IdentityPrecondition {
+                        expected_kind: Some(SemanticIdentityKind::InlineSpan),
+                        expected_owner: IdentityOwnerExpectation::Any,
+                    },
+                    requested_family: SemanticCommandFamily::StyleRole,
+                },
+                requested: EditableSemanticValue::StyleReference(Some(style)),
+                target: span,
+            },
+            DirectEditBatchCommand {
+                dependencies: vec![],
+                id: 2_u32,
+                preconditions: CommandTargetPreconditions {
+                    expected_value: Some(EditableSemanticValue::Text(
+                        String::from("base"),
+                    )),
+                    identity: IdentityPrecondition {
+                        expected_kind: Some(SemanticIdentityKind::InlineSpan),
+                        expected_owner: IdentityOwnerExpectation::Any,
+                    },
+                    requested_family: SemanticCommandFamily::StructuredContent,
+                },
+                requested: EditableSemanticValue::Text(String::from("wrong")),
+                target: span,
+            },
+        ],
+    };
+    let DirectEditBatchSimulationOutcome::Rejected {
+        command,
+        evaluated,
+        reason,
+        ..
+    } = session.simulate_direct_edit_batch(batch.clone())
+    else {
+        panic!("unsupported sibling family must reject");
+    };
+    assert_eq!(command, 2_u32);
+    assert_eq!(evaluated.len(), 1);
+    assert!(matches!(
+        *reason,
+        DirectEditBatchCommandRejection::Precondition { outcome }
+            if *outcome
+                == CommandTargetPreconditionOutcome::FamilyNotExecutable
+            {
+                available: Some(SemanticCommandFamily::TextContent),
+                requested: SemanticCommandFamily::StructuredContent,
+                revision: base,
+                target: span,
+            }
+    ));
+    assert!(matches!(
+        session.apply_direct_edit_batch(batch),
+        DirectEditBatchApplyOutcome::Rejected { command: 2_u32, .. }
+    ));
+    assert_eq!(session.current(), Some(&before));
+    assert_eq!(
+        session.history_availability(),
+        HistoryAvailabilityOutcome::Available(HistoryAvailability {
+            can_redo: false,
+            can_undo: false,
+            revision: base,
+        }),
+    );
+}
+
+#[test]
 fn mixed_family_net_noop_preserves_sibling_span_change() {
     let ids = IdentityAllocator::new();
     let (mut candidate, span) = candidate_notebook_with_span(&ids, "before");

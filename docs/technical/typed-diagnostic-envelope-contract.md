@@ -50,9 +50,18 @@ cannot report layout readiness, and diagnostic sets with missing, duplicate,
 forged, stale, or non-layout operation context are rejected before preflight.
 This gate performs no path or persistent file operation and is not full Export.
 
-Cross-capability acceptance remains incomplete. Semantic-command, Render, full
-Export, Plan, CLI, and MCP implementations must exercise the remaining fixtures
-before parity and capability-specific diagnostic behavior are proven.
+The diagnostic vocabulary now also reserves the stable
+`atrament.semantic-command.precondition-rejected` condition and typed evidence
+for which local semantic precondition failed and how. A domain fixture binds
+that evidence to Semantic Validate with command, target-object, and field
+locations. It deliberately uses synthetic location identities: the current
+pre-normalization semantic batch still has generic command IDs and opaque
+accepted identities, so application projection must wait for an admitted stable
+diagnostic identity representation rather than leak Debug formatting.
+
+Cross-capability acceptance remains incomplete. Semantic-command Apply, Render,
+full Export, Plan, CLI, and MCP implementations must exercise the remaining
+fixtures before parity and capability-specific diagnostic behavior are proven.
 
 ## Contract
 

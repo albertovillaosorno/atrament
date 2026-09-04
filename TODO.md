@@ -114,13 +114,19 @@ operation binding, and complete-set semantics. A layout-only Export preflight
 preserves those diagnostics rather than interpreting prose.
 
 A transport-neutral semantic-command Apply producer now exists, but its typed
-results do not yet carry `DiagnosticSet`. The shared envelope already names
-Semantic Validate/Apply operations and command locations, while its current
-`DiagnosticCode` and `Evidence` vocabularies still have no semantic-command
-precondition condition/evidence family. The frozen diagnostic fixture requires a
-stable command code plus typed precondition evidence, so the application must
-not invent that taxonomy locally. Render, full Export, and Plan producers also
-remain open, and CLI/MCP parity cannot yet prove cross-capability semantics.
+results do not yet carry `DiagnosticSet`. The shared envelope now reserves the
+stable `atrament.semantic-command.precondition-rejected` code and typed local
+precondition condition/failure evidence for family, kind, owner, target,
+editability, and exact-value checks. Domain fixtures prove the code, Semantic
+Validate binding, command/object/field locations, and typed evidence shape
+without inventing adapter prose.
+
+Complete Apply diagnostic projection remains open because accepted semantic
+identities are intentionally opaque and command identities are still generic in
+the pre-normalization batch. No stable diagnostic identity text or final command
+context binding exists yet, so the application must not leak Debug formatting to
+satisfy the fixture. Render, full Export, and Plan producers also remain open,
+and CLI/MCP parity cannot yet prove cross-capability semantics.
 
 ## P2 — Semantic notebook and physical layout
 
@@ -321,15 +327,18 @@ owning block/flow region. Single-target review and ordered batches share the
 same seed projection; net semantic no-ops emit no seed.
 
 Ordered simulation consumes indexed target material and impact scopes instead of
-cloning them for each evaluation. Block, list, and table traversal uses borrowed
-slice continuation frames in document order and stops once every unique target
-is indexed. Constraint-, page-, profile-, and revision-owned
-provenance-record-only
-batches resolve before block traversal.
+cloning them for each evaluation. The index request is keyed by exact target and
+requested family rather than unique target alone, so same-target Text, Style,
+and Provenance material is collected in one document-order traversal. Block,
+list, and table traversal uses borrowed slice continuation frames and stops once
+every requested target/family material pair is indexed. Constraint-, page-,
+profile-, and revision-owned provenance-record-only batches resolve before block
+traversal.
 
-Single-target provenance-record material
-also resolves before the generic page/block descriptor walk. Block and span
-reference families remain addressable through family-qualified material.
+Single-target provenance-record material also resolves before the generic
+page/block descriptor walk. Family-qualified block/span material retains its
+local impact scope; figure-caption references use the containing figure block as
+impact owner rather than the nested Figure identity.
 
 A release probe over 20,000 unrelated rule blocks measured 500 single-target
 provenance-material reads at about 94-95 microseconds each before that fast path

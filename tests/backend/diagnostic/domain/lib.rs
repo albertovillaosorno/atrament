@@ -36,7 +36,8 @@ use diagnostic::{
     DiagnosticSet, Evidence, EvidenceUnit, LocationKind, LocationRole,
     Operation, OperationBinding, OperationContext, OperationContextKind,
     PhysicalBoundaryEdge, PhysicalLengthQuantity, RelationshipKind,
-    Remediation, SemanticLocation, Severity,
+    Remediation, SemanticCommandPreconditionFailure,
+    SemanticCommandPreconditionKind, SemanticLocation, Severity,
 };
 
 #[allow(dead_code)]
@@ -53,6 +54,10 @@ fn namespace_and_condition_codes_are_stable() {
     assert_eq!(
         DiagnosticCode::HandshakeVersionMismatch.stable_name(),
         "atrament.handshake.version-mismatch",
+    );
+    assert_eq!(
+        DiagnosticCode::SemanticCommandPreconditionRejected.stable_name(),
+        "atrament.semantic-command.precondition-rejected",
     );
     assert_eq!(
         DiagnosticCode::SessionDraftResourceLimit.stable_name(),
@@ -167,4 +172,61 @@ fn layout_overflow_has_typed_edge_and_physical_amount_evidence() {
         edge: PhysicalBoundaryEdge::Bottom,
     },);
     assert_eq!(diagnostic.operation.operation, Operation::Layout);
+}
+
+#[test]
+fn semantic_command_precondition_diagnostic_keeps_typed_failure_evidence() {
+    let diagnostic = Diagnostic {
+        code: DiagnosticCode::SemanticCommandPreconditionRejected,
+        disposition: BlockingDisposition::Blocking,
+        evidence: vec![Evidence::SemanticCommandPrecondition {
+            condition: SemanticCommandPreconditionKind::Kind,
+            failure: SemanticCommandPreconditionFailure::Mismatch,
+        }],
+        locations: vec![
+            SemanticLocation {
+                identity: String::from("command:edit-1"),
+                kind: LocationKind::Command,
+                relationship: None,
+                role: LocationRole::Primary,
+            },
+            SemanticLocation {
+                identity: String::from("object:paragraph-1"),
+                kind: LocationKind::Object,
+                relationship: None,
+                role: LocationRole::Related,
+            },
+            SemanticLocation {
+                identity: String::from("precondition:semantic-kind"),
+                kind: LocationKind::Field,
+                relationship: None,
+                role: LocationRole::Related,
+            },
+        ],
+        operation: OperationBinding {
+            contexts: vec![OperationContext {
+                identity: String::from("revision:42"),
+                kind: OperationContextKind::AcceptedRevision,
+            }],
+            operation: Operation::SemanticValidate,
+        },
+        remediations: vec![Remediation::InspectRelatedIdentity],
+        severity: Severity::Error,
+    };
+
+    assert_eq!(
+        diagnostic.evidence,
+        vec![Evidence::SemanticCommandPrecondition {
+            condition: SemanticCommandPreconditionKind::Kind,
+            failure: SemanticCommandPreconditionFailure::Mismatch,
+        }],
+    );
+    assert_eq!(diagnostic.locations.len(), 3);
+    assert_eq!(diagnostic.locations[0].kind, LocationKind::Command);
+    assert_eq!(diagnostic.locations[1].kind, LocationKind::Object);
+    assert_eq!(diagnostic.locations[2].kind, LocationKind::Field);
+    assert_eq!(
+        diagnostic.operation.operation,
+        Operation::SemanticValidate,
+    );
 }

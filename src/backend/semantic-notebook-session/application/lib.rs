@@ -101,6 +101,33 @@ struct DirectEditBatchIndex {
 }
 
 #[derive(Clone, Copy)]
+struct DirectEditBatchIndexRequest<'request> {
+    families_by_target:
+        &'request BTreeMap<AcceptedIdentity, BTreeSet<SemanticCommandFamily>>,
+    material_count: usize,
+}
+
+impl DirectEditBatchIndexRequest<'_> {
+    fn contains_family(
+        self,
+        target: AcceptedIdentity,
+        family: SemanticCommandFamily,
+    ) -> bool {
+        self.families_by_target
+            .get(&target)
+            .is_some_and(|families| families.contains(&family))
+    }
+
+    fn contains_target(self, target: AcceptedIdentity) -> bool {
+        self.families_by_target.contains_key(&target)
+    }
+
+    fn is_complete(self, index: &DirectEditBatchIndex) -> bool {
+        index.materials.len() == self.material_count
+    }
+}
+
+#[derive(Clone, Copy)]
 struct DirectEditBatchBlockContext {
     block: AcceptedIdentity,
     flow: AcceptedIdentity,
@@ -2366,67 +2393,32 @@ fn check_command_target_preconditions_material(
 
 fn direct_edit_material_index(
     notebook: &Notebook<AcceptedIdentity>,
-    targets: &BTreeSet<AcceptedIdentity>,
+    request: DirectEditBatchIndexRequest<'_>,
     revision: atrament_semantic_notebook::RevisionIdentity,
 ) -> DirectEditBatchIndex {
     let mut index = DirectEditBatchIndex::default();
     index_direct_edit_constraints(
         notebook,
-        targets,
+        request,
         revision,
         &mut index,
     );
-    if index.materials.len() == targets.len() {
+    if request.is_complete(&index) {
         return index;
     }
-    let targeted_profiles = notebook
-        .page_profiles
-        .iter()
-        .filter(|profile| targets.contains(&profile.id))
-        .count();
-    if targeted_profiles > 0 {
-        let mut profile_pages =
-            BTreeMap::<AcceptedIdentity, Vec<AcceptedIdentity>>::new();
-        for page in &notebook.pages {
-            if targets.contains(&page.page_profile) {
-                profile_pages
-                    .entry(page.page_profile)
-                    .or_default()
-                    .push(page.id);
-            }
-        }
-        for profile in &notebook.page_profiles {
-            if !targets.contains(&profile.id) {
-                continue;
-            }
-            let pages = profile_pages.remove(&profile.id).unwrap_or_default();
-            let impact = if pages.is_empty() {
-                DirectEditImpactScope::Notebook { notebook: notebook.id }
-            } else {
-                DirectEditImpactScope::Pages { pages }
-            };
-            insert_direct_edit_material(
-                &mut index,
-                profile.id,
-                SemanticIdentityDescriptor {
-                    kind: SemanticIdentityKind::PageProfile,
-                    owner: Some(notebook.id),
-                },
-                EditableSemanticValue::PageProfile(profile.geometry),
-                impact,
-                revision,
-            );
-        }
-        if targeted_profiles == targets.len() {
-            return index;
-        }
+    index_direct_edit_page_profiles(notebook, request, revision, &mut index);
+    if request.is_complete(&index) {
+        return index;
     }
-    index_direct_edit_pages(notebook, targets, revision, &mut index);
-    if index.materials.len() == targets.len() {
+    index_direct_edit_pages(notebook, request, revision, &mut index);
+    if request.is_complete(&index) {
         return index;
     }
     for provenance in &notebook.provenance {
-        if !targets.contains(&provenance.id) {
+        if !request.contains_family(
+            provenance.id,
+            SemanticCommandFamily::Provenance,
+        ) {
             continue;
         }
         insert_direct_edit_material(
@@ -2441,7 +2433,7 @@ fn direct_edit_material_index(
             revision,
         );
     }
-    if index.materials.len() == targets.len() {
+    if request.is_complete(&index) {
         return index;
     }
     let mut stack = Vec::new();
@@ -2456,9 +2448,9 @@ fn direct_edit_material_index(
             }
             while let Some(frame) = stack.pop() {
                 index_direct_edit_frame(
-                    frame, &mut index, targets, revision, &mut stack,
+                    frame, &mut index, request, revision, &mut stack,
                 );
-                if index.materials.len() == targets.len() {
+                if request.is_complete(&index) {
                     break 'pages;
                 }
             }
@@ -2467,14 +2459,72 @@ fn direct_edit_material_index(
     index
 }
 
+fn index_direct_edit_page_profiles(
+    notebook: &Notebook<AcceptedIdentity>,
+    request: DirectEditBatchIndexRequest<'_>,
+    revision: atrament_semantic_notebook::RevisionIdentity,
+    index: &mut DirectEditBatchIndex,
+) {
+    let has_targeted_profile = notebook.page_profiles.iter().any(|profile| {
+        request.contains_family(
+            profile.id,
+            SemanticCommandFamily::DocumentConstraint,
+        )
+    });
+    if !has_targeted_profile {
+        return;
+    }
+    let mut profile_pages =
+        BTreeMap::<AcceptedIdentity, Vec<AcceptedIdentity>>::new();
+    for page in &notebook.pages {
+        if request.contains_family(
+            page.page_profile,
+            SemanticCommandFamily::DocumentConstraint,
+        ) {
+            profile_pages
+                .entry(page.page_profile)
+                .or_default()
+                .push(page.id);
+        }
+    }
+    for profile in &notebook.page_profiles {
+        if !request.contains_family(
+            profile.id,
+            SemanticCommandFamily::DocumentConstraint,
+        ) {
+            continue;
+        }
+        let pages = profile_pages.remove(&profile.id).unwrap_or_default();
+        let impact = if pages.is_empty() {
+            DirectEditImpactScope::Notebook { notebook: notebook.id }
+        } else {
+            DirectEditImpactScope::Pages { pages }
+        };
+        insert_direct_edit_material(
+            index,
+            profile.id,
+            SemanticIdentityDescriptor {
+                kind: SemanticIdentityKind::PageProfile,
+                owner: Some(notebook.id),
+            },
+            EditableSemanticValue::PageProfile(profile.geometry),
+            impact,
+            revision,
+        );
+    }
+}
+
 fn index_direct_edit_pages(
     notebook: &Notebook<AcceptedIdentity>,
-    targets: &BTreeSet<AcceptedIdentity>,
+    request: DirectEditBatchIndexRequest<'_>,
     revision: atrament_semantic_notebook::RevisionIdentity,
     index: &mut DirectEditBatchIndex,
 ) {
     for page in &notebook.pages {
-        if !targets.contains(&page.id) {
+        if !request.contains_family(
+            page.id,
+            SemanticCommandFamily::DocumentConstraint,
+        ) {
             continue;
         }
         insert_direct_edit_material(
@@ -2493,12 +2543,15 @@ fn index_direct_edit_pages(
 
 fn index_direct_edit_constraints(
     notebook: &Notebook<AcceptedIdentity>,
-    targets: &BTreeSet<AcceptedIdentity>,
+    request: DirectEditBatchIndexRequest<'_>,
     revision: atrament_semantic_notebook::RevisionIdentity,
     index: &mut DirectEditBatchIndex,
 ) {
     for constraint in &notebook.constraints {
-        if !targets.contains(&constraint.id) {
+        if !request.contains_family(
+            constraint.id,
+            SemanticCommandFamily::DocumentConstraint,
+        ) {
             continue;
         }
         insert_direct_edit_material(
@@ -2518,14 +2571,14 @@ fn index_direct_edit_constraints(
 fn index_direct_edit_frame<'notebook>(
     frame: DirectEditBatchIndexFrame<'notebook>,
     index: &mut DirectEditBatchIndex,
-    targets: &BTreeSet<AcceptedIdentity>,
+    request: DirectEditBatchIndexRequest<'_>,
     revision: atrament_semantic_notebook::RevisionIdentity,
     stack: &mut Vec<DirectEditBatchIndexFrame<'notebook>>,
 ) {
     match frame {
         DirectEditBatchIndexFrame::Blocks { blocks, flow, page } => {
             index_direct_edit_blocks_frame(
-                blocks, flow, page, index, targets, revision, stack,
+                blocks, flow, page, index, request, revision, stack,
             );
         },
         DirectEditBatchIndexFrame::ListItems { flow, items, page } => {
@@ -2537,7 +2590,7 @@ fn index_direct_edit_frame<'notebook>(
             row,
         } => {
             index_direct_edit_table_cells_frame(
-                cells, context, row, index, targets, revision, stack,
+                cells, context, row, index, request, revision, stack,
             );
         },
         DirectEditBatchIndexFrame::TableRows {
@@ -2551,7 +2604,7 @@ fn index_direct_edit_frame<'notebook>(
                 rows,
                 DirectEditBatchTableContext { block, flow, page, table },
                 index,
-                targets,
+                request,
                 revision,
                 stack,
             );
@@ -2582,7 +2635,7 @@ fn index_direct_edit_blocks_frame<'notebook>(
     flow: AcceptedIdentity,
     page: AcceptedIdentity,
     index: &mut DirectEditBatchIndex,
-    targets: &BTreeSet<AcceptedIdentity>,
+    request: DirectEditBatchIndexRequest<'_>,
     revision: atrament_semantic_notebook::RevisionIdentity,
     stack: &mut Vec<DirectEditBatchIndexFrame<'notebook>>,
 ) {
@@ -2596,27 +2649,11 @@ fn index_direct_edit_blocks_frame<'notebook>(
             page,
         });
     }
-    if targets.contains(&block.id) {
-        insert_direct_edit_material(
-            index,
-            block.id,
-            SemanticIdentityDescriptor {
-                kind: SemanticIdentityKind::Block(direct_edit_block_kind(
-                    &block.content,
-                )),
-                owner: Some(flow),
-            },
-            EditableSemanticValue::StyleReference(block.style),
-            DirectEditImpactScope::BlockFlow {
-                block: block.id,
-                flow,
-                page,
-            },
-            revision,
-        );
-        if index.materials.len() == targets.len() {
-            return;
-        }
+    index_direct_edit_block_materials(
+        block, flow, page, index, request, revision,
+    );
+    if request.is_complete(index) {
+        return;
     }
     match &block.content {
         BlockContent::Callout(children) | BlockContent::Freeform(children) => {
@@ -2632,11 +2669,20 @@ fn index_direct_edit_blocks_frame<'notebook>(
         | BlockContent::Heading(spans)
         | BlockContent::Paragraph(spans) => {
             index_direct_edit_spans(
-                index, spans, targets, block.id, flow, page, revision,
+                index,
+                spans,
+                request,
+                block.id,
+                DirectEditBatchBlockContext {
+                    block: block.id,
+                    flow,
+                    page,
+                },
+                revision,
             );
         },
         BlockContent::Figure(figure) => index_direct_edit_figure(
-            figure, block.id, flow, page, index, targets, revision,
+            figure, block.id, flow, page, index, request, revision,
         ),
         BlockContent::List(list) => index_direct_edit_list(
             list,
@@ -2646,12 +2692,15 @@ fn index_direct_edit_blocks_frame<'notebook>(
                 page,
             },
             index,
-            targets,
+            request,
             revision,
             stack,
         ),
         BlockContent::Mathematics(formula) => {
-            if targets.contains(&formula.id) {
+            if request.contains_family(
+                formula.id,
+                SemanticCommandFamily::StructuredContent,
+            ) {
                 insert_direct_edit_material(
                     index,
                     formula.id,
@@ -2687,16 +2736,66 @@ fn index_direct_edit_blocks_frame<'notebook>(
     }
 }
 
+fn index_direct_edit_block_materials(
+    block: &Block<AcceptedIdentity>,
+    flow: AcceptedIdentity,
+    page: AcceptedIdentity,
+    index: &mut DirectEditBatchIndex,
+    request: DirectEditBatchIndexRequest<'_>,
+    revision: atrament_semantic_notebook::RevisionIdentity,
+) {
+    if !request.contains_target(block.id) {
+        return;
+    }
+    let descriptor = SemanticIdentityDescriptor {
+        kind: SemanticIdentityKind::Block(direct_edit_block_kind(
+            &block.content,
+        )),
+        owner: Some(flow),
+    };
+    if request.contains_family(block.id, SemanticCommandFamily::StyleRole) {
+        insert_direct_edit_material(
+            index,
+            block.id,
+            descriptor,
+            EditableSemanticValue::StyleReference(block.style),
+            DirectEditImpactScope::BlockFlow {
+                block: block.id,
+                flow,
+                page,
+            },
+            revision,
+        );
+    }
+    if request.contains_family(block.id, SemanticCommandFamily::Provenance) {
+        insert_direct_edit_material(
+            index,
+            block.id,
+            descriptor,
+            EditableSemanticValue::ProvenanceReference(block.provenance),
+            DirectEditImpactScope::BlockFlow {
+                block: block.id,
+                flow,
+                page,
+            },
+            revision,
+        );
+    }
+}
+
 fn index_direct_edit_list<'notebook>(
     list: &'notebook List<AcceptedIdentity>,
     context: DirectEditBatchBlockContext,
     index: &mut DirectEditBatchIndex,
-    targets: &BTreeSet<AcceptedIdentity>,
+    request: DirectEditBatchIndexRequest<'_>,
     revision: atrament_semantic_notebook::RevisionIdentity,
     stack: &mut Vec<DirectEditBatchIndexFrame<'notebook>>,
 ) {
     let DirectEditBatchBlockContext { block, flow, page } = context;
-    if targets.contains(&list.id) {
+    if request.contains_family(
+        list.id,
+        SemanticCommandFamily::OrderingAndGrouping,
+    ) {
         insert_direct_edit_material(
             index,
             list.id,
@@ -2708,7 +2807,7 @@ fn index_direct_edit_list<'notebook>(
             DirectEditImpactScope::BlockFlow { block, flow, page },
             revision,
         );
-        if index.materials.len() == targets.len() {
+        if request.is_complete(index) {
             return;
         }
     }
@@ -2727,10 +2826,13 @@ fn index_direct_edit_figure(
     flow: AcceptedIdentity,
     page: AcceptedIdentity,
     index: &mut DirectEditBatchIndex,
-    targets: &BTreeSet<AcceptedIdentity>,
+    request: DirectEditBatchIndexRequest<'_>,
     revision: atrament_semantic_notebook::RevisionIdentity,
 ) {
-    if targets.contains(&figure.id) {
+    if request.contains_family(
+        figure.id,
+        SemanticCommandFamily::AssetReference,
+    ) {
         insert_direct_edit_material(
             index,
             figure.id,
@@ -2742,17 +2844,16 @@ fn index_direct_edit_figure(
             DirectEditImpactScope::BlockFlow { block, flow, page },
             revision,
         );
-        if index.materials.len() == targets.len() {
+        if request.is_complete(index) {
             return;
         }
     }
     index_direct_edit_spans(
         index,
         &figure.caption,
-        targets,
+        request,
         figure.id,
-        flow,
-        page,
+        DirectEditBatchBlockContext { block, flow, page },
         revision,
     );
 }
@@ -2787,7 +2888,7 @@ fn index_direct_edit_table_cells_frame<'notebook>(
     context: DirectEditBatchTableContext<'notebook>,
     row: AcceptedIdentity,
     index: &mut DirectEditBatchIndex,
-    targets: &BTreeSet<AcceptedIdentity>,
+    request: DirectEditBatchIndexRequest<'_>,
     revision: atrament_semantic_notebook::RevisionIdentity,
     stack: &mut Vec<DirectEditBatchIndexFrame<'notebook>>,
 ) {
@@ -2801,7 +2902,10 @@ fn index_direct_edit_table_cells_frame<'notebook>(
             row,
         });
     }
-    if targets.contains(&cell.id) {
+    if request.contains_family(
+        cell.id,
+        SemanticCommandFamily::StructuredContent,
+    ) {
         insert_direct_edit_material(
             index,
             cell.id,
@@ -2823,7 +2927,7 @@ fn index_direct_edit_table_cells_frame<'notebook>(
             .table_overlays
             .entry(table_id)
             .or_insert_with(|| context.table.clone());
-        if index.materials.len() == targets.len() {
+        if request.is_complete(index) {
             return;
         }
     }
@@ -2840,7 +2944,7 @@ fn index_direct_edit_table_rows_frame<'notebook>(
     current: &'notebook [TableRow<AcceptedIdentity>],
     context: DirectEditBatchTableContext<'notebook>,
     index: &mut DirectEditBatchIndex,
-    targets: &BTreeSet<AcceptedIdentity>,
+    request: DirectEditBatchIndexRequest<'_>,
     revision: atrament_semantic_notebook::RevisionIdentity,
     stack: &mut Vec<DirectEditBatchIndexFrame<'notebook>>,
 ) {
@@ -2857,7 +2961,10 @@ fn index_direct_edit_table_rows_frame<'notebook>(
             table,
         });
     }
-    if targets.contains(&row.id) {
+    if request.contains_family(
+        row.id,
+        SemanticCommandFamily::StructuredContent,
+    ) {
         insert_direct_edit_material(
             index,
             row.id,
@@ -2869,7 +2976,7 @@ fn index_direct_edit_table_rows_frame<'notebook>(
             DirectEditImpactScope::BlockFlow { block, flow, page },
             revision,
         );
-        if index.materials.len() == targets.len() {
+        if request.is_complete(index) {
             return;
         }
     }
@@ -2885,28 +2992,68 @@ fn index_direct_edit_table_rows_frame<'notebook>(
 fn index_direct_edit_spans(
     index: &mut DirectEditBatchIndex,
     spans: &[InlineSpan<AcceptedIdentity>],
-    targets: &BTreeSet<AcceptedIdentity>,
+    request: DirectEditBatchIndexRequest<'_>,
     owner: AcceptedIdentity,
-    flow: AcceptedIdentity,
-    page: AcceptedIdentity,
+    context: DirectEditBatchBlockContext,
     revision: atrament_semantic_notebook::RevisionIdentity,
 ) {
+    let DirectEditBatchBlockContext { block, flow, page } = context;
     for span in spans {
-        if !targets.contains(&span.id) {
+        if !request.contains_target(span.id) {
             continue;
         }
-        insert_direct_edit_material(
-            index,
+        let descriptor = SemanticIdentityDescriptor {
+            kind: SemanticIdentityKind::InlineSpan,
+            owner: Some(owner),
+        };
+        if request.contains_family(
             span.id,
-            SemanticIdentityDescriptor {
-                kind: SemanticIdentityKind::InlineSpan,
-                owner: Some(owner),
-            },
-            EditableSemanticValue::Text(span.text.clone()),
-            DirectEditImpactScope::Flow { flow, page },
-            revision,
-        );
-        if index.materials.len() == targets.len() {
+            SemanticCommandFamily::TextContent,
+        ) {
+            insert_direct_edit_material(
+                index,
+                span.id,
+                descriptor,
+                EditableSemanticValue::Text(span.text.clone()),
+                DirectEditImpactScope::Flow { flow, page },
+                revision,
+            );
+        }
+        if request.contains_family(
+            span.id,
+            SemanticCommandFamily::StyleRole,
+        ) {
+            insert_direct_edit_material(
+                index,
+                span.id,
+                descriptor,
+                EditableSemanticValue::StyleReference(span.style),
+                DirectEditImpactScope::BlockFlow {
+                    block,
+                    flow,
+                    page,
+                },
+                revision,
+            );
+        }
+        if request.contains_family(
+            span.id,
+            SemanticCommandFamily::Provenance,
+        ) {
+            insert_direct_edit_material(
+                index,
+                span.id,
+                descriptor,
+                EditableSemanticValue::ProvenanceReference(span.provenance),
+                DirectEditImpactScope::BlockFlow {
+                    block,
+                    flow,
+                    page,
+                },
+                revision,
+            );
+        }
+        if request.is_complete(index) {
             break;
         }
     }
@@ -2970,12 +3117,26 @@ where
             revision,
         };
     }
-    let targets = commands
-        .iter()
-        .map(|command| command.target)
-        .collect::<BTreeSet<_>>();
+    let mut families_by_target = BTreeMap::<
+        AcceptedIdentity,
+        BTreeSet<SemanticCommandFamily>,
+    >::new();
+    for command in &commands {
+        let _inserted = families_by_target
+            .entry(command.target)
+            .or_default()
+            .insert(command.preconditions.requested_family);
+    }
+    let material_count = families_by_target
+        .values()
+        .map(BTreeSet::len)
+        .sum();
+    let request = DirectEditBatchIndexRequest {
+        families_by_target: &families_by_target,
+        material_count,
+    };
     let mut batch_index =
-        direct_edit_material_index(&current.notebook, &targets, revision);
+        direct_edit_material_index(&current.notebook, request, revision);
     let mut evaluated =
         Vec::<DirectEditBatchCommandPrediction<CommandIdentity>>::with_capacity(
             commands.len(),
