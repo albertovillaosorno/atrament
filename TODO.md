@@ -254,9 +254,9 @@ Executable fixtures now cover attach from no reference, replacement between two
 admitted assets, removal to no reference, a dependent replace-then-remove chain,
 and a figure nested through callout, list, table-cell, and freeform containers.
 
-The immediately previous aggregate behavior version 2 rejects. A wrong-kind
-reference in a later mixed-batch command leaves earlier valid predictions and
-history uncommitted.
+The pre-asset-reference aggregate behavior version 2 remains incompatible. A
+wrong-kind reference in a later mixed-batch command leaves earlier valid
+predictions and history uncommitted.
 
 Provenance commands now distinguish record metadata from semantic linkage. One
 value replaces an existing revision-owned provenance record's kind and optional
@@ -274,7 +274,7 @@ Document-constraint editable value. The constraint identity and semantic target
 remain stable, a changed kind seeds notebook-wide `AllDerived`, and one Undo
 restores the prior kind. Reassigning a constraint target and editing detailed
 paper, style, placement, or output values remain outside this broad constraint
-model. Aggregate behavior version 4 rejects after this admission.
+model. The pre-constraint aggregate behavior version 4 remains incompatible.
 
 Block and inline-span identities now expose their optional admitted `Style`
 reference through the Style-role family. Replacement may attach, replace, or
@@ -294,7 +294,7 @@ and child content. Item moves, new grouping relationships, insertion/deletion,
 and anchor semantics remain open.
 
 Changed lists seed their containing block/flow/page region with `AllDerived`.
-Aggregate behavior version 6 rejects after this admission.
+The pre-list-ordering aggregate behavior version 6 remains incompatible.
 
 Existing semantic `Page` identities now expose only the accepted page-profile
 identity they reference through Document constraint. Replacement must name a
