@@ -197,7 +197,8 @@ fn named_symbol_vocabulary_is_supported_without_rewriting() {
         r"\pi", r"\pm", r"\propto", r"\psi", r"\rho", r"\rightarrow",
         r"\sigma", r"\sim", r"\subset",
         r"\subseteq", r"\supset", r"\supseteq", r"\tau", r"\theta",
-        r"\times", r"\to", r"\upsilon", r"\xi", r"\zeta",
+        r"\times", r"\to", r"\upsilon", r"\varepsilon", r"\varphi",
+        r"\varpi", r"\varrho", r"\varsigma", r"\vartheta", r"\xi", r"\zeta",
     ] {
         let analyzed =
             analyze(source, FormulaMode::Inline).expect("named symbol formula");
@@ -216,6 +217,29 @@ fn named_symbol_vocabulary_is_supported_without_rewriting() {
             "{source}",
         );
     }
+}
+
+#[test]
+fn variant_greek_symbols_compose_without_rewriting() {
+    let source = concat!(
+        r"\varepsilon + \varphi + \vartheta + ",
+        r"\varrho + \varsigma + \varpi",
+    );
+    let analyzed = analyze(source, FormulaMode::Inline)
+        .expect("variant Greek symbol expression");
+    assert!(analyzed.is_supported());
+    assert_eq!(reconstructed(&analyzed), source);
+    assert_eq!(
+        analyzed
+            .tokens
+            .iter()
+            .filter(|token| {
+                token.kind
+                    == MathTokenKind::Command(SupportedCommand::NamedSymbol)
+            })
+            .count(),
+        6,
+    );
 }
 
 #[test]

@@ -52,7 +52,8 @@ const NAMED_SYMBOL_COMMANDS: &[&str] = &[
     "\\partial", "\\perp", "\\phi", "\\pi", "\\pm", "\\propto", "\\psi",
     "\\rho", "\\rightarrow", "\\sigma", "\\sim",
     "\\subset", "\\subseteq", "\\supset", "\\supseteq", "\\tau", "\\theta",
-    "\\times", "\\to", "\\upsilon", "\\xi", "\\zeta",
+    "\\times", "\\to", "\\upsilon", "\\varepsilon", "\\varphi",
+    "\\varpi", "\\varrho", "\\varsigma", "\\vartheta", "\\xi", "\\zeta",
 ];
 
 const STRUCTURED_COMMANDS: &[(&str, SupportedCommand)] = &[
