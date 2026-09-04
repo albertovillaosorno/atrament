@@ -941,6 +941,7 @@ fn outer_environments_do_not_leak_alignment_into_substack_scope() {
         (r"\begin{aligned}", r"\end{aligned}"),
         (r"\begin{cases}", r"\end{cases}"),
         (r"\begin{matrix}", r"\end{matrix}"),
+        (r"\begin{split}", r"\end{split}"),
     ] {
         let source = format!(r"{begin}\substack{{a & b}}{end}");
         assert_eq!(
@@ -1266,6 +1267,60 @@ fn aligned_environment_admits_rows_and_alignment_in_display_mode() {
 }
 
 #[test]
+fn split_environment_admits_derivation_rows_and_alignment() {
+    let source = concat!(
+        r"\begin{split}f(x) &= x^2 + 1 \\ ",
+        r"f'(x) &= 2x\end{split}",
+    );
+    let analyzed = analyze(source, FormulaMode::Display)
+        .expect("split derivation environment");
+    assert!(analyzed.is_supported());
+    assert_eq!(reconstructed(&analyzed), source);
+    assert!(analyzed.tokens.iter().any(|token| {
+        token.kind == MathTokenKind::Command(SupportedCommand::BeginSplit)
+    }));
+    assert!(analyzed.tokens.iter().any(|token| {
+        token.kind == MathTokenKind::Command(SupportedCommand::EndSplit)
+    }));
+    assert_eq!(
+        analyzed
+            .tokens
+            .iter()
+            .filter(|token| token.kind == MathTokenKind::AlignmentPoint)
+            .count(),
+        2,
+    );
+    assert_eq!(
+        analyzed
+            .tokens
+            .iter()
+            .filter(|token| token.kind == MathTokenKind::RowBreak)
+            .count(),
+        1,
+    );
+}
+
+#[test]
+fn gathered_scope_yields_to_nested_split_alignment() {
+    let source = concat!(
+        r"\begin{gathered}\begin{split}a &= b \\ c &= d\end{split}",
+        r" \\ e\end{gathered}",
+    );
+    let analyzed = analyze(source, FormulaMode::Display)
+        .expect("split nested inside gathered rows");
+    assert!(analyzed.is_supported());
+    assert_eq!(reconstructed(&analyzed), source);
+    assert_eq!(
+        analyzed
+            .tokens
+            .iter()
+            .filter(|token| token.kind == MathTokenKind::AlignmentPoint)
+            .count(),
+        2,
+    );
+}
+
+#[test]
 fn gathered_environment_admits_rows_but_not_column_alignment() {
     let source = r"\begin{gathered}a \\ b\end{gathered}";
     let analyzed = analyze(source, FormulaMode::Display)
@@ -1490,6 +1545,7 @@ fn environments_cannot_close_inside_a_later_group() {
         (r"\begin{cases}", r"\end{cases}"),
         (r"\begin{gathered}", r"\end{gathered}"),
         (r"\begin{matrix}", r"\end{matrix}"),
+        (r"\begin{split}", r"\end{split}"),
     ] {
         let prefix = format!("{begin}{{a");
         let source = format!("{prefix}{end}}}");
@@ -1517,6 +1573,7 @@ fn environments_must_close_before_their_owning_group() {
         (r"\begin{cases}", r"\end{cases}"),
         (r"\begin{gathered}", r"\end{gathered}"),
         (r"\begin{matrix}", r"\end{matrix}"),
+        (r"\begin{split}", r"\end{split}"),
     ] {
         let prefix = format!("{{{begin}a");
         let source = format!("{prefix}}}{end}");
@@ -1755,6 +1812,7 @@ fn environment_names_require_exact_braced_spelling() {
         (r"\begin{casesx}a & b", r"\begin"),
         (r"a & b\end{casesx}", r"\end"),
         (r"\begin{matrixx}a & b", r"\begin"),
+        (r"\begin{splitx}a & b", r"\begin"),
         (r"a & b\end{matrixx}", r"\end"),
     ] {
         let analyzed = analyze(source, FormulaMode::Aligned)
@@ -1873,6 +1931,25 @@ fn malformed_matrix_boundaries_are_typed() {
         Err(MathSyntaxError {
             byte_offset: source.len(),
             kind: MathSyntaxErrorKind::MissingMatrixEnd,
+        }),
+    );
+}
+
+#[test]
+fn malformed_split_boundaries_are_typed() {
+    assert_eq!(
+        analyze(r"\end{split}", FormulaMode::Display),
+        Err(MathSyntaxError {
+            byte_offset: 0,
+            kind: MathSyntaxErrorKind::ExtraSplitEnd,
+        }),
+    );
+    let source = r"\begin{split}a &= b";
+    assert_eq!(
+        analyze(source, FormulaMode::Display),
+        Err(MathSyntaxError {
+            byte_offset: source.len(),
+            kind: MathSyntaxErrorKind::MissingSplitEnd,
         }),
     );
 }

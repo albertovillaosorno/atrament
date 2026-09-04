@@ -190,12 +190,12 @@ supports read-only behavior-version drift checks. It deliberately advertises no
 command protocol, normalizer, command context, Validate, Apply, rebatching, or
 numeric command/context limits yet.
 
-Aggregate command behavior and typed-result behavior are version 40 after
-rejecting TeX environments that close inside a later-opened group. Asset
+Aggregate command behavior and typed-result behavior are version 41 after
+admitting ordered TeX split derivation environments. Asset
 reference, Ordering and grouping, and Text content retain family behavior
 version 1; Provenance and Style role are version 2, Document constraint is
-version 3, and Structured content is version 33. The immediately previous
-aggregate version 39 rejects instead of being reinterpreted.
+version 3, and Structured content is version 34. The immediately previous
+aggregate version 40 rejects instead of being reinterpreted.
 
 A version-bound single-target proposal combines capability, exact local
 preconditions, and direct-edit simulation read-only. All five dedicated direct
@@ -497,7 +497,7 @@ vector, overline, and underline decorations, escaped TeX special characters,
 standard and variant Greek control-sequence notation, common named and delimiter
 symbols, binary-operator symbols, arrow and ellipsis symbols, relation and logic
 symbols, operators, calculus, set notation, aligned row and column separators,
-and ordered aligned, cases, gathered, and matrix environments. Paired
+and ordered aligned, cases, gathered, matrix, and split environments. Paired
 delimiter-sizing controls remain explicit unsupported input rather than being
 inferred from admitted delimiter glyph names.
 
@@ -509,8 +509,8 @@ Inline, display, and aligned presentation modes are semantic values rather than
 renderer guesses. Unknown control words remain
 explicit unsupported constructs; malformed groups, required arguments,
 alignment use, environment ordering, either direction of group/environment
-crossing, and aligned, cases, gathered, or matrix boundaries return typed syntax
-failures.
+crossing, and aligned, cases, gathered, matrix, or split boundaries return typed
+syntax failures.
 
 Gathered rows do not admit column alignment unless a column-capable environment
 is explicitly nested inside.
