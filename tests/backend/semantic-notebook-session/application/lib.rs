@@ -84,7 +84,7 @@ use atrament_semantic_notebook_port::{
 use atrament_semantic_notebook_session::SemanticNotebookSessionService;
 
 const CURRENT_COMMAND_BEHAVIOR_VERSION: CommandBehaviorVersion =
-    CommandBehaviorVersion(28);
+    CommandBehaviorVersion(29);
 
 #[derive(Debug)]
 struct CountingCommandIdentity {
@@ -1287,6 +1287,53 @@ fn binomial_tex_is_admitted_and_directly_editable() {
     assert_eq!(
         formula_value_for_test(
             session.current().expect("edited binomial mathematics"),
+            formula,
+        )
+        .source,
+        edited_source,
+    );
+}
+
+#[test]
+fn arrow_tex_is_admitted_and_directly_editable() {
+    let ids = IdentityAllocator::new();
+    let initial = r"A \Leftarrow B \leftrightarrow C \Longrightarrow D";
+    let (candidate, formula) =
+        candidate_math_notebook(&ids, initial, FormulaMode::Display);
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(candidate)
+    else {
+        panic!("arrow mathematics must be accepted");
+    };
+    let formula = accepted_for(&mapping, formula);
+    assert_eq!(
+        formula_value_for_test(
+            session.current().expect("accepted arrow mathematics"),
+            formula,
+        )
+        .source,
+        initial,
+    );
+
+    let edited_source = r"x \mapsto y; p \nearrow q; a \hookrightarrow b";
+    let outcome = session.replace_formula(
+        revision, formula, FormulaMode::Display, edited_source.to_owned(),
+    );
+    let FormulaEditOutcome::Applied {
+        base,
+        revision: edited,
+        target,
+    } = outcome
+    else {
+        panic!("arrow mathematics edit must apply: {outcome:?}");
+    };
+    assert_eq!(base, revision);
+    assert_ne!(edited, revision);
+    assert_eq!(target, formula);
+    assert_eq!(
+        formula_value_for_test(
+            session.current().expect("edited arrow mathematics"),
             formula,
         )
         .source,
@@ -6016,7 +6063,7 @@ fn command_capability_snapshot_is_deterministic_and_does_not_overclaim() {
             family: SemanticCommandFamily::Provenance,
         },
         CommandFamilyCapability {
-            behavior_version: CommandBehaviorVersion(21),
+            behavior_version: CommandBehaviorVersion(22),
             family: SemanticCommandFamily::StructuredContent,
         },
         CommandFamilyCapability {
@@ -6084,11 +6131,11 @@ fn command_capability_version_detects_drift_independently_of_revision() {
     );
     assert_eq!(
         session.check_command_capability_compatibility(
-            CommandBehaviorVersion(27),
+            CommandBehaviorVersion(28),
         ),
         CommandCapabilityCompatibilityOutcome::Mismatch {
             current: CURRENT_COMMAND_BEHAVIOR_VERSION,
-            expected: CommandBehaviorVersion(27),
+            expected: CommandBehaviorVersion(28),
         },
     );
     assert_eq!(

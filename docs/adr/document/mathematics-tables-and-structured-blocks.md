@@ -63,8 +63,8 @@ mathematical alphabets, common one-group accents, upright unit or label groups,
 grouped text and custom operator names, vector, overline, and underline
 decorations, escaped TeX special characters, standard and variant Greek
 control-sequence notation, common named and delimiter symbols, binary-operator
-symbols, relation and logic symbols, operators, calculus, set notation, aligned
-separators, and matrix environments.
+symbols, arrow symbols, relation and logic symbols, operators, calculus, set
+notation, aligned separators, and matrix environments.
 Unknown control words and unadmitted control symbols remain explicit unsupported
 constructs, and malformed source returns typed syntax failures.
 
