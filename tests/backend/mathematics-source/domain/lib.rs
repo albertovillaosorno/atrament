@@ -266,6 +266,39 @@ fn unknown_control_symbol_stays_explicitly_unsupported() {
 }
 
 #[test]
+fn grouped_decorations_are_structural_and_require_one_group() {
+    let source = r"\vec{v} + \overline{AB} + \underline{x_1}";
+    let analyzed = analyze(source, FormulaMode::Display)
+        .expect("grouped decoration formula");
+    assert!(analyzed.is_supported());
+    assert_eq!(reconstructed(&analyzed), source);
+    for (spelling, kind) in [
+        (r"\vec", SupportedCommand::Vector),
+        (r"\overline", SupportedCommand::Overline),
+        (r"\underline", SupportedCommand::Underline),
+    ] {
+        assert!(analyzed.tokens.iter().any(|token| {
+            token.kind == MathTokenKind::Command(kind)
+                && analyzed.token_source(*token) == Some(spelling)
+        }));
+    }
+    for (source, byte_offset) in [
+        (r"\vec", 4),
+        (r"\overline", 9),
+        (r"\underline", 10),
+    ] {
+        assert_eq!(
+            analyze(source, FormulaMode::Inline),
+            Err(MathSyntaxError {
+                byte_offset,
+                kind: MathSyntaxErrorKind::MissingRequiredGroup,
+            }),
+            "{source}",
+        );
+    }
+}
+
+#[test]
 fn square_root_is_structural_and_requires_one_group() {
     let source = r"x = \sqrt{a^2 + b^2}";
     let analyzed =

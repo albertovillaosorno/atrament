@@ -481,10 +481,10 @@ that exact family, kind, owner, and optional base value.
 
 A deterministic capability snapshot now reports those seven discoverable family
 behaviors and one top-level behavior version. Aggregate command behavior and
-typed-result behavior are version 15 after admitting common calculus operators,
-symbols, and limit arrows. Asset reference, Ordering and grouping, and Text
+typed-result behavior are version 16 after admitting grouped vector, overline,
+and underline decorations. Asset reference, Ordering and grouping, and Text
 content retain family behavior version 1; Document constraint is version 3;
-Structured content is version 8; Provenance and Style role are version 2.
+Structured content is version 9; Provenance and Style role are version 2.
 
 Because no serialized command protocol is implemented, the snapshot advertises
 no protocol or normalization version, no command-context, Validate, Apply, or

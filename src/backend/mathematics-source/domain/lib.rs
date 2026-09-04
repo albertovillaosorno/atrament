@@ -159,12 +159,18 @@ pub enum SupportedCommand {
     NamedOperator,
     /// Admitted no-argument named mathematical symbol.
     NamedSymbol,
+    /// One-group overline decoration.
+    Overline,
     /// Roman/upright grouped content, useful for units and labels.
     Roman,
     /// One-group square-root command.
     SquareRoot,
     /// One grouped text fragment preserved exactly inside mathematics.
     Text,
+    /// One-group underline decoration.
+    Underline,
+    /// One-group vector decoration.
+    Vector,
 }
 
 /// One unknown TeX-like command retained as unsupported input.
@@ -196,7 +202,8 @@ impl AnalyzedFormula {
 ///
 /// Supported source includes ordinary Unicode mathematics, groups, scripts,
 /// `\\frac{...}{...}`, `\\sqrt{...}`, `\\mathrm{...}`, `\\text{...}`,
-/// escaped TeX special characters, common named mathematical operators and
+/// grouped vector, overline, and underline decorations, escaped TeX special
+/// characters, common named mathematical operators and
 /// symbols, aligned separators, and `\\begin{matrix}...\\end{matrix}`.
 /// Math-only alignment, script, and row-break markers remain literal inside
 /// grouped text.
@@ -390,8 +397,11 @@ fn scan_command(source: &str, start: usize) -> ScannedCommand {
         ("\\end{matrix}", SupportedCommand::EndMatrix),
         ("\\frac", SupportedCommand::Fraction),
         ("\\mathrm", SupportedCommand::Roman),
+        ("\\overline", SupportedCommand::Overline),
         ("\\sqrt", SupportedCommand::SquareRoot),
         ("\\text", SupportedCommand::Text),
+        ("\\underline", SupportedCommand::Underline),
+        ("\\vec", SupportedCommand::Vector),
     ] {
         if command_matches(source, start, spelling) {
             return ScannedCommand {
@@ -631,9 +641,12 @@ fn validate_command_groups(
         | SupportedCommand::NamedOperator
         | SupportedCommand::NamedSymbol => 0usize,
         SupportedCommand::Fraction => 2usize,
-        SupportedCommand::Roman
+        SupportedCommand::Overline
+        | SupportedCommand::Roman
         | SupportedCommand::SquareRoot
-        | SupportedCommand::Text => 1usize,
+        | SupportedCommand::Text
+        | SupportedCommand::Underline
+        | SupportedCommand::Vector => 1usize,
     };
     let mut cursor = command_end;
     for _ in 0..required {

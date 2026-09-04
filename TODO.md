@@ -190,11 +190,11 @@ supports read-only behavior-version drift checks. It deliberately advertises no
 command protocol, normalizer, command context, Validate, Apply, rebatching, or
 numeric command/context limits yet.
 
-Aggregate command behavior and typed-result behavior are version 15 after
-admitting common calculus operators, symbols, and limit arrows. Asset reference,
+Aggregate command behavior and typed-result behavior are version 16 after
+admitting grouped vector, overline, and underline decorations. Asset reference,
 Ordering and grouping, and Text content retain family behavior version 1;
 Provenance and Style role are version 2, Document constraint is version 3, and
-Structured content is version 8. The immediately previous aggregate version 14
+Structured content is version 9. The immediately previous aggregate version 15
 rejects instead of being reinterpreted.
 
 A version-bound single-target proposal combines capability, exact local
@@ -491,10 +491,10 @@ derivation content while exposing unsupported constructs without rewriting.
 Current executable evidence preserves exact UTF-8 mathematical source while
 structurally recognizing ordinary Unicode notation, groups, scripts, fractions,
 square roots, upright unit or label groups, explicit `\text{...}` fragments,
-escaped TeX special characters, common named symbols, relations, operators, and
-calculus notation, aligned row and column separators, and matrix environments.
-Math-only alignment, script, and row-break markers remain literal inside grouped
-text.
+grouped vector, overline, and underline decorations, escaped TeX special
+characters, common named symbols, relations, operators, and calculus notation,
+aligned row and column separators, and matrix environments. Math-only alignment,
+script, and row-break markers remain literal inside grouped text.
 Inline, display, and aligned presentation modes are semantic values rather than
 renderer guesses. Unknown control words remain explicit unsupported constructs;
 malformed groups, required arguments, alignment use, and matrix boundaries
