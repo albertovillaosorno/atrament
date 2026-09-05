@@ -84,7 +84,7 @@ use atrament_semantic_notebook_port::{
 use atrament_semantic_notebook_session::SemanticNotebookSessionService;
 
 const CURRENT_COMMAND_BEHAVIOR_VERSION: CommandBehaviorVersion =
-    CommandBehaviorVersion(53);
+    CommandBehaviorVersion(54);
 
 #[derive(Debug)]
 struct CountingCommandIdentity {
@@ -2946,6 +2946,231 @@ fn unsupported_mathematics_can_be_preserved_as_exact_unresolved_source() {
     };
     assert_eq!(unresolved.reason, UnresolvedReason::Unsupported);
     assert_eq!(unresolved.source, source);
+}
+
+#[test]
+fn definition_spans_promote_edit_and_preserve_semantic_references() {
+    let ids = IdentityAllocator::new();
+    let (mut candidate, provenance_ids) =
+        candidate_notebook_with_provenance(&ids);
+    let block_candidate = candidate.pages[0].flows[0].blocks[0].id;
+    let style_candidate = candidate_id(&ids);
+    candidate.styles.push(Style {
+        id: style_candidate,
+        name: String::from("definition-term"),
+    });
+    let content = std::mem::replace(
+        &mut candidate.pages[0].flows[0].blocks[0].content,
+        BlockContent::Rule,
+    );
+    let BlockContent::Paragraph(mut spans) = content else {
+        panic!("definition fixture must start from a paragraph");
+    };
+    spans[0].style = Some(style_candidate);
+    candidate.pages[0].flows[0].blocks[0].content =
+        BlockContent::Definition(spans);
+    candidate.pages[0].flows[0].blocks[0].provenance =
+        Some(provenance_ids.edited);
+    candidate.pages[0].flows[0].blocks[0].style = Some(style_candidate);
+
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(candidate)
+    else {
+        panic!("definition candidate must be accepted");
+    };
+    let block = accepted_for(&mapping, block_candidate);
+    let span = accepted_for(&mapping, provenance_ids.claim);
+    let provenance = accepted_for(&mapping, provenance_ids.edited);
+    let style = accepted_for(&mapping, style_candidate);
+
+    assert_eq!(
+        session.inspect_identity_kind(revision, block),
+        IdentityKindInspectOutcome::Inspected {
+            kind: SemanticIdentityKind::Block(SemanticBlockKind::Definition),
+            revision,
+            target: block,
+        },
+    );
+    assert_eq!(
+        session.inspect_identity_kind(revision, span),
+        IdentityKindInspectOutcome::Inspected {
+            kind: SemanticIdentityKind::InlineSpan,
+            revision,
+            target: span,
+        },
+    );
+    for (family, value) in [
+        (
+            SemanticCommandFamily::TextContent,
+            EditableSemanticValue::Text(String::from("Energy is conserved.")),
+        ),
+        (
+            SemanticCommandFamily::StyleRole,
+            EditableSemanticValue::StyleReference(Some(style)),
+        ),
+        (
+            SemanticCommandFamily::Provenance,
+            EditableSemanticValue::ProvenanceReference(Some(provenance)),
+        ),
+    ] {
+        let CommandTargetMaterialOutcome::Prepared { material } =
+            session.command_target_material_for_family(revision, span, family)
+        else {
+            panic!("definition span family material must be available");
+        };
+        assert_eq!(material.descriptor, SemanticIdentityDescriptor {
+            kind: SemanticIdentityKind::InlineSpan,
+            owner: Some(block),
+        });
+        assert_eq!(material.editable_value, Some(value));
+    }
+
+    let TextEditOutcome::Applied {
+        revision: changed, ..
+    } = session.replace_text(
+        revision,
+        span,
+        String::from("Energy remains constant in an isolated system."),
+    )
+    else {
+        panic!("definition span text edit must apply");
+    };
+    let current = session.current().expect("definition edit revision");
+    let BlockContent::Definition(spans) =
+        &current.notebook.pages[0].flows[0].blocks[0].content
+    else {
+        panic!("definition identity must remain a definition");
+    };
+    assert_eq!(spans[0].id, span);
+    assert_eq!(spans[0].style, Some(style));
+    assert_eq!(spans[0].provenance, Some(provenance));
+    assert_eq!(
+        spans[0].text,
+        "Energy remains constant in an isolated system.",
+    );
+
+    let HistoryTraversalOutcome::Traversed { .. } =
+        session.traverse_history(changed, HistoryDirection::Undo)
+    else {
+        panic!("definition text edit must Undo");
+    };
+    let current = session.current().expect("definition Undo revision");
+    let BlockContent::Definition(spans) =
+        &current.notebook.pages[0].flows[0].blocks[0].content
+    else {
+        panic!("Undo must preserve definition block kind");
+    };
+    assert_eq!(spans[0].id, span);
+    assert_eq!(spans[0].text, "Energy is conserved.");
+    assert_eq!(spans[0].style, Some(style));
+    assert_eq!(spans[0].provenance, Some(provenance));
+}
+
+#[test]
+fn nested_definition_remains_editable_through_every_block_container() {
+    let ids = IdentityAllocator::new();
+    let (mut candidate, span_candidate) =
+        candidate_notebook_with_span(&ids, "nested definition");
+    let mut definition = candidate.pages[0].flows[0]
+        .blocks
+        .pop()
+        .expect("definition seed block");
+    let definition_candidate = definition.id;
+    let content =
+        std::mem::replace(&mut definition.content, BlockContent::Rule);
+    let BlockContent::Paragraph(spans) = content else {
+        panic!("nested definition seed must start as paragraph");
+    };
+    definition.content = BlockContent::Definition(spans);
+
+    let freeform = Block {
+        content: BlockContent::Freeform(vec![definition]),
+        extensions: vec![],
+        id: candidate_id(&ids),
+        provenance: None,
+        style: None,
+    };
+    let table = Block {
+        content: BlockContent::Table(Table {
+            id: candidate_id(&ids),
+            rows: vec![TableRow {
+                cells: vec![TableCell {
+                    blocks: vec![freeform],
+                    id: candidate_id(&ids),
+                    span: TableCellSpan::SINGLE,
+                }],
+                id: candidate_id(&ids),
+                role: TableRowRole::Body,
+            }],
+        }),
+        extensions: vec![],
+        id: candidate_id(&ids),
+        provenance: None,
+        style: None,
+    };
+    let list = Block {
+        content: BlockContent::List(List {
+            id: candidate_id(&ids),
+            items: vec![ListItem {
+                blocks: vec![table],
+                id: candidate_id(&ids),
+            }],
+            ordered: false,
+        }),
+        extensions: vec![],
+        id: candidate_id(&ids),
+        provenance: None,
+        style: None,
+    };
+    candidate.pages[0].flows[0].blocks = vec![Block {
+        content: BlockContent::Callout(vec![list]),
+        extensions: vec![],
+        id: candidate_id(&ids),
+        provenance: None,
+        style: None,
+    }];
+
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(candidate)
+    else {
+        panic!("nested definition candidate must be accepted");
+    };
+    let definition = accepted_for(&mapping, definition_candidate);
+    let span = accepted_for(&mapping, span_candidate);
+    assert_eq!(
+        session.inspect_identity_kind(revision, definition),
+        IdentityKindInspectOutcome::Inspected {
+            kind: SemanticIdentityKind::Block(SemanticBlockKind::Definition),
+            revision,
+            target: definition,
+        },
+    );
+    let TextEditOutcome::Applied { revision: changed, .. } =
+        session.replace_text(
+            revision,
+            span,
+            String::from("nested definition changed"),
+        )
+    else {
+        panic!("nested definition span must remain editable");
+    };
+    let CommandTargetMaterialOutcome::Prepared { material } =
+        session.command_target_material_for_family(
+            changed,
+            span,
+            SemanticCommandFamily::TextContent,
+        )
+    else {
+        panic!("nested definition text material must remain discoverable");
+    };
+    assert_eq!(
+        material.editable_value,
+        Some(EditableSemanticValue::Text(String::from(
+            "nested definition changed",
+        ))),
+    );
 }
 
 #[test]
@@ -7275,11 +7500,11 @@ fn command_capability_version_detects_drift_independently_of_revision() {
     );
     assert_eq!(
         session.check_command_capability_compatibility(
-            CommandBehaviorVersion(52),
+            CommandBehaviorVersion(53),
         ),
         CommandCapabilityCompatibilityOutcome::Mismatch {
             current: CURRENT_COMMAND_BEHAVIOR_VERSION,
-            expected: CommandBehaviorVersion(52),
+            expected: CommandBehaviorVersion(53),
         },
     );
     assert_eq!(
@@ -13856,6 +14081,38 @@ fn wrong_reference_kind_rejects_without_changing_current_revision() {
             ..
         },
     }));
+    assert_eq!(session.current(), Some(&before));
+}
+
+#[test]
+fn definition_span_references_are_validated_before_candidate_commit() {
+    let candidate_ids = IdentityAllocator::new();
+    let valid = candidate_notebook(&candidate_ids, "accepted");
+    let mut invalid = candidate_notebook(&candidate_ids, "definition");
+    let page_id = invalid.pages[0].id;
+    let content = std::mem::replace(
+        &mut invalid.pages[0].flows[0].blocks[0].content,
+        BlockContent::Rule,
+    );
+    let BlockContent::Paragraph(mut spans) = content else {
+        panic!("definition reference fixture must start as paragraph");
+    };
+    spans[0].style = Some(page_id);
+    invalid.pages[0].flows[0].blocks[0].content =
+        BlockContent::Definition(spans);
+
+    let mut session = SemanticNotebookSessionService::default();
+    let _ = session.accept(valid);
+    let before = session.current().expect("accepted revision").clone();
+    assert!(matches!(
+        session.accept(invalid),
+        AcceptanceOutcome::InvalidCandidate {
+            reason: CandidateGraphError::ReferenceKindMismatch {
+                expected: CandidateReferenceKind::Style,
+                ..
+            },
+        }
+    ));
     assert_eq!(session.current(), Some(&before));
 }
 

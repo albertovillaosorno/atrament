@@ -146,10 +146,13 @@ styles, assets, constraints, output profiles, and provenance with stable IDs.
 Current executable evidence defines transport-independent typed values for those
 semantic families, separate opaque candidate, accepted, and revision identities,
 non-recycling active-session allocation, unresolved semantic blocks, and exact
-extension-data preservation. Explicit candidate acceptance validates duplicate,
-dangling, and wrong-kind references before mutation, promotes candidate-local
-identities through one backend-owned mapping, and commits one new accepted
-revision atomically while preserving nested semantic references.
+extension-data preservation. Definitions are now a distinct semantic block kind
+whose editable inline spans retain their own identities, style references, and
+provenance references rather than being flattened into paragraph text. Explicit
+candidate acceptance validates duplicate, dangling, and wrong-kind references
+before mutation, promotes candidate-local identities through one backend-owned
+mapping, and commits one new accepted revision atomically while preserving
+nested semantic references.
 
 A direct accepted-text edit now preconditions the exact current revision,
 preserves all semantic identities while replacing one admitted inline text
@@ -198,12 +201,12 @@ supports read-only behavior-version drift checks. It deliberately advertises no
 command protocol, normalizer, command context, Validate, Apply, rebatching, or
 numeric command/context limits yet.
 
-Aggregate command behavior and typed-result behavior are version 53 after
-admitting additional grouped TeX accents. Asset reference,
-Ordering and grouping, and Text content retain family behavior version 1;
-Provenance and Style role are version 2, Document constraint is version 3, and
-Structured content is version 46. The immediately previous aggregate version 52
-rejects instead of being reinterpreted.
+Aggregate command behavior and typed-result behavior are version 54 after
+admitting Definition blocks through the existing inline-span edit semantics.
+Asset reference, Ordering and grouping, and Text content retain family behavior
+version 1; Provenance and Style role are version 2, Document constraint is
+version 3, and Structured content is version 46. The immediately previous
+aggregate version 53 rejects instead of being reinterpreted.
 
 A version-bound single-target proposal combines capability, exact local
 preconditions, and direct-edit simulation read-only. All five dedicated direct
@@ -552,7 +555,7 @@ math-specific diagnostics, and render/live-output consumption.
 ### TODO - Implement tables and ruled educational blocks
 
 Support merged cells, headers, alignment, wrapping, ruler-like borders, boxes,
-dividers, arrows, labels, definitions, and page references.
+dividers, arrows, labels, and page references.
 
 Current executable evidence makes table header rows semantically distinct from
 ordinary body rows without coupling that meaning to visual styling. Candidate

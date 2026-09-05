@@ -89,6 +89,8 @@ pub enum BlockContent<Identity> {
     Callout(Vec<Block<Identity>>),
     /// Semantic date content retained as editable spans.
     Date(Vec<InlineSpan<Identity>>),
+    /// Definition content retained as editable spans.
+    Definition(Vec<InlineSpan<Identity>>),
     /// Figure backed by an admitted asset and semantic caption.
     Figure(Figure<Identity>),
     /// Explicit freeform region containing semantic child blocks.
@@ -548,6 +550,8 @@ pub enum SemanticBlockKind {
     Callout,
     /// Date block containing inline text spans.
     Date,
+    /// Definition block containing inline text spans.
+    Definition,
     /// Figure block with a figure identity and optional caption spans.
     Figure,
     /// Explicit freeform semantic region.
@@ -753,6 +757,7 @@ const fn semantic_block_kind<Identity>(
     match content {
         BlockContent::Callout(_) => SemanticBlockKind::Callout,
         BlockContent::Date(_) => SemanticBlockKind::Date,
+        BlockContent::Definition(_) => SemanticBlockKind::Definition,
         BlockContent::Figure(_) => SemanticBlockKind::Figure,
         BlockContent::Freeform(_) => SemanticBlockKind::Freeform,
         BlockContent::Heading(_) => SemanticBlockKind::Heading,
@@ -879,6 +884,7 @@ where
             None
         },
         BlockContent::Date(spans)
+        | BlockContent::Definition(spans)
         | BlockContent::Heading(spans)
         | BlockContent::Paragraph(spans) => {
             semantic_spans_descriptor(spans, target, block.id)

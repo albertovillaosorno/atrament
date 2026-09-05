@@ -22,8 +22,8 @@ notebooks, pages, flows, blocks, inline spans, media, styles, and provenance.
 Content meaning is separate from its chosen handwriting, page placement, and
 device motion.
 
-Blocks include paragraphs, lists, headings, dates, mathematics, tables,
-figures, callouts, rules, and explicit freeform regions. Unsupported or
+Blocks include paragraphs, definitions, lists, headings, dates, mathematics,
+tables, figures, callouts, rules, and explicit freeform regions. Unsupported or
 ambiguous input remains a typed unresolved block rather than being discarded or
 guessed into a supported form.
 
@@ -49,3 +49,12 @@ guessed into a supported form.
 Round-trip fixtures must serialize, reopen, edit, and render every block family
 without identity loss. Model tests must reject unknown required semantics while
 preserving explicitly admitted extension data.
+
+### Implementation evidence
+
+Definition blocks are now executable semantic values with their own block kind.
+Their inline spans participate in the existing candidate identity graph,
+accepted-identity promotion, exact Text-content editing, Style-role and
+Provenance material, identity inspection, and semantic Undo/Redo without being
+reclassified as paragraphs. Layout-specific definition presentation remains a
+later measurement/style concern rather than semantic storage behavior.

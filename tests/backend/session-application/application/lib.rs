@@ -78,7 +78,7 @@ use atrament_session_draft_port::{DraftField, DraftMutation, SessionDraft};
 mod application;
 
 const CURRENT_COMMAND_BEHAVIOR_VERSION: CommandBehaviorVersion =
-    CommandBehaviorVersion(53);
+    CommandBehaviorVersion(54);
 
 fn physical_page_profile() -> PageProfile {
     PageProfile {
@@ -1717,6 +1717,79 @@ fn application_routes_direct_text_edit_into_owned_history() {
     assert_eq!(spans[0].id, span);
     assert_eq!(spans[0].text, "before direct edit");
     assert_ne!(undone, applied);
+}
+
+#[test]
+fn application_preserves_definition_kind_across_text_edit_and_undo() {
+    let identities = IdentityAllocator::new();
+    let (mut candidate, candidate_span) =
+        editable_text_candidate(&identities, "Definition before");
+    let candidate_block = candidate.pages[0].flows[0].blocks[0].id;
+    let content = std::mem::replace(
+        &mut candidate.pages[0].flows[0].blocks[0].content,
+        BlockContent::Rule,
+    );
+    let BlockContent::Paragraph(spans) = content else {
+        panic!("definition fixture must start from a paragraph");
+    };
+    candidate.pages[0].flows[0].blocks[0].content =
+        BlockContent::Definition(spans);
+
+    let mut session = application::SessionApplication::default();
+    let AcceptanceOutcome::Accepted { mapping, revision: base } =
+        session.accept_candidate(candidate)
+    else {
+        panic!("definition candidate must be accepted");
+    };
+    let accepted = |candidate| {
+        mapping
+            .iter()
+            .find(|entry| entry.candidate == candidate)
+            .expect("definition identity must map")
+            .accepted
+    };
+    let block = accepted(candidate_block);
+    let span = accepted(candidate_span);
+    assert_eq!(
+        session.inspect_identity_kind(base, block),
+        IdentityKindInspectOutcome::Inspected {
+            kind: SemanticIdentityKind::Block(SemanticBlockKind::Definition),
+            revision: base,
+            target: block,
+        },
+    );
+
+    let TextEditOutcome::Applied { revision: changed, .. } =
+        session.replace_text(base, span, String::from("Definition after"))
+    else {
+        panic!("definition text edit must apply through session owner");
+    };
+    let current = session
+        .accepted_revision()
+        .expect("definition edit revision");
+    let BlockContent::Definition(spans) =
+        &current.notebook.pages[0].flows[0].blocks[0].content
+    else {
+        panic!("definition edit must preserve block kind");
+    };
+    assert_eq!(spans[0].id, span);
+    assert_eq!(spans[0].text, "Definition after");
+
+    let HistoryTraversalOutcome::Traversed { .. } =
+        session.traverse_history(changed, HistoryDirection::Undo)
+    else {
+        panic!("definition text edit must Undo through session owner");
+    };
+    let current = session
+        .accepted_revision()
+        .expect("definition Undo revision");
+    let BlockContent::Definition(spans) =
+        &current.notebook.pages[0].flows[0].blocks[0].content
+    else {
+        panic!("definition Undo must preserve block kind");
+    };
+    assert_eq!(spans[0].id, span);
+    assert_eq!(spans[0].text, "Definition before");
 }
 
 #[test]

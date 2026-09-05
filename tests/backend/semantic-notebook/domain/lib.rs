@@ -291,6 +291,57 @@ fn cloned_semantic_state_preserves_stable_identity() {
 }
 
 #[test]
+fn definition_block_and_span_keep_distinct_semantic_identity() {
+    let notebook = Notebook {
+        assets: vec![],
+        constraints: vec![],
+        extensions: vec![],
+        id: 1u32,
+        output_profiles: vec![],
+        page_profiles: vec![PaperProfile {
+            geometry: physical_page_profile(),
+            id: 2,
+        }],
+        pages: vec![Page {
+            flows: vec![Flow {
+                blocks: vec![Block {
+                    content: BlockContent::Definition(vec![InlineSpan {
+                        id: 6,
+                        provenance: None,
+                        style: None,
+                        text: String::from("Momentum is mass times velocity."),
+                    }]),
+                    extensions: vec![],
+                    id: 5,
+                    provenance: None,
+                    style: None,
+                }],
+                id: 4,
+            }],
+            id: 3,
+            page_profile: 2,
+        }],
+        provenance: vec![],
+        styles: vec![],
+    };
+
+    assert_eq!(
+        semantic_identity_descriptor(&notebook, 5),
+        Some(SemanticIdentityDescriptor {
+            kind: SemanticIdentityKind::Block(SemanticBlockKind::Definition),
+            owner: Some(4),
+        }),
+    );
+    assert_eq!(
+        semantic_identity_descriptor(&notebook, 6),
+        Some(SemanticIdentityDescriptor {
+            kind: SemanticIdentityKind::InlineSpan,
+            owner: Some(5),
+        }),
+    );
+}
+
+#[test]
 fn logical_table_validator_matches_naive_occupancy_oracle() {
     let mut seed = 0x5eed_1234_9876_abcd;
     for case in 0..20_000u32 {

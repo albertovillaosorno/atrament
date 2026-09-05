@@ -211,6 +211,7 @@ fn block_content_contains(
             blocks_contain(blocks, target)
         },
         BlockContent::Date(_)
+        | BlockContent::Definition(_)
         | BlockContent::Figure(_)
         | BlockContent::Heading(_)
         | BlockContent::Mathematics(_)
