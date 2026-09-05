@@ -391,7 +391,10 @@ before indexed impact reuse and 12.4-12.9 milliseconds after it. This is
 implementation evidence, not a product latency guarantee.
 
 Bounded identity ancestry now resolves one iterative structural path instead of
-rescanning the notebook for every owner hop. At 255 block wrappers, the same
+rescanning the notebook for every owner hop. A 5,000-tree deterministic oracle
+checks branching callout, freeform, list, and table paths against an independent
+descriptor-owner walk; root-owned semantic families also pin exact two-entry
+paths to the notebook. At 255 block wrappers, the same
 20,000 complete release reads measured 4,206 milliseconds before this change and
 about 79-88 milliseconds after it; a 2,000,000-read stress completed in about
 7.81 seconds. These are implementation measurements, not latency guarantees.
