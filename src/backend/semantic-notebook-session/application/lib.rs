@@ -3853,11 +3853,11 @@ fn validate_asset_reference(
     else {
         return simulation;
     };
-    let actual = semantic_identity_descriptor(notebook, *reference)
-        .map(|descriptor| descriptor.kind);
-    if actual == Some(SemanticIdentityKind::Asset) {
+    if notebook.assets.iter().any(|asset| asset.id == *reference) {
         return simulation;
     }
+    let actual = semantic_identity_descriptor(notebook, *reference)
+        .map(|descriptor| descriptor.kind);
     DirectEditSimulation {
         before: simulation.before,
         outcome: DirectEditSimulationOutcome::InvalidAssetReference {
@@ -3882,11 +3882,15 @@ fn validate_page_profile_reference(
     else {
         return simulation;
     };
-    let actual = semantic_identity_descriptor(notebook, *reference)
-        .map(|descriptor| descriptor.kind);
-    if actual == Some(SemanticIdentityKind::PageProfile) {
+    if notebook
+        .page_profiles
+        .iter()
+        .any(|profile| profile.id == *reference)
+    {
         return simulation;
     }
+    let actual = semantic_identity_descriptor(notebook, *reference)
+        .map(|descriptor| descriptor.kind);
     DirectEditSimulation {
         before: simulation.before,
         outcome: DirectEditSimulationOutcome::InvalidPageProfileReference {
@@ -3911,11 +3915,15 @@ fn validate_provenance_reference(
     else {
         return simulation;
     };
-    let actual = semantic_identity_descriptor(notebook, *reference)
-        .map(|descriptor| descriptor.kind);
-    if actual == Some(SemanticIdentityKind::Provenance) {
+    if notebook
+        .provenance
+        .iter()
+        .any(|provenance| provenance.id == *reference)
+    {
         return simulation;
     }
+    let actual = semantic_identity_descriptor(notebook, *reference)
+        .map(|descriptor| descriptor.kind);
     DirectEditSimulation {
         before: simulation.before,
         outcome: DirectEditSimulationOutcome::InvalidProvenanceReference {
@@ -3940,11 +3948,11 @@ fn validate_style_reference(
     else {
         return simulation;
     };
-    let actual = semantic_identity_descriptor(notebook, *reference)
-        .map(|descriptor| descriptor.kind);
-    if actual == Some(SemanticIdentityKind::Style) {
+    if notebook.styles.iter().any(|style| style.id == *reference) {
         return simulation;
     }
+    let actual = semantic_identity_descriptor(notebook, *reference)
+        .map(|descriptor| descriptor.kind);
     DirectEditSimulation {
         before: simulation.before,
         outcome: DirectEditSimulationOutcome::InvalidStyleReference {
