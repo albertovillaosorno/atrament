@@ -1044,6 +1044,62 @@ fn indexed_square_root_scans_index_content_and_preserves_whitespace() {
 }
 
 #[test]
+fn indexed_square_root_closure_respects_backslash_parity() {
+    let protected = r"\sqrt[1\]2]{x}";
+    let analyzed = analyze(protected, FormulaMode::Inline)
+        .expect("control symbol protects root-index closing bracket");
+    assert!(!analyzed.is_supported());
+    assert_eq!(reconstructed(&analyzed), protected);
+    assert_eq!(analyzed.unsupported.len(), 1);
+    assert_eq!(analyzed.unsupported[0].name, r"\]");
+    assert_eq!(
+        analyzed
+            .tokens
+            .iter()
+            .filter(|token| token.kind == MathTokenKind::RootIndexClose)
+            .count(),
+        1,
+    );
+    assert_eq!(
+        analyzed
+            .tokens
+            .iter()
+            .find(|token| token.kind == MathTokenKind::RootIndexClose)
+            .and_then(|token| analyzed.token_source(*token)),
+        Some("]"),
+    );
+
+    let even_slashes = r"\sqrt[1\\]{x}";
+    let analyzed = analyze(even_slashes, FormulaMode::Aligned)
+        .expect("row break ends before root-index closing bracket");
+    assert!(analyzed.is_supported());
+    assert_eq!(reconstructed(&analyzed), even_slashes);
+    assert_eq!(
+        analyzed
+            .tokens
+            .iter()
+            .filter(|token| token.kind == MathTokenKind::RowBreak)
+            .count(),
+        1,
+    );
+    assert_eq!(
+        analyzed
+            .tokens
+            .iter()
+            .filter(|token| token.kind == MathTokenKind::RootIndexClose)
+            .count(),
+        1,
+    );
+    assert_eq!(
+        analyze(even_slashes, FormulaMode::Inline),
+        Err(MathSyntaxError {
+            byte_offset: r"\sqrt[1".len(),
+            kind: MathSyntaxErrorKind::AlignmentOutsideStructure,
+        }),
+    );
+}
+
+#[test]
 fn indexed_square_root_boundaries_are_scoped_without_global_brackets() {
     let nested = r"\sqrt[{\sqrt[3]{x}}]{y}";
     let analyzed = analyze(nested, FormulaMode::Inline)
