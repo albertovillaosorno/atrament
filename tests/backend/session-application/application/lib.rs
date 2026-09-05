@@ -2820,6 +2820,105 @@ fn raw_asset_bytes_are_write_once_and_follow_session_history_lifetime() {
 }
 
 #[test]
+fn abandoned_redo_asset_bytes_cannot_attach_to_new_asset_identity() {
+    let identities = IdentityAllocator::new();
+    let mut session = application::SessionApplication::default();
+    let AcceptanceOutcome::Accepted { revision: empty, .. } =
+        session.accept_candidate(minimal_candidate(&identities))
+    else {
+        panic!("empty candidate must be accepted");
+    };
+    let (asset_candidate, _, abandoned_candidate, _) =
+        asset_figure_candidate(&identities);
+    let AcceptanceOutcome::Accepted {
+        mapping: asset_mapping,
+        revision: with_asset,
+    } = session.accept_candidate(asset_candidate)
+    else {
+        panic!("asset candidate must be accepted");
+    };
+    let abandoned_asset = asset_mapping
+        .iter()
+        .find(|entry| entry.candidate == abandoned_candidate)
+        .expect("abandoned asset identity must map")
+        .accepted;
+    let abandoned_bytes = b"redo-only-private-asset".to_vec();
+    assert_eq!(
+        session.retain_asset_bytes(
+            with_asset,
+            abandoned_asset,
+            abandoned_bytes.clone(),
+        ),
+        Ok(application::AssetBytesRetention::Retained {
+            asset: abandoned_asset,
+            byte_count: abandoned_bytes.len(),
+            revision: with_asset,
+        }),
+    );
+
+    let HistoryTraversalOutcome::Traversed {
+        revision: restored, ..
+    } = session.traverse_history(with_asset, HistoryDirection::Undo)
+    else {
+        panic!("asset candidate must Undo to empty state");
+    };
+    assert_ne!(restored, empty);
+    assert_eq!(
+        session.asset_bytes(restored, abandoned_asset),
+        Err(application::AssetBytesError::TargetNotFound {
+            revision: restored,
+            target: abandoned_asset,
+        }),
+    );
+    assert_eq!(
+        session.history_availability(),
+        HistoryAvailabilityOutcome::Available(HistoryAvailability {
+            can_redo: true,
+            can_undo: false,
+            revision: restored,
+        }),
+    );
+
+    let (branch_candidate, _, branch_asset_candidate, _) =
+        asset_figure_candidate(&identities);
+    let AcceptanceOutcome::Accepted {
+        mapping: branch_mapping,
+        revision: branched,
+    } = session.accept_candidate(branch_candidate)
+    else {
+        panic!("replacement asset branch must be accepted");
+    };
+    let branch_asset = branch_mapping
+        .iter()
+        .find(|entry| entry.candidate == branch_asset_candidate)
+        .expect("replacement branch asset identity must map")
+        .accepted;
+    assert_ne!(branch_asset, abandoned_asset);
+    assert_eq!(
+        session.history_availability(),
+        HistoryAvailabilityOutcome::Available(HistoryAvailability {
+            can_redo: false,
+            can_undo: true,
+            revision: branched,
+        }),
+    );
+    assert_eq!(
+        session.asset_bytes(branched, abandoned_asset),
+        Err(application::AssetBytesError::TargetNotFound {
+            revision: branched,
+            target: abandoned_asset,
+        }),
+    );
+    assert_eq!(
+        session.asset_bytes(branched, branch_asset),
+        Err(application::AssetBytesError::BytesNotRetained {
+            asset: branch_asset,
+            revision: branched,
+        }),
+    );
+}
+
+#[test]
 fn one_application_owns_draft_and_accepted_revision_together() {
     let identities = IdentityAllocator::new();
     let mut session = application::SessionApplication::default();

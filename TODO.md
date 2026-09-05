@@ -36,6 +36,10 @@ Debug projection does not expose private draft text or raw media. The active
 application can retain already-validated raw bytes only after an accepted
 semantic asset identity exists. It preserves the first retained byte sequence
 for that identity and keeps those bytes process-local across semantic Undo/Redo.
+After Undo followed by a new candidate branch, abandoned asset bytes cannot
+reattach: the old accepted asset identity is absent from the new revision, Redo
+is discarded, and newly accepted assets receive distinct identities with no
+retained bytes.
 
 A process fixture now retains bytes for two semantic assets, commits text and
 asset-reference history,
