@@ -3240,6 +3240,127 @@ fn quotation_spans_preserve_unicode_across_edit_and_undo() {
 }
 
 #[test]
+fn every_simple_inline_block_family_promotes_edits_and_undoes() {
+    type InlineBlockConstructor = fn(
+        Vec<InlineSpan<CandidateIdentity>>,
+    ) -> BlockContent<CandidateIdentity>;
+    let cases: &[(SemanticBlockKind, InlineBlockConstructor)] = &[
+        (SemanticBlockKind::Date, BlockContent::Date),
+        (SemanticBlockKind::Definition, BlockContent::Definition),
+        (SemanticBlockKind::Heading, BlockContent::Heading),
+        (SemanticBlockKind::Paragraph, BlockContent::Paragraph),
+        (SemanticBlockKind::Quotation, BlockContent::Quotation),
+    ];
+
+    for (kind, constructor) in cases {
+        let ids = IdentityAllocator::new();
+        let (mut candidate, span_candidate) =
+            candidate_notebook_with_span(&ids, "before");
+        let block_candidate = candidate.pages[0].flows[0].blocks[0].id;
+        let content = std::mem::replace(
+            &mut candidate.pages[0].flows[0].blocks[0].content,
+            BlockContent::Rule,
+        );
+        let BlockContent::Paragraph(spans) = content else {
+            panic!("simple inline-family seed must be a paragraph");
+        };
+        candidate.pages[0].flows[0].blocks[0].content = constructor(spans);
+
+        let mut session = SemanticNotebookSessionService::default();
+        let AcceptanceOutcome::Accepted { mapping, revision } =
+            session.accept(candidate)
+        else {
+            panic!("simple inline-family candidate must be accepted");
+        };
+        let block = accepted_for(&mapping, block_candidate);
+        let span = accepted_for(&mapping, span_candidate);
+        assert_eq!(
+            session.inspect_identity_kind(revision, block),
+            IdentityKindInspectOutcome::Inspected {
+                kind: SemanticIdentityKind::Block(*kind),
+                revision,
+                target: block,
+            },
+        );
+        for (family, expected) in [
+            (
+                SemanticCommandFamily::TextContent,
+                EditableSemanticValue::Text(String::from("before")),
+            ),
+            (
+                SemanticCommandFamily::StyleRole,
+                EditableSemanticValue::StyleReference(None),
+            ),
+            (
+                SemanticCommandFamily::Provenance,
+                EditableSemanticValue::ProvenanceReference(None),
+            ),
+        ] {
+            let CommandTargetMaterialOutcome::Prepared { material } =
+                session.command_target_material_for_family(
+                    revision,
+                    span,
+                    family,
+                )
+            else {
+                panic!("simple inline-family material must exist");
+            };
+            assert_eq!(material.descriptor, SemanticIdentityDescriptor {
+                kind: SemanticIdentityKind::InlineSpan,
+                owner: Some(block),
+            });
+            assert_eq!(material.editable_value, Some(expected));
+        }
+
+        let TextEditOutcome::Applied { revision: changed, .. } =
+            session.replace_text(revision, span, String::from("after"))
+        else {
+            panic!("simple inline-family text edit must apply");
+        };
+        assert_eq!(
+            session.inspect_identity_kind(changed, block),
+            IdentityKindInspectOutcome::Inspected {
+                kind: SemanticIdentityKind::Block(*kind),
+                revision: changed,
+                target: block,
+            },
+        );
+        let CommandTargetMaterialOutcome::Prepared { material } =
+            session.command_target_material_for_family(
+                changed,
+                span,
+                SemanticCommandFamily::TextContent,
+            )
+        else {
+            panic!("edited simple inline-family text material must exist");
+        };
+        assert_eq!(
+            material.editable_value,
+            Some(EditableSemanticValue::Text(String::from("after"))),
+        );
+
+        let HistoryTraversalOutcome::Traversed { revision: undone, .. } =
+            session.traverse_history(changed, HistoryDirection::Undo)
+        else {
+            panic!("simple inline-family text edit must Undo");
+        };
+        let CommandTargetMaterialOutcome::Prepared { material } =
+            session.command_target_material_for_family(
+                undone,
+                span,
+                SemanticCommandFamily::TextContent,
+            )
+        else {
+            panic!("restored simple inline-family text material must exist");
+        };
+        assert_eq!(
+            material.editable_value,
+            Some(EditableSemanticValue::Text(String::from("before"))),
+        );
+    }
+}
+
+#[test]
 fn bounded_identity_ancestry_reports_explicit_complete_and_incomplete_chains() {
     let ids = IdentityAllocator::new();
     let (candidate, _, _) =
