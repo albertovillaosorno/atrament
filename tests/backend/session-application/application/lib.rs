@@ -3149,6 +3149,126 @@ fn rejected_edits_preserve_redo_only_asset_bytes() {
 }
 
 #[test]
+fn invalid_direct_replacements_preserve_redo_asset_bytes() {
+    #[derive(Clone, Copy)]
+    enum Replacement {
+        Formula,
+        PageProfile,
+        TableCellSpan,
+    }
+
+    for replacement in [
+        Replacement::Formula,
+        Replacement::PageProfile,
+        Replacement::TableCellSpan,
+    ] {
+        let identities = IdentityAllocator::new();
+        let (
+            candidate,
+            candidate_formula,
+            candidate_profile,
+            candidate_cell,
+            _candidate_row,
+        ) = replacement_family_candidate(&identities);
+        let mut session = application::SessionApplication::default();
+        let AcceptanceOutcome::Accepted { mapping, .. } =
+            session.accept_candidate(candidate)
+        else {
+            panic!("replacement-family candidate must be accepted");
+        };
+        let accepted = |candidate| {
+            mapping
+                .iter()
+                .find(|entry| entry.candidate == candidate)
+                .expect("replacement target identity must map")
+                .accepted
+        };
+        let formula = accepted(candidate_formula);
+        let profile = accepted(candidate_profile);
+        let cell = accepted(candidate_cell);
+
+        let (redo_candidate, _, candidate_redo_asset, _) =
+            asset_figure_candidate(&identities);
+        let AcceptanceOutcome::Accepted {
+            mapping: redo_mapping,
+            revision: redo_revision,
+        } = session.accept_candidate(redo_candidate)
+        else {
+            panic!("Redo asset candidate must be accepted");
+        };
+        let redo_asset = redo_mapping
+            .iter()
+            .find(|entry| entry.candidate == candidate_redo_asset)
+            .expect("Redo asset identity must map")
+            .accepted;
+        assert!(matches!(
+            session.retain_asset_bytes(
+                redo_revision,
+                redo_asset,
+                b"replacement-invalid-redo-only".to_vec(),
+            ),
+            Ok(application::AssetBytesRetention::Retained { .. })
+        ));
+        let HistoryTraversalOutcome::Traversed { revision: undone, .. } =
+            session.traverse_history(redo_revision, HistoryDirection::Undo)
+        else {
+            panic!("Redo asset candidate must Undo");
+        };
+        let expected_history =
+            HistoryAvailabilityOutcome::Available(HistoryAvailability {
+                can_redo: true,
+                can_undo: false,
+                revision: undone,
+            });
+
+        match replacement {
+            Replacement::Formula => assert!(matches!(
+                session.replace_formula(
+                    undone,
+                    formula,
+                    FormulaMode::Display,
+                    String::from(r"\frac{1}"),
+                ),
+                FormulaEditOutcome::InvalidMathematics {
+                    revision,
+                    target,
+                    ..
+                } if revision == undone && target == formula
+            )),
+            Replacement::PageProfile => {
+                let mut invalid = physical_page_profile();
+                invalid.sheet.width = Length::ZERO;
+                assert!(matches!(
+                    session.replace_page_profile(undone, profile, invalid),
+                    PageProfileEditOutcome::InvalidProfile {
+                        revision,
+                        target,
+                        ..
+                    } if revision == undone && target == profile
+                ));
+            },
+            Replacement::TableCellSpan => {
+                let invalid = TableCellSpan {
+                    columns: NonZeroU32::MIN,
+                    rows: NonZeroU32::new(2)
+                        .expect("two rows are nonzero"),
+                };
+                assert!(matches!(
+                    session.replace_table_cell_span(undone, cell, invalid),
+                    TableCellSpanEditOutcome::InvalidTableGrid {
+                        revision,
+                        target,
+                        ..
+                    } if revision == undone && target == cell
+                ));
+            },
+        }
+        assert_eq!(session.history_availability(), expected_history);
+        assert_eq!(session.retained_asset_byte_count_for_test(), 1);
+    }
+}
+
+#[test]
 fn every_direct_replacement_noop_preserves_redo_asset_bytes() {
     #[derive(Clone, Copy)]
     enum Replacement {

@@ -52,8 +52,9 @@ branch-cleanup gate so this lifecycle rule is not duplicated per operation.
 Formula, physical-page-profile, table-cell-span, and table-row-role replacements
 are exercised through that same gate after Undo with Redo-only asset bytes:
 successful changes prune the discarded branch, while exact-value no-ops preserve
-Redo and its retained bytes. Direct text and bounded-batch branches are covered
-separately.
+Redo and its retained bytes. Malformed mathematics, invalid page geometry, and
+invalid table grids also reject without dropping that branch or its bytes.
+Direct text and bounded-batch branches are covered separately.
 
 A 256-state asset-history fixture undoes halfway, then branches: cleanup removes
 exactly 128 Redo-only retained byte entries and preserves all 128 identities
