@@ -175,6 +175,15 @@ const STRUCTURED_ENVIRONMENTS: &[StructuredEnvironmentDefinition] = &[
     },
     StructuredEnvironmentDefinition {
         allows_alignment: true,
+        begin_command: SupportedCommand::BeginSmallMatrix,
+        begin_spelling: "\\begin{smallmatrix}",
+        end_command: SupportedCommand::EndSmallMatrix,
+        end_spelling: "\\end{smallmatrix}",
+        extra_end_error: MathSyntaxErrorKind::ExtraSmallMatrixEnd,
+        missing_end_error: MathSyntaxErrorKind::MissingSmallMatrixEnd,
+    },
+    StructuredEnvironmentDefinition {
+        allows_alignment: true,
         begin_command: SupportedCommand::BeginSplit,
         begin_spelling: "\\begin{split}",
         end_command: SupportedCommand::EndSplit,
@@ -253,6 +262,8 @@ pub enum MathSyntaxErrorKind {
     ExtraMatrixEnd,
     /// Parenthesized-matrix environment closes without its matching start.
     ExtraParenthesizedMatrixEnd,
+    /// Compact small-matrix environment closes without its matching start.
+    ExtraSmallMatrixEnd,
     /// Split environment closes without a matching split start.
     ExtraSplitEnd,
     /// Vertical-bar matrix closes without its matching start.
@@ -279,6 +290,8 @@ pub enum MathSyntaxErrorKind {
     MissingRequiredGroup,
     /// An indexed square root is missing its top-level closing bracket.
     MissingRootIndexEnd,
+    /// Compact small-matrix environment remains open at end of source.
+    MissingSmallMatrixEnd,
     /// Split environment remains open at end of source.
     MissingSplitEnd,
     /// Vertical-bar matrix remains open at end of source.
@@ -392,6 +405,8 @@ pub enum SupportedCommand {
     BeginMatrix,
     /// Start of an explicit parenthesized-matrix environment.
     BeginParenthesizedMatrix,
+    /// Start of an explicit compact small-matrix environment.
+    BeginSmallMatrix,
     /// Start of an explicit split environment.
     BeginSplit,
     /// Start of an explicit vertical-bar matrix environment.
@@ -428,6 +443,8 @@ pub enum SupportedCommand {
     EndMatrix,
     /// End of an explicit parenthesized-matrix environment.
     EndParenthesizedMatrix,
+    /// End of an explicit compact small-matrix environment.
+    EndSmallMatrix,
     /// End of an explicit split environment.
     EndSplit,
     /// End of an explicit vertical-bar matrix environment.
@@ -515,8 +532,8 @@ impl AnalyzedFormula {
 /// overline, and underline decorations, escaped TeX special characters, common
 /// named mathematical operators and symbols, aligned separators, and ordered
 /// aligned, brace-delimited-matrix, bracketed-matrix, cases,
-/// double-vertical-bar-matrix, gathered, matrix, parenthesized-matrix, split,
-/// and vertical-bar-matrix environments.
+/// double-vertical-bar-matrix, gathered, matrix, parenthesized-matrix,
+/// small-matrix, split, and vertical-bar-matrix environments.
 /// Math-only alignment, script, and row-break markers remain literal inside
 /// grouped text.
 /// Other commands remain present in the token stream and are reported through
@@ -1160,6 +1177,7 @@ fn validate_command_groups(
         | SupportedCommand::BeginGathered
         | SupportedCommand::BeginMatrix
         | SupportedCommand::BeginParenthesizedMatrix
+        | SupportedCommand::BeginSmallMatrix
         | SupportedCommand::BeginSplit
         | SupportedCommand::BeginVerticalMatrix
         | SupportedCommand::EndAligned
@@ -1170,6 +1188,7 @@ fn validate_command_groups(
         | SupportedCommand::EndGathered
         | SupportedCommand::EndMatrix
         | SupportedCommand::EndParenthesizedMatrix
+        | SupportedCommand::EndSmallMatrix
         | SupportedCommand::EndSplit
         | SupportedCommand::EndVerticalMatrix
         | SupportedCommand::EscapedSpecial

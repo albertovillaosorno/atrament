@@ -1090,6 +1090,7 @@ fn outer_environments_do_not_leak_alignment_into_substack_scope() {
         (r"\begin{cases}", r"\end{cases}"),
         (r"\begin{matrix}", r"\end{matrix}"),
         (r"\begin{pmatrix}", r"\end{pmatrix}"),
+        (r"\begin{smallmatrix}", r"\end{smallmatrix}"),
         (r"\begin{split}", r"\end{split}"),
         (r"\begin{vmatrix}", r"\end{vmatrix}"),
     ] {
@@ -1588,6 +1589,37 @@ fn vertical_matrix_admits_rows_and_alignment() {
 }
 
 #[test]
+fn small_matrix_admits_rows_and_alignment_with_distinct_identity() {
+    let source = r"A=\begin{smallmatrix}a & b \\ c & d\end{smallmatrix}";
+    let analyzed = analyze(source, FormulaMode::Inline)
+        .expect("compact small-matrix formula");
+    assert!(analyzed.is_supported());
+    assert_eq!(reconstructed(&analyzed), source);
+    assert!(analyzed.tokens.iter().any(|token| {
+        token.kind == MathTokenKind::Command(SupportedCommand::BeginSmallMatrix)
+    }));
+    assert!(analyzed.tokens.iter().any(|token| {
+        token.kind == MathTokenKind::Command(SupportedCommand::EndSmallMatrix)
+    }));
+    assert_eq!(
+        analyzed
+            .tokens
+            .iter()
+            .filter(|token| token.kind == MathTokenKind::AlignmentPoint)
+            .count(),
+        2,
+    );
+    assert_eq!(
+        analyzed
+            .tokens
+            .iter()
+            .filter(|token| token.kind == MathTokenKind::RowBreak)
+            .count(),
+        1,
+    );
+}
+
+#[test]
 fn split_environment_admits_derivation_rows_and_alignment() {
     let source = concat!(
         r"\begin{split}f(x) &= x^2 + 1 \\ ",
@@ -1994,6 +2026,7 @@ fn environments_cannot_close_inside_a_later_group() {
         (r"\begin{gathered}", r"\end{gathered}"),
         (r"\begin{matrix}", r"\end{matrix}"),
         (r"\begin{pmatrix}", r"\end{pmatrix}"),
+        (r"\begin{smallmatrix}", r"\end{smallmatrix}"),
         (r"\begin{split}", r"\end{split}"),
         (r"\begin{vmatrix}", r"\end{vmatrix}"),
     ] {
@@ -2027,6 +2060,7 @@ fn environments_must_close_before_their_owning_group() {
         (r"\begin{gathered}", r"\end{gathered}"),
         (r"\begin{matrix}", r"\end{matrix}"),
         (r"\begin{pmatrix}", r"\end{pmatrix}"),
+        (r"\begin{smallmatrix}", r"\end{smallmatrix}"),
         (r"\begin{split}", r"\end{split}"),
         (r"\begin{vmatrix}", r"\end{vmatrix}"),
     ] {
@@ -2095,7 +2129,7 @@ fn deep_ordered_environments_are_iterative_and_balanced() {
     let depth = 1_024usize;
     let mut source = String::new();
     for level in 0..depth {
-        match level % 10 {
+        match level % 11 {
             0 => source.push_str(r"\begin{Bmatrix}"),
             1 => source.push_str(r"\begin{Vmatrix}"),
             2 => source.push_str(r"\begin{aligned}"),
@@ -2104,13 +2138,14 @@ fn deep_ordered_environments_are_iterative_and_balanced() {
             5 => source.push_str(r"\begin{gathered}"),
             6 => source.push_str(r"\begin{matrix}"),
             7 => source.push_str(r"\begin{pmatrix}"),
-            8 => source.push_str(r"\begin{split}"),
+            8 => source.push_str(r"\begin{smallmatrix}"),
+            9 => source.push_str(r"\begin{split}"),
             _ => source.push_str(r"\begin{vmatrix}"),
         }
     }
     source.push('x');
     for level in (0..depth).rev() {
-        match level % 10 {
+        match level % 11 {
             0 => source.push_str(r"\end{Bmatrix}"),
             1 => source.push_str(r"\end{Vmatrix}"),
             2 => source.push_str(r"\end{aligned}"),
@@ -2119,7 +2154,8 @@ fn deep_ordered_environments_are_iterative_and_balanced() {
             5 => source.push_str(r"\end{gathered}"),
             6 => source.push_str(r"\end{matrix}"),
             7 => source.push_str(r"\end{pmatrix}"),
-            8 => source.push_str(r"\end{split}"),
+            8 => source.push_str(r"\end{smallmatrix}"),
+            9 => source.push_str(r"\end{split}"),
             _ => source.push_str(r"\end{vmatrix}"),
         }
     }
@@ -2142,6 +2178,7 @@ fn deep_ordered_environments_are_iterative_and_balanced() {
                         | SupportedCommand::BeginGathered
                         | SupportedCommand::BeginMatrix
                         | SupportedCommand::BeginParenthesizedMatrix
+                        | SupportedCommand::BeginSmallMatrix
                         | SupportedCommand::BeginSplit
                         | SupportedCommand::BeginVerticalMatrix
                 )
@@ -2297,6 +2334,8 @@ fn environment_names_require_exact_braced_spelling() {
         (r"a & b\end{matrixx}", r"\end"),
         (r"\begin{pmatrixx}a & b", r"\begin"),
         (r"a & b\end{pmatrixx}", r"\end"),
+        (r"\begin{smallmatrixx}a & b", r"\begin"),
+        (r"a & b\end{smallmatrixx}", r"\end"),
         (r"\begin{splitx}a & b", r"\begin"),
         (r"a & b\end{splitx}", r"\end"),
         (r"\begin{vmatrixx}a & b", r"\begin"),
@@ -2513,6 +2552,25 @@ fn malformed_vertical_matrix_boundaries_are_typed() {
         Err(MathSyntaxError {
             byte_offset: source.len(),
             kind: MathSyntaxErrorKind::MissingVerticalMatrixEnd,
+        }),
+    );
+}
+
+#[test]
+fn malformed_small_matrix_boundaries_are_typed() {
+    assert_eq!(
+        analyze(r"\end{smallmatrix}", FormulaMode::Inline),
+        Err(MathSyntaxError {
+            byte_offset: 0,
+            kind: MathSyntaxErrorKind::ExtraSmallMatrixEnd,
+        }),
+    );
+    let source = r"\begin{smallmatrix}a & b";
+    assert_eq!(
+        analyze(source, FormulaMode::Inline),
+        Err(MathSyntaxError {
+            byte_offset: source.len(),
+            kind: MathSyntaxErrorKind::MissingSmallMatrixEnd,
         }),
     );
 }
