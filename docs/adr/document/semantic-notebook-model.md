@@ -22,10 +22,10 @@ notebooks, pages, flows, blocks, inline spans, media, styles, and provenance.
 Content meaning is separate from its chosen handwriting, page placement, and
 device motion.
 
-Blocks include paragraphs, definitions, lists, headings, dates, mathematics,
-tables, figures, callouts, rules, and explicit freeform regions. Unsupported or
-ambiguous input remains a typed unresolved block rather than being discarded or
-guessed into a supported form.
+Blocks include paragraphs, definitions, quotations, lists, headings, dates,
+mathematics, tables, figures, callouts, rules, and explicit freeform regions.
+Unsupported or ambiguous input remains a typed unresolved block rather than
+being discarded or guessed into a supported form.
 
 ## Consequences
 
@@ -52,9 +52,10 @@ preserving explicitly admitted extension data.
 
 ### Implementation evidence
 
-Definition blocks are now executable semantic values with their own block kind.
-Their inline spans participate in the existing candidate identity graph,
-accepted-identity promotion, exact Text-content editing, Style-role and
-Provenance material, identity inspection, and semantic Undo/Redo without being
-reclassified as paragraphs. Layout-specific definition presentation remains a
-later measurement/style concern rather than semantic storage behavior.
+Definition and quotation blocks are now executable semantic values with their
+own block kinds. Their inline spans participate in the existing candidate
+identity graph, accepted-identity promotion, exact Text-content editing,
+Style-role and Provenance material, identity inspection, and semantic Undo/Redo
+without being reclassified as paragraphs. Layout-specific definition or
+quotation presentation remains a later measurement/style concern rather than
+semantic storage behavior.

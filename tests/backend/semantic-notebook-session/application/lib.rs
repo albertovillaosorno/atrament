@@ -84,7 +84,7 @@ use atrament_semantic_notebook_port::{
 use atrament_semantic_notebook_session::SemanticNotebookSessionService;
 
 const CURRENT_COMMAND_BEHAVIOR_VERSION: CommandBehaviorVersion =
-    CommandBehaviorVersion(54);
+    CommandBehaviorVersion(55);
 
 #[derive(Debug)]
 struct CountingCommandIdentity {
@@ -3171,6 +3171,72 @@ fn nested_definition_remains_editable_through_every_block_container() {
             "nested definition changed",
         ))),
     );
+}
+
+#[test]
+fn quotation_spans_preserve_unicode_across_edit_and_undo() {
+    let ids = IdentityAllocator::new();
+    let (mut candidate, span_candidate) =
+        candidate_notebook_with_span(&ids, "«Conócete a ti mismo.»");
+    let block_candidate = candidate.pages[0].flows[0].blocks[0].id;
+    let content = std::mem::replace(
+        &mut candidate.pages[0].flows[0].blocks[0].content,
+        BlockContent::Rule,
+    );
+    let BlockContent::Paragraph(spans) = content else {
+        panic!("quotation fixture must start as paragraph");
+    };
+    candidate.pages[0].flows[0].blocks[0].content =
+        BlockContent::Quotation(spans);
+
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(candidate)
+    else {
+        panic!("quotation candidate must be accepted");
+    };
+    let block = accepted_for(&mapping, block_candidate);
+    let span = accepted_for(&mapping, span_candidate);
+    assert_eq!(
+        session.inspect_identity_kind(revision, block),
+        IdentityKindInspectOutcome::Inspected {
+            kind: SemanticIdentityKind::Block(SemanticBlockKind::Quotation),
+            revision,
+            target: block,
+        },
+    );
+
+    let TextEditOutcome::Applied { revision: changed, .. } =
+        session.replace_text(
+            revision,
+            span,
+            String::from("“Know yourself.” — Conócete a ti mismo."),
+        )
+    else {
+        panic!("quotation span text edit must apply");
+    };
+    let current = session.current().expect("quotation edit revision");
+    let BlockContent::Quotation(spans) =
+        &current.notebook.pages[0].flows[0].blocks[0].content
+    else {
+        panic!("quotation edit must preserve block kind");
+    };
+    assert_eq!(spans[0].id, span);
+    assert_eq!(spans[0].text, "“Know yourself.” — Conócete a ti mismo.");
+
+    let HistoryTraversalOutcome::Traversed { .. } =
+        session.traverse_history(changed, HistoryDirection::Undo)
+    else {
+        panic!("quotation edit must Undo");
+    };
+    let current = session.current().expect("quotation Undo revision");
+    let BlockContent::Quotation(spans) =
+        &current.notebook.pages[0].flows[0].blocks[0].content
+    else {
+        panic!("quotation Undo must preserve block kind");
+    };
+    assert_eq!(spans[0].id, span);
+    assert_eq!(spans[0].text, "«Conócete a ti mismo.»");
 }
 
 #[test]
@@ -7500,11 +7566,11 @@ fn command_capability_version_detects_drift_independently_of_revision() {
     );
     assert_eq!(
         session.check_command_capability_compatibility(
-            CommandBehaviorVersion(53),
+            CommandBehaviorVersion(54),
         ),
         CommandCapabilityCompatibilityOutcome::Mismatch {
             current: CURRENT_COMMAND_BEHAVIOR_VERSION,
-            expected: CommandBehaviorVersion(53),
+            expected: CommandBehaviorVersion(54),
         },
     );
     assert_eq!(
