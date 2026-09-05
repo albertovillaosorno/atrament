@@ -1720,76 +1720,128 @@ fn application_routes_direct_text_edit_into_owned_history() {
 }
 
 #[test]
-fn application_preserves_definition_kind_across_text_edit_and_undo() {
-    let identities = IdentityAllocator::new();
-    let (mut candidate, candidate_span) =
-        editable_text_candidate(&identities, "Definition before");
-    let candidate_block = candidate.pages[0].flows[0].blocks[0].id;
-    let content = std::mem::replace(
-        &mut candidate.pages[0].flows[0].blocks[0].content,
-        BlockContent::Rule,
-    );
-    let BlockContent::Paragraph(spans) = content else {
-        panic!("definition fixture must start from a paragraph");
-    };
-    candidate.pages[0].flows[0].blocks[0].content =
-        BlockContent::Definition(spans);
+fn application_preserves_every_simple_inline_block_family() {
+    type InlineBlockConstructor = fn(
+        Vec<InlineSpan<CandidateIdentity>>,
+    ) -> BlockContent<CandidateIdentity>;
+    let cases: &[(SemanticBlockKind, InlineBlockConstructor)] = &[
+        (SemanticBlockKind::Date, BlockContent::Date),
+        (SemanticBlockKind::Definition, BlockContent::Definition),
+        (SemanticBlockKind::Heading, BlockContent::Heading),
+        (SemanticBlockKind::Paragraph, BlockContent::Paragraph),
+        (SemanticBlockKind::Quotation, BlockContent::Quotation),
+        (SemanticBlockKind::SourceNote, BlockContent::SourceNote),
+    ];
 
-    let mut session = application::SessionApplication::default();
-    let AcceptanceOutcome::Accepted { mapping, revision: base } =
-        session.accept_candidate(candidate)
-    else {
-        panic!("definition candidate must be accepted");
-    };
-    let accepted = |candidate| {
-        mapping
-            .iter()
-            .find(|entry| entry.candidate == candidate)
-            .expect("definition identity must map")
-            .accepted
-    };
-    let block = accepted(candidate_block);
-    let span = accepted(candidate_span);
-    assert_eq!(
-        session.inspect_identity_kind(base, block),
-        IdentityKindInspectOutcome::Inspected {
-            kind: SemanticIdentityKind::Block(SemanticBlockKind::Definition),
-            revision: base,
-            target: block,
-        },
-    );
+    for (kind, constructor) in cases {
+        let identities = IdentityAllocator::new();
+        let (mut candidate, candidate_span) =
+            editable_text_candidate(&identities, "before");
+        let candidate_block = candidate.pages[0].flows[0].blocks[0].id;
+        let content = std::mem::replace(
+            &mut candidate.pages[0].flows[0].blocks[0].content,
+            BlockContent::Rule,
+        );
+        let BlockContent::Paragraph(spans) = content else {
+            panic!("simple inline-family fixture must start as paragraph");
+        };
+        candidate.pages[0].flows[0].blocks[0].content = constructor(spans);
 
-    let TextEditOutcome::Applied { revision: changed, .. } =
-        session.replace_text(base, span, String::from("Definition after"))
-    else {
-        panic!("definition text edit must apply through session owner");
-    };
-    let current = session
-        .accepted_revision()
-        .expect("definition edit revision");
-    let BlockContent::Definition(spans) =
-        &current.notebook.pages[0].flows[0].blocks[0].content
-    else {
-        panic!("definition edit must preserve block kind");
-    };
-    assert_eq!(spans[0].id, span);
-    assert_eq!(spans[0].text, "Definition after");
+        let mut session = application::SessionApplication::default();
+        let AcceptanceOutcome::Accepted { mapping, revision: base } =
+            session.accept_candidate(candidate)
+        else {
+            panic!("simple inline-family candidate must be accepted");
+        };
+        let accepted = |candidate| {
+            mapping
+                .iter()
+                .find(|entry| entry.candidate == candidate)
+                .expect("simple inline-family identity must map")
+                .accepted
+        };
+        let block = accepted(candidate_block);
+        let span = accepted(candidate_span);
+        assert_eq!(
+            session.inspect_identity_kind(base, block),
+            IdentityKindInspectOutcome::Inspected {
+                kind: SemanticIdentityKind::Block(*kind),
+                revision: base,
+                target: block,
+            },
+        );
+        for (family, expected) in [
+            (
+                SemanticCommandFamily::TextContent,
+                EditableSemanticValue::Text(String::from("before")),
+            ),
+            (
+                SemanticCommandFamily::StyleRole,
+                EditableSemanticValue::StyleReference(None),
+            ),
+            (
+                SemanticCommandFamily::Provenance,
+                EditableSemanticValue::ProvenanceReference(None),
+            ),
+        ] {
+            let CommandTargetMaterialOutcome::Prepared { material } =
+                session.command_target_material_for_family(base, span, family)
+            else {
+                panic!("simple inline-family material must be available");
+            };
+            assert_eq!(material.descriptor, SemanticIdentityDescriptor {
+                kind: SemanticIdentityKind::InlineSpan,
+                owner: Some(block),
+            });
+            assert_eq!(material.editable_value, Some(expected));
+        }
 
-    let HistoryTraversalOutcome::Traversed { .. } =
-        session.traverse_history(changed, HistoryDirection::Undo)
-    else {
-        panic!("definition text edit must Undo through session owner");
-    };
-    let current = session
-        .accepted_revision()
-        .expect("definition Undo revision");
-    let BlockContent::Definition(spans) =
-        &current.notebook.pages[0].flows[0].blocks[0].content
-    else {
-        panic!("definition Undo must preserve block kind");
-    };
-    assert_eq!(spans[0].id, span);
-    assert_eq!(spans[0].text, "Definition before");
+        let TextEditOutcome::Applied { revision: changed, .. } =
+            session.replace_text(base, span, String::from("after"))
+        else {
+            panic!("simple inline-family text edit must apply");
+        };
+        assert_eq!(
+            session.inspect_identity_kind(changed, block),
+            IdentityKindInspectOutcome::Inspected {
+                kind: SemanticIdentityKind::Block(*kind),
+                revision: changed,
+                target: block,
+            },
+        );
+        let CommandTargetMaterialOutcome::Prepared { material } =
+            session.command_target_material_for_family(
+                changed,
+                span,
+                SemanticCommandFamily::TextContent,
+            )
+        else {
+            panic!("edited simple inline-family material must be available");
+        };
+        assert_eq!(
+            material.editable_value,
+            Some(EditableSemanticValue::Text(String::from("after"))),
+        );
+
+        let HistoryTraversalOutcome::Traversed { revision: undone, .. } =
+            session.traverse_history(changed, HistoryDirection::Undo)
+        else {
+            panic!("simple inline-family edit must Undo");
+        };
+        let CommandTargetMaterialOutcome::Prepared { material } =
+            session.command_target_material_for_family(
+                undone,
+                span,
+                SemanticCommandFamily::TextContent,
+            )
+        else {
+            panic!("restored simple inline-family material must be available");
+        };
+        assert_eq!(
+            material.editable_value,
+            Some(EditableSemanticValue::Text(String::from("before"))),
+        );
+    }
 }
 
 #[test]
