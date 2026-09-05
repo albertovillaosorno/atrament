@@ -71,9 +71,11 @@ fn grid_row(id: u32, cells: Vec<TableCell<u32>>) -> TableRow<u32> {
     }
 }
 
-fn grid_oracle_is_valid(table: &Table<u32>) -> bool {
+fn grid_oracle_result(
+    table: &Table<u32>,
+) -> Result<(), TableGridError<u32>> {
     let Some(first) = table.rows.first() else {
-        return true;
+        return Ok(());
     };
     let width: usize = first
         .cells
@@ -94,21 +96,27 @@ fn grid_oracle_is_valid(table: &Table<u32>) -> bool {
             let rows =
                 usize::try_from(cell.span.rows.get()).expect("small rows");
             let Some(end_column) = cursor.checked_add(columns) else {
-                return false;
+                return Err(TableGridError::ColumnSpan { cell: cell.id });
             };
-            let Some(end_row) = row_index.checked_add(rows) else {
-                return false;
-            };
-            if end_column > width || end_row > table.rows.len() {
-                return false;
-            }
-            for occupied_row in &occupied[row_index..end_row] {
-                if occupied_row[cursor..end_column]
+            if end_column > width
+                || occupied[row_index][cursor..end_column]
                     .iter()
                     .any(|slot| *slot)
-                {
-                    return false;
-                }
+            {
+                return Err(TableGridError::ColumnSpan { cell: cell.id });
+            }
+            let Some(end_row) = row_index.checked_add(rows) else {
+                return Err(TableGridError::RowSpan { cell: cell.id });
+            };
+            if end_row > table.rows.len() {
+                return Err(TableGridError::RowSpan { cell: cell.id });
+            }
+            if occupied[row_index..end_row].iter().any(|occupied_row| {
+                occupied_row[cursor..end_column]
+                    .iter()
+                    .any(|slot| *slot)
+            }) {
+                return Err(TableGridError::ColumnSpan { cell: cell.id });
             }
             for occupied_row in &mut occupied[row_index..end_row] {
                 for slot in &mut occupied_row[cursor..end_column] {
@@ -118,10 +126,10 @@ fn grid_oracle_is_valid(table: &Table<u32>) -> bool {
             cursor = end_column;
         }
         if occupied[row_index].iter().any(|slot| !*slot) {
-            return false;
+            return Err(TableGridError::RowWidth { row: row.id });
         }
     }
-    true
+    Ok(())
 }
 
 fn next_grid_seed(seed: &mut u64) -> u32 {
@@ -382,9 +390,9 @@ fn logical_table_validator_matches_naive_occupancy_oracle() {
         }
         let table = Table { id: identity, rows };
         assert_eq!(
-            table.validate_grid().is_ok(),
-            grid_oracle_is_valid(&table),
-            "occupancy oracle mismatch in generated case {case}",
+            table.validate_grid(),
+            grid_oracle_result(&table),
+            "typed occupancy oracle mismatch in generated case {case}",
         );
     }
 }
@@ -649,6 +657,9 @@ fn unresolved_semantics_and_extensions_are_preserved_exactly() {
         panic!("fixture must remain unresolved");
     };
     assert_eq!(unresolved.source, "future semantic object");
-    assert_eq!(unresolved.extensions, [extension.clone()]);
+    assert_eq!(
+        unresolved.extensions.as_slice(),
+        std::slice::from_ref(&extension),
+    );
     assert_eq!(block.extensions, [extension]);
 }
