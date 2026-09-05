@@ -3402,20 +3402,22 @@ fn direct_edit_ancestor_scope(
     notebook: &Notebook<AcceptedIdentity>,
     target: AcceptedIdentity,
 ) -> Option<(Option<AcceptedIdentity>, AcceptedIdentity, AcceptedIdentity)> {
+    let path = semantic_identity_path(notebook, target)?;
     let mut block = None;
-    let mut current = target;
-    loop {
-        let descriptor = semantic_identity_descriptor(notebook, current)?;
-        if matches!(descriptor.kind, SemanticIdentityKind::Block(_))
+    for entry in path {
+        if matches!(entry.descriptor.kind, SemanticIdentityKind::Block(_))
             && block.is_none()
         {
-            block = Some(current);
+            block = Some(entry.identity);
         }
-        if descriptor.kind == SemanticIdentityKind::Flow {
-            return descriptor.owner.map(|page| (block, current, page));
+        if entry.descriptor.kind == SemanticIdentityKind::Flow {
+            return entry
+                .descriptor
+                .owner
+                .map(|page| (block, entry.identity, page));
         }
-        current = descriptor.owner?;
     }
+    None
 }
 
 fn simulate_direct_edit_batch_command<CommandIdentity>(
