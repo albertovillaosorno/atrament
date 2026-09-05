@@ -432,9 +432,10 @@ pages before the selected flow's owning page.
 Measurement admission now streams contiguous block-owner runs instead of
 materializing a second owner vector. Independent pagination advances through the
 remaining page sequence once per fragment, and keep-together search computes one
-checked total height and maximum width per group. Three reference oracles cover
-7,504 small independent and keep-together placement cases, including nonzero
-current-page remainder, while 341 owner-sequence cases cover complete,
+checked total height and maximum width per group. Four reference oracles cover
+17,504 independent, keep-together, and deterministic mixed-policy placement
+cases, including nonzero current-page remainder and heterogeneous page skips,
+while 341 owner-sequence cases cover complete,
 incomplete, repeated, reordered, and out-of-flow semantic measurements.
 
 Empty measured flows now avoid unused page-profile authority entirely. Nonempty

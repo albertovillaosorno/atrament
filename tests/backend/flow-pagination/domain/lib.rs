@@ -117,6 +117,140 @@ fn reference_independent(
     Ok(placements)
 }
 
+fn next_case_value(seed: &mut u64) -> u64 {
+    *seed = seed
+        .wrapping_mul(6_364_136_223_846_793_005)
+        .wrapping_add(1_442_695_040_888_963_407);
+    *seed
+}
+
+fn reference_mixed_units(
+    pages: &[PageRegion<u64>],
+    units: &[MeasuredFlowUnit<u64>],
+) -> Result<Vec<PlacedFragment<u64, u64>>, PaginationError<u64, u64>> {
+    let mut cursor = ReferenceCursor {
+        page_index: 0,
+        used_height: 0,
+    };
+    let mut placements = Vec::new();
+    for unit in units {
+        if unit.fragments.is_empty() {
+            continue;
+        }
+        match unit.policy {
+            FlowUnitPolicy::Independent => reference_place_group(
+                pages,
+                &unit.fragments,
+                &mut cursor,
+                &mut placements,
+            )?,
+            FlowUnitPolicy::KeepTogetherWhenPossible => {
+                let total_height = unit
+                    .fragments
+                    .iter()
+                    .map(|fragment| fragment.height.micrometres())
+                    .sum::<u64>();
+                let maximum_width = unit
+                    .fragments
+                    .iter()
+                    .map(|fragment| fragment.width)
+                    .max()
+                    .unwrap_or(Length::ZERO);
+                let current = pages.get(cursor.page_index);
+                let current_fits = current.is_some_and(|page| {
+                    let remaining = page
+                        .writable
+                        .height
+                        .micrometres()
+                        .saturating_sub(cursor.used_height);
+                    total_height <= remaining
+                        && maximum_width <= page.writable.width
+                });
+                if current_fits {
+                    reference_place_group(
+                        pages,
+                        &unit.fragments,
+                        &mut cursor,
+                        &mut placements,
+                    )?;
+                    continue;
+                }
+                let later = cursor
+                    .page_index
+                    .checked_add(1)
+                    .and_then(|start| {
+                        pages
+                            .iter()
+                            .enumerate()
+                            .skip(start)
+                            .find(|(_, page)| {
+                                total_height
+                                    <= page.writable.height.micrometres()
+                                    && maximum_width <= page.writable.width
+                            })
+                    });
+                if let Some((page_index, _page)) = later {
+                    cursor.page_index = page_index;
+                    cursor.used_height = 0;
+                }
+                reference_place_group(
+                    pages,
+                    &unit.fragments,
+                    &mut cursor,
+                    &mut placements,
+                )?;
+            },
+        }
+    }
+    Ok(placements)
+}
+
+#[test]
+fn mixed_policy_pagination_matches_reference_oracle() {
+    const CASES: usize = 10_000;
+    let mut seed = 0x5eed_f10f_u64;
+    for case in 0..CASES {
+        let page_count = (next_case_value(&mut seed) % 4 + 1) as usize;
+        let mut pages = Vec::with_capacity(page_count);
+        for index in 0..page_count {
+            let width = next_case_value(&mut seed) % 6 + 1;
+            let height = next_case_value(&mut seed) % 6 + 1;
+            pages.push(page(
+                100 + index as u64,
+                1_000 * index as u64,
+                width,
+                height,
+            ));
+        }
+
+        let unit_count = (next_case_value(&mut seed) % 4 + 1) as usize;
+        let mut units = Vec::with_capacity(unit_count);
+        let mut owner = 1u64;
+        for _ in 0..unit_count {
+            let policy = if next_case_value(&mut seed) & 1 == 0 {
+                FlowUnitPolicy::Independent
+            } else {
+                FlowUnitPolicy::KeepTogetherWhenPossible
+            };
+            let fragment_count = (next_case_value(&mut seed) % 4) as usize;
+            let mut fragments = Vec::with_capacity(fragment_count);
+            for _ in 0..fragment_count {
+                fragments.push(fragment(
+                    owner,
+                    next_case_value(&mut seed) % 7 + 1,
+                    next_case_value(&mut seed) % 7 + 1,
+                ));
+                owner += 1;
+            }
+            units.push(unit(policy, fragments));
+        }
+
+        let actual = paginate(&pages, &units).map(|plan| plan.placements);
+        let expected = reference_mixed_units(&pages, &units);
+        assert_eq!(actual, expected, "generated case {case}");
+    }
+}
+
 #[test]
 fn independent_pagination_matches_reference_oracle() {
     let mut cases = 0usize;
