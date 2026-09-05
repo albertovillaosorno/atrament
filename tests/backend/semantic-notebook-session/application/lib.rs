@@ -3023,6 +3023,8 @@ fn every_simple_inline_family_remains_editable_through_block_containers() {
         let ids = IdentityAllocator::new();
         let (mut candidate, span_candidate) =
             candidate_notebook_with_span(&ids, "nested before");
+        let page_candidate = candidate.pages[0].id;
+        let flow_candidate = candidate.pages[0].flows[0].id;
         let mut inline_block = candidate.pages[0].flows[0]
             .blocks
             .pop()
@@ -3088,7 +3090,9 @@ fn every_simple_inline_family_remains_editable_through_block_containers() {
         else {
             panic!("nested simple inline-family candidate must be accepted");
         };
+        let flow = accepted_for(&mapping, flow_candidate);
         let inline_block = accepted_for(&mapping, inline_block_candidate);
+        let page = accepted_for(&mapping, page_candidate);
         let span = accepted_for(&mapping, span_candidate);
         assert_eq!(
             session.inspect_identity_kind(revision, inline_block),
@@ -3098,6 +3102,42 @@ fn every_simple_inline_family_remains_editable_through_block_containers() {
                 target: inline_block,
             },
         );
+        let before = session
+            .current()
+            .expect("nested accepted revision")
+            .clone();
+        let DirectEditBatchSimulationOutcome::Predicted {
+            effect,
+            impact_seeds,
+            ..
+        } = session.simulate_direct_edit_batch(DirectEditBatchProposal {
+            base: revision,
+            capability_version: CURRENT_COMMAND_BEHAVIOR_VERSION,
+            commands: vec![text_batch_command(
+                1,
+                &[],
+                span,
+                "nested before",
+                "nested preview",
+            )],
+        })
+        else {
+            panic!("nested simple inline-family text edit must simulate");
+        };
+        assert_eq!(effect, DirectEditEffectClass::Mutation);
+        assert_eq!(impact_seeds, vec![DirectEditImpactSeed {
+            authorities: vec![
+                DirectEditDerivedAuthority::Diagnostics,
+                DirectEditDerivedAuthority::FlowGeometry,
+                DirectEditDerivedAuthority::Handwriting,
+                DirectEditDerivedAuthority::Motion,
+                DirectEditDerivedAuthority::Rendering,
+                DirectEditDerivedAuthority::Shaping,
+                DirectEditDerivedAuthority::Wrapping,
+            ],
+            scope: DirectEditImpactScope::Flow { flow, page },
+        }]);
+        assert_eq!(session.current(), Some(&before));
 
         let TextEditOutcome::Applied { revision: changed, .. } =
             session.replace_text(revision, span, String::from("nested after"))
