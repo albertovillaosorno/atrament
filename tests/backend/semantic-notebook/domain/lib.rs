@@ -37,13 +37,14 @@ use atrament_physical_page_profile::{
 use std::num::NonZeroU32;
 
 use atrament_semantic_notebook::{
-    Block, BlockContent, ExtensionData, Figure, Flow, IdentityAllocator,
-    InlineSpan, List, ListItem, Notebook, Page, PaperProfile, SemanticBlockKind,
-    SemanticIdentityDescriptor, SemanticIdentityKind, Table, TableCell,
-    TableCellSpan, TableGridError, TableRow, TableRowRole, UnresolvedBlock,
-    UnresolvedReason,
-    semantic_identity_descriptor, semantic_identity_kind,
-    semantic_identity_path,
+    Asset, Block, BlockContent, Constraint, ConstraintKind, ExtensionData,
+    Figure, Flow, IdentityAllocator, InlineSpan, List, ListItem, Notebook,
+    OutputProfile, Page, PaperProfile, Provenance, ProvenanceKind,
+    SemanticBlockKind, SemanticIdentityDescriptor, SemanticIdentityKind,
+    SemanticIdentityPathEntry, Style,
+    Table, TableCell, TableCellSpan, TableGridError, TableRow, TableRowRole,
+    UnresolvedBlock, UnresolvedReason, semantic_identity_descriptor,
+    semantic_identity_kind, semantic_identity_path,
 };
 
 fn grid_cell(
@@ -553,6 +554,69 @@ fn simple_inline_block_kinds_keep_span_ownership() {
                 owner: Some(5),
             }),
         );
+    }
+}
+
+#[test]
+fn notebook_root_families_have_exact_two_entry_paths() {
+    let notebook = Notebook {
+        assets: vec![Asset {
+            id: 2u32,
+            media_type: String::from("image/png"),
+        }],
+        constraints: vec![Constraint {
+            id: 3,
+            kind: ConstraintKind::Placement,
+            target: 1,
+        }],
+        extensions: vec![],
+        id: 1,
+        output_profiles: vec![OutputProfile {
+            id: 4,
+            name: String::from("digital"),
+        }],
+        page_profiles: vec![PaperProfile {
+            geometry: physical_page_profile(),
+            id: 5,
+        }],
+        pages: vec![],
+        provenance: vec![Provenance {
+            id: 6,
+            kind: ProvenanceKind::Supplied,
+            reference: Some(String::from("source")),
+        }],
+        styles: vec![Style {
+            id: 7,
+            name: String::from("body"),
+        }],
+    };
+    let cases = [
+        (2, SemanticIdentityKind::Asset),
+        (3, SemanticIdentityKind::Constraint),
+        (4, SemanticIdentityKind::OutputProfile),
+        (5, SemanticIdentityKind::PageProfile),
+        (6, SemanticIdentityKind::Provenance),
+        (7, SemanticIdentityKind::Style),
+    ];
+
+    for (target, kind) in cases {
+        let path = semantic_identity_path(&notebook, target)
+            .expect("root-owned identity must have a semantic path");
+        assert_eq!(path.len(), 2);
+        assert_eq!(path[0], SemanticIdentityPathEntry {
+            descriptor: SemanticIdentityDescriptor {
+                kind,
+                owner: Some(notebook.id),
+            },
+            identity: target,
+        });
+        assert_eq!(path[1], SemanticIdentityPathEntry {
+            descriptor: SemanticIdentityDescriptor {
+                kind: SemanticIdentityKind::Notebook,
+                owner: None,
+            },
+            identity: notebook.id,
+        });
     }
 }
 
