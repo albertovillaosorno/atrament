@@ -607,6 +607,16 @@ fn route_draft_replace(
     }
 }
 
+const fn is_origin_form_target_character(byte: u8) -> bool {
+    byte.is_ascii_alphanumeric()
+        || matches!(
+            byte,
+            b'-' | b'.' | b'_' | b'~' | b'!' | b'$' | b'&' | b'\''
+                | b'(' | b')' | b'*' | b'+' | b',' | b';' | b'=' | b':'
+                | b'@' | b'/' | b'?'
+        )
+}
+
 fn is_origin_form_target(target: &str) -> bool {
     if !target.starts_with('/') {
         return false;
@@ -614,9 +624,6 @@ fn is_origin_form_target(target: &str) -> bool {
     let bytes = target.as_bytes();
     let mut index = 0usize;
     while let Some(byte) = bytes.get(index).copied() {
-        if !byte.is_ascii_graphic() || byte == b'#' {
-            return false;
-        }
         if byte == b'%' {
             let Some(first) = bytes.get(index.saturating_add(1)) else {
                 return false;
@@ -629,6 +636,9 @@ fn is_origin_form_target(target: &str) -> bool {
             }
             index = index.saturating_add(3);
         } else {
+            if !is_origin_form_target_character(byte) {
+                return false;
+            }
             index = index.saturating_add(1);
         }
     }
