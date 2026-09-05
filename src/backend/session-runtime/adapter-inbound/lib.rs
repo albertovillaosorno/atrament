@@ -607,6 +607,13 @@ fn route_draft_replace(
     }
 }
 
+fn is_origin_form_target(target: &str) -> bool {
+    target.starts_with('/')
+        && target
+            .bytes()
+            .all(|byte| byte.is_ascii_graphic() && byte != b'#')
+}
+
 fn request_method_host_and_target(
     request: &[u8],
 ) -> Option<(&str, &str, &str)> {
@@ -616,7 +623,7 @@ fn request_method_host_and_target(
     let (method, remainder) = request_line.split_once(' ')?;
     let (target, version) = remainder.split_once(' ')?;
     if !matches!(method, "GET" | "POST")
-        || target.is_empty()
+        || !is_origin_form_target(target)
         || version != "HTTP/1.1"
     {
         return None;

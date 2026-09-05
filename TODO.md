@@ -1283,6 +1283,9 @@ Current loopback-runtime evidence requires the exact canonical Host, browser
 Origin, and Bearer credential before protected draft mutation. The request line
 requires exactly one ASCII space between method, target, and HTTP/1.1; tabs,
 repeated spaces, trailing whitespace, and other versions reject before routing.
+Request targets must use visible-ASCII origin form beginning with `/`; absolute
+proxy form, `*`, fragments, controls, and raw Unicode reject before routing.
+
 Every header field name must also use the HTTP token grammar; whitespace,
 Unicode, control characters, and other non-token names reject even when the
 header is unrelated to Atrament. Header values reject control bytes other than
