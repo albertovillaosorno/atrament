@@ -65,7 +65,8 @@ vector, overline, and underline decorations, escaped TeX special characters,
 standard and variant Greek control-sequence notation, common named and delimiter
 symbols, binary-operator symbols, arrow and ellipsis symbols, relation and logic
 symbols, operators, calculus, set notation, aligned separators, and ordered
-aligned, cases, gathered, matrix, and split environments. Paired
+aligned, cases, gathered, matrix, parenthesized-matrix, and split
+environments. Paired
 delimiter-sizing controls remain explicit unsupported input rather than being
 inferred from admitted delimiter glyph names. Unknown control words and
 unadmitted control symbols remain explicit unsupported constructs, and malformed

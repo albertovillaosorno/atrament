@@ -105,11 +105,13 @@ const STRUCTURED_ENVIRONMENT_COMMANDS: &[(&str, SupportedCommand)] = &[
     ("\\begin{cases}", SupportedCommand::BeginCases),
     ("\\begin{gathered}", SupportedCommand::BeginGathered),
     ("\\begin{matrix}", SupportedCommand::BeginMatrix),
+    ("\\begin{pmatrix}", SupportedCommand::BeginParenthesizedMatrix),
     ("\\begin{split}", SupportedCommand::BeginSplit),
     ("\\end{aligned}", SupportedCommand::EndAligned),
     ("\\end{cases}", SupportedCommand::EndCases),
     ("\\end{gathered}", SupportedCommand::EndGathered),
     ("\\end{matrix}", SupportedCommand::EndMatrix),
+    ("\\end{pmatrix}", SupportedCommand::EndParenthesizedMatrix),
     ("\\end{split}", SupportedCommand::EndSplit),
 ];
 
@@ -165,6 +167,8 @@ pub enum MathSyntaxErrorKind {
     ExtraGroupClose,
     /// Matrix environment closes without a matching matrix start.
     ExtraMatrixEnd,
+    /// Parenthesized-matrix environment closes without its matching start.
+    ExtraParenthesizedMatrixEnd,
     /// Split environment closes without a matching split start.
     ExtraSplitEnd,
     /// An environment closes while a different environment is still innermost.
@@ -177,6 +181,8 @@ pub enum MathSyntaxErrorKind {
     MissingGatheredEnd,
     /// Matrix environment remains open at end of source.
     MissingMatrixEnd,
+    /// Parenthesized-matrix environment remains open at end of source.
+    MissingParenthesizedMatrixEnd,
     /// A supported command is missing one or more required braced arguments.
     MissingRequiredGroup,
     /// Split environment remains open at end of source.
@@ -223,6 +229,7 @@ enum StructuredEnvironmentKind {
     Cases,
     Gathered,
     Matrix,
+    ParenthesizedMatrix,
     Split,
 }
 
@@ -274,6 +281,8 @@ pub enum SupportedCommand {
     BeginGathered,
     /// Start of an explicit matrix environment.
     BeginMatrix,
+    /// Start of an explicit parenthesized-matrix environment.
+    BeginParenthesizedMatrix,
     /// Start of an explicit split environment.
     BeginSplit,
     /// Two-group binomial coefficient command.
@@ -300,6 +309,8 @@ pub enum SupportedCommand {
     EndGathered,
     /// End of an explicit matrix environment.
     EndMatrix,
+    /// End of an explicit parenthesized-matrix environment.
+    EndParenthesizedMatrix,
     /// End of an explicit split environment.
     EndSplit,
     /// Escaped TeX special character preserved as literal source.
@@ -383,7 +394,8 @@ impl AnalyzedFormula {
 /// `\\operatorname{...}`, `\\text{...}`, grouped substacks, vector,
 /// overline, and underline decorations, escaped TeX special characters, common
 /// named mathematical operators and symbols, aligned separators, and ordered
-/// aligned, cases, gathered, matrix, and split environments.
+/// aligned, cases, gathered, matrix, parenthesized-matrix, and split
+/// environments.
 /// Math-only alignment, script, and row-break markers remain literal inside
 /// grouped text.
 /// Other commands remain present in the token stream and are reported through
@@ -875,6 +887,8 @@ fn beginning_environment(
         Some(StructuredEnvironmentKind::Gathered)
     } else if command == SupportedCommand::BeginMatrix {
         Some(StructuredEnvironmentKind::Matrix)
+    } else if command == SupportedCommand::BeginParenthesizedMatrix {
+        Some(StructuredEnvironmentKind::ParenthesizedMatrix)
     } else if command == SupportedCommand::BeginSplit {
         Some(StructuredEnvironmentKind::Split)
     } else {
@@ -893,6 +907,8 @@ fn ending_environment(
         Some(StructuredEnvironmentKind::Gathered)
     } else if command == SupportedCommand::EndMatrix {
         Some(StructuredEnvironmentKind::Matrix)
+    } else if command == SupportedCommand::EndParenthesizedMatrix {
+        Some(StructuredEnvironmentKind::ParenthesizedMatrix)
     } else if command == SupportedCommand::EndSplit {
         Some(StructuredEnvironmentKind::Split)
     } else {
@@ -907,6 +923,7 @@ const fn environment_allows_alignment(
         StructuredEnvironmentKind::Aligned
         | StructuredEnvironmentKind::Cases
         | StructuredEnvironmentKind::Matrix
+        | StructuredEnvironmentKind::ParenthesizedMatrix
         | StructuredEnvironmentKind::Split => true,
         StructuredEnvironmentKind::Gathered => false,
     }
@@ -925,6 +942,9 @@ const fn environment_extra_end_error(
         },
         StructuredEnvironmentKind::Matrix => {
             MathSyntaxErrorKind::ExtraMatrixEnd
+        },
+        StructuredEnvironmentKind::ParenthesizedMatrix => {
+            MathSyntaxErrorKind::ExtraParenthesizedMatrixEnd
         },
         StructuredEnvironmentKind::Split => MathSyntaxErrorKind::ExtraSplitEnd,
     }
@@ -945,6 +965,9 @@ const fn environment_missing_end_error(
         },
         StructuredEnvironmentKind::Matrix => {
             MathSyntaxErrorKind::MissingMatrixEnd
+        },
+        StructuredEnvironmentKind::ParenthesizedMatrix => {
+            MathSyntaxErrorKind::MissingParenthesizedMatrixEnd
         },
         StructuredEnvironmentKind::Split => {
             MathSyntaxErrorKind::MissingSplitEnd
@@ -1007,11 +1030,13 @@ fn validate_command_groups(
         | SupportedCommand::BeginCases
         | SupportedCommand::BeginGathered
         | SupportedCommand::BeginMatrix
+        | SupportedCommand::BeginParenthesizedMatrix
         | SupportedCommand::BeginSplit
         | SupportedCommand::EndAligned
         | SupportedCommand::EndCases
         | SupportedCommand::EndGathered
         | SupportedCommand::EndMatrix
+        | SupportedCommand::EndParenthesizedMatrix
         | SupportedCommand::EndSplit
         | SupportedCommand::EscapedSpecial
         | SupportedCommand::NamedOperator

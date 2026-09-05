@@ -941,6 +941,7 @@ fn outer_environments_do_not_leak_alignment_into_substack_scope() {
         (r"\begin{aligned}", r"\end{aligned}"),
         (r"\begin{cases}", r"\end{cases}"),
         (r"\begin{matrix}", r"\end{matrix}"),
+        (r"\begin{pmatrix}", r"\end{pmatrix}"),
         (r"\begin{split}", r"\end{split}"),
     ] {
         let source = format!(r"{begin}\substack{{a & b}}{end}");
@@ -1267,6 +1268,43 @@ fn aligned_environment_admits_rows_and_alignment_in_display_mode() {
 }
 
 #[test]
+fn parenthesized_matrix_admits_rows_and_alignment() {
+    let source = r"A=\begin{pmatrix}a & b \\ c & d\end{pmatrix}";
+    let analyzed = analyze(source, FormulaMode::Display)
+        .expect("parenthesized matrix formula");
+    assert!(analyzed.is_supported());
+    assert_eq!(reconstructed(&analyzed), source);
+    assert!(analyzed.tokens.iter().any(|token| {
+        token.kind
+            == MathTokenKind::Command(
+                SupportedCommand::BeginParenthesizedMatrix,
+            )
+    }));
+    assert!(analyzed.tokens.iter().any(|token| {
+        token.kind
+            == MathTokenKind::Command(
+                SupportedCommand::EndParenthesizedMatrix,
+            )
+    }));
+    assert_eq!(
+        analyzed
+            .tokens
+            .iter()
+            .filter(|token| token.kind == MathTokenKind::AlignmentPoint)
+            .count(),
+        2,
+    );
+    assert_eq!(
+        analyzed
+            .tokens
+            .iter()
+            .filter(|token| token.kind == MathTokenKind::RowBreak)
+            .count(),
+        1,
+    );
+}
+
+#[test]
 fn split_environment_admits_derivation_rows_and_alignment() {
     let source = concat!(
         r"\begin{split}f(x) &= x^2 + 1 \\ ",
@@ -1558,6 +1596,7 @@ fn environments_cannot_close_inside_a_later_group() {
         (r"\begin{cases}", r"\end{cases}"),
         (r"\begin{gathered}", r"\end{gathered}"),
         (r"\begin{matrix}", r"\end{matrix}"),
+        (r"\begin{pmatrix}", r"\end{pmatrix}"),
         (r"\begin{split}", r"\end{split}"),
     ] {
         let prefix = format!("{begin}{{a");
@@ -1586,6 +1625,7 @@ fn environments_must_close_before_their_owning_group() {
         (r"\begin{cases}", r"\end{cases}"),
         (r"\begin{gathered}", r"\end{gathered}"),
         (r"\begin{matrix}", r"\end{matrix}"),
+        (r"\begin{pmatrix}", r"\end{pmatrix}"),
         (r"\begin{split}", r"\end{split}"),
     ] {
         let prefix = format!("{{{begin}a");
@@ -1832,6 +1872,8 @@ fn environment_names_require_exact_braced_spelling() {
         (r"a \\ b\end{gatheredx}", r"\end"),
         (r"\begin{matrixx}a & b", r"\begin"),
         (r"a & b\end{matrixx}", r"\end"),
+        (r"\begin{pmatrixx}a & b", r"\begin"),
+        (r"a & b\end{pmatrixx}", r"\end"),
         (r"\begin{splitx}a & b", r"\begin"),
         (r"a & b\end{splitx}", r"\end"),
     ] {
@@ -1846,7 +1888,7 @@ fn environment_names_require_exact_braced_spelling() {
 
 #[test]
 fn unknown_matrix_environment_remains_explicit_unsupported_source() {
-    let source = r"\begin{pmatrix}a & b";
+    let source = r"\begin{bmatrix}a & b";
     let analyzed = analyze(source, FormulaMode::Aligned)
         .expect("balanced unknown matrix environment source");
     assert!(!analyzed.is_supported());
@@ -1951,6 +1993,25 @@ fn malformed_matrix_boundaries_are_typed() {
         Err(MathSyntaxError {
             byte_offset: source.len(),
             kind: MathSyntaxErrorKind::MissingMatrixEnd,
+        }),
+    );
+}
+
+#[test]
+fn malformed_parenthesized_matrix_boundaries_are_typed() {
+    assert_eq!(
+        analyze(r"\end{pmatrix}", FormulaMode::Display),
+        Err(MathSyntaxError {
+            byte_offset: 0,
+            kind: MathSyntaxErrorKind::ExtraParenthesizedMatrixEnd,
+        }),
+    );
+    let source = r"\begin{pmatrix}a & b";
+    assert_eq!(
+        analyze(source, FormulaMode::Display),
+        Err(MathSyntaxError {
+            byte_offset: source.len(),
+            kind: MathSyntaxErrorKind::MissingParenthesizedMatrixEnd,
         }),
     );
 }
