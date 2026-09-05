@@ -1475,6 +1475,11 @@ the same attacker page, isolating Atrament's response policy rather than generic
 cross-origin framing behavior. This proves browser enforcement of
 `frame-ancestors 'none'`, not only header emission.
 
+The same fixture performs document-initiated navigation from Atrament to a
+hostile loopback recorder and observes no `Referer`, while a permissive control
+document sends its ordinary origin referrer to that recorder. This proves
+browser enforcement of `no-referrer`, not only header emission.
+
 These browser constraints do not replace backend socket, token, host, path,
 cleanup, framing, or hostile-origin acceptance tests.
 
