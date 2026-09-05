@@ -1084,6 +1084,7 @@ fn substack_rows_are_scoped_to_their_group() {
 fn outer_environments_do_not_leak_alignment_into_substack_scope() {
     for (begin, end) in [
         (r"\begin{aligned}", r"\end{aligned}"),
+        (r"\begin{bmatrix}", r"\end{bmatrix}"),
         (r"\begin{cases}", r"\end{cases}"),
         (r"\begin{matrix}", r"\end{matrix}"),
         (r"\begin{pmatrix}", r"\end{pmatrix}"),
@@ -1393,6 +1394,39 @@ fn aligned_environment_admits_rows_and_alignment_in_display_mode() {
     }));
     assert!(analyzed.tokens.iter().any(|token| {
         token.kind == MathTokenKind::Command(SupportedCommand::EndAligned)
+    }));
+    assert_eq!(
+        analyzed
+            .tokens
+            .iter()
+            .filter(|token| token.kind == MathTokenKind::AlignmentPoint)
+            .count(),
+        2,
+    );
+    assert_eq!(
+        analyzed
+            .tokens
+            .iter()
+            .filter(|token| token.kind == MathTokenKind::RowBreak)
+            .count(),
+        1,
+    );
+}
+
+#[test]
+fn bracketed_matrix_admits_rows_and_alignment() {
+    let source = r"A=\begin{bmatrix}a & b \\ c & d\end{bmatrix}";
+    let analyzed = analyze(source, FormulaMode::Display)
+        .expect("bracketed matrix formula");
+    assert!(analyzed.is_supported());
+    assert_eq!(reconstructed(&analyzed), source);
+    assert!(analyzed.tokens.iter().any(|token| {
+        token.kind
+            == MathTokenKind::Command(SupportedCommand::BeginBracketedMatrix)
+    }));
+    assert!(analyzed.tokens.iter().any(|token| {
+        token.kind
+            == MathTokenKind::Command(SupportedCommand::EndBracketedMatrix)
     }));
     assert_eq!(
         analyzed
@@ -1761,6 +1795,7 @@ fn mismatched_environment_end_precedes_group_depth_failure() {
 fn environments_cannot_close_inside_a_later_group() {
     for (begin, end) in [
         (r"\begin{aligned}", r"\end{aligned}"),
+        (r"\begin{bmatrix}", r"\end{bmatrix}"),
         (r"\begin{cases}", r"\end{cases}"),
         (r"\begin{gathered}", r"\end{gathered}"),
         (r"\begin{matrix}", r"\end{matrix}"),
@@ -1790,6 +1825,7 @@ fn environments_cannot_close_inside_a_later_group() {
 fn environments_must_close_before_their_owning_group() {
     for (begin, end) in [
         (r"\begin{aligned}", r"\end{aligned}"),
+        (r"\begin{bmatrix}", r"\end{bmatrix}"),
         (r"\begin{cases}", r"\end{cases}"),
         (r"\begin{gathered}", r"\end{gathered}"),
         (r"\begin{matrix}", r"\end{matrix}"),
@@ -1861,23 +1897,25 @@ fn deep_ordered_environments_are_iterative_and_balanced() {
     let depth = 1_024usize;
     let mut source = String::new();
     for level in 0..depth {
-        match level % 6 {
+        match level % 7 {
             0 => source.push_str(r"\begin{aligned}"),
-            1 => source.push_str(r"\begin{cases}"),
-            2 => source.push_str(r"\begin{gathered}"),
-            3 => source.push_str(r"\begin{matrix}"),
-            4 => source.push_str(r"\begin{pmatrix}"),
+            1 => source.push_str(r"\begin{bmatrix}"),
+            2 => source.push_str(r"\begin{cases}"),
+            3 => source.push_str(r"\begin{gathered}"),
+            4 => source.push_str(r"\begin{matrix}"),
+            5 => source.push_str(r"\begin{pmatrix}"),
             _ => source.push_str(r"\begin{split}"),
         }
     }
     source.push('x');
     for level in (0..depth).rev() {
-        match level % 6 {
+        match level % 7 {
             0 => source.push_str(r"\end{aligned}"),
-            1 => source.push_str(r"\end{cases}"),
-            2 => source.push_str(r"\end{gathered}"),
-            3 => source.push_str(r"\end{matrix}"),
-            4 => source.push_str(r"\end{pmatrix}"),
+            1 => source.push_str(r"\end{bmatrix}"),
+            2 => source.push_str(r"\end{cases}"),
+            3 => source.push_str(r"\end{gathered}"),
+            4 => source.push_str(r"\end{matrix}"),
+            5 => source.push_str(r"\end{pmatrix}"),
             _ => source.push_str(r"\end{split}"),
         }
     }
@@ -1893,6 +1931,7 @@ fn deep_ordered_environments_are_iterative_and_balanced() {
                 token.kind,
                 MathTokenKind::Command(
                     SupportedCommand::BeginAligned
+                        | SupportedCommand::BeginBracketedMatrix
                         | SupportedCommand::BeginCases
                         | SupportedCommand::BeginGathered
                         | SupportedCommand::BeginMatrix
@@ -2037,6 +2076,8 @@ fn environment_names_require_exact_braced_spelling() {
     for (source, unsupported) in [
         (r"\begin{alignedx}a & b", r"\begin"),
         (r"a & b\end{alignedx}", r"\end"),
+        (r"\begin{bmatrixx}a & b", r"\begin"),
+        (r"a & b\end{bmatrixx}", r"\end"),
         (r"\begin{casesx}a & b", r"\begin"),
         (r"a & b\end{casesx}", r"\end"),
         (r"\begin{gatheredx}a \\ b", r"\begin"),
@@ -2059,7 +2100,7 @@ fn environment_names_require_exact_braced_spelling() {
 
 #[test]
 fn unknown_matrix_environment_remains_explicit_unsupported_source() {
-    let source = r"\begin{bmatrix}a & b";
+    let source = r"\begin{vmatrix}a & b";
     let analyzed = analyze(source, FormulaMode::Aligned)
         .expect("balanced unknown matrix environment source");
     assert!(!analyzed.is_supported());
@@ -2164,6 +2205,25 @@ fn malformed_matrix_boundaries_are_typed() {
         Err(MathSyntaxError {
             byte_offset: source.len(),
             kind: MathSyntaxErrorKind::MissingMatrixEnd,
+        }),
+    );
+}
+
+#[test]
+fn malformed_bracketed_matrix_boundaries_are_typed() {
+    assert_eq!(
+        analyze(r"\end{bmatrix}", FormulaMode::Display),
+        Err(MathSyntaxError {
+            byte_offset: 0,
+            kind: MathSyntaxErrorKind::ExtraBracketedMatrixEnd,
+        }),
+    );
+    let source = r"\begin{bmatrix}a & b";
+    assert_eq!(
+        analyze(source, FormulaMode::Display),
+        Err(MathSyntaxError {
+            byte_offset: source.len(),
+            kind: MathSyntaxErrorKind::MissingBracketedMatrixEnd,
         }),
     );
 }
