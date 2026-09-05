@@ -1048,6 +1048,103 @@ fn unknown_flow_identity_is_typed_before_page_geometry() {
 }
 
 #[test]
+fn keep_group_skip_never_backfills_earlier_accepted_page() {
+    let ids = IdentityAllocator::new();
+    let mut fixture = candidate_fixture(&ids);
+    fixture.notebook.page_profiles[1].geometry = geometry(155_000);
+    let profile_three = ids.allocate_candidate().expect("third profile");
+    let page_three = ids.allocate_candidate().expect("third page");
+    fixture.notebook.page_profiles.push(PaperProfile {
+        geometry: geometry(20_000),
+        id: profile_three,
+    });
+    fixture.notebook.pages.push(Page {
+        flows: Vec::new(),
+        id: page_three,
+        page_profile: profile_three,
+    });
+
+    let second = ids.allocate_candidate().expect("second block");
+    let third = ids.allocate_candidate().expect("third block");
+    let fourth = ids.allocate_candidate().expect("fourth block");
+    for block in [second, third, fourth] {
+        fixture.notebook.pages[0].flows[0].blocks.push(Block {
+            content: BlockContent::Rule,
+            extensions: vec![],
+            id: block,
+            provenance: None,
+            style: None,
+        });
+    }
+
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(fixture.notebook)
+    else {
+        panic!("three-page candidate must be accepted");
+    };
+    let flow = accepted_for(&mapping, fixture.flow);
+    let owners = [
+        accepted_for(&mapping, fixture.block),
+        accepted_for(&mapping, second),
+        accepted_for(&mapping, third),
+        accepted_for(&mapping, fourth),
+    ];
+    let first_page = accepted_for(&mapping, fixture.page_one);
+    let third_page = accepted_for(&mapping, page_three);
+    let measured = RevisionFlowMeasurement {
+        flow,
+        revision,
+        units: vec![
+            MeasuredFlowUnit {
+                fragments: vec![MeasuredFragment {
+                    height: Length::from_micrometres(250_000),
+                    owner: owners[0],
+                    width: Length::from_micrometres(50_000),
+                }],
+                policy: FlowUnitPolicy::Independent,
+            },
+            MeasuredFlowUnit {
+                fragments: owners[1..3]
+                    .iter()
+                    .map(|owner| MeasuredFragment {
+                        height: Length::from_micrometres(40_000),
+                        owner: *owner,
+                        width: Length::from_micrometres(100_000),
+                    })
+                    .collect(),
+                policy: FlowUnitPolicy::KeepTogetherWhenPossible,
+            },
+            MeasuredFlowUnit {
+                fragments: vec![MeasuredFragment {
+                    height: Length::from_micrometres(10_000),
+                    owner: owners[3],
+                    width: Length::from_micrometres(20_000),
+                }],
+                policy: FlowUnitPolicy::Independent,
+            },
+        ],
+    };
+
+    let plan = paginate_revision(
+        session.current().expect("accepted revision"),
+        &measured,
+    )
+    .expect("accepted page order must remain monotone");
+    assert_eq!(
+        plan.placements
+            .iter()
+            .map(|placement| placement.page)
+            .collect::<Vec<_>>(),
+        [first_page, third_page, third_page, third_page],
+    );
+    assert_eq!(
+        plan.placements[3].top,
+        Length::from_micrometres(100_000),
+    );
+}
+
+#[test]
 fn flow_owned_by_second_page_never_backfills_first_page() {
     let ids = IdentityAllocator::new();
     let mut fixture = candidate_fixture(&ids);
