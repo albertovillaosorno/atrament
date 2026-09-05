@@ -45,6 +45,89 @@ fn reconstructed(
         .collect()
 }
 
+fn assert_analysis_invariants(
+    analyzed: &atrament_mathematics_source::AnalyzedFormula,
+    source: &str,
+    mode: FormulaMode,
+) {
+    assert_eq!(analyzed.source, source);
+    assert_eq!(analyzed.mode, mode);
+    assert_eq!(analyzed.is_supported(), analyzed.unsupported.is_empty());
+
+    let mut cursor = 0usize;
+    for token in &analyzed.tokens {
+        assert_eq!(token.start, cursor, "token gap or overlap: {source:?}");
+        assert!(token.start < token.end, "empty token: {source:?}");
+        assert!(source.is_char_boundary(token.start));
+        assert!(source.is_char_boundary(token.end));
+        cursor = token.end;
+    }
+    assert_eq!(cursor, source.len(), "incomplete token coverage: {source:?}");
+    assert_eq!(reconstructed(analyzed), source);
+
+    let mut unsupported_end = 0usize;
+    for item in &analyzed.unsupported {
+        assert!(item.start >= unsupported_end, "unsupported order: {source:?}");
+        assert!(item.start < item.end, "empty unsupported span: {source:?}");
+        assert_eq!(
+            source.get(item.start..item.end),
+            Some(item.name.as_str()),
+            "unsupported source mismatch: {source:?}",
+        );
+        assert!(
+            analyzed.tokens.iter().any(|token| {
+                token.start == item.start
+                    && token.end == item.end
+                    && token.kind == MathTokenKind::Literal
+            }),
+            "unsupported command must retain one exact literal token: {:?}",
+            source,
+        );
+        unsupported_end = item.end;
+    }
+}
+
+#[test]
+fn small_mixed_sources_preserve_analysis_invariants() {
+    const FRAGMENTS: &[&str] = &[
+        "a",
+        "ñ",
+        "🙂",
+        "{",
+        "}",
+        "&",
+        r"\\",
+        r"\unknown",
+        r"\acute",
+        r"\sqrt[3]",
+        r"\begin{gathered}",
+        r"\end{gathered}",
+    ];
+
+    for first in FRAGMENTS {
+        for second in FRAGMENTS {
+            for third in FRAGMENTS {
+                for fourth in FRAGMENTS {
+                    let source = format!("{first}{second}{third}{fourth}");
+                    for mode in [
+                        FormulaMode::Inline,
+                        FormulaMode::Display,
+                        FormulaMode::Aligned,
+                    ] {
+                        if let Ok(analyzed) = analyze(&source, mode) {
+                            assert_analysis_invariants(
+                                &analyzed,
+                                &source,
+                                mode,
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 #[test]
 fn unicode_school_formula_is_preserved_byte_for_byte() {
     let source = "y′ = 5(3x² + 1)⁴ · 6x";
