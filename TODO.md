@@ -1366,6 +1366,16 @@ unreachable authenticated session running. Recovery text is secret-free and
 directs a restart after browser launch is fixed; it does not present the bare
 origin as an authenticated continuation URL.
 
+The current automatic-launch handoff still passes the fragment-bearing URL as a
+platform-opener command-line argument. A synthetic Linux probe observed that
+argument, including its marker credential, through both `/proc/<pid>/cmdline`
+and `ps` while the opener was alive. This violates the intended protection from
+unrelated same-user local processes even though the fragment never enters an
+HTTP request, log, query string, or persistent product file. P1 remains open
+until the platform launcher uses a credential handoff that is not exposed via
+child argv, environment, temporary files, or shell history; moving the same
+secret between those surfaces is not an acceptable fix.
+
 Request targets must use RFC 3986 origin-form path/query characters beginning
 with `/`; absolute proxy form, `*`, fragments, controls, raw Unicode, and URI-
 invalid visible punctuation reject before routing. Any `%` escape must carry

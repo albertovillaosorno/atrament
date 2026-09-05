@@ -76,6 +76,14 @@ handoff because the fragment is not transmitted in the HTTP request. Frontend
 startup consumes the fragment, stores the secret only in memory, and removes it
 from the visible browser location before ordinary navigation or copying.
 
+The handoff must also keep the credential unavailable to unrelated same-user
+processes. Passing the fragment URL as a child-process command-line argument
+does not satisfy that requirement on platforms where process arguments are
+observable through facilities such as `/proc` or process-listing tools. An
+admitted launcher
+must therefore use an operating-system handoff whose credential payload is not
+exposed through child argv, environment, a temporary file, or shell history.
+
 ### Request authentication
 
 Every API request that reads or mutates session-private state presents the
