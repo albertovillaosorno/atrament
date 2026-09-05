@@ -2963,6 +2963,7 @@ fn abandoned_redo_asset_bytes_cannot_attach_to_new_asset_identity() {
             revision: with_asset,
         }),
     );
+    assert_eq!(session.retained_asset_byte_count_for_test(), 1);
 
     let HistoryTraversalOutcome::Traversed {
         revision: restored, ..
@@ -2986,6 +2987,7 @@ fn abandoned_redo_asset_bytes_cannot_attach_to_new_asset_identity() {
             revision: restored,
         }),
     );
+    assert_eq!(session.retained_asset_byte_count_for_test(), 1);
 
     let (branch_candidate, _, branch_asset_candidate, _) =
         asset_figure_candidate(&identities);
@@ -3010,6 +3012,7 @@ fn abandoned_redo_asset_bytes_cannot_attach_to_new_asset_identity() {
             revision: branched,
         }),
     );
+    assert_eq!(session.retained_asset_byte_count_for_test(), 0);
     assert_eq!(
         session.asset_bytes(branched, abandoned_asset),
         Err(application::AssetBytesError::TargetNotFound {

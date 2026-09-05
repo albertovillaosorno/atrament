@@ -624,6 +624,13 @@ impl SessionApplication {
         }
     }
 
+    /// Return retained asset-entry count for root-fixture lifetime assertions.
+    #[cfg(test)]
+    #[must_use]
+    pub fn retained_asset_byte_count_for_test(&self) -> usize {
+        self.asset_bytes.len()
+    }
+
     /// Simulate one established direct semantic edit without mutation.
     #[must_use]
     pub fn simulate_direct_edit(
