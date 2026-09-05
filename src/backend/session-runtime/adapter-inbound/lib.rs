@@ -203,10 +203,20 @@ fn declared_content_length(request_head: &[u8]) -> io::Result<usize> {
             "request content length is malformed or duplicated",
         ));
     };
+    parse_content_length_value(value)
+}
+
+fn parse_content_length_value(value: &str) -> io::Result<usize> {
+    if value.is_empty() || !value.bytes().all(|byte| byte.is_ascii_digit()) {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "request content length is not an ASCII decimal byte count",
+        ));
+    }
     let length = value.parse::<usize>().map_err(|_parse_error| {
         io::Error::new(
             io::ErrorKind::InvalidData,
-            "request content length is not a decimal byte count",
+            "request content length is not representable",
         )
     })?;
     if length > MAX_REQUEST_BODY_BYTES {
@@ -475,9 +485,11 @@ fn request_body(request: &[u8]) -> Option<&[u8]> {
     {
         return None;
     }
-    let declared = single_header_value(request_head, "content-length")?
-        .parse::<usize>()
-        .ok()?;
+    let declared = parse_content_length_value(single_header_value(
+        request_head,
+        "content-length",
+    )?)
+    .ok()?;
     let body = request.get(head_end..)?;
     (body.len() == declared).then_some(body)
 }

@@ -621,6 +621,7 @@ fn malformed_draft_body_framing_never_mutates_state() {
     let malformed = [
         format!("{prefix}\r\nbody").into_bytes(),
         format!("{prefix}Content-Length: 3\r\n\r\nbody").into_bytes(),
+        format!("{prefix}Content-Length: +4\r\n\r\nbody").into_bytes(),
         format!("{prefix}Content-Length: 4\r\nContent-Length: 4\r\n\r\nbody",)
             .into_bytes(),
         format!(

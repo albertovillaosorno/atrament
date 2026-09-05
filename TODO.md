@@ -1246,6 +1246,12 @@ Test loopback binding, session token, hostile local pages, file-path
 confinement, temporary cleanup, no telemetry, no autosave, and no undeclared
 network access.
 
+Current loopback-runtime evidence requires the exact canonical Host, browser
+Origin, and Bearer credential before protected draft mutation. Request framing
+rejects transfer encoding, duplicate content lengths, body-length mismatch, and
+non-digit Content-Length syntax such as a leading plus sign before draft state
+can change.
+
 Current frontend evidence has no runtime dependencies, network client,
 persistent browser storage, domain parser, external assets, referrer, autofill,
 or browser spellcheck on session text. Its CSP blocks cross-origin script,
