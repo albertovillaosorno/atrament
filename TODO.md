@@ -456,9 +456,13 @@ metrics and move complete semantic fragments to following pages predictably.
 
 Current executable evidence paginates already-measured top-level flow blocks in
 semantic order over exact writable regions derived from accepted page profiles.
+
 The physical-profile root independently matches writable-region derivation
 across 20,000 valid profiles covering both orientations and all four binding
-edges.
+edges. Another 120,000 mixed profiles compare validation failure precedence and
+writable-region results against an independent integer-arithmetic model,
+including coordinate overflow and simultaneous invalid conditions.
+
 Measurements bind to one accepted revision and one accepted flow; stale,
 incomplete, reordered, unknown-flow, and out-of-flow measurements reject before
 layout. Repeated measured fragments may retain one block owner, and no fragment
