@@ -1370,9 +1370,14 @@ authenticated continuation URL.
 
 The opener process now receives null stdin, stdout, and stderr. Before that
 change, a synthetic opener that echoed its URL copied the credential-bearing
-fragment into both Atrament output streams; the same probe is now silent. This
-closes child-output reflection without claiming to solve the separate argv
-exposure below.
+fragment into both Atrament output streams; the same probe is now silent. A live
+Linux `/proc` check also observed file descriptors 0, 1, and 2 all bound to
+`/dev/null`.
+
+Three hung-opener production trials failed closed in 5.003-5.007 seconds and
+left no matching helper process. This closes child-output reflection and
+unbounded launch waiting without claiming to solve the separate argv exposure
+below.
 
 The current automatic-launch handoff still passes the fragment-bearing URL as a
 platform-opener command-line argument. A synthetic Linux probe observed that
