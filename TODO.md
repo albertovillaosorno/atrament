@@ -1339,7 +1339,14 @@ POST requests.
 The configured request timeout is now one total transport deadline rather than a
 per-read budget. Trickle bytes cannot extend the production two-second request
 budget; a real loopback probe returns 408 near that deadline and then serves a
-fresh health request.
+fresh health request. The reader refuses to run without that total deadline, and
+the runtime serves a connection only after both read and write deadlines are
+configured.
+
+The transport admits at most 16 KiB of request headers and 2 MiB of request
+body. Exact-limit fixtures pass while one byte over either ceiling rejects. The
+first-release authenticated handshake additionally admits no request body;
+absent or zero `Content-Length` is accepted only when no trailing bytes exist.
 
 Request targets must use RFC 3986 origin-form path/query characters beginning
 with `/`; absolute proxy form, `*`, fragments, controls, raw Unicode, and URI-
