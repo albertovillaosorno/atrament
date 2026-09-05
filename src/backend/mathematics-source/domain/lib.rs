@@ -100,19 +100,61 @@ const STRUCTURED_CONTROL_WORD_COMMANDS: &[(&str, SupportedCommand)] = &[
     ("\\vec", SupportedCommand::Vector),
 ];
 
-const STRUCTURED_ENVIRONMENT_COMMANDS: &[(&str, SupportedCommand)] = &[
-    ("\\begin{aligned}", SupportedCommand::BeginAligned),
-    ("\\begin{cases}", SupportedCommand::BeginCases),
-    ("\\begin{gathered}", SupportedCommand::BeginGathered),
-    ("\\begin{matrix}", SupportedCommand::BeginMatrix),
-    ("\\begin{pmatrix}", SupportedCommand::BeginParenthesizedMatrix),
-    ("\\begin{split}", SupportedCommand::BeginSplit),
-    ("\\end{aligned}", SupportedCommand::EndAligned),
-    ("\\end{cases}", SupportedCommand::EndCases),
-    ("\\end{gathered}", SupportedCommand::EndGathered),
-    ("\\end{matrix}", SupportedCommand::EndMatrix),
-    ("\\end{pmatrix}", SupportedCommand::EndParenthesizedMatrix),
-    ("\\end{split}", SupportedCommand::EndSplit),
+const STRUCTURED_ENVIRONMENTS: &[StructuredEnvironmentDefinition] = &[
+    StructuredEnvironmentDefinition {
+        allows_alignment: true,
+        begin_command: SupportedCommand::BeginAligned,
+        begin_spelling: "\\begin{aligned}",
+        end_command: SupportedCommand::EndAligned,
+        end_spelling: "\\end{aligned}",
+        extra_end_error: MathSyntaxErrorKind::ExtraAlignedEnd,
+        missing_end_error: MathSyntaxErrorKind::MissingAlignedEnd,
+    },
+    StructuredEnvironmentDefinition {
+        allows_alignment: true,
+        begin_command: SupportedCommand::BeginCases,
+        begin_spelling: "\\begin{cases}",
+        end_command: SupportedCommand::EndCases,
+        end_spelling: "\\end{cases}",
+        extra_end_error: MathSyntaxErrorKind::ExtraCasesEnd,
+        missing_end_error: MathSyntaxErrorKind::MissingCasesEnd,
+    },
+    StructuredEnvironmentDefinition {
+        allows_alignment: false,
+        begin_command: SupportedCommand::BeginGathered,
+        begin_spelling: "\\begin{gathered}",
+        end_command: SupportedCommand::EndGathered,
+        end_spelling: "\\end{gathered}",
+        extra_end_error: MathSyntaxErrorKind::ExtraGatheredEnd,
+        missing_end_error: MathSyntaxErrorKind::MissingGatheredEnd,
+    },
+    StructuredEnvironmentDefinition {
+        allows_alignment: true,
+        begin_command: SupportedCommand::BeginMatrix,
+        begin_spelling: "\\begin{matrix}",
+        end_command: SupportedCommand::EndMatrix,
+        end_spelling: "\\end{matrix}",
+        extra_end_error: MathSyntaxErrorKind::ExtraMatrixEnd,
+        missing_end_error: MathSyntaxErrorKind::MissingMatrixEnd,
+    },
+    StructuredEnvironmentDefinition {
+        allows_alignment: true,
+        begin_command: SupportedCommand::BeginParenthesizedMatrix,
+        begin_spelling: "\\begin{pmatrix}",
+        end_command: SupportedCommand::EndParenthesizedMatrix,
+        end_spelling: "\\end{pmatrix}",
+        extra_end_error: MathSyntaxErrorKind::ExtraParenthesizedMatrixEnd,
+        missing_end_error: MathSyntaxErrorKind::MissingParenthesizedMatrixEnd,
+    },
+    StructuredEnvironmentDefinition {
+        allows_alignment: true,
+        begin_command: SupportedCommand::BeginSplit,
+        begin_spelling: "\\begin{split}",
+        end_command: SupportedCommand::EndSplit,
+        end_spelling: "\\end{split}",
+        extra_end_error: MathSyntaxErrorKind::ExtraSplitEnd,
+        missing_end_error: MathSyntaxErrorKind::MissingSplitEnd,
+    },
 ];
 
 /// Complete source-preserving analysis of one mathematical unit.
@@ -224,19 +266,20 @@ pub enum MathTokenKind {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum StructuredEnvironmentKind {
-    Aligned,
-    Cases,
-    Gathered,
-    Matrix,
-    ParenthesizedMatrix,
-    Split,
+struct StructuredEnvironmentDefinition {
+    allows_alignment: bool,
+    begin_command: SupportedCommand,
+    begin_spelling: &'static str,
+    end_command: SupportedCommand,
+    end_spelling: &'static str,
+    extra_end_error: MathSyntaxErrorKind,
+    missing_end_error: MathSyntaxErrorKind,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct StructuredEnvironmentScope {
+    definition: StructuredEnvironmentDefinition,
     group_depth: usize,
-    kind: StructuredEnvironmentKind,
 }
 
 #[derive(Debug)]
@@ -586,15 +629,27 @@ fn scan_structured_environment_command(
     source: &str,
     start: usize,
 ) -> Option<ScannedCommand> {
-    STRUCTURED_ENVIRONMENT_COMMANDS
-        .iter()
-        .find_map(|(spelling, supported)| {
-            environment_command_matches(source, start, spelling)
-                .then(|| ScannedCommand {
-                    end: start.saturating_add(spelling.len()),
-                    kind: ScannedCommandKind::Supported(*supported),
-                })
+    STRUCTURED_ENVIRONMENTS.iter().find_map(|environment| {
+        let (spelling, supported) = if environment_command_matches(
+            source,
+            start,
+            environment.begin_spelling,
+        ) {
+            (environment.begin_spelling, environment.begin_command)
+        } else if environment_command_matches(
+            source,
+            start,
+            environment.end_spelling,
+        ) {
+            (environment.end_spelling, environment.end_command)
+        } else {
+            return None;
+        };
+        Some(ScannedCommand {
+            end: start.saturating_add(spelling.len()),
+            kind: ScannedCommandKind::Supported(supported),
         })
+    })
 }
 
 fn scan_command(source: &str, start: usize) -> ScannedCommand {
@@ -722,7 +777,7 @@ fn scan_alignment(
         environment.is_none_or(|scope| scope.group_depth < depth)
     });
     let environment_allows_columns = environment
-        .is_some_and(|scope| environment_allows_alignment(scope.kind));
+        .is_some_and(|scope| scope.definition.allows_alignment);
     let mode_allows_columns =
         environment.is_none() && mode == FormulaMode::Aligned;
     if substack_owns_scope
@@ -869,8 +924,8 @@ fn scan_supported_command(
     }
     if let Some(environment) = beginning_environment(supported) {
         state.environment_stack.push(StructuredEnvironmentScope {
+            definition: environment,
             group_depth: state.group_depth,
-            kind: environment,
         });
     }
     Ok(())
@@ -878,111 +933,30 @@ fn scan_supported_command(
 
 fn beginning_environment(
     command: SupportedCommand,
-) -> Option<StructuredEnvironmentKind> {
-    if command == SupportedCommand::BeginAligned {
-        Some(StructuredEnvironmentKind::Aligned)
-    } else if command == SupportedCommand::BeginCases {
-        Some(StructuredEnvironmentKind::Cases)
-    } else if command == SupportedCommand::BeginGathered {
-        Some(StructuredEnvironmentKind::Gathered)
-    } else if command == SupportedCommand::BeginMatrix {
-        Some(StructuredEnvironmentKind::Matrix)
-    } else if command == SupportedCommand::BeginParenthesizedMatrix {
-        Some(StructuredEnvironmentKind::ParenthesizedMatrix)
-    } else if command == SupportedCommand::BeginSplit {
-        Some(StructuredEnvironmentKind::Split)
-    } else {
-        None
-    }
+) -> Option<StructuredEnvironmentDefinition> {
+    STRUCTURED_ENVIRONMENTS
+        .iter()
+        .copied()
+        .find(|environment| environment.begin_command == command)
 }
 
 fn ending_environment(
     command: SupportedCommand,
-) -> Option<StructuredEnvironmentKind> {
-    if command == SupportedCommand::EndAligned {
-        Some(StructuredEnvironmentKind::Aligned)
-    } else if command == SupportedCommand::EndCases {
-        Some(StructuredEnvironmentKind::Cases)
-    } else if command == SupportedCommand::EndGathered {
-        Some(StructuredEnvironmentKind::Gathered)
-    } else if command == SupportedCommand::EndMatrix {
-        Some(StructuredEnvironmentKind::Matrix)
-    } else if command == SupportedCommand::EndParenthesizedMatrix {
-        Some(StructuredEnvironmentKind::ParenthesizedMatrix)
-    } else if command == SupportedCommand::EndSplit {
-        Some(StructuredEnvironmentKind::Split)
-    } else {
-        None
-    }
-}
-
-const fn environment_allows_alignment(
-    environment: StructuredEnvironmentKind,
-) -> bool {
-    match environment {
-        StructuredEnvironmentKind::Aligned
-        | StructuredEnvironmentKind::Cases
-        | StructuredEnvironmentKind::Matrix
-        | StructuredEnvironmentKind::ParenthesizedMatrix
-        | StructuredEnvironmentKind::Split => true,
-        StructuredEnvironmentKind::Gathered => false,
-    }
-}
-
-const fn environment_extra_end_error(
-    environment: StructuredEnvironmentKind,
-) -> MathSyntaxErrorKind {
-    match environment {
-        StructuredEnvironmentKind::Aligned => {
-            MathSyntaxErrorKind::ExtraAlignedEnd
-        },
-        StructuredEnvironmentKind::Cases => MathSyntaxErrorKind::ExtraCasesEnd,
-        StructuredEnvironmentKind::Gathered => {
-            MathSyntaxErrorKind::ExtraGatheredEnd
-        },
-        StructuredEnvironmentKind::Matrix => {
-            MathSyntaxErrorKind::ExtraMatrixEnd
-        },
-        StructuredEnvironmentKind::ParenthesizedMatrix => {
-            MathSyntaxErrorKind::ExtraParenthesizedMatrixEnd
-        },
-        StructuredEnvironmentKind::Split => MathSyntaxErrorKind::ExtraSplitEnd,
-    }
-}
-
-const fn environment_missing_end_error(
-    environment: StructuredEnvironmentKind,
-) -> MathSyntaxErrorKind {
-    match environment {
-        StructuredEnvironmentKind::Aligned => {
-            MathSyntaxErrorKind::MissingAlignedEnd
-        },
-        StructuredEnvironmentKind::Cases => {
-            MathSyntaxErrorKind::MissingCasesEnd
-        },
-        StructuredEnvironmentKind::Gathered => {
-            MathSyntaxErrorKind::MissingGatheredEnd
-        },
-        StructuredEnvironmentKind::Matrix => {
-            MathSyntaxErrorKind::MissingMatrixEnd
-        },
-        StructuredEnvironmentKind::ParenthesizedMatrix => {
-            MathSyntaxErrorKind::MissingParenthesizedMatrixEnd
-        },
-        StructuredEnvironmentKind::Split => {
-            MathSyntaxErrorKind::MissingSplitEnd
-        },
-    }
+) -> Option<StructuredEnvironmentDefinition> {
+    STRUCTURED_ENVIRONMENTS
+        .iter()
+        .copied()
+        .find(|environment| environment.end_command == command)
 }
 
 fn close_environment(
     state: &mut ScanState,
-    expected: StructuredEnvironmentKind,
+    expected: StructuredEnvironmentDefinition,
 ) -> Result<(), MathSyntaxError> {
     let Some(actual) = state.environment_stack.last().copied() else {
-        return Err(error(state.index, environment_extra_end_error(expected)));
+        return Err(error(state.index, expected.extra_end_error));
     };
-    if actual.kind != expected {
+    if actual.definition != expected {
         return Err(error(
             state.index,
             MathSyntaxErrorKind::MismatchedEnvironmentEnd,
@@ -1097,6 +1071,6 @@ fn validate_final_state(
     };
     Err(error(
         source_len,
-        environment_missing_end_error(environment.kind),
+        environment.definition.missing_end_error,
     ))
 }
