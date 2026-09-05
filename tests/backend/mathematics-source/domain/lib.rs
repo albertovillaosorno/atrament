@@ -623,6 +623,32 @@ fn common_accents_are_structural_and_require_one_group() {
 }
 
 #[test]
+fn wide_accents_are_structural_and_require_one_group() {
+    let source = r"\widehat{ABC}+\widetilde{xyz}";
+    let analyzed = analyze(source, FormulaMode::Inline)
+        .expect("grouped wide accents");
+    assert!(analyzed.is_supported());
+    assert_eq!(reconstructed(&analyzed), source);
+    for (spelling, kind) in [
+        (r"\widehat", SupportedCommand::WideHat),
+        (r"\widetilde", SupportedCommand::WideTilde),
+    ] {
+        assert!(analyzed.tokens.iter().any(|token| {
+            token.kind == MathTokenKind::Command(kind)
+                && analyzed.token_source(*token) == Some(spelling)
+        }));
+        assert_eq!(
+            analyze(spelling, FormulaMode::Inline),
+            Err(MathSyntaxError {
+                byte_offset: spelling.len(),
+                kind: MathSyntaxErrorKind::MissingRequiredGroup,
+            }),
+            "{spelling}",
+        );
+    }
+}
+
+#[test]
 fn grouped_math_alphabets_are_structural_and_require_one_group() {
     let source = concat!(
         r"x \in \mathbb{R}, \mathbf{v}, \mathcal{F}, \mathit{x}, ",

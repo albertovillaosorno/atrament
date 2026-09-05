@@ -101,6 +101,8 @@ const STRUCTURED_CONTROL_WORD_COMMANDS: &[(&str, SupportedCommand)] = &[
     ("\\underline", SupportedCommand::Underline),
     ("\\underset", SupportedCommand::Underset),
     ("\\vec", SupportedCommand::Vector),
+    ("\\widehat", SupportedCommand::WideHat),
+    ("\\widetilde", SupportedCommand::WideTilde),
 ];
 
 const STRUCTURED_ENVIRONMENTS: &[StructuredEnvironmentDefinition] = &[
@@ -504,6 +506,10 @@ pub enum SupportedCommand {
     Underset,
     /// One-group vector decoration.
     Vector,
+    /// One-group wide hat accent.
+    WideHat,
+    /// One-group wide tilde accent.
+    WideTilde,
 }
 
 /// One unknown TeX-like command retained as unsupported input.
@@ -1234,7 +1240,9 @@ fn validate_command_groups(
         | SupportedCommand::Typewriter
         | SupportedCommand::Underbrace
         | SupportedCommand::Underline
-        | SupportedCommand::Vector => 1usize,
+        | SupportedCommand::Vector
+        | SupportedCommand::WideHat
+        | SupportedCommand::WideTilde => 1usize,
     };
     validate_required_groups(source, groups, command_end, required)
 }
