@@ -33,6 +33,7 @@
 //
 use std::collections::BTreeSet;
 use std::io::{BufRead, BufReader, Read, Write};
+use std::num::NonZeroU32;
 use std::process::{Command, Stdio};
 
 use atrament_export_layout_preflight::{
@@ -55,10 +56,11 @@ use atrament_semantic_fixed_region_layout::{
 };
 use atrament_semantic_notebook::{
     Asset, Block, BlockContent, CandidateIdentity, Constraint, ConstraintKind,
-    Figure, Flow, FormulaMode, IdentityAllocator, InlineSpan, List, ListItem,
-    Notebook, Page, PaperProfile, Provenance,
+    Figure, Flow, Formula, FormulaMode, IdentityAllocator, InlineSpan, List,
+    ListItem, Notebook, Page, PaperProfile, Provenance,
     ProvenanceKind, SemanticBlockKind, SemanticIdentityDescriptor,
-    SemanticIdentityKind, Style, TableCellSpan, TableRowRole,
+    SemanticIdentityKind, Style, Table, TableCell, TableCellSpan, TableRow,
+    TableRowRole,
 };
 use atrament_semantic_notebook_port::{
     AcceptanceOutcome, CommandBehaviorVersion,
@@ -342,6 +344,59 @@ fn asset_figure_candidate(
         styles: vec![],
     };
     (candidate, figure, first_asset, second_asset)
+}
+
+fn replacement_family_candidate(
+    identities: &IdentityAllocator,
+) -> (
+    Notebook<CandidateIdentity>,
+    CandidateIdentity,
+    CandidateIdentity,
+    CandidateIdentity,
+    CandidateIdentity,
+) {
+    let (mut candidate, _) = editable_text_candidate(identities, "replacement");
+    let profile = candidate.page_profiles[0].id;
+    let formula_block = identities
+        .allocate_candidate()
+        .expect("formula block id");
+    let formula = identities.allocate_candidate().expect("formula id");
+    let table_block = identities.allocate_candidate().expect("table block id");
+    let table = identities.allocate_candidate().expect("table id");
+    let row = identities.allocate_candidate().expect("table row id");
+    let cell = identities.allocate_candidate().expect("table cell id");
+    candidate.pages[0].flows[0].blocks.extend([
+        Block {
+            content: BlockContent::Mathematics(Formula {
+                id: formula,
+                mode: FormulaMode::Inline,
+                source: String::from("x"),
+            }),
+            extensions: Vec::new(),
+            id: formula_block,
+            provenance: None,
+            style: None,
+        },
+        Block {
+            content: BlockContent::Table(Table {
+                id: table,
+                rows: vec![TableRow {
+                    cells: vec![TableCell {
+                        blocks: Vec::new(),
+                        id: cell,
+                        span: TableCellSpan::SINGLE,
+                    }],
+                    id: row,
+                    role: TableRowRole::Body,
+                }],
+            }),
+            extensions: Vec::new(),
+            id: table_block,
+            provenance: None,
+            style: None,
+        },
+    ]);
+    (candidate, formula, profile, cell, row)
 }
 
 fn minimal_candidate(
@@ -3091,6 +3146,139 @@ fn rejected_edits_preserve_redo_only_asset_bytes() {
     );
     assert_eq!(session.history_availability(), expected_history);
     assert_eq!(session.retained_asset_byte_count_for_test(), 1);
+}
+
+#[test]
+fn every_direct_replacement_family_prunes_discarded_redo_asset_bytes() {
+    #[derive(Clone, Copy)]
+    enum Replacement {
+        Formula,
+        PageProfile,
+        TableCellSpan,
+        TableRowRole,
+    }
+
+    for replacement in [
+        Replacement::Formula,
+        Replacement::PageProfile,
+        Replacement::TableCellSpan,
+        Replacement::TableRowRole,
+    ] {
+        let identities = IdentityAllocator::new();
+        let (
+            candidate,
+            candidate_formula,
+            candidate_profile,
+            candidate_cell,
+            candidate_row,
+        ) = replacement_family_candidate(&identities);
+        let mut session = application::SessionApplication::default();
+        let AcceptanceOutcome::Accepted { mapping, .. } =
+            session.accept_candidate(candidate)
+        else {
+            panic!("replacement-family candidate must be accepted");
+        };
+        let accepted = |candidate| {
+            mapping
+                .iter()
+                .find(|entry| entry.candidate == candidate)
+                .expect("replacement target identity must map")
+                .accepted
+        };
+        let formula = accepted(candidate_formula);
+        let profile = accepted(candidate_profile);
+        let cell = accepted(candidate_cell);
+        let row = accepted(candidate_row);
+
+        let (redo_candidate, _, candidate_redo_asset, _) =
+            asset_figure_candidate(&identities);
+        let AcceptanceOutcome::Accepted {
+            mapping: redo_mapping,
+            revision: redo_revision,
+        } = session.accept_candidate(redo_candidate)
+        else {
+            panic!("Redo asset candidate must be accepted");
+        };
+        let redo_asset = redo_mapping
+            .iter()
+            .find(|entry| entry.candidate == candidate_redo_asset)
+            .expect("Redo asset identity must map")
+            .accepted;
+        assert!(matches!(
+            session.retain_asset_bytes(
+                redo_revision,
+                redo_asset,
+                b"replacement-family-redo-only".to_vec(),
+            ),
+            Ok(application::AssetBytesRetention::Retained { .. })
+        ));
+        let HistoryTraversalOutcome::Traversed { revision: undone, .. } =
+            session.traverse_history(redo_revision, HistoryDirection::Undo)
+        else {
+            panic!("Redo asset candidate must Undo");
+        };
+        assert_eq!(session.retained_asset_byte_count_for_test(), 1);
+
+        let edited = match replacement {
+            Replacement::Formula => {
+                let FormulaEditOutcome::Applied { revision, .. } =
+                    session.replace_formula(
+                        undone,
+                        formula,
+                        FormulaMode::Display,
+                        String::from("x + 1"),
+                    )
+                else {
+                    panic!("formula replacement must apply");
+                };
+                revision
+            },
+            Replacement::PageProfile => {
+                let mut geometry = physical_page_profile();
+                geometry.binding_edge = BindingEdge::Right;
+                let PageProfileEditOutcome::Applied { revision, .. } =
+                    session.replace_page_profile(undone, profile, geometry)
+                else {
+                    panic!("page-profile replacement must apply");
+                };
+                revision
+            },
+            Replacement::TableCellSpan => {
+                let span = TableCellSpan {
+                    columns: NonZeroU32::new(2)
+                        .expect("two columns are nonzero"),
+                    rows: NonZeroU32::MIN,
+                };
+                let TableCellSpanEditOutcome::Applied { revision, .. } =
+                    session.replace_table_cell_span(undone, cell, span)
+                else {
+                    panic!("table-cell-span replacement must apply");
+                };
+                revision
+            },
+            Replacement::TableRowRole => {
+                let TableRowRoleEditOutcome::Applied { revision, .. } =
+                    session.replace_table_row_role(
+                        undone,
+                        row,
+                        TableRowRole::Header,
+                    )
+                else {
+                    panic!("table-row-role replacement must apply");
+                };
+                revision
+            },
+        };
+        assert_eq!(session.retained_asset_byte_count_for_test(), 0);
+        assert_eq!(
+            session.history_availability(),
+            HistoryAvailabilityOutcome::Available(HistoryAvailability {
+                can_redo: false,
+                can_undo: true,
+                revision: edited,
+            }),
+        );
+    }
 }
 
 #[test]
