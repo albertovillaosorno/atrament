@@ -41,7 +41,7 @@ use atrament_export_layout_preflight::{
     RevisionLayoutDiagnostics,
 };
 use atrament_flow_pagination::{
-    FlowUnitPolicy, MeasuredFlowUnit, MeasuredFragment,
+    FlowUnitPolicy, MeasuredFlowUnit, MeasuredFragment, PaginationError,
 };
 use atrament_physical_page_profile::{
     BindingEdge, BorderShape, Length, Orientation, PageProfile,
@@ -1104,6 +1104,107 @@ fn application_routes_measured_pagination_through_owned_revision() {
                 accepted: redone,
                 measured: revision,
             },
+        )),
+    );
+}
+
+#[test]
+fn page_profile_edits_recompute_live_pagination_geometry() {
+    let identities = IdentityAllocator::new();
+    let (candidate, _) =
+        editable_text_candidate(&identities, "profile geometry");
+    let profile_candidate = candidate.page_profiles[0].id;
+    let page_candidate = candidate.pages[0].id;
+    let flow_candidate = candidate.pages[0].flows[0].id;
+    let block_candidate = candidate.pages[0].flows[0].blocks[0].id;
+    let mut session = application::SessionApplication::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept_candidate(candidate)
+    else {
+        panic!("profile-pagination candidate must be accepted");
+    };
+    let accepted = |candidate| {
+        mapping
+            .iter()
+            .find(|entry| entry.candidate == candidate)
+            .expect("profile-pagination identity must map")
+            .accepted
+    };
+    let profile = accepted(profile_candidate);
+    let page = accepted(page_candidate);
+    let flow = accepted(flow_candidate);
+    let block = accepted(block_candidate);
+    let measurement = |revision, width| RevisionFlowMeasurement {
+        flow,
+        revision,
+        units: vec![MeasuredFlowUnit {
+            fragments: vec![MeasuredFragment {
+                height: Length::from_micrometres(20_000),
+                owner: block,
+                width: Length::from_micrometres(width),
+            }],
+            policy: FlowUnitPolicy::Independent,
+        }],
+    };
+
+    let before = measurement(revision, 100_000);
+    let plan = session
+        .paginate_measured_flow(&before)
+        .expect("base profile must fit measured fragment");
+    assert_eq!(plan.placements.len(), 1);
+    assert_eq!(plan.placements[0].page, page);
+
+    let mut narrowed = physical_page_profile();
+    narrowed.printable_region.width = Length::from_micrometres(100_000);
+    let PageProfileEditOutcome::Applied { revision: edited, .. } =
+        session.replace_page_profile(revision, profile, narrowed)
+    else {
+        panic!("valid narrowed profile must apply");
+    };
+    assert_eq!(
+        session.paginate_measured_flow(&before),
+        Err(application::SessionPaginationError::Pagination(
+            SemanticPaginationError::MeasurementRevisionMismatch {
+                accepted: edited,
+                measured: revision,
+            },
+        )),
+    );
+    assert_eq!(
+        session.paginate_measured_flow(&measurement(edited, 100_000)),
+        Err(application::SessionPaginationError::Pagination(
+            SemanticPaginationError::Pagination(
+                PaginationError::FragmentDoesNotFitAnyPage { owner: block },
+            ),
+        )),
+    );
+    let narrowed_fit = session
+        .paginate_measured_flow(&measurement(edited, 80_000))
+        .expect("fresh narrow measurement must fit edited profile");
+    assert_eq!(narrowed_fit.placements[0].page, page);
+
+    let HistoryTraversalOutcome::Traversed { revision: undone, .. } =
+        session.traverse_history(edited, HistoryDirection::Undo)
+    else {
+        panic!("profile edit must Undo");
+    };
+    assert_ne!(undone, revision);
+    let restored = session
+        .paginate_measured_flow(&measurement(undone, 100_000))
+        .expect("fresh Undo measurement must use restored profile geometry");
+    assert_eq!(restored.placements[0].page, page);
+
+    let HistoryTraversalOutcome::Traversed { revision: redone, .. } =
+        session.traverse_history(undone, HistoryDirection::Redo)
+    else {
+        panic!("profile edit must Redo");
+    };
+    assert_eq!(
+        session.paginate_measured_flow(&measurement(redone, 100_000)),
+        Err(application::SessionPaginationError::Pagination(
+            SemanticPaginationError::Pagination(
+                PaginationError::FragmentDoesNotFitAnyPage { owner: block },
+            ),
         )),
     );
 }

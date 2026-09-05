@@ -515,9 +515,12 @@ The live `SessionApplication` owner now admits the semantic-flow pagination
 application dependency and exposes one read-only measured-flow operation. It
 binds the supplied measurement to the owner's current accepted revision and
 delegates page/profile derivation and measurement admission without publishing
-arbitrary page rectangles or a transport route. Undo and Redo restore semantic
-content under fresh revision identities, so an older measurement never becomes
-current again merely because content history is traversed.
+arbitrary page rectangles or a transport route. A live page-profile edit now has
+integration evidence that an old measurement becomes stale and a fresh
+measurement uses the narrowed writable geometry; fresh Undo/Redo measurements
+follow the restored profile content under their new revision identities. Undo
+and Redo therefore never reactivate an older measurement merely because
+semantic content is restored.
 
 The task remains open for real handwriting and formula measurement, grapheme-
 aware line breaking and paragraph wrapping, quotation and citation measurement,
