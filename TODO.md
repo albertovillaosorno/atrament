@@ -1465,9 +1465,13 @@ The localhost runtime now emits response-level
 from the document-level meta CSP, while the latter reinforces the shell's own
 no-referrer declaration. Backend fixtures pin both headers on every served
 workspace resource and across representative success, empty, authentication,
-conflict, routing, and malformed-request response classes. A real hostile
-second-loopback-origin browser fixture still needs to prove frame enforcement
-rather than only header emission.
+conflict, routing, and malformed-request response classes.
+
+A real Firefox BiDi fixture now launches Atrament plus a hostile second loopback
+origin. Direct top-level loading commits the workspace document, while framing
+the same Atrament URL from that hostile origin commits Firefox's error document
+instead. This proves browser enforcement of `frame-ancestors 'none'`, not only
+header emission.
 
 These browser constraints do not replace backend socket, token, host, path,
 cleanup, framing, or hostile-origin acceptance tests.

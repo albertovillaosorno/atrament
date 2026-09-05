@@ -102,6 +102,12 @@ not reflect arbitrary request origins, admit wildcard origins, or accept browser
 mutation through form-compatible endpoints that another local or remote page
 could trigger without the application client.
 
+Every runtime response also carries
+`Content-Security-Policy: frame-ancestors 'none'` and
+`Referrer-Policy: no-referrer`. A real Firefox fixture must be able to load the
+workspace directly while a distinct loopback origin fails to embed the same
+resource as a frame.
+
 Authentication and origin checks are separate. The secret protects the active
 session from unrelated local pages and processes that discover the port; exact
 origin admission reduces browser-based request-forgery and rebinding surfaces.
