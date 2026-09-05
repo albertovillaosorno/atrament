@@ -1459,7 +1459,11 @@ fn page_profile_reference_edits_recompute_live_derived_geometry() {
             ),
         )),
     );
-    let FixedRegionLayoutResult::Overflow { report, .. } = session
+    let FixedRegionLayoutResult::Overflow {
+        diagnostics: edited_diagnostics,
+        report,
+        ..
+    } = session
         .validate_fixed_placement(placement(edited))
         .expect("retargeted placement must use second profile")
     else {
@@ -1467,6 +1471,14 @@ fn page_profile_reference_edits_recompute_live_derived_geometry() {
     };
     assert_eq!(report.violations.len(), 1);
     assert_eq!(report.violations[0].amount.micrometres(), 5_000);
+    let edited_bound =
+        RevisionLayoutDiagnostics::bind(edited, &edited_diagnostics)
+            .expect("retargeted overflow diagnostics must bind");
+    assert!(matches!(
+        session.preflight_layout_for_export(edited, edited_bound),
+        Ok(ExportLayoutPreflightResult::Blocked { revision, .. })
+            if revision == edited
+    ));
 
     let HistoryTraversalOutcome::Traversed { revision: undone, .. } =
         session.traverse_history(edited, HistoryDirection::Undo)
@@ -1477,6 +1489,15 @@ fn page_profile_reference_edits_recompute_live_derived_geometry() {
     assert_eq!(
         session.validate_fixed_placement(placement(undone)),
         Ok(FixedRegionLayoutResult::WithinBounds { object: block, page }),
+    );
+    assert_eq!(
+        session.preflight_layout_for_export(edited, edited_bound),
+        Err(application::SessionExportLayoutPreflightError::Preflight(
+            ExportLayoutPreflightError::RequestedRevisionMismatch {
+                current: undone,
+                requested: edited,
+            },
+        )),
     );
 
     let HistoryTraversalOutcome::Traversed { revision: redone, .. } =
@@ -1492,7 +1513,20 @@ fn page_profile_reference_edits_recompute_live_derived_geometry() {
             ),
         )),
     );
-    let FixedRegionLayoutResult::Overflow { report, .. } = session
+    assert_eq!(
+        session.preflight_layout_for_export(edited, edited_bound),
+        Err(application::SessionExportLayoutPreflightError::Preflight(
+            ExportLayoutPreflightError::RequestedRevisionMismatch {
+                current: redone,
+                requested: edited,
+            },
+        )),
+    );
+    let FixedRegionLayoutResult::Overflow {
+        diagnostics: redone_diagnostics,
+        report,
+        ..
+    } = session
         .validate_fixed_placement(placement(redone))
         .expect("Redo placement must use second profile")
     else {
@@ -1500,6 +1534,14 @@ fn page_profile_reference_edits_recompute_live_derived_geometry() {
     };
     assert_eq!(report.violations.len(), 1);
     assert_eq!(report.violations[0].amount.micrometres(), 5_000);
+    let redone_bound =
+        RevisionLayoutDiagnostics::bind(redone, &redone_diagnostics)
+            .expect("Redo retarget overflow diagnostics must bind");
+    assert!(matches!(
+        session.preflight_layout_for_export(redone, redone_bound),
+        Ok(ExportLayoutPreflightResult::Blocked { revision, .. })
+            if revision == redone
+    ));
 }
 
 #[test]
