@@ -31,6 +31,7 @@
 //
 use std::io::Write;
 use std::net::{Ipv4Addr, SocketAddr, TcpListener, TcpStream};
+use std::thread;
 use std::time::Duration;
 
 use atrament_diagnostic::{Completeness, DIAGNOSTIC_VERSION, DiagnosticSet};
@@ -152,6 +153,33 @@ fn malformed_header_line_endings_reject_without_waiting_for_eof() {
         b"GET /health HTTP/1.1\rHost: 127.0.0.1:43123\r\r",
     );
     assert_eq!(bare_cr.kind(), std::io::ErrorKind::InvalidData);
+}
+
+#[test]
+fn valid_crlf_may_arrive_split_across_socket_reads() {
+    let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0))
+        .expect("test listener binds");
+    let address = listener.local_addr().expect("test listener address");
+    let writer = thread::spawn(move || {
+        let mut client =
+            TcpStream::connect(address).expect("test client connects");
+        client
+            .write_all(b"GET /health HTTP/1.1\r")
+            .expect("first request fragment writes");
+        thread::sleep(Duration::from_millis(10));
+        client
+            .write_all(b"\nHost: 127.0.0.1:43123\r\n\r\n")
+            .expect("second request fragment writes");
+    });
+    let (mut server, _) = listener.accept().expect("test server accepts");
+    server
+        .set_read_timeout(Some(Duration::from_millis(100)))
+        .expect("test read timeout");
+    assert_eq!(
+        runtime::read_request(&mut server).expect("split CRLF request reads"),
+        b"GET /health HTTP/1.1\r\nHost: 127.0.0.1:43123\r\n\r\n",
+    );
+    writer.join().expect("test writer joins");
 }
 
 #[test]
