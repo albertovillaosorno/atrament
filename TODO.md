@@ -377,6 +377,12 @@ wrappers measured 2,000 Text-content previews at about 396-400 milliseconds
 before indexed impact reuse and 12.4-12.9 milliseconds after it. This is
 implementation evidence, not a product latency guarantee.
 
+Bounded identity ancestry now resolves one iterative structural path instead of
+rescanning the notebook for every owner hop. At 255 block wrappers, the same
+20,000 complete release reads measured 4,206 milliseconds before this change and
+about 79-88 milliseconds after it; a 2,000,000-read stress completed in about
+7.81 seconds. These are implementation measurements, not latency guarantees.
+
 The same transport-neutral direct-edit batch can now be applied atomically after
 re-running its validation and simulation. Net mutations replay only the
 coalesced final semantic changes into a cloned accepted notebook. Coalesced
@@ -1271,7 +1277,10 @@ requires exactly one ASCII space between method, target, and HTTP/1.1; tabs,
 repeated spaces, trailing whitespace, and other versions reject before routing.
 Every header field name must also use the HTTP token grammar; whitespace,
 Unicode, control characters, and other non-token names reject even when the
-header is unrelated to Atrament. Request framing rejects transfer encoding,
+header is unrelated to Atrament. Header values reject control bytes other than
+HTTP tab whitespace, including NUL and DEL, before routing.
+
+Request framing rejects transfer encoding,
 duplicate content lengths,
 body-length mismatch, and non-digit Content-Length syntax such as a leading plus
 sign before draft state can change.
