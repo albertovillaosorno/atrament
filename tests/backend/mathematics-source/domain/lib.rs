@@ -1771,6 +1771,28 @@ fn aligned_cases_and_matrix_environments_nest_in_order() {
 }
 
 #[test]
+fn single_and_double_vertical_matrices_keep_distinct_nesting() {
+    let source = concat!(
+        r"\begin{Vmatrix}a & \begin{vmatrix}b & c \\ d & e",
+        r"\end{vmatrix} \\ f & g\end{Vmatrix}",
+    );
+    let analyzed = analyze(source, FormulaMode::Display)
+        .expect("nested double- and single-vertical-bar matrices");
+    assert!(analyzed.is_supported());
+    assert_eq!(reconstructed(&analyzed), source);
+
+    let prefix = r"\begin{Vmatrix}\begin{vmatrix}x";
+    let crossed = format!(r"{prefix}\end{{Vmatrix}}");
+    assert_eq!(
+        analyze(&crossed, FormulaMode::Display),
+        Err(MathSyntaxError {
+            byte_offset: prefix.len(),
+            kind: MathSyntaxErrorKind::MismatchedEnvironmentEnd,
+        }),
+    );
+}
+
+#[test]
 fn vertical_and_bracketed_matrices_keep_distinct_nesting() {
     let source = concat!(
         r"\begin{vmatrix}a & \begin{bmatrix}b & c \\ d & e",
