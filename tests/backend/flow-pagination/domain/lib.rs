@@ -614,6 +614,33 @@ fn keep_group_skips_narrow_page_for_earliest_whole_fit() {
 }
 
 #[test]
+fn later_fragment_never_backfills_page_skipped_by_keep_group() {
+    let pages = [
+        page(1, 0, 100, 100),
+        page(2, 1_000, 30, 100),
+        page(3, 2_000, 100, 100),
+    ];
+    let units = [
+        unit(FlowUnitPolicy::Independent, vec![fragment(1, 50, 80)]),
+        unit(FlowUnitPolicy::KeepTogetherWhenPossible, vec![
+            fragment(2, 60, 20),
+            fragment(3, 80, 20),
+        ]),
+        unit(FlowUnitPolicy::Independent, vec![fragment(4, 20, 10)]),
+    ];
+
+    let plan = paginate(&pages, &units).expect("ordered page advancement");
+    assert_eq!(
+        plan.placements
+            .iter()
+            .map(|placement| placement.page)
+            .collect::<Vec<_>>(),
+        [1, 3, 3, 3],
+    );
+    assert_eq!(plan.placements[3].top, Length::from_micrometres(2_040));
+}
+
+#[test]
 fn fresh_page_exhaustion_is_distinct_from_unplaceable_measurement() {
     let pages = [page(1, 0, 100, 100)];
     let units = [unit(FlowUnitPolicy::Independent, vec![
