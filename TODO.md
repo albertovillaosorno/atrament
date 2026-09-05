@@ -515,12 +515,12 @@ The live `SessionApplication` owner now admits the semantic-flow pagination
 application dependency and exposes one read-only measured-flow operation. It
 binds the supplied measurement to the owner's current accepted revision and
 delegates page/profile derivation and measurement admission without publishing
-arbitrary page rectangles or a transport route. A live page-profile edit now has
-integration evidence that an old measurement becomes stale and a fresh
-measurement uses the narrowed writable geometry; fresh Undo/Redo measurements
-follow the restored profile content under their new revision identities. Undo
-and Redo therefore never reactivate an older measurement merely because
-semantic content is restored.
+arbitrary page rectangles or a transport route. Live page-profile geometry and
+page-to-profile reference edits now have integration evidence that old
+measurements become stale and fresh measurements use the current referenced
+writable geometry; fresh Undo/Redo measurements follow restored profile content
+and assignments under new revision identities. Undo and Redo therefore never
+reactivate an older measurement merely because semantic content is restored.
 
 The task remains open for real handwriting and formula measurement, grapheme-
 aware line breaking and paragraph wrapping, quotation and citation measurement,
@@ -566,12 +566,13 @@ Stale placements, wrong page ownership, missing or invalid profiles, and
 unrepresentable coordinates fail before a diagnostic can be presented as
 current. The live `SessionApplication` owner routes this same read-only
 placement validation against its current accepted revision without admitting
-solver or transport authority. Live page-profile edits now have integration
-evidence that prior placements become stale while a fresh placement uses the new
-writable geometry; fresh Undo/Redo placements follow restored profile content
-under new revision identities. Edited overflow diagnostics block layout-only
-Export for that revision, then remain stale after Undo/Redo; fresh Redo overflow
-evidence must bind to the new revision before it can block Export again.
+solver or transport authority. Live page-profile geometry and page-to-profile
+reference edits now have integration evidence that prior placements become stale
+while fresh placements use the current referenced writable geometry; fresh
+Undo/Redo placements follow restored profile content and assignments under new
+revision identities. Edited overflow diagnostics block layout-only Export for
+that revision, then remain stale after Undo/Redo; fresh Redo overflow evidence
+must bind to the new revision before it can block Export again.
 
 Nested semantic blocks retain their accepted page ownership, and overflow
 amounts retain the full physical `u64` range without diagnostic truncation.
