@@ -608,10 +608,31 @@ fn route_draft_replace(
 }
 
 fn is_origin_form_target(target: &str) -> bool {
-    target.starts_with('/')
-        && target
-            .bytes()
-            .all(|byte| byte.is_ascii_graphic() && byte != b'#')
+    if !target.starts_with('/') {
+        return false;
+    }
+    let bytes = target.as_bytes();
+    let mut index = 0usize;
+    while let Some(byte) = bytes.get(index).copied() {
+        if !byte.is_ascii_graphic() || byte == b'#' {
+            return false;
+        }
+        if byte == b'%' {
+            let Some(first) = bytes.get(index.saturating_add(1)) else {
+                return false;
+            };
+            let Some(second) = bytes.get(index.saturating_add(2)) else {
+                return false;
+            };
+            if !first.is_ascii_hexdigit() || !second.is_ascii_hexdigit() {
+                return false;
+            }
+            index = index.saturating_add(3);
+        } else {
+            index = index.saturating_add(1);
+        }
+    }
+    true
 }
 
 fn request_method_host_and_target(
