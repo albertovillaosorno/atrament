@@ -295,6 +295,11 @@ fn read_request(stream: &mut TcpStream) -> io::Result<Vec<u8>> {
     }
 }
 
+
+fn trim_http_ows(value: &str) -> &str {
+    value.trim_matches(|character| matches!(character, ' ' | '\t'))
+}
+
 fn single_header_value<'request>(
     request: &'request [u8],
     expected_name: &str,
@@ -310,7 +315,7 @@ fn single_header_value<'request>(
             if matched_value.is_some() {
                 return None;
             }
-            matched_value = Some(value.trim());
+            matched_value = Some(trim_http_ows(value));
         }
     }
     matched_value
@@ -604,7 +609,7 @@ fn request_method_host_and_target(
             if host.is_some() {
                 return None;
             }
-            host = Some(value.trim());
+            host = Some(trim_http_ows(value));
         }
     }
     Some((method, host?, target))

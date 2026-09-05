@@ -1250,7 +1250,9 @@ Current loopback-runtime evidence requires the exact canonical Host, browser
 Origin, and Bearer credential before protected draft mutation. Request framing
 rejects transfer encoding, duplicate content lengths, body-length mismatch, and
 non-digit Content-Length syntax such as a leading plus sign before draft state
-can change.
+can change. Security-sensitive header values trim only HTTP space/tab OWS;
+Unicode whitespace remains part of the value and therefore cannot normalize a
+malformed Host, Origin, or Bearer credential into an admitted one.
 
 Current frontend evidence has no runtime dependencies, network client,
 persistent browser storage, domain parser, external assets, referrer, autofill,

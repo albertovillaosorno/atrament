@@ -113,6 +113,7 @@ fn health_requires_the_exact_canonical_host() {
         "0.0.0.0:43123",
         "example.test:43123",
         "127.0.0.1",
+        "\u{00a0}127.0.0.1:43123",
     ];
     for rejected_host in rejected_hosts {
         let request =
@@ -331,6 +332,13 @@ fn session_credential_requires_one_exact_bearer_value() {
             "POST /api HTTP/1.1\r\nAuthorization: Bearer {secret}\r\n\
              Authorization: Bearer {secret}\r\n\r\n",
         ),
+        format!(
+            concat!(
+                "POST /api HTTP/1.1\r\n",
+                "Authorization:\u{00a0}Bearer {secret}\r\n\r\n",
+            ),
+            secret = secret,
+        ),
     ];
     for request in rejected {
         assert!(!runtime::request_has_session_credential(
@@ -371,6 +379,7 @@ fn browser_origin_requires_one_exact_canonical_value() {
             "POST /api HTTP/1.1\r\nOrigin: {origin}\r\n\
              Origin: {origin}\r\n\r\n",
         ),
+        format!("POST /api HTTP/1.1\r\nOrigin:\u{2003}{origin}\r\n\r\n"),
     ];
     for request in rejected {
         assert!(!runtime::request_has_exact_origin(
