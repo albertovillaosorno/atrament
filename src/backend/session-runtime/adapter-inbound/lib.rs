@@ -284,21 +284,16 @@ fn request_head_line_endings_are_valid_so_far(bytes: &[u8]) -> bool {
     true
 }
 
-fn remaining_request_timeout(
+fn remaining_transport_timeout(
     total_timeout: Duration,
     started: Instant,
+    timeout_message: &'static str,
 ) -> io::Result<Duration> {
     let Some(remaining) = total_timeout.checked_sub(started.elapsed()) else {
-        return Err(io::Error::new(
-            io::ErrorKind::TimedOut,
-            "request exceeded runtime transport deadline",
-        ));
+        return Err(io::Error::new(io::ErrorKind::TimedOut, timeout_message));
     };
     if remaining.is_zero() {
-        return Err(io::Error::new(
-            io::ErrorKind::TimedOut,
-            "request exceeded runtime transport deadline",
-        ));
+        return Err(io::Error::new(io::ErrorKind::TimedOut, timeout_message));
     }
     Ok(remaining)
 }
@@ -315,7 +310,11 @@ pub(crate) fn read_request(stream: &mut TcpStream) -> io::Result<Vec<u8>> {
     let mut chunk = [0u8; 1024];
     let mut expected_total = None;
     loop {
-        let remaining = remaining_request_timeout(total_timeout, started)?;
+        let remaining = remaining_transport_timeout(
+            total_timeout,
+            started,
+            "request exceeded runtime transport deadline",
+        )?;
         stream.set_read_timeout(Some(remaining))?;
         let read = stream.read(&mut chunk)?;
         if read == 0 {
@@ -426,6 +425,54 @@ fn single_header_value<'request>(
 
 fn authorization_bearer(request: &[u8]) -> Option<&str> {
     single_header_value(request, "authorization")?.strip_prefix("Bearer ")
+}
+
+pub(crate) fn write_response(
+    stream: &mut TcpStream,
+    response: &[u8],
+) -> io::Result<()> {
+    let Some(total_timeout) = stream.write_timeout()? else {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "response writer requires a configured total deadline",
+        ));
+    };
+    let started = Instant::now();
+    let mut written = 0usize;
+    while written < response.len() {
+        let remaining = remaining_transport_timeout(
+            total_timeout,
+            started,
+            "response exceeded runtime transport deadline",
+        )?;
+        stream.set_write_timeout(Some(remaining))?;
+        let remaining_response = response.get(written..).ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                "response write offset exceeded response bytes",
+            )
+        })?;
+        let count = stream.write(remaining_response)?;
+        if count == 0 {
+            return Err(io::Error::new(
+                io::ErrorKind::WriteZero,
+                "response socket accepted zero bytes",
+            ));
+        }
+        written = written.checked_add(count).ok_or_else(|| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                "response byte count overflowed",
+            )
+        })?;
+    }
+    let remaining = remaining_transport_timeout(
+        total_timeout,
+        started,
+        "response exceeded runtime transport deadline",
+    )?;
+    stream.set_write_timeout(Some(remaining))?;
+    stream.flush()
 }
 
 fn fixed_work_secret_match(expected: &str, candidate: &str) -> bool {
@@ -932,8 +979,7 @@ fn serve_connection(
                 "400 Bad Request",
                 br#"{"error":"invalid_request"}"#,
             );
-            stream.write_all(&response)?;
-            return stream.flush();
+            return write_response(stream, &response);
         },
         Err(error)
             if matches!(
@@ -945,8 +991,7 @@ fn serve_connection(
                 "408 Request Timeout",
                 br#"{"error":"request_timeout"}"#,
             );
-            stream.write_all(&response)?;
-            return stream.flush();
+            return write_response(stream, &response);
         },
         Err(error) => return Err(error),
     };
@@ -958,6 +1003,5 @@ fn serve_connection(
         handshake,
         draft,
     );
-    stream.write_all(&response)?;
-    stream.flush()
+    write_response(stream, &response)
 }

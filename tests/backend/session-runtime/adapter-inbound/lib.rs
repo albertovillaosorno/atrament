@@ -29,10 +29,12 @@
 // - Defaults:
 //   - Uses ephemeral loopback ports and deterministic request fixtures.
 //
-use std::io::Write;
+use std::io::{Read, Write};
 use std::net::{Ipv4Addr, SocketAddr, TcpListener, TcpStream};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use atrament_diagnostic::{Completeness, DIAGNOSTIC_VERSION, DiagnosticSet};
 use atrament_session_draft::{MAX_DRAFT_FIELD_BYTES, SessionDraftService};
@@ -151,6 +153,59 @@ fn request_reader_requires_and_runtime_configures_total_deadlines() {
         Some(Duration::from_secs(2)),
     );
     drop(client);
+}
+
+#[test]
+fn response_writer_requires_a_configured_total_deadline() {
+    let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0))
+        .expect("test listener binds");
+    let address = listener.local_addr().expect("test listener address");
+    let _client = TcpStream::connect(address).expect("test client connects");
+    let (mut server, _) = listener.accept().expect("test server accepts");
+
+    let error = runtime::write_response(&mut server, b"response")
+        .expect_err("writer must reject a missing total deadline");
+    assert_eq!(error.kind(), std::io::ErrorKind::InvalidInput);
+}
+
+#[test]
+fn response_write_timeout_is_total_budget_across_progress() {
+    let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0))
+        .expect("test listener binds");
+    let address = listener.local_addr().expect("test listener address");
+    let mut client = TcpStream::connect(address).expect("test client connects");
+    let (mut server, _) = listener.accept().expect("test server accepts");
+    server
+        .set_write_timeout(Some(Duration::from_millis(180)))
+        .expect("test write timeout configures");
+    let stop = Arc::new(AtomicBool::new(false));
+    let reader_stop = Arc::clone(&stop);
+    let reader = thread::spawn(move || {
+        let mut chunk = [0u8; 1024];
+        for _ in 0..40 {
+            if reader_stop.load(Ordering::Relaxed) {
+                return;
+            }
+            thread::sleep(Duration::from_millis(30));
+            if client.read(&mut chunk).unwrap_or(0) == 0 {
+                return;
+            }
+        }
+        thread::sleep(Duration::from_millis(300));
+    });
+    let response = vec![b'x'; 16 * 1024 * 1024];
+    let started = Instant::now();
+    let error = runtime::write_response(&mut server, &response)
+        .expect_err("slow response consumer must hit total deadline");
+    let elapsed = started.elapsed();
+    stop.store(true, Ordering::Relaxed);
+    assert!(matches!(
+        error.kind(),
+        std::io::ErrorKind::TimedOut | std::io::ErrorKind::WouldBlock
+    ));
+    assert!(elapsed >= Duration::from_millis(100));
+    assert!(elapsed < Duration::from_millis(500));
+    reader.join().expect("slow response reader joins");
 }
 
 #[test]

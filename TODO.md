@@ -1345,12 +1345,15 @@ cannot replace the required blank CRLF header terminator. Exhaustive prefix and
 two-write split fixtures cover every byte boundary of valid GET and body-bearing
 POST requests.
 
-The configured request timeout is now one total transport deadline rather than a
-per-read budget. Trickle bytes cannot extend the production two-second request
-budget; a real loopback probe returns 408 near that deadline and then serves a
-fresh health request. The reader refuses to run without that total deadline, and
-the runtime serves a connection only after both read and write deadlines are
-configured.
+Configured request and response timeouts are total transport deadlines rather
+than per-read or per-write budgets. Trickle bytes cannot extend the production
+two-second request budget, and a slow response consumer cannot hold the
+single-thread listener open by making intermittent write progress. The reader
+and writer both refuse to run without their configured deadline; accepted
+connections receive both deadlines before request handling begins. Five
+production trials with a one-mebibyte authenticated draft and tiny-window
+trickle readers released queued health in 1.932-1.980 seconds instead of
+remaining blocked beyond eight seconds.
 
 The transport admits at most 16 KiB of request headers and 2 MiB of request
 body. Exact-limit fixtures pass while one byte over either ceiling rejects. The
