@@ -1833,6 +1833,31 @@ impl SemanticNotebookSessionService {
         self.current = Some(AcceptedRevision { id: revision, notebook });
         Ok(revision)
     }
+
+    /// Return accepted asset identities reachable from active history.
+    ///
+    /// The result is a deduplicated semantic set; it exposes neither history
+    /// direction nor snapshot storage shape and grants no access to asset
+    /// bytes.
+    /// Process owners can use it to release bytes after Redo is discarded.
+    #[must_use]
+    pub fn history_reachable_asset_identities(
+        &self,
+    ) -> BTreeSet<AcceptedIdentity> {
+        let mut assets = BTreeSet::new();
+        if let Some(revision) = &self.current {
+            assets.extend(revision.notebook.assets.iter().map(|item| item.id));
+        }
+        for notebook in self
+            .undo_notebooks
+            .iter()
+            .chain(self.redo_notebooks.iter())
+        {
+            assets.extend(notebook.assets.iter().map(|item| item.id));
+        }
+        assets
+    }
+
 }
 
 fn accept_asset(

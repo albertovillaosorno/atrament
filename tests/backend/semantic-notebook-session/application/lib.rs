@@ -15156,6 +15156,47 @@ fn repeated_completed_history_request_is_stale_without_advancing_again() {
 }
 
 #[test]
+fn history_reachable_assets_drop_with_discarded_redo_branch() {
+    let candidate_ids = IdentityAllocator::new();
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { revision: empty, .. } =
+        session.accept(candidate_notebook(&candidate_ids, "empty"))
+    else {
+        panic!("empty candidate must be accepted");
+    };
+    let (candidate, figure_ids) =
+        candidate_notebook_with_figure_assets(&candidate_ids);
+    let AcceptanceOutcome::Accepted { mapping, revision: assets } =
+        session.accept(candidate)
+    else {
+        panic!("asset candidate must be accepted");
+    };
+    let asset_one = accepted_for(&mapping, figure_ids.asset_one);
+    let asset_two = accepted_for(&mapping, figure_ids.asset_two);
+    assert_eq!(
+        session.history_reachable_asset_identities(),
+        BTreeSet::from([asset_one, asset_two]),
+    );
+
+    let HistoryTraversalOutcome::Traversed { revision: undone, .. } =
+        session.traverse_history(assets, HistoryDirection::Undo)
+    else {
+        panic!("asset candidate must Undo to empty state");
+    };
+    assert_ne!(undone, empty);
+    assert_eq!(
+        session.history_reachable_asset_identities(),
+        BTreeSet::from([asset_one, asset_two]),
+    );
+
+    assert!(matches!(
+        session.accept(candidate_notebook(&candidate_ids, "branch")),
+        AcceptanceOutcome::Accepted { .. }
+    ));
+    assert!(session.history_reachable_asset_identities().is_empty());
+}
+
+#[test]
 fn semantic_history_new_edit_after_undo_discards_redo_branch() {
     let candidate_ids = IdentityAllocator::new();
     let (candidate, candidate_span) =

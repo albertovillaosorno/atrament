@@ -189,7 +189,10 @@ impl SessionApplication {
         &mut self,
         candidate: Notebook<CandidateIdentity>,
     ) -> AcceptanceOutcome {
-        self.semantic.accept(candidate)
+        let had_redo = self.redo_is_available();
+        let outcome = self.semantic.accept(candidate);
+        self.prune_discarded_redo_asset_bytes(had_redo);
+        outcome
     }
 
     /// Read the current accepted semantic revision without creating another.
@@ -206,7 +209,10 @@ impl SessionApplication {
     where
         CommandIdentity: Clone + Ord,
     {
-        self.semantic.apply_direct_edit_batch(batch)
+        let had_redo = self.redo_is_available();
+        let outcome = self.semantic.apply_direct_edit_batch(batch);
+        self.prune_discarded_redo_asset_bytes(had_redo);
+        outcome
     }
 
     /// Apply one caller-bounded semantic batch through the owned authority.
@@ -218,7 +224,12 @@ impl SessionApplication {
     where
         CommandIdentity: Clone + Ord,
     {
-        self.semantic.apply_direct_edit_batch_bounded(batch, limits)
+        let had_redo = self.redo_is_available();
+        let outcome = self
+            .semantic
+            .apply_direct_edit_batch_bounded(batch, limits);
+        self.prune_discarded_redo_asset_bytes(had_redo);
+        outcome
     }
 
     /// Borrow raw bytes retained for one current accepted semantic asset.
@@ -491,6 +502,26 @@ impl SessionApplication {
             .preview_direct_edit_changes(revision, target, requested)
     }
 
+    fn prune_discarded_redo_asset_bytes(&mut self, had_redo: bool) {
+        if !had_redo
+            || self.redo_is_available()
+            || self.asset_bytes.is_empty()
+        {
+            return;
+        }
+        let reachable = self.semantic.history_reachable_asset_identities();
+        self.asset_bytes
+            .retain(|asset, _bytes| reachable.contains(asset));
+    }
+
+    fn redo_is_available(&self) -> bool {
+        matches!(
+            self.semantic.history_availability(),
+            HistoryAvailabilityOutcome::Available(availability)
+                if availability.can_redo
+        )
+    }
+
     /// Replace one mathematical source through the owned semantic authority.
     pub fn replace_formula(
         &mut self,
@@ -499,7 +530,10 @@ impl SessionApplication {
         mode: FormulaMode,
         source: String,
     ) -> FormulaEditOutcome {
-        self.semantic.replace_formula(base, target, mode, source)
+        let had_redo = self.redo_is_available();
+        let outcome = self.semantic.replace_formula(base, target, mode, source);
+        self.prune_discarded_redo_asset_bytes(had_redo);
+        outcome
     }
 
     /// Replace one physical page profile through the owned semantic authority.
@@ -509,7 +543,11 @@ impl SessionApplication {
         target: AcceptedIdentity,
         geometry: PhysicalPageProfile,
     ) -> PageProfileEditOutcome {
-        self.semantic.replace_page_profile(base, target, geometry)
+        let had_redo = self.redo_is_available();
+        let outcome =
+            self.semantic.replace_page_profile(base, target, geometry);
+        self.prune_discarded_redo_asset_bytes(had_redo);
+        outcome
     }
 
     /// Replace one table-cell span through the owned semantic authority.
@@ -519,7 +557,10 @@ impl SessionApplication {
         target: AcceptedIdentity,
         span: TableCellSpan,
     ) -> TableCellSpanEditOutcome {
-        self.semantic.replace_table_cell_span(base, target, span)
+        let had_redo = self.redo_is_available();
+        let outcome = self.semantic.replace_table_cell_span(base, target, span);
+        self.prune_discarded_redo_asset_bytes(had_redo);
+        outcome
     }
 
     /// Replace one table-row role through the owned semantic authority.
@@ -529,7 +570,10 @@ impl SessionApplication {
         target: AcceptedIdentity,
         role: TableRowRole,
     ) -> TableRowRoleEditOutcome {
-        self.semantic.replace_table_row_role(base, target, role)
+        let had_redo = self.redo_is_available();
+        let outcome = self.semantic.replace_table_row_role(base, target, role);
+        self.prune_discarded_redo_asset_bytes(had_redo);
+        outcome
     }
 
     /// Replace one inline text value through the owned semantic authority.
@@ -539,7 +583,10 @@ impl SessionApplication {
         target: AcceptedIdentity,
         value: String,
     ) -> TextEditOutcome {
-        self.semantic.replace_text(base, target, value)
+        let had_redo = self.redo_is_available();
+        let outcome = self.semantic.replace_text(base, target, value);
+        self.prune_discarded_redo_asset_bytes(had_redo);
+        outcome
     }
 
     /// Retain already-validated raw bytes for one accepted semantic asset.
