@@ -78,6 +78,287 @@ fn next_profile_value(seed: &mut u64) -> u64 {
     *seed >> 32
 }
 
+fn next_validation_value(seed: &mut u64) -> u64 {
+    *seed = seed
+        .wrapping_mul(2_862_933_555_777_941_757)
+        .wrapping_add(3_037_000_493);
+    *seed
+}
+
+fn reference_writable_region(
+    profile: PageProfile,
+) -> Result<Rect, PageProfileError> {
+    if profile.sheet.width == Length::ZERO
+        || profile.sheet.height == Length::ZERO
+    {
+        return Err(PageProfileError::SheetDimensionIsZero);
+    }
+    let (sheet_width, sheet_height) = match profile.orientation {
+        Orientation::Landscape => (
+            profile.sheet.height.micrometres(),
+            profile.sheet.width.micrometres(),
+        ),
+        Orientation::Portrait => (
+            profile.sheet.width.micrometres(),
+            profile.sheet.height.micrometres(),
+        ),
+    };
+    let printable = profile.printable_region;
+    let width = printable.width.micrometres();
+    let height = printable.height.micrometres();
+    if width == 0 || height == 0 {
+        return Err(PageProfileError::PrintableRegionIsEmpty);
+    }
+    let right = u128::from(printable.x.micrometres()) + u128::from(width);
+    let bottom = u128::from(printable.y.micrometres()) + u128::from(height);
+    if right > u128::from(u64::MAX)
+        || bottom > u128::from(u64::MAX)
+        || right > u128::from(sheet_width)
+        || bottom > u128::from(sheet_height)
+    {
+        return Err(PageProfileError::PrintableRegionOutsideSheet);
+    }
+    let top = printable
+        .y
+        .micrometres()
+        .checked_add(profile.top_clearance.micrometres())
+        .ok_or(PageProfileError::TopClearanceExhaustsPrintableRegion)?;
+    let remaining_height = height
+        .checked_sub(profile.top_clearance.micrometres())
+        .ok_or(PageProfileError::TopClearanceExhaustsPrintableRegion)?;
+    if remaining_height == 0 {
+        return Err(PageProfileError::TopClearanceExhaustsPrintableRegion);
+    }
+    let binding_inset = profile
+        .outer_margin
+        .micrometres()
+        .checked_add(profile.writing_inset.micrometres())
+        .ok_or(PageProfileError::BindingInsetExhaustsPrintableRegion)?;
+    let (x, y, writable_width, writable_height) = match profile.binding_edge {
+        BindingEdge::Left => (
+            printable
+                .x
+                .micrometres()
+                .checked_add(binding_inset)
+                .ok_or(PageProfileError::BindingInsetExhaustsPrintableRegion)?,
+            top,
+            width
+                .checked_sub(binding_inset)
+                .ok_or(PageProfileError::BindingInsetExhaustsPrintableRegion)?,
+            remaining_height,
+        ),
+        BindingEdge::Right => (
+            printable.x.micrometres(),
+            top,
+            width
+                .checked_sub(binding_inset)
+                .ok_or(PageProfileError::BindingInsetExhaustsPrintableRegion)?,
+            remaining_height,
+        ),
+        BindingEdge::Top => (
+            printable.x.micrometres(),
+            top.checked_add(binding_inset)
+                .ok_or(PageProfileError::BindingInsetExhaustsPrintableRegion)?,
+            width,
+            remaining_height
+                .checked_sub(binding_inset)
+                .ok_or(PageProfileError::BindingInsetExhaustsPrintableRegion)?,
+        ),
+        BindingEdge::Bottom => (
+            printable.x.micrometres(),
+            top,
+            width,
+            remaining_height
+                .checked_sub(binding_inset)
+                .ok_or(PageProfileError::BindingInsetExhaustsPrintableRegion)?,
+        ),
+    };
+    if writable_width == 0 || writable_height == 0 {
+        return Err(PageProfileError::BindingInsetExhaustsPrintableRegion);
+    }
+    Ok(Rect {
+        height: Length::from_micrometres(writable_height),
+        width: Length::from_micrometres(writable_width),
+        x: Length::from_micrometres(x),
+        y: Length::from_micrometres(y),
+    })
+}
+
+fn reference_profile_validation(
+    profile: PageProfile,
+) -> Result<(), PageProfileError> {
+    reference_printable_region(profile)?;
+    if matches!(
+        profile.paper_mark_appearance.join,
+        PaperMarkJoin::Rounded { radius } if radius == Length::ZERO
+    ) {
+        return Err(PageProfileError::PaperMarkRoundedJoinRadiusIsZero);
+    }
+    if matches!(
+        profile.paper_pattern,
+        PaperPattern::Dotted { spacing }
+            | PaperPattern::Ruled { spacing }
+            | PaperPattern::Squared { spacing }
+            if spacing == Length::ZERO
+    ) {
+        return Err(PageProfileError::PatternSpacingIsZero);
+    }
+    if profile.border_shape != BorderShape::RoundedRectangle {
+        if profile.corner_roundness != Length::ZERO {
+            return Err(PageProfileError::CornerRoundnessRequiresRoundedBorder);
+        }
+    } else {
+        let doubled = u128::from(profile.corner_roundness.micrometres()) * 2;
+        if doubled > u128::from(profile.printable_region.width.micrometres())
+            || doubled
+                > u128::from(profile.printable_region.height.micrometres())
+        {
+            return Err(PageProfileError::CornerRoundnessExceedsPrintableRegion);
+        }
+    }
+    reference_writable_region(profile).map(|_writable| ())
+}
+
+fn reference_printable_region(
+    profile: PageProfile,
+) -> Result<(), PageProfileError> {
+    if profile.sheet.width == Length::ZERO
+        || profile.sheet.height == Length::ZERO
+    {
+        return Err(PageProfileError::SheetDimensionIsZero);
+    }
+    let (sheet_width, sheet_height) = match profile.orientation {
+        Orientation::Landscape => (
+            profile.sheet.height.micrometres(),
+            profile.sheet.width.micrometres(),
+        ),
+        Orientation::Portrait => (
+            profile.sheet.width.micrometres(),
+            profile.sheet.height.micrometres(),
+        ),
+    };
+    let printable = profile.printable_region;
+    if printable.width == Length::ZERO || printable.height == Length::ZERO {
+        return Err(PageProfileError::PrintableRegionIsEmpty);
+    }
+    let right = u128::from(printable.x.micrometres())
+        + u128::from(printable.width.micrometres());
+    let bottom = u128::from(printable.y.micrometres())
+        + u128::from(printable.height.micrometres());
+    if right > u128::from(u64::MAX)
+        || bottom > u128::from(u64::MAX)
+        || right > u128::from(sheet_width)
+        || bottom > u128::from(sheet_height)
+    {
+        return Err(PageProfileError::PrintableRegionOutsideSheet);
+    }
+    Ok(())
+}
+
+fn generated_validation_profile(seed: &mut u64, case: usize) -> PageProfile {
+    let mut profile = base_profile(match next_validation_value(seed) % 4 {
+        0 => BindingEdge::Bottom,
+        1 => BindingEdge::Left,
+        2 => BindingEdge::Right,
+        _ => BindingEdge::Top,
+    });
+    profile.orientation = if next_validation_value(seed) & 1 == 0 {
+        Orientation::Portrait
+    } else {
+        Orientation::Landscape
+    };
+    if profile.orientation == Orientation::Landscape {
+        profile.printable_region = Rect {
+            height: Length::from_micrometres(190_000),
+            width: Length::from_micrometres(277_000),
+            x: TEN_MM,
+            y: TEN_MM,
+        };
+    }
+    match case % 12 {
+        0 => profile.sheet.width = Length::ZERO,
+        1 => profile.printable_region.height = Length::ZERO,
+        2 => profile.printable_region.x = Length::from_micrometres(u64::MAX),
+        3 => {
+            profile.paper_mark_appearance.join =
+                PaperMarkJoin::Rounded { radius: Length::ZERO };
+            profile.paper_pattern = PaperPattern::Ruled {
+                spacing: Length::ZERO,
+            };
+        },
+        4 => {
+            profile.paper_pattern = PaperPattern::Squared {
+                spacing: Length::ZERO,
+            };
+        },
+        5 => {
+            profile.border_shape = BorderShape::Rectangle;
+            profile.corner_roundness = FIVE_MM;
+        },
+        6 => {
+            profile.corner_roundness = Length::from_micrometres(u64::MAX);
+        },
+        7 => profile.top_clearance = profile.printable_region.height,
+        8 => {
+            profile.outer_margin = Length::from_micrometres(u64::MAX);
+            profile.writing_inset = Length::from_micrometres(1);
+        },
+        9 => {
+            profile.outer_margin = match profile.binding_edge {
+                BindingEdge::Bottom | BindingEdge::Top => {
+                    profile.printable_region.height
+                },
+                BindingEdge::Left | BindingEdge::Right => {
+                    profile.printable_region.width
+                },
+            };
+            profile.writing_inset = Length::ZERO;
+        },
+        10 => {
+            let jitter = next_validation_value(seed) % 5_000;
+            profile.top_clearance = Length::from_micrometres(jitter);
+            profile.outer_margin = Length::from_micrometres(jitter / 2);
+            profile.writing_inset = Length::from_micrometres(jitter / 3);
+        },
+        _ => {
+            profile.paper_mark_appearance.maximum_ruler_error =
+                Length::from_micrometres(next_validation_value(seed));
+        },
+    }
+    profile
+}
+
+#[test]
+fn mixed_profile_failures_match_independent_precedence_oracle() {
+    const CASES: usize = 120_000;
+    let mut seed = 0xd1b5_4a32_d192_ed03_u64;
+    let mut valid = 0usize;
+    let mut invalid = 0usize;
+    for case in 0..CASES {
+        let profile = generated_validation_profile(&mut seed, case);
+        let expected = reference_profile_validation(profile);
+        if expected.is_ok() {
+            valid = valid.saturating_add(1);
+        } else {
+            invalid = invalid.saturating_add(1);
+        }
+        assert_eq!(
+            profile.validate().map(|_valid| ()),
+            expected,
+            "profile validation mismatch in generated case {case}",
+        );
+        if reference_printable_region(profile).is_ok() {
+            assert_eq!(
+                profile.writable_region(),
+                reference_writable_region(profile),
+                "writable-region mismatch in generated case {case}",
+            );
+        }
+    }
+    assert!(valid > 10_000);
+    assert!(invalid > 50_000);
+}
+
 #[test]
 fn valid_profiles_match_writable_region_reference_oracle() {
     const CASES: usize = 20_000;
