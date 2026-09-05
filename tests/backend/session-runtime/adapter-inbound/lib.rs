@@ -981,6 +981,50 @@ fn authenticated_handshake_returns_current_version_set() {
 }
 
 #[test]
+fn handshake_admits_only_an_empty_request_body() {
+    let authorization = format!("Bearer {EXPECTED_SECRET}");
+    let base = format!(
+        concat!(
+            "POST /api/handshake HTTP/1.1\r\n",
+            "Host: {}\r\n",
+            "Authorization: {}\r\n",
+            "Origin: {}\r\n",
+            "X-Atrament-Capability-Version: {}\r\n",
+            "X-Atrament-Product-Version: {}\r\n",
+            "X-Atrament-Profile-Version: {}\r\n",
+            "X-Atrament-Prompt-Version: {}\r\n",
+            "X-Atrament-Protocol-Version: {}\r\n",
+            "X-Atrament-Renderer-Version: {}\r\n",
+        ),
+        EXPECTED_HOST,
+        authorization,
+        EXPECTED_ORIGIN,
+        CAPABILITY_VERSION,
+        PRODUCT_VERSION,
+        PROFILE_VERSION,
+        PROMPT_VERSION,
+        PROTOCOL_VERSION,
+        RENDERER_VERSION,
+    );
+    let zero_length = format!("{base}Content-Length: 0\r\n\r\n");
+    assert_eq!(
+        status_line(&route_runtime(zero_length.as_bytes(), EXPECTED_HOST)),
+        "HTTP/1.1 200 OK",
+    );
+
+    let body = format!("{base}Content-Length: 1\r\n\r\nx");
+    assert_eq!(
+        status_line(&route_runtime(body.as_bytes(), EXPECTED_HOST)),
+        "HTTP/1.1 400 Bad Request",
+    );
+    let trailing = format!("{base}\r\nx");
+    assert_eq!(
+        status_line(&route_runtime(trailing.as_bytes(), EXPECTED_HOST)),
+        "HTTP/1.1 400 Bad Request",
+    );
+}
+
+#[test]
 fn handshake_admission_failures_share_one_unauthenticated_response() {
     let authorization = format!("Bearer {EXPECTED_SECRET}");
     let wrong_authorization = format!("Bearer {}", "b".repeat(64));

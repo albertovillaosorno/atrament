@@ -550,6 +550,12 @@ fn route_handshake(
             br#"{"error":"unauthenticated"}"#,
         );
     }
+    if !request_has_no_body(request) {
+        return json_response(
+            "400 Bad Request",
+            br#"{"error":"invalid_request"}"#,
+        );
+    }
     match handshake.evaluate(handshake_versions(request)) {
         HandshakeResult::Compatible { versions } => {
             handshake_success_response(versions)
@@ -578,6 +584,17 @@ fn request_body(request: &[u8]) -> Option<&[u8]> {
     .ok()?;
     let body = request.get(head_end..)?;
     (body.len() == declared).then_some(body)
+}
+
+fn request_has_no_body(request: &[u8]) -> bool {
+    let Some(head_end) = request_head_end(request) else {
+        return false;
+    };
+    let Some(request_head) = request.get(..head_end) else {
+        return false;
+    };
+    declared_content_length(request_head).is_ok_and(|length| length == 0)
+        && request.len() == head_end
 }
 
 fn request_origin_is_admitted(request: &[u8], expected_origin: &str) -> bool {
