@@ -361,22 +361,23 @@ fn named_symbol_vocabulary_is_supported_without_rewriting() {
         r"\Rightarrow",
         r"\Sigma", r"\Theta", r"\Uparrow", r"\Updownarrow", r"\Upsilon",
         r"\Vert", r"\Xi", r"\alpha", r"\angle", r"\approx", r"\ast",
-        r"\because", r"\beta", r"\bullet", r"\cap", r"\cdot", r"\cdots",
+        r"\backslash", r"\because", r"\beta", r"\bullet", r"\cap", r"\cdot",
+        r"\cdots",
         r"\chi", r"\circ", r"\cong", r"\cup", r"\dashv", r"\ddots", r"\delta",
         r"\div", r"\dots", r"\downarrow", r"\ell", r"\emptyset", r"\epsilon",
         r"\equiv", r"\eta", r"\exists", r"\forall", r"\gamma", r"\ge", r"\geq",
         r"\geqslant", r"\gets", r"\gg", r"\gtrsim", r"\hbar", r"\hookleftarrow",
         r"\hookrightarrow", r"\iff", r"\imath", r"\implies", r"\in", r"\infty",
         r"\iota", r"\jmath", r"\kappa", r"\lambda", r"\land", r"\langle",
-        r"\lbrace", r"\lceil", r"\ldots", r"\le", r"\leftarrow",
+        r"\lbrace", r"\lbrack", r"\lceil", r"\ldots", r"\le", r"\leftarrow",
         r"\leftrightarrow", r"\leq", r"\leqslant", r"\lesssim", r"\lfloor",
         r"\ll", r"\longleftarrow", r"\longleftrightarrow", r"\longrightarrow",
         r"\lor", r"\mapsto", r"\mid", r"\models", r"\mp", r"\mu", r"\nabla",
         r"\ne", r"\nearrow", r"\neg", r"\neq", r"\nexists", r"\ni", r"\notin",
         r"\nu", r"\nwarrow", r"\omega", r"\oplus", r"\otimes", r"\parallel",
         r"\partial", r"\perp", r"\phi", r"\pi", r"\pm", r"\prec", r"\preceq",
-        r"\prime", r"\propto", r"\psi", r"\rangle", r"\rbrace", r"\rceil",
-        r"\rfloor",
+        r"\prime", r"\propto", r"\psi", r"\rangle", r"\rbrace", r"\rbrack",
+        r"\rceil", r"\rfloor",
         r"\rho", r"\rightarrow", r"\searrow", r"\setminus", r"\sigma", r"\sim",
         r"\simeq", r"\star", r"\subset", r"\subseteq", r"\subsetneq", r"\succ",
         r"\succeq", r"\supset", r"\supseteq", r"\supsetneq", r"\swarrow",
@@ -547,6 +548,7 @@ fn named_delimiters_compose_without_rewriting() {
     let source = concat!(
         r"\langle x, y \rangle; \lceil x \rceil; ",
         r"\lfloor y \rfloor; \lbrace A \rbrace; ",
+        r"\lbrack z \rbrack; A \backslash B; ",
         r"\vert x \vert + \Vert v \Vert",
     );
     let analyzed = analyze(source, FormulaMode::Display)
@@ -562,7 +564,7 @@ fn named_delimiters_compose_without_rewriting() {
                     == MathTokenKind::Command(SupportedCommand::NamedSymbol)
             })
             .count(),
-        12,
+        15,
     );
 }
 
