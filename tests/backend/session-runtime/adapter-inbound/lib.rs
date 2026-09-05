@@ -155,6 +155,30 @@ fn malformed_header_line_endings_reject_without_waiting_for_eof() {
 }
 
 #[test]
+fn request_body_bytes_are_not_subject_to_header_line_ending_grammar() {
+    let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0))
+        .expect("test listener binds");
+    let address = listener.local_addr().expect("test listener address");
+    let mut client = TcpStream::connect(address).expect("test client connects");
+    let (mut server, _) = listener.accept().expect("test server accepts");
+    server
+        .set_read_timeout(Some(Duration::from_millis(100)))
+        .expect("test read timeout");
+    let request = concat!(
+        "POST /api/session/task HTTP/1.1\r\n",
+        "Host: 127.0.0.1:43123\r\n",
+        "Content-Length: 5\r\n\r\n",
+        "\n\rabc",
+    )
+    .as_bytes();
+    client.write_all(request).expect("test request writes");
+    assert_eq!(
+        runtime::read_request(&mut server).expect("valid framed body reads"),
+        request,
+    );
+}
+
+#[test]
 fn malformed_or_missing_host_is_rejected_before_routing() {
     let host = "127.0.0.1:43123";
     let rejected = [
