@@ -763,6 +763,26 @@ fn handshake_request(
 }
 
 #[test]
+fn generated_handshake_versions_match_backend_authority() {
+    let module = std::str::from_utf8(SESSION_HANDSHAKE_JAVASCRIPT)
+        .expect("generated handshake module is UTF-8");
+    for (name, version) in [
+        ("CAPABILITY_VERSION", CAPABILITY_VERSION),
+        ("PRODUCT_VERSION", PRODUCT_VERSION),
+        ("PROFILE_VERSION", PROFILE_VERSION),
+        ("PROMPT_VERSION", PROMPT_VERSION),
+        ("PROTOCOL_VERSION", PROTOCOL_VERSION),
+        ("RENDERER_VERSION", RENDERER_VERSION),
+    ] {
+        let declaration = format!(r#"const {name} = "{version}";"#);
+        assert!(
+            module.contains(&declaration),
+            "generated handshake module drifted for {name}",
+        );
+    }
+}
+
+#[test]
 fn serves_embedded_frontend_resources_without_caching() {
     let host = "127.0.0.1:43123";
     let cases = [
