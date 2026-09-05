@@ -41,7 +41,7 @@
 use std::io::{self, Read as _, Write as _};
 use std::net::{Ipv4Addr, SocketAddr, TcpListener, TcpStream};
 use std::str;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use atrament_diagnostic::{Completeness, DIAGNOSTIC_VERSION, DiagnosticSet};
 use atrament_session_draft_port::{DraftField, DraftMutation, SessionDraft};
@@ -279,10 +279,27 @@ fn request_head_line_endings_are_valid_so_far(bytes: &[u8]) -> bool {
 }
 
 pub(crate) fn read_request(stream: &mut TcpStream) -> io::Result<Vec<u8>> {
+    let total_timeout = stream.read_timeout()?;
+    let started = Instant::now();
     let mut bytes = Vec::with_capacity(1024);
     let mut chunk = [0u8; 1024];
     let mut expected_total = None;
     loop {
+        if let Some(timeout) = total_timeout {
+            let Some(remaining) = timeout.checked_sub(started.elapsed()) else {
+                return Err(io::Error::new(
+                    io::ErrorKind::TimedOut,
+                    "request exceeded runtime transport deadline",
+                ));
+            };
+            if remaining.is_zero() {
+                return Err(io::Error::new(
+                    io::ErrorKind::TimedOut,
+                    "request exceeded runtime transport deadline",
+                ));
+            }
+            stream.set_read_timeout(Some(remaining))?;
+        }
         let read = stream.read(&mut chunk)?;
         if read == 0 {
             if expected_total.is_some_and(|total| bytes.len() < total) {

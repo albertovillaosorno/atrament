@@ -297,6 +297,33 @@ fn valid_crlf_may_arrive_split_across_socket_reads() {
 }
 
 #[test]
+fn request_timeout_is_total_deadline_not_per_read_budget() {
+    let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0))
+        .expect("test listener binds");
+    let address = listener.local_addr().expect("test listener address");
+    let writer = thread::spawn(move || {
+        let mut client =
+            TcpStream::connect(address).expect("test client connects");
+        for _ in 0..10 {
+            let _write_result = client.write_all(b"x");
+            thread::sleep(Duration::from_millis(50));
+        }
+    });
+    let (mut server, _) = listener.accept().expect("test server accepts");
+    server
+        .set_read_timeout(Some(Duration::from_millis(180)))
+        .expect("test read timeout");
+    let error = runtime::read_request(&mut server)
+        .expect_err("trickle request must hit total deadline");
+    assert!(matches!(
+        error.kind(),
+        std::io::ErrorKind::TimedOut | std::io::ErrorKind::WouldBlock
+    ));
+    drop(server);
+    writer.join().expect("test writer joins");
+}
+
+#[test]
 fn request_transport_limits_admit_exact_bounds_only() {
     const HEADER_LIMIT: usize = 16 * 1024;
     const BODY_LIMIT: usize = 2 * 1024 * 1024;

@@ -1329,6 +1329,11 @@ cannot replace the required blank CRLF header terminator. Exhaustive prefix and
 two-write split fixtures cover every byte boundary of valid GET and body-bearing
 POST requests.
 
+The configured request timeout is now one total transport deadline rather than a
+per-read budget. Trickle bytes cannot extend the production two-second request
+budget; a real loopback probe returns 408 near that deadline and then serves a
+fresh health request.
+
 Request targets must use RFC 3986 origin-form path/query characters beginning
 with `/`; absolute proxy form, `*`, fragments, controls, raw Unicode, and URI-
 invalid visible punctuation reject before routing. Any `%` escape must carry
