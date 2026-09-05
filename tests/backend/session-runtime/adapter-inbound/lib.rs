@@ -297,6 +297,91 @@ fn valid_crlf_may_arrive_split_across_socket_reads() {
 }
 
 #[test]
+fn request_transport_limits_admit_exact_bounds_only() {
+    const HEADER_LIMIT: usize = 16 * 1024;
+    const BODY_LIMIT: usize = 2 * 1024 * 1024;
+
+    fn read_closed(bytes: Vec<u8>) -> std::io::Result<Vec<u8>> {
+        let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0))
+            .expect("test listener binds");
+        let address = listener.local_addr().expect("test listener address");
+        let writer = thread::spawn(move || {
+            let mut client =
+                TcpStream::connect(address).expect("test client connects");
+            client.write_all(&bytes).expect("bounded request writes");
+        });
+        let (mut server, _) = listener.accept().expect("test server accepts");
+        server
+            .set_read_timeout(Some(Duration::from_secs(1)))
+            .expect("test read timeout");
+        let result = runtime::read_request(&mut server);
+        writer.join().expect("test writer joins");
+        result
+    }
+
+    fn padded_head(total: usize) -> Vec<u8> {
+        let prefix = concat!(
+            "GET /health HTTP/1.1\r\n",
+            "Host: 127.0.0.1:43123\r\n",
+            "X-Pad: ",
+        );
+        let suffix = "\r\n\r\n";
+        let padding = total
+            .checked_sub(prefix.len() + suffix.len())
+            .expect("header limit holds fixture syntax");
+        format!("{prefix}{}{suffix}", "a".repeat(padding)).into_bytes()
+    }
+
+    let exact_head = padded_head(HEADER_LIMIT);
+    assert_eq!(exact_head.len(), HEADER_LIMIT);
+    assert_eq!(
+        read_closed(exact_head.clone()).expect("exact header limit reads"),
+        exact_head,
+    );
+    let over_head = padded_head(HEADER_LIMIT + 1);
+    assert_eq!(
+        read_closed(over_head)
+            .expect_err("over-limit request header must reject")
+            .kind(),
+        std::io::ErrorKind::InvalidData,
+    );
+
+    let body_head = format!(
+        concat!(
+            "POST /api/session/task HTTP/1.1\r\n",
+            "Host: 127.0.0.1:43123\r\n",
+            "Content-Length: {}\r\n\r\n",
+        ),
+        BODY_LIMIT,
+    );
+    let mut exact_body = body_head.into_bytes();
+    exact_body.extend(std::iter::repeat_n(b'a', BODY_LIMIT));
+    let expected_length = exact_body.len();
+    assert_eq!(
+        read_closed(exact_body)
+            .expect("exact body transport limit reads")
+            .len(),
+        expected_length,
+    );
+
+    let over_body = format!(
+        concat!(
+            "POST /api/session/task HTTP/1.1\r\n",
+            "Host: 127.0.0.1:43123\r\n",
+            "Content-Length: {}\r\n\r\n",
+        ),
+        BODY_LIMIT + 1,
+    )
+    .into_bytes();
+    assert_eq!(
+        read_closed(over_body)
+            .expect_err("over-limit declared body must reject")
+            .kind(),
+        std::io::ErrorKind::InvalidData,
+    );
+}
+
+#[test]
 fn request_body_bytes_are_not_subject_to_header_line_ending_grammar() {
     let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0))
         .expect("test listener binds");
