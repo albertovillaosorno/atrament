@@ -27,7 +27,8 @@
 // - Usage:
 //   - Compile this root test harness against the browser launch adapter.
 // - Defaults:
-//   - Uses standard no-op process commands on Unix test hosts.
+//   - Uses standard Unix commands whose inherited output would expose the
+//     synthetic launch credential.
 //
 use std::ffi::OsStr;
 #[cfg(unix)]
@@ -38,6 +39,10 @@ use std::time::{Duration, Instant};
 mod browser_launch;
 
 const ORIGIN: &str = "http://127.0.0.1:43123";
+const PRIVATE_LAUNCH_URL: &str = concat!(
+    "http://127.0.0.1:43123/#session=",
+    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+);
 
 #[cfg(unix)]
 #[test]
@@ -70,17 +75,32 @@ fn missing_opener_is_typed_without_exposing_the_origin() {
 
 #[cfg(unix)]
 #[test]
-fn hanging_opener_is_killed_at_the_total_launch_deadline() {
+fn credential_echoing_stdout_opener_is_silenced_and_killed_at_deadline() {
     let started = Instant::now();
     let error = browser_launch::launch_with_timeout(
         OsStr::new("yes"),
-        ORIGIN,
+        PRIVATE_LAUNCH_URL,
         Duration::from_millis(80),
     )
-    .expect_err("sleep must exceed the bounded launch deadline");
+    .expect_err("yes must exceed the bounded launch deadline");
     let elapsed = started.elapsed();
     assert!(matches!(error, browser_launch::LaunchError::TimedOut));
     assert!(elapsed >= Duration::from_millis(60));
     assert!(elapsed < Duration::from_secs(1));
-    assert!(!error.to_string().contains(ORIGIN));
+    assert!(!error.to_string().contains(PRIVATE_LAUNCH_URL));
+}
+
+#[cfg(unix)]
+#[test]
+fn credential_echoing_stderr_opener_is_silenced_and_typed() {
+    let error = browser_launch::launch_with(
+        OsStr::new("cat"),
+        PRIVATE_LAUNCH_URL,
+    )
+    .expect_err("cat must reject the synthetic URL as a file path");
+    assert!(matches!(
+        error,
+        browser_launch::LaunchError::Unsuccessful(_)
+    ));
+    assert!(!error.to_string().contains(PRIVATE_LAUNCH_URL));
 }
