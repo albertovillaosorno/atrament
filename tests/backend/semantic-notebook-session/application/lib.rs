@@ -14409,35 +14409,64 @@ fn wrong_reference_kind_rejects_without_changing_current_revision() {
 }
 
 #[test]
-fn definition_span_references_are_validated_before_candidate_commit() {
-    let candidate_ids = IdentityAllocator::new();
-    let valid = candidate_notebook(&candidate_ids, "accepted");
-    let mut invalid = candidate_notebook(&candidate_ids, "definition");
-    let page_id = invalid.pages[0].id;
-    let content = std::mem::replace(
-        &mut invalid.pages[0].flows[0].blocks[0].content,
-        BlockContent::Rule,
-    );
-    let BlockContent::Paragraph(mut spans) = content else {
-        panic!("definition reference fixture must start as paragraph");
-    };
-    spans[0].style = Some(page_id);
-    invalid.pages[0].flows[0].blocks[0].content =
-        BlockContent::Definition(spans);
+fn every_simple_inline_family_validates_span_reference_kinds() {
+    type InlineBlockConstructor = fn(
+        Vec<InlineSpan<CandidateIdentity>>,
+    ) -> BlockContent<CandidateIdentity>;
+    let cases: &[InlineBlockConstructor] = &[
+        BlockContent::Date,
+        BlockContent::Definition,
+        BlockContent::Heading,
+        BlockContent::MarginNote,
+        BlockContent::Paragraph,
+        BlockContent::Quotation,
+        BlockContent::SourceNote,
+    ];
 
-    let mut session = SemanticNotebookSessionService::default();
-    let _ = session.accept(valid);
-    let before = session.current().expect("accepted revision").clone();
-    assert!(matches!(
-        session.accept(invalid),
-        AcceptanceOutcome::InvalidCandidate {
-            reason: CandidateGraphError::ReferenceKindMismatch {
-                expected: CandidateReferenceKind::Style,
-                ..
-            },
+    for constructor in cases {
+        for expected in [
+            CandidateReferenceKind::Style,
+            CandidateReferenceKind::Provenance,
+        ] {
+            let candidate_ids = IdentityAllocator::new();
+            let valid = candidate_notebook(&candidate_ids, "accepted");
+            let mut invalid = candidate_notebook(&candidate_ids, "invalid");
+            let page_id = invalid.pages[0].id;
+            let content = std::mem::replace(
+                &mut invalid.pages[0].flows[0].blocks[0].content,
+                BlockContent::Rule,
+            );
+            let BlockContent::Paragraph(mut spans) = content else {
+                panic!("simple inline-family seed must start as paragraph");
+            };
+            match expected {
+                CandidateReferenceKind::Style => spans[0].style = Some(page_id),
+                CandidateReferenceKind::Provenance => {
+                    spans[0].provenance = Some(page_id);
+                },
+                CandidateReferenceKind::Asset
+                | CandidateReferenceKind::PageProfile
+                | CandidateReferenceKind::Semantic => {
+                    panic!("fixture only checks inline-span references");
+                },
+            }
+            invalid.pages[0].flows[0].blocks[0].content = constructor(spans);
+
+            let mut session = SemanticNotebookSessionService::default();
+            let _ = session.accept(valid);
+            let before = session.current().expect("accepted revision").clone();
+            assert!(matches!(
+                session.accept(invalid),
+                AcceptanceOutcome::InvalidCandidate {
+                    reason: CandidateGraphError::ReferenceKindMismatch {
+                        expected: actual,
+                        ..
+                    },
+                } if actual == expected
+            ));
+            assert_eq!(session.current(), Some(&before));
         }
-    ));
-    assert_eq!(session.current(), Some(&before));
+    }
 }
 
 #[test]
