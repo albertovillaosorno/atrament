@@ -57,7 +57,7 @@ use atrament_semantic_notebook::{
     TableCellSpan,
     TableGridError, TableRow,
     TableRowRole,
-    semantic_identity_descriptor,
+    semantic_identity_descriptor, semantic_identity_path,
 };
 use atrament_semantic_notebook_port::{
     AcceptanceOutcome, CANDIDATE_BLOCK_NESTING_LIMIT, CandidateGraphError,
@@ -888,46 +888,50 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
                 current: current.id,
             };
         }
-        let mut identity = target;
-        let Some(mut descriptor) =
-            semantic_identity_descriptor(&current.notebook, identity)
+        if maximum_results == 0 {
+            if semantic_identity_descriptor(&current.notebook, target)
+                .is_none()
+            {
+                return IdentityAncestryInspectOutcome::TargetNotFound {
+                    revision,
+                    target,
+                };
+            }
+            return IdentityAncestryInspectOutcome::Inspected {
+                completeness: IdentityAncestryCompleteness::Incomplete {
+                    remaining_identity: target,
+                },
+                entries: Vec::new(),
+                revision,
+                target,
+            };
+        }
+        let Some(path) = semantic_identity_path(&current.notebook, target)
         else {
             return IdentityAncestryInspectOutcome::TargetNotFound {
                 revision,
                 target,
             };
         };
-        let mut entries = Vec::new();
-        loop {
-            if entries.len() == maximum_results {
-                return IdentityAncestryInspectOutcome::Inspected {
-                    completeness: IdentityAncestryCompleteness::Incomplete {
-                        remaining_identity: identity,
-                    },
-                    entries,
-                    revision,
-                    target,
-                };
-            }
-            entries.push(IdentityAncestryEntry { descriptor, identity });
-            let Some(owner) = descriptor.owner else {
-                return IdentityAncestryInspectOutcome::Inspected {
-                    completeness: IdentityAncestryCompleteness::Complete,
-                    entries,
-                    revision,
-                    target,
-                };
-            };
-            identity = owner;
-            let Some(owner_descriptor) =
-                semantic_identity_descriptor(&current.notebook, identity)
-            else {
-                return IdentityAncestryInspectOutcome::TargetNotFound {
-                    revision,
-                    target: identity,
-                };
-            };
-            descriptor = owner_descriptor;
+        let completeness = path.get(maximum_results).map_or(
+            IdentityAncestryCompleteness::Complete,
+            |remaining| IdentityAncestryCompleteness::Incomplete {
+                remaining_identity: remaining.identity,
+            },
+        );
+        let entries = path
+            .into_iter()
+            .take(maximum_results)
+            .map(|entry| IdentityAncestryEntry {
+                descriptor: entry.descriptor,
+                identity: entry.identity,
+            })
+            .collect();
+        IdentityAncestryInspectOutcome::Inspected {
+            completeness,
+            entries,
+            revision,
+            target,
         }
     }
 

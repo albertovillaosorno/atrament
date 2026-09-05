@@ -37,12 +37,13 @@ use atrament_physical_page_profile::{
 use std::num::NonZeroU32;
 
 use atrament_semantic_notebook::{
-    Block, BlockContent, ExtensionData, Flow, IdentityAllocator, InlineSpan,
-    Notebook, Page, PaperProfile, SemanticBlockKind,
+    Block, BlockContent, ExtensionData, Figure, Flow, IdentityAllocator,
+    InlineSpan, List, ListItem, Notebook, Page, PaperProfile, SemanticBlockKind,
     SemanticIdentityDescriptor, SemanticIdentityKind, Table, TableCell,
     TableCellSpan, TableGridError, TableRow, TableRowRole, UnresolvedBlock,
     UnresolvedReason,
     semantic_identity_descriptor, semantic_identity_kind,
+    semantic_identity_path,
 };
 
 fn grid_cell(
@@ -364,6 +365,125 @@ fn simple_inline_block_kinds_keep_span_ownership() {
 }
 
 #[test]
+fn semantic_identity_path_matches_descriptor_chain_across_nested_families() {
+    let notebook = Notebook {
+        assets: vec![],
+        constraints: vec![],
+        extensions: vec![],
+        id: 1u32,
+        output_profiles: vec![],
+        page_profiles: vec![PaperProfile {
+            geometry: physical_page_profile(),
+            id: 2,
+        }],
+        pages: vec![Page {
+            flows: vec![Flow {
+                blocks: vec![
+                    Block {
+                        content: BlockContent::Figure(Figure {
+                            asset: None,
+                            caption: vec![InlineSpan {
+                                id: 6,
+                                provenance: None,
+                                style: None,
+                                text: String::from("caption"),
+                            }],
+                            id: 5,
+                        }),
+                        extensions: vec![],
+                        id: 4,
+                        provenance: None,
+                        style: None,
+                    },
+                    Block {
+                        content: BlockContent::List(List {
+                            id: 8,
+                            items: vec![ListItem {
+                                blocks: vec![Block {
+                                    content: BlockContent::Paragraph(vec![
+                                        InlineSpan {
+                                            id: 11,
+                                            provenance: None,
+                                            style: None,
+                                            text: String::from("list text"),
+                                        },
+                                    ]),
+                                    extensions: vec![],
+                                    id: 10,
+                                    provenance: None,
+                                    style: None,
+                                }],
+                                id: 9,
+                            }],
+                            ordered: true,
+                        }),
+                        extensions: vec![],
+                        id: 7,
+                        provenance: None,
+                        style: None,
+                    },
+                    Block {
+                        content: BlockContent::Table(Table {
+                            id: 13,
+                            rows: vec![TableRow {
+                                cells: vec![TableCell {
+                                    blocks: vec![Block {
+                                        content: BlockContent::Rule,
+                                        extensions: vec![],
+                                        id: 16,
+                                        provenance: None,
+                                        style: None,
+                                    }],
+                                    id: 15,
+                                    span: TableCellSpan::SINGLE,
+                                }],
+                                id: 14,
+                                role: TableRowRole::Body,
+                            }],
+                        }),
+                        extensions: vec![],
+                        id: 12,
+                        provenance: None,
+                        style: None,
+                    },
+                ],
+                id: 3,
+            }],
+            id: 20,
+            page_profile: 2,
+        }],
+        provenance: vec![],
+        styles: vec![],
+    };
+
+    for target in [1, 2, 20, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16] {
+        let path = semantic_identity_path(&notebook, target)
+            .expect("fixture identity must have a semantic path");
+        let first = path.first().expect("path contains target");
+        assert_eq!(first.identity, target);
+        assert_eq!(
+            first.descriptor,
+            semantic_identity_descriptor(&notebook, target)
+                .expect("fixture identity must have a descriptor"),
+        );
+        for adjacent in path.windows(2) {
+            let Some(current) = adjacent.first() else {
+                panic!("path window has current entry");
+            };
+            let Some(owner) = adjacent.get(1) else {
+                panic!("path window has owner entry");
+            };
+            assert_eq!(current.descriptor.owner, Some(owner.identity));
+        }
+        let root = path.last().expect("path reaches notebook root");
+        assert_eq!(root.identity, notebook.id);
+        assert_eq!(root.descriptor.kind, SemanticIdentityKind::Notebook);
+        assert_eq!(root.descriptor.owner, None);
+    }
+    assert_eq!(semantic_identity_path(&notebook, u32::MAX), None);
+}
+
+#[test]
 fn logical_table_validator_matches_naive_occupancy_oracle() {
     let mut seed = 0x5eed_1234_9876_abcd;
     for case in 0..20_000u32 {
@@ -630,6 +750,11 @@ fn semantic_identity_descriptor_handles_deep_nesting_iteratively() {
             owner: Some(1_000),
         }),
     );
+    let path = semantic_identity_path(&notebook, TARGET)
+        .expect("deep target must have a structural path");
+    assert_eq!(path.len(), usize::try_from(DEPTH).expect("depth fits") + 4);
+    assert_eq!(path.first().map(|entry| entry.identity), Some(TARGET));
+    assert_eq!(path.last().map(|entry| entry.identity), Some(notebook.id));
     std::mem::forget(notebook);
 }
 

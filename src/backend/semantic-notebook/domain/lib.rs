@@ -663,6 +663,38 @@ enum SemanticDescriptorFrame<'notebook, Identity> {
     },
 }
 
+/// One identity and descriptor in a semantic structural owner path.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct SemanticIdentityPathEntry<Identity> {
+    /// Semantic kind and direct structural owner for this identity.
+    pub descriptor: SemanticIdentityDescriptor<Identity>,
+    /// Semantic identity at this path position.
+    pub identity: Identity,
+}
+
+#[derive(Clone, Copy)]
+enum SemanticPathFrame<'notebook, Identity> {
+    Blocks {
+        blocks: &'notebook [Block<Identity>],
+        owner: Identity,
+    },
+    ListItems {
+        items: &'notebook [ListItem<Identity>],
+        owner: Identity,
+    },
+    TableCells {
+        cells: &'notebook [TableCell<Identity>],
+        owner: Identity,
+    },
+    TableRows {
+        owner: Identity,
+        rows: &'notebook [TableRow<Identity>],
+    },
+    Truncate {
+        length: usize,
+    },
+}
+
 /// Resolve one identity's semantic kind and direct structural owner.
 ///
 /// This is a read-only semantic inspection primitive. It exposes no serialized
@@ -739,6 +771,522 @@ where
         }
     }
     None
+}
+
+/// Resolve one identity and its complete structural owner path target-first.
+///
+/// The traversal is iterative for nested block, list, and table structures. The
+/// returned path ends at the notebook root and contains no reference edges such
+/// as style, provenance, asset, or page-profile references.
+#[must_use]
+pub fn semantic_identity_path<Identity>(
+    notebook: &Notebook<Identity>,
+    target: Identity,
+) -> Option<Vec<SemanticIdentityPathEntry<Identity>>>
+where
+    Identity: Copy + Eq,
+{
+    let root = SemanticIdentityPathEntry {
+        descriptor: SemanticIdentityDescriptor {
+            kind: SemanticIdentityKind::Notebook,
+            owner: None,
+        },
+        identity: notebook.id,
+    };
+    if notebook.id == target {
+        return Some(vec![root]);
+    }
+    for (identity, kind) in notebook
+        .assets
+        .iter()
+        .map(|value| (value.id, SemanticIdentityKind::Asset))
+        .chain(
+            notebook
+                .constraints
+                .iter()
+                .map(|value| (value.id, SemanticIdentityKind::Constraint)),
+        )
+        .chain(
+            notebook
+                .output_profiles
+                .iter()
+                .map(|value| (value.id, SemanticIdentityKind::OutputProfile)),
+        )
+        .chain(
+            notebook
+                .page_profiles
+                .iter()
+                .map(|value| (value.id, SemanticIdentityKind::PageProfile)),
+        )
+    {
+        if identity == target {
+            return Some(vec![
+                SemanticIdentityPathEntry {
+                    descriptor: descriptor(kind, notebook.id),
+                    identity,
+                },
+                root,
+            ]);
+        }
+    }
+    for page in &notebook.pages {
+        let page_entry = SemanticIdentityPathEntry {
+            descriptor: descriptor(SemanticIdentityKind::Page, notebook.id),
+            identity: page.id,
+        };
+        if page.id == target {
+            return Some(vec![page_entry, root]);
+        }
+        for flow in &page.flows {
+            let flow_entry = SemanticIdentityPathEntry {
+                descriptor: descriptor(SemanticIdentityKind::Flow, page.id),
+                identity: flow.id,
+            };
+            if flow.id == target {
+                return Some(vec![flow_entry, page_entry, root]);
+            }
+            let mut ancestors = vec![root, page_entry, flow_entry];
+            if let Some(path) = semantic_blocks_path(
+                &flow.blocks,
+                target,
+                flow.id,
+                &mut ancestors,
+            )
+            {
+                return Some(path);
+            }
+        }
+    }
+    for (identity, kind) in notebook
+        .provenance
+        .iter()
+        .map(|value| (value.id, SemanticIdentityKind::Provenance))
+        .chain(
+            notebook
+                .styles
+                .iter()
+                .map(|value| (value.id, SemanticIdentityKind::Style)),
+        )
+    {
+        if identity == target {
+            return Some(vec![
+                SemanticIdentityPathEntry {
+                    descriptor: descriptor(kind, notebook.id),
+                    identity,
+                },
+                root,
+            ]);
+        }
+    }
+    None
+}
+
+fn semantic_blocks_path<Identity>(
+    root_blocks: &[Block<Identity>],
+    target: Identity,
+    root_owner: Identity,
+    ancestors: &mut Vec<SemanticIdentityPathEntry<Identity>>,
+) -> Option<Vec<SemanticIdentityPathEntry<Identity>>>
+where
+    Identity: Copy + Eq,
+{
+    let mut stack = vec![SemanticPathFrame::Blocks {
+        blocks: root_blocks,
+        owner: root_owner,
+    }];
+    while let Some(frame) = stack.pop() {
+        let found = match frame {
+            SemanticPathFrame::Blocks { blocks, owner } => {
+                semantic_path_blocks_frame(
+                    blocks,
+                    owner,
+                    target,
+                    ancestors,
+                    &mut stack,
+                )
+            }
+            SemanticPathFrame::ListItems { items, owner } => {
+                semantic_path_list_items_frame(
+                    items,
+                    owner,
+                    target,
+                    ancestors,
+                    &mut stack,
+                )
+            }
+            SemanticPathFrame::TableCells { cells, owner } => {
+                semantic_path_table_cells_frame(
+                    cells,
+                    owner,
+                    target,
+                    ancestors,
+                    &mut stack,
+                )
+            }
+            SemanticPathFrame::TableRows { owner, rows } => {
+                semantic_path_table_rows_frame(
+                    rows,
+                    owner,
+                    target,
+                    ancestors,
+                    &mut stack,
+                )
+            }
+            SemanticPathFrame::Truncate { length } => {
+                ancestors.truncate(length);
+                None
+            }
+        };
+        if found.is_some() {
+            return found;
+        }
+    }
+    None
+}
+
+fn semantic_path_blocks_frame<'notebook, Identity>(
+    blocks: &'notebook [Block<Identity>],
+    owner: Identity,
+    target: Identity,
+    ancestors: &mut Vec<SemanticIdentityPathEntry<Identity>>,
+    stack: &mut Vec<SemanticPathFrame<'notebook, Identity>>,
+) -> Option<Vec<SemanticIdentityPathEntry<Identity>>>
+where
+    Identity: Copy + Eq,
+{
+    let (block, remaining) = blocks.split_first()?;
+    if !remaining.is_empty() {
+        stack.push(SemanticPathFrame::Blocks {
+            blocks: remaining,
+            owner,
+        });
+    }
+    let block_kind =
+        SemanticIdentityKind::Block(semantic_block_kind(&block.content));
+    if block.id == target {
+        return Some(semantic_found_path(target, block_kind, owner, ancestors));
+    }
+    let base = ancestors.len();
+    ancestors.push(SemanticIdentityPathEntry {
+        descriptor: descriptor(block_kind, owner),
+        identity: block.id,
+    });
+    semantic_path_block_content(block, target, base, ancestors, stack)
+}
+
+fn semantic_path_block_content<'notebook, Identity>(
+    block: &'notebook Block<Identity>,
+    target: Identity,
+    base: usize,
+    ancestors: &mut Vec<SemanticIdentityPathEntry<Identity>>,
+    stack: &mut Vec<SemanticPathFrame<'notebook, Identity>>,
+) -> Option<Vec<SemanticIdentityPathEntry<Identity>>>
+where
+    Identity: Copy + Eq,
+{
+    match &block.content {
+        BlockContent::Callout(children) | BlockContent::Freeform(children) => {
+            stack.push(SemanticPathFrame::Truncate { length: base });
+            if !children.is_empty() {
+                stack.push(SemanticPathFrame::Blocks {
+                    blocks: children,
+                    owner: block.id,
+                });
+            }
+            None
+        }
+        BlockContent::Date(spans)
+        | BlockContent::Definition(spans)
+        | BlockContent::Heading(spans)
+        | BlockContent::MarginNote(spans)
+        | BlockContent::Paragraph(spans)
+        | BlockContent::Quotation(spans)
+        | BlockContent::SourceNote(spans) => {
+            let found = spans.iter().any(|span| span.id == target).then(|| {
+                semantic_found_path(
+                    target,
+                    SemanticIdentityKind::InlineSpan,
+                    block.id,
+                    ancestors,
+                )
+            });
+            if found.is_none() {
+                ancestors.truncate(base);
+            }
+            found
+        }
+        BlockContent::Figure(figure) => {
+            semantic_path_figure(block.id, figure, target, base, ancestors)
+        }
+        BlockContent::List(list) => {
+            semantic_path_list(block.id, list, target, base, ancestors, stack)
+        }
+        BlockContent::Mathematics(formula) => {
+            let found = (formula.id == target).then(|| {
+                semantic_found_path(
+                    target,
+                    SemanticIdentityKind::Formula,
+                    block.id,
+                    ancestors,
+                )
+            });
+            if found.is_none() {
+                ancestors.truncate(base);
+            }
+            found
+        }
+        BlockContent::Rule | BlockContent::Unresolved(_) => {
+            ancestors.truncate(base);
+            None
+        }
+        BlockContent::Table(table) => {
+            semantic_path_table(block.id, table, target, base, ancestors, stack)
+        }
+    }
+}
+
+fn semantic_path_figure<Identity>(
+    block: Identity,
+    figure: &Figure<Identity>,
+    target: Identity,
+    base: usize,
+    ancestors: &mut Vec<SemanticIdentityPathEntry<Identity>>,
+) -> Option<Vec<SemanticIdentityPathEntry<Identity>>>
+where
+    Identity: Copy + Eq,
+{
+    if figure.id == target {
+        return Some(semantic_found_path(
+            target,
+            SemanticIdentityKind::Figure,
+            block,
+            ancestors,
+        ));
+    }
+    ancestors.push(SemanticIdentityPathEntry {
+        descriptor: descriptor(SemanticIdentityKind::Figure, block),
+        identity: figure.id,
+    });
+    let found = figure
+        .caption
+        .iter()
+        .any(|span| span.id == target)
+        .then(|| {
+            semantic_found_path(
+                target,
+                SemanticIdentityKind::InlineSpan,
+                figure.id,
+                ancestors,
+            )
+        });
+    if found.is_none() {
+        ancestors.truncate(base);
+    }
+    found
+}
+
+fn semantic_path_list<'notebook, Identity>(
+    block: Identity,
+    list: &'notebook List<Identity>,
+    target: Identity,
+    base: usize,
+    ancestors: &mut Vec<SemanticIdentityPathEntry<Identity>>,
+    stack: &mut Vec<SemanticPathFrame<'notebook, Identity>>,
+) -> Option<Vec<SemanticIdentityPathEntry<Identity>>>
+where
+    Identity: Copy + Eq,
+{
+    if list.id == target {
+        return Some(semantic_found_path(
+            target,
+            SemanticIdentityKind::List,
+            block,
+            ancestors,
+        ));
+    }
+    ancestors.push(SemanticIdentityPathEntry {
+        descriptor: descriptor(SemanticIdentityKind::List, block),
+        identity: list.id,
+    });
+    stack.push(SemanticPathFrame::Truncate { length: base });
+    if !list.items.is_empty() {
+        stack.push(SemanticPathFrame::ListItems {
+            items: &list.items,
+            owner: list.id,
+        });
+    }
+    None
+}
+
+fn semantic_path_table<'notebook, Identity>(
+    block: Identity,
+    table: &'notebook Table<Identity>,
+    target: Identity,
+    base: usize,
+    ancestors: &mut Vec<SemanticIdentityPathEntry<Identity>>,
+    stack: &mut Vec<SemanticPathFrame<'notebook, Identity>>,
+) -> Option<Vec<SemanticIdentityPathEntry<Identity>>>
+where
+    Identity: Copy + Eq,
+{
+    if table.id == target {
+        return Some(semantic_found_path(
+            target,
+            SemanticIdentityKind::Table,
+            block,
+            ancestors,
+        ));
+    }
+    ancestors.push(SemanticIdentityPathEntry {
+        descriptor: descriptor(SemanticIdentityKind::Table, block),
+        identity: table.id,
+    });
+    stack.push(SemanticPathFrame::Truncate { length: base });
+    if !table.rows.is_empty() {
+        stack.push(SemanticPathFrame::TableRows {
+            owner: table.id,
+            rows: &table.rows,
+        });
+    }
+    None
+}
+
+fn semantic_path_list_items_frame<'notebook, Identity>(
+    items: &'notebook [ListItem<Identity>],
+    owner: Identity,
+    target: Identity,
+    ancestors: &mut Vec<SemanticIdentityPathEntry<Identity>>,
+    stack: &mut Vec<SemanticPathFrame<'notebook, Identity>>,
+) -> Option<Vec<SemanticIdentityPathEntry<Identity>>>
+where
+    Identity: Copy + Eq,
+{
+    let (item, remaining) = items.split_first()?;
+    if !remaining.is_empty() {
+        stack.push(SemanticPathFrame::ListItems {
+            items: remaining,
+            owner,
+        });
+    }
+    if item.id == target {
+        return Some(semantic_found_path(
+            target,
+            SemanticIdentityKind::ListItem,
+            owner,
+            ancestors,
+        ));
+    }
+    let base = ancestors.len();
+    ancestors.push(SemanticIdentityPathEntry {
+        descriptor: descriptor(SemanticIdentityKind::ListItem, owner),
+        identity: item.id,
+    });
+    stack.push(SemanticPathFrame::Truncate { length: base });
+    if !item.blocks.is_empty() {
+        stack.push(SemanticPathFrame::Blocks {
+            blocks: &item.blocks,
+            owner: item.id,
+        });
+    }
+    None
+}
+
+fn semantic_path_table_rows_frame<'notebook, Identity>(
+    rows: &'notebook [TableRow<Identity>],
+    owner: Identity,
+    target: Identity,
+    ancestors: &mut Vec<SemanticIdentityPathEntry<Identity>>,
+    stack: &mut Vec<SemanticPathFrame<'notebook, Identity>>,
+) -> Option<Vec<SemanticIdentityPathEntry<Identity>>>
+where
+    Identity: Copy + Eq,
+{
+    let (row, remaining) = rows.split_first()?;
+    if !remaining.is_empty() {
+        stack.push(SemanticPathFrame::TableRows {
+            owner,
+            rows: remaining,
+        });
+    }
+    if row.id == target {
+        return Some(semantic_found_path(
+            target,
+            SemanticIdentityKind::TableRow,
+            owner,
+            ancestors,
+        ));
+    }
+    let base = ancestors.len();
+    ancestors.push(SemanticIdentityPathEntry {
+        descriptor: descriptor(SemanticIdentityKind::TableRow, owner),
+        identity: row.id,
+    });
+    stack.push(SemanticPathFrame::Truncate { length: base });
+    if !row.cells.is_empty() {
+        stack.push(SemanticPathFrame::TableCells {
+            cells: &row.cells,
+            owner: row.id,
+        });
+    }
+    None
+}
+
+fn semantic_path_table_cells_frame<'notebook, Identity>(
+    cells: &'notebook [TableCell<Identity>],
+    owner: Identity,
+    target: Identity,
+    ancestors: &mut Vec<SemanticIdentityPathEntry<Identity>>,
+    stack: &mut Vec<SemanticPathFrame<'notebook, Identity>>,
+) -> Option<Vec<SemanticIdentityPathEntry<Identity>>>
+where
+    Identity: Copy + Eq,
+{
+    let (cell, remaining) = cells.split_first()?;
+    if !remaining.is_empty() {
+        stack.push(SemanticPathFrame::TableCells {
+            cells: remaining,
+            owner,
+        });
+    }
+    if cell.id == target {
+        return Some(semantic_found_path(
+            target,
+            SemanticIdentityKind::TableCell,
+            owner,
+            ancestors,
+        ));
+    }
+    let base = ancestors.len();
+    ancestors.push(SemanticIdentityPathEntry {
+        descriptor: descriptor(SemanticIdentityKind::TableCell, owner),
+        identity: cell.id,
+    });
+    stack.push(SemanticPathFrame::Truncate { length: base });
+    if !cell.blocks.is_empty() {
+        stack.push(SemanticPathFrame::Blocks {
+            blocks: &cell.blocks,
+            owner: cell.id,
+        });
+    }
+    None
+}
+
+fn semantic_found_path<Identity>(
+    identity: Identity,
+    kind: SemanticIdentityKind,
+    owner: Identity,
+    ancestors: &[SemanticIdentityPathEntry<Identity>],
+) -> Vec<SemanticIdentityPathEntry<Identity>>
+where
+    Identity: Copy,
+{
+    let mut path = Vec::with_capacity(ancestors.len().saturating_add(1));
+    path.push(SemanticIdentityPathEntry {
+        descriptor: descriptor(kind, owner),
+        identity,
+    });
+    path.extend(ancestors.iter().rev().copied());
+    path
 }
 
 /// Resolve only the semantic kind owned by one identity in a notebook snapshot.
