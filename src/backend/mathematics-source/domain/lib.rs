@@ -68,49 +68,49 @@ const NAMED_SYMBOL_COMMANDS: &[&str] = &[
     "\\xi", "\\zeta",
 ];
 
-const STRUCTURED_CONTROL_WORD_COMMANDS: &[(&str, SupportedCommand)] = &[
-    ("\\acute", SupportedCommand::Acute),
-    ("\\bar", SupportedCommand::Bar),
-    ("\\binom", SupportedCommand::Binomial),
-    ("\\boxed", SupportedCommand::Boxed),
-    ("\\breve", SupportedCommand::Breve),
-    ("\\check", SupportedCommand::Check),
-    ("\\dbinom", SupportedCommand::DisplayBinomial),
-    ("\\ddot", SupportedCommand::DoubleDot),
-    ("\\dfrac", SupportedCommand::DisplayFraction),
-    ("\\dot", SupportedCommand::Dot),
-    ("\\frac", SupportedCommand::Fraction),
-    ("\\grave", SupportedCommand::Grave),
-    ("\\hat", SupportedCommand::Hat),
-    ("\\mathbb", SupportedCommand::BlackboardBold),
-    ("\\mathbf", SupportedCommand::Bold),
-    ("\\mathcal", SupportedCommand::Calligraphic),
-    ("\\mathfrak", SupportedCommand::Fraktur),
-    ("\\mathit", SupportedCommand::Italic),
-    ("\\mathring", SupportedCommand::MathRing),
-    ("\\mathrm", SupportedCommand::Roman),
-    ("\\mathsf", SupportedCommand::SansSerif),
-    ("\\mathtt", SupportedCommand::Typewriter),
-    ("\\operatorname", SupportedCommand::OperatorName),
-    ("\\overbrace", SupportedCommand::Overbrace),
-    ("\\overleftarrow", SupportedCommand::OverLeftArrow),
-    ("\\overleftrightarrow", SupportedCommand::OverLeftRightArrow),
-    ("\\overline", SupportedCommand::Overline),
-    ("\\overrightarrow", SupportedCommand::OverRightArrow),
-    ("\\overset", SupportedCommand::Overset),
-    ("\\sqrt", SupportedCommand::SquareRoot),
-    ("\\stackrel", SupportedCommand::StackRelation),
-    ("\\substack", SupportedCommand::Substack),
-    ("\\tbinom", SupportedCommand::TextBinomial),
-    ("\\text", SupportedCommand::Text),
-    ("\\tfrac", SupportedCommand::TextFraction),
-    ("\\tilde", SupportedCommand::Tilde),
-    ("\\underbrace", SupportedCommand::Underbrace),
-    ("\\underline", SupportedCommand::Underline),
-    ("\\underset", SupportedCommand::Underset),
-    ("\\vec", SupportedCommand::Vector),
-    ("\\widehat", SupportedCommand::WideHat),
-    ("\\widetilde", SupportedCommand::WideTilde),
+const STRUCTURED_CONTROL_WORD_COMMANDS: &[(&str, SupportedCommand, usize)] = &[
+    ("\\acute", SupportedCommand::Acute, 1),
+    ("\\bar", SupportedCommand::Bar, 1),
+    ("\\binom", SupportedCommand::Binomial, 2),
+    ("\\boxed", SupportedCommand::Boxed, 1),
+    ("\\breve", SupportedCommand::Breve, 1),
+    ("\\check", SupportedCommand::Check, 1),
+    ("\\dbinom", SupportedCommand::DisplayBinomial, 2),
+    ("\\ddot", SupportedCommand::DoubleDot, 1),
+    ("\\dfrac", SupportedCommand::DisplayFraction, 2),
+    ("\\dot", SupportedCommand::Dot, 1),
+    ("\\frac", SupportedCommand::Fraction, 2),
+    ("\\grave", SupportedCommand::Grave, 1),
+    ("\\hat", SupportedCommand::Hat, 1),
+    ("\\mathbb", SupportedCommand::BlackboardBold, 1),
+    ("\\mathbf", SupportedCommand::Bold, 1),
+    ("\\mathcal", SupportedCommand::Calligraphic, 1),
+    ("\\mathfrak", SupportedCommand::Fraktur, 1),
+    ("\\mathit", SupportedCommand::Italic, 1),
+    ("\\mathring", SupportedCommand::MathRing, 1),
+    ("\\mathrm", SupportedCommand::Roman, 1),
+    ("\\mathsf", SupportedCommand::SansSerif, 1),
+    ("\\mathtt", SupportedCommand::Typewriter, 1),
+    ("\\operatorname", SupportedCommand::OperatorName, 1),
+    ("\\overbrace", SupportedCommand::Overbrace, 1),
+    ("\\overleftarrow", SupportedCommand::OverLeftArrow, 1),
+    ("\\overleftrightarrow", SupportedCommand::OverLeftRightArrow, 1),
+    ("\\overline", SupportedCommand::Overline, 1),
+    ("\\overrightarrow", SupportedCommand::OverRightArrow, 1),
+    ("\\overset", SupportedCommand::Overset, 2),
+    ("\\sqrt", SupportedCommand::SquareRoot, 1),
+    ("\\stackrel", SupportedCommand::StackRelation, 2),
+    ("\\substack", SupportedCommand::Substack, 1),
+    ("\\tbinom", SupportedCommand::TextBinomial, 2),
+    ("\\text", SupportedCommand::Text, 1),
+    ("\\tfrac", SupportedCommand::TextFraction, 2),
+    ("\\tilde", SupportedCommand::Tilde, 1),
+    ("\\underbrace", SupportedCommand::Underbrace, 1),
+    ("\\underline", SupportedCommand::Underline, 1),
+    ("\\underset", SupportedCommand::Underset, 2),
+    ("\\vec", SupportedCommand::Vector, 1),
+    ("\\widehat", SupportedCommand::WideHat, 1),
+    ("\\widetilde", SupportedCommand::WideTilde, 1),
 ];
 
 const STRUCTURED_ENVIRONMENTS: &[StructuredEnvironmentDefinition] = &[
@@ -388,6 +388,7 @@ struct ScanState {
 struct ScannedCommand {
     end: usize,
     kind: ScannedCommandKind,
+    required_groups: usize,
 }
 
 #[derive(Clone, Copy)]
@@ -746,6 +747,7 @@ fn scan_named_command(
         .then_some(ScannedCommand {
             end,
             kind: ScannedCommandKind::Supported(supported),
+            required_groups: 0,
         })
 }
 
@@ -756,12 +758,14 @@ fn scan_structured_control_word(
 ) -> Option<ScannedCommand> {
     let spelling = source.get(start..end)?;
     let index = STRUCTURED_CONTROL_WORD_COMMANDS
-        .binary_search_by(|(candidate, _)| candidate.cmp(&spelling))
+        .binary_search_by(|(candidate, _, _)| candidate.cmp(&spelling))
         .ok()?;
-    let (_, supported) = STRUCTURED_CONTROL_WORD_COMMANDS.get(index)?;
+    let (_, supported, required_groups) =
+        STRUCTURED_CONTROL_WORD_COMMANDS.get(index)?;
     Some(ScannedCommand {
         end,
         kind: ScannedCommandKind::Supported(*supported),
+        required_groups: *required_groups,
     })
 }
 
@@ -788,6 +792,7 @@ fn scan_structured_environment_command(
         Some(ScannedCommand {
             end: start.saturating_add(spelling.len()),
             kind: ScannedCommandKind::Supported(supported),
+            required_groups: 0,
         })
     })
 }
@@ -798,6 +803,7 @@ fn scan_command(source: &str, start: usize) -> ScannedCommand {
         return ScannedCommand {
             end: after_slash.saturating_add(1),
             kind: ScannedCommandKind::RowBreak,
+            required_groups: 0,
         };
     }
     if source.as_bytes().get(after_slash).is_some_and(|byte| {
@@ -808,6 +814,7 @@ fn scan_command(source: &str, start: usize) -> ScannedCommand {
             kind: ScannedCommandKind::Supported(
                 SupportedCommand::EscapedSpecial,
             ),
+            required_groups: 0,
         };
     }
     if let Some(end) = scan_ascii_control_word_end(source, after_slash) {
@@ -842,6 +849,7 @@ fn scan_command(source: &str, start: usize) -> ScannedCommand {
         return ScannedCommand {
             end,
             kind: ScannedCommandKind::Unsupported,
+            required_groups: 0,
         };
     }
     if let Some(command) = scan_structured_environment_command(source, start) {
@@ -854,6 +862,7 @@ fn scan_command(source: &str, start: usize) -> ScannedCommand {
     ScannedCommand {
         end,
         kind: ScannedCommandKind::Unsupported,
+        required_groups: 0,
     }
 }
 
@@ -1075,15 +1084,25 @@ fn scan_supported_command(
                 source,
                 groups,
                 close.saturating_add(1),
-                1,
+                command.required_groups,
             )?;
             state.pending_root_index_open = Some(open);
             state.root_index_close_offsets.push(close);
         } else {
-            validate_required_groups(source, groups, command.end, 1)?;
+            validate_required_groups(
+                source,
+                groups,
+                command.end,
+                command.required_groups,
+            )?;
         }
     } else {
-        validate_command_groups(source, groups, command.end, supported)?;
+        validate_required_groups(
+            source,
+            groups,
+            command.end,
+            command.required_groups,
+        )?;
     }
     if supported == SupportedCommand::Substack {
         state.pending_substack_group = true;
@@ -1199,84 +1218,6 @@ fn token_coverage(tokens: &[MathToken]) -> usize {
     tokens.iter().fold(0usize, |total, item| {
         total.saturating_add(item.end.saturating_sub(item.start))
     })
-}
-
-fn validate_command_groups(
-    source: &str,
-    groups: &GroupIndex,
-    command_end: usize,
-    command: SupportedCommand,
-) -> Result<(), MathSyntaxError> {
-    let required = match command {
-        SupportedCommand::BeginAligned
-        | SupportedCommand::BeginBracedMatrix
-        | SupportedCommand::BeginBracketedMatrix
-        | SupportedCommand::BeginCases
-        | SupportedCommand::BeginDoubleVerticalMatrix
-        | SupportedCommand::BeginGathered
-        | SupportedCommand::BeginMatrix
-        | SupportedCommand::BeginParenthesizedMatrix
-        | SupportedCommand::BeginSmallMatrix
-        | SupportedCommand::BeginSplit
-        | SupportedCommand::BeginVerticalMatrix
-        | SupportedCommand::EndAligned
-        | SupportedCommand::EndBracedMatrix
-        | SupportedCommand::EndBracketedMatrix
-        | SupportedCommand::EndCases
-        | SupportedCommand::EndDoubleVerticalMatrix
-        | SupportedCommand::EndGathered
-        | SupportedCommand::EndMatrix
-        | SupportedCommand::EndParenthesizedMatrix
-        | SupportedCommand::EndSmallMatrix
-        | SupportedCommand::EndSplit
-        | SupportedCommand::EndVerticalMatrix
-        | SupportedCommand::EscapedSpecial
-        | SupportedCommand::NamedOperator
-        | SupportedCommand::SquareRoot
-        | SupportedCommand::NamedSymbol => 0usize,
-        SupportedCommand::Binomial
-        | SupportedCommand::DisplayBinomial
-        | SupportedCommand::DisplayFraction
-        | SupportedCommand::Fraction
-        | SupportedCommand::Overset
-        | SupportedCommand::StackRelation
-        | SupportedCommand::TextBinomial
-        | SupportedCommand::TextFraction
-        | SupportedCommand::Underset => 2usize,
-        SupportedCommand::Acute
-        | SupportedCommand::Bar
-        | SupportedCommand::BlackboardBold
-        | SupportedCommand::Bold
-        | SupportedCommand::Boxed
-        | SupportedCommand::Breve
-        | SupportedCommand::Calligraphic
-        | SupportedCommand::Check
-        | SupportedCommand::Dot
-        | SupportedCommand::DoubleDot
-        | SupportedCommand::Fraktur
-        | SupportedCommand::Grave
-        | SupportedCommand::Hat
-        | SupportedCommand::Italic
-        | SupportedCommand::MathRing
-        | SupportedCommand::OperatorName
-        | SupportedCommand::Overbrace
-        | SupportedCommand::OverLeftArrow
-        | SupportedCommand::OverLeftRightArrow
-        | SupportedCommand::Overline
-        | SupportedCommand::OverRightArrow
-        | SupportedCommand::Roman
-        | SupportedCommand::SansSerif
-        | SupportedCommand::Substack
-        | SupportedCommand::Text
-        | SupportedCommand::Tilde
-        | SupportedCommand::Typewriter
-        | SupportedCommand::Underbrace
-        | SupportedCommand::Underline
-        | SupportedCommand::Vector
-        | SupportedCommand::WideHat
-        | SupportedCommand::WideTilde => 1usize,
-    };
-    validate_required_groups(source, groups, command_end, required)
 }
 
 fn validate_required_groups(
