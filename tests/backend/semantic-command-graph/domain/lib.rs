@@ -662,6 +662,90 @@ fn next_graph_oracle_value(seed: &mut u64) -> u64 {
     *seed >> 32
 }
 
+fn exhaustive_dependency_mask(mask: u8) -> Vec<u32> {
+    [0_u32, 1, 2, 9]
+        .into_iter()
+        .enumerate()
+        .filter_map(|(bit, dependency)| {
+            (mask & (1_u8 << bit) != 0).then_some(dependency)
+        })
+        .collect()
+}
+
+fn reference_three_node_graph(
+    nodes: &[CommandNode<u32>; 3],
+) -> Result<(), CommandGraphError<u32>> {
+    let mut first_forward = None;
+    let mut reachability = [[false; 3]; 3];
+    for (position, node) in nodes.iter().enumerate() {
+        for dependency in &node.dependencies {
+            if *dependency == node.id {
+                return Err(CommandGraphError::SelfDependency {
+                    command: node.id,
+                });
+            }
+            let dependency_position = nodes
+                .iter()
+                .position(|candidate| candidate.id == *dependency);
+            let Some(dependency_position) = dependency_position else {
+                return Err(CommandGraphError::MissingDependency {
+                    command: node.id,
+                    dependency: *dependency,
+                });
+            };
+            reachability[position][dependency_position] = true;
+            if dependency_position > position && first_forward.is_none() {
+                first_forward = Some((node.id, *dependency));
+            }
+        }
+    }
+    let Some((command, dependency)) = first_forward else {
+        return Ok(());
+    };
+    for intermediate in 0..3 {
+        for from in 0..3 {
+            for to in 0..3 {
+                reachability[from][to] |= reachability[from][intermediate]
+                    && reachability[intermediate][to];
+            }
+        }
+    }
+    if (0..3).any(|position| reachability[position][position]) {
+        Err(CommandGraphError::Cycle)
+    } else {
+        Err(CommandGraphError::DependencyAfterCommand {
+            command,
+            dependency,
+        })
+    }
+}
+
+#[test]
+fn every_three_command_graph_matches_invalid_precedence_oracle() {
+    let mut cases = 0_u32;
+    for first_mask in 0_u8..16 {
+        for second_mask in 0_u8..16 {
+            for third_mask in 0_u8..16 {
+                let nodes = [
+                    node(0, &exhaustive_dependency_mask(first_mask)),
+                    node(1, &exhaustive_dependency_mask(second_mask)),
+                    node(2, &exhaustive_dependency_mask(third_mask)),
+                ];
+                assert_eq!(
+                    validate_command_graph(&nodes),
+                    reference_three_node_graph(&nodes),
+                    "graph mismatch for masks {}/{}/{}",
+                    first_mask,
+                    second_mask,
+                    third_mask,
+                );
+                cases = cases.saturating_add(1);
+            }
+        }
+    }
+    assert_eq!(cases, 4_096);
+}
+
 fn reference_dependency_requirements(
     nodes: &[CommandNode<u32>],
     selected: &BTreeSet<u32>,
