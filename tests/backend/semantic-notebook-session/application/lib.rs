@@ -7862,6 +7862,56 @@ fn command_family_admission_is_exact_target_scope_and_read_only() {
 }
 
 #[test]
+fn margin_note_does_not_imply_spatial_constraint_authority() {
+    let ids = IdentityAllocator::new();
+    let (mut candidate, span_candidate) =
+        candidate_notebook_with_span(&ids, "margin reminder");
+    let block_candidate = candidate.pages[0].flows[0].blocks[0].id;
+    let content = std::mem::replace(
+        &mut candidate.pages[0].flows[0].blocks[0].content,
+        BlockContent::Rule,
+    );
+    let BlockContent::Paragraph(spans) = content else {
+        panic!("margin-note seed must start as paragraph");
+    };
+    candidate.pages[0].flows[0].blocks[0].content =
+        BlockContent::MarginNote(spans);
+
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(candidate)
+    else {
+        panic!("margin-note candidate must be accepted");
+    };
+    let block = accepted_for(&mapping, block_candidate);
+    let span = accepted_for(&mapping, span_candidate);
+    let before = session.current().expect("accepted margin note").clone();
+
+    assert!(matches!(
+        session.check_command_family_admission(
+            revision,
+            span,
+            SemanticCommandFamily::TextContent,
+        ),
+        CommandFamilyAdmissionOutcome::Admitted { .. },
+    ));
+    assert_eq!(
+        session.check_command_family_admission(
+            revision,
+            block,
+            SemanticCommandFamily::SpatialConstraint,
+        ),
+        CommandFamilyAdmissionOutcome::FamilyNotExecutable {
+            available: Some(SemanticCommandFamily::StyleRole),
+            requested: SemanticCommandFamily::SpatialConstraint,
+            revision,
+            target: block,
+        },
+    );
+    assert_eq!(session.current(), Some(&before));
+}
+
+#[test]
 fn command_family_admission_stale_missing_and_empty_are_typed() {
     let ids = IdentityAllocator::new();
     let (candidate, span) = candidate_notebook_with_span(&ids, "base text");
