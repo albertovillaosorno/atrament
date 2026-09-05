@@ -383,6 +383,30 @@ fn complete_advisory_layout_evidence_is_ready_and_preserved() {
 }
 
 #[test]
+fn later_blocking_layout_diagnostic_still_blocks_preflight() {
+    let mut session = SemanticNotebookSessionService::default();
+    let fixture = accepted_fixture(&mut session);
+    let mut diagnostics = real_overflow_diagnostics(&session, &fixture);
+    let mut advisory = diagnostics.diagnostics[0].clone();
+    advisory.disposition = BlockingDisposition::Advisory;
+    diagnostics.diagnostics.insert(0, advisory);
+    let expected = diagnostics.clone();
+
+    assert_eq!(
+        preflight_layout_for_export(
+            session.current().expect("accepted revision"),
+            fixture.revision,
+            RevisionLayoutDiagnostics::bind(fixture.revision, &diagnostics)
+                .expect("mixed layout diagnostic binding"),
+        ),
+        Ok(ExportLayoutPreflightResult::Blocked {
+            diagnostics: expected,
+            revision: fixture.revision,
+        }),
+    );
+}
+
+#[test]
 fn incomplete_blocking_layout_evidence_remains_incomplete() {
     let mut session = SemanticNotebookSessionService::default();
     let fixture = accepted_fixture(&mut session);
