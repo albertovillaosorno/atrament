@@ -94,6 +94,7 @@ const STRUCTURED_CONTROL_WORD_COMMANDS: &[(&str, SupportedCommand)] = &[
     ("\\overrightarrow", SupportedCommand::OverRightArrow),
     ("\\overset", SupportedCommand::Overset),
     ("\\sqrt", SupportedCommand::SquareRoot),
+    ("\\stackrel", SupportedCommand::StackRelation),
     ("\\substack", SupportedCommand::Substack),
     ("\\tbinom", SupportedCommand::TextBinomial),
     ("\\text", SupportedCommand::Text),
@@ -492,6 +493,8 @@ pub enum SupportedCommand {
     SansSerif,
     /// One-group square-root command.
     SquareRoot,
+    /// Two-group stacked relation annotation.
+    StackRelation,
     /// One grouped multi-row substack expression.
     Substack,
     /// One grouped text fragment preserved exactly inside mathematics.
@@ -1221,6 +1224,7 @@ fn validate_command_groups(
         | SupportedCommand::DisplayFraction
         | SupportedCommand::Fraction
         | SupportedCommand::Overset
+        | SupportedCommand::StackRelation
         | SupportedCommand::TextBinomial
         | SupportedCommand::TextFraction
         | SupportedCommand::Underset => 2usize,

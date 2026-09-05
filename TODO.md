@@ -190,11 +190,11 @@ supports read-only behavior-version drift checks. It deliberately advertises no
 command protocol, normalizer, command context, Validate, Apply, rebatching, or
 numeric command/context limits yet.
 
-Aggregate command behavior and typed-result behavior are version 51 after
-admitting styled TeX binomial coefficients. Asset reference,
+Aggregate command behavior and typed-result behavior are version 52 after
+admitting grouped TeX stacked relations. Asset reference,
 Ordering and grouping, and Text content retain family behavior version 1;
 Provenance and Style role are version 2, Document constraint is version 3, and
-Structured content is version 44. The immediately previous aggregate version 50
+Structured content is version 45. The immediately previous aggregate version 51
 rejects instead of being reinterpreted.
 
 A version-bound single-target proposal combines capability, exact local
@@ -495,7 +495,8 @@ roots, grouped
 mathematical
 alphabets, common one-group and wide accents, upright unit or label groups,
 explicit `\text{...}` fragments, grouped custom operator names, stacked
-annotations, vector, directional over-arrows, overline, and underline
+annotations and relations, vector, directional over-arrows, overline, and
+underline
 decorations, escaped TeX special characters,
 standard and variant Greek control-sequence notation, common named and delimiter
 symbols, binary-operator symbols, arrow and ellipsis symbols, relation and logic

@@ -817,6 +817,28 @@ fn grouped_decorations_are_structural_and_require_one_group() {
 }
 
 #[test]
+fn stacked_relation_is_structural_and_requires_two_groups() {
+    let source = r"a\stackrel{!}{=}b";
+    let analyzed = analyze(source, FormulaMode::Inline)
+        .expect("stacked relation annotation");
+    assert!(analyzed.is_supported());
+    assert_eq!(reconstructed(&analyzed), source);
+    assert!(analyzed.tokens.iter().any(|token| {
+        token.kind == MathTokenKind::Command(SupportedCommand::StackRelation)
+            && analyzed.token_source(*token) == Some(r"\stackrel")
+    }));
+    for malformed in [r"\stackrel", r"\stackrel{!}"] {
+        assert_eq!(
+            analyze(malformed, FormulaMode::Inline),
+            Err(MathSyntaxError {
+                byte_offset: malformed.len(),
+                kind: MathSyntaxErrorKind::MissingRequiredGroup,
+            }),
+        );
+    }
+}
+
+#[test]
 fn stacked_annotations_are_structural_and_require_two_groups() {
     let source = r"\overset{!}{=} + \underset{n\to\infty}{\lim}";
     let analyzed = analyze(source, FormulaMode::Display)
