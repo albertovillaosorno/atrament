@@ -830,6 +830,31 @@ fn application_routes_fixed_overflow_through_owned_revision() {
             },
         )),
     );
+
+    let HistoryTraversalOutcome::Traversed { revision: undone, .. } =
+        session.traverse_history(current, HistoryDirection::Undo)
+    else {
+        panic!("fixed-region edit must Undo");
+    };
+    assert_ne!(undone, revision);
+    assert_eq!(
+        session.validate_fixed_placement(placement),
+        Err(application::SessionFixedRegionLayoutError::Layout(
+            FixedRegionLayoutError::RevisionMismatch {
+                accepted: undone,
+                placement: revision,
+            },
+        )),
+    );
+    assert_eq!(
+        session.preflight_layout_for_export(revision, bound),
+        Err(application::SessionExportLayoutPreflightError::Preflight(
+            ExportLayoutPreflightError::RequestedRevisionMismatch {
+                current: undone,
+                requested: revision,
+            },
+        )),
+    );
 }
 
 #[test]
