@@ -190,11 +190,11 @@ supports read-only behavior-version drift checks. It deliberately advertises no
 command protocol, normalizer, command context, Validate, Apply, rebatching, or
 numeric command/context limits yet.
 
-Aggregate command behavior and typed-result behavior are version 45 after
-admitting ordered TeX vertical-bar-matrix environments. Asset reference,
+Aggregate command behavior and typed-result behavior are version 46 after
+admitting ordered TeX double-vertical-bar-matrix environments. Asset reference,
 Ordering and grouping, and Text content retain family behavior version 1;
 Provenance and Style role are version 2, Document constraint is version 3, and
-Structured content is version 38. The immediately previous aggregate version 44
+Structured content is version 39. The immediately previous aggregate version 45
 rejects instead of being reinterpreted.
 
 A version-bound single-target proposal combines capability, exact local
@@ -498,8 +498,9 @@ vector, overline, and underline decorations, escaped TeX special characters,
 standard and variant Greek control-sequence notation, common named and delimiter
 symbols, binary-operator symbols, arrow and ellipsis symbols, relation and logic
 symbols, operators, calculus, set notation, aligned row and column separators,
-and ordered aligned, bracketed-matrix, cases, gathered, matrix,
-parenthesized-matrix, split, and vertical-bar-matrix environments. Paired
+and ordered aligned, bracketed-matrix, cases, double-vertical-bar-matrix,
+gathered, matrix, parenthesized-matrix, split, and vertical-bar-matrix
+environments. Paired
 delimiter-sizing controls remain explicit unsupported input rather than being
 inferred from admitted delimiter glyph names.
 
@@ -512,8 +513,8 @@ renderer guesses. Unknown control words remain explicit unsupported
 constructs; malformed groups, required arguments,
 alignment use, environment ordering, either direction of group/environment
 crossing, indexed-root optional-argument closure, and aligned, bracketed-matrix,
-cases, gathered, matrix, parenthesized-matrix, split, or vertical-bar-matrix
-boundaries return typed syntax failures.
+cases, double-vertical-bar-matrix, gathered, matrix, parenthesized-matrix,
+split, or vertical-bar-matrix boundaries return typed syntax failures.
 
 Gathered rows do not admit column alignment unless a column-capable environment
 is explicitly nested inside.

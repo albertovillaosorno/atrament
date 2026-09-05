@@ -103,6 +103,15 @@ const STRUCTURED_CONTROL_WORD_COMMANDS: &[(&str, SupportedCommand)] = &[
 const STRUCTURED_ENVIRONMENTS: &[StructuredEnvironmentDefinition] = &[
     StructuredEnvironmentDefinition {
         allows_alignment: true,
+        begin_command: SupportedCommand::BeginDoubleVerticalMatrix,
+        begin_spelling: "\\begin{Vmatrix}",
+        end_command: SupportedCommand::EndDoubleVerticalMatrix,
+        end_spelling: "\\end{Vmatrix}",
+        extra_end_error: MathSyntaxErrorKind::ExtraDoubleVerticalMatrixEnd,
+        missing_end_error: MathSyntaxErrorKind::MissingDoubleVerticalMatrixEnd,
+    },
+    StructuredEnvironmentDefinition {
+        allows_alignment: true,
         begin_command: SupportedCommand::BeginAligned,
         begin_spelling: "\\begin{aligned}",
         end_command: SupportedCommand::EndAligned,
@@ -223,6 +232,8 @@ pub enum MathSyntaxErrorKind {
     ExtraBracketedMatrixEnd,
     /// Cases environment closes without a matching cases start.
     ExtraCasesEnd,
+    /// Double-vertical-bar matrix closes without its matching start.
+    ExtraDoubleVerticalMatrixEnd,
     /// Gathered environment closes without a matching gathered start.
     ExtraGatheredEnd,
     /// A closing group appears without a matching open group.
@@ -243,6 +254,8 @@ pub enum MathSyntaxErrorKind {
     MissingBracketedMatrixEnd,
     /// Cases environment remains open at end of source.
     MissingCasesEnd,
+    /// Double-vertical-bar matrix remains open at end of source.
+    MissingDoubleVerticalMatrixEnd,
     /// Gathered environment remains open at end of source.
     MissingGatheredEnd,
     /// Matrix environment remains open at end of source.
@@ -356,6 +369,8 @@ pub enum SupportedCommand {
     BeginBracketedMatrix,
     /// Start of an explicit cases environment.
     BeginCases,
+    /// Start of an explicit double-vertical-bar matrix environment.
+    BeginDoubleVerticalMatrix,
     /// Start of an explicit gathered environment.
     BeginGathered,
     /// Start of an explicit matrix environment.
@@ -388,6 +403,8 @@ pub enum SupportedCommand {
     EndBracketedMatrix,
     /// End of an explicit cases environment.
     EndCases,
+    /// End of an explicit double-vertical-bar matrix environment.
+    EndDoubleVerticalMatrix,
     /// End of an explicit gathered environment.
     EndGathered,
     /// End of an explicit matrix environment.
@@ -480,8 +497,8 @@ impl AnalyzedFormula {
 /// `\\operatorname{...}`, `\\text{...}`, grouped substacks, vector,
 /// overline, and underline decorations, escaped TeX special characters, common
 /// named mathematical operators and symbols, aligned separators, and ordered
-/// aligned, bracketed-matrix, cases, gathered, matrix, parenthesized-matrix,
-/// split, and vertical-bar-matrix environments.
+/// aligned, bracketed-matrix, cases, double-vertical-bar-matrix, gathered,
+/// matrix, parenthesized-matrix, split, and vertical-bar-matrix environments.
 /// Math-only alignment, script, and row-break markers remain literal inside
 /// grouped text.
 /// Other commands remain present in the token stream and are reported through
@@ -1120,6 +1137,7 @@ fn validate_command_groups(
         SupportedCommand::BeginAligned
         | SupportedCommand::BeginBracketedMatrix
         | SupportedCommand::BeginCases
+        | SupportedCommand::BeginDoubleVerticalMatrix
         | SupportedCommand::BeginGathered
         | SupportedCommand::BeginMatrix
         | SupportedCommand::BeginParenthesizedMatrix
@@ -1128,6 +1146,7 @@ fn validate_command_groups(
         | SupportedCommand::EndAligned
         | SupportedCommand::EndBracketedMatrix
         | SupportedCommand::EndCases
+        | SupportedCommand::EndDoubleVerticalMatrix
         | SupportedCommand::EndGathered
         | SupportedCommand::EndMatrix
         | SupportedCommand::EndParenthesizedMatrix
