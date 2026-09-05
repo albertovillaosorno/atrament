@@ -217,7 +217,9 @@ A separate generic command-graph domain validates duplicate command identities,
 self-dependencies, missing dependencies, cycles, and dependency direction
 without choosing command-ID syntax or changing command order. Interactive
 command-ID selections can report their complete transitive omitted dependency
-requirements without silently changing the caller's selection.
+requirements without silently changing the caller's selection. A 20,000-case
+valid-DAG oracle cross-checks exact graph size, dependency closure, omitted-edge
+requirements, summaries, bounded reporting, and closed-selection results.
 
 Session-level selection analysis binds those requirements to capability behavior
 and the exact accepted base revision, but does not construct a replacement

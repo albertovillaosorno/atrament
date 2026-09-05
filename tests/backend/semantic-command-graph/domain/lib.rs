@@ -573,6 +573,7 @@ fn counting_identity(clones: &AtomicUsize, value: u32) -> CountingIdentity<'_> {
 }
 
 #[test]
+#[allow(clippy::mutable_key_type)]
 fn bounded_requirement_rejection_does_not_clone_identity_pairs() {
     let clones = AtomicUsize::new(0);
     let nodes = [
@@ -652,4 +653,160 @@ fn graph_validation_accepts_borrowed_node_views() {
             selected_commands: 1,
         }),
     );
+}
+
+fn next_graph_oracle_value(seed: &mut u64) -> u64 {
+    *seed = seed
+        .wrapping_mul(6_364_136_223_846_793_005)
+        .wrapping_add(1_442_695_040_888_963_407);
+    *seed >> 32
+}
+
+fn reference_dependency_requirements(
+    nodes: &[CommandNode<u32>],
+    selected: &BTreeSet<u32>,
+) -> (
+    BTreeSet<u32>,
+    Vec<MissingDependencyRequirement<u32>>,
+) {
+    let mut required = selected.clone();
+    for node in nodes.iter().rev() {
+        if !required.contains(&node.id) {
+            continue;
+        }
+        required.extend(node.dependencies.iter().copied());
+    }
+    let mut missing = Vec::new();
+    for node in nodes {
+        if !required.contains(&node.id) {
+            continue;
+        }
+        for dependency in &node.dependencies {
+            if !selected.contains(dependency) {
+                missing.push(MissingDependencyRequirement {
+                    command: node.id,
+                    dependency: *dependency,
+                });
+            }
+        }
+    }
+    (required, missing)
+}
+
+fn reference_closed_selection(
+    nodes: &[CommandNode<u32>],
+    selected: &BTreeSet<u32>,
+) -> Result<(), DependencySelectionError<u32>> {
+    for node in nodes {
+        if !selected.contains(&node.id) {
+            continue;
+        }
+        for dependency in &node.dependencies {
+            if !selected.contains(dependency) {
+                return Err(
+                    DependencySelectionError::MissingRequiredDependency {
+                        command: node.id,
+                        dependency: *dependency,
+                    },
+                );
+            }
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn valid_dag_selection_apis_match_reference_oracle() {
+    const CASES: usize = 20_000;
+    let mut seed = 0x05ee_dda6_2026_u64;
+    for case in 0..CASES {
+        let node_count = (next_graph_oracle_value(&mut seed) % 9) as u32;
+        let mut nodes = Vec::with_capacity(node_count as usize);
+        for id in 0..node_count {
+            let mut dependencies = Vec::new();
+            for dependency in 0..id {
+                if next_graph_oracle_value(&mut seed).is_multiple_of(3) {
+                    dependencies.push(dependency);
+                    if next_graph_oracle_value(&mut seed).is_multiple_of(5) {
+                        dependencies.push(dependency);
+                    }
+                }
+            }
+            nodes.push(CommandNode { dependencies, id });
+        }
+        let selected = nodes
+            .iter()
+            .filter_map(|node| {
+                (!next_graph_oracle_value(&mut seed).is_multiple_of(3))
+                    .then_some(node.id)
+            })
+            .collect::<BTreeSet<_>>();
+        let (required, expected_missing) =
+            reference_dependency_requirements(&nodes, &selected);
+        let expected_summary = DependencySelectionSummary {
+            missing_dependency_edges: expected_missing.len(),
+            required_commands: required.len(),
+            selected_commands: selected.len(),
+        };
+        let expected_size = CommandGraphSize {
+            commands: nodes.len(),
+            dependency_edges: nodes
+                .iter()
+                .map(|node| node.dependencies.len())
+                .sum(),
+        };
+
+        assert_eq!(
+            validate_command_graph(&nodes),
+            Ok(()),
+            "graph validity mismatch in generated case {case}",
+        );
+        assert_eq!(
+            command_graph_size(&nodes),
+            Ok(expected_size),
+            "graph size mismatch in generated case {case}",
+        );
+        assert_eq!(
+            dependency_selection_requirements(&nodes, &selected),
+            Ok(expected_missing.clone()),
+            "requirements mismatch in generated case {case}",
+        );
+        assert_eq!(
+            dependency_selection_summary(&nodes, &selected),
+            Ok(expected_summary),
+            "summary mismatch in generated case {case}",
+        );
+        assert_eq!(
+            dependency_selection_requirements_bounded(
+                &nodes,
+                &selected,
+                expected_missing.len(),
+            ),
+            Ok(expected_missing.clone()),
+            "bounded requirements mismatch in generated case {case}",
+        );
+        assert_eq!(
+            validate_dependency_closed_selection(&nodes, &selected),
+            reference_closed_selection(&nodes, &selected),
+            "closure mismatch in generated case {case}",
+        );
+        if !expected_missing.is_empty() {
+            let limit = expected_missing.len() - 1;
+            assert_eq!(
+                dependency_selection_requirements_bounded(
+                    &nodes,
+                    &selected,
+                    limit,
+                ),
+                Err(
+                    BoundedDependencyRequirementsError::
+                        RequirementCountExceeded {
+                            actual: expected_missing.len(),
+                            limit,
+                        },
+                ),
+                "bounded rejection mismatch in generated case {case}",
+            );
+        }
+    }
 }
