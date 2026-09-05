@@ -798,6 +798,22 @@ fn application_routes_measured_pagination_through_owned_revision() {
             },
         )),
     );
+
+    let HistoryTraversalOutcome::Traversed { revision: undone, .. } =
+        session.traverse_history(current, HistoryDirection::Undo)
+    else {
+        panic!("Undo must restore prior semantic content");
+    };
+    assert_ne!(undone, revision);
+    assert_eq!(
+        session.paginate_measured_flow(&measurement),
+        Err(application::SessionPaginationError::Pagination(
+            SemanticPaginationError::MeasurementRevisionMismatch {
+                accepted: undone,
+                measured: revision,
+            },
+        )),
+    );
 }
 
 #[test]
