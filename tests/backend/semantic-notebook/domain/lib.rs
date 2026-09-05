@@ -291,156 +291,67 @@ fn cloned_semantic_state_preserves_stable_identity() {
 }
 
 #[test]
-fn definition_block_and_span_keep_distinct_semantic_identity() {
-    let notebook = Notebook {
-        assets: vec![],
-        constraints: vec![],
-        extensions: vec![],
-        id: 1u32,
-        output_profiles: vec![],
-        page_profiles: vec![PaperProfile {
-            geometry: physical_page_profile(),
-            id: 2,
-        }],
-        pages: vec![Page {
-            flows: vec![Flow {
-                blocks: vec![Block {
-                    content: BlockContent::Definition(vec![InlineSpan {
-                        id: 6,
+fn simple_inline_block_kinds_keep_span_ownership() {
+    type InlineBlockConstructor =
+        fn(Vec<InlineSpan<u32>>) -> BlockContent<u32>;
+    let cases: &[(SemanticBlockKind, InlineBlockConstructor)] = &[
+        (SemanticBlockKind::Date, BlockContent::Date),
+        (SemanticBlockKind::Definition, BlockContent::Definition),
+        (SemanticBlockKind::Heading, BlockContent::Heading),
+        (SemanticBlockKind::Paragraph, BlockContent::Paragraph),
+        (SemanticBlockKind::Quotation, BlockContent::Quotation),
+        (SemanticBlockKind::SourceNote, BlockContent::SourceNote),
+    ];
+
+    for (kind, constructor) in cases {
+        let notebook = Notebook {
+            assets: vec![],
+            constraints: vec![],
+            extensions: vec![],
+            id: 1u32,
+            output_profiles: vec![],
+            page_profiles: vec![PaperProfile {
+                geometry: physical_page_profile(),
+                id: 2,
+            }],
+            pages: vec![Page {
+                flows: vec![Flow {
+                    blocks: vec![Block {
+                        content: constructor(vec![InlineSpan {
+                            id: 6,
+                            provenance: None,
+                            style: None,
+                            text: String::from("semantic inline text"),
+                        }]),
+                        extensions: vec![],
+                        id: 5,
                         provenance: None,
                         style: None,
-                        text: String::from("Momentum is mass times velocity."),
-                    }]),
-                    extensions: vec![],
-                    id: 5,
-                    provenance: None,
-                    style: None,
+                    }],
+                    id: 4,
                 }],
-                id: 4,
+                id: 3,
+                page_profile: 2,
             }],
-            id: 3,
-            page_profile: 2,
-        }],
-        provenance: vec![],
-        styles: vec![],
-    };
+            provenance: vec![],
+            styles: vec![],
+        };
 
-    assert_eq!(
-        semantic_identity_descriptor(&notebook, 5),
-        Some(SemanticIdentityDescriptor {
-            kind: SemanticIdentityKind::Block(SemanticBlockKind::Definition),
-            owner: Some(4),
-        }),
-    );
-    assert_eq!(
-        semantic_identity_descriptor(&notebook, 6),
-        Some(SemanticIdentityDescriptor {
-            kind: SemanticIdentityKind::InlineSpan,
-            owner: Some(5),
-        }),
-    );
-}
-
-#[test]
-fn quotation_block_and_span_keep_distinct_semantic_identity() {
-    let notebook = Notebook {
-        assets: vec![],
-        constraints: vec![],
-        extensions: vec![],
-        id: 11u32,
-        output_profiles: vec![],
-        page_profiles: vec![PaperProfile {
-            geometry: physical_page_profile(),
-            id: 12,
-        }],
-        pages: vec![Page {
-            flows: vec![Flow {
-                blocks: vec![Block {
-                    content: BlockContent::Quotation(vec![InlineSpan {
-                        id: 16,
-                        provenance: None,
-                        style: None,
-                        text: String::from("«Conócete a ti mismo.»"),
-                    }]),
-                    extensions: vec![],
-                    id: 15,
-                    provenance: None,
-                    style: None,
-                }],
-                id: 14,
-            }],
-            id: 13,
-            page_profile: 12,
-        }],
-        provenance: vec![],
-        styles: vec![],
-    };
-
-    assert_eq!(
-        semantic_identity_descriptor(&notebook, 15),
-        Some(SemanticIdentityDescriptor {
-            kind: SemanticIdentityKind::Block(SemanticBlockKind::Quotation),
-            owner: Some(14),
-        }),
-    );
-    assert_eq!(
-        semantic_identity_descriptor(&notebook, 16),
-        Some(SemanticIdentityDescriptor {
-            kind: SemanticIdentityKind::InlineSpan,
-            owner: Some(15),
-        }),
-    );
-}
-
-#[test]
-fn source_note_block_and_span_keep_distinct_semantic_identity() {
-    let notebook = Notebook {
-        assets: vec![],
-        constraints: vec![],
-        extensions: vec![],
-        id: 21u32,
-        output_profiles: vec![],
-        page_profiles: vec![PaperProfile {
-            geometry: physical_page_profile(),
-            id: 22,
-        }],
-        pages: vec![Page {
-            flows: vec![Flow {
-                blocks: vec![Block {
-                    content: BlockContent::SourceNote(vec![InlineSpan {
-                        id: 26,
-                        provenance: None,
-                        style: None,
-                        text: String::from("Fuente: notas de laboratorio."),
-                    }]),
-                    extensions: vec![],
-                    id: 25,
-                    provenance: None,
-                    style: None,
-                }],
-                id: 24,
-            }],
-            id: 23,
-            page_profile: 22,
-        }],
-        provenance: vec![],
-        styles: vec![],
-    };
-
-    assert_eq!(
-        semantic_identity_descriptor(&notebook, 25),
-        Some(SemanticIdentityDescriptor {
-            kind: SemanticIdentityKind::Block(SemanticBlockKind::SourceNote),
-            owner: Some(24),
-        }),
-    );
-    assert_eq!(
-        semantic_identity_descriptor(&notebook, 26),
-        Some(SemanticIdentityDescriptor {
-            kind: SemanticIdentityKind::InlineSpan,
-            owner: Some(25),
-        }),
-    );
+        assert_eq!(
+            semantic_identity_descriptor(&notebook, 5),
+            Some(SemanticIdentityDescriptor {
+                kind: SemanticIdentityKind::Block(*kind),
+                owner: Some(4),
+            }),
+        );
+        assert_eq!(
+            semantic_identity_descriptor(&notebook, 6),
+            Some(SemanticIdentityDescriptor {
+                kind: SemanticIdentityKind::InlineSpan,
+                owner: Some(5),
+            }),
+        );
+    }
 }
 
 #[test]
