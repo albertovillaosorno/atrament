@@ -156,6 +156,30 @@ fn malformed_header_line_endings_reject_without_waiting_for_eof() {
 }
 
 #[test]
+fn eof_cannot_replace_the_required_header_terminator() {
+    let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0))
+        .expect("test listener binds");
+    let address = listener.local_addr().expect("test listener address");
+    let writer = thread::spawn(move || {
+        let mut client =
+            TcpStream::connect(address).expect("test client connects");
+        client
+            .write_all(
+                b"GET /health HTTP/1.1\r\nHost: 127.0.0.1:43123\r\n",
+            )
+            .expect("unterminated request head writes");
+    });
+    let (mut server, _) = listener.accept().expect("test server accepts");
+    server
+        .set_read_timeout(Some(Duration::from_millis(100)))
+        .expect("test read timeout");
+    let error = runtime::read_request(&mut server)
+        .expect_err("EOF cannot terminate HTTP headers");
+    assert_eq!(error.kind(), std::io::ErrorKind::UnexpectedEof);
+    writer.join().expect("test writer joins");
+}
+
+#[test]
 fn valid_crlf_may_arrive_split_across_socket_reads() {
     let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0))
         .expect("test listener binds");

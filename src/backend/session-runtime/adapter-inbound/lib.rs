@@ -291,6 +291,12 @@ pub(crate) fn read_request(stream: &mut TcpStream) -> io::Result<Vec<u8>> {
                     "request body ended before declared content length",
                 ));
             }
+            if expected_total.is_none() && !bytes.is_empty() {
+                return Err(io::Error::new(
+                    io::ErrorKind::UnexpectedEof,
+                    "request head ended before header terminator",
+                ));
+            }
             return Ok(bytes);
         }
         let Some(read_bytes) = chunk.get(..read) else {
