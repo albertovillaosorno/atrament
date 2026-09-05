@@ -226,9 +226,12 @@ Process crash recovery does not reconstruct the notebook. A restarted process
 creates a different port or listener ownership, a new session secret, an empty
 session, and a fresh handshake.
 
-If browser launch fails after the service reaches `ready`, the process may stay
-available and publish a secret-free recovery instruction. It must not weaken
-host or authentication checks to make manual browser opening easier.
+If automatic browser launch fails before the service reaches `ready`, startup
+fails closed. The listener and fresh session credential are released with the
+process, and the secret-free recovery instruction directs the user to fix
+browser
+launch and restart Atrament. Startup must not publish a bare origin as a usable
+continuation path or weaken host or authentication checks for manual opening.
 
 ## Failure Modes
 

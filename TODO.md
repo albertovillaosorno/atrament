@@ -1357,6 +1357,12 @@ body. Exact-limit fixtures pass while one byte over either ceiling rejects. The
 first-release authenticated handshake additionally admits no request body;
 absent or zero `Content-Length` is accepted only when no trailing bytes exist.
 
+Automatic browser launch now fails startup closed before `ready`: the bound
+loopback listener and fresh credential are released instead of leaving an
+unreachable authenticated session running. Recovery text is secret-free and
+directs a restart after browser launch is fixed; it does not present the bare
+origin as an authenticated continuation URL.
+
 Request targets must use RFC 3986 origin-form path/query characters beginning
 with `/`; absolute proxy form, `*`, fragments, controls, raw Unicode, and URI-
 invalid visible punctuation reject before routing. Any `%` escape must carry

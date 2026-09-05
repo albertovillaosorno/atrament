@@ -29,8 +29,8 @@
 //   - Run the atrament binary to bind, publish, launch, and serve the
 //     workspace.
 // - Defaults:
-//   - Continues serving with a recovery URL when automatic launch is
-//     unavailable.
+//   - Fails startup closed when automatic browser launch is unavailable.
+//   - Never publishes the session credential for manual recovery.
 //
 
 //! Atrament process composition for one disposable localhost browser session.
@@ -63,15 +63,18 @@ fn publish_startup(state: &str, origin: Option<&str>) -> io::Result<()> {
     output.flush()
 }
 
-fn report_launch_failure(
+pub(crate) fn browser_launch_failure(
     error: &browser_launch::LaunchError,
-    origin: &str,
-) -> io::Result<()> {
-    let stderr = io::stderr();
-    let mut output = stderr.lock();
-    writeln!(output, "Atrament browser launch failed: {error}.")?;
-    writeln!(output, "Open {origin} in a local browser to continue.")?;
-    output.flush()
+) -> io::Error {
+    io::Error::other(format!(
+        concat!(
+            "Atrament browser launch failed: {}. ",
+            "Fix automatic browser launch and restart Atrament; ",
+            "the session credential is intentionally not published for ",
+            "manual recovery.",
+        ),
+        error,
+    ))
 }
 
 fn bind_runtime() -> io::Result<Runtime> {
@@ -103,9 +106,8 @@ fn main() -> io::Result<()> {
     let runtime = bind_runtime()?;
     publish_startup("listening", Some(runtime.origin()))?;
     let initial_browser_url = launch_url(runtime.origin(), &secret);
-    if let Err(error) = browser_launch::launch(&initial_browser_url) {
-        report_launch_failure(&error, runtime.origin())?;
-    }
+    browser_launch::launch(&initial_browser_url)
+        .map_err(|error| browser_launch_failure(&error))?;
     publish_startup("ready", Some(runtime.origin()))?;
     runtime.serve(secret.encoded(), &handshake, &mut application);
     Ok(())
