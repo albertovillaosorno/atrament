@@ -1522,6 +1522,18 @@ fn aligned_cases_and_matrix_environments_nest_in_order() {
 }
 
 #[test]
+fn parenthesized_and_plain_matrices_nest_in_order() {
+    let source = concat!(
+        r"\begin{pmatrix}a & \begin{matrix}b & c \\ d & e",
+        r"\end{matrix} \\ f & g\end{pmatrix}",
+    );
+    let analyzed = analyze(source, FormulaMode::Display)
+        .expect("nested parenthesized and plain matrices");
+    assert!(analyzed.is_supported());
+    assert_eq!(reconstructed(&analyzed), source);
+}
+
+#[test]
 fn cases_and_matrix_environments_nest_in_order() {
     let source = concat!(
         r"\begin{cases}a & \begin{matrix}b & c \\ d & e",
@@ -1545,6 +1557,17 @@ fn cases_and_matrix_environments_nest_in_order() {
 
 #[test]
 fn crossed_environment_closes_are_typed() {
+    let parenthesized_first = r"\begin{pmatrix}\begin{matrix}x";
+    let parenthesized_source =
+        format!(r"{parenthesized_first}\end{{pmatrix}}");
+    assert_eq!(
+        analyze(&parenthesized_source, FormulaMode::Display),
+        Err(MathSyntaxError {
+            byte_offset: parenthesized_first.len(),
+            kind: MathSyntaxErrorKind::MismatchedEnvironmentEnd,
+        }),
+    );
+
     let aligned_first = r"\begin{aligned}\begin{cases}x";
     let aligned_source = format!(r"{aligned_first}\end{{aligned}}");
     assert_eq!(
@@ -1693,21 +1716,23 @@ fn deep_ordered_environments_are_iterative_and_balanced() {
     let depth = 1_024usize;
     let mut source = String::new();
     for level in 0..depth {
-        match level % 5 {
+        match level % 6 {
             0 => source.push_str(r"\begin{aligned}"),
             1 => source.push_str(r"\begin{cases}"),
             2 => source.push_str(r"\begin{gathered}"),
             3 => source.push_str(r"\begin{matrix}"),
+            4 => source.push_str(r"\begin{pmatrix}"),
             _ => source.push_str(r"\begin{split}"),
         }
     }
     source.push('x');
     for level in (0..depth).rev() {
-        match level % 5 {
+        match level % 6 {
             0 => source.push_str(r"\end{aligned}"),
             1 => source.push_str(r"\end{cases}"),
             2 => source.push_str(r"\end{gathered}"),
             3 => source.push_str(r"\end{matrix}"),
+            4 => source.push_str(r"\end{pmatrix}"),
             _ => source.push_str(r"\end{split}"),
         }
     }
@@ -1726,6 +1751,7 @@ fn deep_ordered_environments_are_iterative_and_balanced() {
                         | SupportedCommand::BeginCases
                         | SupportedCommand::BeginGathered
                         | SupportedCommand::BeginMatrix
+                        | SupportedCommand::BeginParenthesizedMatrix
                         | SupportedCommand::BeginSplit
                 )
             ))
