@@ -46,6 +46,15 @@ fn generated_secret_has_the_frozen_transport_shape() {
 }
 
 #[test]
+fn independent_generations_do_not_reuse_the_same_credential() {
+    let first = SessionSecret::generate()
+        .expect("first operating-system random secret");
+    let second = SessionSecret::generate()
+        .expect("second operating-system random secret");
+    assert_ne!(first.encoded(), second.encoded());
+}
+
+#[test]
 fn debug_output_redacts_the_session_secret() {
     let secret = SessionSecret::generate()
         .expect("operating-system randomness is available");

@@ -76,7 +76,11 @@ state and media intermediates disappear while explicit exports remain intact.
 
 Current runtime evidence proves orderly process termination releases the old
 loopback listener, restart generates a fresh session credential, and a stale
-credential cannot authenticate to the new process. Process-level draft fixtures
+credential cannot authenticate to the new process.
+
+The secret adapter separately pins that independent operating-system-backed
+generations do not reuse the same encoded credential. Process-level draft
+fixtures
 also write and read task, source, and raw-response text, then verify both
 orderly restart and forced process death yield empty fields in the fresh
 session. A checked-in application-process fixture now also populates an accepted
