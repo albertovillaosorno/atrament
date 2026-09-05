@@ -14123,6 +14123,58 @@ fn first_candidate_acceptance_commits_one_revision_and_identity_mapping() {
 }
 
 #[test]
+fn rejected_candidates_do_not_consume_future_accepted_identity_sequences() {
+    const ATTEMPTS: usize = 4_000;
+    let candidate_ids = IdentityAllocator::new();
+    let eventual = candidate_notebook(&candidate_ids, "eventual acceptance");
+    let mut exercised = SemanticNotebookSessionService::default();
+
+    for attempt in 0..ATTEMPTS {
+        let mut invalid = candidate_notebook(&candidate_ids, "rejected");
+        let outcome = match attempt % 4 {
+            0 => {
+                invalid.pages[0].id = invalid.id;
+                exercised.accept(invalid)
+            },
+            1 => {
+                invalid.page_profiles[0].geometry.printable_region.width =
+                    Length::ZERO;
+                exercised.accept(invalid)
+            },
+            2 => {
+                invalid.pages[0].page_profile = invalid.pages[0].id;
+                exercised.accept(invalid)
+            },
+            _ => {
+                let missing = candidate_ids
+                    .allocate_candidate()
+                    .expect("missing candidate identity");
+                let constraint = candidate_ids
+                    .allocate_candidate()
+                    .expect("constraint candidate identity");
+                invalid.constraints.push(Constraint {
+                    id: constraint,
+                    kind: ConstraintKind::Placement,
+                    target: missing,
+                });
+                exercised.accept(invalid)
+            },
+        };
+        assert!(
+            matches!(outcome, AcceptanceOutcome::InvalidCandidate { .. }),
+            "generated invalid attempt {attempt} must reject",
+        );
+        assert!(exercised.current().is_none());
+    }
+
+    let mut pristine = SemanticNotebookSessionService::default();
+    let expected = pristine.accept(eventual.clone());
+    let actual = exercised.accept(eventual);
+    assert_eq!(actual, expected);
+    assert_eq!(exercised.current(), pristine.current());
+}
+
+#[test]
 fn repeated_candidate_acceptance_allocates_new_revision_and_semantic_ids() {
     let candidate_ids = IdentityAllocator::new();
     let first = candidate_notebook(&candidate_ids, "same semantics");
