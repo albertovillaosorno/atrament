@@ -363,9 +363,15 @@ evidence rather than a latency promise.
 A pinned release probe with the target first measured about 20 microseconds with
 100,000 unrelated top-level blocks versus 1,099 microseconds before traversal
 hardening. A nested first-child probe measured about 19 microseconds with
-100,000
-siblings versus 186 microseconds before slice frames. These are implementation
-measurements, not product latency or resource guarantees.
+100,000 siblings versus 186 microseconds before slice frames. These are
+implementation measurements, not product latency or resource guarantees.
+
+Single-target change preview now reuses the ordered-batch material index for its
+impact scope instead of walking the semantic owner chain through repeated root
+lookups. A session-local release probe at the maximum accepted 255 block
+wrappers measured 2,000 Text-content previews at about 396-400 milliseconds
+before indexed impact reuse and 12.4-12.9 milliseconds after it. This is
+implementation evidence, not a product latency guarantee.
 
 The same transport-neutral direct-edit batch can now be applied atomically after
 re-running its validation and simulation. Net mutations replay only the
