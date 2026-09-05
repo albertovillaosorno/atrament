@@ -30,7 +30,7 @@
 //   - Uses ephemeral loopback ports and deterministic request fixtures.
 //
 use std::io::{Read, Write};
-use std::net::{Ipv4Addr, SocketAddr, TcpListener, TcpStream};
+use std::net::{Ipv4Addr, Shutdown, SocketAddr, TcpListener, TcpStream};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
@@ -270,6 +270,9 @@ fn every_nonempty_proper_request_prefix_rejects_at_eof() {
             let mut client =
                 TcpStream::connect(address).expect("test client connects");
             client.write_all(&bytes).expect("request prefix writes");
+            client
+                .shutdown(Shutdown::Write)
+                .expect("request prefix write half closes");
         });
         let (mut server, _) = listener.accept().expect("test server accepts");
         server
