@@ -3005,125 +3005,6 @@ fn unsupported_mathematics_can_be_preserved_as_exact_unresolved_source() {
 }
 
 #[test]
-fn definition_spans_promote_edit_and_preserve_semantic_references() {
-    let ids = IdentityAllocator::new();
-    let (mut candidate, provenance_ids) =
-        candidate_notebook_with_provenance(&ids);
-    let block_candidate = candidate.pages[0].flows[0].blocks[0].id;
-    let style_candidate = candidate_id(&ids);
-    candidate.styles.push(Style {
-        id: style_candidate,
-        name: String::from("definition-term"),
-    });
-    let content = std::mem::replace(
-        &mut candidate.pages[0].flows[0].blocks[0].content,
-        BlockContent::Rule,
-    );
-    let BlockContent::Paragraph(mut spans) = content else {
-        panic!("definition fixture must start from a paragraph");
-    };
-    spans[0].style = Some(style_candidate);
-    candidate.pages[0].flows[0].blocks[0].content =
-        BlockContent::Definition(spans);
-    candidate.pages[0].flows[0].blocks[0].provenance =
-        Some(provenance_ids.edited);
-    candidate.pages[0].flows[0].blocks[0].style = Some(style_candidate);
-
-    let mut session = SemanticNotebookSessionService::default();
-    let AcceptanceOutcome::Accepted { mapping, revision } =
-        session.accept(candidate)
-    else {
-        panic!("definition candidate must be accepted");
-    };
-    let block = accepted_for(&mapping, block_candidate);
-    let span = accepted_for(&mapping, provenance_ids.claim);
-    let provenance = accepted_for(&mapping, provenance_ids.edited);
-    let style = accepted_for(&mapping, style_candidate);
-
-    assert_eq!(
-        session.inspect_identity_kind(revision, block),
-        IdentityKindInspectOutcome::Inspected {
-            kind: SemanticIdentityKind::Block(SemanticBlockKind::Definition),
-            revision,
-            target: block,
-        },
-    );
-    assert_eq!(
-        session.inspect_identity_kind(revision, span),
-        IdentityKindInspectOutcome::Inspected {
-            kind: SemanticIdentityKind::InlineSpan,
-            revision,
-            target: span,
-        },
-    );
-    for (family, value) in [
-        (
-            SemanticCommandFamily::TextContent,
-            EditableSemanticValue::Text(String::from("Energy is conserved.")),
-        ),
-        (
-            SemanticCommandFamily::StyleRole,
-            EditableSemanticValue::StyleReference(Some(style)),
-        ),
-        (
-            SemanticCommandFamily::Provenance,
-            EditableSemanticValue::ProvenanceReference(Some(provenance)),
-        ),
-    ] {
-        let CommandTargetMaterialOutcome::Prepared { material } =
-            session.command_target_material_for_family(revision, span, family)
-        else {
-            panic!("definition span family material must be available");
-        };
-        assert_eq!(material.descriptor, SemanticIdentityDescriptor {
-            kind: SemanticIdentityKind::InlineSpan,
-            owner: Some(block),
-        });
-        assert_eq!(material.editable_value, Some(value));
-    }
-
-    let TextEditOutcome::Applied {
-        revision: changed, ..
-    } = session.replace_text(
-        revision,
-        span,
-        String::from("Energy remains constant in an isolated system."),
-    )
-    else {
-        panic!("definition span text edit must apply");
-    };
-    let current = session.current().expect("definition edit revision");
-    let BlockContent::Definition(spans) =
-        &current.notebook.pages[0].flows[0].blocks[0].content
-    else {
-        panic!("definition identity must remain a definition");
-    };
-    assert_eq!(spans[0].id, span);
-    assert_eq!(spans[0].style, Some(style));
-    assert_eq!(spans[0].provenance, Some(provenance));
-    assert_eq!(
-        spans[0].text,
-        "Energy remains constant in an isolated system.",
-    );
-
-    let HistoryTraversalOutcome::Traversed { .. } =
-        session.traverse_history(changed, HistoryDirection::Undo)
-    else {
-        panic!("definition text edit must Undo");
-    };
-    let current = session.current().expect("definition Undo revision");
-    let BlockContent::Definition(spans) =
-        &current.notebook.pages[0].flows[0].blocks[0].content
-    else {
-        panic!("Undo must preserve definition block kind");
-    };
-    assert_eq!(spans[0].id, span);
-    assert_eq!(spans[0].text, "Energy is conserved.");
-    assert_eq!(spans[0].style, Some(style));
-    assert_eq!(spans[0].provenance, Some(provenance));
-}
-
-#[test]
 fn every_simple_inline_family_remains_editable_through_block_containers() {
     type InlineBlockConstructor = fn(
         Vec<InlineSpan<CandidateIdentity>>,
@@ -3325,7 +3206,7 @@ fn quotation_spans_preserve_unicode_across_edit_and_undo() {
 }
 
 #[test]
-fn every_simple_inline_block_family_promotes_edits_and_undoes() {
+fn every_simple_inline_family_preserves_attached_semantic_references() {
     type InlineBlockConstructor = fn(
         Vec<InlineSpan<CandidateIdentity>>,
     ) -> BlockContent<CandidateIdentity>;
@@ -3341,17 +3222,26 @@ fn every_simple_inline_block_family_promotes_edits_and_undoes() {
 
     for (kind, constructor) in cases {
         let ids = IdentityAllocator::new();
-        let (mut candidate, span_candidate) =
-            candidate_notebook_with_span(&ids, "before");
+        let (mut candidate, provenance_ids) =
+            candidate_notebook_with_provenance(&ids);
         let block_candidate = candidate.pages[0].flows[0].blocks[0].id;
+        let style_candidate = candidate_id(&ids);
+        candidate.styles.push(Style {
+            id: style_candidate,
+            name: String::from("simple-inline-role"),
+        });
         let content = std::mem::replace(
             &mut candidate.pages[0].flows[0].blocks[0].content,
             BlockContent::Rule,
         );
-        let BlockContent::Paragraph(spans) = content else {
+        let BlockContent::Paragraph(mut spans) = content else {
             panic!("simple inline-family seed must be a paragraph");
         };
+        spans[0].style = Some(style_candidate);
         candidate.pages[0].flows[0].blocks[0].content = constructor(spans);
+        candidate.pages[0].flows[0].blocks[0].provenance =
+            Some(provenance_ids.edited);
+        candidate.pages[0].flows[0].blocks[0].style = Some(style_candidate);
 
         let mut session = SemanticNotebookSessionService::default();
         let AcceptanceOutcome::Accepted { mapping, revision } =
@@ -3360,7 +3250,9 @@ fn every_simple_inline_block_family_promotes_edits_and_undoes() {
             panic!("simple inline-family candidate must be accepted");
         };
         let block = accepted_for(&mapping, block_candidate);
-        let span = accepted_for(&mapping, span_candidate);
+        let span = accepted_for(&mapping, provenance_ids.claim);
+        let provenance = accepted_for(&mapping, provenance_ids.edited);
+        let style = accepted_for(&mapping, style_candidate);
         assert_eq!(
             session.inspect_identity_kind(revision, block),
             IdentityKindInspectOutcome::Inspected {
@@ -3369,33 +3261,52 @@ fn every_simple_inline_block_family_promotes_edits_and_undoes() {
                 target: block,
             },
         );
-        for (family, expected) in [
+        assert_eq!(
+            session.inspect_identity_kind(revision, span),
+            IdentityKindInspectOutcome::Inspected {
+                kind: SemanticIdentityKind::InlineSpan,
+                revision,
+                target: span,
+            },
+        );
+        for (target, family, expected) in [
             (
+                span,
                 SemanticCommandFamily::TextContent,
-                EditableSemanticValue::Text(String::from("before")),
+                EditableSemanticValue::Text(String::from(
+                    "Energy is conserved.",
+                )),
             ),
             (
+                span,
                 SemanticCommandFamily::StyleRole,
-                EditableSemanticValue::StyleReference(None),
+                EditableSemanticValue::StyleReference(Some(style)),
             ),
             (
+                span,
                 SemanticCommandFamily::Provenance,
-                EditableSemanticValue::ProvenanceReference(None),
+                EditableSemanticValue::ProvenanceReference(Some(provenance)),
+            ),
+            (
+                block,
+                SemanticCommandFamily::StyleRole,
+                EditableSemanticValue::StyleReference(Some(style)),
+            ),
+            (
+                block,
+                SemanticCommandFamily::Provenance,
+                EditableSemanticValue::ProvenanceReference(Some(provenance)),
             ),
         ] {
             let CommandTargetMaterialOutcome::Prepared { material } =
                 session.command_target_material_for_family(
                     revision,
-                    span,
+                    target,
                     family,
                 )
             else {
                 panic!("simple inline-family material must exist");
             };
-            assert_eq!(material.descriptor, SemanticIdentityDescriptor {
-                kind: SemanticIdentityKind::InlineSpan,
-                owner: Some(block),
-            });
             assert_eq!(material.editable_value, Some(expected));
         }
 
@@ -3404,46 +3315,60 @@ fn every_simple_inline_block_family_promotes_edits_and_undoes() {
         else {
             panic!("simple inline-family text edit must apply");
         };
-        assert_eq!(
-            session.inspect_identity_kind(changed, block),
-            IdentityKindInspectOutcome::Inspected {
-                kind: SemanticIdentityKind::Block(*kind),
-                revision: changed,
-                target: block,
-            },
-        );
-        let CommandTargetMaterialOutcome::Prepared { material } =
-            session.command_target_material_for_family(
-                changed,
-                span,
+        for (family, expected) in [
+            (
                 SemanticCommandFamily::TextContent,
-            )
-        else {
-            panic!("edited simple inline-family text material must exist");
-        };
-        assert_eq!(
-            material.editable_value,
-            Some(EditableSemanticValue::Text(String::from("after"))),
-        );
+                EditableSemanticValue::Text(String::from("after")),
+            ),
+            (
+                SemanticCommandFamily::StyleRole,
+                EditableSemanticValue::StyleReference(Some(style)),
+            ),
+            (
+                SemanticCommandFamily::Provenance,
+                EditableSemanticValue::ProvenanceReference(Some(provenance)),
+            ),
+        ] {
+            let CommandTargetMaterialOutcome::Prepared { material } =
+                session.command_target_material_for_family(
+                    changed,
+                    span,
+                    family,
+                )
+            else {
+                panic!("edited simple inline-family material must exist");
+            };
+            assert_eq!(material.editable_value, Some(expected));
+        }
 
         let HistoryTraversalOutcome::Traversed { revision: undone, .. } =
             session.traverse_history(changed, HistoryDirection::Undo)
         else {
             panic!("simple inline-family text edit must Undo");
         };
-        let CommandTargetMaterialOutcome::Prepared { material } =
-            session.command_target_material_for_family(
-                undone,
-                span,
+        for (family, expected) in [
+            (
                 SemanticCommandFamily::TextContent,
-            )
-        else {
-            panic!("restored simple inline-family text material must exist");
-        };
-        assert_eq!(
-            material.editable_value,
-            Some(EditableSemanticValue::Text(String::from("before"))),
-        );
+                EditableSemanticValue::Text(String::from(
+                    "Energy is conserved.",
+                )),
+            ),
+            (
+                SemanticCommandFamily::StyleRole,
+                EditableSemanticValue::StyleReference(Some(style)),
+            ),
+            (
+                SemanticCommandFamily::Provenance,
+                EditableSemanticValue::ProvenanceReference(Some(provenance)),
+            ),
+        ] {
+            let CommandTargetMaterialOutcome::Prepared { material } =
+                session.command_target_material_for_family(undone, span, family)
+            else {
+                panic!("restored simple inline-family material must exist");
+            };
+            assert_eq!(material.editable_value, Some(expected));
+        }
     }
 }
 
