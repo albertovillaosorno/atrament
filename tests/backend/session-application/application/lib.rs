@@ -3175,6 +3175,86 @@ fn successful_bounded_batch_prunes_redo_only_asset_bytes() {
 }
 
 #[test]
+fn direct_edit_pruning_preserves_current_asset_bytes() {
+    let identities = IdentityAllocator::new();
+    let (mut editable, candidate_span) =
+        editable_text_candidate(&identities, "before");
+    let candidate_current_asset =
+        identities.allocate_candidate().expect("current asset id");
+    editable.assets.push(Asset {
+        id: candidate_current_asset,
+        media_type: String::from("image/png"),
+    });
+    let mut session = application::SessionApplication::default();
+    let AcceptanceOutcome::Accepted {
+        mapping: editable_mapping,
+        revision: editable_revision,
+    } = session.accept_candidate(editable)
+    else {
+        panic!("editable asset candidate must be accepted");
+    };
+    let span = editable_mapping
+        .iter()
+        .find(|entry| entry.candidate == candidate_span)
+        .expect("editable span identity must map")
+        .accepted;
+    let current_asset = editable_mapping
+        .iter()
+        .find(|entry| entry.candidate == candidate_current_asset)
+        .expect("current asset identity must map")
+        .accepted;
+    let current_bytes = b"current-history-asset".to_vec();
+    assert!(matches!(
+        session.retain_asset_bytes(
+            editable_revision,
+            current_asset,
+            current_bytes.clone(),
+        ),
+        Ok(application::AssetBytesRetention::Retained { .. })
+    ));
+
+    let (redo_candidate, _, candidate_redo_asset, _) =
+        asset_figure_candidate(&identities);
+    let AcceptanceOutcome::Accepted {
+        mapping: redo_mapping,
+        revision: redo_revision,
+    } = session.accept_candidate(redo_candidate)
+    else {
+        panic!("Redo asset candidate must be accepted");
+    };
+    let redo_asset = redo_mapping
+        .iter()
+        .find(|entry| entry.candidate == candidate_redo_asset)
+        .expect("Redo asset identity must map")
+        .accepted;
+    assert!(matches!(
+        session.retain_asset_bytes(
+            redo_revision,
+            redo_asset,
+            b"redo-only-asset".to_vec(),
+        ),
+        Ok(application::AssetBytesRetention::Retained { .. })
+    ));
+    assert_eq!(session.retained_asset_byte_count_for_test(), 2);
+
+    let HistoryTraversalOutcome::Traversed { revision: undone, .. } =
+        session.traverse_history(redo_revision, HistoryDirection::Undo)
+    else {
+        panic!("Redo asset candidate must Undo");
+    };
+    let TextEditOutcome::Applied { revision: edited, .. } =
+        session.replace_text(undone, span, String::from("after"))
+    else {
+        panic!("direct edit must commit replacement branch");
+    };
+    assert_eq!(session.retained_asset_byte_count_for_test(), 1);
+    assert_eq!(
+        session.asset_bytes(edited, current_asset),
+        Ok(current_bytes.as_slice()),
+    );
+}
+
+#[test]
 fn successful_direct_edit_prunes_redo_only_asset_bytes() {
     let identities = IdentityAllocator::new();
     let (editable, candidate_span) =
