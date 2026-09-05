@@ -174,6 +174,24 @@ fn request_head_end(request: &[u8]) -> Option<usize> {
         .and_then(|index| index.checked_add(4))
 }
 
+fn is_http_field_name(name: &str) -> bool {
+    !name.is_empty()
+        && name.bytes().all(|byte| {
+            byte.is_ascii_alphanumeric()
+                || matches!(
+                    byte,
+                    b'!' | b'#' | b'$' | b'%' | b'&' | b'\'' | b'*'
+                        | b'+' | b'-' | b'.' | b'^' | b'_' | b'`' | b'|'
+                        | b'~'
+                )
+        })
+}
+
+fn split_header_line(line: &str) -> Option<(&str, &str)> {
+    let (name, value) = line.split_once(':')?;
+    is_http_field_name(name).then_some((name, value))
+}
+
 fn header_is_present(request_head: &[u8], expected_name: &str) -> bool {
     let Ok(text) = str::from_utf8(request_head) else {
         return false;
@@ -182,7 +200,7 @@ fn header_is_present(request_head: &[u8], expected_name: &str) -> bool {
         .skip(1)
         .take_while(|line| !line.is_empty())
         .any(|line| {
-            line.split_once(':').is_some_and(|(name, _)| {
+            split_header_line(line).is_some_and(|(name, _)| {
                 name.eq_ignore_ascii_case(expected_name)
             })
         })
@@ -311,7 +329,7 @@ fn single_header_value<'request>(
         if line.is_empty() {
             break;
         }
-        let (name, value) = line.split_once(':')?;
+        let (name, value) = split_header_line(line)?;
         if name.eq_ignore_ascii_case(expected_name) {
             if matched_value.is_some() {
                 return None;
@@ -602,7 +620,7 @@ fn request_method_host_and_target(
         if line.is_empty() {
             break;
         }
-        let (name, value) = line.split_once(':')?;
+        let (name, value) = split_header_line(line)?;
         if name.eq_ignore_ascii_case("host") {
             if host.is_some() {
                 return None;
