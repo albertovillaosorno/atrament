@@ -943,7 +943,9 @@ fn scan_supported_command(
         MathTokenKind::Command(supported),
     ));
     if supported == SupportedCommand::SquareRoot {
-        if let Some((open, close)) = root_index_bounds(source, command.end)? {
+        if let Some((open, close)) =
+            root_index_bounds(source, groups, command.end)?
+        {
             validate_required_groups(
                 source,
                 groups,
@@ -1016,13 +1018,13 @@ fn close_environment(
 
 fn root_index_bounds(
     source: &str,
+    groups: &GroupIndex,
     command_end: usize,
 ) -> Result<Option<(usize, usize)>, MathSyntaxError> {
     let open = skip_ascii_whitespace(source, command_end);
     if source.as_bytes().get(open) != Some(&b'[') {
         return Ok(None);
     }
-    let mut brace_depth = 0usize;
     let mut cursor = open.saturating_add(1);
     let mut slash_run = 0usize;
     while let Some(byte) = source.as_bytes().get(cursor).copied() {
@@ -1033,15 +1035,20 @@ fn root_index_bounds(
         }
         let escaped = slash_run & 1 == 1;
         slash_run = 0;
-        if !escaped {
-            match byte {
-                b'{' => brace_depth = brace_depth.saturating_add(1),
-                b'}' if brace_depth != 0 => {
-                    brace_depth = brace_depth.saturating_sub(1);
-                },
-                b']' if brace_depth == 0 => return Ok(Some((open, cursor))),
-                _ => {},
-            }
+        if !escaped && byte == b'{' {
+            let Ok(end) =
+                matching_group_end(groups, source.len(), cursor)
+            else {
+                return Err(error(
+                    source.len(),
+                    MathSyntaxErrorKind::MissingRootIndexEnd,
+                ));
+            };
+            cursor = end;
+            continue;
+        }
+        if !escaped && byte == b']' {
+            return Ok(Some((open, cursor)));
         }
         cursor = cursor.saturating_add(1);
     }
