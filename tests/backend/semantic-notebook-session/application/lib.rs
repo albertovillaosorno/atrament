@@ -9525,6 +9525,10 @@ fn graph_resource_preflight_borrows_command_identities() {
     assert_eq!(clones.load(AtomicOrdering::Relaxed), 0);
 }
 
+#[allow(
+    clippy::mutable_key_type,
+    reason = "test key carries only a clone counter for identity-copy evidence",
+)]
 #[test]
 fn selection_summary_and_bounded_rejection_borrow_command_identities() {
     let ids = IdentityAllocator::new();
