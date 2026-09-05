@@ -227,6 +227,7 @@ async function evaluateDocument(client, context) {
     const response = await client.command("script.evaluate", {
         awaitPromise: false,
         expression: `JSON.stringify({
+            hasControl: document.querySelector(".control-frame") !== null,
             hasWorkspace: document.querySelector(".workspace-shell") !== null,
             title: document.title
         })`,
@@ -276,6 +277,7 @@ test(
         const profile = fs.mkdtempSync(".temp/frame-ancestors-");
         const children = [];
         let hostile;
+        let permissive;
         let bidi;
         try {
             const build = spawnSync(
@@ -322,14 +324,35 @@ test(
                 }
             });
 
-            hostile = http.createServer((_request, response) => {
+            permissive = http.createServer((_request, response) => {
+                response.writeHead(200, {
+                    "Cache-Control": "no-store",
+                    "Content-Type": "text/html; charset=utf-8",
+                });
+                response.end([
+                    "<!doctype html><title>Permissive frame</title>",
+                    '<main class="control-frame">Allowed control</main>',
+                ].join(""));
+            });
+            permissive.listen(0, "127.0.0.1");
+            await once(permissive, "listening");
+            const permissiveAddress = permissive.address();
+            assert.notEqual(typeof permissiveAddress, "string");
+            assert.notEqual(permissiveAddress, null);
+            const permissiveOrigin =
+                `http://127.0.0.1:${permissiveAddress.port}`;
+
+            hostile = http.createServer((request, response) => {
+                const target = request.url === "/control"
+                    ? permissiveOrigin
+                    : origin;
                 response.writeHead(200, {
                     "Cache-Control": "no-store",
                     "Content-Type": "text/html; charset=utf-8",
                 });
                 response.end([
                     "<!doctype html><title>Hostile frame</title>",
-                    `<iframe src="${origin}/"></iframe>`,
+                    `<iframe src="${target}/"></iframe>`,
                 ].join(""));
             });
             hostile.listen(0, "127.0.0.1");
@@ -377,8 +400,30 @@ test(
             assert.deepEqual(
                 await evaluateDocument(bidi, direct.context),
                 {
+                    hasControl: false,
                     hasWorkspace: true,
                     title: "Atrament",
+                },
+            );
+
+            const control = await bidi.command("browsingContext.create", {
+                type: "tab",
+            });
+            await bidi.command("browsingContext.navigate", {
+                context: control.context,
+                url: `${hostileOrigin}/control`,
+                wait: "complete",
+            });
+            const controlChild = await waitForChildContext(
+                bidi,
+                control.context,
+            );
+            assert.deepEqual(
+                await waitForFramedDocument(bidi, controlChild),
+                {
+                    hasControl: true,
+                    hasWorkspace: false,
+                    title: "Permissive frame",
                 },
             );
 
@@ -392,15 +437,18 @@ test(
             });
             const child = await waitForChildContext(bidi, attacker.context);
             const framed = await waitForFramedDocument(bidi, child);
+            assert.equal(framed.hasControl, false);
             assert.equal(framed.hasWorkspace, false);
             assert.notEqual(framed.title, "Atrament");
         } finally {
             if (bidi?.socket != null) {
                 bidi.socket.end();
             }
-            if (hostile !== undefined) {
-                hostile.close();
-                await once(hostile, "close");
+            for (const server of [hostile, permissive]) {
+                if (server !== undefined) {
+                    server.close();
+                    await once(server, "close");
+                }
             }
             for (const child of children.reverse()) {
                 await stopChild(child);
