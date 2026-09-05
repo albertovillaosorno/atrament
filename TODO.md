@@ -1321,8 +1321,12 @@ requires exactly one ASCII space between method, target, and HTTP/1.1; tabs,
 repeated spaces, trailing whitespace, and other versions reject before routing.
 
 Malformed bare-LF or bare-CR header line endings reject while the peer remains
-connected instead of occupying the listener until the request timeout. Request
-targets must use RFC 3986 origin-form path/query characters beginning
+connected instead of occupying the listener until the request timeout. EOF also
+cannot replace the required blank CRLF header terminator. Exhaustive prefix and
+two-write split fixtures cover every byte boundary of valid GET and body-bearing
+POST requests.
+
+Request targets must use RFC 3986 origin-form path/query characters beginning
 with `/`; absolute proxy form, `*`, fragments, controls, raw Unicode, and URI-
 invalid visible punctuation reject before routing. Any `%` escape must carry
 exactly two ASCII hexadecimal digits before routing.
@@ -1343,6 +1347,10 @@ sign before draft state can change.
 Security-sensitive header values trim only HTTP space/tab OWS;
 Unicode whitespace remains part of the value and therefore cannot normalize a
 malformed Host, Origin, or Bearer credential into an admitted one.
+Session-secret comparison executes all 64 admitted byte positions for every
+candidate length;
+0 through 128 byte candidates pin exact-length admission without claiming
+platform-level constant-time execution.
 
 Public, missing-route, unauthenticated, and authenticated empty responses are
 also checked against exact session-credential reflection.
