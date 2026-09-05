@@ -149,6 +149,16 @@ fn malformed_or_missing_host_is_rejected_before_routing() {
         concat!(
             "GET /health HTTP/1.1\r\n",
             "Host: 127.0.0.1:43123\r\n",
+            "X-Control: \u{0000}value\r\n\r\n",
+        ),
+        concat!(
+            "GET /health HTTP/1.1\r\n",
+            "Host: 127.0.0.1:43123\r\n",
+            "X-Control: value\u{007f}\r\n\r\n",
+        ),
+        concat!(
+            "GET /health HTTP/1.1\r\n",
+            "Host: 127.0.0.1:43123\r\n",
             "Host: 127.0.0.1:43123\r\n\r\n",
         ),
     ];

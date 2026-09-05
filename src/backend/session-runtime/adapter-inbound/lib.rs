@@ -187,9 +187,16 @@ fn is_http_field_name(name: &str) -> bool {
         })
 }
 
+fn is_http_field_value(value: &str) -> bool {
+    value.bytes().all(|byte| {
+        byte == b'\t' || (byte >= b' ' && byte != 0x7f)
+    })
+}
+
 fn split_header_line(line: &str) -> Option<(&str, &str)> {
     let (name, value) = line.split_once(':')?;
-    is_http_field_name(name).then_some((name, value))
+    (is_http_field_name(name) && is_http_field_value(value))
+        .then_some((name, value))
 }
 
 fn header_is_present(request_head: &[u8], expected_name: &str) -> bool {
