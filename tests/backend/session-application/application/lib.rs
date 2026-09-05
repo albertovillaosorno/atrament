@@ -78,7 +78,7 @@ use atrament_session_draft_port::{DraftField, DraftMutation, SessionDraft};
 mod application;
 
 const CURRENT_COMMAND_BEHAVIOR_VERSION: CommandBehaviorVersion =
-    CommandBehaviorVersion(57);
+    CommandBehaviorVersion(58);
 
 fn physical_page_profile() -> PageProfile {
     PageProfile {
@@ -1728,6 +1728,7 @@ fn application_preserves_every_simple_inline_block_family() {
         (SemanticBlockKind::Date, BlockContent::Date),
         (SemanticBlockKind::Definition, BlockContent::Definition),
         (SemanticBlockKind::Heading, BlockContent::Heading),
+        (SemanticBlockKind::MarginNote, BlockContent::MarginNote),
         (SemanticBlockKind::Paragraph, BlockContent::Paragraph),
         (SemanticBlockKind::Quotation, BlockContent::Quotation),
         (SemanticBlockKind::SourceNote, BlockContent::SourceNote),

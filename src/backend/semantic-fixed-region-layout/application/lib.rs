@@ -216,6 +216,7 @@ fn block_content_contains(
         | BlockContent::SourceNote(_)
         | BlockContent::Figure(_)
         | BlockContent::Heading(_)
+        | BlockContent::MarginNote(_)
         | BlockContent::Mathematics(_)
         | BlockContent::Paragraph(_)
         | BlockContent::Rule

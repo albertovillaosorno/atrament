@@ -99,6 +99,8 @@ pub enum BlockContent<Identity> {
     Heading(Vec<InlineSpan<Identity>>),
     /// Ordered or unordered semantic list.
     List(List<Identity>),
+    /// Semantic margin note retained as editable authored spans.
+    MarginNote(Vec<InlineSpan<Identity>>),
     /// Structured mathematical source.
     Mathematics(Formula<Identity>),
     /// Ordinary prose paragraph.
@@ -564,6 +566,8 @@ pub enum SemanticBlockKind {
     Heading,
     /// Structured semantic list block.
     List,
+    /// Margin-note block containing inline text spans.
+    MarginNote,
     /// Structured mathematical source block.
     Mathematics,
     /// Paragraph block containing inline text spans.
@@ -772,6 +776,7 @@ const fn semantic_block_kind<Identity>(
         BlockContent::Freeform(_) => SemanticBlockKind::Freeform,
         BlockContent::Heading(_) => SemanticBlockKind::Heading,
         BlockContent::List(_) => SemanticBlockKind::List,
+        BlockContent::MarginNote(_) => SemanticBlockKind::MarginNote,
         BlockContent::Mathematics(_) => SemanticBlockKind::Mathematics,
         BlockContent::Paragraph(_) => SemanticBlockKind::Paragraph,
         BlockContent::Rule => SemanticBlockKind::Rule,
@@ -898,6 +903,7 @@ where
         | BlockContent::Quotation(spans)
         | BlockContent::SourceNote(spans)
         | BlockContent::Heading(spans)
+        | BlockContent::MarginNote(spans)
         | BlockContent::Paragraph(spans) => {
             semantic_spans_descriptor(spans, target, block.id)
         },

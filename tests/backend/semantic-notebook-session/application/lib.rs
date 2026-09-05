@@ -84,7 +84,7 @@ use atrament_semantic_notebook_port::{
 use atrament_semantic_notebook_session::SemanticNotebookSessionService;
 
 const CURRENT_COMMAND_BEHAVIOR_VERSION: CommandBehaviorVersion =
-    CommandBehaviorVersion(57);
+    CommandBehaviorVersion(58);
 
 #[derive(Debug)]
 struct CountingCommandIdentity {
@@ -3132,6 +3132,7 @@ fn every_simple_inline_family_remains_editable_through_block_containers() {
         (SemanticBlockKind::Date, BlockContent::Date),
         (SemanticBlockKind::Definition, BlockContent::Definition),
         (SemanticBlockKind::Heading, BlockContent::Heading),
+        (SemanticBlockKind::MarginNote, BlockContent::MarginNote),
         (SemanticBlockKind::Paragraph, BlockContent::Paragraph),
         (SemanticBlockKind::Quotation, BlockContent::Quotation),
         (SemanticBlockKind::SourceNote, BlockContent::SourceNote),
@@ -3332,6 +3333,7 @@ fn every_simple_inline_block_family_promotes_edits_and_undoes() {
         (SemanticBlockKind::Date, BlockContent::Date),
         (SemanticBlockKind::Definition, BlockContent::Definition),
         (SemanticBlockKind::Heading, BlockContent::Heading),
+        (SemanticBlockKind::MarginNote, BlockContent::MarginNote),
         (SemanticBlockKind::Paragraph, BlockContent::Paragraph),
         (SemanticBlockKind::Quotation, BlockContent::Quotation),
         (SemanticBlockKind::SourceNote, BlockContent::SourceNote),
@@ -7772,11 +7774,11 @@ fn command_capability_version_detects_drift_independently_of_revision() {
     );
     assert_eq!(
         session.check_command_capability_compatibility(
-            CommandBehaviorVersion(56),
+            CommandBehaviorVersion(57),
         ),
         CommandCapabilityCompatibilityOutcome::Mismatch {
             current: CURRENT_COMMAND_BEHAVIOR_VERSION,
-            expected: CommandBehaviorVersion(56),
+            expected: CommandBehaviorVersion(57),
         },
     );
     assert_eq!(

@@ -544,7 +544,7 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
     }
 
     fn command_capability_snapshot(&self) -> SemanticCommandCapabilitySnapshot {
-        const VERSION: CommandBehaviorVersion = CommandBehaviorVersion(57);
+        const VERSION: CommandBehaviorVersion = CommandBehaviorVersion(58);
         const FAMILY_CAPABILITIES: [CommandFamilyCapability; 7] = [
             CommandFamilyCapability {
                 behavior_version: CommandBehaviorVersion(1),
@@ -1872,6 +1872,9 @@ fn accept_block_content(
         BlockContent::List(list) => {
             Ok(BlockContent::List(accept_list(list, identities)?))
         },
+        BlockContent::MarginNote(spans) => {
+            Ok(BlockContent::MarginNote(accept_spans(spans, identities)?))
+        },
         BlockContent::Mathematics(formula) => Ok(BlockContent::Mathematics(
             accept_formula(formula, identities)?,
         )),
@@ -2195,6 +2198,7 @@ fn formula_content_value(
         | BlockContent::SourceNote(_)
         | BlockContent::Figure(_)
         | BlockContent::Heading(_)
+        | BlockContent::MarginNote(_)
         | BlockContent::Mathematics(_)
         | BlockContent::Paragraph(_)
         | BlockContent::Rule
@@ -2637,6 +2641,7 @@ const fn direct_edit_block_kind(
         BlockContent::Freeform(_) => SemanticBlockKind::Freeform,
         BlockContent::Heading(_) => SemanticBlockKind::Heading,
         BlockContent::List(_) => SemanticBlockKind::List,
+        BlockContent::MarginNote(_) => SemanticBlockKind::MarginNote,
         BlockContent::Mathematics(_) => SemanticBlockKind::Mathematics,
         BlockContent::Paragraph(_) => SemanticBlockKind::Paragraph,
         BlockContent::Rule => SemanticBlockKind::Rule,
@@ -2685,6 +2690,7 @@ fn index_direct_edit_blocks_frame<'notebook>(
         | BlockContent::Quotation(spans)
         | BlockContent::SourceNote(spans)
         | BlockContent::Heading(spans)
+        | BlockContent::MarginNote(spans)
         | BlockContent::Paragraph(spans) => {
             index_direct_edit_spans(
                 index,
@@ -4300,6 +4306,7 @@ fn block_provenance_blocks_value(
         | BlockContent::SourceNote(_)
             | BlockContent::Figure(_)
             | BlockContent::Heading(_)
+        | BlockContent::MarginNote(_)
             | BlockContent::Mathematics(_)
             | BlockContent::Paragraph(_)
             | BlockContent::Rule
@@ -4350,6 +4357,7 @@ fn inline_span_content_value(
         | BlockContent::Quotation(spans)
         | BlockContent::SourceNote(spans)
         | BlockContent::Heading(spans)
+        | BlockContent::MarginNote(spans)
         | BlockContent::Paragraph(spans) => {
             spans.iter().find(|span| span.id == target)
         },
@@ -4470,6 +4478,7 @@ fn list_ordering_blocks_value(
         | BlockContent::SourceNote(_)
             | BlockContent::Figure(_)
             | BlockContent::Heading(_)
+        | BlockContent::MarginNote(_)
             | BlockContent::Mathematics(_)
             | BlockContent::Paragraph(_)
             | BlockContent::Rule
@@ -4540,6 +4549,7 @@ fn replace_list_ordering_blocks(
         | BlockContent::SourceNote(_)
             | BlockContent::Figure(_)
             | BlockContent::Heading(_)
+        | BlockContent::MarginNote(_)
             | BlockContent::Mathematics(_)
             | BlockContent::Paragraph(_)
             | BlockContent::Rule
@@ -4604,6 +4614,7 @@ fn block_style_blocks_value(
         | BlockContent::SourceNote(_)
             | BlockContent::Figure(_)
             | BlockContent::Heading(_)
+        | BlockContent::MarginNote(_)
             | BlockContent::Mathematics(_)
             | BlockContent::Paragraph(_)
             | BlockContent::Rule
@@ -4674,6 +4685,7 @@ fn replace_block_style_blocks(
         | BlockContent::SourceNote(_)
             | BlockContent::Figure(_)
             | BlockContent::Heading(_)
+        | BlockContent::MarginNote(_)
             | BlockContent::Mathematics(_)
             | BlockContent::Paragraph(_)
             | BlockContent::Rule
@@ -4713,6 +4725,7 @@ fn replace_inline_span_style_blocks(
             | BlockContent::Quotation(spans)
         | BlockContent::SourceNote(spans)
             | BlockContent::Heading(spans)
+        | BlockContent::MarginNote(spans)
             | BlockContent::Paragraph(spans) => {
                 if let Some(span) =
                     spans.iter_mut().find(|span| span.id == target)
@@ -4808,6 +4821,7 @@ fn replace_provenance_reference_blocks(
             | BlockContent::Quotation(spans)
         | BlockContent::SourceNote(spans)
             | BlockContent::Heading(spans)
+        | BlockContent::MarginNote(spans)
             | BlockContent::Paragraph(spans) => {
                 if let Some(span) =
                     spans.iter_mut().find(|span| span.id == target)
@@ -4913,6 +4927,7 @@ fn figure_blocks_value(
         | BlockContent::SourceNote(_)
             | BlockContent::Figure(_)
             | BlockContent::Heading(_)
+        | BlockContent::MarginNote(_)
             | BlockContent::Mathematics(_)
             | BlockContent::Paragraph(_)
             | BlockContent::Rule
@@ -4983,6 +4998,7 @@ fn replace_figure_asset_blocks(
         | BlockContent::SourceNote(_)
             | BlockContent::Figure(_)
             | BlockContent::Heading(_)
+        | BlockContent::MarginNote(_)
             | BlockContent::Mathematics(_)
             | BlockContent::Paragraph(_)
             | BlockContent::Rule
@@ -5102,6 +5118,7 @@ fn replace_formula_content(
         | BlockContent::SourceNote(_)
         | BlockContent::Figure(_)
         | BlockContent::Heading(_)
+        | BlockContent::MarginNote(_)
         | BlockContent::Mathematics(_)
         | BlockContent::Paragraph(_)
         | BlockContent::Rule
@@ -5380,6 +5397,7 @@ fn table_containing_cell_content_value(
         | BlockContent::SourceNote(_)
         | BlockContent::Figure(_)
         | BlockContent::Heading(_)
+        | BlockContent::MarginNote(_)
         | BlockContent::Mathematics(_)
         | BlockContent::Paragraph(_)
         | BlockContent::Rule
@@ -5450,6 +5468,7 @@ fn replace_table_cell_span_raw_content(
         | BlockContent::SourceNote(_)
         | BlockContent::Figure(_)
         | BlockContent::Heading(_)
+        | BlockContent::MarginNote(_)
         | BlockContent::Mathematics(_)
         | BlockContent::Paragraph(_)
         | BlockContent::Rule
@@ -5540,6 +5559,7 @@ fn replace_table_cell_span_content(
         | BlockContent::SourceNote(_)
         | BlockContent::Figure(_)
         | BlockContent::Heading(_)
+        | BlockContent::MarginNote(_)
         | BlockContent::Mathematics(_)
         | BlockContent::Paragraph(_)
         | BlockContent::Rule
@@ -5623,6 +5643,7 @@ fn table_cell_span_content_value(
         | BlockContent::SourceNote(_)
         | BlockContent::Figure(_)
         | BlockContent::Heading(_)
+        | BlockContent::MarginNote(_)
         | BlockContent::Mathematics(_)
         | BlockContent::Paragraph(_)
         | BlockContent::Rule
@@ -5695,6 +5716,7 @@ fn replace_table_row_role_content(
         | BlockContent::SourceNote(_)
         | BlockContent::Figure(_)
         | BlockContent::Heading(_)
+        | BlockContent::MarginNote(_)
         | BlockContent::Mathematics(_)
         | BlockContent::Paragraph(_)
         | BlockContent::Rule
@@ -5769,6 +5791,7 @@ fn table_row_role_content_value(
         | BlockContent::SourceNote(_)
         | BlockContent::Figure(_)
         | BlockContent::Heading(_)
+        | BlockContent::MarginNote(_)
         | BlockContent::Mathematics(_)
         | BlockContent::Paragraph(_)
         | BlockContent::Rule
@@ -5819,6 +5842,7 @@ fn replace_text_content(
         | BlockContent::Quotation(spans)
         | BlockContent::SourceNote(spans)
         | BlockContent::Heading(spans)
+        | BlockContent::MarginNote(spans)
         | BlockContent::Paragraph(spans) => {
             replace_text_spans(spans, target, value)
         },
@@ -5907,6 +5931,7 @@ fn text_content_value(
         | BlockContent::Quotation(spans)
         | BlockContent::SourceNote(spans)
         | BlockContent::Heading(spans)
+        | BlockContent::MarginNote(spans)
         | BlockContent::Paragraph(spans) => text_spans_value(spans, target),
         BlockContent::Figure(figure) => {
             text_spans_value(&figure.caption, target)
@@ -5990,6 +6015,7 @@ fn discard_candidate_notebook(notebook: Notebook<CandidateIdentity>) {
         | BlockContent::SourceNote(_)
             | BlockContent::Figure(_)
             | BlockContent::Heading(_)
+        | BlockContent::MarginNote(_)
             | BlockContent::Mathematics(_)
             | BlockContent::Paragraph(_)
             | BlockContent::Rule
@@ -6066,6 +6092,7 @@ fn candidate_graph_blocks_frame<'candidate>(
         | BlockContent::Quotation(spans)
         | BlockContent::SourceNote(spans)
         | BlockContent::Heading(spans)
+        | BlockContent::MarginNote(spans)
         | BlockContent::Paragraph(spans) => {
             candidate_spans(spans, graph)?;
         },

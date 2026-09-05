@@ -298,6 +298,7 @@ fn simple_inline_block_kinds_keep_span_ownership() {
         (SemanticBlockKind::Date, BlockContent::Date),
         (SemanticBlockKind::Definition, BlockContent::Definition),
         (SemanticBlockKind::Heading, BlockContent::Heading),
+        (SemanticBlockKind::MarginNote, BlockContent::MarginNote),
         (SemanticBlockKind::Paragraph, BlockContent::Paragraph),
         (SemanticBlockKind::Quotation, BlockContent::Quotation),
         (SemanticBlockKind::SourceNote, BlockContent::SourceNote),
