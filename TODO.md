@@ -525,6 +525,10 @@ first-journey 6 mm bottom overflow is exercised directly. A 20,000-case
 deterministic rectangle oracle independently verifies crossed-edge combinations,
 stable edge order, and exact overflow amounts.
 
+A second 200,000-case oracle uses `u128` reference arithmetic over full-range
+`u64` rectangles to verify writable and object coordinate-overflow precedence
+plus exact surviving edge amounts.
+
 A second 20,000-case accepted placement oracle verifies those reports project
 one
 complete blocking diagnostic per violation with matching typed edge and physical

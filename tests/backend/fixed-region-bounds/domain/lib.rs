@@ -92,6 +92,117 @@ fn next_bounds_value(seed: &mut u64) -> u64 {
     *seed >> 32
 }
 
+fn next_full_bounds_value(seed: &mut u64) -> u64 {
+    *seed = seed
+        .wrapping_mul(2_862_933_555_777_941_757)
+        .wrapping_add(3_037_000_493);
+    *seed
+}
+
+fn reference_bounds_full_range(
+    writable: Rect,
+    object: Rect,
+) -> Result<Vec<BoundaryViolation>, BoundsError> {
+    let maximum = u128::from(u64::MAX);
+    let writable_right = u128::from(writable.x.micrometres())
+        + u128::from(writable.width.micrometres());
+    let writable_bottom = u128::from(writable.y.micrometres())
+        + u128::from(writable.height.micrometres());
+    if writable_right > maximum || writable_bottom > maximum {
+        return Err(BoundsError::WritableCoordinateOverflow);
+    }
+    let object_right = u128::from(object.x.micrometres())
+        + u128::from(object.width.micrometres());
+    let object_bottom = u128::from(object.y.micrometres())
+        + u128::from(object.height.micrometres());
+    if object_right > maximum || object_bottom > maximum {
+        return Err(BoundsError::ObjectCoordinateOverflow);
+    }
+    let writable_right = u64::try_from(writable_right)
+        .expect("validated writable right fits u64");
+    let writable_bottom = u64::try_from(writable_bottom)
+        .expect("validated writable bottom fits u64");
+    let object_right = u64::try_from(object_right)
+        .expect("validated object right fits u64");
+    let object_bottom = u64::try_from(object_bottom)
+        .expect("validated object bottom fits u64");
+    let mut violations = Vec::new();
+    if object_bottom > writable_bottom {
+        violations.push(BoundaryViolation {
+            amount: Length::from_micrometres(
+                object_bottom - writable_bottom,
+            ),
+            edge: BoundaryEdge::Bottom,
+        });
+    }
+    if object.x < writable.x {
+        violations.push(BoundaryViolation {
+            amount: Length::from_micrometres(
+                writable.x.micrometres() - object.x.micrometres(),
+            ),
+            edge: BoundaryEdge::Left,
+        });
+    }
+    if object_right > writable_right {
+        violations.push(BoundaryViolation {
+            amount: Length::from_micrometres(
+                object_right - writable_right,
+            ),
+            edge: BoundaryEdge::Right,
+        });
+    }
+    if object.y < writable.y {
+        violations.push(BoundaryViolation {
+            amount: Length::from_micrometres(
+                writable.y.micrometres() - object.y.micrometres(),
+            ),
+            edge: BoundaryEdge::Top,
+        });
+    }
+    Ok(violations)
+}
+
+#[test]
+fn full_range_rectangles_match_u128_reference_oracle() {
+    const CASES: usize = 200_000;
+    let mut seed = 0xa24b_aed4_963e_e407_u64;
+    let mut object_overflows = 0usize;
+    let mut valid = 0usize;
+    let mut writable_overflows = 0usize;
+    for case in 0..CASES {
+        let writable = rect(
+            next_full_bounds_value(&mut seed),
+            next_full_bounds_value(&mut seed),
+            next_full_bounds_value(&mut seed),
+            next_full_bounds_value(&mut seed),
+        );
+        let object = rect(
+            next_full_bounds_value(&mut seed),
+            next_full_bounds_value(&mut seed),
+            next_full_bounds_value(&mut seed),
+            next_full_bounds_value(&mut seed),
+        );
+        let expected = reference_bounds_full_range(writable, object);
+        match expected {
+            Ok(_) => valid = valid.saturating_add(1),
+            Err(BoundsError::ObjectCoordinateOverflow) => {
+                object_overflows = object_overflows.saturating_add(1);
+            },
+            Err(BoundsError::WritableCoordinateOverflow) => {
+                writable_overflows = writable_overflows.saturating_add(1);
+            },
+        }
+        assert_eq!(
+            check_bounds(writable, object).map(|report| report.violations),
+            expected,
+            "full-range bounds mismatch in generated case {case}",
+        );
+    }
+    assert!(valid > 1_000);
+    assert!(object_overflows > 1_000);
+    assert!(writable_overflows > 1_000);
+}
+
 #[test]
 fn small_rectangles_match_reference_bounds_oracle() {
     const CASES: usize = 20_000;
