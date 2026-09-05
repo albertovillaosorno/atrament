@@ -31,19 +31,23 @@ consumer of the concrete semantic-session service. No command transport or
 writable scope is published by this composition evidence.
 
 Dropping that owner and creating a fresh application yields empty draft fields,
-no accepted revision, and no history position; its Debug projection does not
-expose private draft text. A process fixture now accepts two semantic asset
-records plus a referencing figure, commits both a text mutation and an
-asset-reference mutation, and retains Undo history before orderly or forced
-termination. A fresh process then has no accepted revision or history, so those
-revision-owned semantic asset records and references cannot survive restart.
-Browser edits send complete authenticated replacements and no browser
-persistence API is used.
+no accepted revision, no history position, and no retained asset bytes; its
+Debug projection does not expose private draft text or raw media. The active
+application can retain already-validated raw bytes only after an accepted
+semantic asset identity exists. It preserves the first retained byte sequence
+for that identity and keeps those bytes process-local across semantic Undo/Redo.
 
-This asset evidence covers revision-owned semantic metadata only; raw imported
-media bytes do not yet have an executable session owner. The task remains open
-until those media bytes, previews, diagnostics, renders, and plans all join the
-same lifecycle invariant.
+A process fixture now retains bytes for two semantic assets, commits text and
+asset-reference history,
+and proves both orderly and forced termination leave a fresh process with no
+accepted revision, history, or bytes. Browser edits send complete authenticated
+replacements and no browser persistence API is used.
+
+This evidence establishes raw-byte ownership after a separate ingestion
+boundary; it does not implement media decoding, format validation, clipboard or
+file intake, or temporary conversion files. The task remains open until
+previews, diagnostics, renders, plans, and the remaining media operations join
+the same lifecycle invariant.
 
 ### TODO - Implement explicit import and export
 
@@ -77,9 +81,10 @@ also write and read task, source, and raw-response text, then verify both
 orderly restart and forced process death yield empty fields in the fresh
 session. A checked-in application-process fixture now also populates an accepted
 semantic revision containing two semantic asset records and a figure reference,
-commits text and asset-reference history, then proves orderly exit and forced
-process death both leave a fresh owner with no accepted revision or history
-position. This does not yet model raw imported media bytes or their cleanup.
+retains distinct raw byte sequences for both assets, commits text and
+asset-reference history, then proves orderly exit and forced process death both
+leave a fresh owner with no accepted revision, history position, or retained raw
+bytes. Media decoding and temporary conversion-file cleanup remain open.
 
 While private draft text is live, the runtime holds no writable regular-file
 descriptor and changes no declared repository runtime-root file.
@@ -248,8 +253,9 @@ without coupling independent fields on one identity.
 Figure asset-reference commands can only carry `None` or an accepted semantic
 identity already classified as `Asset` in the same current revision. Missing or
 wrong-kind identities reject before mutation; raw bytes, base64 payloads, local
-paths, and remote URLs are not representable by this value. Asset ingestion and
-media-byte ownership remain separate open capabilities.
+paths, and remote URLs are not representable by this value. Asset ingestion
+remains a separate open capability; the application owner can retain opaque raw
+bytes only after an accepted asset identity already exists.
 Executable fixtures now cover attach from no reference, replacement between two
 admitted assets, removal to no reference, a dependent replace-then-remove chain,
 and a figure nested through callout, list, table-cell, and freeform containers.

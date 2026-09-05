@@ -179,8 +179,10 @@ and accepted revision context. They do not download remote URLs, embed arbitrary
 base64 payloads as document fields, or create undeclared persistent files.
 
 Asset import and media ingestion are separate application capabilities. After an
-asset is admitted and receives an identity, a semantic batch may attach or place
-that identity through the normal revision transaction.
+asset is admitted and receives an identity, the active application owner may
+retain its already-validated raw bytes in process memory, and a semantic batch
+may attach or place that identity through the normal revision transaction. Raw
+byte retention does not validate formats or grant import authority.
 
 ### Spatial command parity
 

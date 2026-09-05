@@ -9,40 +9,42 @@
 //
 // Boundary-Contract:
 // - Owns:
-//   - Active-process pre-acceptance draft and accepted semantic notebook state.
+//   - Active-process draft, raw asset bytes, and accepted semantic notebook
+//     state.
 // - Must-Not:
 //   - Persist session state, parse transport input, or duplicate semantic
 //     rules.
 // - Allows:
-//   - Inputs: Existing draft and semantic application-service operations.
-//   - Outputs: Typed semantic outcomes, borrowed accepted state, and the draft
-//     port.
+//   - Inputs: Existing draft and semantic application-service operations plus
+//     raw bytes already validated by an ingestion boundary.
+//   - Outputs: Typed outcomes plus borrowed accepted state and raw asset bytes.
 //   - Side effects: Process-local mutation through owned application services.
 // - Split-When:
-//   - Assets or derived state require independently bounded owners.
+//   - Derived state or bounded media policy requires an independent owner.
 // - Merge-When:
 //   - One broader application authority owns every active-session capability.
 // - Summary:
 //   - Owns mutable Atrament application state for one disposable process.
 // - Description:
-//   - Gives draft and accepted notebook state one process-lifetime owner while
-//     preserving their established application contracts.
+//   - Gives draft, accepted notebook, and retained asset bytes one process
+//     owner while preserving their established application contracts.
 // - Usage:
 //   - Construct one instance in the runtime composition root and drop it when
 //     the active localhost session ends.
 // - Defaults:
-//   - Starts with empty draft fields and no accepted semantic revision.
+//   - Starts with empty draft fields, no accepted revision, and no asset bytes.
 //
 
 //! Process-lifetime owner for disposable Atrament application state.
 
-use std::collections::BTreeSet;
+use std::collections::btree_map::Entry;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
 use atrament_semantic_notebook::{
     AcceptedIdentity, AcceptedRevision, CandidateIdentity, FormulaMode,
-    Notebook, PhysicalPageProfile, RevisionIdentity, TableCellSpan,
-    TableRowRole,
+    Notebook, PhysicalPageProfile, RevisionIdentity, SemanticIdentityKind,
+    TableCellSpan, TableRowRole,
 };
 use atrament_semantic_notebook_port::{
     AcceptanceOutcome, CommandCapabilityCompatibilityOutcome,
@@ -70,9 +72,66 @@ use atrament_semantic_notebook_session::SemanticNotebookSessionService;
 use atrament_session_draft::SessionDraftService;
 use atrament_session_draft_port::{DraftField, DraftMutation, SessionDraft};
 
+/// Typed failure to retain or inspect process-owned raw asset bytes.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum AssetBytesError {
+    /// The semantic asset exists, but this process retains no bytes for it.
+    BytesNotRetained {
+        /// Accepted semantic asset identity without retained bytes.
+        asset: AcceptedIdentity,
+        /// Current accepted revision that admits the asset identity.
+        revision: RevisionIdentity,
+    },
+    /// Session has no accepted semantic revision.
+    NoAcceptedRevision,
+    /// Caller names an accepted revision that is no longer current.
+    StaleBase {
+        /// Current accepted revision that rejected the stale request.
+        current: RevisionIdentity,
+    },
+    /// Requested identity exists but is not a semantic asset.
+    TargetNotAsset {
+        /// Actual semantic kind owned by the requested identity.
+        actual: SemanticIdentityKind,
+        /// Accepted revision inspected without mutation.
+        revision: RevisionIdentity,
+        /// Existing non-asset semantic identity.
+        target: AcceptedIdentity,
+    },
+    /// Requested accepted identity is absent from the named revision.
+    TargetNotFound {
+        /// Accepted revision inspected without mutation.
+        revision: RevisionIdentity,
+        /// Requested identity absent from that revision.
+        target: AcceptedIdentity,
+    },
+}
+
+/// Result of retaining bytes for one already-accepted semantic asset.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum AssetBytesRetention {
+    /// The asset already owned bytes; its original sequence was preserved.
+    AlreadyRetained {
+        /// Accepted semantic asset identity whose bytes were left unchanged.
+        asset: AcceptedIdentity,
+        /// Current accepted revision that still admits the asset identity.
+        revision: RevisionIdentity,
+    },
+    /// The asset had no retained bytes and now owns this exact byte sequence.
+    Retained {
+        /// Accepted semantic asset identity that owns the bytes.
+        asset: AcceptedIdentity,
+        /// Complete retained byte count.
+        byte_count: usize,
+        /// Current accepted revision that admitted the asset identity.
+        revision: RevisionIdentity,
+    },
+}
+
 /// Mutable application state owned by one active Atrament process.
 #[derive(Default)]
 pub struct SessionApplication {
+    asset_bytes: BTreeMap<AcceptedIdentity, Vec<u8>>,
     draft: SessionDraftService,
     semantic: SemanticNotebookSessionService,
 }
@@ -119,6 +178,24 @@ impl SessionApplication {
         CommandIdentity: Clone + Ord,
     {
         self.semantic.apply_direct_edit_batch_bounded(batch, limits)
+    }
+
+    /// Borrow raw bytes retained for one current accepted semantic asset.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed error when the revision is unavailable or stale, when
+    /// the target is missing or not an asset, or when that asset has no
+    /// retained byte sequence in this process.
+    pub fn asset_bytes(
+        &self,
+        revision: RevisionIdentity,
+        asset: AcceptedIdentity,
+    ) -> Result<&[u8], AssetBytesError> {
+        self.validate_asset_identity(revision, asset)?;
+        self.asset_bytes.get(&asset).map(Vec::as_slice).ok_or(
+            AssetBytesError::BytesNotRetained { asset, revision },
+        )
     }
 
     /// Check one previously bound semantic command behavior version.
@@ -377,6 +454,41 @@ impl SessionApplication {
         self.semantic.replace_text(base, target, value)
     }
 
+    /// Retain already-validated raw bytes for one accepted semantic asset.
+    ///
+    /// Existing bytes are immutable for that accepted asset identity. Repeated
+    /// retention preserves the original bytes instead of changing render input
+    /// behind a stable semantic reference. This is not a media-ingestion or
+    /// media-format validation capability.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed error when the revision is unavailable or stale, when
+    /// the target is missing or not an asset, or when no accepted revision
+    /// exists.
+    pub fn retain_asset_bytes(
+        &mut self,
+        revision: RevisionIdentity,
+        asset: AcceptedIdentity,
+        bytes: Vec<u8>,
+    ) -> Result<AssetBytesRetention, AssetBytesError> {
+        self.validate_asset_identity(revision, asset)?;
+        match self.asset_bytes.entry(asset) {
+            Entry::Occupied(_) => {
+                Ok(AssetBytesRetention::AlreadyRetained { asset, revision })
+            },
+            Entry::Vacant(entry) => {
+                let byte_count = bytes.len();
+                let _bytes = entry.insert(bytes);
+                Ok(AssetBytesRetention::Retained {
+                    asset,
+                    byte_count,
+                    revision,
+                })
+            },
+        }
+    }
+
     /// Simulate one established direct semantic edit without mutation.
     #[must_use]
     pub fn simulate_direct_edit(
@@ -429,6 +541,41 @@ impl SessionApplication {
         direction: HistoryDirection,
     ) -> HistoryTraversalOutcome {
         self.semantic.traverse_history(base, direction)
+    }
+
+    fn validate_asset_identity(
+        &self,
+        revision: RevisionIdentity,
+        asset: AcceptedIdentity,
+    ) -> Result<(), AssetBytesError> {
+        match self.semantic.inspect_identity_kind(revision, asset) {
+            IdentityKindInspectOutcome::Inspected {
+                kind: SemanticIdentityKind::Asset,
+                ..
+            } => Ok(()),
+            IdentityKindInspectOutcome::Inspected {
+                kind: actual,
+                revision: inspected_revision,
+                target,
+            } => Err(AssetBytesError::TargetNotAsset {
+                actual,
+                revision: inspected_revision,
+                target,
+            }),
+            IdentityKindInspectOutcome::NoAcceptedRevision => {
+                Err(AssetBytesError::NoAcceptedRevision)
+            },
+            IdentityKindInspectOutcome::StaleBase { current } => {
+                Err(AssetBytesError::StaleBase { current })
+            },
+            IdentityKindInspectOutcome::TargetNotFound {
+                revision: inspected_revision,
+                target,
+            } => Err(AssetBytesError::TargetNotFound {
+                revision: inspected_revision,
+                target,
+            }),
+        }
     }
 }
 

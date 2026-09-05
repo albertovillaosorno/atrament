@@ -9,26 +9,27 @@
 //
 // Boundary-Contract:
 // - Owns:
-//   - Regression evidence for one disposable active-session application owner.
+//   - Regression evidence for one disposable active-session application owner,
+//     including raw asset bytes.
 // - Must-Not:
 //   - Exercise HTTP transport, persistence, or semantic validation details.
 // - Allows:
-//   - Inputs: Bounded draft text and a minimal valid semantic candidate.
+//   - Inputs: Bounded draft text, semantic candidates, and opaque asset bytes.
 //   - Outputs: Assertions over shared lifecycle ownership and fresh defaults.
 //   - Side effects: Test subprocesses and process-local allocations only.
 // - Split-When:
-//   - Assets, previews, renders, or derived plans join the session owner.
+//   - Previews, renders, or derived plans require independent lifecycle proof.
 // - Merge-When:
 //   - Full process lifecycle fixtures supersede this application-level proof.
 // - Summary:
-//   - Verifies draft, accepted notebook, and history share one owner.
+//   - Verifies draft, notebook, history, and raw asset bytes share one owner.
 // - Description:
-//   - Proves the live-session application can hold both state classes and a
+//   - Proves the live-session application can hold all four state classes and a
 //     fresh application cannot observe them after the prior owner is dropped.
 // - Usage:
 //   - Compile against the session application and semantic inbound-port crates.
 // - Defaults:
-//   - Starts with empty draft fields and no accepted semantic revision.
+//   - Starts with empty draft fields, no accepted revision, and no asset bytes.
 //
 use std::collections::BTreeSet;
 use std::io::{BufRead, BufReader, Read, Write};
@@ -349,16 +350,38 @@ fn minimal_candidate(
 const PROCESS_FIXTURE_MODE: &str = "ATRAMENT_SESSION_APPLICATION_FIXTURE";
 const PROCESS_POPULATED_READY: &str = "atrament-populated-session-ready";
 const PROCESS_FRESH_EMPTY: &str = "atrament-fresh-session-empty";
+const PROCESS_FIRST_ASSET_BYTES: &[u8] = b"process-private-png-bytes";
+const PROCESS_SECOND_ASSET_BYTES: &[u8] = b"process-private-webp-bytes";
 const PROCESS_TEST_NAME: &str =
-    "process_restart_drops_accepted_revision_and_history";
+    "process_restart_drops_revision_history_and_raw_asset_bytes";
 
 fn run_process_fixture_child(mode: &str) {
     if mode == "fresh" {
-        let fresh = application::SessionApplication::default();
+        let mut fresh = application::SessionApplication::default();
         assert!(fresh.accepted_revision().is_none());
         assert_eq!(
             fresh.history_availability(),
             HistoryAvailabilityOutcome::NoAcceptedRevision,
+        );
+        let identities = IdentityAllocator::new();
+        let (candidate, _, candidate_asset, _) =
+            asset_figure_candidate(&identities);
+        let AcceptanceOutcome::Accepted { mapping, revision } =
+            fresh.accept_candidate(candidate)
+        else {
+            panic!("fresh process asset candidate must be accepted");
+        };
+        let asset = mapping
+            .iter()
+            .find(|entry| entry.candidate == candidate_asset)
+            .expect("fresh process asset identity must map")
+            .accepted;
+        assert_eq!(
+            fresh.asset_bytes(revision, asset),
+            Err(application::AssetBytesError::BytesNotRetained {
+                asset,
+                revision,
+            }),
         );
         println!("{PROCESS_FRESH_EMPTY}");
         return;
@@ -412,6 +435,30 @@ fn run_process_fixture_child(mode: &str) {
     let figure = accepted(candidate_figure);
     let first_asset = accepted(candidate_first_asset);
     let second_asset = accepted(candidate_second_asset);
+    assert_eq!(
+        session.retain_asset_bytes(
+            base,
+            first_asset,
+            PROCESS_FIRST_ASSET_BYTES.to_vec(),
+        ),
+        Ok(application::AssetBytesRetention::Retained {
+            asset: first_asset,
+            byte_count: PROCESS_FIRST_ASSET_BYTES.len(),
+            revision: base,
+        }),
+    );
+    assert_eq!(
+        session.retain_asset_bytes(
+            base,
+            second_asset,
+            PROCESS_SECOND_ASSET_BYTES.to_vec(),
+        ),
+        Ok(application::AssetBytesRetention::Retained {
+            asset: second_asset,
+            byte_count: PROCESS_SECOND_ASSET_BYTES.len(),
+            revision: base,
+        }),
+    );
     let TextEditOutcome::Applied {
         revision: text_revision,
         ..
@@ -476,6 +523,14 @@ fn run_process_fixture_child(mode: &str) {
     };
     assert_eq!(current_figure.id, figure);
     assert_eq!(current_figure.asset, Some(second_asset));
+    assert_eq!(
+        session.asset_bytes(revision, first_asset),
+        Ok(PROCESS_FIRST_ASSET_BYTES),
+    );
+    assert_eq!(
+        session.asset_bytes(revision, second_asset),
+        Ok(PROCESS_SECOND_ASSET_BYTES),
+    );
     if mode == "populated-redo" {
         let HistoryTraversalOutcome::Traversed {
             revision: undone, ..
@@ -562,7 +617,7 @@ fn assert_fresh_process_empty() {
 }
 
 #[test]
-fn process_restart_drops_accepted_revision_and_history() {
+fn process_restart_drops_revision_history_and_raw_asset_bytes() {
     if let Some(mode) = std::env::var_os(PROCESS_FIXTURE_MODE) {
         run_process_fixture_child(&mode.to_string_lossy());
         return;
@@ -2268,6 +2323,105 @@ fn application_routes_atomic_batch_apply_through_owned_semantic_authority() {
     assert_eq!(spans[0].id, span);
     assert_eq!(spans[0].text, "bounded before");
     assert_ne!(undone, applied);
+}
+
+#[test]
+fn raw_asset_bytes_are_write_once_and_follow_session_history_lifetime() {
+    let identities = IdentityAllocator::new();
+    let (candidate, candidate_figure, candidate_first, candidate_second) =
+        asset_figure_candidate(&identities);
+    let mut session = application::SessionApplication::default();
+    let AcceptanceOutcome::Accepted { mapping, revision: base } =
+        session.accept_candidate(candidate)
+    else {
+        panic!("asset-byte candidate must be accepted");
+    };
+    let accepted = |candidate| {
+        mapping
+            .iter()
+            .find(|entry| entry.candidate == candidate)
+            .expect("asset-byte identity must map")
+            .accepted
+    };
+    let figure = accepted(candidate_figure);
+    let first_asset = accepted(candidate_first);
+    let second_asset = accepted(candidate_second);
+    assert_eq!(
+        session.asset_bytes(base, first_asset),
+        Err(application::AssetBytesError::BytesNotRetained {
+            asset: first_asset,
+            revision: base,
+        }),
+    );
+    assert_eq!(
+        session.asset_bytes(base, second_asset),
+        Err(application::AssetBytesError::BytesNotRetained {
+            asset: second_asset,
+            revision: base,
+        }),
+    );
+    assert_eq!(
+        session.asset_bytes(base, figure),
+        Err(application::AssetBytesError::TargetNotAsset {
+            actual: SemanticIdentityKind::Figure,
+            revision: base,
+            target: figure,
+        }),
+    );
+
+    let private_bytes = b"private-original-image-bytes".to_vec();
+    assert_eq!(
+        session.retain_asset_bytes(base, first_asset, private_bytes.clone()),
+        Ok(application::AssetBytesRetention::Retained {
+            asset: first_asset,
+            byte_count: private_bytes.len(),
+            revision: base,
+        }),
+    );
+    assert_eq!(
+        session.asset_bytes(base, first_asset),
+        Ok(private_bytes.as_slice()),
+    );
+    let fresh = application::SessionApplication::default();
+    assert_eq!(
+        fresh.asset_bytes(base, first_asset),
+        Err(application::AssetBytesError::NoAcceptedRevision),
+    );
+    assert_eq!(
+        session.retain_asset_bytes(
+            base,
+            first_asset,
+            b"replacement-must-not-win".to_vec(),
+        ),
+        Ok(application::AssetBytesRetention::AlreadyRetained {
+            asset: first_asset,
+            revision: base,
+        }),
+    );
+    assert_eq!(
+        session.asset_bytes(base, first_asset),
+        Ok(private_bytes.as_slice()),
+    );
+
+    let AcceptanceOutcome::Accepted { revision: replaced, .. } =
+        session.accept_candidate(minimal_candidate(&identities))
+    else {
+        panic!("replacement candidate must be accepted");
+    };
+    assert_eq!(
+        session.asset_bytes(base, first_asset),
+        Err(application::AssetBytesError::StaleBase { current: replaced }),
+    );
+    let HistoryTraversalOutcome::Traversed { revision: restored, .. } =
+        session.traverse_history(replaced, HistoryDirection::Undo)
+    else {
+        panic!("asset-byte candidate replacement must Undo");
+    };
+    assert_eq!(
+        session.asset_bytes(restored, first_asset),
+        Ok(private_bytes.as_slice()),
+    );
+    assert!(!format!("{session:?}").contains("private-original-image-bytes"));
 }
 
 #[test]
