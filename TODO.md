@@ -364,6 +364,14 @@ provenance-material reads at about 94-95 microseconds each before that fast path
 and about 0.05 microseconds each after it. These measurements are implementation
 evidence rather than a latency promise.
 
+Valid root-owned semantic references now check their admitted Asset,
+PageProfile,
+Provenance, or Style collections before requesting generic wrong-kind evidence.
+With a first-block target and 100,000 unrelated sibling blocks, 500 valid
+Provenance-reference simulations measured about 302 milliseconds before this
+shortcut and 0.066 milliseconds after it. This is implementation evidence, not
+a product latency guarantee.
+
 A pinned release probe with the target first measured about 20 microseconds with
 100,000 unrelated top-level blocks versus 1,099 microseconds before traversal
 hardening. A nested first-child probe measured about 19 microseconds with
