@@ -46,6 +46,9 @@ use atrament_physical_page_profile::{
 use atrament_semantic_flow_pagination::{
     RevisionFlowMeasurement, SemanticPaginationError,
 };
+use atrament_semantic_fixed_region_layout::{
+    AcceptedFixedPlacement, FixedRegionLayoutError, FixedRegionLayoutResult,
+};
 use atrament_semantic_notebook::{
     Asset, Block, BlockContent, CandidateIdentity, Constraint, ConstraintKind,
     Figure, Flow, FormulaMode, IdentityAllocator, InlineSpan, List, ListItem,
@@ -725,6 +728,79 @@ fn application_routes_bounded_inspection_through_owned_semantic_authority() {
     assert_eq!(
         session.accepted_revision().map(|current| current.id),
         Some(revision),
+    );
+}
+
+#[test]
+fn application_routes_fixed_overflow_through_owned_revision() {
+    let identities = IdentityAllocator::new();
+    let (candidate, span_candidate) =
+        editable_text_candidate(&identities, "fixed content");
+    let page_candidate = candidate.pages[0].id;
+    let block_candidate = candidate.pages[0].flows[0].blocks[0].id;
+    let mut session = application::SessionApplication::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept_candidate(candidate)
+    else {
+        panic!("fixed-region candidate must be accepted");
+    };
+    let accepted = |candidate| {
+        mapping
+            .iter()
+            .find(|entry| entry.candidate == candidate)
+            .expect("candidate identity must map")
+            .accepted
+    };
+    let page = accepted(page_candidate);
+    let block = accepted(block_candidate);
+    let span = accepted(span_candidate);
+    let placement = AcceptedFixedPlacement {
+        object: block,
+        page,
+        rectangle: Rect {
+            height: Length::from_micrometres(23_000),
+            width: Length::from_micrometres(50_000),
+            x: Length::from_micrometres(35_000),
+            y: Length::from_micrometres(270_000),
+        },
+        revision,
+    };
+
+    let fresh = application::SessionApplication::default();
+    assert_eq!(
+        fresh.validate_fixed_placement(placement),
+        Err(application::SessionFixedRegionLayoutError::NoAcceptedRevision),
+    );
+
+    let before = session
+        .accepted_revision()
+        .expect("accepted revision remains live")
+        .clone();
+    let result = session
+        .validate_fixed_placement(placement)
+        .expect("current fixed placement must validate");
+    let FixedRegionLayoutResult::Overflow { diagnostics, report, .. } = result
+    else {
+        panic!("fixture must overflow accepted writable bottom");
+    };
+    assert_eq!(report.violations.len(), 1);
+    assert_eq!(report.violations[0].amount.micrometres(), 6_000);
+    assert_eq!(diagnostics.diagnostics.len(), 1);
+    assert_eq!(session.accepted_revision(), Some(&before));
+
+    let TextEditOutcome::Applied { revision: current, .. } =
+        session.replace_text(revision, span, String::from("edited fixed"))
+    else {
+        panic!("text edit must advance accepted revision");
+    };
+    assert_eq!(
+        session.validate_fixed_placement(placement),
+        Err(application::SessionFixedRegionLayoutError::Layout(
+            FixedRegionLayoutError::RevisionMismatch {
+                accepted: current,
+                placement: revision,
+            },
+        )),
     );
 }
 

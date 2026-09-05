@@ -510,9 +510,12 @@ amount.
 
 Stale placements, wrong page ownership, missing or invalid profiles, and
 unrepresentable coordinates fail before a diagnostic can be presented as
-current. Page-profile edits invalidate prior derived geometry, while nested
-semantic blocks retain their accepted page ownership. Overflow amounts retain
-the full physical `u64` range without diagnostic truncation.
+current. The live `SessionApplication` owner routes this same read-only
+placement validation against its current accepted revision without admitting
+solver or
+transport authority. Page-profile edits invalidate prior derived geometry, while
+nested semantic blocks retain their accepted page ownership. Overflow amounts
+retain the full physical `u64` range without diagnostic truncation.
 
 A read-only layout-only Export preflight now consumes revision-bound layout
 diagnostics and refuses layout readiness when evidence is blocking or explicitly

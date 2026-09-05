@@ -16,10 +16,10 @@
 //     rules.
 // - Allows:
 //   - Inputs: Existing draft and semantic application-service operations,
-//     revision-bound flow measurements, plus raw bytes already validated by an
-//     ingestion boundary.
-//   - Outputs: Typed outcomes, read-only pagination plans, borrowed accepted
-//     state, and raw asset bytes.
+//     revision-bound flow measurements and derived fixed placements, plus raw
+//     bytes already validated by an ingestion boundary.
+//   - Outputs: Typed outcomes, read-only pagination and fixed-layout results,
+//     borrowed accepted state, and raw asset bytes.
 //   - Side effects: Process-local mutation through owned application services.
 // - Split-When:
 //   - Derived state or bounded media policy requires an independent owner.
@@ -46,6 +46,10 @@ use std::fmt;
 use atrament_semantic_flow_pagination::{
     RevisionFlowMeasurement, SemanticPaginationError, SemanticPaginationPlan,
     paginate_revision,
+};
+use atrament_semantic_fixed_region_layout::{
+    AcceptedFixedPlacement, FixedRegionLayoutError, FixedRegionLayoutResult,
+    validate_fixed_placement,
 };
 use atrament_semantic_notebook::{
     AcceptedIdentity, AcceptedRevision, CandidateIdentity, FormulaMode,
@@ -111,6 +115,15 @@ pub enum AssetBytesError {
         /// Requested identity absent from that revision.
         target: AcceptedIdentity,
     },
+}
+
+/// Typed failure to validate derived fixed geometry through current state.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum SessionFixedRegionLayoutError {
+    /// Accepted placement validation rejected the derived rectangle.
+    Layout(FixedRegionLayoutError),
+    /// Session has no accepted semantic revision for placement binding.
+    NoAcceptedRevision,
 }
 
 /// Typed failure to paginate one measured flow through current session state.
@@ -615,6 +628,30 @@ impl SessionApplication {
             }),
         }
     }
+
+    /// Validate one revision-bound fixed rectangle through current authority.
+    ///
+    /// This read-only operation delegates page ownership and page-profile
+    /// geometry, bounds checks, and overflow diagnostics to the accepted layout
+    /// service.
+    /// It does not solve placement or invent anchors, collision policy, or
+    /// remediation choices.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed failure when no accepted revision exists or when the
+    /// derived placement is stale, mis-owned, invalid, or unrepresentable.
+    pub fn validate_fixed_placement(
+        &self,
+        placement: AcceptedFixedPlacement,
+    ) -> Result<FixedRegionLayoutResult, SessionFixedRegionLayoutError> {
+        let Some(revision) = self.semantic.current() else {
+            return Err(SessionFixedRegionLayoutError::NoAcceptedRevision);
+        };
+        validate_fixed_placement(revision, placement)
+            .map_err(SessionFixedRegionLayoutError::Layout)
+    }
+
 }
 
 impl SessionDraft for SessionApplication {
