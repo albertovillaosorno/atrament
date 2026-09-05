@@ -180,6 +180,96 @@ fn eof_cannot_replace_the_required_header_terminator() {
 }
 
 #[test]
+fn every_nonempty_proper_request_prefix_rejects_at_eof() {
+    fn read_closed(bytes: &[u8]) -> std::io::Result<Vec<u8>> {
+        let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0))
+            .expect("test listener binds");
+        let address = listener.local_addr().expect("test listener address");
+        let bytes = bytes.to_vec();
+        let writer = thread::spawn(move || {
+            let mut client =
+                TcpStream::connect(address).expect("test client connects");
+            client.write_all(&bytes).expect("request prefix writes");
+        });
+        let (mut server, _) = listener.accept().expect("test server accepts");
+        server
+            .set_read_timeout(Some(Duration::from_millis(100)))
+            .expect("test read timeout");
+        let result = runtime::read_request(&mut server);
+        writer.join().expect("test writer joins");
+        result
+    }
+
+    let requests: [&[u8]; 2] = [
+        b"GET /health HTTP/1.1\r\nHost: 127.0.0.1:43123\r\n\r\n",
+        concat!(
+            "POST /api/session/task HTTP/1.1\r\n",
+            "Host: 127.0.0.1:43123\r\n",
+            "Content-Length: 5\r\n\r\nhello",
+        )
+        .as_bytes(),
+    ];
+    for request in requests {
+        for prefix_length in 1..request.len() {
+            let error = read_closed(&request[..prefix_length])
+                .expect_err("proper request prefix must reject at EOF");
+            assert_eq!(
+                error.kind(),
+                std::io::ErrorKind::UnexpectedEof,
+                "unexpected prefix classification at byte {prefix_length}",
+            );
+        }
+        assert_eq!(
+            read_closed(request).expect("complete request reads"),
+            request,
+        );
+    }
+}
+
+#[test]
+fn complete_requests_survive_every_single_write_split() {
+    let requests: [&[u8]; 2] = [
+        b"GET /health HTTP/1.1\r\nHost: 127.0.0.1:43123\r\n\r\n",
+        concat!(
+            "POST /api/session/task HTTP/1.1\r\n",
+            "Host: 127.0.0.1:43123\r\n",
+            "Content-Length: 5\r\n\r\nhello",
+        )
+        .as_bytes(),
+    ];
+    for request in requests {
+        for split in 1..request.len() {
+            let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0))
+                .expect("test listener binds");
+            let address = listener.local_addr().expect("test listener address");
+            let first = request[..split].to_vec();
+            let second = request[split..].to_vec();
+            let writer = thread::spawn(move || {
+                let mut client = TcpStream::connect(address)
+                    .expect("test client connects");
+                client.write_all(&first).expect("first request part writes");
+                thread::yield_now();
+                client
+                    .write_all(&second)
+                    .expect("second request part writes");
+            });
+            let (mut server, _) =
+                listener.accept().expect("test server accepts");
+            server
+                .set_read_timeout(Some(Duration::from_millis(100)))
+                .expect("test read timeout");
+            assert_eq!(
+                runtime::read_request(&mut server)
+                    .expect("split complete request reads"),
+                request,
+                "request failed at split byte {split}",
+            );
+            writer.join().expect("test writer joins");
+        }
+    }
+}
+
+#[test]
 fn valid_crlf_may_arrive_split_across_socket_reads() {
     let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0))
         .expect("test listener binds");
