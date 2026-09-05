@@ -906,6 +906,50 @@ fn malformed_indexed_square_root_is_typed() {
 }
 
 #[test]
+fn deep_indexed_square_roots_are_iterative_and_balanced() {
+    let depth = 4_096usize;
+    let mut source = String::new();
+    for _ in 0..depth {
+        source.push_str(r"\sqrt[{");
+    }
+    source.push('2');
+    for _ in 0..depth {
+        source.push_str(r"}]{x}");
+    }
+    let analyzed = analyze(&source, FormulaMode::Inline)
+        .expect("deep indexed square-root source");
+    assert!(analyzed.is_supported());
+    assert_eq!(reconstructed(&analyzed), source);
+    assert_eq!(
+        analyzed
+            .tokens
+            .iter()
+            .filter(|token| {
+                token.kind
+                    == MathTokenKind::Command(SupportedCommand::SquareRoot)
+            })
+            .count(),
+        depth,
+    );
+    assert_eq!(
+        analyzed
+            .tokens
+            .iter()
+            .filter(|token| token.kind == MathTokenKind::RootIndexOpen)
+            .count(),
+        depth,
+    );
+    assert_eq!(
+        analyzed
+            .tokens
+            .iter()
+            .filter(|token| token.kind == MathTokenKind::RootIndexClose)
+            .count(),
+        depth,
+    );
+}
+
+#[test]
 fn binomial_is_structural_and_requires_two_groups() {
     let source = r"P(X=k) = \binom{n}{k}p^k(1-p)^{n-k}";
     let analyzed = analyze(source, FormulaMode::Display)
