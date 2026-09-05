@@ -22,10 +22,10 @@
 // - Merge-When:
 //   - Full process lifecycle fixtures supersede this application-level proof.
 // - Summary:
-//   - Verifies draft, notebook, history, and raw asset bytes share one owner.
+//   - Verifies session state and derived outputs remain process-local.
 // - Description:
-//   - Proves the live-session application can hold all four state classes and a
-//     fresh application cannot observe them after the prior owner is dropped.
+//   - Proves the live-session application can own draft, notebook, history, raw
+//     asset bytes, and read-only derived layout results before process death.
 // - Usage:
 //   - Compile against the session application and semantic inbound-port crates.
 // - Defaults:
@@ -366,7 +366,7 @@ const PROCESS_FRESH_EMPTY: &str = "atrament-fresh-session-empty";
 const PROCESS_FIRST_ASSET_BYTES: &[u8] = b"process-private-png-bytes";
 const PROCESS_SECOND_ASSET_BYTES: &[u8] = b"process-private-webp-bytes";
 const PROCESS_TEST_NAME: &str =
-    "process_restart_drops_revision_history_and_raw_asset_bytes";
+    "process_restart_drops_session_state_and_derived_outputs";
 
 fn run_process_fixture_child(mode: &str) {
     if mode == "fresh" {
@@ -403,6 +403,9 @@ fn run_process_fixture_child(mode: &str) {
     let identities = IdentityAllocator::new();
     let (mut candidate, candidate_span) =
         editable_text_candidate(&identities, "process-private before");
+    let candidate_page = candidate.pages[0].id;
+    let candidate_flow = candidate.pages[0].flows[0].id;
+    let candidate_text_block = candidate.pages[0].flows[0].blocks[0].id;
     let candidate_figure = identities.allocate_candidate().expect("figure id");
     let candidate_figure_block =
         identities.allocate_candidate().expect("figure block id");
@@ -445,7 +448,11 @@ fn run_process_fixture_child(mode: &str) {
             .accepted
     };
     let span = accepted(candidate_span);
+    let page = accepted(candidate_page);
+    let flow = accepted(candidate_flow);
+    let text_block = accepted(candidate_text_block);
     let figure = accepted(candidate_figure);
+    let figure_block = accepted(candidate_figure_block);
     let first_asset = accepted(candidate_first_asset);
     let second_asset = accepted(candidate_second_asset);
     assert_eq!(
@@ -544,6 +551,64 @@ fn run_process_fixture_child(mode: &str) {
         session.asset_bytes(revision, second_asset),
         Ok(PROCESS_SECOND_ASSET_BYTES),
     );
+
+    let measurement = RevisionFlowMeasurement {
+        flow,
+        revision,
+        units: vec![
+            MeasuredFlowUnit {
+                fragments: vec![MeasuredFragment {
+                    height: Length::from_micrometres(18_000),
+                    owner: text_block,
+                    width: Length::from_micrometres(80_000),
+                }],
+                policy: FlowUnitPolicy::Independent,
+            },
+            MeasuredFlowUnit {
+                fragments: vec![MeasuredFragment {
+                    height: Length::from_micrometres(30_000),
+                    owner: figure_block,
+                    width: Length::from_micrometres(90_000),
+                }],
+                policy: FlowUnitPolicy::Independent,
+            },
+        ],
+    };
+    let pagination_plan = session
+        .paginate_measured_flow(&measurement)
+        .expect("process fixture measured flow must paginate");
+    assert_eq!(pagination_plan.placements.len(), 2);
+    assert!(pagination_plan
+        .placements
+        .iter()
+        .all(|placement| placement.page == page));
+
+    let placement = AcceptedFixedPlacement {
+        object: figure_block,
+        page,
+        rectangle: Rect {
+            height: Length::from_micrometres(23_000),
+            width: Length::from_micrometres(50_000),
+            x: Length::from_micrometres(35_000),
+            y: Length::from_micrometres(270_000),
+        },
+        revision,
+    };
+    let FixedRegionLayoutResult::Overflow { diagnostics, report, .. } = session
+        .validate_fixed_placement(placement)
+        .expect("process fixture fixed placement must validate")
+    else {
+        panic!("process fixture fixed placement must overflow");
+    };
+    assert_eq!(report.violations.len(), 1);
+    assert_eq!(report.violations[0].amount.micrometres(), 6_000);
+    let bound = RevisionLayoutDiagnostics::bind(revision, &diagnostics)
+        .expect("process fixture layout diagnostics must bind");
+    assert!(matches!(
+        session.preflight_layout_for_export(revision, bound),
+        Ok(ExportLayoutPreflightResult::Blocked { .. })
+    ));
+
     if mode == "populated-redo" {
         let HistoryTraversalOutcome::Traversed {
             revision: undone, ..
@@ -630,7 +695,7 @@ fn assert_fresh_process_empty() {
 }
 
 #[test]
-fn process_restart_drops_revision_history_and_raw_asset_bytes() {
+fn process_restart_drops_session_state_and_derived_outputs() {
     if let Some(mode) = std::env::var_os(PROCESS_FIXTURE_MODE) {
         run_process_fixture_child(&mode.to_string_lossy());
         return;

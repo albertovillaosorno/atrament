@@ -42,10 +42,11 @@ is discarded, and newly accepted assets receive distinct identities with no
 retained bytes.
 
 A process fixture now retains bytes for two semantic assets, commits text and
-asset-reference history,
-and proves both orderly and forced termination leave a fresh process with no
-accepted revision, history, or bytes. Browser edits send complete authenticated
-replacements and no browser persistence API is used.
+asset-reference history, and computes current measured pagination, fixed-region
+overflow diagnostics, and layout-only Export preflight. Both orderly and forced
+termination leave a fresh process with no accepted revision, history, or bytes;
+the derived results exist only in the terminated process. Browser edits send
+complete authenticated replacements and no browser persistence API is used.
 
 This evidence establishes raw-byte ownership after a separate ingestion
 boundary; it does not implement media decoding, format validation, clipboard or
