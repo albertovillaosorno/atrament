@@ -395,20 +395,14 @@ fn authorization_bearer(request: &[u8]) -> Option<&str> {
 }
 
 fn fixed_work_secret_match(expected: &str, candidate: &str) -> bool {
-    let valid_length = expected.len() == ENCODED_SECRET_BYTES
-        && candidate.len() == ENCODED_SECRET_BYTES;
-    let mut expected_bytes = [0u8; ENCODED_SECRET_BYTES];
-    let mut candidate_bytes = [0u8; ENCODED_SECRET_BYTES];
-    for (slot, byte) in expected_bytes.iter_mut().zip(expected.bytes()) {
-        *slot = byte;
-    }
-    for (slot, byte) in candidate_bytes.iter_mut().zip(candidate.bytes()) {
-        *slot = byte;
-    }
+    let expected_bytes = expected.as_bytes();
+    let candidate_bytes = candidate.as_bytes();
+    let valid_length = expected_bytes.len() == ENCODED_SECRET_BYTES
+        && candidate_bytes.len() == ENCODED_SECRET_BYTES;
     let mut difference = 0u8;
-    for (expected_byte, candidate_byte) in
-        expected_bytes.iter().zip(candidate_bytes.iter())
-    {
+    for index in 0..ENCODED_SECRET_BYTES {
+        let expected_byte = expected_bytes.get(index).copied().unwrap_or(0);
+        let candidate_byte = candidate_bytes.get(index).copied().unwrap_or(0);
         difference |= expected_byte ^ candidate_byte;
     }
     valid_length && difference == 0

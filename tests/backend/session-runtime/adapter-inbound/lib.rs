@@ -761,6 +761,25 @@ fn session_credential_requires_one_exact_bearer_value() {
 }
 
 #[test]
+fn session_credential_rejects_every_noncanonical_byte_length() {
+    let secret = "a".repeat(64);
+    for length in 0..=128usize {
+        let candidate = "a".repeat(length);
+        let request = format!(
+            "POST /api HTTP/1.1\r\nAuthorization: Bearer {candidate}\r\n\r\n",
+        );
+        assert_eq!(
+            runtime::request_has_session_credential(
+                request.as_bytes(),
+                &secret,
+            ),
+            length == 64,
+            "unexpected credential admission at {length} bytes",
+        );
+    }
+}
+
+#[test]
 fn browser_origin_requires_one_exact_canonical_value() {
     let origin = "http://127.0.0.1:43123";
     let accepted = format!("POST /api HTTP/1.1\r\nOrigin: {origin}\r\n\r\n",);
