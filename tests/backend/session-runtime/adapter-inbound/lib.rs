@@ -190,6 +190,46 @@ fn malformed_or_missing_host_is_rejected_before_routing() {
 }
 
 #[test]
+fn origin_form_ascii_graphics_match_rfc3986_character_classes() {
+    let allowed = |byte: u8| {
+        byte.is_ascii_alphanumeric()
+            || matches!(
+                byte,
+                b'-' | b'.' | b'_' | b'~' | b'!' | b'$' | b'&' | b'\''
+                    | b'(' | b')' | b'*' | b'+' | b',' | b';' | b'='
+                    | b':' | b'@' | b'/' | b'?'
+            )
+    };
+
+    for byte in b'!'..=b'~' {
+        let suffix = char::from(byte);
+        let request = format!(
+            "GET /probe{suffix} HTTP/1.1\r\nHost: {EXPECTED_HOST}\r\n\r\n",
+        );
+        let expected = if allowed(byte) {
+            "HTTP/1.1 404 Not Found"
+        } else {
+            "HTTP/1.1 400 Bad Request"
+        };
+        assert_eq!(
+            status_line(&route_runtime(request.as_bytes(), EXPECTED_HOST)),
+            expected,
+            "unexpected request-target classification for ASCII byte {byte}",
+        );
+    }
+
+    for escape in ["%00", "%2f", "%2F", "%7E", "%ff", "%FF"] {
+        let request = format!(
+            "GET /probe{escape} HTTP/1.1\r\nHost: {EXPECTED_HOST}\r\n\r\n",
+        );
+        assert_eq!(
+            status_line(&route_runtime(request.as_bytes(), EXPECTED_HOST)),
+            "HTTP/1.1 404 Not Found",
+        );
+    }
+}
+
+#[test]
 fn unrelated_paths_do_not_expose_runtime_state() {
     let response = route_runtime(
         b"GET /session HTTP/1.1\r\nHost: 127.0.0.1:43123\r\n\r\n",
