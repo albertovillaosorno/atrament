@@ -84,7 +84,7 @@ use atrament_semantic_notebook_port::{
 use atrament_semantic_notebook_session::SemanticNotebookSessionService;
 
 const CURRENT_COMMAND_BEHAVIOR_VERSION: CommandBehaviorVersion =
-    CommandBehaviorVersion(59);
+    CommandBehaviorVersion(60);
 
 #[derive(Debug)]
 struct CountingCommandIdentity {
@@ -1731,7 +1731,7 @@ fn expanded_tex_vocabulary_is_admitted_and_directly_editable() {
     let ids = IdentityAllocator::new();
     let initial = concat!(
         r"\angle ABC \simeq \triangle DEF \implies P ",
-        r"\pmod{17}",
+        r"\pmod{17} + \Re(z) + i\Im(z) + f^\prime(x)",
     );
     let (candidate, formula) =
         candidate_math_notebook(&ids, initial, FormulaMode::Display);
@@ -7816,7 +7816,7 @@ fn command_capability_snapshot_is_deterministic_and_does_not_overclaim() {
             family: SemanticCommandFamily::Provenance,
         },
         CommandFamilyCapability {
-            behavior_version: CommandBehaviorVersion(47),
+            behavior_version: CommandBehaviorVersion(48),
             family: SemanticCommandFamily::StructuredContent,
         },
         CommandFamilyCapability {
@@ -7884,11 +7884,11 @@ fn command_capability_version_detects_drift_independently_of_revision() {
     );
     assert_eq!(
         session.check_command_capability_compatibility(
-            CommandBehaviorVersion(58),
+            CommandBehaviorVersion(59),
         ),
         CommandCapabilityCompatibilityOutcome::Mismatch {
             current: CURRENT_COMMAND_BEHAVIOR_VERSION,
-            expected: CommandBehaviorVersion(58),
+            expected: CommandBehaviorVersion(59),
         },
     );
     assert_eq!(

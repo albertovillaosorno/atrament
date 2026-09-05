@@ -45,9 +45,10 @@ const NAMED_OPERATOR_COMMANDS: &[&str] = &[
 ];
 
 const NAMED_SYMBOL_COMMANDS: &[&str] = &[
-    "\\Delta", "\\Downarrow", "\\Gamma", "\\Lambda", "\\Leftarrow",
+    "\\Delta", "\\Downarrow", "\\Gamma", "\\Im", "\\Lambda", "\\Leftarrow",
     "\\Leftrightarrow", "\\Longleftarrow", "\\Longleftrightarrow",
-    "\\Longrightarrow", "\\Omega", "\\Phi", "\\Pi", "\\Psi", "\\Rightarrow",
+    "\\Longrightarrow", "\\Omega", "\\Phi", "\\Pi", "\\Psi", "\\Re",
+    "\\Rightarrow",
     "\\Sigma", "\\Theta", "\\Uparrow", "\\Updownarrow", "\\Upsilon", "\\Vert",
     "\\Xi", "\\alpha", "\\angle", "\\approx", "\\ast", "\\because", "\\beta",
     "\\bullet", "\\cap", "\\cdot", "\\cdots", "\\chi", "\\circ", "\\cong",
@@ -63,7 +64,8 @@ const NAMED_SYMBOL_COMMANDS: &[&str] = &[
     "\\mu", "\\nabla", "\\ne", "\\nearrow", "\\neg", "\\neq", "\\nexists",
     "\\ni", "\\notin", "\\nu", "\\nwarrow", "\\omega", "\\oplus", "\\otimes",
     "\\parallel", "\\partial", "\\perp", "\\phi", "\\pi", "\\pm", "\\prec",
-    "\\preceq", "\\propto", "\\psi", "\\rangle", "\\rbrace", "\\rceil",
+    "\\preceq", "\\prime", "\\propto", "\\psi", "\\rangle", "\\rbrace",
+    "\\rceil",
     "\\rfloor", "\\rho", "\\rightarrow", "\\searrow", "\\setminus", "\\sigma",
     "\\sim", "\\simeq", "\\star", "\\subset", "\\subseteq", "\\subsetneq",
     "\\succ", "\\succeq", "\\supset", "\\supseteq", "\\supsetneq", "\\swarrow",

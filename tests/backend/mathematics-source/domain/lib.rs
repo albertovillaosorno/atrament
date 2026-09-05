@@ -355,9 +355,10 @@ fn calculus_commands_compose_with_scripts_without_rewriting() {
 #[test]
 fn named_symbol_vocabulary_is_supported_without_rewriting() {
     for source in [
-        r"\Delta", r"\Downarrow", r"\Gamma", r"\Lambda", r"\Leftarrow",
+        r"\Delta", r"\Downarrow", r"\Gamma", r"\Im", r"\Lambda", r"\Leftarrow",
         r"\Leftrightarrow", r"\Longleftarrow", r"\Longleftrightarrow",
-        r"\Longrightarrow", r"\Omega", r"\Phi", r"\Pi", r"\Psi", r"\Rightarrow",
+        r"\Longrightarrow", r"\Omega", r"\Phi", r"\Pi", r"\Psi", r"\Re",
+        r"\Rightarrow",
         r"\Sigma", r"\Theta", r"\Uparrow", r"\Updownarrow", r"\Upsilon",
         r"\Vert", r"\Xi", r"\alpha", r"\angle", r"\approx", r"\ast",
         r"\because", r"\beta", r"\bullet", r"\cap", r"\cdot", r"\cdots",
@@ -374,7 +375,8 @@ fn named_symbol_vocabulary_is_supported_without_rewriting() {
         r"\ne", r"\nearrow", r"\neg", r"\neq", r"\nexists", r"\ni", r"\notin",
         r"\nu", r"\nwarrow", r"\omega", r"\oplus", r"\otimes", r"\parallel",
         r"\partial", r"\perp", r"\phi", r"\pi", r"\pm", r"\prec", r"\preceq",
-        r"\propto", r"\psi", r"\rangle", r"\rbrace", r"\rceil", r"\rfloor",
+        r"\prime", r"\propto", r"\psi", r"\rangle", r"\rbrace", r"\rceil",
+        r"\rfloor",
         r"\rho", r"\rightarrow", r"\searrow", r"\setminus", r"\sigma", r"\sim",
         r"\simeq", r"\star", r"\subset", r"\subseteq", r"\subsetneq", r"\succ",
         r"\succeq", r"\supset", r"\supseteq", r"\supsetneq", r"\swarrow",
@@ -400,6 +402,26 @@ fn named_symbol_vocabulary_is_supported_without_rewriting() {
             "{source}",
         );
     }
+}
+
+#[test]
+fn complex_and_prime_symbols_compose_without_rewriting() {
+    let source = r"z = \Re(w) + i\Im(w); f^\prime(x)";
+    let analyzed = analyze(source, FormulaMode::Display)
+        .expect("complex and prime symbol expression");
+    assert!(analyzed.is_supported());
+    assert_eq!(reconstructed(&analyzed), source);
+    assert_eq!(
+        analyzed
+            .tokens
+            .iter()
+            .filter(|token| {
+                token.kind
+                    == MathTokenKind::Command(SupportedCommand::NamedSymbol)
+            })
+            .count(),
+        3,
+    );
 }
 
 #[test]
