@@ -90,9 +90,12 @@ While private draft text is live, the runtime holds no writable regular-file
 descriptor and changes no declared repository runtime-root file.
 
 Checked-in browser policy tests guard one-time launch-credential fragment
-consumption, `pagehide` credential invalidation, pending-work invalidation,
-session-text clearing, and bfcache subtree scrubbing. Refresh therefore cannot
-recover the launch credential from the rewritten browser URL or persistence API.
+consumption, credential invalidation on `pagehide`, in-flight handshake and
+draft request cancellation, pending clipboard/draft invalidation, session-text
+clearing, and bfcache subtree scrubbing. Aborted draft requests cannot
+repopulate status text after page-exit invalidation. Refresh therefore cannot
+recover the launch credential
+from the rewritten browser URL or persistence API.
 
 The task remains open until temporary media exist and end-to-end fixtures also
 cover browser close, refresh, cancellation, media cleanup, and explicit-export

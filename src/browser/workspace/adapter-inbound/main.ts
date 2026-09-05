@@ -56,6 +56,7 @@ function consumeSessionSecretFragment(): string | null {
 }
 
 let sessionSecret = consumeSessionSecretFragment();
+const sessionRequests = new AbortController();
 
 function requireElement<T extends Element>(selector: string): T {
     const element = document.querySelector<T>(selector);
@@ -424,6 +425,7 @@ async function completeSessionHandshake(secret: string): Promise<void> {
             mode: "same-origin",
             redirect: "error",
             referrerPolicy: "no-referrer",
+            signal: sessionRequests.signal,
         });
     } catch {
         if (sessionSecret === secret) {
@@ -514,12 +516,16 @@ async function syncDraftField(
                     mode: "same-origin",
                     redirect: "error",
                     referrerPolicy: "no-referrer",
+                    signal: sessionRequests.signal,
                 });
             } catch {
-                setTextIfChanged(
-                    sessionStatus,
-                    "Draft offline · retry edit",
-                );
+                if (
+                    sessionSecret === secret
+                    && draftSyncGeneration === generation
+                ) {
+                    const offlineMessage = "Draft offline · retry edit";
+                    setTextIfChanged(sessionStatus, offlineMessage);
+                }
                 return;
             }
             if (
@@ -561,6 +567,7 @@ async function syncDraftField(
             }
             if (response.status === 401) {
                 sessionSecret = null;
+                sessionRequests.abort();
                 invalidateDraftSync();
                 disableDraftEditing();
                 setTextIfChanged(
@@ -605,6 +612,7 @@ bindDraftSync("candidate", candidateInput);
 
 window.addEventListener("pagehide", (event): void => {
     sessionSecret = null;
+    sessionRequests.abort();
     invalidateClipboardRequests();
     invalidateDraftSync();
     if (activeDividerPointerId !== null) {

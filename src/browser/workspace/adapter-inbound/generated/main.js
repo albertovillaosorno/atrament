@@ -54,6 +54,7 @@ function consumeSessionSecretFragment() {
     return sessionSecret;
 }
 let sessionSecret = consumeSessionSecretFragment();
+const sessionRequests = new AbortController();
 function requireElement(selector) {
     const element = document.querySelector(selector);
     if (element === null) {
@@ -357,6 +358,7 @@ async function completeSessionHandshake(secret) {
             mode: "same-origin",
             redirect: "error",
             referrerPolicy: "no-referrer",
+            signal: sessionRequests.signal,
         });
     }
     catch {
@@ -436,10 +438,15 @@ async function syncDraftField(field, input, secret) {
                     mode: "same-origin",
                     redirect: "error",
                     referrerPolicy: "no-referrer",
+                    signal: sessionRequests.signal,
                 });
             }
             catch {
-                setTextIfChanged(sessionStatus, "Draft offline · retry edit");
+                if (sessionSecret === secret
+                    && draftSyncGeneration === generation) {
+                    const offlineMessage = "Draft offline · retry edit";
+                    setTextIfChanged(sessionStatus, offlineMessage);
+                }
                 return;
             }
             if (sessionSecret !== secret
@@ -470,6 +477,7 @@ async function syncDraftField(field, input, secret) {
             }
             if (response.status === 401) {
                 sessionSecret = null;
+                sessionRequests.abort();
                 invalidateDraftSync();
                 disableDraftEditing();
                 setTextIfChanged(sessionStatus, "Authorization failed");
@@ -501,6 +509,7 @@ bindDraftSync("source", sourceInput);
 bindDraftSync("candidate", candidateInput);
 window.addEventListener("pagehide", (event) => {
     sessionSecret = null;
+    sessionRequests.abort();
     invalidateClipboardRequests();
     invalidateDraftSync();
     if (activeDividerPointerId !== null) {

@@ -71,6 +71,7 @@ test("page exit invalidates credential, work, and session text", async () => {
     const handler = source.slice(start, end);
     for (const required of [
         "sessionSecret = null;",
+        "sessionRequests.abort();",
         "invalidateClipboardRequests();",
         "invalidateDraftSync();",
         "clearSessionText();",
@@ -83,6 +84,43 @@ test("page exit invalidates credential, work, and session text", async () => {
             `pagehide handler must retain ${required}`,
         );
     }
+});
+
+
+test("page session network requests are cancellable on exit", async () => {
+    const source = await readFile(MAIN_MODULE, "utf8");
+    const signalUses = source.match(/signal: sessionRequests\.signal,/gu) ?? [];
+    assert.equal(
+        signalUses.length,
+        2,
+        "handshake and draft requests must share the page-session signal",
+    );
+    const draftStart = source.indexOf("async function syncDraftField(");
+    const draftEnd = source.indexOf("function bindDraftSync(", draftStart);
+    assert.notEqual(draftStart, -1, "draft sync function must exist");
+    assert.notEqual(draftEnd, -1, "draft sync function must be bounded");
+    const draftSync = source.slice(draftStart, draftEnd);
+    const offlineStatus = draftSync.indexOf('"Draft offline · retry edit"');
+    const staleGuard = draftSync.lastIndexOf(
+        "draftSyncGeneration === generation",
+        offlineStatus,
+    );
+    assert.notEqual(offlineStatus, -1, "draft fetch failure status must exist");
+    assert.notEqual(
+        staleGuard,
+        -1,
+        "draft fetch failure must ignore invalidated generations",
+    );
+    const start = source.indexOf(
+        'window.addEventListener("pagehide", (event) => {',
+    );
+    const end = source.indexOf("\n});", start);
+    const handler = source.slice(start, end);
+    assert.ok(
+        handler.indexOf("sessionRequests.abort();")
+            < handler.indexOf("clearSessionText();"),
+        "page exit must abort requests before clearing session text",
+    );
 });
 
 
