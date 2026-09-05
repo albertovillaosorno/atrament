@@ -1010,6 +1010,35 @@ fn deep_indexed_square_roots_are_iterative_and_balanced() {
 }
 
 #[test]
+fn styled_binomials_are_structural_and_require_two_groups() {
+    let source = r"\dbinom{n}{k}+\tbinom{a}{b}";
+    let analyzed = analyze(source, FormulaMode::Inline)
+        .expect("styled binomial coefficients");
+    assert!(analyzed.is_supported());
+    assert_eq!(reconstructed(&analyzed), source);
+    for (spelling, kind) in [
+        (r"\dbinom", SupportedCommand::DisplayBinomial),
+        (r"\tbinom", SupportedCommand::TextBinomial),
+    ] {
+        assert!(analyzed.tokens.iter().any(|token| {
+            token.kind == MathTokenKind::Command(kind)
+                && analyzed.token_source(*token) == Some(spelling)
+        }));
+        for malformed in [spelling.to_owned(), format!("{spelling}{{a}}")]
+        {
+            assert_eq!(
+                analyze(&malformed, FormulaMode::Inline),
+                Err(MathSyntaxError {
+                    byte_offset: malformed.len(),
+                    kind: MathSyntaxErrorKind::MissingRequiredGroup,
+                }),
+                "{malformed}",
+            );
+        }
+    }
+}
+
+#[test]
 fn binomial_is_structural_and_requires_two_groups() {
     let source = r"P(X=k) = \binom{n}{k}p^k(1-p)^{n-k}";
     let analyzed = analyze(source, FormulaMode::Display)

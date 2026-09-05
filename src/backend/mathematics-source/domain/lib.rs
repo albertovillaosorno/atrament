@@ -72,6 +72,7 @@ const STRUCTURED_CONTROL_WORD_COMMANDS: &[(&str, SupportedCommand)] = &[
     ("\\bar", SupportedCommand::Bar),
     ("\\binom", SupportedCommand::Binomial),
     ("\\boxed", SupportedCommand::Boxed),
+    ("\\dbinom", SupportedCommand::DisplayBinomial),
     ("\\ddot", SupportedCommand::DoubleDot),
     ("\\dfrac", SupportedCommand::DisplayFraction),
     ("\\dot", SupportedCommand::Dot),
@@ -94,6 +95,7 @@ const STRUCTURED_CONTROL_WORD_COMMANDS: &[(&str, SupportedCommand)] = &[
     ("\\overset", SupportedCommand::Overset),
     ("\\sqrt", SupportedCommand::SquareRoot),
     ("\\substack", SupportedCommand::Substack),
+    ("\\tbinom", SupportedCommand::TextBinomial),
     ("\\text", SupportedCommand::Text),
     ("\\tfrac", SupportedCommand::TextFraction),
     ("\\tilde", SupportedCommand::Tilde),
@@ -426,6 +428,8 @@ pub enum SupportedCommand {
     Boxed,
     /// One-group calligraphic mathematical alphabet.
     Calligraphic,
+    /// Two-group display-style binomial coefficient command.
+    DisplayBinomial,
     /// Two-group display-style fraction command.
     DisplayFraction,
     /// One-group dot accent.
@@ -492,6 +496,8 @@ pub enum SupportedCommand {
     Substack,
     /// One grouped text fragment preserved exactly inside mathematics.
     Text,
+    /// Two-group text-style binomial coefficient command.
+    TextBinomial,
     /// Two-group text-style fraction command.
     TextFraction,
     /// One-group tilde accent.
@@ -1211,9 +1217,11 @@ fn validate_command_groups(
         | SupportedCommand::SquareRoot
         | SupportedCommand::NamedSymbol => 0usize,
         SupportedCommand::Binomial
+        | SupportedCommand::DisplayBinomial
         | SupportedCommand::DisplayFraction
         | SupportedCommand::Fraction
         | SupportedCommand::Overset
+        | SupportedCommand::TextBinomial
         | SupportedCommand::TextFraction
         | SupportedCommand::Underset => 2usize,
         SupportedCommand::Bar
