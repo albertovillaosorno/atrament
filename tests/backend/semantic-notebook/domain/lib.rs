@@ -172,6 +172,198 @@ fn physical_page_profile() -> PhysicalPageProfile {
     }
 }
 
+
+fn allocate_path_identity(next: &mut u32, targets: &mut Vec<u32>) -> u32 {
+    let identity = *next;
+    *next = next.checked_add(1).expect("small generated identity space");
+    targets.push(identity);
+    identity
+}
+
+fn path_rule_block(next: &mut u32, targets: &mut Vec<u32>) -> Block<u32> {
+    Block {
+        content: BlockContent::Rule,
+        extensions: vec![],
+        id: allocate_path_identity(next, targets),
+        provenance: None,
+        style: None,
+    }
+}
+
+fn generated_path_notebook(seed: &mut u64) -> (Notebook<u32>, Vec<u32>) {
+    let mut next = 1u32;
+    let mut targets = Vec::new();
+    let notebook = allocate_path_identity(&mut next, &mut targets);
+    let profile = allocate_path_identity(&mut next, &mut targets);
+    let page = allocate_path_identity(&mut next, &mut targets);
+    let flow = allocate_path_identity(&mut next, &mut targets);
+    let span = allocate_path_identity(&mut next, &mut targets);
+    let leaf = allocate_path_identity(&mut next, &mut targets);
+    let mut block = Block {
+        content: BlockContent::Paragraph(vec![InlineSpan {
+            id: span,
+            provenance: None,
+            style: None,
+            text: String::from("generated path leaf"),
+        }]),
+        extensions: vec![],
+        id: leaf,
+        provenance: None,
+        style: None,
+    };
+    let depth = (next_grid_seed(seed) % 8).saturating_add(1);
+    for _ in 0..depth {
+        let wrapper = allocate_path_identity(&mut next, &mut targets);
+        let kind = next_grid_seed(seed) % 4;
+        block = match kind {
+            0 | 1 => {
+                let before = path_rule_block(&mut next, &mut targets);
+                let after = path_rule_block(&mut next, &mut targets);
+                let children = match next_grid_seed(seed) % 3 {
+                    0 => vec![block, before, after],
+                    1 => vec![before, block, after],
+                    _ => vec![before, after, block],
+                };
+                Block {
+                    content: if kind == 0 {
+                        BlockContent::Callout(children)
+                    } else {
+                        BlockContent::Freeform(children)
+                    },
+                    extensions: vec![],
+                    id: wrapper,
+                    provenance: None,
+                    style: None,
+                }
+            },
+            2 => {
+                let list = allocate_path_identity(&mut next, &mut targets);
+                let first_item =
+                    allocate_path_identity(&mut next, &mut targets);
+                let second_item =
+                    allocate_path_identity(&mut next, &mut targets);
+                let first_rule = path_rule_block(&mut next, &mut targets);
+                let second_rule = path_rule_block(&mut next, &mut targets);
+                let (first_blocks, second_blocks) =
+                    if next_grid_seed(seed) & 1 == 0 {
+                        (vec![first_rule], vec![second_rule, block])
+                    } else {
+                        (vec![first_rule, block], vec![second_rule])
+                    };
+                Block {
+                    content: BlockContent::List(List {
+                        id: list,
+                        items: vec![
+                            ListItem {
+                                blocks: first_blocks,
+                                id: first_item,
+                            },
+                            ListItem {
+                                blocks: second_blocks,
+                                id: second_item,
+                            },
+                        ],
+                        ordered: next_grid_seed(seed) & 1 == 0,
+                    }),
+                    extensions: vec![],
+                    id: wrapper,
+                    provenance: None,
+                    style: None,
+                }
+            },
+            _ => {
+                let table = allocate_path_identity(&mut next, &mut targets);
+                let first_row = allocate_path_identity(&mut next, &mut targets);
+                let second_row =
+                    allocate_path_identity(&mut next, &mut targets);
+                let first_cell =
+                    allocate_path_identity(&mut next, &mut targets);
+                let second_cell =
+                    allocate_path_identity(&mut next, &mut targets);
+                let first_rule = path_rule_block(&mut next, &mut targets);
+                let second_rule = path_rule_block(&mut next, &mut targets);
+                let (first_blocks, second_blocks) =
+                    if next_grid_seed(seed) & 1 == 0 {
+                        (vec![first_rule], vec![second_rule, block])
+                    } else {
+                        (vec![first_rule, block], vec![second_rule])
+                    };
+                Block {
+                    content: BlockContent::Table(Table {
+                        id: table,
+                        rows: vec![
+                            TableRow {
+                                cells: vec![TableCell {
+                                    blocks: first_blocks,
+                                    id: first_cell,
+                                    span: TableCellSpan::SINGLE,
+                                }],
+                                id: first_row,
+                                role: TableRowRole::Body,
+                            },
+                            TableRow {
+                                cells: vec![TableCell {
+                                    blocks: second_blocks,
+                                    id: second_cell,
+                                    span: TableCellSpan::SINGLE,
+                                }],
+                                id: second_row,
+                                role: TableRowRole::Body,
+                            },
+                        ],
+                    }),
+                    extensions: vec![],
+                    id: wrapper,
+                    provenance: None,
+                    style: None,
+                }
+            },
+        };
+    }
+    (
+        Notebook {
+            assets: vec![],
+            constraints: vec![],
+            extensions: vec![],
+            id: notebook,
+            output_profiles: vec![],
+            page_profiles: vec![PaperProfile {
+                geometry: physical_page_profile(),
+                id: profile,
+            }],
+            pages: vec![Page {
+                flows: vec![Flow {
+                    blocks: vec![block],
+                    id: flow,
+                }],
+                id: page,
+                page_profile: profile,
+            }],
+            provenance: vec![],
+            styles: vec![],
+        },
+        targets,
+    )
+}
+
+fn descriptor_owner_chain(
+    notebook: &Notebook<u32>,
+    target: u32,
+) -> Vec<(u32, SemanticIdentityDescriptor<u32>)> {
+    let mut chain = Vec::new();
+    let mut current = target;
+    loop {
+        let descriptor = semantic_identity_descriptor(notebook, current)
+            .expect("generated target must have descriptor");
+        chain.push((current, descriptor));
+        let Some(owner) = descriptor.owner else {
+            break;
+        };
+        current = owner;
+    }
+    chain
+}
+
 #[test]
 fn accepted_candidate_and_revision_sequences_never_reuse_within_authority() {
     let identities = IdentityAllocator::new();
@@ -481,6 +673,27 @@ fn semantic_identity_path_matches_descriptor_chain_across_nested_families() {
         assert_eq!(root.descriptor.owner, None);
     }
     assert_eq!(semantic_identity_path(&notebook, u32::MAX), None);
+}
+
+#[test]
+fn semantic_identity_path_matches_descriptor_walk_on_generated_trees() {
+    let mut seed = 0x9e37_79b9_7f4a_7c15;
+    for case in 0..5_000u32 {
+        let (notebook, targets) = generated_path_notebook(&mut seed);
+        for target in targets {
+            let path = semantic_identity_path(&notebook, target)
+                .expect("generated target must have semantic path");
+            let actual = path
+                .iter()
+                .map(|entry| (entry.identity, entry.descriptor))
+                .collect::<Vec<_>>();
+            assert_eq!(
+                actual,
+                descriptor_owner_chain(&notebook, target),
+                "generated path mismatch in case {case} target {target}",
+            );
+        }
+    }
 }
 
 #[test]
