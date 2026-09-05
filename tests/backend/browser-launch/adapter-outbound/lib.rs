@@ -93,11 +93,9 @@ fn credential_echoing_stdout_opener_is_silenced_and_killed_at_deadline() {
 #[cfg(unix)]
 #[test]
 fn credential_echoing_stderr_opener_is_silenced_and_typed() {
-    let error = browser_launch::launch_with(
-        OsStr::new("cat"),
-        PRIVATE_LAUNCH_URL,
-    )
-    .expect_err("cat must reject the synthetic URL as a file path");
+    let error =
+        browser_launch::launch_with(OsStr::new("cat"), PRIVATE_LAUNCH_URL)
+            .expect_err("cat must reject the synthetic URL as a file path");
     assert!(matches!(
         error,
         browser_launch::LaunchError::Unsuccessful(_)
