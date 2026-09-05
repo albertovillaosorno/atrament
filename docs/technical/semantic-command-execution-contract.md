@@ -481,8 +481,8 @@ that exact family, kind, owner, and optional base value.
 
 A deterministic capability snapshot now reports those seven discoverable family
 behaviors and one top-level behavior version. Aggregate command behavior and
-typed-result behavior are version 56 after broadening exact-source TeX
-operator and symbol admission.
+typed-result behavior are version 57 after admitting Source-note blocks
+through the existing inline-span edit semantics.
 Asset reference, Ordering and grouping, and Text content retain family behavior
 version 1; Document constraint is version 3;
 Structured content is version 47; Provenance and Style role are version 2.

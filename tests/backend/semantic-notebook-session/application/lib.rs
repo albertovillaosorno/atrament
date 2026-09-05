@@ -84,7 +84,7 @@ use atrament_semantic_notebook_port::{
 use atrament_semantic_notebook_session::SemanticNotebookSessionService;
 
 const CURRENT_COMMAND_BEHAVIOR_VERSION: CommandBehaviorVersion =
-    CommandBehaviorVersion(56);
+    CommandBehaviorVersion(57);
 
 #[derive(Debug)]
 struct CountingCommandIdentity {
@@ -7744,11 +7744,11 @@ fn command_capability_version_detects_drift_independently_of_revision() {
     );
     assert_eq!(
         session.check_command_capability_compatibility(
-            CommandBehaviorVersion(55),
+            CommandBehaviorVersion(56),
         ),
         CommandCapabilityCompatibilityOutcome::Mismatch {
             current: CURRENT_COMMAND_BEHAVIOR_VERSION,
-            expected: CommandBehaviorVersion(55),
+            expected: CommandBehaviorVersion(56),
         },
     );
     assert_eq!(

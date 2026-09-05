@@ -148,13 +148,11 @@ semantic families, separate opaque candidate, accepted, and revision identities,
 non-recycling active-session allocation, unresolved semantic blocks, and exact
 extension-data preservation. Definitions, quotations, and source notes are
 now distinct semantic block kinds whose editable inline spans retain their own
-identities,
-style references, and provenance references rather than being flattened into
-paragraph text. Explicit candidate acceptance validates duplicate, dangling,
-and wrong-kind references before mutation, promotes candidate-local identities
-through one backend-owned mapping, and commits one new accepted revision
-atomically while preserving
-nested semantic references.
+identities, style references, and provenance references rather than being
+flattened into paragraph text. Explicit candidate acceptance validates
+duplicate, dangling, and wrong-kind references before mutation, promotes
+candidate-local identities through one backend-owned mapping, and commits one
+new accepted revision atomically while preserving nested semantic references.
 
 A direct accepted-text edit now preconditions the exact current revision,
 preserves all semantic identities while replacing one admitted inline text
@@ -203,12 +201,12 @@ supports read-only behavior-version drift checks. It deliberately advertises no
 command protocol, normalizer, command context, Validate, Apply, rebatching, or
 numeric command/context limits yet.
 
-Aggregate command behavior and typed-result behavior are version 56 after
-broadening exact-source TeX operator and symbol admission.
+Aggregate command behavior and typed-result behavior are version 57 after
+admitting Source-note blocks through the existing inline-span edit semantics.
 Asset reference, Ordering and grouping, and Text content retain family behavior
 version 1; Provenance and Style role are version 2, Document constraint is
 version 3, and Structured content is version 47. The immediately previous
-aggregate version 55 rejects instead of being reinterpreted.
+aggregate version 56 rejects instead of being reinterpreted.
 
 A version-bound single-target proposal combines capability, exact local
 preconditions, and direct-edit simulation read-only. All five dedicated direct

@@ -107,6 +107,8 @@ pub enum BlockContent<Identity> {
     Quotation(Vec<InlineSpan<Identity>>),
     /// Semantic ruler or divider.
     Rule,
+    /// Source note retained as editable authored spans.
+    SourceNote(Vec<InlineSpan<Identity>>),
     /// Structured semantic table.
     Table(Table<Identity>),
     /// Unsupported or ambiguous semantic content retained without guessing.
@@ -570,6 +572,8 @@ pub enum SemanticBlockKind {
     Quotation,
     /// Semantic rule or divider block.
     Rule,
+    /// Source-note block containing inline text spans.
+    SourceNote,
     /// Structured semantic table block.
     Table,
     /// Unsupported or ambiguous semantic content block.
@@ -763,6 +767,7 @@ const fn semantic_block_kind<Identity>(
         BlockContent::Date(_) => SemanticBlockKind::Date,
         BlockContent::Definition(_) => SemanticBlockKind::Definition,
         BlockContent::Quotation(_) => SemanticBlockKind::Quotation,
+        BlockContent::SourceNote(_) => SemanticBlockKind::SourceNote,
         BlockContent::Figure(_) => SemanticBlockKind::Figure,
         BlockContent::Freeform(_) => SemanticBlockKind::Freeform,
         BlockContent::Heading(_) => SemanticBlockKind::Heading,
@@ -891,6 +896,7 @@ where
         BlockContent::Date(spans)
         | BlockContent::Definition(spans)
         | BlockContent::Quotation(spans)
+        | BlockContent::SourceNote(spans)
         | BlockContent::Heading(spans)
         | BlockContent::Paragraph(spans) => {
             semantic_spans_descriptor(spans, target, block.id)

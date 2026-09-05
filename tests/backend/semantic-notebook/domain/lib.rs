@@ -393,6 +393,57 @@ fn quotation_block_and_span_keep_distinct_semantic_identity() {
 }
 
 #[test]
+fn source_note_block_and_span_keep_distinct_semantic_identity() {
+    let notebook = Notebook {
+        assets: vec![],
+        constraints: vec![],
+        extensions: vec![],
+        id: 21u32,
+        output_profiles: vec![],
+        page_profiles: vec![PaperProfile {
+            geometry: physical_page_profile(),
+            id: 22,
+        }],
+        pages: vec![Page {
+            flows: vec![Flow {
+                blocks: vec![Block {
+                    content: BlockContent::SourceNote(vec![InlineSpan {
+                        id: 26,
+                        provenance: None,
+                        style: None,
+                        text: String::from("Fuente: notas de laboratorio."),
+                    }]),
+                    extensions: vec![],
+                    id: 25,
+                    provenance: None,
+                    style: None,
+                }],
+                id: 24,
+            }],
+            id: 23,
+            page_profile: 22,
+        }],
+        provenance: vec![],
+        styles: vec![],
+    };
+
+    assert_eq!(
+        semantic_identity_descriptor(&notebook, 25),
+        Some(SemanticIdentityDescriptor {
+            kind: SemanticIdentityKind::Block(SemanticBlockKind::SourceNote),
+            owner: Some(24),
+        }),
+    );
+    assert_eq!(
+        semantic_identity_descriptor(&notebook, 26),
+        Some(SemanticIdentityDescriptor {
+            kind: SemanticIdentityKind::InlineSpan,
+            owner: Some(25),
+        }),
+    );
+}
+
+#[test]
 fn logical_table_validator_matches_naive_occupancy_oracle() {
     let mut seed = 0x5eed_1234_9876_abcd;
     for case in 0..20_000u32 {

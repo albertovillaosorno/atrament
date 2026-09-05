@@ -22,8 +22,9 @@ notebooks, pages, flows, blocks, inline spans, media, styles, and provenance.
 Content meaning is separate from its chosen handwriting, page placement, and
 device motion.
 
-Blocks include paragraphs, definitions, quotations, lists, headings, dates,
-mathematics, tables, figures, callouts, rules, and explicit freeform regions.
+Blocks include paragraphs, definitions, quotations, source notes, lists,
+headings, dates, mathematics, tables, figures, callouts, rules, and explicit
+freeform regions.
 Unsupported or ambiguous input remains a typed unresolved block rather than
 being discarded or guessed into a supported form.
 
@@ -52,10 +53,12 @@ preserving explicitly admitted extension data.
 
 ### Implementation evidence
 
-Definition and quotation blocks are now executable semantic values with their
-own block kinds. Their inline spans participate in the existing candidate
+Definition, quotation, and source-note blocks are now executable semantic
+values with their own block kinds. Their inline spans participate in the
+existing candidate
 identity graph, accepted-identity promotion, exact Text-content editing,
 Style-role and Provenance material, identity inspection, and semantic Undo/Redo
-without being reclassified as paragraphs. Layout-specific definition or
-quotation presentation remains a later measurement/style concern rather than
-semantic storage behavior.
+without being reclassified as paragraphs. Layout-specific definition,
+quotation, or source-note presentation remains a later measurement/style
+concern rather than semantic storage behavior. Source notes do not establish
+citation-to-claim linkage or bibliographic authority.

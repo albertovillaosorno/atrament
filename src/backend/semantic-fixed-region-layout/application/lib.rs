@@ -213,6 +213,7 @@ fn block_content_contains(
         BlockContent::Date(_)
         | BlockContent::Definition(_)
         | BlockContent::Quotation(_)
+        | BlockContent::SourceNote(_)
         | BlockContent::Figure(_)
         | BlockContent::Heading(_)
         | BlockContent::Mathematics(_)
