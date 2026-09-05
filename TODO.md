@@ -394,9 +394,13 @@ rounded joins, layer order, and profile-specific appearance.
 
 Current executable evidence compiles blank, ruled, dotted, and squared paper
 into compact exact physical anchor series without allocating one object per
-mark. Squared grids keep identical nominal spacing on both axes. Accepted page
-profiles own the maximum ruler-error envelope, rounded or sharp join treatment,
-and mark layer.
+mark. Squared grids keep identical nominal spacing on both axes. One 20,000-
+case deterministic oracle verifies repeated-mark counts, first and last anchors,
+and full rule spans across dotted, ruled, and squared regions. A second 20,000-
+case oracle verifies signed ruler-sample span and error-bound classification.
+
+Accepted page profiles own the maximum ruler-error envelope, rounded or sharp
+join treatment, and mark layer.
 
 Validated ruler samples cannot move nominal anchors. Overflow, zero spacing,
 invalid rounded joins, and unspecified custom geometry fail with typed results.

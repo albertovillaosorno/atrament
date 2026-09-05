@@ -33,8 +33,8 @@
 //   - Region origin is the first nominal mark anchor in each active axis.
 //
 use atrament_paper_mark_geometry::{
-    GeometryError, PaperMarkGeometry, ProfilePaperMarksError, RulerOffset,
-    RulerSample, RulerSampleError, compile_nominal_marks,
+    AxisSeries, GeometryError, PaperMarkGeometry, ProfilePaperMarksError,
+    RulerOffset, RulerSample, RulerSampleError, compile_nominal_marks,
     compile_profile_marks, validate_ruler_sample,
 };
 use atrament_physical_page_profile::{
@@ -87,6 +87,162 @@ fn rounded_appearance(maximum_error: Length) -> PaperMarkAppearance {
             radius: Length::from_micrometres(250),
         },
         maximum_ruler_error: maximum_error,
+    }
+}
+
+fn next_mark_value(seed: &mut u64) -> u64 {
+    *seed = seed
+        .wrapping_mul(6_364_136_223_846_793_005)
+        .wrapping_add(1_442_695_040_888_963_407);
+    *seed >> 32
+}
+
+fn assert_axis_series(
+    series: AxisSeries,
+    first: u64,
+    extent: u64,
+    spacing: u64,
+    case: usize,
+) {
+    let expected_count = extent / spacing + 1;
+    let expected_last = first + spacing * (expected_count - 1);
+    assert_eq!(series.first, Length::from_micrometres(first), "case {case}");
+    assert_eq!(
+        series.spacing,
+        Length::from_micrometres(spacing),
+        "case {case}",
+    );
+    assert_eq!(series.count, expected_count, "case {case}");
+    assert_eq!(
+        series.coordinate(0),
+        Some(Length::from_micrometres(first)),
+        "case {case}",
+    );
+    assert_eq!(
+        series.coordinate(expected_count - 1),
+        Some(Length::from_micrometres(expected_last)),
+        "case {case}",
+    );
+    assert_eq!(series.coordinate(expected_count), None, "case {case}");
+}
+
+#[test]
+fn repeated_marks_match_compact_series_reference_oracle() {
+    const CASES: usize = 20_000;
+    let mut seed = 0x5eed_6a1d_2026_u64;
+    for case in 0..CASES {
+        let x = next_mark_value(&mut seed) % 1_000;
+        let y = next_mark_value(&mut seed) % 1_000;
+        let width = next_mark_value(&mut seed) % 1_000 + 1;
+        let height = next_mark_value(&mut seed) % 1_000 + 1;
+        let spacing = next_mark_value(&mut seed) % 200 + 1;
+        let region = Rect {
+            height: Length::from_micrometres(height),
+            width: Length::from_micrometres(width),
+            x: Length::from_micrometres(x),
+            y: Length::from_micrometres(y),
+        };
+        let spacing_length = Length::from_micrometres(spacing);
+        match next_mark_value(&mut seed) % 3 {
+            0 => {
+                let PaperMarkGeometry::Dotted { horizontal, vertical } =
+                    compile_nominal_marks(
+                        region,
+                        PaperPattern::Dotted {
+                            spacing: spacing_length,
+                        },
+                    )
+                    .expect("generated dotted geometry")
+                else {
+                    panic!("generated dotted case must remain dotted");
+                };
+                assert_axis_series(horizontal, y, height, spacing, case);
+                assert_axis_series(vertical, x, width, spacing, case);
+            },
+            1 => {
+                let PaperMarkGeometry::Ruled { horizontal, span } =
+                    compile_nominal_marks(
+                        region,
+                        PaperPattern::Ruled {
+                            spacing: spacing_length,
+                        },
+                    )
+                    .expect("generated ruled geometry")
+                else {
+                    panic!("generated ruled case must remain ruled");
+                };
+                assert_axis_series(horizontal, y, height, spacing, case);
+                assert_eq!(span.start, Length::from_micrometres(x));
+                assert_eq!(span.end, Length::from_micrometres(x + width));
+            },
+            _ => {
+                let PaperMarkGeometry::Squared {
+                    horizontal,
+                    horizontal_span,
+                    vertical,
+                    vertical_span,
+                } = compile_nominal_marks(
+                    region,
+                    PaperPattern::Squared {
+                        spacing: spacing_length,
+                    },
+                )
+                .expect("generated squared geometry")
+                else {
+                    panic!("generated squared case must remain squared");
+                };
+                assert_axis_series(horizontal, y, height, spacing, case);
+                assert_axis_series(vertical, x, width, spacing, case);
+                assert_eq!(horizontal_span.start, Length::from_micrometres(x));
+                assert_eq!(
+                    horizontal_span.end,
+                    Length::from_micrometres(x + width),
+                );
+                assert_eq!(vertical_span.start, Length::from_micrometres(y));
+                assert_eq!(
+                    vertical_span.end,
+                    Length::from_micrometres(y + height),
+                );
+            },
+        }
+    }
+}
+
+#[test]
+fn ruler_samples_match_bounded_reference_oracle() {
+    const CASES: usize = 20_000;
+    let mut seed = 0x5eed_7a1e_2026_u64;
+    for case in 0..CASES {
+        let maximum = next_mark_value(&mut seed) % 501;
+        let line_length = next_mark_value(&mut seed) % 1_001;
+        let along = next_mark_value(&mut seed) % 1_201;
+        let signed = i64::try_from(next_mark_value(&mut seed) % 1_401)
+            .expect("small generated offset")
+            - 700;
+        let sample = RulerSample {
+            along: Length::from_micrometres(along),
+            normal_offset: RulerOffset::from_micrometres(signed),
+        };
+        let appearance = PaperMarkAppearance {
+            join: PaperMarkJoin::Sharp,
+            maximum_ruler_error: Length::from_micrometres(maximum),
+        };
+        let expected = if along > line_length {
+            Err(RulerSampleError::OutsideSpan)
+        } else if signed.unsigned_abs() > maximum {
+            Err(RulerSampleError::ErrorBoundExceeded)
+        } else {
+            Ok(sample)
+        };
+        assert_eq!(
+            validate_ruler_sample(
+                sample,
+                Length::from_micrometres(line_length),
+                appearance,
+            ),
+            expected,
+            "ruler oracle mismatch in generated case {case}",
+        );
     }
 }
 
