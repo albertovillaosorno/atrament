@@ -569,9 +569,12 @@ placement validation against its current accepted revision without admitting
 solver or transport authority. Live page-profile edits now have integration
 evidence that prior placements become stale while a fresh placement uses the new
 writable geometry; fresh Undo/Redo placements follow restored profile content
-under new revision identities. Nested semantic blocks retain their accepted page
-ownership, and overflow amounts retain the full physical `u64` range without
-diagnostic truncation.
+under new revision identities. Edited overflow diagnostics block layout-only
+Export for that revision, then remain stale after Undo/Redo; fresh Redo overflow
+evidence must bind to the new revision before it can block Export again.
+
+Nested semantic blocks retain their accepted page ownership, and overflow
+amounts retain the full physical `u64` range without diagnostic truncation.
 
 Fixed block/page ownership now reuses the semantic model's iterative structural
 lookup instead of maintaining a recursive fixed-layout traversal. Fixtures keep
