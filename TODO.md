@@ -1469,9 +1469,11 @@ conflict, routing, and malformed-request response classes.
 
 A real Firefox BiDi fixture now launches Atrament plus a hostile second loopback
 origin. Direct top-level loading commits the workspace document, while framing
-the same Atrament URL from that hostile origin commits Firefox's error document
-instead. This proves browser enforcement of `frame-ancestors 'none'`, not only
-header emission.
+the same Atrament URL from that hostile origin commits Firefox's blocked
+document instead. A permissive third loopback origin frames successfully from
+the same attacker page, isolating Atrament's response policy rather than generic
+cross-origin framing behavior. This proves browser enforcement of
+`frame-ancestors 'none'`, not only header emission.
 
 These browser constraints do not replace backend socket, token, host, path,
 cleanup, framing, or hostile-origin acceptance tests.
