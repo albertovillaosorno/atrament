@@ -69,20 +69,25 @@ const NAMED_SYMBOL_COMMANDS: &[&str] = &[
 ];
 
 const STRUCTURED_CONTROL_WORD_COMMANDS: &[(&str, SupportedCommand)] = &[
+    ("\\acute", SupportedCommand::Acute),
     ("\\bar", SupportedCommand::Bar),
     ("\\binom", SupportedCommand::Binomial),
     ("\\boxed", SupportedCommand::Boxed),
+    ("\\breve", SupportedCommand::Breve),
+    ("\\check", SupportedCommand::Check),
     ("\\dbinom", SupportedCommand::DisplayBinomial),
     ("\\ddot", SupportedCommand::DoubleDot),
     ("\\dfrac", SupportedCommand::DisplayFraction),
     ("\\dot", SupportedCommand::Dot),
     ("\\frac", SupportedCommand::Fraction),
+    ("\\grave", SupportedCommand::Grave),
     ("\\hat", SupportedCommand::Hat),
     ("\\mathbb", SupportedCommand::BlackboardBold),
     ("\\mathbf", SupportedCommand::Bold),
     ("\\mathcal", SupportedCommand::Calligraphic),
     ("\\mathfrak", SupportedCommand::Fraktur),
     ("\\mathit", SupportedCommand::Italic),
+    ("\\mathring", SupportedCommand::MathRing),
     ("\\mathrm", SupportedCommand::Roman),
     ("\\mathsf", SupportedCommand::SansSerif),
     ("\\mathtt", SupportedCommand::Typewriter),
@@ -395,6 +400,8 @@ enum ScannedCommandKind {
 /// One supported TeX-compatible control sequence or environment marker.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum SupportedCommand {
+    /// One-group acute accent.
+    Acute,
     /// One-group bar accent.
     Bar,
     /// Start of an explicit aligned environment.
@@ -427,8 +434,12 @@ pub enum SupportedCommand {
     Bold,
     /// One-group boxed mathematical expression.
     Boxed,
+    /// One-group breve accent.
+    Breve,
     /// One-group calligraphic mathematical alphabet.
     Calligraphic,
+    /// One-group check accent.
+    Check,
     /// Two-group display-style binomial coefficient command.
     DisplayBinomial,
     /// Two-group display-style fraction command.
@@ -465,10 +476,14 @@ pub enum SupportedCommand {
     Fraction,
     /// One-group Fraktur mathematical alphabet.
     Fraktur,
+    /// One-group grave accent.
+    Grave,
     /// One-group hat accent.
     Hat,
     /// One-group italic mathematical alphabet.
     Italic,
+    /// One-group mathematical ring accent.
+    MathRing,
     /// Admitted no-argument named mathematical operator.
     NamedOperator,
     /// Admitted no-argument named mathematical symbol.
@@ -1228,16 +1243,21 @@ fn validate_command_groups(
         | SupportedCommand::TextBinomial
         | SupportedCommand::TextFraction
         | SupportedCommand::Underset => 2usize,
-        SupportedCommand::Bar
+        SupportedCommand::Acute
+        | SupportedCommand::Bar
         | SupportedCommand::BlackboardBold
         | SupportedCommand::Bold
         | SupportedCommand::Boxed
+        | SupportedCommand::Breve
         | SupportedCommand::Calligraphic
+        | SupportedCommand::Check
         | SupportedCommand::Dot
         | SupportedCommand::DoubleDot
         | SupportedCommand::Fraktur
+        | SupportedCommand::Grave
         | SupportedCommand::Hat
         | SupportedCommand::Italic
+        | SupportedCommand::MathRing
         | SupportedCommand::OperatorName
         | SupportedCommand::Overbrace
         | SupportedCommand::OverLeftArrow

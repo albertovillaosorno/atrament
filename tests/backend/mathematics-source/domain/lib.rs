@@ -623,6 +623,38 @@ fn common_accents_are_structural_and_require_one_group() {
 }
 
 #[test]
+fn extended_accents_are_structural_and_require_one_group() {
+    let source = concat!(
+        r"\acute{x}+\breve{y}+\check{z}+",
+        r"\grave{a}+\mathring{b}",
+    );
+    let analyzed = analyze(source, FormulaMode::Inline)
+        .expect("extended grouped accents");
+    assert!(analyzed.is_supported());
+    assert_eq!(reconstructed(&analyzed), source);
+    for (spelling, kind) in [
+        (r"\acute", SupportedCommand::Acute),
+        (r"\breve", SupportedCommand::Breve),
+        (r"\check", SupportedCommand::Check),
+        (r"\grave", SupportedCommand::Grave),
+        (r"\mathring", SupportedCommand::MathRing),
+    ] {
+        assert!(analyzed.tokens.iter().any(|token| {
+            token.kind == MathTokenKind::Command(kind)
+                && analyzed.token_source(*token) == Some(spelling)
+        }));
+        assert_eq!(
+            analyze(spelling, FormulaMode::Inline),
+            Err(MathSyntaxError {
+                byte_offset: spelling.len(),
+                kind: MathSyntaxErrorKind::MissingRequiredGroup,
+            }),
+            "{spelling}",
+        );
+    }
+}
+
+#[test]
 fn wide_accents_are_structural_and_require_one_group() {
     let source = r"\widehat{ABC}+\widetilde{xyz}";
     let analyzed = analyze(source, FormulaMode::Inline)
