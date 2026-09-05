@@ -1343,6 +1343,166 @@ fn page_profile_edits_recompute_live_pagination_geometry() {
 }
 
 #[test]
+fn page_profile_reference_edits_recompute_live_derived_geometry() {
+    let identities = IdentityAllocator::new();
+    let (
+        mut candidate,
+        notebook_candidate,
+        page_candidate,
+        first_candidate,
+        second_candidate,
+    ) = page_profile_reference_candidate(&identities);
+    candidate.page_profiles[1].geometry.printable_region.width =
+        Length::from_micrometres(100_000);
+    let flow_candidate = candidate.pages[0].flows[0].id;
+    let block_candidate = candidate.pages[0].flows[0].blocks[0].id;
+    let mut session = application::SessionApplication::default();
+    let AcceptanceOutcome::Accepted { mapping, revision: base } =
+        session.accept_candidate(candidate)
+    else {
+        panic!("profile-reference geometry candidate must be accepted");
+    };
+    let accepted = |candidate| {
+        mapping
+            .iter()
+            .find(|entry| entry.candidate == candidate)
+            .expect("profile-reference geometry identity must map")
+            .accepted
+    };
+    let notebook = accepted(notebook_candidate);
+    let page = accepted(page_candidate);
+    let first = accepted(first_candidate);
+    let second = accepted(second_candidate);
+    let flow = accepted(flow_candidate);
+    let block = accepted(block_candidate);
+    let measurement = |revision| RevisionFlowMeasurement {
+        flow,
+        revision,
+        units: vec![MeasuredFlowUnit {
+            fragments: vec![MeasuredFragment {
+                height: Length::from_micrometres(20_000),
+                owner: block,
+                width: Length::from_micrometres(100_000),
+            }],
+            policy: FlowUnitPolicy::Independent,
+        }],
+    };
+    let rectangle = Rect {
+        height: Length::from_micrometres(10_000),
+        width: Length::from_micrometres(10_000),
+        x: Length::from_micrometres(105_000),
+        y: Length::from_micrometres(50_000),
+    };
+    let placement = |revision| AcceptedFixedPlacement {
+        object: block,
+        page,
+        rectangle,
+        revision,
+    };
+
+    assert!(session.paginate_measured_flow(&measurement(base)).is_ok());
+    assert_eq!(
+        session.validate_fixed_placement(placement(base)),
+        Ok(FixedRegionLayoutResult::WithinBounds { object: block, page }),
+    );
+
+    let snapshot = session.command_capability_snapshot();
+    let batch = DirectEditBatchProposal {
+        base,
+        capability_version: snapshot.behavior_version,
+        commands: vec![DirectEditBatchCommand {
+            dependencies: vec![],
+            id: 1_u32,
+            preconditions: CommandTargetPreconditions {
+                expected_value: Some(
+                    EditableSemanticValue::PageProfileReference(first),
+                ),
+                identity: IdentityPrecondition {
+                    expected_kind: Some(SemanticIdentityKind::Page),
+                    expected_owner: IdentityOwnerExpectation::Direct(notebook),
+                },
+                requested_family: SemanticCommandFamily::DocumentConstraint,
+            },
+            requested: EditableSemanticValue::PageProfileReference(second),
+            target: page,
+        }],
+    };
+    let DirectEditBatchApplyOutcome::Applied { revision: edited, .. } =
+        session.apply_direct_edit_batch(batch)
+    else {
+        panic!("page profile reference retarget must apply");
+    };
+
+    assert_eq!(
+        session.paginate_measured_flow(&measurement(base)),
+        Err(application::SessionPaginationError::Pagination(
+            SemanticPaginationError::MeasurementRevisionMismatch {
+                accepted: edited,
+                measured: base,
+            },
+        )),
+    );
+    assert_eq!(
+        session.validate_fixed_placement(placement(base)),
+        Err(application::SessionFixedRegionLayoutError::Layout(
+            FixedRegionLayoutError::RevisionMismatch {
+                accepted: edited,
+                placement: base,
+            },
+        )),
+    );
+    assert_eq!(
+        session.paginate_measured_flow(&measurement(edited)),
+        Err(application::SessionPaginationError::Pagination(
+            SemanticPaginationError::Pagination(
+                PaginationError::FragmentDoesNotFitAnyPage { owner: block },
+            ),
+        )),
+    );
+    let FixedRegionLayoutResult::Overflow { report, .. } = session
+        .validate_fixed_placement(placement(edited))
+        .expect("retargeted placement must use second profile")
+    else {
+        panic!("retargeted narrow profile must overflow right edge");
+    };
+    assert_eq!(report.violations.len(), 1);
+    assert_eq!(report.violations[0].amount.micrometres(), 5_000);
+
+    let HistoryTraversalOutcome::Traversed { revision: undone, .. } =
+        session.traverse_history(edited, HistoryDirection::Undo)
+    else {
+        panic!("profile-reference edit must Undo");
+    };
+    assert!(session.paginate_measured_flow(&measurement(undone)).is_ok());
+    assert_eq!(
+        session.validate_fixed_placement(placement(undone)),
+        Ok(FixedRegionLayoutResult::WithinBounds { object: block, page }),
+    );
+
+    let HistoryTraversalOutcome::Traversed { revision: redone, .. } =
+        session.traverse_history(undone, HistoryDirection::Redo)
+    else {
+        panic!("profile-reference edit must Redo");
+    };
+    assert_eq!(
+        session.paginate_measured_flow(&measurement(redone)),
+        Err(application::SessionPaginationError::Pagination(
+            SemanticPaginationError::Pagination(
+                PaginationError::FragmentDoesNotFitAnyPage { owner: block },
+            ),
+        )),
+    );
+    let FixedRegionLayoutResult::Overflow { report, .. } = session
+        .validate_fixed_placement(placement(redone))
+        .expect("Redo placement must use second profile")
+    else {
+        panic!("Redone narrow profile must overflow right edge");
+    };
+    assert_eq!(report.violations.len(), 1);
+    assert_eq!(report.violations[0].amount.micrometres(), 5_000);
+}
+
+#[test]
 fn application_routes_list_ordering_through_owned_authority() {
     let identities = IdentityAllocator::new();
     let (candidate, candidate_block, candidate_flow, candidate_list) =
