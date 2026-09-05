@@ -301,6 +301,65 @@ fn serves_embedded_frontend_resources_without_caching() {
     }
 }
 
+fn assert_security_headers(response: &[u8]) {
+    let (head, _body) = response_parts(response);
+    assert!(head.contains("Cache-Control: no-store\r\n"));
+    assert!(head.contains(
+        "Content-Security-Policy: frame-ancestors 'none'\r\n",
+    ));
+    assert!(head.contains("Referrer-Policy: no-referrer\r\n"));
+    assert!(head.contains("X-Content-Type-Options: nosniff\r\n"));
+    assert!(head.contains("Connection: close\r\n"));
+}
+
+#[test]
+fn security_headers_cover_success_error_and_empty_responses() {
+    let authorization = format!("Bearer {EXPECTED_SECRET}");
+    let mut draft = SessionDraftService::default();
+    let draft_request = draft_replace_request(
+        "/api/session/task",
+        Some(&authorization),
+        Some(EXPECTED_ORIGIN),
+        b"header coverage",
+    );
+    let responses = [
+        route_runtime(
+            b"GET /health HTTP/1.1\r\nHost: 127.0.0.1:43123\r\n\r\n",
+            EXPECTED_HOST,
+        ),
+        route_runtime(
+            b"GET /missing HTTP/1.1\r\nHost: 127.0.0.1:43123\r\n\r\n",
+            EXPECTED_HOST,
+        ),
+        route_runtime(
+            b"GET /health HTTP/1.0\r\nHost: 127.0.0.1:43123\r\n\r\n",
+            EXPECTED_HOST,
+        ),
+        route_runtime(
+            b"GET /health HTTP/1.1\r\nHost: localhost:43123\r\n\r\n",
+            EXPECTED_HOST,
+        ),
+        handshake_request(None, Some(EXPECTED_ORIGIN), PROMPT_VERSION),
+        handshake_request(
+            Some(&authorization),
+            Some(EXPECTED_ORIGIN),
+            "atrament.prompt/0",
+        ),
+        route_with_draft(&draft_request, EXPECTED_HOST, &mut draft),
+    ];
+    let expected_statuses = [200, 404, 400, 421, 401, 409, 204];
+    for (response, expected_status) in
+        responses.iter().zip(expected_statuses)
+    {
+        let status = status_line(response);
+        assert!(
+            status.contains(&expected_status.to_string()),
+            "unexpected status line {status}",
+        );
+        assert_security_headers(response);
+    }
+}
+
 #[test]
 fn compiled_frontend_module_is_referenced_by_the_served_document() {
     let response = request("/", "127.0.0.1:43123");

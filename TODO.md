@@ -1329,8 +1329,10 @@ The localhost runtime now emits response-level
 `Referrer-Policy: no-referrer` on every response. The former cannot be enforced
 from the document-level meta CSP, while the latter reinforces the shell's own
 no-referrer declaration. Backend fixtures pin both headers on every served
-workspace resource. A real hostile second-loopback-origin browser fixture still
-needs to prove frame enforcement rather than only header emission.
+workspace resource and across representative success, empty, authentication,
+conflict, routing, and malformed-request response classes. A real hostile
+second-loopback-origin browser fixture still needs to prove frame enforcement
+rather than only header emission.
 
 These browser constraints do not replace backend socket, token, host, path,
 cleanup, framing, or hostile-origin acceptance tests.
