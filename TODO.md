@@ -1300,7 +1300,10 @@ Current loopback-runtime evidence requires the exact canonical Host, browser
 Origin, and Bearer credential before protected draft mutation. The request line
 requires exactly one ASCII space between method, target, and HTTP/1.1; tabs,
 repeated spaces, trailing whitespace, and other versions reject before routing.
-Request targets must use RFC 3986 origin-form path/query characters beginning
+
+Malformed bare-LF or bare-CR header line endings reject while the peer remains
+connected instead of occupying the listener until the request timeout. Request
+targets must use RFC 3986 origin-form path/query characters beginning
 with `/`; absolute proxy form, `*`, fragments, controls, raw Unicode, and URI-
 invalid visible punctuation reject before routing. Any `%` escape must carry
 exactly two ASCII hexadecimal digits before routing.

@@ -255,7 +255,30 @@ fn parse_content_length_value(value: &str) -> io::Result<usize> {
     Ok(length)
 }
 
-fn read_request(stream: &mut TcpStream) -> io::Result<Vec<u8>> {
+fn request_head_line_endings_are_valid_so_far(bytes: &[u8]) -> bool {
+    let mut index = 0usize;
+    while let Some(byte) = bytes.get(index).copied() {
+        match byte {
+            b'\r' => {
+                let Some(next) = bytes
+                    .get(index.saturating_add(1))
+                    .copied()
+                else {
+                    return true;
+                };
+                if next != b'\n' {
+                    return false;
+                }
+                index = index.saturating_add(2);
+            },
+            b'\n' => return false,
+            _ => index = index.saturating_add(1),
+        }
+    }
+    true
+}
+
+pub(crate) fn read_request(stream: &mut TcpStream) -> io::Result<Vec<u8>> {
     let mut bytes = Vec::with_capacity(1024);
     let mut chunk = [0u8; 1024];
     let mut expected_total = None;
@@ -291,6 +314,12 @@ fn read_request(stream: &mut TcpStream) -> io::Result<Vec<u8>> {
                         "request header boundary is invalid",
                     ));
                 };
+                if !request_head_line_endings_are_valid_so_far(request_head) {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        "request headers require CRLF line endings",
+                    ));
+                }
                 let content_length = declared_content_length(request_head)?;
                 expected_total = Some(
                     head_end.checked_add(content_length).ok_or_else(|| {
@@ -300,11 +329,19 @@ fn read_request(stream: &mut TcpStream) -> io::Result<Vec<u8>> {
                         )
                     })?,
                 );
-            } else if bytes.len() > MAX_HEADER_BYTES {
-                return Err(io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    "request headers exceed runtime limit",
-                ));
+            } else {
+                if !request_head_line_endings_are_valid_so_far(&bytes) {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        "request headers require CRLF line endings",
+                    ));
+                }
+                if bytes.len() > MAX_HEADER_BYTES {
+                    return Err(io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        "request headers exceed runtime limit",
+                    ));
+                }
             }
         }
         if let Some(total) = expected_total {

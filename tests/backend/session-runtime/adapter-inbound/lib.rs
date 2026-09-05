@@ -29,7 +29,9 @@
 // - Defaults:
 //   - Uses ephemeral loopback ports and deterministic request fixtures.
 //
-use std::net::{Ipv4Addr, SocketAddr};
+use std::io::Write;
+use std::net::{Ipv4Addr, SocketAddr, TcpListener, TcpStream};
+use std::time::Duration;
 
 use atrament_diagnostic::{Completeness, DIAGNOSTIC_VERSION, DiagnosticSet};
 use atrament_session_draft::{MAX_DRAFT_FIELD_BYTES, SessionDraftService};
@@ -123,6 +125,33 @@ fn health_requires_the_exact_canonical_host() {
             "HTTP/1.1 421 Misdirected Request",
         );
     }
+}
+
+#[test]
+fn malformed_header_line_endings_reject_without_waiting_for_eof() {
+    fn read_error(request: &[u8]) -> std::io::Error {
+        let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0))
+            .expect("test listener binds");
+        let address = listener.local_addr().expect("test listener address");
+        let mut client =
+            TcpStream::connect(address).expect("test client connects");
+        let (mut server, _) = listener.accept().expect("test server accepts");
+        server
+            .set_read_timeout(Some(Duration::from_millis(100)))
+            .expect("test read timeout");
+        client.write_all(request).expect("test request writes");
+        runtime::read_request(&mut server).expect_err("malformed head rejects")
+    }
+
+    let bare_lf = read_error(
+        b"GET /health HTTP/1.1\nHost: 127.0.0.1:43123\n\n",
+    );
+    assert_eq!(bare_lf.kind(), std::io::ErrorKind::InvalidData);
+
+    let bare_cr = read_error(
+        b"GET /health HTTP/1.1\rHost: 127.0.0.1:43123\r\r",
+    );
+    assert_eq!(bare_cr.kind(), std::io::ErrorKind::InvalidData);
 }
 
 #[test]
