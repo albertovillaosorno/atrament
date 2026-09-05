@@ -1316,11 +1316,12 @@ A control copy with `autocomplete="off"` removed only from Task restored its
 secret after the same crash cycle, confirming that the fixture detects Firefox
 form-state persistence rather than merely reopening a blank page.
 
-A hostile page on a second loopback port can currently frame the static shell
-and cause its three assets to load. The document-level CSP cannot provide an
-effective `frame-ancestors` policy from a meta element, so the future localhost
-server must emit a framing-denial response header and prove it against hostile
-local origins.
+The localhost runtime now emits response-level
+`Content-Security-Policy: frame-ancestors 'none'` on every response, because the
+document-level meta CSP cannot enforce `frame-ancestors`. Backend fixtures pin
+that framing-denial header on every served workspace resource. A real hostile
+second-loopback-origin browser fixture still needs to prove enforcement rather
+than only header emission.
 
 These browser constraints do not replace backend socket, token, host, path,
 cleanup, framing, or hostile-origin acceptance tests.

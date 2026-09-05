@@ -291,6 +291,9 @@ fn serves_embedded_frontend_resources_without_caching() {
         assert!(head.starts_with("HTTP/1.1 200 OK\r\n"));
         assert!(head.contains(&format!("Content-Type: {content_type}\r\n")));
         assert!(head.contains("Cache-Control: no-store\r\n"));
+        assert!(head.contains(
+            "Content-Security-Policy: frame-ancestors 'none'\r\n",
+        ));
         assert!(head.contains("X-Content-Type-Options: nosniff\r\n"));
         assert_eq!(body, expected_body);
     }
