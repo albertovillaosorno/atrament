@@ -370,6 +370,66 @@ fn compiled_frontend_module_is_referenced_by_the_served_document() {
 }
 
 #[test]
+fn runtime_responses_never_reflect_the_session_credential() {
+    const PRIVATE_SECRET: &str =
+        "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+    let authorization = format!("Bearer {PRIVATE_SECRET}");
+    let mut draft = SessionDraftService::default();
+    let authenticated = draft_replace_request(
+        "/api/session/task",
+        Some(&authorization),
+        Some(EXPECTED_ORIGIN),
+        b"private response check",
+    );
+    let responses = [
+        runtime::route_request(
+            b"GET / HTTP/1.1\r\nHost: 127.0.0.1:43123\r\n\r\n",
+            EXPECTED_HOST,
+            EXPECTED_ORIGIN,
+            PRIVATE_SECRET,
+            &HANDSHAKE,
+            &mut draft,
+        ),
+        runtime::route_request(
+            b"GET /missing HTTP/1.1\r\nHost: 127.0.0.1:43123\r\n\r\n",
+            EXPECTED_HOST,
+            EXPECTED_ORIGIN,
+            PRIVATE_SECRET,
+            &HANDSHAKE,
+            &mut draft,
+        ),
+        runtime::route_request(
+            concat!(
+                "POST /api/handshake HTTP/1.1\r\n",
+                "Host: 127.0.0.1:43123\r\n",
+                "Origin: http://127.0.0.1:43123\r\n\r\n",
+            )
+            .as_bytes(),
+            EXPECTED_HOST,
+            EXPECTED_ORIGIN,
+            PRIVATE_SECRET,
+            &HANDSHAKE,
+            &mut draft,
+        ),
+        runtime::route_request(
+            &authenticated,
+            EXPECTED_HOST,
+            EXPECTED_ORIGIN,
+            PRIVATE_SECRET,
+            &HANDSHAKE,
+            &mut draft,
+        ),
+    ];
+    for response in responses {
+        assert!(
+            !response
+                .windows(PRIVATE_SECRET.len())
+                .any(|window| window == PRIVATE_SECRET.as_bytes()),
+        );
+    }
+}
+
+#[test]
 fn session_credential_requires_one_exact_bearer_value() {
     let secret = "a".repeat(64);
     let accepted = format!(

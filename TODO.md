@@ -1262,7 +1262,9 @@ rejects transfer encoding, duplicate content lengths, body-length mismatch, and
 non-digit Content-Length syntax such as a leading plus sign before draft state
 can change. Security-sensitive header values trim only HTTP space/tab OWS;
 Unicode whitespace remains part of the value and therefore cannot normalize a
-malformed Host, Origin, or Bearer credential into an admitted one.
+malformed Host, Origin, or Bearer credential into an admitted one. Public,
+missing-route, unauthenticated, and authenticated empty responses are also
+checked against exact session-credential reflection.
 
 Current frontend evidence has no runtime dependencies, network client,
 persistent browser storage, domain parser, external assets, referrer, autofill,
