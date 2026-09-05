@@ -1258,10 +1258,13 @@ confinement, temporary cleanup, no telemetry, no autosave, and no undeclared
 network access.
 
 Current loopback-runtime evidence requires the exact canonical Host, browser
-Origin, and Bearer credential before protected draft mutation. Request framing
-rejects transfer encoding, duplicate content lengths, body-length mismatch, and
-non-digit Content-Length syntax such as a leading plus sign before draft state
-can change. Security-sensitive header values trim only HTTP space/tab OWS;
+Origin, and Bearer credential before protected draft mutation. The request line
+requires exactly one ASCII space between method, target, and HTTP/1.1; tabs,
+repeated spaces, trailing whitespace, and other versions reject before routing.
+Request framing rejects transfer encoding, duplicate content lengths,
+body-length mismatch, and non-digit Content-Length syntax such as a leading plus
+sign before draft state can change. Security-sensitive header values trim only
+HTTP space/tab OWS;
 Unicode whitespace remains part of the value and therefore cannot normalize a
 malformed Host, Origin, or Bearer credential into an admitted one. Public,
 missing-route, unauthenticated, and authenticated empty responses are also

@@ -588,14 +588,11 @@ fn request_method_host_and_target(
     let text = str::from_utf8(request).ok()?;
     let mut lines = text.split("\r\n");
     let request_line = lines.next()?;
-    let mut request_parts = request_line.split_ascii_whitespace();
-    let method = request_parts.next()?;
-    let target = request_parts.next()?;
-    let version = request_parts.next()?;
-    let extra_part = request_parts.next();
+    let (method, remainder) = request_line.split_once(' ')?;
+    let (target, version) = remainder.split_once(' ')?;
     if !matches!(method, "GET" | "POST")
+        || target.is_empty()
         || version != "HTTP/1.1"
-        || extra_part.is_some()
     {
         return None;
     }

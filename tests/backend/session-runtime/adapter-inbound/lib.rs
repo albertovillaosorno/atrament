@@ -132,6 +132,10 @@ fn malformed_or_missing_host_is_rejected_before_routing() {
         "GET /health HTTP/1.1\r\n\r\n",
         "POST /health HTTP/1.1\r\nHost: 127.0.0.1:43123\r\n\r\n",
         "GET /health HTTP/1.0\r\nHost: 127.0.0.1:43123\r\n\r\n",
+        "GET  /health HTTP/1.1\r\nHost: 127.0.0.1:43123\r\n\r\n",
+        "GET\t/health HTTP/1.1\r\nHost: 127.0.0.1:43123\r\n\r\n",
+        "GET /health\tHTTP/1.1\r\nHost: 127.0.0.1:43123\r\n\r\n",
+        "GET /health HTTP/1.1 \r\nHost: 127.0.0.1:43123\r\n\r\n",
         concat!(
             "GET /health HTTP/1.1\r\n",
             "Host: 127.0.0.1:43123\r\n",
