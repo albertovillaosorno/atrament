@@ -49,9 +49,11 @@ bytes still reachable through current or Undo state remain retained.
 All semantic mutation entry points in `SessionApplication` now share one private
 branch-cleanup gate so this lifecycle rule is not duplicated per operation.
 
-Successful formula, physical-page-profile, table-cell-span, and table-row-role
-replacements are exercised through that same gate after Undo with Redo-only
-asset bytes, in addition to direct text and bounded-batch branch coverage.
+Formula, physical-page-profile, table-cell-span, and table-row-role replacements
+are exercised through that same gate after Undo with Redo-only asset bytes:
+successful changes prune the discarded branch, while exact-value no-ops preserve
+Redo and its retained bytes. Direct text and bounded-batch branches are covered
+separately.
 
 A 256-state asset-history fixture undoes halfway, then branches: cleanup removes
 exactly 128 Redo-only retained byte entries and preserves all 128 identities

@@ -3149,6 +3149,134 @@ fn rejected_edits_preserve_redo_only_asset_bytes() {
 }
 
 #[test]
+fn every_direct_replacement_noop_preserves_redo_asset_bytes() {
+    #[derive(Clone, Copy)]
+    enum Replacement {
+        Formula,
+        PageProfile,
+        TableCellSpan,
+        TableRowRole,
+    }
+
+    for replacement in [
+        Replacement::Formula,
+        Replacement::PageProfile,
+        Replacement::TableCellSpan,
+        Replacement::TableRowRole,
+    ] {
+        let identities = IdentityAllocator::new();
+        let (
+            candidate,
+            candidate_formula,
+            candidate_profile,
+            candidate_cell,
+            candidate_row,
+        ) = replacement_family_candidate(&identities);
+        let mut session = application::SessionApplication::default();
+        let AcceptanceOutcome::Accepted { mapping, .. } =
+            session.accept_candidate(candidate)
+        else {
+            panic!("replacement-family candidate must be accepted");
+        };
+        let accepted = |candidate| {
+            mapping
+                .iter()
+                .find(|entry| entry.candidate == candidate)
+                .expect("replacement target identity must map")
+                .accepted
+        };
+        let formula = accepted(candidate_formula);
+        let profile = accepted(candidate_profile);
+        let cell = accepted(candidate_cell);
+        let row = accepted(candidate_row);
+
+        let (redo_candidate, _, candidate_redo_asset, _) =
+            asset_figure_candidate(&identities);
+        let AcceptanceOutcome::Accepted {
+            mapping: redo_mapping,
+            revision: redo_revision,
+        } = session.accept_candidate(redo_candidate)
+        else {
+            panic!("Redo asset candidate must be accepted");
+        };
+        let redo_asset = redo_mapping
+            .iter()
+            .find(|entry| entry.candidate == candidate_redo_asset)
+            .expect("Redo asset identity must map")
+            .accepted;
+        assert!(matches!(
+            session.retain_asset_bytes(
+                redo_revision,
+                redo_asset,
+                b"replacement-noop-redo-only".to_vec(),
+            ),
+            Ok(application::AssetBytesRetention::Retained { .. })
+        ));
+        let HistoryTraversalOutcome::Traversed { revision: undone, .. } =
+            session.traverse_history(redo_revision, HistoryDirection::Undo)
+        else {
+            panic!("Redo asset candidate must Undo");
+        };
+        let expected_history =
+            HistoryAvailabilityOutcome::Available(HistoryAvailability {
+                can_redo: true,
+                can_undo: false,
+                revision: undone,
+            });
+
+        match replacement {
+            Replacement::Formula => assert_eq!(
+                session.replace_formula(
+                    undone,
+                    formula,
+                    FormulaMode::Inline,
+                    String::from("x"),
+                ),
+                FormulaEditOutcome::NoOp {
+                    revision: undone,
+                    target: formula,
+                },
+            ),
+            Replacement::PageProfile => assert_eq!(
+                session.replace_page_profile(
+                    undone,
+                    profile,
+                    physical_page_profile(),
+                ),
+                PageProfileEditOutcome::NoOp {
+                    revision: undone,
+                    target: profile,
+                },
+            ),
+            Replacement::TableCellSpan => assert_eq!(
+                session.replace_table_cell_span(
+                    undone,
+                    cell,
+                    TableCellSpan::SINGLE,
+                ),
+                TableCellSpanEditOutcome::NoOp {
+                    revision: undone,
+                    target: cell,
+                },
+            ),
+            Replacement::TableRowRole => assert_eq!(
+                session.replace_table_row_role(
+                    undone,
+                    row,
+                    TableRowRole::Body,
+                ),
+                TableRowRoleEditOutcome::NoOp {
+                    revision: undone,
+                    target: row,
+                },
+            ),
+        }
+        assert_eq!(session.history_availability(), expected_history);
+        assert_eq!(session.retained_asset_byte_count_for_test(), 1);
+    }
+}
+
+#[test]
 fn every_direct_replacement_family_prunes_discarded_redo_asset_bytes() {
     #[derive(Clone, Copy)]
     enum Replacement {
