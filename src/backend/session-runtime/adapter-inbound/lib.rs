@@ -148,10 +148,9 @@ impl Runtime {
         for incoming in self.listener.incoming() {
             match incoming {
                 Ok(mut connection) => {
-                    drop(connection.set_read_timeout(Some(REQUEST_IO_TIMEOUT)));
-                    drop(
-                        connection.set_write_timeout(Some(REQUEST_IO_TIMEOUT)),
-                    );
+                    if configure_connection_deadline(&connection).is_err() {
+                        continue;
+                    }
                     drop(serve_connection(
                         &mut connection,
                         &self.expected_host,
@@ -165,6 +164,13 @@ impl Runtime {
             }
         }
     }
+}
+
+pub(crate) fn configure_connection_deadline(
+    stream: &TcpStream,
+) -> io::Result<()> {
+    stream.set_read_timeout(Some(REQUEST_IO_TIMEOUT))?;
+    stream.set_write_timeout(Some(REQUEST_IO_TIMEOUT))
 }
 
 fn request_head_end(request: &[u8]) -> Option<usize> {
@@ -278,28 +284,39 @@ fn request_head_line_endings_are_valid_so_far(bytes: &[u8]) -> bool {
     true
 }
 
+fn remaining_request_timeout(
+    total_timeout: Duration,
+    started: Instant,
+) -> io::Result<Duration> {
+    let Some(remaining) = total_timeout.checked_sub(started.elapsed()) else {
+        return Err(io::Error::new(
+            io::ErrorKind::TimedOut,
+            "request exceeded runtime transport deadline",
+        ));
+    };
+    if remaining.is_zero() {
+        return Err(io::Error::new(
+            io::ErrorKind::TimedOut,
+            "request exceeded runtime transport deadline",
+        ));
+    }
+    Ok(remaining)
+}
+
 pub(crate) fn read_request(stream: &mut TcpStream) -> io::Result<Vec<u8>> {
-    let total_timeout = stream.read_timeout()?;
+    let Some(total_timeout) = stream.read_timeout()? else {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "request reader requires a configured total deadline",
+        ));
+    };
     let started = Instant::now();
     let mut bytes = Vec::with_capacity(1024);
     let mut chunk = [0u8; 1024];
     let mut expected_total = None;
     loop {
-        if let Some(timeout) = total_timeout {
-            let Some(remaining) = timeout.checked_sub(started.elapsed()) else {
-                return Err(io::Error::new(
-                    io::ErrorKind::TimedOut,
-                    "request exceeded runtime transport deadline",
-                ));
-            };
-            if remaining.is_zero() {
-                return Err(io::Error::new(
-                    io::ErrorKind::TimedOut,
-                    "request exceeded runtime transport deadline",
-                ));
-            }
-            stream.set_read_timeout(Some(remaining))?;
-        }
+        let remaining = remaining_request_timeout(total_timeout, started)?;
+        stream.set_read_timeout(Some(remaining))?;
         let read = stream.read(&mut chunk)?;
         if read == 0 {
             if expected_total.is_some_and(|total| bytes.len() < total) {

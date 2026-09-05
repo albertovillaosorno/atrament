@@ -129,6 +129,31 @@ fn health_requires_the_exact_canonical_host() {
 }
 
 #[test]
+fn request_reader_requires_and_runtime_configures_total_deadlines() {
+    let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0))
+        .expect("test listener binds");
+    let address = listener.local_addr().expect("test listener address");
+    let client = TcpStream::connect(address).expect("test client connects");
+    let (mut server, _) = listener.accept().expect("test server accepts");
+
+    let error = runtime::read_request(&mut server)
+        .expect_err("reader must reject a missing total deadline");
+    assert_eq!(error.kind(), std::io::ErrorKind::InvalidInput);
+
+    runtime::configure_connection_deadline(&server)
+        .expect("runtime connection deadline configures");
+    assert_eq!(
+        server.read_timeout().expect("read timeout inspects"),
+        Some(Duration::from_secs(2)),
+    );
+    assert_eq!(
+        server.write_timeout().expect("write timeout inspects"),
+        Some(Duration::from_secs(2)),
+    );
+    drop(client);
+}
+
+#[test]
 fn malformed_header_line_endings_reject_without_waiting_for_eof() {
     fn read_error(request: &[u8]) -> std::io::Error {
         let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0))
