@@ -66,8 +66,10 @@ relations, vector, directional over-arrows, overline, and underline decorations,
 escaped
 TeX special characters,
 standard and variant Greek control-sequence notation, common named and delimiter
-symbols, binary-operator symbols, arrow and ellipsis symbols, relation and logic
-symbols, operators, calculus, set notation, aligned separators, and ordered
+symbols, geometry/proof and ordering/set relations, binary-operator symbols,
+arrow and ellipsis symbols, relation and logic symbols, modular arithmetic,
+single, multiple, and contour calculus operators, set notation, aligned
+separators, and ordered
 aligned, brace-delimited-matrix, bracketed-matrix, cases,
 double-vertical-bar-matrix, gathered, matrix, parenthesized-matrix,
 small-matrix, split, and vertical-bar-matrix environments. Paired

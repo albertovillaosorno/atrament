@@ -84,7 +84,7 @@ use atrament_semantic_notebook_port::{
 use atrament_semantic_notebook_session::SemanticNotebookSessionService;
 
 const CURRENT_COMMAND_BEHAVIOR_VERSION: CommandBehaviorVersion =
-    CommandBehaviorVersion(55);
+    CommandBehaviorVersion(56);
 
 #[derive(Debug)]
 struct CountingCommandIdentity {
@@ -1727,6 +1727,62 @@ fn named_tex_operators_are_admitted_and_directly_editable() {
 }
 
 #[test]
+fn expanded_tex_vocabulary_is_admitted_and_directly_editable() {
+    let ids = IdentityAllocator::new();
+    let initial = concat!(
+        r"\angle ABC \simeq \triangle DEF \implies P ",
+        r"\pmod{17}",
+    );
+    let (candidate, formula) =
+        candidate_math_notebook(&ids, initial, FormulaMode::Display);
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(candidate)
+    else {
+        panic!("expanded mathematics vocabulary must be accepted");
+    };
+    let formula = accepted_for(&mapping, formula);
+    assert_eq!(
+        formula_value_for_test(
+            session.current().expect("accepted expanded mathematics"),
+            formula,
+        )
+        .source,
+        initial,
+    );
+
+    let edited_source = concat!(
+        r"\iint_D f dA + \bigcup_i A_i ",
+        r"\supsetneq \bigcap_i B_i",
+    );
+    let outcome = session.replace_formula(
+        revision,
+        formula,
+        FormulaMode::Display,
+        edited_source.to_owned(),
+    );
+    let FormulaEditOutcome::Applied {
+        base,
+        revision: edited,
+        target,
+    } = outcome
+    else {
+        panic!("expanded mathematics edit must apply: {outcome:?}");
+    };
+    assert_eq!(base, revision);
+    assert_ne!(edited, revision);
+    assert_eq!(target, formula);
+    assert_eq!(
+        formula_value_for_test(
+            session.current().expect("edited expanded mathematics"),
+            formula,
+        )
+        .source,
+        edited_source,
+    );
+}
+
+#[test]
 fn calculus_tex_is_admitted_and_directly_editable() {
     let ids = IdentityAllocator::new();
     let initial = r"\sum_{i=1}^n i";
@@ -3250,6 +3306,7 @@ fn every_simple_inline_block_family_promotes_edits_and_undoes() {
         (SemanticBlockKind::Heading, BlockContent::Heading),
         (SemanticBlockKind::Paragraph, BlockContent::Paragraph),
         (SemanticBlockKind::Quotation, BlockContent::Quotation),
+        (SemanticBlockKind::SourceNote, BlockContent::SourceNote),
     ];
 
     for (kind, constructor) in cases {
@@ -7619,7 +7676,7 @@ fn command_capability_snapshot_is_deterministic_and_does_not_overclaim() {
             family: SemanticCommandFamily::Provenance,
         },
         CommandFamilyCapability {
-            behavior_version: CommandBehaviorVersion(46),
+            behavior_version: CommandBehaviorVersion(47),
             family: SemanticCommandFamily::StructuredContent,
         },
         CommandFamilyCapability {
@@ -7687,11 +7744,11 @@ fn command_capability_version_detects_drift_independently_of_revision() {
     );
     assert_eq!(
         session.check_command_capability_compatibility(
-            CommandBehaviorVersion(54),
+            CommandBehaviorVersion(55),
         ),
         CommandCapabilityCompatibilityOutcome::Mismatch {
             current: CURRENT_COMMAND_BEHAVIOR_VERSION,
-            expected: CommandBehaviorVersion(54),
+            expected: CommandBehaviorVersion(55),
         },
     );
     assert_eq!(

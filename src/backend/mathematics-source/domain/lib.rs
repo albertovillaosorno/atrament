@@ -36,11 +36,12 @@
 
 // Keep command tables lexically sorted for reviewable vocabulary changes.
 const NAMED_OPERATOR_COMMANDS: &[&str] = &[
-    "\\Pr", "\\arccos", "\\arcsin", "\\arctan", "\\arg", "\\cos", "\\cosh",
-    "\\cot", "\\coth", "\\csc", "\\deg", "\\det", "\\dim", "\\exp", "\\gcd",
-    "\\hom", "\\inf", "\\int", "\\ker", "\\lg", "\\lim", "\\liminf",
-    "\\limsup", "\\ln", "\\log", "\\max", "\\min", "\\prod", "\\sec", "\\sin",
-    "\\sinh", "\\sum", "\\sup", "\\tan", "\\tanh",
+    "\\Pr", "\\arccos", "\\arcsin", "\\arctan", "\\arg", "\\bigcap", "\\bigcup",
+    "\\bmod", "\\cos", "\\cosh", "\\cot", "\\coth", "\\csc", "\\deg", "\\det",
+    "\\dim", "\\exp", "\\gcd", "\\hom", "\\iiint", "\\iint", "\\inf", "\\int",
+    "\\ker", "\\lg", "\\lim", "\\liminf", "\\limsup", "\\ln", "\\log", "\\max",
+    "\\min", "\\mod", "\\oint", "\\prod", "\\sec", "\\sin", "\\sinh", "\\sum",
+    "\\sup", "\\tan", "\\tanh",
 ];
 
 const NAMED_SYMBOL_COMMANDS: &[&str] = &[
@@ -48,24 +49,28 @@ const NAMED_SYMBOL_COMMANDS: &[&str] = &[
     "\\Leftrightarrow", "\\Longleftarrow", "\\Longleftrightarrow",
     "\\Longrightarrow", "\\Omega", "\\Phi", "\\Pi", "\\Psi", "\\Rightarrow",
     "\\Sigma", "\\Theta", "\\Uparrow", "\\Updownarrow", "\\Upsilon", "\\Vert",
-    "\\Xi", "\\alpha", "\\approx", "\\ast", "\\beta", "\\bullet", "\\cap",
-    "\\cdot", "\\cdots", "\\chi", "\\circ", "\\cong", "\\cup", "\\ddots",
-    "\\delta", "\\div", "\\dots", "\\downarrow", "\\emptyset", "\\epsilon",
-    "\\equiv", "\\eta", "\\exists", "\\forall", "\\gamma", "\\ge", "\\geq",
-    "\\hookleftarrow", "\\hookrightarrow", "\\in", "\\infty", "\\iota",
-    "\\kappa", "\\lambda", "\\land", "\\langle", "\\lbrace", "\\lceil",
-    "\\ldots", "\\le", "\\leftarrow", "\\leftrightarrow", "\\leq", "\\lfloor",
-    "\\longleftarrow", "\\longleftrightarrow", "\\longrightarrow", "\\lor",
-    "\\mapsto", "\\mid", "\\mp", "\\mu", "\\nabla", "\\ne", "\\nearrow",
-    "\\neg", "\\neq", "\\notin", "\\nu", "\\nwarrow", "\\omega", "\\oplus",
-    "\\otimes", "\\parallel", "\\partial", "\\perp", "\\phi", "\\pi", "\\pm",
-    "\\propto", "\\psi", "\\rangle", "\\rbrace", "\\rceil", "\\rfloor",
-    "\\rho", "\\rightarrow", "\\searrow", "\\setminus", "\\sigma", "\\sim",
-    "\\star", "\\subset", "\\subseteq", "\\supset", "\\supseteq", "\\swarrow",
-    "\\tau", "\\theta", "\\times", "\\to", "\\uparrow", "\\updownarrow",
-    "\\upsilon", "\\varepsilon", "\\varphi", "\\varpi", "\\varrho",
-    "\\varsigma", "\\vartheta", "\\vdots", "\\vee", "\\vert", "\\wedge",
-    "\\xi", "\\zeta",
+    "\\Xi", "\\alpha", "\\angle", "\\approx", "\\ast", "\\because", "\\beta",
+    "\\bullet", "\\cap", "\\cdot", "\\cdots", "\\chi", "\\circ", "\\cong",
+    "\\cup", "\\dashv", "\\ddots", "\\delta", "\\div", "\\dots", "\\downarrow",
+    "\\ell", "\\emptyset", "\\epsilon", "\\equiv", "\\eta", "\\exists",
+    "\\forall", "\\gamma", "\\ge", "\\geq", "\\geqslant", "\\gets", "\\gg",
+    "\\gtrsim", "\\hbar", "\\hookleftarrow", "\\hookrightarrow", "\\iff",
+    "\\imath", "\\implies", "\\in", "\\infty", "\\iota", "\\jmath", "\\kappa",
+    "\\lambda", "\\land", "\\langle", "\\lbrace", "\\lceil", "\\ldots", "\\le",
+    "\\leftarrow", "\\leftrightarrow", "\\leq", "\\leqslant", "\\lesssim",
+    "\\lfloor", "\\ll", "\\longleftarrow", "\\longleftrightarrow",
+    "\\longrightarrow", "\\lor", "\\mapsto", "\\mid", "\\models", "\\mp",
+    "\\mu", "\\nabla", "\\ne", "\\nearrow", "\\neg", "\\neq", "\\nexists",
+    "\\ni", "\\notin", "\\nu", "\\nwarrow", "\\omega", "\\oplus", "\\otimes",
+    "\\parallel", "\\partial", "\\perp", "\\phi", "\\pi", "\\pm", "\\prec",
+    "\\preceq", "\\propto", "\\psi", "\\rangle", "\\rbrace", "\\rceil",
+    "\\rfloor", "\\rho", "\\rightarrow", "\\searrow", "\\setminus", "\\sigma",
+    "\\sim", "\\simeq", "\\star", "\\subset", "\\subseteq", "\\subsetneq",
+    "\\succ", "\\succeq", "\\supset", "\\supseteq", "\\supsetneq", "\\swarrow",
+    "\\tau", "\\therefore", "\\theta", "\\times", "\\to", "\\triangle",
+    "\\uparrow", "\\updownarrow", "\\upsilon", "\\varepsilon", "\\varphi",
+    "\\varpi", "\\varrho", "\\varsigma", "\\vartheta", "\\vdash", "\\vdots",
+    "\\vee", "\\vert", "\\wedge", "\\xi", "\\zeta",
 ];
 
 const STRUCTURED_CONTROL_WORD_COMMANDS: &[(&str, SupportedCommand, usize)] = &[
@@ -98,6 +103,7 @@ const STRUCTURED_CONTROL_WORD_COMMANDS: &[(&str, SupportedCommand, usize)] = &[
     ("\\overline", SupportedCommand::Overline, 1),
     ("\\overrightarrow", SupportedCommand::OverRightArrow, 1),
     ("\\overset", SupportedCommand::Overset, 2),
+    ("\\pmod", SupportedCommand::ParenthesizedModulo, 1),
     ("\\sqrt", SupportedCommand::SquareRoot, 1),
     ("\\stackrel", SupportedCommand::StackRelation, 2),
     ("\\substack", SupportedCommand::Substack, 1),
@@ -503,6 +509,8 @@ pub enum SupportedCommand {
     Overline,
     /// One annotation group placed above one grouped mathematical base.
     Overset,
+    /// One grouped parenthesized modular-arithmetic annotation.
+    ParenthesizedModulo,
     /// Roman/upright grouped content, useful for units and labels.
     Roman,
     /// One-group sans-serif mathematical alphabet.

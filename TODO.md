@@ -146,8 +146,9 @@ styles, assets, constraints, output profiles, and provenance with stable IDs.
 Current executable evidence defines transport-independent typed values for those
 semantic families, separate opaque candidate, accepted, and revision identities,
 non-recycling active-session allocation, unresolved semantic blocks, and exact
-extension-data preservation. Definitions and quotations are now distinct
-semantic block kinds whose editable inline spans retain their own identities,
+extension-data preservation. Definitions, quotations, and source notes are
+now distinct semantic block kinds whose editable inline spans retain their own
+identities,
 style references, and provenance references rather than being flattened into
 paragraph text. Explicit candidate acceptance validates duplicate, dangling,
 and wrong-kind references before mutation, promotes candidate-local identities
@@ -202,12 +203,12 @@ supports read-only behavior-version drift checks. It deliberately advertises no
 command protocol, normalizer, command context, Validate, Apply, rebatching, or
 numeric command/context limits yet.
 
-Aggregate command behavior and typed-result behavior are version 55 after
-admitting Quotation blocks through the existing inline-span edit semantics.
+Aggregate command behavior and typed-result behavior are version 56 after
+broadening exact-source TeX operator and symbol admission.
 Asset reference, Ordering and grouping, and Text content retain family behavior
 version 1; Provenance and Style role are version 2, Document constraint is
-version 3, and Structured content is version 46. The immediately previous
-aggregate version 54 rejects instead of being reinterpreted.
+version 3, and Structured content is version 47. The immediately previous
+aggregate version 55 rejects instead of being reinterpreted.
 
 A version-bound single-target proposal combines capability, exact local
 preconditions, and direct-edit simulation read-only. All five dedicated direct
@@ -512,8 +513,10 @@ annotations and relations, vector, directional over-arrows, overline, and
 underline
 decorations, escaped TeX special characters,
 standard and variant Greek control-sequence notation, common named and delimiter
-symbols, binary-operator symbols, arrow and ellipsis symbols, relation and logic
-symbols, operators, calculus, set notation, aligned row and column separators,
+symbols, geometry/proof and ordering/set relations, binary-operator symbols,
+arrow and ellipsis symbols, relation and logic symbols, modular arithmetic,
+single, multiple, and contour calculus operators, set notation, aligned row and
+column separators,
 and ordered aligned, brace-delimited-matrix, bracketed-matrix, cases,
 double-vertical-bar-matrix, gathered, matrix, parenthesized-matrix,
 small-matrix, split, and vertical-bar-matrix environments. Paired

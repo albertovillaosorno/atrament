@@ -187,11 +187,13 @@ fn escaped_tex_specials_remain_literal_in_math_and_text() {
 #[test]
 fn named_operator_vocabulary_is_supported_without_rewriting() {
     for source in [
-        r"\Pr", r"\arccos", r"\arcsin", r"\arctan", r"\arg", r"\cos",
-        r"\cosh", r"\cot", r"\coth", r"\csc", r"\deg", r"\det", r"\dim",
-        r"\exp", r"\gcd", r"\hom", r"\inf", r"\int", r"\ker", r"\lg", r"\lim",
-        r"\liminf", r"\limsup", r"\ln", r"\log", r"\max", r"\min", r"\prod",
-        r"\sec", r"\sin", r"\sinh", r"\sum", r"\sup", r"\tan", r"\tanh",
+        r"\Pr", r"\arccos", r"\arcsin", r"\arctan", r"\arg", r"\bigcap",
+        r"\bigcup", r"\bmod", r"\cos", r"\cosh", r"\cot", r"\coth", r"\csc",
+        r"\deg", r"\det", r"\dim", r"\exp", r"\gcd", r"\hom", r"\iiint",
+        r"\iint", r"\inf", r"\int", r"\ker", r"\lg", r"\lim", r"\liminf",
+        r"\limsup", r"\ln", r"\log", r"\max", r"\min", r"\mod", r"\oint",
+        r"\prod", r"\sec", r"\sin", r"\sinh", r"\sum", r"\sup", r"\tan",
+        r"\tanh",
     ] {
         let analyzed = analyze(source, FormulaMode::Inline)
             .expect("named operator formula");
@@ -263,6 +265,65 @@ fn extended_named_operators_compose_without_rewriting() {
 }
 
 #[test]
+fn modular_arithmetic_commands_preserve_structure() {
+    let source = r"a \bmod m; b \mod n; x \pmod{17}";
+    let analyzed = analyze(source, FormulaMode::Inline)
+        .expect("modular arithmetic expression");
+    assert!(analyzed.is_supported());
+    assert_eq!(reconstructed(&analyzed), source);
+    assert_eq!(
+        analyzed
+            .tokens
+            .iter()
+            .filter(|token| {
+                token.kind
+                    == MathTokenKind::Command(SupportedCommand::NamedOperator)
+            })
+            .count(),
+        2,
+    );
+    assert!(analyzed.tokens.iter().any(|token| {
+        token.kind
+            == MathTokenKind::Command(SupportedCommand::ParenthesizedModulo)
+            && analyzed.token_source(*token) == Some(r"\pmod")
+    }));
+    assert_eq!(
+        analyze(r"\pmod", FormulaMode::Inline),
+        Err(MathSyntaxError {
+            byte_offset: r"\pmod".len(),
+            kind: MathSyntaxErrorKind::MissingRequiredGroup,
+        }),
+    );
+    let prefixed = analyze(r"\pmodulus{17}", FormulaMode::Inline)
+        .expect("balanced unsupported pmod prefix");
+    assert!(!prefixed.is_supported());
+    assert_eq!(prefixed.unsupported[0].name, r"\pmodulus");
+}
+
+#[test]
+fn multiple_integral_and_large_set_operators_compose_without_rewriting() {
+    let source = concat!(
+        r"\iint_D f dA + \iiint_V \rho dV + \oint_C F \cdot dr; ",
+        r"\bigcup_i A_i \supseteq \bigcap_i A_i",
+    );
+    let analyzed = analyze(source, FormulaMode::Display)
+        .expect("multiple integral and large-set operator expression");
+    assert!(analyzed.is_supported());
+    assert_eq!(reconstructed(&analyzed), source);
+    assert_eq!(
+        analyzed
+            .tokens
+            .iter()
+            .filter(|token| {
+                token.kind
+                    == MathTokenKind::Command(SupportedCommand::NamedOperator)
+            })
+            .count(),
+        5,
+    );
+}
+
+#[test]
 fn calculus_commands_compose_with_scripts_without_rewriting() {
     let source = concat!(
         r"\sum_{i=1}^n i + \prod_{k=1}^m k + ",
@@ -296,27 +357,31 @@ fn named_symbol_vocabulary_is_supported_without_rewriting() {
     for source in [
         r"\Delta", r"\Downarrow", r"\Gamma", r"\Lambda", r"\Leftarrow",
         r"\Leftrightarrow", r"\Longleftarrow", r"\Longleftrightarrow",
-        r"\Longrightarrow", r"\Omega", r"\Phi", r"\Pi", r"\Psi",
-        r"\Rightarrow", r"\Sigma", r"\Theta", r"\Uparrow", r"\Updownarrow",
-        r"\Upsilon", r"\Vert", r"\Xi", r"\alpha", r"\approx", r"\ast",
-        r"\beta", r"\bullet", r"\cap", r"\cdot", r"\cdots", r"\chi", r"\circ",
-        r"\cong", r"\cup", r"\ddots", r"\delta", r"\div", r"\dots",
-        r"\downarrow", r"\emptyset", r"\epsilon", r"\equiv", r"\eta",
-        r"\exists", r"\forall", r"\gamma", r"\ge", r"\geq", r"\hookleftarrow",
-        r"\hookrightarrow", r"\in", r"\infty", r"\iota", r"\kappa",
-        r"\lambda", r"\land", r"\langle", r"\lbrace", r"\lceil", r"\ldots",
-        r"\le", r"\leftarrow", r"\leftrightarrow", r"\leq", r"\lfloor",
-        r"\longleftarrow", r"\longleftrightarrow", r"\longrightarrow",
-        r"\lor", r"\mapsto", r"\mid", r"\mp", r"\mu", r"\nabla", r"\ne",
-        r"\nearrow", r"\neg", r"\neq", r"\notin", r"\nu", r"\nwarrow",
-        r"\omega", r"\oplus", r"\otimes", r"\parallel", r"\partial", r"\perp",
-        r"\phi", r"\pi", r"\pm", r"\propto", r"\psi", r"\rangle", r"\rbrace",
-        r"\rceil", r"\rfloor", r"\rho", r"\rightarrow", r"\searrow",
-        r"\setminus", r"\sigma", r"\sim", r"\star", r"\subset", r"\subseteq",
-        r"\supset", r"\supseteq", r"\swarrow", r"\tau", r"\theta", r"\times",
-        r"\to", r"\uparrow", r"\updownarrow", r"\upsilon", r"\varepsilon",
-        r"\varphi", r"\varpi", r"\varrho", r"\varsigma", r"\vartheta",
-        r"\vdots", r"\vee", r"\vert", r"\wedge", r"\xi", r"\zeta",
+        r"\Longrightarrow", r"\Omega", r"\Phi", r"\Pi", r"\Psi", r"\Rightarrow",
+        r"\Sigma", r"\Theta", r"\Uparrow", r"\Updownarrow", r"\Upsilon",
+        r"\Vert", r"\Xi", r"\alpha", r"\angle", r"\approx", r"\ast",
+        r"\because", r"\beta", r"\bullet", r"\cap", r"\cdot", r"\cdots",
+        r"\chi", r"\circ", r"\cong", r"\cup", r"\dashv", r"\ddots", r"\delta",
+        r"\div", r"\dots", r"\downarrow", r"\ell", r"\emptyset", r"\epsilon",
+        r"\equiv", r"\eta", r"\exists", r"\forall", r"\gamma", r"\ge", r"\geq",
+        r"\geqslant", r"\gets", r"\gg", r"\gtrsim", r"\hbar", r"\hookleftarrow",
+        r"\hookrightarrow", r"\iff", r"\imath", r"\implies", r"\in", r"\infty",
+        r"\iota", r"\jmath", r"\kappa", r"\lambda", r"\land", r"\langle",
+        r"\lbrace", r"\lceil", r"\ldots", r"\le", r"\leftarrow",
+        r"\leftrightarrow", r"\leq", r"\leqslant", r"\lesssim", r"\lfloor",
+        r"\ll", r"\longleftarrow", r"\longleftrightarrow", r"\longrightarrow",
+        r"\lor", r"\mapsto", r"\mid", r"\models", r"\mp", r"\mu", r"\nabla",
+        r"\ne", r"\nearrow", r"\neg", r"\neq", r"\nexists", r"\ni", r"\notin",
+        r"\nu", r"\nwarrow", r"\omega", r"\oplus", r"\otimes", r"\parallel",
+        r"\partial", r"\perp", r"\phi", r"\pi", r"\pm", r"\prec", r"\preceq",
+        r"\propto", r"\psi", r"\rangle", r"\rbrace", r"\rceil", r"\rfloor",
+        r"\rho", r"\rightarrow", r"\searrow", r"\setminus", r"\sigma", r"\sim",
+        r"\simeq", r"\star", r"\subset", r"\subseteq", r"\subsetneq", r"\succ",
+        r"\succeq", r"\supset", r"\supseteq", r"\supsetneq", r"\swarrow",
+        r"\tau", r"\therefore", r"\theta", r"\times", r"\to", r"\triangle",
+        r"\uparrow", r"\updownarrow", r"\upsilon", r"\varepsilon", r"\varphi",
+        r"\varpi", r"\varrho", r"\varsigma", r"\vartheta", r"\vdash", r"\vdots",
+        r"\vee", r"\vert", r"\wedge", r"\xi", r"\zeta",
     ] {
         let analyzed =
             analyze(source, FormulaMode::Inline).expect("named symbol formula");
@@ -335,6 +400,30 @@ fn named_symbol_vocabulary_is_supported_without_rewriting() {
             "{source}",
         );
     }
+}
+
+#[test]
+fn geometry_and_proof_symbols_compose_without_rewriting() {
+    let source = concat!(
+        r"\angle ABC \simeq \triangle DEF; ",
+        r"P \implies Q \iff R; \because x \nexists A \therefore y; ",
+        r"v \vdash P, M \models Q; \ell + \hbar + \imath + \jmath",
+    );
+    let analyzed = analyze(source, FormulaMode::Display)
+        .expect("geometry and proof symbol expression");
+    assert!(analyzed.is_supported());
+    assert_eq!(reconstructed(&analyzed), source);
+    assert_eq!(
+        analyzed
+            .tokens
+            .iter()
+            .filter(|token| {
+                token.kind
+                    == MathTokenKind::Command(SupportedCommand::NamedSymbol)
+            })
+            .count(),
+        14,
+    );
 }
 
 #[test]
@@ -383,6 +472,24 @@ fn common_arrow_symbols_compose_without_rewriting() {
             .count(),
         9,
     );
+}
+
+#[test]
+fn layout_and_style_commands_remain_explicitly_unsupported() {
+    for (source, unsupported) in [
+        (r"\phantom{x}", r"\phantom"),
+        (r"\hspace{1em}", r"\hspace"),
+        (r"\color{red}{x}", r"\color"),
+        (r"x\,y", r"\,"),
+        (r"x\!y", r"\!"),
+    ] {
+        let analyzed = analyze(source, FormulaMode::Inline)
+            .expect("balanced layout-affecting source");
+        assert!(!analyzed.is_supported(), "{source}");
+        assert_eq!(reconstructed(&analyzed), source);
+        assert_eq!(analyzed.unsupported.len(), 1, "{source}");
+        assert_eq!(analyzed.unsupported[0].name, unsupported, "{source}");
+    }
 }
 
 #[test]
@@ -509,6 +616,30 @@ fn common_relation_and_logic_symbols_compose_without_rewriting() {
 }
 
 #[test]
+fn order_and_set_relation_symbols_compose_without_rewriting() {
+    let source = concat!(
+        r"a \ll b \leqslant c \lesssim d; x \gg y \geqslant z \gtrsim w; ",
+        r"p \prec q \preceq r; s \succ t \succeq u; ",
+        r"A \subsetneq B, B \supsetneq A, x \ni y; P \dashv Q",
+    );
+    let analyzed = analyze(source, FormulaMode::Display)
+        .expect("order and set relation expression");
+    assert!(analyzed.is_supported());
+    assert_eq!(reconstructed(&analyzed), source);
+    assert_eq!(
+        analyzed
+            .tokens
+            .iter()
+            .filter(|token| {
+                token.kind
+                    == MathTokenKind::Command(SupportedCommand::NamedSymbol)
+            })
+            .count(),
+        14,
+    );
+}
+
+#[test]
 fn standard_greek_symbols_compose_without_rewriting() {
     let source = concat!(
         r"\Delta x = \Sigma_i \Gamma_i + \Omega; ",
@@ -608,15 +739,22 @@ fn named_symbols_compose_with_scripts_and_relations() {
 #[test]
 fn admitted_control_words_never_match_longer_ascii_names() {
     for (source, unsupported) in [
+        (r"\angles", r"\angles"),
         (r"\binomial{n}{k}", r"\binomial"),
-        (r"\integral_0^1", r"\integral"),
+        (r"\bmodulo", r"\bmodulo"),
+        (r"\iints", r"\iints"),
+        (r"\impliesx", r"\impliesx"),
         (r"\infinite", r"\infinite"),
-        (r"\subsetequal", r"\subsetequal"),
-        (r"\overlined{x}", r"\overlined"),
-        (r"\vectored{x}", r"\vectored"),
-        (r"\Rightarrowed", r"\Rightarrowed"),
-        (r"\emptysets", r"\emptysets"),
+        (r"\integral_0^1", r"\integral"),
+        (r"\leqslanted", r"\leqslanted"),
         (r"\nablax", r"\nablax"),
+        (r"\overlined{x}", r"\overlined"),
+        (r"\pmodulus{17}", r"\pmodulus"),
+        (r"\Rightarrowed", r"\Rightarrowed"),
+        (r"\subsetequal", r"\subsetequal"),
+        (r"\thereforex", r"\thereforex"),
+        (r"\vectored{x}", r"\vectored"),
+        (r"\emptysets", r"\emptysets"),
     ] {
         let analyzed = analyze(source, FormulaMode::Inline)
             .expect("balanced longer control word");
@@ -663,6 +801,7 @@ fn required_groups_allow_ascii_whitespace_without_rewriting() {
         "\\binom\n{n}\r\n{k}",
         "\\sqrt \t{x}",
         "\\operatorname  {rank}",
+        "\\pmod \t{17}",
     ] {
         let analyzed = analyze(source, FormulaMode::Display)
             .expect("whitespace-separated required groups");

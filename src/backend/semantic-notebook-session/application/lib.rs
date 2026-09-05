@@ -544,7 +544,7 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
     }
 
     fn command_capability_snapshot(&self) -> SemanticCommandCapabilitySnapshot {
-        const VERSION: CommandBehaviorVersion = CommandBehaviorVersion(55);
+        const VERSION: CommandBehaviorVersion = CommandBehaviorVersion(56);
         const FAMILY_CAPABILITIES: [CommandFamilyCapability; 7] = [
             CommandFamilyCapability {
                 behavior_version: CommandBehaviorVersion(1),
@@ -563,7 +563,7 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
                 family: SemanticCommandFamily::Provenance,
             },
             CommandFamilyCapability {
-                behavior_version: CommandBehaviorVersion(46),
+                behavior_version: CommandBehaviorVersion(47),
                 family: SemanticCommandFamily::StructuredContent,
             },
             CommandFamilyCapability {
@@ -1857,6 +1857,9 @@ fn accept_block_content(
         BlockContent::Quotation(spans) => {
             Ok(BlockContent::Quotation(accept_spans(spans, identities)?))
         },
+        BlockContent::SourceNote(spans) => {
+            Ok(BlockContent::SourceNote(accept_spans(spans, identities)?))
+        },
         BlockContent::Figure(figure) => {
             Ok(BlockContent::Figure(accept_figure(figure, identities)?))
         },
@@ -2189,6 +2192,7 @@ fn formula_content_value(
         BlockContent::Date(_)
         | BlockContent::Definition(_)
         | BlockContent::Quotation(_)
+        | BlockContent::SourceNote(_)
         | BlockContent::Figure(_)
         | BlockContent::Heading(_)
         | BlockContent::Mathematics(_)
@@ -2628,6 +2632,7 @@ const fn direct_edit_block_kind(
         BlockContent::Date(_) => SemanticBlockKind::Date,
         BlockContent::Definition(_) => SemanticBlockKind::Definition,
         BlockContent::Quotation(_) => SemanticBlockKind::Quotation,
+        BlockContent::SourceNote(_) => SemanticBlockKind::SourceNote,
         BlockContent::Figure(_) => SemanticBlockKind::Figure,
         BlockContent::Freeform(_) => SemanticBlockKind::Freeform,
         BlockContent::Heading(_) => SemanticBlockKind::Heading,
@@ -2678,6 +2683,7 @@ fn index_direct_edit_blocks_frame<'notebook>(
         BlockContent::Date(spans)
         | BlockContent::Definition(spans)
         | BlockContent::Quotation(spans)
+        | BlockContent::SourceNote(spans)
         | BlockContent::Heading(spans)
         | BlockContent::Paragraph(spans) => {
             index_direct_edit_spans(
@@ -4291,6 +4297,7 @@ fn block_provenance_blocks_value(
             BlockContent::Date(_)
             | BlockContent::Definition(_)
             | BlockContent::Quotation(_)
+        | BlockContent::SourceNote(_)
             | BlockContent::Figure(_)
             | BlockContent::Heading(_)
             | BlockContent::Mathematics(_)
@@ -4341,6 +4348,7 @@ fn inline_span_content_value(
         BlockContent::Date(spans)
         | BlockContent::Definition(spans)
         | BlockContent::Quotation(spans)
+        | BlockContent::SourceNote(spans)
         | BlockContent::Heading(spans)
         | BlockContent::Paragraph(spans) => {
             spans.iter().find(|span| span.id == target)
@@ -4459,6 +4467,7 @@ fn list_ordering_blocks_value(
             BlockContent::Date(_)
             | BlockContent::Definition(_)
             | BlockContent::Quotation(_)
+        | BlockContent::SourceNote(_)
             | BlockContent::Figure(_)
             | BlockContent::Heading(_)
             | BlockContent::Mathematics(_)
@@ -4528,6 +4537,7 @@ fn replace_list_ordering_blocks(
             BlockContent::Date(_)
             | BlockContent::Definition(_)
             | BlockContent::Quotation(_)
+        | BlockContent::SourceNote(_)
             | BlockContent::Figure(_)
             | BlockContent::Heading(_)
             | BlockContent::Mathematics(_)
@@ -4591,6 +4601,7 @@ fn block_style_blocks_value(
             BlockContent::Date(_)
             | BlockContent::Definition(_)
             | BlockContent::Quotation(_)
+        | BlockContent::SourceNote(_)
             | BlockContent::Figure(_)
             | BlockContent::Heading(_)
             | BlockContent::Mathematics(_)
@@ -4660,6 +4671,7 @@ fn replace_block_style_blocks(
             BlockContent::Date(_)
             | BlockContent::Definition(_)
             | BlockContent::Quotation(_)
+        | BlockContent::SourceNote(_)
             | BlockContent::Figure(_)
             | BlockContent::Heading(_)
             | BlockContent::Mathematics(_)
@@ -4699,6 +4711,7 @@ fn replace_inline_span_style_blocks(
             BlockContent::Date(spans)
             | BlockContent::Definition(spans)
             | BlockContent::Quotation(spans)
+        | BlockContent::SourceNote(spans)
             | BlockContent::Heading(spans)
             | BlockContent::Paragraph(spans) => {
                 if let Some(span) =
@@ -4793,6 +4806,7 @@ fn replace_provenance_reference_blocks(
             BlockContent::Date(spans)
             | BlockContent::Definition(spans)
             | BlockContent::Quotation(spans)
+        | BlockContent::SourceNote(spans)
             | BlockContent::Heading(spans)
             | BlockContent::Paragraph(spans) => {
                 if let Some(span) =
@@ -4896,6 +4910,7 @@ fn figure_blocks_value(
             BlockContent::Date(_)
             | BlockContent::Definition(_)
             | BlockContent::Quotation(_)
+        | BlockContent::SourceNote(_)
             | BlockContent::Figure(_)
             | BlockContent::Heading(_)
             | BlockContent::Mathematics(_)
@@ -4965,6 +4980,7 @@ fn replace_figure_asset_blocks(
             BlockContent::Date(_)
             | BlockContent::Definition(_)
             | BlockContent::Quotation(_)
+        | BlockContent::SourceNote(_)
             | BlockContent::Figure(_)
             | BlockContent::Heading(_)
             | BlockContent::Mathematics(_)
@@ -5083,6 +5099,7 @@ fn replace_formula_content(
         BlockContent::Date(_)
         | BlockContent::Definition(_)
         | BlockContent::Quotation(_)
+        | BlockContent::SourceNote(_)
         | BlockContent::Figure(_)
         | BlockContent::Heading(_)
         | BlockContent::Mathematics(_)
@@ -5360,6 +5377,7 @@ fn table_containing_cell_content_value(
         BlockContent::Date(_)
         | BlockContent::Definition(_)
         | BlockContent::Quotation(_)
+        | BlockContent::SourceNote(_)
         | BlockContent::Figure(_)
         | BlockContent::Heading(_)
         | BlockContent::Mathematics(_)
@@ -5429,6 +5447,7 @@ fn replace_table_cell_span_raw_content(
         BlockContent::Date(_)
         | BlockContent::Definition(_)
         | BlockContent::Quotation(_)
+        | BlockContent::SourceNote(_)
         | BlockContent::Figure(_)
         | BlockContent::Heading(_)
         | BlockContent::Mathematics(_)
@@ -5518,6 +5537,7 @@ fn replace_table_cell_span_content(
         BlockContent::Date(_)
         | BlockContent::Definition(_)
         | BlockContent::Quotation(_)
+        | BlockContent::SourceNote(_)
         | BlockContent::Figure(_)
         | BlockContent::Heading(_)
         | BlockContent::Mathematics(_)
@@ -5600,6 +5620,7 @@ fn table_cell_span_content_value(
         BlockContent::Date(_)
         | BlockContent::Definition(_)
         | BlockContent::Quotation(_)
+        | BlockContent::SourceNote(_)
         | BlockContent::Figure(_)
         | BlockContent::Heading(_)
         | BlockContent::Mathematics(_)
@@ -5671,6 +5692,7 @@ fn replace_table_row_role_content(
         BlockContent::Date(_)
         | BlockContent::Definition(_)
         | BlockContent::Quotation(_)
+        | BlockContent::SourceNote(_)
         | BlockContent::Figure(_)
         | BlockContent::Heading(_)
         | BlockContent::Mathematics(_)
@@ -5744,6 +5766,7 @@ fn table_row_role_content_value(
         BlockContent::Date(_)
         | BlockContent::Definition(_)
         | BlockContent::Quotation(_)
+        | BlockContent::SourceNote(_)
         | BlockContent::Figure(_)
         | BlockContent::Heading(_)
         | BlockContent::Mathematics(_)
@@ -5794,6 +5817,7 @@ fn replace_text_content(
         BlockContent::Date(spans)
         | BlockContent::Definition(spans)
         | BlockContent::Quotation(spans)
+        | BlockContent::SourceNote(spans)
         | BlockContent::Heading(spans)
         | BlockContent::Paragraph(spans) => {
             replace_text_spans(spans, target, value)
@@ -5881,6 +5905,7 @@ fn text_content_value(
         BlockContent::Date(spans)
         | BlockContent::Definition(spans)
         | BlockContent::Quotation(spans)
+        | BlockContent::SourceNote(spans)
         | BlockContent::Heading(spans)
         | BlockContent::Paragraph(spans) => text_spans_value(spans, target),
         BlockContent::Figure(figure) => {
@@ -5962,6 +5987,7 @@ fn discard_candidate_notebook(notebook: Notebook<CandidateIdentity>) {
             BlockContent::Date(_)
             | BlockContent::Definition(_)
             | BlockContent::Quotation(_)
+        | BlockContent::SourceNote(_)
             | BlockContent::Figure(_)
             | BlockContent::Heading(_)
             | BlockContent::Mathematics(_)
@@ -6038,6 +6064,7 @@ fn candidate_graph_blocks_frame<'candidate>(
         BlockContent::Date(spans)
         | BlockContent::Definition(spans)
         | BlockContent::Quotation(spans)
+        | BlockContent::SourceNote(spans)
         | BlockContent::Heading(spans)
         | BlockContent::Paragraph(spans) => {
             candidate_spans(spans, graph)?;
