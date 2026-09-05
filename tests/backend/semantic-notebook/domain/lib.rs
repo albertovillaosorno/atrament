@@ -759,6 +759,23 @@ fn semantic_identity_path_matches_descriptor_walk_on_generated_trees() {
                 descriptor_owner_chain(&notebook, target),
                 "generated path mismatch in case {case} target {target}",
             );
+            let expected_page = matches!(
+                path.first().map(|entry| entry.descriptor.kind),
+                Some(SemanticIdentityKind::Block(_)),
+            )
+            .then(|| {
+                path.iter()
+                    .find(|entry| {
+                        entry.descriptor.kind == SemanticIdentityKind::Page
+                    })
+                    .expect("generated block path must reach a page")
+                    .identity
+            });
+            assert_eq!(
+                semantic_block_page(&notebook, target),
+                expected_page,
+                "generated block/page mismatch in case {case} target {target}",
+            );
         }
     }
 }
