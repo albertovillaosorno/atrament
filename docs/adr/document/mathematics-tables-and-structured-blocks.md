@@ -62,7 +62,8 @@ groups, scripts, plain and styled fractions, binomial coefficients, square and
 indexed roots, grouped mathematical alphabets, common one-group accents,
 upright unit or
 label groups, grouped text and custom operator names, stacked annotations,
-vector, overline, and underline decorations, escaped TeX special characters,
+vector, directional over-arrows, overline, and underline decorations, escaped
+TeX special characters,
 standard and variant Greek control-sequence notation, common named and delimiter
 symbols, binary-operator symbols, arrow and ellipsis symbols, relation and logic
 symbols, operators, calculus, set notation, aligned separators, and ordered

@@ -87,7 +87,10 @@ const STRUCTURED_CONTROL_WORD_COMMANDS: &[(&str, SupportedCommand)] = &[
     ("\\mathtt", SupportedCommand::Typewriter),
     ("\\operatorname", SupportedCommand::OperatorName),
     ("\\overbrace", SupportedCommand::Overbrace),
+    ("\\overleftarrow", SupportedCommand::OverLeftArrow),
+    ("\\overleftrightarrow", SupportedCommand::OverLeftRightArrow),
     ("\\overline", SupportedCommand::Overline),
+    ("\\overrightarrow", SupportedCommand::OverRightArrow),
     ("\\overset", SupportedCommand::Overset),
     ("\\sqrt", SupportedCommand::SquareRoot),
     ("\\substack", SupportedCommand::Substack),
@@ -465,6 +468,12 @@ pub enum SupportedCommand {
     NamedSymbol,
     /// One grouped custom mathematical operator name.
     OperatorName,
+    /// One-group left-pointing over-arrow decoration.
+    OverLeftArrow,
+    /// One-group bidirectional over-arrow decoration.
+    OverLeftRightArrow,
+    /// One-group right-pointing over-arrow decoration.
+    OverRightArrow,
     /// One-group overbrace decoration.
     Overbrace,
     /// One-group overline decoration.
@@ -1213,7 +1222,10 @@ fn validate_command_groups(
         | SupportedCommand::Italic
         | SupportedCommand::OperatorName
         | SupportedCommand::Overbrace
+        | SupportedCommand::OverLeftArrow
+        | SupportedCommand::OverLeftRightArrow
         | SupportedCommand::Overline
+        | SupportedCommand::OverRightArrow
         | SupportedCommand::Roman
         | SupportedCommand::SansSerif
         | SupportedCommand::Substack

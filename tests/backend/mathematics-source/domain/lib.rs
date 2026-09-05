@@ -694,6 +694,40 @@ fn custom_operator_name_is_structural_and_requires_one_group() {
 }
 
 #[test]
+fn directional_over_arrows_are_structural_and_require_one_group() {
+    let source = concat!(
+        r"\overleftarrow{AB}+",
+        r"\overleftrightarrow{CD}+",
+        r"\overrightarrow{EF}",
+    );
+    let analyzed = analyze(source, FormulaMode::Inline)
+        .expect("grouped directional over-arrows");
+    assert!(analyzed.is_supported());
+    assert_eq!(reconstructed(&analyzed), source);
+    for (spelling, kind) in [
+        (r"\overleftarrow", SupportedCommand::OverLeftArrow),
+        (
+            r"\overleftrightarrow",
+            SupportedCommand::OverLeftRightArrow,
+        ),
+        (r"\overrightarrow", SupportedCommand::OverRightArrow),
+    ] {
+        assert!(analyzed.tokens.iter().any(|token| {
+            token.kind == MathTokenKind::Command(kind)
+                && analyzed.token_source(*token) == Some(spelling)
+        }));
+        assert_eq!(
+            analyze(spelling, FormulaMode::Inline),
+            Err(MathSyntaxError {
+                byte_offset: spelling.len(),
+                kind: MathSyntaxErrorKind::MissingRequiredGroup,
+            }),
+            "{spelling}",
+        );
+    }
+}
+
+#[test]
 fn boxed_and_brace_decorations_preserve_grouped_structure() {
     let source = concat!(
         r"\boxed{x+1} + \overbrace{a+b}^{sum} + ",
