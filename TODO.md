@@ -539,6 +539,11 @@ geometry, while
 nested semantic blocks retain their accepted page ownership. Overflow amounts
 retain the full physical `u64` range without diagnostic truncation.
 
+Fixed block/page ownership now reuses the semantic model's iterative structural
+lookup instead of maintaining a recursive fixed-layout traversal. Fixtures keep
+same-page non-block identities rejected and cover the maximum accepted 256-level
+block nesting boundary.
+
 A read-only layout-only Export preflight now consumes revision-bound layout
 diagnostics and refuses layout readiness when evidence is blocking or explicitly
 incomplete. The live `SessionApplication` routes that gate against its current
