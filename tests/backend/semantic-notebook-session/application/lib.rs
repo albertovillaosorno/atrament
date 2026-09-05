@@ -3124,109 +3124,137 @@ fn definition_spans_promote_edit_and_preserve_semantic_references() {
 }
 
 #[test]
-fn nested_definition_remains_editable_through_every_block_container() {
-    let ids = IdentityAllocator::new();
-    let (mut candidate, span_candidate) =
-        candidate_notebook_with_span(&ids, "nested definition");
-    let mut definition = candidate.pages[0].flows[0]
-        .blocks
-        .pop()
-        .expect("definition seed block");
-    let definition_candidate = definition.id;
-    let content =
-        std::mem::replace(&mut definition.content, BlockContent::Rule);
-    let BlockContent::Paragraph(spans) = content else {
-        panic!("nested definition seed must start as paragraph");
-    };
-    definition.content = BlockContent::Definition(spans);
+fn every_simple_inline_family_remains_editable_through_block_containers() {
+    type InlineBlockConstructor = fn(
+        Vec<InlineSpan<CandidateIdentity>>,
+    ) -> BlockContent<CandidateIdentity>;
+    let cases: &[(SemanticBlockKind, InlineBlockConstructor)] = &[
+        (SemanticBlockKind::Date, BlockContent::Date),
+        (SemanticBlockKind::Definition, BlockContent::Definition),
+        (SemanticBlockKind::Heading, BlockContent::Heading),
+        (SemanticBlockKind::Paragraph, BlockContent::Paragraph),
+        (SemanticBlockKind::Quotation, BlockContent::Quotation),
+        (SemanticBlockKind::SourceNote, BlockContent::SourceNote),
+    ];
 
-    let freeform = Block {
-        content: BlockContent::Freeform(vec![definition]),
-        extensions: vec![],
-        id: candidate_id(&ids),
-        provenance: None,
-        style: None,
-    };
-    let table = Block {
-        content: BlockContent::Table(Table {
+    for (kind, constructor) in cases {
+        let ids = IdentityAllocator::new();
+        let (mut candidate, span_candidate) =
+            candidate_notebook_with_span(&ids, "nested before");
+        let mut inline_block = candidate.pages[0].flows[0]
+            .blocks
+            .pop()
+            .expect("simple inline-family seed block");
+        let inline_block_candidate = inline_block.id;
+        let content =
+            std::mem::replace(&mut inline_block.content, BlockContent::Rule);
+        let BlockContent::Paragraph(spans) = content else {
+            panic!("simple inline-family seed must start as paragraph");
+        };
+        inline_block.content = constructor(spans);
+
+        let freeform = Block {
+            content: BlockContent::Freeform(vec![inline_block]),
+            extensions: vec![],
             id: candidate_id(&ids),
-            rows: vec![TableRow {
-                cells: vec![TableCell {
-                    blocks: vec![freeform],
+            provenance: None,
+            style: None,
+        };
+        let table = Block {
+            content: BlockContent::Table(Table {
+                id: candidate_id(&ids),
+                rows: vec![TableRow {
+                    cells: vec![TableCell {
+                        blocks: vec![freeform],
+                        id: candidate_id(&ids),
+                        span: TableCellSpan::SINGLE,
+                    }],
                     id: candidate_id(&ids),
-                    span: TableCellSpan::SINGLE,
+                    role: TableRowRole::Body,
                 }],
-                id: candidate_id(&ids),
-                role: TableRowRole::Body,
-            }],
-        }),
-        extensions: vec![],
-        id: candidate_id(&ids),
-        provenance: None,
-        style: None,
-    };
-    let list = Block {
-        content: BlockContent::List(List {
+            }),
+            extensions: vec![],
             id: candidate_id(&ids),
-            items: vec![ListItem {
-                blocks: vec![table],
+            provenance: None,
+            style: None,
+        };
+        let list = Block {
+            content: BlockContent::List(List {
                 id: candidate_id(&ids),
-            }],
-            ordered: false,
-        }),
-        extensions: vec![],
-        id: candidate_id(&ids),
-        provenance: None,
-        style: None,
-    };
-    candidate.pages[0].flows[0].blocks = vec![Block {
-        content: BlockContent::Callout(vec![list]),
-        extensions: vec![],
-        id: candidate_id(&ids),
-        provenance: None,
-        style: None,
-    }];
+                items: vec![ListItem {
+                    blocks: vec![table],
+                    id: candidate_id(&ids),
+                }],
+                ordered: false,
+            }),
+            extensions: vec![],
+            id: candidate_id(&ids),
+            provenance: None,
+            style: None,
+        };
+        candidate.pages[0].flows[0].blocks = vec![Block {
+            content: BlockContent::Callout(vec![list]),
+            extensions: vec![],
+            id: candidate_id(&ids),
+            provenance: None,
+            style: None,
+        }];
 
-    let mut session = SemanticNotebookSessionService::default();
-    let AcceptanceOutcome::Accepted { mapping, revision } =
-        session.accept(candidate)
-    else {
-        panic!("nested definition candidate must be accepted");
-    };
-    let definition = accepted_for(&mapping, definition_candidate);
-    let span = accepted_for(&mapping, span_candidate);
-    assert_eq!(
-        session.inspect_identity_kind(revision, definition),
-        IdentityKindInspectOutcome::Inspected {
-            kind: SemanticIdentityKind::Block(SemanticBlockKind::Definition),
-            revision,
-            target: definition,
-        },
-    );
-    let TextEditOutcome::Applied { revision: changed, .. } =
-        session.replace_text(
-            revision,
-            span,
-            String::from("nested definition changed"),
-        )
-    else {
-        panic!("nested definition span must remain editable");
-    };
-    let CommandTargetMaterialOutcome::Prepared { material } =
-        session.command_target_material_for_family(
-            changed,
-            span,
-            SemanticCommandFamily::TextContent,
-        )
-    else {
-        panic!("nested definition text material must remain discoverable");
-    };
-    assert_eq!(
-        material.editable_value,
-        Some(EditableSemanticValue::Text(String::from(
-            "nested definition changed",
-        ))),
-    );
+        let mut session = SemanticNotebookSessionService::default();
+        let AcceptanceOutcome::Accepted { mapping, revision } =
+            session.accept(candidate)
+        else {
+            panic!("nested simple inline-family candidate must be accepted");
+        };
+        let inline_block = accepted_for(&mapping, inline_block_candidate);
+        let span = accepted_for(&mapping, span_candidate);
+        assert_eq!(
+            session.inspect_identity_kind(revision, inline_block),
+            IdentityKindInspectOutcome::Inspected {
+                kind: SemanticIdentityKind::Block(*kind),
+                revision,
+                target: inline_block,
+            },
+        );
+
+        let TextEditOutcome::Applied { revision: changed, .. } =
+            session.replace_text(revision, span, String::from("nested after"))
+        else {
+            panic!("nested simple inline-family span must remain editable");
+        };
+        let CommandTargetMaterialOutcome::Prepared { material } =
+            session.command_target_material_for_family(
+                changed,
+                span,
+                SemanticCommandFamily::TextContent,
+            )
+        else {
+            panic!("nested simple inline-family text must remain discoverable");
+        };
+        assert_eq!(
+            material.editable_value,
+            Some(EditableSemanticValue::Text(String::from("nested after"))),
+        );
+
+        let HistoryTraversalOutcome::Traversed { revision: undone, .. } =
+            session.traverse_history(changed, HistoryDirection::Undo)
+        else {
+            panic!("nested simple inline-family edit must Undo");
+        };
+        let CommandTargetMaterialOutcome::Prepared { material } =
+            session.command_target_material_for_family(
+                undone,
+                span,
+                SemanticCommandFamily::TextContent,
+            )
+        else {
+            panic!("nested simple inline-family Undo must restore text");
+        };
+        assert_eq!(
+            material.editable_value,
+            Some(EditableSemanticValue::Text(String::from("nested before"))),
+        );
+    }
 }
 
 #[test]
