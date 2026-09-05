@@ -35,10 +35,16 @@ use std::collections::BTreeSet;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::process::{Command, Stdio};
 
+use atrament_flow_pagination::{
+    FlowUnitPolicy, MeasuredFlowUnit, MeasuredFragment,
+};
 use atrament_physical_page_profile::{
     BindingEdge, BorderShape, Length, Orientation, PageProfile,
     PaperMarkAppearance, PaperMarkJoin, PaperMarkLayer, PaperPattern, Rect,
     SheetSize,
+};
+use atrament_semantic_flow_pagination::{
+    RevisionFlowMeasurement, SemanticPaginationError,
 };
 use atrament_semantic_notebook::{
     Asset, Block, BlockContent, CandidateIdentity, Constraint, ConstraintKind,
@@ -719,6 +725,78 @@ fn application_routes_bounded_inspection_through_owned_semantic_authority() {
     assert_eq!(
         session.accepted_revision().map(|current| current.id),
         Some(revision),
+    );
+}
+
+#[test]
+fn application_routes_measured_pagination_through_owned_revision() {
+    let identities = IdentityAllocator::new();
+    let (candidate, span_candidate) =
+        editable_text_candidate(&identities, "measured text");
+    let page_candidate = candidate.pages[0].id;
+    let flow_candidate = candidate.pages[0].flows[0].id;
+    let block_candidate = candidate.pages[0].flows[0].blocks[0].id;
+    let mut session = application::SessionApplication::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept_candidate(candidate)
+    else {
+        panic!("measured-flow candidate must be accepted");
+    };
+    let accepted = |candidate| {
+        mapping
+            .iter()
+            .find(|entry| entry.candidate == candidate)
+            .expect("candidate identity must map")
+            .accepted
+    };
+    let page = accepted(page_candidate);
+    let flow = accepted(flow_candidate);
+    let block = accepted(block_candidate);
+    let span = accepted(span_candidate);
+    let measurement = RevisionFlowMeasurement {
+        flow,
+        revision,
+        units: vec![MeasuredFlowUnit {
+            fragments: vec![MeasuredFragment {
+                height: Length::from_micrometres(20_000),
+                owner: block,
+                width: Length::from_micrometres(80_000),
+            }],
+            policy: FlowUnitPolicy::Independent,
+        }],
+    };
+
+    let fresh = application::SessionApplication::default();
+    assert_eq!(
+        fresh.paginate_measured_flow(&measurement),
+        Err(application::SessionPaginationError::NoAcceptedRevision),
+    );
+
+    let before = session
+        .accepted_revision()
+        .expect("accepted revision remains live")
+        .clone();
+    let plan = session
+        .paginate_measured_flow(&measurement)
+        .expect("current measurement must paginate");
+    assert_eq!(plan.placements.len(), 1);
+    assert_eq!(plan.placements[0].owner, block);
+    assert_eq!(plan.placements[0].page, page);
+    assert_eq!(session.accepted_revision(), Some(&before));
+
+    let TextEditOutcome::Applied { revision: current, .. } =
+        session.replace_text(revision, span, String::from("edited"))
+    else {
+        panic!("text edit must advance accepted revision");
+    };
+    assert_eq!(
+        session.paginate_measured_flow(&measurement),
+        Err(application::SessionPaginationError::Pagination(
+            SemanticPaginationError::MeasurementRevisionMismatch {
+                accepted: current,
+                measured: revision,
+            },
+        )),
     );
 }
 

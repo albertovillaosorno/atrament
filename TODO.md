@@ -466,10 +466,11 @@ for all pages sharing it. Fixtures cover 10,000 ordered measured blocks, 10,000
 additional distinct page/profile pairs, and 10,000 pages sharing one profile
 without changing semantic order.
 
-Runtime composition of this read-only pagination service remains open. The
-current architecture declaration does not admit a dependency from the live
-`SessionApplication` owner to `atrament_semantic_flow_pagination`, so adapters
-must not bypass that boundary by wiring it ad hoc.
+The live `SessionApplication` owner now admits the semantic-flow pagination
+application dependency and exposes one read-only measured-flow operation. It
+binds the supplied measurement to the owner's current accepted revision and
+delegates page/profile derivation and measurement admission without publishing
+arbitrary page rectangles or a transport route.
 
 The task remains open for real handwriting and formula measurement, grapheme-
 aware line breaking and paragraph wrapping, quotation and citation measurement,

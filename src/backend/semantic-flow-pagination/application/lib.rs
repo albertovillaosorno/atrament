@@ -45,6 +45,10 @@ use atrament_semantic_notebook::{
     RevisionIdentity,
 };
 
+/// Complete measured-flow plan whose owners and pages are accepted identities.
+pub type SemanticPaginationPlan =
+    PaginationPlan<AcceptedIdentity, AcceptedIdentity>;
+
 /// Already-measured semantic flow bound to one exact accepted revision.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct RevisionFlowMeasurement {
@@ -130,10 +134,7 @@ struct FlowScope<'revision> {
 pub fn paginate_revision(
     revision: &AcceptedRevision,
     measurement: &RevisionFlowMeasurement,
-) -> Result<
-    PaginationPlan<AcceptedIdentity, AcceptedIdentity>,
-    SemanticPaginationError,
-> {
+) -> Result<SemanticPaginationPlan, SemanticPaginationError> {
     if measurement.revision != revision.id {
         return Err(SemanticPaginationError::MeasurementRevisionMismatch {
             accepted: revision.id,

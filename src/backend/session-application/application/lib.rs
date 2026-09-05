@@ -15,9 +15,11 @@
 //   - Persist session state, parse transport input, or duplicate semantic
 //     rules.
 // - Allows:
-//   - Inputs: Existing draft and semantic application-service operations plus
-//     raw bytes already validated by an ingestion boundary.
-//   - Outputs: Typed outcomes plus borrowed accepted state and raw asset bytes.
+//   - Inputs: Existing draft and semantic application-service operations,
+//     revision-bound flow measurements, plus raw bytes already validated by an
+//     ingestion boundary.
+//   - Outputs: Typed outcomes, read-only pagination plans, borrowed accepted
+//     state, and raw asset bytes.
 //   - Side effects: Process-local mutation through owned application services.
 // - Split-When:
 //   - Derived state or bounded media policy requires an independent owner.
@@ -41,6 +43,10 @@ use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
+use atrament_semantic_flow_pagination::{
+    RevisionFlowMeasurement, SemanticPaginationError, SemanticPaginationPlan,
+    paginate_revision,
+};
 use atrament_semantic_notebook::{
     AcceptedIdentity, AcceptedRevision, CandidateIdentity, FormulaMode,
     Notebook, PhysicalPageProfile, RevisionIdentity, SemanticIdentityKind,
@@ -105,6 +111,15 @@ pub enum AssetBytesError {
         /// Requested identity absent from that revision.
         target: AcceptedIdentity,
     },
+}
+
+/// Typed failure to paginate one measured flow through current session state.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum SessionPaginationError {
+    /// Session has no accepted semantic revision to bind the measurement to.
+    NoAcceptedRevision,
+    /// Current accepted revision or measured-flow admission rejected the input.
+    Pagination(SemanticPaginationError),
 }
 
 /// Result of retaining bytes for one already-accepted semantic asset.
@@ -389,6 +404,29 @@ impl SessionApplication {
         target: AcceptedIdentity,
     ) -> IdentityKindInspectOutcome {
         self.semantic.inspect_identity_kind(revision, target)
+    }
+
+    /// Paginate one revision-bound measured flow through current authority.
+    ///
+    /// This operation is read-only. It never accepts arbitrary page rectangles:
+    /// page geometry is derived by the semantic pagination service from the
+    /// current accepted revision's page-profile authority.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed failure when no accepted revision exists, when the
+    /// measurement belongs to another revision or flow, its block sequence is
+    /// invalid, page
+    /// authority is invalid, or measured fragments cannot be placed.
+    pub fn paginate_measured_flow(
+        &self,
+        measurement: &RevisionFlowMeasurement,
+    ) -> Result<SemanticPaginationPlan, SessionPaginationError> {
+        let Some(revision) = self.semantic.current() else {
+            return Err(SessionPaginationError::NoAcceptedRevision);
+        };
+        paginate_revision(revision, measurement)
+            .map_err(SessionPaginationError::Pagination)
     }
 
     /// Preview one exact direct semantic change without mutation.
