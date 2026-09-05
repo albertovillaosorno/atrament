@@ -297,6 +297,43 @@ fn valid_crlf_may_arrive_split_across_socket_reads() {
 }
 
 #[test]
+fn request_deadline_covers_slow_body_transfer() {
+    let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0))
+        .expect("test listener binds");
+    let address = listener.local_addr().expect("test listener address");
+    let writer = thread::spawn(move || {
+        let mut client =
+            TcpStream::connect(address).expect("test client connects");
+        client
+            .write_all(
+                concat!(
+                    "POST /api/session/task HTTP/1.1\r\n",
+                    "Host: 127.0.0.1:43123\r\n",
+                    "Content-Length: 10\r\n\r\n",
+                )
+                .as_bytes(),
+            )
+            .expect("request head writes");
+        for byte in b"abcdefghij" {
+            let _write_result = client.write_all(&[*byte]);
+            thread::sleep(Duration::from_millis(50));
+        }
+    });
+    let (mut server, _) = listener.accept().expect("test server accepts");
+    server
+        .set_read_timeout(Some(Duration::from_millis(180)))
+        .expect("test read timeout");
+    let error = runtime::read_request(&mut server)
+        .expect_err("slow body must hit total request deadline");
+    assert!(matches!(
+        error.kind(),
+        std::io::ErrorKind::TimedOut | std::io::ErrorKind::WouldBlock
+    ));
+    drop(server);
+    writer.join().expect("test writer joins");
+}
+
+#[test]
 fn request_timeout_is_total_deadline_not_per_read_budget() {
     let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0))
         .expect("test listener binds");
