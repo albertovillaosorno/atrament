@@ -103,6 +103,15 @@ const STRUCTURED_CONTROL_WORD_COMMANDS: &[(&str, SupportedCommand)] = &[
 const STRUCTURED_ENVIRONMENTS: &[StructuredEnvironmentDefinition] = &[
     StructuredEnvironmentDefinition {
         allows_alignment: true,
+        begin_command: SupportedCommand::BeginBracedMatrix,
+        begin_spelling: "\\begin{Bmatrix}",
+        end_command: SupportedCommand::EndBracedMatrix,
+        end_spelling: "\\end{Bmatrix}",
+        extra_end_error: MathSyntaxErrorKind::ExtraBracedMatrixEnd,
+        missing_end_error: MathSyntaxErrorKind::MissingBracedMatrixEnd,
+    },
+    StructuredEnvironmentDefinition {
+        allows_alignment: true,
         begin_command: SupportedCommand::BeginDoubleVerticalMatrix,
         begin_spelling: "\\begin{Vmatrix}",
         end_command: SupportedCommand::EndDoubleVerticalMatrix,
@@ -228,6 +237,8 @@ pub enum MathSyntaxErrorKind {
     EnvironmentCrossesGroupClose,
     /// Aligned environment closes without a matching aligned start.
     ExtraAlignedEnd,
+    /// Brace-delimited matrix closes without its matching start.
+    ExtraBracedMatrixEnd,
     /// Bracketed-matrix environment closes without its matching start.
     ExtraBracketedMatrixEnd,
     /// Cases environment closes without a matching cases start.
@@ -250,6 +261,8 @@ pub enum MathSyntaxErrorKind {
     MismatchedEnvironmentEnd,
     /// Aligned environment remains open at end of source.
     MissingAlignedEnd,
+    /// Brace-delimited matrix remains open at end of source.
+    MissingBracedMatrixEnd,
     /// Bracketed-matrix environment remains open at end of source.
     MissingBracketedMatrixEnd,
     /// Cases environment remains open at end of source.
@@ -365,6 +378,8 @@ pub enum SupportedCommand {
     Bar,
     /// Start of an explicit aligned environment.
     BeginAligned,
+    /// Start of an explicit brace-delimited matrix environment.
+    BeginBracedMatrix,
     /// Start of an explicit bracketed-matrix environment.
     BeginBracketedMatrix,
     /// Start of an explicit cases environment.
@@ -399,6 +414,8 @@ pub enum SupportedCommand {
     DoubleDot,
     /// End of an explicit aligned environment.
     EndAligned,
+    /// End of an explicit brace-delimited matrix environment.
+    EndBracedMatrix,
     /// End of an explicit bracketed-matrix environment.
     EndBracketedMatrix,
     /// End of an explicit cases environment.
@@ -497,8 +514,9 @@ impl AnalyzedFormula {
 /// `\\operatorname{...}`, `\\text{...}`, grouped substacks, vector,
 /// overline, and underline decorations, escaped TeX special characters, common
 /// named mathematical operators and symbols, aligned separators, and ordered
-/// aligned, bracketed-matrix, cases, double-vertical-bar-matrix, gathered,
-/// matrix, parenthesized-matrix, split, and vertical-bar-matrix environments.
+/// aligned, brace-delimited-matrix, bracketed-matrix, cases,
+/// double-vertical-bar-matrix, gathered, matrix, parenthesized-matrix, split,
+/// and vertical-bar-matrix environments.
 /// Math-only alignment, script, and row-break markers remain literal inside
 /// grouped text.
 /// Other commands remain present in the token stream and are reported through
@@ -1135,6 +1153,7 @@ fn validate_command_groups(
 ) -> Result<(), MathSyntaxError> {
     let required = match command {
         SupportedCommand::BeginAligned
+        | SupportedCommand::BeginBracedMatrix
         | SupportedCommand::BeginBracketedMatrix
         | SupportedCommand::BeginCases
         | SupportedCommand::BeginDoubleVerticalMatrix
@@ -1144,6 +1163,7 @@ fn validate_command_groups(
         | SupportedCommand::BeginSplit
         | SupportedCommand::BeginVerticalMatrix
         | SupportedCommand::EndAligned
+        | SupportedCommand::EndBracedMatrix
         | SupportedCommand::EndBracketedMatrix
         | SupportedCommand::EndCases
         | SupportedCommand::EndDoubleVerticalMatrix
