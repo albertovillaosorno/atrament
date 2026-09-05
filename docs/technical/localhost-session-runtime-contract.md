@@ -243,11 +243,16 @@ creates a different port or listener ownership, a new session secret, an empty
 session, and a fresh handshake.
 
 If automatic browser launch fails before the service reaches `ready`, startup
-fails closed. The listener and fresh session credential are released with the
-process, and the secret-free recovery instruction directs the user to fix
-browser
-launch and restart Atrament. Startup must not publish a bare origin as a usable
+fails closed. Browser-opener completion is bounded to five seconds; a hung
+opener is terminated rather than leaving Atrament indefinitely in `listening`.
+The listener and fresh session credential are released with the process, and the
+secret-free recovery instruction directs the user to fix browser launch and
+restart Atrament. Startup must not publish a bare origin as a usable
 continuation path or weaken host or authentication checks for manual opening.
+
+The platform opener also receives null standard input, output, and error so it
+cannot reflect the credential-bearing launch argument into Atrament's own output
+streams.
 
 ## Failure Modes
 

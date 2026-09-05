@@ -1362,9 +1362,17 @@ absent or zero `Content-Length` is accepted only when no trailing bytes exist.
 
 Automatic browser launch now fails startup closed before `ready`: the bound
 loopback listener and fresh credential are released instead of leaving an
-unreachable authenticated session running. Recovery text is secret-free and
-directs a restart after browser launch is fixed; it does not present the bare
-origin as an authenticated continuation URL.
+unreachable authenticated session running. The opener itself has one five-second
+completion budget, so a hung platform helper is killed rather than holding the
+process forever in `listening`. Recovery text is secret-free and directs a
+restart after browser launch is fixed; it does not present the bare origin as an
+authenticated continuation URL.
+
+The opener process now receives null stdin, stdout, and stderr. Before that
+change, a synthetic opener that echoed its URL copied the credential-bearing
+fragment into both Atrament output streams; the same probe is now silent. This
+closes child-output reflection without claiming to solve the separate argv
+exposure below.
 
 The current automatic-launch handoff still passes the fragment-bearing URL as a
 platform-opener command-line argument. A synthetic Linux probe observed that

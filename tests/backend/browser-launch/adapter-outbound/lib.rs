@@ -30,6 +30,8 @@
 //   - Uses standard no-op process commands on Unix test hosts.
 //
 use std::ffi::OsStr;
+#[cfg(unix)]
+use std::time::{Duration, Instant};
 
 #[allow(dead_code)]
 #[path = "../../../../src/backend/browser-launch/adapter-outbound/lib.rs"]
@@ -63,5 +65,22 @@ fn missing_opener_is_typed_without_exposing_the_origin() {
     )
     .expect_err("missing opener fails");
     assert!(matches!(error, browser_launch::LaunchError::Spawn(_)));
+    assert!(!error.to_string().contains(ORIGIN));
+}
+
+#[cfg(unix)]
+#[test]
+fn hanging_opener_is_killed_at_the_total_launch_deadline() {
+    let started = Instant::now();
+    let error = browser_launch::launch_with_timeout(
+        OsStr::new("yes"),
+        ORIGIN,
+        Duration::from_millis(80),
+    )
+    .expect_err("sleep must exceed the bounded launch deadline");
+    let elapsed = started.elapsed();
+    assert!(matches!(error, browser_launch::LaunchError::TimedOut));
+    assert!(elapsed >= Duration::from_millis(60));
+    assert!(elapsed < Duration::from_secs(1));
     assert!(!error.to_string().contains(ORIGIN));
 }

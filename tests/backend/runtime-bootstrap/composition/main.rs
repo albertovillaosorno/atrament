@@ -35,10 +35,8 @@ use atrament_browser_launch::LaunchError;
 #[path = "../../../../src/backend/runtime-bootstrap/composition/main.rs"]
 mod bootstrap;
 
-#[test]
-fn browser_launch_failure_requires_restart_without_publishing_access() {
-    let launch_error = LaunchError::GraphicalSessionUnavailable;
-    let error = bootstrap::browser_launch_failure(&launch_error);
+fn assert_recovery_error_is_secret_free(launch_error: &LaunchError) {
+    let error = bootstrap::browser_launch_failure(launch_error);
     let message = error.to_string();
     assert!(message.contains("restart Atrament"));
     assert!(message.contains("credential is intentionally not published"));
@@ -46,4 +44,16 @@ fn browser_launch_failure_requires_restart_without_publishing_access() {
     assert!(!message.contains("https://"));
     assert!(!message.contains("#session="));
     assert!(!message.contains("Open "));
+}
+
+#[test]
+fn browser_launch_failure_requires_restart_without_publishing_access() {
+    assert_recovery_error_is_secret_free(
+        &LaunchError::GraphicalSessionUnavailable,
+    );
+}
+
+#[test]
+fn browser_launch_timeout_requires_restart_without_publishing_access() {
+    assert_recovery_error_is_secret_free(&LaunchError::TimedOut);
 }
