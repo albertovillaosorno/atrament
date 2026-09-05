@@ -3094,6 +3094,72 @@ fn rejected_edits_preserve_redo_only_asset_bytes() {
 }
 
 #[test]
+fn successful_direct_edit_prunes_redo_only_asset_bytes() {
+    let identities = IdentityAllocator::new();
+    let (editable, candidate_span) =
+        editable_text_candidate(&identities, "before");
+    let mut session = application::SessionApplication::default();
+    let AcceptanceOutcome::Accepted { mapping, .. } =
+        session.accept_candidate(editable)
+    else {
+        panic!("editable candidate must be accepted");
+    };
+    let span = mapping
+        .iter()
+        .find(|entry| entry.candidate == candidate_span)
+        .expect("editable span identity must map")
+        .accepted;
+
+    let (asset_candidate, _, candidate_asset, _) =
+        asset_figure_candidate(&identities);
+    let AcceptanceOutcome::Accepted {
+        mapping: asset_mapping,
+        revision: with_asset,
+    } = session.accept_candidate(asset_candidate)
+    else {
+        panic!("asset candidate must be accepted");
+    };
+    let asset = asset_mapping
+        .iter()
+        .find(|entry| entry.candidate == candidate_asset)
+        .expect("asset identity must map")
+        .accepted;
+    assert!(matches!(
+        session.retain_asset_bytes(with_asset, asset, vec![1, 3, 5, 7]),
+        Ok(application::AssetBytesRetention::Retained { .. })
+    ));
+
+    let HistoryTraversalOutcome::Traversed { revision: undone, .. } =
+        session.traverse_history(with_asset, HistoryDirection::Undo)
+    else {
+        panic!("asset candidate must Undo to editable state");
+    };
+    assert_eq!(session.retained_asset_byte_count_for_test(), 1);
+    assert!(matches!(
+        session.history_availability(),
+        HistoryAvailabilityOutcome::Available(HistoryAvailability {
+            can_redo: true,
+            ..
+        })
+    ));
+
+    let TextEditOutcome::Applied { revision: edited, .. } =
+        session.replace_text(undone, span, String::from("after"))
+    else {
+        panic!("direct edit must commit replacement branch");
+    };
+    assert_eq!(session.retained_asset_byte_count_for_test(), 0);
+    assert_eq!(
+        session.history_availability(),
+        HistoryAvailabilityOutcome::Available(HistoryAvailability {
+            can_redo: false,
+            can_undo: true,
+            revision: edited,
+        }),
+    );
+}
+
+#[test]
 fn discarded_redo_pruning_preserves_other_history_asset_bytes() {
     let identities = IdentityAllocator::new();
     let mut session = application::SessionApplication::default();
