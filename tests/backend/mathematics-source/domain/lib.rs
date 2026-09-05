@@ -1849,6 +1849,28 @@ fn vertical_and_bracketed_matrices_keep_distinct_nesting() {
 }
 
 #[test]
+fn braced_and_bracketed_matrices_keep_distinct_nesting() {
+    let source = concat!(
+        r"\begin{Bmatrix}a & \begin{bmatrix}b & c \\ d & e",
+        r"\end{bmatrix} \\ f & g\end{Bmatrix}",
+    );
+    let analyzed = analyze(source, FormulaMode::Display)
+        .expect("nested brace-delimited and bracketed matrices");
+    assert!(analyzed.is_supported());
+    assert_eq!(reconstructed(&analyzed), source);
+
+    let prefix = r"\begin{Bmatrix}\begin{bmatrix}x";
+    let crossed = format!(r"{prefix}\end{{Bmatrix}}");
+    assert_eq!(
+        analyze(&crossed, FormulaMode::Display),
+        Err(MathSyntaxError {
+            byte_offset: prefix.len(),
+            kind: MathSyntaxErrorKind::MismatchedEnvironmentEnd,
+        }),
+    );
+}
+
+#[test]
 fn bracketed_and_parenthesized_matrices_keep_distinct_nesting() {
     let source = concat!(
         r"\begin{bmatrix}a & \begin{pmatrix}b & c \\ d & e",
