@@ -46,6 +46,10 @@ No-op batches, rejected candidates, bounded command rejection, and stale direct
 edits preserve both Redo and its reachable bytes. Branch cleanup is selective:
 bytes still reachable through current or Undo state remain retained.
 
+A 256-state asset-history fixture undoes halfway, then branches: cleanup removes
+exactly 128 Redo-only retained byte entries and preserves all 128 identities
+still reachable through older history, including their exact byte sequences.
+
 A process fixture now retains bytes for two semantic assets, commits text and
 asset-reference history, and computes current measured pagination, fixed-region
 overflow diagnostics, and layout-only Export preflight. Both orderly and forced

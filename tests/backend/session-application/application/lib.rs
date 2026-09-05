@@ -3186,6 +3186,94 @@ fn discarded_redo_pruning_preserves_other_history_asset_bytes() {
 }
 
 #[test]
+fn deep_history_redo_pruning_matches_reachable_asset_set() {
+    const CANDIDATES: usize = 256;
+    const REDO_TO_DISCARD: usize = 128;
+
+    let identities = IdentityAllocator::new();
+    let mut session = application::SessionApplication::default();
+    let mut revisions = Vec::with_capacity(CANDIDATES);
+    let mut assets = Vec::with_capacity(CANDIDATES);
+    let mut payloads = Vec::with_capacity(CANDIDATES);
+
+    for index in 0..CANDIDATES {
+        let (candidate, _, candidate_asset, _) =
+            asset_figure_candidate(&identities);
+        let AcceptanceOutcome::Accepted { mapping, revision } =
+            session.accept_candidate(candidate)
+        else {
+            panic!("generated asset candidate must be accepted");
+        };
+        let asset = mapping
+            .iter()
+            .find(|entry| entry.candidate == candidate_asset)
+            .expect("generated asset identity must map")
+            .accepted;
+        let marker = u8::try_from(index % 251).expect("payload marker fits u8");
+        let payload = vec![marker, marker.wrapping_add(1)];
+        assert!(matches!(
+            session.retain_asset_bytes(revision, asset, payload.clone()),
+            Ok(application::AssetBytesRetention::Retained { .. })
+        ));
+        revisions.push(revision);
+        assets.push(asset);
+        payloads.push(payload);
+    }
+    assert_eq!(session.retained_asset_byte_count_for_test(), CANDIDATES);
+
+    let mut current = *revisions.last().expect("latest generated revision");
+    for _ in 0..REDO_TO_DISCARD {
+        let HistoryTraversalOutcome::Traversed { revision, .. } =
+            session.traverse_history(current, HistoryDirection::Undo)
+        else {
+            panic!("generated history must Undo");
+        };
+        current = revision;
+    }
+    assert_eq!(session.retained_asset_byte_count_for_test(), CANDIDATES);
+    assert!(matches!(
+        session.history_availability(),
+        HistoryAvailabilityOutcome::Available(HistoryAvailability {
+            can_redo: true,
+            can_undo: true,
+            ..
+        })
+    ));
+
+    let AcceptanceOutcome::Accepted { revision: branch, .. } =
+        session.accept_candidate(minimal_candidate(&identities))
+    else {
+        panic!("generated replacement branch must be accepted");
+    };
+    let retained = CANDIDATES - REDO_TO_DISCARD;
+    assert_eq!(session.retained_asset_byte_count_for_test(), retained);
+
+    let HistoryTraversalOutcome::Traversed {
+        revision: mut restored,
+        ..
+    } = session.traverse_history(branch, HistoryDirection::Undo)
+    else {
+        panic!("generated replacement branch must Undo");
+    };
+    for index in (0..retained).rev() {
+        assert_eq!(
+            session.asset_bytes(restored, assets[index]),
+            Ok(payloads[index].as_slice()),
+            "retained history asset {index} lost its bytes",
+        );
+        if index > 0 {
+            let HistoryTraversalOutcome::Traversed { revision, .. } =
+                session.traverse_history(restored, HistoryDirection::Undo)
+            else {
+                panic!("retained generated history must Undo");
+            };
+            restored = revision;
+        }
+    }
+    assert_eq!(session.retained_asset_byte_count_for_test(), retained);
+}
+
+#[test]
 fn abandoned_redo_asset_bytes_cannot_attach_to_new_asset_identity() {
     let identities = IdentityAllocator::new();
     let mut session = application::SessionApplication::default();
