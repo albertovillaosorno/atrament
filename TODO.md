@@ -566,10 +566,12 @@ Stale placements, wrong page ownership, missing or invalid profiles, and
 unrepresentable coordinates fail before a diagnostic can be presented as
 current. The live `SessionApplication` owner routes this same read-only
 placement validation against its current accepted revision without admitting
-solver or transport authority. Page-profile edits invalidate prior derived
-geometry, while
-nested semantic blocks retain their accepted page ownership. Overflow amounts
-retain the full physical `u64` range without diagnostic truncation.
+solver or transport authority. Live page-profile edits now have integration
+evidence that prior placements become stale while a fresh placement uses the new
+writable geometry; fresh Undo/Redo placements follow restored profile content
+under new revision identities. Nested semantic blocks retain their accepted page
+ownership, and overflow amounts retain the full physical `u64` range without
+diagnostic truncation.
 
 Fixed block/page ownership now reuses the semantic model's iterative structural
 lookup instead of maintaining a recursive fixed-layout traversal. Fixtures keep

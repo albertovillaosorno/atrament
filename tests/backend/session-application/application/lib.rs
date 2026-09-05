@@ -1004,6 +1004,97 @@ fn application_routes_fixed_overflow_through_owned_revision() {
 }
 
 #[test]
+fn page_profile_edits_recompute_live_fixed_region_geometry() {
+    let identities = IdentityAllocator::new();
+    let (candidate, _) = editable_text_candidate(&identities, "fixed geometry");
+    let profile_candidate = candidate.page_profiles[0].id;
+    let page_candidate = candidate.pages[0].id;
+    let block_candidate = candidate.pages[0].flows[0].blocks[0].id;
+    let mut session = application::SessionApplication::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept_candidate(candidate)
+    else {
+        panic!("fixed-profile candidate must be accepted");
+    };
+    let accepted = |candidate| {
+        mapping
+            .iter()
+            .find(|entry| entry.candidate == candidate)
+            .expect("fixed-profile identity must map")
+            .accepted
+    };
+    let profile = accepted(profile_candidate);
+    let page = accepted(page_candidate);
+    let block = accepted(block_candidate);
+    let rectangle = Rect {
+        height: Length::from_micrometres(10_000),
+        width: Length::from_micrometres(10_000),
+        x: Length::from_micrometres(35_000),
+        y: Length::from_micrometres(50_000),
+    };
+    let placement = |revision| AcceptedFixedPlacement {
+        object: block,
+        page,
+        rectangle,
+        revision,
+    };
+
+    assert_eq!(
+        session.validate_fixed_placement(placement(revision)),
+        Ok(FixedRegionLayoutResult::WithinBounds { object: block, page }),
+    );
+
+    let mut narrowed = physical_page_profile();
+    narrowed.outer_margin = Length::from_micrometres(40_000);
+    let PageProfileEditOutcome::Applied { revision: edited, .. } =
+        session.replace_page_profile(revision, profile, narrowed)
+    else {
+        panic!("valid fixed-profile edit must apply");
+    };
+    assert_eq!(
+        session.validate_fixed_placement(placement(revision)),
+        Err(application::SessionFixedRegionLayoutError::Layout(
+            FixedRegionLayoutError::RevisionMismatch {
+                accepted: edited,
+                placement: revision,
+            },
+        )),
+    );
+    let FixedRegionLayoutResult::Overflow { report, .. } = session
+        .validate_fixed_placement(placement(edited))
+        .expect("fresh placement must use narrowed profile")
+    else {
+        panic!("narrowed profile must overflow the old x coordinate");
+    };
+    assert_eq!(report.violations.len(), 1);
+    assert_eq!(report.violations[0].amount.micrometres(), 20_000);
+
+    let HistoryTraversalOutcome::Traversed { revision: undone, .. } =
+        session.traverse_history(edited, HistoryDirection::Undo)
+    else {
+        panic!("fixed-profile edit must Undo");
+    };
+    assert_eq!(
+        session.validate_fixed_placement(placement(undone)),
+        Ok(FixedRegionLayoutResult::WithinBounds { object: block, page }),
+    );
+
+    let HistoryTraversalOutcome::Traversed { revision: redone, .. } =
+        session.traverse_history(undone, HistoryDirection::Redo)
+    else {
+        panic!("fixed-profile edit must Redo");
+    };
+    let FixedRegionLayoutResult::Overflow { report, .. } = session
+        .validate_fixed_placement(placement(redone))
+        .expect("fresh Redo placement must use narrowed profile")
+    else {
+        panic!("Redone narrowed profile must overflow the old x coordinate");
+    };
+    assert_eq!(report.violations.len(), 1);
+    assert_eq!(report.violations[0].amount.micrometres(), 20_000);
+}
+
+#[test]
 fn application_routes_measured_pagination_through_owned_revision() {
     let identities = IdentityAllocator::new();
     let (candidate, span_candidate) =
