@@ -295,6 +295,7 @@ fn serves_embedded_frontend_resources_without_caching() {
         assert!(head.contains(
             "Content-Security-Policy: frame-ancestors 'none'\r\n",
         ));
+        assert!(head.contains("Referrer-Policy: no-referrer\r\n"));
         assert!(head.contains("X-Content-Type-Options: nosniff\r\n"));
         assert_eq!(body, expected_body);
     }

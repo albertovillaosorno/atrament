@@ -61,6 +61,7 @@ const JSON_CONTENT_TYPE: &str = "application/json; charset=utf-8";
 const RESPONSE_TRAILERS: &str = concat!(
     "Cache-Control: no-store\r\n",
     "Content-Security-Policy: frame-ancestors 'none'\r\n",
+    "Referrer-Policy: no-referrer\r\n",
     "X-Content-Type-Options: nosniff\r\n",
     "Connection: close\r\n\r\n",
 );
