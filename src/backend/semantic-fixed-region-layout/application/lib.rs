@@ -47,8 +47,8 @@ use atrament_fixed_region_bounds::{
 };
 use atrament_physical_page_profile::Rect;
 use atrament_semantic_notebook::{
-    AcceptedIdentity, AcceptedRevision, Block, BlockContent,
-    PhysicalPageProfileError, RevisionIdentity,
+    AcceptedIdentity, AcceptedRevision, PhysicalPageProfileError,
+    RevisionIdentity, SemanticIdentityKind, semantic_identity_path,
 };
 
 /// One solver-derived fixed rectangle bound to accepted semantic authority.
@@ -159,11 +159,20 @@ pub fn validate_fixed_placement(
             page: placement.page,
         });
     };
-    if !page
-        .flows
-        .iter()
-        .any(|flow| blocks_contain(&flow.blocks, placement.object))
-    {
+    let object_is_block_on_page = semantic_identity_path(
+        &revision.notebook,
+        placement.object,
+    )
+    .is_some_and(|path| {
+        matches!(
+            path.first().map(|entry| entry.descriptor.kind),
+            Some(SemanticIdentityKind::Block(_)),
+        ) && path.iter().any(|entry| {
+            entry.identity == placement.page
+                && entry.descriptor.kind == SemanticIdentityKind::Page
+        })
+    });
+    if !object_is_block_on_page {
         return Err(FixedRegionLayoutError::ObjectNotOnPage {
             object: placement.object,
             page: placement.page,
@@ -199,46 +208,6 @@ pub fn validate_fixed_placement(
         object: placement.object,
         page: placement.page,
         report,
-    })
-}
-
-fn block_content_contains(
-    content: &BlockContent<AcceptedIdentity>,
-    target: AcceptedIdentity,
-) -> bool {
-    match content {
-        BlockContent::Callout(blocks) | BlockContent::Freeform(blocks) => {
-            blocks_contain(blocks, target)
-        },
-        BlockContent::Date(_)
-        | BlockContent::Definition(_)
-        | BlockContent::Quotation(_)
-        | BlockContent::SourceNote(_)
-        | BlockContent::Figure(_)
-        | BlockContent::Heading(_)
-        | BlockContent::MarginNote(_)
-        | BlockContent::Mathematics(_)
-        | BlockContent::Paragraph(_)
-        | BlockContent::Rule
-        | BlockContent::Unresolved(_) => false,
-        BlockContent::List(list) => list
-            .items
-            .iter()
-            .any(|item| blocks_contain(&item.blocks, target)),
-        BlockContent::Table(table) => table.rows.iter().any(|row| {
-            row.cells
-                .iter()
-                .any(|cell| blocks_contain(&cell.blocks, target))
-        }),
-    }
-}
-
-fn blocks_contain(
-    blocks: &[Block<AcceptedIdentity>],
-    target: AcceptedIdentity,
-) -> bool {
-    blocks.iter().any(|block| {
-        block.id == target || block_content_contains(&block.content, target)
     })
 }
 

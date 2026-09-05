@@ -54,7 +54,8 @@ use atrament_semantic_notebook::{
     IdentityAllocator, Notebook, Page, PaperProfile,
 };
 use atrament_semantic_notebook_port::{
-    AcceptanceOutcome, PageProfileEditOutcome, SemanticNotebookSession,
+    AcceptanceOutcome, CANDIDATE_BLOCK_NESTING_LIMIT, PageProfileEditOutcome,
+    SemanticNotebookSession,
 };
 use atrament_semantic_notebook_session::SemanticNotebookSessionService;
 
@@ -540,6 +541,21 @@ fn object_must_belong_to_the_named_accepted_page() {
         ),
         Err(FixedRegionLayoutError::PageNotFound { page: fake_page }),
     );
+    assert_eq!(
+        validate_fixed_placement(
+            session.current().expect("accepted revision"),
+            placement(
+                revision,
+                page_one,
+                page_one,
+                rect(35_000, 20_000, 1, 1),
+            ),
+        ),
+        Err(FixedRegionLayoutError::ObjectNotOnPage {
+            object: page_one,
+            page: page_one,
+        }),
+    );
     assert_ne!(page_one, page_two);
 }
 
@@ -561,6 +577,45 @@ fn nested_block_is_still_owned_by_its_accepted_page() {
             placement(revision, page, nested, rect(35_000, 20_000, 1, 1)),
         ),
         Ok(FixedRegionLayoutResult::WithinBounds { object: nested, page }),
+    );
+}
+
+#[test]
+fn maximum_depth_block_ownership_is_iterative() {
+    let ids = IdentityAllocator::new();
+    let mut fixture = candidate_fixture(&ids);
+    let target = ids.allocate_candidate().expect("deep target");
+    let mut block = Block {
+        content: BlockContent::Rule,
+        extensions: vec![],
+        id: target,
+        provenance: None,
+        style: None,
+    };
+    for _ in 0..CANDIDATE_BLOCK_NESTING_LIMIT.saturating_sub(1) {
+        block = Block {
+            content: BlockContent::Callout(vec![block]),
+            extensions: vec![],
+            id: ids.allocate_candidate().expect("deep wrapper"),
+            provenance: None,
+            style: None,
+        };
+    }
+    fixture.notebook.pages[0].flows[0].blocks = vec![block];
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(fixture.notebook)
+    else {
+        panic!("maximum-depth candidate must be accepted");
+    };
+    let page = accepted_for(&mapping, fixture.page_one);
+    let object = accepted_for(&mapping, target);
+    assert_eq!(
+        validate_fixed_placement(
+            session.current().expect("accepted deep revision"),
+            placement(revision, page, object, rect(35_000, 20_000, 1, 1)),
+        ),
+        Ok(FixedRegionLayoutResult::WithinBounds { object, page }),
     );
 }
 
