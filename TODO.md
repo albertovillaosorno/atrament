@@ -43,7 +43,8 @@ is discarded, and newly accepted assets receive distinct identities with no
 retained bytes. The process owner now also prunes retained bytes whose accepted
 asset identities are unreachable from current, Undo, and Redo semantic state.
 No-op batches, rejected candidates, bounded command rejection, and stale direct
-edits preserve both Redo and its reachable bytes.
+edits preserve both Redo and its reachable bytes. Branch cleanup is selective:
+bytes still reachable through current or Undo state remain retained.
 
 A process fixture now retains bytes for two semantic assets, commits text and
 asset-reference history, and computes current measured pagination, fixed-region

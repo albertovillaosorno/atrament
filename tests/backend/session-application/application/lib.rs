@@ -3094,6 +3094,98 @@ fn rejected_edits_preserve_redo_only_asset_bytes() {
 }
 
 #[test]
+fn discarded_redo_pruning_preserves_other_history_asset_bytes() {
+    let identities = IdentityAllocator::new();
+    let mut session = application::SessionApplication::default();
+
+    let (first_candidate, _, first_candidate_asset, _) =
+        asset_figure_candidate(&identities);
+    let AcceptanceOutcome::Accepted {
+        mapping: first_mapping,
+        revision: first_revision,
+    } = session.accept_candidate(first_candidate)
+    else {
+        panic!("first asset candidate must be accepted");
+    };
+    let first_asset = first_mapping
+        .iter()
+        .find(|entry| entry.candidate == first_candidate_asset)
+        .expect("first asset identity must map")
+        .accepted;
+    let first_bytes = b"first-history-asset".to_vec();
+    assert!(matches!(
+        session.retain_asset_bytes(
+            first_revision,
+            first_asset,
+            first_bytes.clone(),
+        ),
+        Ok(application::AssetBytesRetention::Retained { .. })
+    ));
+
+    let (second_candidate, _, second_candidate_asset, _) =
+        asset_figure_candidate(&identities);
+    let AcceptanceOutcome::Accepted {
+        mapping: second_mapping,
+        revision: second_revision,
+    } = session.accept_candidate(second_candidate)
+    else {
+        panic!("second asset candidate must be accepted");
+    };
+    let second_asset = second_mapping
+        .iter()
+        .find(|entry| entry.candidate == second_candidate_asset)
+        .expect("second asset identity must map")
+        .accepted;
+    assert_ne!(second_asset, first_asset);
+    assert!(matches!(
+        session.retain_asset_bytes(
+            second_revision,
+            second_asset,
+            b"second-redo-only-asset".to_vec(),
+        ),
+        Ok(application::AssetBytesRetention::Retained { .. })
+    ));
+    assert_eq!(session.retained_asset_byte_count_for_test(), 2);
+
+    let HistoryTraversalOutcome::Traversed { revision: first_again, .. } =
+        session.traverse_history(second_revision, HistoryDirection::Undo)
+    else {
+        panic!("second asset candidate must Undo");
+    };
+    assert_eq!(
+        session.asset_bytes(first_again, first_asset),
+        Ok(first_bytes.as_slice()),
+    );
+    assert_eq!(session.retained_asset_byte_count_for_test(), 2);
+
+    let AcceptanceOutcome::Accepted { revision: branch, .. } =
+        session.accept_candidate(minimal_candidate(&identities))
+    else {
+        panic!("replacement branch must be accepted");
+    };
+    assert_eq!(session.retained_asset_byte_count_for_test(), 1);
+    assert_eq!(
+        session.history_availability(),
+        HistoryAvailabilityOutcome::Available(HistoryAvailability {
+            can_redo: false,
+            can_undo: true,
+            revision: branch,
+        }),
+    );
+
+    let HistoryTraversalOutcome::Traversed { revision: restored, .. } =
+        session.traverse_history(branch, HistoryDirection::Undo)
+    else {
+        panic!("replacement branch must Undo");
+    };
+    assert_eq!(
+        session.asset_bytes(restored, first_asset),
+        Ok(first_bytes.as_slice()),
+    );
+    assert_eq!(session.retained_asset_byte_count_for_test(), 1);
+}
+
+#[test]
 fn abandoned_redo_asset_bytes_cannot_attach_to_new_asset_identity() {
     let identities = IdentityAllocator::new();
     let mut session = application::SessionApplication::default();
