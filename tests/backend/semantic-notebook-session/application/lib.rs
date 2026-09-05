@@ -3373,6 +3373,89 @@ fn every_simple_inline_family_preserves_attached_semantic_references() {
 }
 
 #[test]
+fn every_simple_inline_family_keeps_text_impact_scope() {
+    type InlineBlockConstructor = fn(
+        Vec<InlineSpan<CandidateIdentity>>,
+    ) -> BlockContent<CandidateIdentity>;
+    let cases: &[InlineBlockConstructor] = &[
+        BlockContent::Date,
+        BlockContent::Definition,
+        BlockContent::Heading,
+        BlockContent::MarginNote,
+        BlockContent::Paragraph,
+        BlockContent::Quotation,
+        BlockContent::SourceNote,
+    ];
+    let expected_authorities = vec![
+        DirectEditDerivedAuthority::Diagnostics,
+        DirectEditDerivedAuthority::FlowGeometry,
+        DirectEditDerivedAuthority::Handwriting,
+        DirectEditDerivedAuthority::Motion,
+        DirectEditDerivedAuthority::Rendering,
+        DirectEditDerivedAuthority::Shaping,
+        DirectEditDerivedAuthority::Wrapping,
+    ];
+
+    for constructor in cases {
+        let ids = IdentityAllocator::new();
+        let (mut candidate, span_candidate) =
+            candidate_notebook_with_span(&ids, "before");
+        let page_candidate = candidate.pages[0].id;
+        let flow_candidate = candidate.pages[0].flows[0].id;
+        let content = std::mem::replace(
+            &mut candidate.pages[0].flows[0].blocks[0].content,
+            BlockContent::Rule,
+        );
+        let BlockContent::Paragraph(spans) = content else {
+            panic!("impact seed fixture must start as paragraph");
+        };
+        candidate.pages[0].flows[0].blocks[0].content = constructor(spans);
+
+        let mut session = SemanticNotebookSessionService::default();
+        let AcceptanceOutcome::Accepted { mapping, revision } =
+            session.accept(candidate)
+        else {
+            panic!("simple inline-family candidate must be accepted");
+        };
+        let flow = accepted_for(&mapping, flow_candidate);
+        let page = accepted_for(&mapping, page_candidate);
+        let span = accepted_for(&mapping, span_candidate);
+        let before = session.current().expect("accepted revision").clone();
+        let DirectEditBatchSimulationOutcome::Predicted {
+            changes,
+            effect,
+            impact_seeds,
+            ..
+        } = session.simulate_direct_edit_batch(DirectEditBatchProposal {
+            base: revision,
+            capability_version: CURRENT_COMMAND_BEHAVIOR_VERSION,
+            commands: vec![text_batch_command(
+                1,
+                &[],
+                span,
+                "before",
+                "after",
+            )],
+        })
+        else {
+            panic!("simple inline-family text edit must simulate");
+        };
+        assert_eq!(effect, DirectEditEffectClass::Mutation);
+        assert_eq!(changes, vec![DirectEditSemanticChange {
+            after: EditableSemanticValue::Text(String::from("after")),
+            before: EditableSemanticValue::Text(String::from("before")),
+            family: SemanticCommandFamily::TextContent,
+            target: span,
+        }]);
+        assert_eq!(impact_seeds, vec![DirectEditImpactSeed {
+            authorities: expected_authorities.clone(),
+            scope: DirectEditImpactScope::Flow { flow, page },
+        }]);
+        assert_eq!(session.current(), Some(&before));
+    }
+}
+
+#[test]
 fn bounded_identity_ancestry_reports_explicit_complete_and_incomplete_chains() {
     let ids = IdentityAllocator::new();
     let (candidate, _, _) =
