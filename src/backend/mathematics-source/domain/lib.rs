@@ -164,6 +164,15 @@ const STRUCTURED_ENVIRONMENTS: &[StructuredEnvironmentDefinition] = &[
         extra_end_error: MathSyntaxErrorKind::ExtraSplitEnd,
         missing_end_error: MathSyntaxErrorKind::MissingSplitEnd,
     },
+    StructuredEnvironmentDefinition {
+        allows_alignment: true,
+        begin_command: SupportedCommand::BeginVerticalMatrix,
+        begin_spelling: "\\begin{vmatrix}",
+        end_command: SupportedCommand::EndVerticalMatrix,
+        end_spelling: "\\end{vmatrix}",
+        extra_end_error: MathSyntaxErrorKind::ExtraVerticalMatrixEnd,
+        missing_end_error: MathSyntaxErrorKind::MissingVerticalMatrixEnd,
+    },
 ];
 
 /// Complete source-preserving analysis of one mathematical unit.
@@ -224,6 +233,8 @@ pub enum MathSyntaxErrorKind {
     ExtraParenthesizedMatrixEnd,
     /// Split environment closes without a matching split start.
     ExtraSplitEnd,
+    /// Vertical-bar matrix closes without its matching start.
+    ExtraVerticalMatrixEnd,
     /// An environment closes while a different environment is still innermost.
     MismatchedEnvironmentEnd,
     /// Aligned environment remains open at end of source.
@@ -244,6 +255,8 @@ pub enum MathSyntaxErrorKind {
     MissingRootIndexEnd,
     /// Split environment remains open at end of source.
     MissingSplitEnd,
+    /// Vertical-bar matrix remains open at end of source.
+    MissingVerticalMatrixEnd,
     /// An ordinary source group remains open at end of source.
     UnclosedGroup,
 }
@@ -351,6 +364,8 @@ pub enum SupportedCommand {
     BeginParenthesizedMatrix,
     /// Start of an explicit split environment.
     BeginSplit,
+    /// Start of an explicit vertical-bar matrix environment.
+    BeginVerticalMatrix,
     /// Two-group binomial coefficient command.
     Binomial,
     /// One-group blackboard-bold mathematical alphabet.
@@ -381,6 +396,8 @@ pub enum SupportedCommand {
     EndParenthesizedMatrix,
     /// End of an explicit split environment.
     EndSplit,
+    /// End of an explicit vertical-bar matrix environment.
+    EndVerticalMatrix,
     /// Escaped TeX special character preserved as literal source.
     EscapedSpecial,
     /// Two-group fraction command.
@@ -464,7 +481,7 @@ impl AnalyzedFormula {
 /// overline, and underline decorations, escaped TeX special characters, common
 /// named mathematical operators and symbols, aligned separators, and ordered
 /// aligned, bracketed-matrix, cases, gathered, matrix, parenthesized-matrix,
-/// and split environments.
+/// split, and vertical-bar-matrix environments.
 /// Math-only alignment, script, and row-break markers remain literal inside
 /// grouped text.
 /// Other commands remain present in the token stream and are reported through
@@ -1107,6 +1124,7 @@ fn validate_command_groups(
         | SupportedCommand::BeginMatrix
         | SupportedCommand::BeginParenthesizedMatrix
         | SupportedCommand::BeginSplit
+        | SupportedCommand::BeginVerticalMatrix
         | SupportedCommand::EndAligned
         | SupportedCommand::EndBracketedMatrix
         | SupportedCommand::EndCases
@@ -1114,6 +1132,7 @@ fn validate_command_groups(
         | SupportedCommand::EndMatrix
         | SupportedCommand::EndParenthesizedMatrix
         | SupportedCommand::EndSplit
+        | SupportedCommand::EndVerticalMatrix
         | SupportedCommand::EscapedSpecial
         | SupportedCommand::NamedOperator
         | SupportedCommand::SquareRoot

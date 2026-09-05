@@ -1089,6 +1089,7 @@ fn outer_environments_do_not_leak_alignment_into_substack_scope() {
         (r"\begin{matrix}", r"\end{matrix}"),
         (r"\begin{pmatrix}", r"\end{pmatrix}"),
         (r"\begin{split}", r"\end{split}"),
+        (r"\begin{vmatrix}", r"\end{vmatrix}"),
     ] {
         let source = format!(r"{begin}\substack{{a & b}}{end}");
         assert_eq!(
@@ -1484,6 +1485,39 @@ fn parenthesized_matrix_admits_rows_and_alignment() {
 }
 
 #[test]
+fn vertical_matrix_admits_rows_and_alignment() {
+    let source = r"D=\begin{vmatrix}a & b \\ c & d\end{vmatrix}";
+    let analyzed = analyze(source, FormulaMode::Display)
+        .expect("vertical-bar matrix formula");
+    assert!(analyzed.is_supported());
+    assert_eq!(reconstructed(&analyzed), source);
+    assert!(analyzed.tokens.iter().any(|token| {
+        token.kind
+            == MathTokenKind::Command(SupportedCommand::BeginVerticalMatrix)
+    }));
+    assert!(analyzed.tokens.iter().any(|token| {
+        token.kind
+            == MathTokenKind::Command(SupportedCommand::EndVerticalMatrix)
+    }));
+    assert_eq!(
+        analyzed
+            .tokens
+            .iter()
+            .filter(|token| token.kind == MathTokenKind::AlignmentPoint)
+            .count(),
+        2,
+    );
+    assert_eq!(
+        analyzed
+            .tokens
+            .iter()
+            .filter(|token| token.kind == MathTokenKind::RowBreak)
+            .count(),
+        1,
+    );
+}
+
+#[test]
 fn split_environment_admits_derivation_rows_and_alignment() {
     let source = concat!(
         r"\begin{split}f(x) &= x^2 + 1 \\ ",
@@ -1823,6 +1857,7 @@ fn environments_cannot_close_inside_a_later_group() {
         (r"\begin{matrix}", r"\end{matrix}"),
         (r"\begin{pmatrix}", r"\end{pmatrix}"),
         (r"\begin{split}", r"\end{split}"),
+        (r"\begin{vmatrix}", r"\end{vmatrix}"),
     ] {
         let prefix = format!("{begin}{{a");
         let source = format!("{prefix}{end}}}");
@@ -1853,6 +1888,7 @@ fn environments_must_close_before_their_owning_group() {
         (r"\begin{matrix}", r"\end{matrix}"),
         (r"\begin{pmatrix}", r"\end{pmatrix}"),
         (r"\begin{split}", r"\end{split}"),
+        (r"\begin{vmatrix}", r"\end{vmatrix}"),
     ] {
         let prefix = format!("{{{begin}a");
         let source = format!("{prefix}}}{end}");
@@ -1919,26 +1955,28 @@ fn deep_ordered_environments_are_iterative_and_balanced() {
     let depth = 1_024usize;
     let mut source = String::new();
     for level in 0..depth {
-        match level % 7 {
+        match level % 8 {
             0 => source.push_str(r"\begin{aligned}"),
             1 => source.push_str(r"\begin{bmatrix}"),
             2 => source.push_str(r"\begin{cases}"),
             3 => source.push_str(r"\begin{gathered}"),
             4 => source.push_str(r"\begin{matrix}"),
             5 => source.push_str(r"\begin{pmatrix}"),
-            _ => source.push_str(r"\begin{split}"),
+            6 => source.push_str(r"\begin{split}"),
+            _ => source.push_str(r"\begin{vmatrix}"),
         }
     }
     source.push('x');
     for level in (0..depth).rev() {
-        match level % 7 {
+        match level % 8 {
             0 => source.push_str(r"\end{aligned}"),
             1 => source.push_str(r"\end{bmatrix}"),
             2 => source.push_str(r"\end{cases}"),
             3 => source.push_str(r"\end{gathered}"),
             4 => source.push_str(r"\end{matrix}"),
             5 => source.push_str(r"\end{pmatrix}"),
-            _ => source.push_str(r"\end{split}"),
+            6 => source.push_str(r"\end{split}"),
+            _ => source.push_str(r"\end{vmatrix}"),
         }
     }
     let analyzed = analyze(&source, FormulaMode::Display)
@@ -1959,6 +1997,7 @@ fn deep_ordered_environments_are_iterative_and_balanced() {
                         | SupportedCommand::BeginMatrix
                         | SupportedCommand::BeginParenthesizedMatrix
                         | SupportedCommand::BeginSplit
+                        | SupportedCommand::BeginVerticalMatrix
                 )
             ))
             .count(),
@@ -2110,6 +2149,8 @@ fn environment_names_require_exact_braced_spelling() {
         (r"a & b\end{pmatrixx}", r"\end"),
         (r"\begin{splitx}a & b", r"\begin"),
         (r"a & b\end{splitx}", r"\end"),
+        (r"\begin{vmatrixx}a & b", r"\begin"),
+        (r"a & b\end{vmatrixx}", r"\end"),
     ] {
         let analyzed = analyze(source, FormulaMode::Aligned)
             .expect("balanced near-match environment source");
@@ -2122,7 +2163,7 @@ fn environment_names_require_exact_braced_spelling() {
 
 #[test]
 fn unknown_matrix_environment_remains_explicit_unsupported_source() {
-    let source = r"\begin{vmatrix}a & b";
+    let source = r"\begin{Vmatrix}a & b";
     let analyzed = analyze(source, FormulaMode::Aligned)
         .expect("balanced unknown matrix environment source");
     assert!(!analyzed.is_supported());
@@ -2265,6 +2306,25 @@ fn malformed_parenthesized_matrix_boundaries_are_typed() {
         Err(MathSyntaxError {
             byte_offset: source.len(),
             kind: MathSyntaxErrorKind::MissingParenthesizedMatrixEnd,
+        }),
+    );
+}
+
+#[test]
+fn malformed_vertical_matrix_boundaries_are_typed() {
+    assert_eq!(
+        analyze(r"\end{vmatrix}", FormulaMode::Display),
+        Err(MathSyntaxError {
+            byte_offset: 0,
+            kind: MathSyntaxErrorKind::ExtraVerticalMatrixEnd,
+        }),
+    );
+    let source = r"\begin{vmatrix}a & b";
+    assert_eq!(
+        analyze(source, FormulaMode::Display),
+        Err(MathSyntaxError {
+            byte_offset: source.len(),
+            kind: MathSyntaxErrorKind::MissingVerticalMatrixEnd,
         }),
     );
 }
