@@ -189,10 +189,7 @@ impl SessionApplication {
         &mut self,
         candidate: Notebook<CandidateIdentity>,
     ) -> AcceptanceOutcome {
-        let had_redo = self.redo_is_available();
-        let outcome = self.semantic.accept(candidate);
-        self.prune_discarded_redo_asset_bytes(had_redo);
-        outcome
+        self.mutate_semantic(|semantic| semantic.accept(candidate))
     }
 
     /// Read the current accepted semantic revision without creating another.
@@ -209,10 +206,7 @@ impl SessionApplication {
     where
         CommandIdentity: Clone + Ord,
     {
-        let had_redo = self.redo_is_available();
-        let outcome = self.semantic.apply_direct_edit_batch(batch);
-        self.prune_discarded_redo_asset_bytes(had_redo);
-        outcome
+        self.mutate_semantic(|semantic| semantic.apply_direct_edit_batch(batch))
     }
 
     /// Apply one caller-bounded semantic batch through the owned authority.
@@ -224,12 +218,9 @@ impl SessionApplication {
     where
         CommandIdentity: Clone + Ord,
     {
-        let had_redo = self.redo_is_available();
-        let outcome = self
-            .semantic
-            .apply_direct_edit_batch_bounded(batch, limits);
-        self.prune_discarded_redo_asset_bytes(had_redo);
-        outcome
+        self.mutate_semantic(|semantic| {
+            semantic.apply_direct_edit_batch_bounded(batch, limits)
+        })
     }
 
     /// Borrow raw bytes retained for one current accepted semantic asset.
@@ -443,6 +434,16 @@ impl SessionApplication {
         self.semantic.inspect_identity_kind(revision, target)
     }
 
+    fn mutate_semantic<Outcome>(
+        &mut self,
+        operation: impl FnOnce(&mut SemanticNotebookSessionService) -> Outcome,
+    ) -> Outcome {
+        let had_redo = self.redo_is_available();
+        let outcome = operation(&mut self.semantic);
+        self.prune_discarded_redo_asset_bytes(had_redo);
+        outcome
+    }
+
     /// Paginate one revision-bound measured flow through current authority.
     ///
     /// This operation is read-only. It never accepts arbitrary page rectangles:
@@ -530,10 +531,9 @@ impl SessionApplication {
         mode: FormulaMode,
         source: String,
     ) -> FormulaEditOutcome {
-        let had_redo = self.redo_is_available();
-        let outcome = self.semantic.replace_formula(base, target, mode, source);
-        self.prune_discarded_redo_asset_bytes(had_redo);
-        outcome
+        self.mutate_semantic(|semantic| {
+            semantic.replace_formula(base, target, mode, source)
+        })
     }
 
     /// Replace one physical page profile through the owned semantic authority.
@@ -543,11 +543,9 @@ impl SessionApplication {
         target: AcceptedIdentity,
         geometry: PhysicalPageProfile,
     ) -> PageProfileEditOutcome {
-        let had_redo = self.redo_is_available();
-        let outcome =
-            self.semantic.replace_page_profile(base, target, geometry);
-        self.prune_discarded_redo_asset_bytes(had_redo);
-        outcome
+        self.mutate_semantic(|semantic| {
+            semantic.replace_page_profile(base, target, geometry)
+        })
     }
 
     /// Replace one table-cell span through the owned semantic authority.
@@ -557,10 +555,9 @@ impl SessionApplication {
         target: AcceptedIdentity,
         span: TableCellSpan,
     ) -> TableCellSpanEditOutcome {
-        let had_redo = self.redo_is_available();
-        let outcome = self.semantic.replace_table_cell_span(base, target, span);
-        self.prune_discarded_redo_asset_bytes(had_redo);
-        outcome
+        self.mutate_semantic(|semantic| {
+            semantic.replace_table_cell_span(base, target, span)
+        })
     }
 
     /// Replace one table-row role through the owned semantic authority.
@@ -570,10 +567,9 @@ impl SessionApplication {
         target: AcceptedIdentity,
         role: TableRowRole,
     ) -> TableRowRoleEditOutcome {
-        let had_redo = self.redo_is_available();
-        let outcome = self.semantic.replace_table_row_role(base, target, role);
-        self.prune_discarded_redo_asset_bytes(had_redo);
-        outcome
+        self.mutate_semantic(|semantic| {
+            semantic.replace_table_row_role(base, target, role)
+        })
     }
 
     /// Replace one inline text value through the owned semantic authority.
@@ -583,10 +579,9 @@ impl SessionApplication {
         target: AcceptedIdentity,
         value: String,
     ) -> TextEditOutcome {
-        let had_redo = self.redo_is_available();
-        let outcome = self.semantic.replace_text(base, target, value);
-        self.prune_discarded_redo_asset_bytes(had_redo);
-        outcome
+        self.mutate_semantic(|semantic| {
+            semantic.replace_text(base, target, value)
+        })
     }
 
     /// Retain already-validated raw bytes for one accepted semantic asset.

@@ -46,6 +46,9 @@ No-op batches, rejected candidates, bounded command rejection, and stale direct
 edits preserve both Redo and its reachable bytes. Branch cleanup is selective:
 bytes still reachable through current or Undo state remain retained.
 
+All semantic mutation entry points in `SessionApplication` now share one private
+branch-cleanup gate so this lifecycle rule is not duplicated per operation.
+
 A 256-state asset-history fixture undoes halfway, then branches: cleanup removes
 exactly 128 Redo-only retained byte entries and preserves all 128 identities
 still reachable through older history, including their exact byte sequences.
