@@ -1701,6 +1701,28 @@ fn aligned_cases_and_matrix_environments_nest_in_order() {
 }
 
 #[test]
+fn bracketed_and_parenthesized_matrices_keep_distinct_nesting() {
+    let source = concat!(
+        r"\begin{bmatrix}a & \begin{pmatrix}b & c \\ d & e",
+        r"\end{pmatrix} \\ f & g\end{bmatrix}",
+    );
+    let analyzed = analyze(source, FormulaMode::Display)
+        .expect("nested bracketed and parenthesized matrices");
+    assert!(analyzed.is_supported());
+    assert_eq!(reconstructed(&analyzed), source);
+
+    let prefix = r"\begin{bmatrix}\begin{pmatrix}x";
+    let crossed = format!(r"{prefix}\end{{bmatrix}}");
+    assert_eq!(
+        analyze(&crossed, FormulaMode::Display),
+        Err(MathSyntaxError {
+            byte_offset: prefix.len(),
+            kind: MathSyntaxErrorKind::MismatchedEnvironmentEnd,
+        }),
+    );
+}
+
+#[test]
 fn parenthesized_and_plain_matrices_nest_in_order() {
     let source = concat!(
         r"\begin{pmatrix}a & \begin{matrix}b & c \\ d & e",
