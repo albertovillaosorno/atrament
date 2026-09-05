@@ -43,8 +43,9 @@ use atrament_semantic_notebook::{
     SemanticBlockKind, SemanticIdentityDescriptor, SemanticIdentityKind,
     SemanticIdentityPathEntry, Style,
     Table, TableCell, TableCellSpan, TableGridError, TableRow, TableRowRole,
-    UnresolvedBlock, UnresolvedReason, semantic_identity_descriptor,
-    semantic_identity_kind, semantic_identity_path,
+    UnresolvedBlock, UnresolvedReason, semantic_block_page,
+    semantic_identity_descriptor, semantic_identity_kind,
+    semantic_identity_path,
 };
 
 fn grid_cell(
@@ -554,6 +555,8 @@ fn simple_inline_block_kinds_keep_span_ownership() {
                 owner: Some(5),
             }),
         );
+        assert_eq!(semantic_block_page(&notebook, 5), Some(3));
+        assert_eq!(semantic_block_page(&notebook, 6), None);
     }
 }
 

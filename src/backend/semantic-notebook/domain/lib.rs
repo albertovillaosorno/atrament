@@ -707,67 +707,113 @@ pub fn semantic_identity_descriptor<Identity>(
 where
     Identity: Copy + Eq,
 {
+    semantic_identity_location(notebook, target)
+        .map(|(descriptor, _page)| descriptor)
+}
+
+/// Resolve the accepted page structurally containing one semantic block.
+///
+/// Non-block identities and missing targets return `None`. The lookup follows
+/// the same identity precedence and iterative nested-block traversal as
+/// [`semantic_identity_descriptor`].
+#[must_use]
+pub fn semantic_block_page<Identity>(
+    notebook: &Notebook<Identity>,
+    target: Identity,
+) -> Option<Identity>
+where
+    Identity: Copy + Eq,
+{
+    let (descriptor, page) = semantic_identity_location(notebook, target)?;
+    if matches!(descriptor.kind, SemanticIdentityKind::Block(_)) {
+        return page;
+    }
+    None
+}
+
+fn semantic_identity_location<Identity>(
+    notebook: &Notebook<Identity>,
+    target: Identity,
+) -> Option<(SemanticIdentityDescriptor<Identity>, Option<Identity>)>
+where
+    Identity: Copy + Eq,
+{
     if notebook.id == target {
-        return Some(SemanticIdentityDescriptor {
-            kind: SemanticIdentityKind::Notebook,
-            owner: None,
-        });
+        return Some((
+            SemanticIdentityDescriptor {
+                kind: SemanticIdentityKind::Notebook,
+                owner: None,
+            },
+            None,
+        ));
     }
     for asset in &notebook.assets {
         if asset.id == target {
-            return Some(descriptor(SemanticIdentityKind::Asset, notebook.id));
+            return Some((
+                descriptor(SemanticIdentityKind::Asset, notebook.id),
+                None,
+            ));
         }
     }
     for constraint in &notebook.constraints {
         if constraint.id == target {
-            return Some(descriptor(
-                SemanticIdentityKind::Constraint,
-                notebook.id,
+            return Some((
+                descriptor(SemanticIdentityKind::Constraint, notebook.id),
+                None,
             ));
         }
     }
     for profile in &notebook.output_profiles {
         if profile.id == target {
-            return Some(descriptor(
-                SemanticIdentityKind::OutputProfile,
-                notebook.id,
+            return Some((
+                descriptor(SemanticIdentityKind::OutputProfile, notebook.id),
+                None,
             ));
         }
     }
     for profile in &notebook.page_profiles {
         if profile.id == target {
-            return Some(descriptor(
-                SemanticIdentityKind::PageProfile,
-                notebook.id,
+            return Some((
+                descriptor(SemanticIdentityKind::PageProfile, notebook.id),
+                None,
             ));
         }
     }
     for page in &notebook.pages {
         if page.id == target {
-            return Some(descriptor(SemanticIdentityKind::Page, notebook.id));
+            return Some((
+                descriptor(SemanticIdentityKind::Page, notebook.id),
+                Some(page.id),
+            ));
         }
         for flow in &page.flows {
             if flow.id == target {
-                return Some(descriptor(SemanticIdentityKind::Flow, page.id));
+                return Some((
+                    descriptor(SemanticIdentityKind::Flow, page.id),
+                    Some(page.id),
+                ));
             }
             if let Some(found) =
                 semantic_blocks_descriptor(&flow.blocks, target, flow.id)
             {
-                return Some(found);
+                return Some((found, Some(page.id)));
             }
         }
     }
     for provenance in &notebook.provenance {
         if provenance.id == target {
-            return Some(descriptor(
-                SemanticIdentityKind::Provenance,
-                notebook.id,
+            return Some((
+                descriptor(SemanticIdentityKind::Provenance, notebook.id),
+                None,
             ));
         }
     }
     for style in &notebook.styles {
         if style.id == target {
-            return Some(descriptor(SemanticIdentityKind::Style, notebook.id));
+            return Some((
+                descriptor(SemanticIdentityKind::Style, notebook.id),
+                None,
+            ));
         }
     }
     None

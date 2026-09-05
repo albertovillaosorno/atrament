@@ -48,7 +48,7 @@ use atrament_fixed_region_bounds::{
 use atrament_physical_page_profile::Rect;
 use atrament_semantic_notebook::{
     AcceptedIdentity, AcceptedRevision, PhysicalPageProfileError,
-    RevisionIdentity, SemanticIdentityKind, semantic_identity_path,
+    RevisionIdentity, semantic_block_page,
 };
 
 /// One solver-derived fixed rectangle bound to accepted semantic authority.
@@ -159,19 +159,9 @@ pub fn validate_fixed_placement(
             page: placement.page,
         });
     };
-    let object_is_block_on_page = semantic_identity_path(
-        &revision.notebook,
-        placement.object,
-    )
-    .is_some_and(|path| {
-        matches!(
-            path.first().map(|entry| entry.descriptor.kind),
-            Some(SemanticIdentityKind::Block(_)),
-        ) && path.iter().any(|entry| {
-            entry.identity == placement.page
-                && entry.descriptor.kind == SemanticIdentityKind::Page
-        })
-    });
+    let object_is_block_on_page =
+        semantic_block_page(&revision.notebook, placement.object)
+            == Some(placement.page);
     if !object_is_block_on_page {
         return Err(FixedRegionLayoutError::ObjectNotOnPage {
             object: placement.object,
