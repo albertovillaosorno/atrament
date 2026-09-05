@@ -988,6 +988,35 @@ fn malformed_indexed_square_root_is_typed() {
 }
 
 #[test]
+fn deep_required_group_commands_are_iterative_and_balanced() {
+    let depth = 4_096usize;
+    let mut source = String::new();
+    for _ in 0..depth {
+        source.push_str(r"\widehat{");
+    }
+    source.push('x');
+    for _ in 0..depth {
+        source.push('}');
+    }
+
+    let analyzed = analyze(&source, FormulaMode::Inline)
+        .expect("deep nested required groups");
+    assert!(analyzed.is_supported());
+    assert_eq!(reconstructed(&analyzed), source);
+    assert_eq!(
+        analyzed
+            .tokens
+            .iter()
+            .filter(|token| {
+                token.kind
+                    == MathTokenKind::Command(SupportedCommand::WideHat)
+            })
+            .count(),
+        depth,
+    );
+}
+
+#[test]
 fn deep_indexed_square_roots_are_iterative_and_balanced() {
     let depth = 4_096usize;
     let mut source = String::new();
