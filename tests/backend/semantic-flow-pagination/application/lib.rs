@@ -749,6 +749,117 @@ fn streaming_owner_admission_matches_reference_oracle() {
     assert_eq!(cases, 341);
 }
 
+fn next_owner_oracle_value(seed: &mut u64) -> u64 {
+    *seed = seed
+        .wrapping_mul(6_364_136_223_846_793_005)
+        .wrapping_add(1_442_695_040_888_963_407);
+    *seed >> 32
+}
+
+#[test]
+fn multi_unit_owner_admission_matches_reference_oracle() {
+    const CASES: usize = 20_000;
+    let ids = IdentityAllocator::new();
+    let mut fixture = candidate_fixture(&ids);
+    let second = ids.allocate_candidate().expect("second block");
+    let third = ids.allocate_candidate().expect("third block");
+    fixture.notebook.pages[0].flows[0].blocks.extend([
+        Block {
+            content: BlockContent::Rule,
+            extensions: vec![],
+            id: second,
+            provenance: None,
+            style: None,
+        },
+        Block {
+            content: BlockContent::Rule,
+            extensions: vec![],
+            id: third,
+            provenance: None,
+            style: None,
+        },
+    ]);
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(fixture.notebook)
+    else {
+        panic!("three-block candidate must be accepted");
+    };
+    let flow = accepted_for(&mapping, fixture.flow);
+    let blocks = [
+        accepted_for(&mapping, fixture.block),
+        accepted_for(&mapping, second),
+        accepted_for(&mapping, third),
+    ];
+    let outsider = accepted_for(&mapping, fixture.page_one);
+    let alphabet = [blocks[0], blocks[1], blocks[2], outsider];
+    let accepted = session.current().expect("accepted revision");
+    let mut seed = 0x5eed_0a11_2026_u64;
+
+    for case in 0..CASES {
+        let owner_count = (next_owner_oracle_value(&mut seed) % 9) as usize;
+        let owners = (0..owner_count)
+            .map(|_| {
+                let generated = next_owner_oracle_value(&mut seed) as usize;
+                let index = generated % alphabet.len();
+                alphabet[index]
+            })
+            .collect::<Vec<_>>();
+        let mut units = Vec::new();
+        let mut offset = 0usize;
+        while offset < owners.len() {
+            if next_owner_oracle_value(&mut seed).is_multiple_of(5) {
+                units.push(MeasuredFlowUnit {
+                    fragments: vec![],
+                    policy: FlowUnitPolicy::Independent,
+                });
+            }
+            let remaining = owners.len() - offset;
+            let take = usize::min(
+                remaining,
+                (next_owner_oracle_value(&mut seed) % 3 + 1) as usize,
+            );
+            let fragments = owners[offset..offset + take]
+                .iter()
+                .map(|owner| MeasuredFragment {
+                    height: Length::from_micrometres(1),
+                    owner: *owner,
+                    width: Length::from_micrometres(1),
+                })
+                .collect();
+            let policy = if next_owner_oracle_value(&mut seed) & 1 == 0 {
+                FlowUnitPolicy::Independent
+            } else {
+                FlowUnitPolicy::KeepTogetherWhenPossible
+            };
+            units.push(MeasuredFlowUnit { fragments, policy });
+            offset += take;
+        }
+        if owners.is_empty()
+            && next_owner_oracle_value(&mut seed) & 1 == 0
+        {
+            units.push(MeasuredFlowUnit {
+                fragments: vec![],
+                policy: FlowUnitPolicy::KeepTogetherWhenPossible,
+            });
+        }
+        let measured = RevisionFlowMeasurement { flow, revision, units };
+        let expected = expected_owner_sequence_outcome(
+            flow,
+            &blocks,
+            &owners,
+            outsider,
+        );
+        let actual = paginate_revision(accepted, &measured);
+        match expected {
+            Ok(()) => assert!(actual.is_ok(), "generated case {case}"),
+            Err(reason) => {
+                assert_eq!(actual, Err(reason), "generated case {case}");
+            },
+        }
+    }
+}
+
 #[test]
 fn large_complete_measurement_streams_in_semantic_block_order() {
     const BLOCKS: usize = 10_000;

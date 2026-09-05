@@ -442,9 +442,10 @@ materializing a second owner vector. Independent pagination advances through the
 remaining page sequence once per fragment, and keep-together search computes one
 checked total height and maximum width per group. Four reference oracles cover
 17,504 independent, keep-together, and deterministic mixed-policy placement
-cases, including nonzero current-page remainder and heterogeneous page skips,
-while 341 owner-sequence cases cover complete,
-incomplete, repeated, reordered, and out-of-flow semantic measurements.
+cases, including nonzero current-page remainder and heterogeneous page skips.
+Another 20,341 owner-sequence cases cover complete, incomplete, repeated,
+reordered, and out-of-flow semantic measurements, including owner runs split
+across empty, independent, and keep-together measurement units.
 
 Empty measured flows now avoid unused page-profile authority entirely. Nonempty
 semantic pagination indexes page profiles once per call while preserving
