@@ -227,6 +227,8 @@ pub enum MathSyntaxErrorKind {
     MissingParenthesizedMatrixEnd,
     /// A supported command is missing one or more required braced arguments.
     MissingRequiredGroup,
+    /// An indexed square root is missing its top-level closing bracket.
+    MissingRootIndexEnd,
     /// Split environment remains open at end of source.
     MissingSplitEnd,
     /// An ordinary source group remains open at end of source.
@@ -257,6 +259,10 @@ pub enum MathTokenKind {
     GroupOpen,
     /// Ordinary literal source that is not structural syntax.
     Literal,
+    /// Closing bracket of an indexed square-root argument.
+    RootIndexClose,
+    /// Opening bracket of an indexed square-root argument.
+    RootIndexOpen,
     /// Explicit mathematical row break.
     RowBreak,
     /// Subscript marker.
@@ -292,8 +298,10 @@ struct ScanState {
     group_depth: usize,
     index: usize,
     literal_start: usize,
+    pending_root_index_open: Option<usize>,
     pending_substack_group: bool,
     pending_text_group: bool,
+    root_index_close_offsets: Vec<usize>,
     substack_group_depths: Vec<usize>,
     text_group_depth: Option<usize>,
 }
@@ -432,7 +440,8 @@ impl AnalyzedFormula {
 /// Analyze one exact mathematical source without normalizing or rewriting it.
 ///
 /// Supported source includes ordinary Unicode mathematics, groups, scripts,
-/// `\\frac{...}{...}`, `\\binom{...}{...}`, `\\sqrt{...}`,
+/// `\\frac{...}{...}`, `\\binom{...}{...}`, `\\sqrt{...}`, and
+/// indexed `\\sqrt[...]{...}`,
 /// grouped mathematical alphabets, common one-group accents, `\\mathrm{...}`,
 /// `\\operatorname{...}`, `\\text{...}`, grouped substacks, vector,
 /// overline, and underline decorations, escaped TeX special characters, common
@@ -459,8 +468,10 @@ pub fn analyze(
         group_depth: 0,
         index: 0,
         literal_start: 0,
+        pending_root_index_open: None,
         pending_substack_group: false,
         pending_text_group: false,
+        root_index_close_offsets: Vec::new(),
         substack_group_depths: Vec::new(),
         text_group_depth: None,
     };
@@ -473,7 +484,11 @@ pub fn analyze(
         let Some(character) = tail.chars().next() else {
             break;
         };
-        if !is_structural(character) {
+        let is_root_index_marker =
+            state.pending_root_index_open == Some(state.index)
+                || state.root_index_close_offsets.last().copied()
+                    == Some(state.index);
+        if !is_structural(character) && !is_root_index_marker {
             state.index = state.index.saturating_add(character.len_utf8());
             continue;
         }
@@ -741,6 +756,18 @@ fn scan_structural(
             scan_marker(state, tokens, width, MathTokenKind::Subscript);
             Ok(())
         },
+        '[' if state.pending_root_index_open == Some(state.index) => {
+            state.pending_root_index_open = None;
+            scan_marker(state, tokens, width, MathTokenKind::RootIndexOpen);
+            Ok(())
+        },
+        ']' if state.root_index_close_offsets.last().copied()
+            == Some(state.index) =>
+        {
+            let _: Option<usize> = state.root_index_close_offsets.pop();
+            scan_marker(state, tokens, width, MathTokenKind::RootIndexClose);
+            Ok(())
+        },
         '{' => {
             state.group_depth = state.group_depth.saturating_add(1);
             if state.pending_substack_group {
@@ -915,7 +942,22 @@ fn scan_supported_command(
         command.end,
         MathTokenKind::Command(supported),
     ));
-    validate_command_groups(source, groups, command.end, supported)?;
+    if supported == SupportedCommand::SquareRoot {
+        if let Some((open, close)) = root_index_bounds(source, command.end)? {
+            validate_required_groups(
+                source,
+                groups,
+                close.saturating_add(1),
+                1,
+            )?;
+            state.pending_root_index_open = Some(open);
+            state.root_index_close_offsets.push(close);
+        } else {
+            validate_required_groups(source, groups, command.end, 1)?;
+        }
+    } else {
+        validate_command_groups(source, groups, command.end, supported)?;
+    }
     if supported == SupportedCommand::Substack {
         state.pending_substack_group = true;
     }
@@ -972,6 +1014,40 @@ fn close_environment(
     Ok(())
 }
 
+fn root_index_bounds(
+    source: &str,
+    command_end: usize,
+) -> Result<Option<(usize, usize)>, MathSyntaxError> {
+    let open = skip_ascii_whitespace(source, command_end);
+    if source.as_bytes().get(open) != Some(&b'[') {
+        return Ok(None);
+    }
+    let mut brace_depth = 0usize;
+    let mut cursor = open.saturating_add(1);
+    let mut slash_run = 0usize;
+    while let Some(byte) = source.as_bytes().get(cursor).copied() {
+        if byte == b'\\' {
+            slash_run = slash_run.saturating_add(1);
+            cursor = cursor.saturating_add(1);
+            continue;
+        }
+        let escaped = slash_run & 1 == 1;
+        slash_run = 0;
+        if !escaped {
+            match byte {
+                b'{' => brace_depth = brace_depth.saturating_add(1),
+                b'}' if brace_depth != 0 => {
+                    brace_depth = brace_depth.saturating_sub(1);
+                },
+                b']' if brace_depth == 0 => return Ok(Some((open, cursor))),
+                _ => {},
+            }
+        }
+        cursor = cursor.saturating_add(1);
+    }
+    Err(error(source.len(), MathSyntaxErrorKind::MissingRootIndexEnd))
+}
+
 fn skip_ascii_whitespace(source: &str, mut cursor: usize) -> usize {
     while source
         .as_bytes()
@@ -1014,6 +1090,7 @@ fn validate_command_groups(
         | SupportedCommand::EndSplit
         | SupportedCommand::EscapedSpecial
         | SupportedCommand::NamedOperator
+        | SupportedCommand::SquareRoot
         | SupportedCommand::NamedSymbol => 0usize,
         SupportedCommand::Binomial
         | SupportedCommand::DisplayFraction
@@ -1036,7 +1113,6 @@ fn validate_command_groups(
         | SupportedCommand::Overline
         | SupportedCommand::Roman
         | SupportedCommand::SansSerif
-        | SupportedCommand::SquareRoot
         | SupportedCommand::Substack
         | SupportedCommand::Text
         | SupportedCommand::Tilde
@@ -1045,7 +1121,15 @@ fn validate_command_groups(
         | SupportedCommand::Underline
         | SupportedCommand::Vector => 1usize,
     };
-    let mut cursor = command_end;
+    validate_required_groups(source, groups, command_end, required)
+}
+
+fn validate_required_groups(
+    source: &str,
+    groups: &GroupIndex,
+    mut cursor: usize,
+    required: usize,
+) -> Result<(), MathSyntaxError> {
     for _ in 0..required {
         cursor = skip_ascii_whitespace(source, cursor);
         if source.as_bytes().get(cursor) != Some(&b'{') {
@@ -1065,6 +1149,14 @@ fn validate_final_state(
 ) -> Result<(), MathSyntaxError> {
     if state.group_depth != 0 {
         return Err(error(source_len, MathSyntaxErrorKind::UnclosedGroup));
+    }
+    if state.pending_root_index_open.is_some()
+        || !state.root_index_close_offsets.is_empty()
+    {
+        return Err(error(
+            source_len,
+            MathSyntaxErrorKind::MissingRootIndexEnd,
+        ));
     }
     let Some(environment) = state.environment_stack.last().copied() else {
         return Ok(());

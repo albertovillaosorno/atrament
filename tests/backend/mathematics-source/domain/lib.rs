@@ -805,6 +805,107 @@ fn square_root_is_structural_and_requires_one_group() {
 }
 
 #[test]
+fn indexed_square_root_preserves_structural_index_and_radicand() {
+    let source = r"x = \sqrt[3]{a^2 + b^2}";
+    let analyzed = analyze(source, FormulaMode::Display)
+        .expect("indexed square-root formula");
+    assert!(analyzed.is_supported());
+    assert_eq!(reconstructed(&analyzed), source);
+    assert!(analyzed.tokens.iter().any(|token| {
+        token.kind == MathTokenKind::RootIndexOpen
+            && analyzed.token_source(*token) == Some("[")
+    }));
+    assert!(analyzed.tokens.iter().any(|token| {
+        token.kind == MathTokenKind::RootIndexClose
+            && analyzed.token_source(*token) == Some("]")
+    }));
+    assert!(analyzed.tokens.iter().any(|token| {
+        token.kind == MathTokenKind::Superscript
+            && analyzed.token_source(*token) == Some("^")
+    }));
+}
+
+#[test]
+fn indexed_square_root_scans_index_content_and_preserves_whitespace() {
+    let source = r"\sqrt [\alpha+{3]}] {x}";
+    let analyzed = analyze(source, FormulaMode::Inline)
+        .expect("indexed root with protected closing bracket");
+    assert!(analyzed.is_supported());
+    assert_eq!(reconstructed(&analyzed), source);
+    assert!(analyzed.tokens.iter().any(|token| {
+        token.kind == MathTokenKind::Command(SupportedCommand::NamedSymbol)
+            && analyzed.token_source(*token) == Some(r"\alpha")
+    }));
+
+    let unsupported = r"\sqrt[\unknown]{x}";
+    let analyzed = analyze(unsupported, FormulaMode::Inline)
+        .expect("unsupported index command remains analyzable");
+    assert!(!analyzed.is_supported());
+    assert_eq!(reconstructed(&analyzed), unsupported);
+    assert_eq!(analyzed.unsupported.len(), 1);
+    assert_eq!(analyzed.unsupported[0].name, r"\unknown");
+}
+
+#[test]
+fn indexed_square_root_boundaries_are_scoped_without_global_brackets() {
+    let nested = r"\sqrt[{\sqrt[3]{x}}]{y}";
+    let analyzed = analyze(nested, FormulaMode::Inline)
+        .expect("brace-contained nested indexed root");
+    assert!(analyzed.is_supported());
+    assert_eq!(reconstructed(&analyzed), nested);
+    assert_eq!(
+        analyzed
+            .tokens
+            .iter()
+            .filter(|token| token.kind == MathTokenKind::RootIndexOpen)
+            .count(),
+        2,
+    );
+    assert_eq!(
+        analyzed
+            .tokens
+            .iter()
+            .filter(|token| token.kind == MathTokenKind::RootIndexClose)
+            .count(),
+        2,
+    );
+
+    let ordinary = analyze("[a,b]", FormulaMode::Inline)
+        .expect("ordinary square brackets remain literal");
+    assert_eq!(ordinary.tokens.len(), 1);
+    assert_eq!(ordinary.tokens[0].kind, MathTokenKind::Literal);
+
+    let overlapping = r"\sqrt[\sqrt[3]{x}]{y}";
+    assert_eq!(
+        analyze(overlapping, FormulaMode::Inline),
+        Err(MathSyntaxError {
+            byte_offset: overlapping.len(),
+            kind: MathSyntaxErrorKind::MissingRootIndexEnd,
+        }),
+    );
+}
+
+#[test]
+fn malformed_indexed_square_root_is_typed() {
+    let missing_close = r"\sqrt[3{x}";
+    assert_eq!(
+        analyze(missing_close, FormulaMode::Inline),
+        Err(MathSyntaxError {
+            byte_offset: missing_close.len(),
+            kind: MathSyntaxErrorKind::MissingRootIndexEnd,
+        }),
+    );
+    let missing_radicand = r"\sqrt[3]x";
+    assert_eq!(
+        analyze(missing_radicand, FormulaMode::Inline),
+        Err(MathSyntaxError {
+            byte_offset: 8,
+            kind: MathSyntaxErrorKind::MissingRequiredGroup,
+        }),
+    );
+}
+
+#[test]
 fn binomial_is_structural_and_requires_two_groups() {
     let source = r"P(X=k) = \binom{n}{k}p^k(1-p)^{n-k}";
     let analyzed = analyze(source, FormulaMode::Display)

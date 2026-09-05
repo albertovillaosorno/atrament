@@ -58,8 +58,9 @@ representative bilingual assignment must exercise every initial block family.
 
 The backend now has a dependency-free mathematical source analyzer that retains
 exact UTF-8 source and exposes structural spans for the admitted first slice:
-groups, scripts, plain and styled fractions, binomial coefficients, square
-roots, grouped mathematical alphabets, common one-group accents, upright unit or
+groups, scripts, plain and styled fractions, binomial coefficients, square and
+indexed roots, grouped mathematical alphabets, common one-group accents,
+upright unit or
 label groups, grouped text and custom operator names, stacked annotations,
 vector, overline, and underline decorations, escaped TeX special characters,
 standard and variant Greek control-sequence notation, common named and delimiter
@@ -71,6 +72,10 @@ delimiter-sizing controls remain explicit unsupported input rather than being
 inferred from admitted delimiter glyph names. Unknown control words and
 unadmitted control symbols remain explicit unsupported constructs, and malformed
 source returns typed syntax failures.
+
+Indexed square roots preserve explicit optional-index brackets while scanning
+the index contents under the same supported-command and structural rules.
+Malformed optional-index closure is typed rather than repaired.
 
 Environment closes are order-sensitive, with typed extra, missing,
 mismatched-boundary, owning-group-crossing, and later-group-close failures.
