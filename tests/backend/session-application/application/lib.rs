@@ -2999,6 +2999,101 @@ fn nonmutating_attempts_preserve_redo_asset_bytes() {
 }
 
 #[test]
+fn rejected_edits_preserve_redo_only_asset_bytes() {
+    let identities = IdentityAllocator::new();
+    let (editable, candidate_span) =
+        editable_text_candidate(&identities, "before");
+    let mut session = application::SessionApplication::default();
+    let AcceptanceOutcome::Accepted {
+        mapping: editable_mapping,
+        revision: editable_revision,
+    } = session.accept_candidate(editable)
+    else {
+        panic!("editable candidate must be accepted");
+    };
+    let span = editable_mapping
+        .iter()
+        .find(|entry| entry.candidate == candidate_span)
+        .expect("editable span identity must map")
+        .accepted;
+
+    let (asset_candidate, _, candidate_asset, _) =
+        asset_figure_candidate(&identities);
+    let AcceptanceOutcome::Accepted {
+        mapping: asset_mapping,
+        revision: with_asset,
+    } = session.accept_candidate(asset_candidate)
+    else {
+        panic!("asset candidate must be accepted");
+    };
+    let asset = asset_mapping
+        .iter()
+        .find(|entry| entry.candidate == candidate_asset)
+        .expect("asset identity must map")
+        .accepted;
+    assert!(matches!(
+        session.retain_asset_bytes(with_asset, asset, vec![4, 5, 6]),
+        Ok(application::AssetBytesRetention::Retained { .. })
+    ));
+
+    let HistoryTraversalOutcome::Traversed { revision: undone, .. } =
+        session.traverse_history(with_asset, HistoryDirection::Undo)
+    else {
+        panic!("asset candidate must Undo to editable state");
+    };
+    let expected_history =
+        HistoryAvailabilityOutcome::Available(HistoryAvailability {
+            can_redo: true,
+            can_undo: false,
+            revision: undone,
+        });
+    assert_eq!(session.history_availability(), expected_history);
+    assert_eq!(session.retained_asset_byte_count_for_test(), 1);
+
+    let bounded = DirectEditBatchProposal {
+        base: undone,
+        capability_version: CURRENT_COMMAND_BEHAVIOR_VERSION,
+        commands: vec![DirectEditBatchCommand {
+            dependencies: Vec::new(),
+            id: 1_u32,
+            preconditions: CommandTargetPreconditions {
+                expected_value: Some(EditableSemanticValue::Text(String::from(
+                    "before",
+                ))),
+                identity: IdentityPrecondition {
+                    expected_kind: Some(SemanticIdentityKind::InlineSpan),
+                    expected_owner: IdentityOwnerExpectation::Any,
+                },
+                requested_family: SemanticCommandFamily::TextContent,
+            },
+            requested: EditableSemanticValue::Text(String::from("after")),
+            target: span,
+        }],
+    };
+    let zero_limits = CommandGraphLimits {
+        commands: 0,
+        dependency_edges: 0,
+    };
+    assert!(matches!(
+        session.apply_direct_edit_batch_bounded(bounded, zero_limits),
+        DirectEditBatchApplyOutcome::ResourceRejected { .. }
+    ));
+    assert_eq!(session.history_availability(), expected_history);
+    assert_eq!(session.retained_asset_byte_count_for_test(), 1);
+
+    assert_eq!(
+        session.replace_text(
+            editable_revision,
+            span,
+            String::from("stale replacement"),
+        ),
+        TextEditOutcome::StaleBase { current: undone },
+    );
+    assert_eq!(session.history_availability(), expected_history);
+    assert_eq!(session.retained_asset_byte_count_for_test(), 1);
+}
+
+#[test]
 fn abandoned_redo_asset_bytes_cannot_attach_to_new_asset_identity() {
     let identities = IdentityAllocator::new();
     let mut session = application::SessionApplication::default();
