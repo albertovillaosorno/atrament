@@ -3690,6 +3690,62 @@ fn bounded_identity_ancestry_reaches_the_maximum_accepted_nesting_depth() {
 }
 
 #[test]
+fn direct_edit_preview_keeps_flow_scope_at_maximum_nesting_depth() {
+    let ids = IdentityAllocator::new();
+    let (candidate, _, span_candidate) = candidate_nested_text_notebook(
+        &ids,
+        CANDIDATE_BLOCK_NESTING_LIMIT.saturating_sub(1),
+    );
+    let flow_candidate = candidate.pages[0].flows[0].id;
+    let page_candidate = candidate.pages[0].id;
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(candidate)
+    else {
+        panic!("maximum-depth preview candidate must be accepted");
+    };
+    let flow = accepted_for(&mapping, flow_candidate);
+    let page = accepted_for(&mapping, page_candidate);
+    let span = accepted_for(&mapping, span_candidate);
+    let before = session.current().expect("maximum-depth revision").clone();
+
+    assert_eq!(
+        session.preview_direct_edit_changes(
+            revision,
+            span,
+            EditableSemanticValue::Text(String::from("deep preview")),
+        ),
+        DirectEditChangePreviewOutcome::Predicted {
+            changes: vec![DirectEditSemanticChange {
+                after: EditableSemanticValue::Text(String::from(
+                    "deep preview",
+                )),
+                before: EditableSemanticValue::Text(String::from(
+                    "nested text",
+                )),
+                family: SemanticCommandFamily::TextContent,
+                target: span,
+            }],
+            effect: DirectEditEffectClass::Mutation,
+            impact_seeds: vec![DirectEditImpactSeed {
+                authorities: vec![
+                    DirectEditDerivedAuthority::Diagnostics,
+                    DirectEditDerivedAuthority::FlowGeometry,
+                    DirectEditDerivedAuthority::Handwriting,
+                    DirectEditDerivedAuthority::Motion,
+                    DirectEditDerivedAuthority::Rendering,
+                    DirectEditDerivedAuthority::Shaping,
+                    DirectEditDerivedAuthority::Wrapping,
+                ],
+                scope: DirectEditImpactScope::Flow { flow, page },
+            }],
+            revision,
+        },
+    );
+    assert_eq!(session.current(), Some(&before));
+}
+
+#[test]
 fn bounded_identity_ancestry_does_not_preallocate_the_caller_bound() {
     let ids = IdentityAllocator::new();
     let (candidate, row, _) =

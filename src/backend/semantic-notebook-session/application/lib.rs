@@ -999,8 +999,22 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
                         ),
                     };
                 };
-                let impact_seeds = direct_edit_impact_seeds(
+                let families_by_target = BTreeMap::from([(
+                    change.target,
+                    BTreeSet::from([change.family]),
+                )]);
+                let request = DirectEditBatchIndexRequest {
+                    families_by_target: &families_by_target,
+                    material_count: 1,
+                };
+                let index = direct_edit_material_index(
                     &current.notebook,
+                    request,
+                    simulated_revision,
+                );
+                let impact_seeds = direct_edit_impact_seeds_indexed(
+                    &current.notebook,
+                    index.impacts,
                     from_ref(&change),
                 );
                 DirectEditChangePreviewOutcome::Predicted {
@@ -3238,18 +3252,6 @@ fn direct_edit_impact_seeds_indexed(
             .remove(&(change.target, change.family))
             .unwrap_or_else(|| direct_edit_impact_scope(notebook, change));
         (scope, direct_edit_impact_authorities(change.family))
-    })
-}
-
-fn direct_edit_impact_seeds(
-    notebook: &Notebook<AcceptedIdentity>,
-    changes: &[DirectEditSemanticChange],
-) -> Vec<DirectEditImpactSeed> {
-    collect_direct_edit_impact_seeds(changes, |change| {
-        (
-            direct_edit_impact_scope(notebook, change),
-            direct_edit_impact_authorities(change.family),
-        )
     })
 }
 
