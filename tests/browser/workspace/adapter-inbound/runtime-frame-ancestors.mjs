@@ -269,6 +269,24 @@ async function waitForFramedDocument(client, context) {
     );
 }
 
+async function navigateFromDocument(client, context, url) {
+    await client.command("script.evaluate", {
+        awaitPromise: false,
+        expression: `location.assign(${JSON.stringify(url)})`,
+        resultOwnership: "none",
+        target: { context },
+    });
+}
+
+async function observedWithin(observation, label) {
+    return Promise.race([
+        observation,
+        new Promise((_resolve, reject) => setTimeout(() => {
+            reject(new Error(`${label} request was not observed`));
+        }, 5_000)),
+    ]);
+}
+
 test(
     "Firefox blocks Atrament inside a hostile loopback frame",
     { skip: !FIREFOX_AVAILABLE, timeout: 30_000 },
@@ -324,6 +342,15 @@ test(
                 }
             });
 
+            let resolveAtramentReferrer;
+            const atramentReferrer = new Promise((resolve) => {
+                resolveAtramentReferrer = resolve;
+            });
+            let resolveControlReferrer;
+            const controlReferrer = new Promise((resolve) => {
+                resolveControlReferrer = resolve;
+            });
+
             permissive = http.createServer((_request, response) => {
                 response.writeHead(200, {
                     "Cache-Control": "no-store",
@@ -343,6 +370,16 @@ test(
                 `http://127.0.0.1:${permissiveAddress.port}`;
 
             hostile = http.createServer((request, response) => {
+                if (request.url === "/atrament-referrer") {
+                    resolveAtramentReferrer(request.headers.referer ?? null);
+                    response.end("<!doctype html><title>Recorder</title>");
+                    return;
+                }
+                if (request.url === "/control-referrer") {
+                    resolveControlReferrer(request.headers.referer ?? null);
+                    response.end("<!doctype html><title>Recorder</title>");
+                    return;
+                }
                 const target = request.url === "/control"
                     ? permissiveOrigin
                     : origin;
@@ -405,6 +442,39 @@ test(
                     title: "Atrament",
                 },
             );
+
+            await navigateFromDocument(
+                bidi,
+                direct.context,
+                `${hostileOrigin}/atrament-referrer`,
+            );
+            assert.equal(
+                await observedWithin(
+                    atramentReferrer,
+                    "Atrament referrer-policy",
+                ),
+                null,
+            );
+
+            const referrerControl = await bidi.command(
+                "browsingContext.create",
+                { type: "tab" },
+            );
+            await bidi.command("browsingContext.navigate", {
+                context: referrerControl.context,
+                url: permissiveOrigin,
+                wait: "complete",
+            });
+            await navigateFromDocument(
+                bidi,
+                referrerControl.context,
+                `${hostileOrigin}/control-referrer`,
+            );
+            const ordinaryReferrer = await observedWithin(
+                controlReferrer,
+                "permissive control referrer",
+            );
+            assert.equal(ordinaryReferrer, `${permissiveOrigin}/`);
 
             const control = await bidi.command("browsingContext.create", {
                 type: "tab",
