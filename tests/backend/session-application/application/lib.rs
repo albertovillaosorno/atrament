@@ -920,6 +920,32 @@ fn application_routes_fixed_overflow_through_owned_revision() {
             },
         )),
     );
+
+    let HistoryTraversalOutcome::Traversed { revision: redone, .. } =
+        session.traverse_history(undone, HistoryDirection::Redo)
+    else {
+        panic!("fixed-region edit must Redo");
+    };
+    assert_ne!(redone, current);
+    assert_ne!(redone, revision);
+    assert_eq!(
+        session.validate_fixed_placement(placement),
+        Err(application::SessionFixedRegionLayoutError::Layout(
+            FixedRegionLayoutError::RevisionMismatch {
+                accepted: redone,
+                placement: revision,
+            },
+        )),
+    );
+    assert_eq!(
+        session.preflight_layout_for_export(revision, bound),
+        Err(application::SessionExportLayoutPreflightError::Preflight(
+            ExportLayoutPreflightError::RequestedRevisionMismatch {
+                current: redone,
+                requested: revision,
+            },
+        )),
+    );
 }
 
 #[test]
@@ -1004,6 +1030,23 @@ fn application_routes_measured_pagination_through_owned_revision() {
         Err(application::SessionPaginationError::Pagination(
             SemanticPaginationError::MeasurementRevisionMismatch {
                 accepted: undone,
+                measured: revision,
+            },
+        )),
+    );
+
+    let HistoryTraversalOutcome::Traversed { revision: redone, .. } =
+        session.traverse_history(undone, HistoryDirection::Redo)
+    else {
+        panic!("measured-flow edit must Redo");
+    };
+    assert_ne!(redone, current);
+    assert_ne!(redone, revision);
+    assert_eq!(
+        session.paginate_measured_flow(&measurement),
+        Err(application::SessionPaginationError::Pagination(
+            SemanticPaginationError::MeasurementRevisionMismatch {
+                accepted: redone,
                 measured: revision,
             },
         )),

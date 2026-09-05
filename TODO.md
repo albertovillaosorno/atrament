@@ -492,7 +492,9 @@ The live `SessionApplication` owner now admits the semantic-flow pagination
 application dependency and exposes one read-only measured-flow operation. It
 binds the supplied measurement to the owner's current accepted revision and
 delegates page/profile derivation and measurement admission without publishing
-arbitrary page rectangles or a transport route.
+arbitrary page rectangles or a transport route. Undo and Redo restore semantic
+content under fresh revision identities, so an older measurement never becomes
+current again merely because content history is traversed.
 
 The task remains open for real handwriting and formula measurement, grapheme-
 aware line breaking and paragraph wrapping, quotation and citation measurement,
@@ -547,6 +549,10 @@ Fixed block/page ownership now reuses the semantic model's iterative structural
 lookup instead of maintaining a recursive fixed-layout traversal. Fixtures keep
 same-page non-block identities rejected and cover the maximum accepted 256-level
 block nesting boundary.
+
+Undo and Redo restore semantic content under fresh accepted revision identities.
+Old fixed placements and their revision-bound layout-only Export evidence remain
+stale after either traversal instead of being reactivated by restored content.
 
 A read-only layout-only Export preflight now consumes revision-bound layout
 diagnostics and refuses layout readiness when evidence is blocking or explicitly
