@@ -492,6 +492,11 @@ first-journey 6 mm bottom overflow is exercised directly. A 20,000-case
 deterministic rectangle oracle independently verifies crossed-edge combinations,
 stable edge order, and exact overflow amounts.
 
+A second 20,000-case accepted placement oracle verifies those reports project
+one
+complete blocking diagnostic per violation with matching typed edge and physical
+amount.
+
 Stale placements, wrong page ownership, missing or invalid profiles, and
 unrepresentable coordinates fail before a diagnostic can be presented as
 current. Page-profile edits invalidate prior derived geometry, while nested

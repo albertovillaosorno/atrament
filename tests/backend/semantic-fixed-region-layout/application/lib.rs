@@ -37,7 +37,9 @@ use atrament_diagnostic::{
     LocationRole, Operation, OperationContextKind, PhysicalBoundaryEdge,
     PhysicalLengthQuantity, Remediation, Severity,
 };
-use atrament_fixed_region_bounds::{BoundaryEdge, BoundsError};
+use atrament_fixed_region_bounds::{
+    BoundaryEdge, BoundsError, check_bounds,
+};
 use atrament_physical_page_profile::{
     BindingEdge, BorderShape, Length, Orientation,
     PageProfile as PhysicalPageProfile, PageProfileError, PaperMarkAppearance,
@@ -208,6 +210,122 @@ fn rect(x: u64, y: u64, width: u64, height: u64) -> Rect {
         width: Length::from_micrometres(width),
         x: Length::from_micrometres(x),
         y: Length::from_micrometres(y),
+    }
+}
+
+fn next_fixed_layout_value(seed: &mut u64) -> u64 {
+    *seed = seed
+        .wrapping_mul(6_364_136_223_846_793_005)
+        .wrapping_add(1_442_695_040_888_963_407);
+    *seed >> 32
+}
+
+const fn diagnostic_boundary(edge: BoundaryEdge) -> PhysicalBoundaryEdge {
+    match edge {
+        BoundaryEdge::Bottom => PhysicalBoundaryEdge::Bottom,
+        BoundaryEdge::Left => PhysicalBoundaryEdge::Left,
+        BoundaryEdge::Right => PhysicalBoundaryEdge::Right,
+        BoundaryEdge::Top => PhysicalBoundaryEdge::Top,
+    }
+}
+
+#[test]
+fn accepted_fixed_layout_diagnostics_match_bounds_oracle() {
+    const CASES: usize = 20_000;
+    let ids = IdentityAllocator::new();
+    let fixture = candidate_fixture(&ids);
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(fixture.notebook)
+    else {
+        panic!("candidate must be accepted");
+    };
+    let page = accepted_for(&mapping, fixture.page_one);
+    let object = accepted_for(&mapping, fixture.block);
+    let writable = geometry(20_000)
+        .writable_region()
+        .expect("fixture writable region");
+    let accepted = session.current().expect("accepted revision");
+    let mut seed = 0x5eed_f1ed_2026_u64;
+
+    for case in 0..CASES {
+        let rectangle = rect(
+            next_fixed_layout_value(&mut seed) % 230_000,
+            next_fixed_layout_value(&mut seed) % 310_000,
+            next_fixed_layout_value(&mut seed) % 210_000,
+            next_fixed_layout_value(&mut seed) % 290_000,
+        );
+        let expected =
+            check_bounds(writable, rectangle).expect("small generated bounds");
+        let actual = validate_fixed_placement(
+            accepted,
+            placement(revision, page, object, rectangle),
+        )
+        .expect("generated placement keeps accepted authority");
+        if expected.is_within_bounds() {
+            assert_eq!(
+                actual,
+                FixedRegionLayoutResult::WithinBounds { object, page },
+                "within-bounds mismatch in generated case {case}",
+            );
+            continue;
+        }
+        let FixedRegionLayoutResult::Overflow {
+            diagnostics,
+            object: actual_object,
+            page: actual_page,
+            report,
+        } = actual
+        else {
+            panic!("overflow case {case} must return diagnostics");
+        };
+        assert_eq!(actual_object, object, "generated case {case}");
+        assert_eq!(actual_page, page, "generated case {case}");
+        assert_eq!(report, expected, "generated case {case}");
+        assert_eq!(diagnostics.completeness, Completeness::Complete);
+        assert_eq!(diagnostics.diagnostics.len(), report.violations.len());
+        for (diagnostic, violation) in
+            diagnostics.diagnostics.iter().zip(&report.violations)
+        {
+            assert_eq!(
+                diagnostic.code,
+                DiagnosticCode::LayoutFixedRegionOverflow,
+            );
+            assert_eq!(
+                diagnostic.disposition,
+                BlockingDisposition::Blocking,
+            );
+            assert_eq!(diagnostic.severity, Severity::Error);
+            assert_eq!(diagnostic.operation.operation, Operation::Layout);
+            assert_eq!(diagnostic.operation.contexts.len(), 1);
+            assert_eq!(
+                diagnostic.operation.contexts[0].kind,
+                OperationContextKind::AcceptedRevision,
+            );
+            assert_eq!(diagnostic.locations.len(), 2);
+            assert_eq!(diagnostic.locations[0].kind, LocationKind::Object);
+            assert_eq!(diagnostic.locations[0].role, LocationRole::Primary);
+            assert_eq!(
+                diagnostic.locations[1].kind,
+                LocationKind::Structure,
+            );
+            assert_eq!(diagnostic.locations[1].role, LocationRole::Related);
+            assert_eq!(
+                diagnostic.remediations,
+                [Remediation::ChangeConstraint],
+            );
+            assert_eq!(diagnostic.evidence, [
+                Evidence::PhysicalBoundary {
+                    edge: diagnostic_boundary(violation.edge),
+                },
+                Evidence::PhysicalLength {
+                    micrometres: i128::from(
+                        violation.amount.micrometres(),
+                    ),
+                    quantity: PhysicalLengthQuantity::Overflow,
+                },
+            ]);
+        }
     }
 }
 
