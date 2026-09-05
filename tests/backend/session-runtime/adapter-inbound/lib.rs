@@ -1216,6 +1216,89 @@ fn authenticated_draft_mutations_replace_only_requested_field() {
 }
 
 #[test]
+fn draft_mutation_requires_the_complete_admission_conjunction() {
+    let authorization = format!("Bearer {EXPECTED_SECRET}");
+    let wrong_authorization = format!("Bearer {}", "b".repeat(64));
+    let credentials = [
+        None,
+        Some(authorization.as_str()),
+        Some(wrong_authorization.as_str()),
+    ];
+    let origins = [
+        None,
+        Some(EXPECTED_ORIGIN),
+        Some("http://attacker.example"),
+    ];
+    let mut admitted = 0_u32;
+    for method in ["GET", "POST"] {
+        for host in [EXPECTED_HOST, "localhost:43123"] {
+            for target in ["/api/session/task", "/api/session/missing"] {
+                for credential in credentials {
+                    for origin in origins {
+                        let body = b"matrix replacement";
+                        let mut request = format!(
+                            "{method} {target} HTTP/1.1\r\nHost: {host}\r\n",
+                        );
+                        if let Some(value) = credential {
+                            request.push_str(&format!(
+                                "Authorization: {value}\r\n",
+                            ));
+                        }
+                        if let Some(value) = origin {
+                            request.push_str(&format!("Origin: {value}\r\n"));
+                        }
+                        let request = if method == "POST" {
+                            request.push_str(&format!(
+                                "Content-Length: {}\r\n\r\n",
+                                body.len(),
+                            ));
+                            let mut bytes = request.into_bytes();
+                            bytes.extend_from_slice(body);
+                            bytes
+                        } else {
+                            request.push_str("\r\n");
+                            request.into_bytes()
+                        };
+                        let mut draft = SessionDraftService::default();
+                        assert_eq!(
+                            draft.replace(
+                                DraftField::Task,
+                                String::from("current"),
+                            ),
+                            atrament_session_draft_port::DraftMutation::Applied,
+                        );
+                        let response = route_with_draft(
+                            &request,
+                            EXPECTED_HOST,
+                            &mut draft,
+                        );
+                        let should_apply = method == "POST"
+                            && host == EXPECTED_HOST
+                            && target == "/api/session/task"
+                            && credential == Some(authorization.as_str())
+                            && origin == Some(EXPECTED_ORIGIN);
+                        assert_eq!(
+                            status_line(&response) == "HTTP/1.1 204 No Content",
+                            should_apply,
+                        );
+                        assert_eq!(
+                            draft.value(DraftField::Task),
+                            if should_apply {
+                                "matrix replacement"
+                            } else {
+                                "current"
+                            },
+                        );
+                        admitted += u32::from(should_apply);
+                    }
+                }
+            }
+        }
+    }
+    assert_eq!(admitted, 1);
+}
+
+#[test]
 fn browser_forgery_cannot_mutate_session_draft_state() {
     let authorization = format!("Bearer {EXPECTED_SECRET}");
     let wrong_authorization = format!("Bearer {}", "b".repeat(64));
