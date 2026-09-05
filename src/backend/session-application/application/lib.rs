@@ -43,6 +43,10 @@ use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
+use atrament_export_layout_preflight::{
+    ExportLayoutPreflightError, ExportLayoutPreflightResult,
+    RevisionLayoutDiagnostics, preflight_layout_for_export,
+};
 use atrament_semantic_flow_pagination::{
     RevisionFlowMeasurement, SemanticPaginationError, SemanticPaginationPlan,
     paginate_revision,
@@ -115,6 +119,15 @@ pub enum AssetBytesError {
         /// Requested identity absent from that revision.
         target: AcceptedIdentity,
     },
+}
+
+/// Typed failure to run layout-only Export preflight through current state.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum SessionExportLayoutPreflightError {
+    /// Session has no accepted semantic revision for preflight binding.
+    NoAcceptedRevision,
+    /// Existing layout-only preflight rejected revision or diagnostic binding.
+    Preflight(ExportLayoutPreflightError),
 }
 
 /// Typed failure to validate derived fixed geometry through current state.
@@ -440,6 +453,30 @@ impl SessionApplication {
         };
         paginate_revision(revision, measurement)
             .map_err(SessionPaginationError::Pagination)
+    }
+
+    /// Evaluate layout-only Export preflight through current session authority.
+    ///
+    /// This read-only operation accepts no path, format, overwrite, retry, or
+    /// file-commit input and cannot report a persistent Export result.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed failure when no accepted revision exists or the supplied
+    /// layout evidence is stale, misbound, or belongs to another capability.
+    pub fn preflight_layout_for_export(
+        &self,
+        requested: RevisionIdentity,
+        layout: RevisionLayoutDiagnostics<'_>,
+    ) -> Result<
+        ExportLayoutPreflightResult,
+        SessionExportLayoutPreflightError,
+    > {
+        let Some(current) = self.semantic.current() else {
+            return Err(SessionExportLayoutPreflightError::NoAcceptedRevision);
+        };
+        preflight_layout_for_export(current, requested, layout)
+            .map_err(SessionExportLayoutPreflightError::Preflight)
     }
 
     /// Preview one exact direct semantic change without mutation.

@@ -512,18 +512,23 @@ Stale placements, wrong page ownership, missing or invalid profiles, and
 unrepresentable coordinates fail before a diagnostic can be presented as
 current. The live `SessionApplication` owner routes this same read-only
 placement validation against its current accepted revision without admitting
-solver or
-transport authority. Page-profile edits invalidate prior derived geometry, while
+solver or transport authority. Page-profile edits invalidate prior derived
+geometry, while
 nested semantic blocks retain their accepted page ownership. Overflow amounts
 retain the full physical `u64` range without diagnostic truncation.
 
 A read-only layout-only Export preflight now consumes revision-bound layout
 diagnostics and refuses layout readiness when evidence is blocking or explicitly
-incomplete. Complete advisory evidence remains Ready and is preserved, while an
-incomplete set remains Incomplete even when it already contains a blocking
-diagnostic. Stale revisions, evidence from another revision, and non-layout
-diagnostics cannot be smuggled through that gate. It accepts no path, overwrite,
-retry, format, or file-commit input and therefore cannot report `Exported`.
+incomplete. The live `SessionApplication` routes that gate against its current
+accepted revision, so post-placement overflow evidence can be checked without
+creating file authority.
+
+Complete advisory evidence remains Ready and is
+preserved, while an incomplete set remains Incomplete even when it already
+contains a blocking diagnostic. Stale revisions, evidence from another revision,
+and non-layout diagnostics cannot be smuggled through that gate. It accepts no
+path, overwrite, retry, format, or file-commit input and therefore cannot report
+`Exported`.
 
 The task remains open until full Export preflight combines layout with semantic,
 source, asset, capability, and format validation before file commit. Move, crop,

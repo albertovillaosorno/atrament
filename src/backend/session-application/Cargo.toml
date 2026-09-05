@@ -6,6 +6,7 @@ publish = false
 license = "MIT"
 
 [dependencies]
+atrament_export_layout_preflight = { path = "../export-layout-preflight" }
 atrament_semantic_flow_pagination = { path = "../semantic-flow-pagination" }
 atrament_semantic_fixed_region_layout = { path = "../semantic-fixed-region-layout" }
 atrament_semantic_notebook = { path = "../semantic-notebook" }

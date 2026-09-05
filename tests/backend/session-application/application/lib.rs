@@ -35,6 +35,10 @@ use std::collections::BTreeSet;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::process::{Command, Stdio};
 
+use atrament_export_layout_preflight::{
+    ExportLayoutPreflightError, ExportLayoutPreflightResult,
+    RevisionLayoutDiagnostics,
+};
 use atrament_flow_pagination::{
     FlowUnitPolicy, MeasuredFlowUnit, MeasuredFragment,
 };
@@ -788,6 +792,21 @@ fn application_routes_fixed_overflow_through_owned_revision() {
     assert_eq!(diagnostics.diagnostics.len(), 1);
     assert_eq!(session.accepted_revision(), Some(&before));
 
+    let bound = RevisionLayoutDiagnostics::bind(revision, &diagnostics)
+        .expect("overflow diagnostics must bind to their revision");
+    assert_eq!(
+        session.preflight_layout_for_export(revision, bound),
+        Ok(ExportLayoutPreflightResult::Blocked {
+            diagnostics: diagnostics.clone(),
+            revision,
+        }),
+    );
+    let fresh = application::SessionApplication::default();
+    assert_eq!(
+        fresh.preflight_layout_for_export(revision, bound),
+        Err(application::SessionExportLayoutPreflightError::NoAcceptedRevision),
+    );
+
     let TextEditOutcome::Applied { revision: current, .. } =
         session.replace_text(revision, span, String::from("edited fixed"))
     else {
@@ -799,6 +818,15 @@ fn application_routes_fixed_overflow_through_owned_revision() {
             FixedRegionLayoutError::RevisionMismatch {
                 accepted: current,
                 placement: revision,
+            },
+        )),
+    );
+    assert_eq!(
+        session.preflight_layout_for_export(revision, bound),
+        Err(application::SessionExportLayoutPreflightError::Preflight(
+            ExportLayoutPreflightError::RequestedRevisionMismatch {
+                current,
+                requested: revision,
             },
         )),
     );
