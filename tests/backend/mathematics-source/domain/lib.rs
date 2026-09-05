@@ -1837,6 +1837,28 @@ fn aligned_cases_and_matrix_environments_nest_in_order() {
 }
 
 #[test]
+fn small_and_plain_matrices_keep_distinct_nesting() {
+    let source = concat!(
+        r"\begin{smallmatrix}a & \begin{matrix}b & c \\ d & e",
+        r"\end{matrix} \\ f & g\end{smallmatrix}",
+    );
+    let analyzed = analyze(source, FormulaMode::Inline)
+        .expect("nested compact and plain matrices");
+    assert!(analyzed.is_supported());
+    assert_eq!(reconstructed(&analyzed), source);
+
+    let prefix = r"\begin{smallmatrix}\begin{matrix}x";
+    let crossed = format!(r"{prefix}\end{{smallmatrix}}");
+    assert_eq!(
+        analyze(&crossed, FormulaMode::Inline),
+        Err(MathSyntaxError {
+            byte_offset: prefix.len(),
+            kind: MathSyntaxErrorKind::MismatchedEnvironmentEnd,
+        }),
+    );
+}
+
+#[test]
 fn single_and_double_vertical_matrices_keep_distinct_nesting() {
     let source = concat!(
         r"\begin{Vmatrix}a & \begin{vmatrix}b & c \\ d & e",
