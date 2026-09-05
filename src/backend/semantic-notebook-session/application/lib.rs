@@ -544,7 +544,7 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
     }
 
     fn command_capability_snapshot(&self) -> SemanticCommandCapabilitySnapshot {
-        const VERSION: CommandBehaviorVersion = CommandBehaviorVersion(58);
+        const VERSION: CommandBehaviorVersion = CommandBehaviorVersion(59);
         const FAMILY_CAPABILITIES: [CommandFamilyCapability; 7] = [
             CommandFamilyCapability {
                 behavior_version: CommandBehaviorVersion(1),
@@ -1891,6 +1891,9 @@ fn accept_block_content(
         BlockContent::Callout(blocks) => {
             Ok(BlockContent::Callout(accept_blocks(blocks, identities)?))
         },
+        BlockContent::Citation(spans) => {
+            Ok(BlockContent::Citation(accept_spans(spans, identities)?))
+        },
         BlockContent::Date(spans) => {
             Ok(BlockContent::Date(accept_spans(spans, identities)?))
         },
@@ -1905,6 +1908,9 @@ fn accept_block_content(
         },
         BlockContent::Figure(figure) => {
             Ok(BlockContent::Figure(accept_figure(figure, identities)?))
+        },
+        BlockContent::Footnote(spans) => {
+            Ok(BlockContent::Footnote(accept_spans(spans, identities)?))
         },
         BlockContent::Freeform(blocks) => {
             Ok(BlockContent::Freeform(accept_blocks(blocks, identities)?))
@@ -2235,7 +2241,9 @@ fn formula_content_value(
             }
             None
         },
-        BlockContent::Date(_)
+        BlockContent::Citation(_)
+        | BlockContent::Date(_)
+        | BlockContent::Footnote(_)
         | BlockContent::Definition(_)
         | BlockContent::Quotation(_)
         | BlockContent::SourceNote(_)
@@ -2676,11 +2684,13 @@ const fn direct_edit_block_kind(
 ) -> SemanticBlockKind {
     match content {
         BlockContent::Callout(_) => SemanticBlockKind::Callout,
+        BlockContent::Citation(_) => SemanticBlockKind::Citation,
         BlockContent::Date(_) => SemanticBlockKind::Date,
         BlockContent::Definition(_) => SemanticBlockKind::Definition,
         BlockContent::Quotation(_) => SemanticBlockKind::Quotation,
         BlockContent::SourceNote(_) => SemanticBlockKind::SourceNote,
         BlockContent::Figure(_) => SemanticBlockKind::Figure,
+        BlockContent::Footnote(_) => SemanticBlockKind::Footnote,
         BlockContent::Freeform(_) => SemanticBlockKind::Freeform,
         BlockContent::Heading(_) => SemanticBlockKind::Heading,
         BlockContent::List(_) => SemanticBlockKind::List,
@@ -2728,26 +2738,17 @@ fn index_direct_edit_blocks_frame<'notebook>(
                 });
             }
         },
-        BlockContent::Date(spans)
+        BlockContent::Citation(spans)
+        | BlockContent::Date(spans)
+        | BlockContent::Footnote(spans)
         | BlockContent::Definition(spans)
         | BlockContent::Quotation(spans)
         | BlockContent::SourceNote(spans)
         | BlockContent::Heading(spans)
         | BlockContent::MarginNote(spans)
-        | BlockContent::Paragraph(spans) => {
-            index_direct_edit_spans(
-                index,
-                spans,
-                request,
-                block.id,
-                DirectEditBatchBlockContext {
-                    block: block.id,
-                    flow,
-                    page,
-                },
-                revision,
-            );
-        },
+        | BlockContent::Paragraph(spans) => index_direct_edit_block_spans(
+            spans, block.id, flow, page, index, request, revision,
+        ),
         BlockContent::Figure(figure) => index_direct_edit_figure(
             figure, block.id, flow, page, index, request, revision,
         ),
@@ -2801,6 +2802,25 @@ fn index_direct_edit_blocks_frame<'notebook>(
         },
         BlockContent::Rule | BlockContent::Unresolved(_) => {},
     }
+}
+
+fn index_direct_edit_block_spans(
+    spans: &[InlineSpan<AcceptedIdentity>],
+    block: AcceptedIdentity,
+    flow: AcceptedIdentity,
+    page: AcceptedIdentity,
+    index: &mut DirectEditBatchIndex,
+    request: DirectEditBatchIndexRequest<'_>,
+    revision: atrament_semantic_notebook::RevisionIdentity,
+) {
+    index_direct_edit_spans(
+        index,
+        spans,
+        request,
+        block,
+        DirectEditBatchBlockContext { block, flow, page },
+        revision,
+    );
 }
 
 fn index_direct_edit_block_materials(
@@ -4341,7 +4361,9 @@ fn block_provenance_blocks_value(
                     }
                 }
             },
-            BlockContent::Date(_)
+            BlockContent::Citation(_)
+            | BlockContent::Date(_)
+            | BlockContent::Footnote(_)
             | BlockContent::Definition(_)
             | BlockContent::Quotation(_)
         | BlockContent::SourceNote(_)
@@ -4393,7 +4415,9 @@ fn inline_span_content_value(
         BlockContent::Callout(blocks) | BlockContent::Freeform(blocks) => {
             inline_span_blocks_value(blocks, target)
         },
-        BlockContent::Date(spans)
+        BlockContent::Citation(spans)
+        | BlockContent::Date(spans)
+        | BlockContent::Footnote(spans)
         | BlockContent::Definition(spans)
         | BlockContent::Quotation(spans)
         | BlockContent::SourceNote(spans)
@@ -4513,7 +4537,9 @@ fn list_ordering_blocks_value(
                     }
                 }
             },
-            BlockContent::Date(_)
+            BlockContent::Citation(_)
+            | BlockContent::Date(_)
+            | BlockContent::Footnote(_)
             | BlockContent::Definition(_)
             | BlockContent::Quotation(_)
         | BlockContent::SourceNote(_)
@@ -4584,7 +4610,9 @@ fn replace_list_ordering_blocks(
                     }
                 }
             },
-            BlockContent::Date(_)
+            BlockContent::Citation(_)
+            | BlockContent::Date(_)
+            | BlockContent::Footnote(_)
             | BlockContent::Definition(_)
             | BlockContent::Quotation(_)
         | BlockContent::SourceNote(_)
@@ -4649,7 +4677,9 @@ fn block_style_blocks_value(
                     }
                 }
             },
-            BlockContent::Date(_)
+            BlockContent::Citation(_)
+            | BlockContent::Date(_)
+            | BlockContent::Footnote(_)
             | BlockContent::Definition(_)
             | BlockContent::Quotation(_)
         | BlockContent::SourceNote(_)
@@ -4720,7 +4750,9 @@ fn replace_block_style_blocks(
                     }
                 }
             },
-            BlockContent::Date(_)
+            BlockContent::Citation(_)
+            | BlockContent::Date(_)
+            | BlockContent::Footnote(_)
             | BlockContent::Definition(_)
             | BlockContent::Quotation(_)
         | BlockContent::SourceNote(_)
@@ -4761,7 +4793,9 @@ fn replace_inline_span_style_blocks(
                     return true;
                 }
             },
-            BlockContent::Date(spans)
+            BlockContent::Citation(spans)
+            | BlockContent::Date(spans)
+            | BlockContent::Footnote(spans)
             | BlockContent::Definition(spans)
             | BlockContent::Quotation(spans)
         | BlockContent::SourceNote(spans)
@@ -4857,7 +4891,9 @@ fn replace_provenance_reference_blocks(
                     return true;
                 }
             },
-            BlockContent::Date(spans)
+            BlockContent::Citation(spans)
+            | BlockContent::Date(spans)
+            | BlockContent::Footnote(spans)
             | BlockContent::Definition(spans)
             | BlockContent::Quotation(spans)
         | BlockContent::SourceNote(spans)
@@ -4962,7 +4998,9 @@ fn figure_blocks_value(
                     }
                 }
             },
-            BlockContent::Date(_)
+            BlockContent::Citation(_)
+            | BlockContent::Date(_)
+            | BlockContent::Footnote(_)
             | BlockContent::Definition(_)
             | BlockContent::Quotation(_)
         | BlockContent::SourceNote(_)
@@ -5033,7 +5071,9 @@ fn replace_figure_asset_blocks(
                     }
                 }
             },
-            BlockContent::Date(_)
+            BlockContent::Citation(_)
+            | BlockContent::Date(_)
+            | BlockContent::Footnote(_)
             | BlockContent::Definition(_)
             | BlockContent::Quotation(_)
         | BlockContent::SourceNote(_)
@@ -5153,7 +5193,9 @@ fn replace_formula_content(
             }
             false
         },
-        BlockContent::Date(_)
+        BlockContent::Citation(_)
+        | BlockContent::Date(_)
+        | BlockContent::Footnote(_)
         | BlockContent::Definition(_)
         | BlockContent::Quotation(_)
         | BlockContent::SourceNote(_)
@@ -5432,7 +5474,9 @@ fn table_containing_cell_content_value(
             }
             None
         },
-        BlockContent::Date(_)
+        BlockContent::Citation(_)
+        | BlockContent::Date(_)
+        | BlockContent::Footnote(_)
         | BlockContent::Definition(_)
         | BlockContent::Quotation(_)
         | BlockContent::SourceNote(_)
@@ -5503,7 +5547,9 @@ fn replace_table_cell_span_raw_content(
                 })
             })
         },
-        BlockContent::Date(_)
+        BlockContent::Citation(_)
+        | BlockContent::Date(_)
+        | BlockContent::Footnote(_)
         | BlockContent::Definition(_)
         | BlockContent::Quotation(_)
         | BlockContent::SourceNote(_)
@@ -5594,7 +5640,9 @@ fn replace_table_cell_span_content(
             }
             Ok(false)
         },
-        BlockContent::Date(_)
+        BlockContent::Citation(_)
+        | BlockContent::Date(_)
+        | BlockContent::Footnote(_)
         | BlockContent::Definition(_)
         | BlockContent::Quotation(_)
         | BlockContent::SourceNote(_)
@@ -5678,7 +5726,9 @@ fn table_cell_span_content_value(
             }
             None
         },
-        BlockContent::Date(_)
+        BlockContent::Citation(_)
+        | BlockContent::Date(_)
+        | BlockContent::Footnote(_)
         | BlockContent::Definition(_)
         | BlockContent::Quotation(_)
         | BlockContent::SourceNote(_)
@@ -5751,7 +5801,9 @@ fn replace_table_row_role_content(
             }
             false
         },
-        BlockContent::Date(_)
+        BlockContent::Citation(_)
+        | BlockContent::Date(_)
+        | BlockContent::Footnote(_)
         | BlockContent::Definition(_)
         | BlockContent::Quotation(_)
         | BlockContent::SourceNote(_)
@@ -5826,7 +5878,9 @@ fn table_row_role_content_value(
             }
             None
         },
-        BlockContent::Date(_)
+        BlockContent::Citation(_)
+        | BlockContent::Date(_)
+        | BlockContent::Footnote(_)
         | BlockContent::Definition(_)
         | BlockContent::Quotation(_)
         | BlockContent::SourceNote(_)
@@ -5878,7 +5932,9 @@ fn replace_text_content(
         BlockContent::Callout(blocks) | BlockContent::Freeform(blocks) => {
             replace_text_blocks(blocks, target, value)
         },
-        BlockContent::Date(spans)
+        BlockContent::Citation(spans)
+        | BlockContent::Date(spans)
+        | BlockContent::Footnote(spans)
         | BlockContent::Definition(spans)
         | BlockContent::Quotation(spans)
         | BlockContent::SourceNote(spans)
@@ -5967,7 +6023,9 @@ fn text_content_value(
         BlockContent::Callout(blocks) | BlockContent::Freeform(blocks) => {
             text_blocks_value(blocks, target)
         },
-        BlockContent::Date(spans)
+        BlockContent::Citation(spans)
+        | BlockContent::Date(spans)
+        | BlockContent::Footnote(spans)
         | BlockContent::Definition(spans)
         | BlockContent::Quotation(spans)
         | BlockContent::SourceNote(spans)
@@ -6050,7 +6108,9 @@ fn discard_candidate_notebook(notebook: Notebook<CandidateIdentity>) {
                     }
                 }
             },
-            BlockContent::Date(_)
+            BlockContent::Citation(_)
+            | BlockContent::Date(_)
+            | BlockContent::Footnote(_)
             | BlockContent::Definition(_)
             | BlockContent::Quotation(_)
         | BlockContent::SourceNote(_)
@@ -6128,7 +6188,9 @@ fn candidate_graph_blocks_frame<'candidate>(
                 });
             }
         },
-        BlockContent::Date(spans)
+        BlockContent::Citation(spans)
+        | BlockContent::Date(spans)
+        | BlockContent::Footnote(spans)
         | BlockContent::Definition(spans)
         | BlockContent::Quotation(spans)
         | BlockContent::SourceNote(spans)

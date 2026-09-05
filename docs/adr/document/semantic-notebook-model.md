@@ -53,14 +53,15 @@ preserving explicitly admitted extension data.
 
 ### Implementation evidence
 
-Definition, quotation, source-note, and margin-note blocks are now executable
-semantic values with their own block kinds. Their inline spans participate in
-the existing candidate identity graph, accepted-identity promotion, exact
-Text-content editing, Style-role and Provenance material, identity inspection,
-and semantic Undo/Redo without being reclassified as paragraphs.
+Citation, definition, footnote, quotation, source-note, and margin-note blocks
+are now executable semantic values with their own block kinds. Their inline
+spans participate in the existing candidate identity graph, accepted-identity
+promotion, exact Text-content editing, Style-role and Provenance material,
+identity inspection, and semantic Undo/Redo without being reclassified as
+paragraphs.
 
-Layout-specific definition, quotation, source-note, or margin-note presentation
-remains a later measurement/style concern rather than semantic storage behavior.
-A margin-note block does not establish margin coordinates or placement
-authority. Source notes do not establish citation-to-claim linkage or
-bibliographic authority.
+Layout-specific presentation for these inline-span block families remains a
+later measurement/style concern rather than semantic storage behavior. A
+margin-note block does not establish margin coordinates or placement authority.
+Citation, footnote, and source-note blocks do not establish citation-to-claim
+linkage or bibliographic authority by themselves.

@@ -93,7 +93,7 @@ use atrament_session_draft_port::{DraftField, DraftMutation, SessionDraft};
 mod application;
 
 const CURRENT_COMMAND_BEHAVIOR_VERSION: CommandBehaviorVersion =
-    CommandBehaviorVersion(58);
+    CommandBehaviorVersion(59);
 
 fn physical_page_profile() -> PageProfile {
     PageProfile {
@@ -2547,7 +2547,9 @@ fn application_preserves_every_simple_inline_block_family() {
         Vec<InlineSpan<CandidateIdentity>>,
     ) -> BlockContent<CandidateIdentity>;
     let cases: &[(SemanticBlockKind, InlineBlockConstructor)] = &[
+        (SemanticBlockKind::Citation, BlockContent::Citation),
         (SemanticBlockKind::Date, BlockContent::Date),
+        (SemanticBlockKind::Footnote, BlockContent::Footnote),
         (SemanticBlockKind::Definition, BlockContent::Definition),
         (SemanticBlockKind::Heading, BlockContent::Heading),
         (SemanticBlockKind::MarginNote, BlockContent::MarginNote),

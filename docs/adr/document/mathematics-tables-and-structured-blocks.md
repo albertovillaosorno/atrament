@@ -129,3 +129,8 @@ table before one atomic commit.
 Cell alignment and wrapping, ruler-like border geometry, table measurement, and
 output consumption remain future verification. The span model does not choose
 wire field names or physical cell geometry.
+
+Citation and footnote blocks now have distinct semantic block kinds backed by
+editable inline spans. They preserve span identity, style and provenance
+references, nested-container reachability, direct Text-content edits, and
+Undo without inventing bibliographic linkage or page-placement semantics.

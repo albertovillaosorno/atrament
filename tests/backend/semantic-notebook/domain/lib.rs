@@ -498,7 +498,9 @@ fn simple_inline_block_kinds_keep_span_ownership() {
     type InlineBlockConstructor =
         fn(Vec<InlineSpan<u32>>) -> BlockContent<u32>;
     let cases: &[(SemanticBlockKind, InlineBlockConstructor)] = &[
+        (SemanticBlockKind::Citation, BlockContent::Citation),
         (SemanticBlockKind::Date, BlockContent::Date),
+        (SemanticBlockKind::Footnote, BlockContent::Footnote),
         (SemanticBlockKind::Definition, BlockContent::Definition),
         (SemanticBlockKind::Heading, BlockContent::Heading),
         (SemanticBlockKind::MarginNote, BlockContent::MarginNote),

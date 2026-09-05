@@ -84,7 +84,7 @@ use atrament_semantic_notebook_port::{
 use atrament_semantic_notebook_session::SemanticNotebookSessionService;
 
 const CURRENT_COMMAND_BEHAVIOR_VERSION: CommandBehaviorVersion =
-    CommandBehaviorVersion(58);
+    CommandBehaviorVersion(59);
 
 #[derive(Debug)]
 struct CountingCommandIdentity {
@@ -3010,7 +3010,9 @@ fn every_simple_inline_family_remains_editable_through_block_containers() {
         Vec<InlineSpan<CandidateIdentity>>,
     ) -> BlockContent<CandidateIdentity>;
     let cases: &[(SemanticBlockKind, InlineBlockConstructor)] = &[
+        (SemanticBlockKind::Citation, BlockContent::Citation),
         (SemanticBlockKind::Date, BlockContent::Date),
+        (SemanticBlockKind::Footnote, BlockContent::Footnote),
         (SemanticBlockKind::Definition, BlockContent::Definition),
         (SemanticBlockKind::Heading, BlockContent::Heading),
         (SemanticBlockKind::MarginNote, BlockContent::MarginNote),
@@ -3251,7 +3253,9 @@ fn every_simple_inline_family_preserves_attached_semantic_references() {
         Vec<InlineSpan<CandidateIdentity>>,
     ) -> BlockContent<CandidateIdentity>;
     let cases: &[(SemanticBlockKind, InlineBlockConstructor)] = &[
+        (SemanticBlockKind::Citation, BlockContent::Citation),
         (SemanticBlockKind::Date, BlockContent::Date),
+        (SemanticBlockKind::Footnote, BlockContent::Footnote),
         (SemanticBlockKind::Definition, BlockContent::Definition),
         (SemanticBlockKind::Heading, BlockContent::Heading),
         (SemanticBlockKind::MarginNote, BlockContent::MarginNote),
@@ -3418,7 +3422,9 @@ fn every_simple_inline_family_keeps_text_impact_scope() {
         Vec<InlineSpan<CandidateIdentity>>,
     ) -> BlockContent<CandidateIdentity>;
     let cases: &[InlineBlockConstructor] = &[
+        BlockContent::Citation,
         BlockContent::Date,
+        BlockContent::Footnote,
         BlockContent::Definition,
         BlockContent::Heading,
         BlockContent::MarginNote,
@@ -7878,11 +7884,11 @@ fn command_capability_version_detects_drift_independently_of_revision() {
     );
     assert_eq!(
         session.check_command_capability_compatibility(
-            CommandBehaviorVersion(57),
+            CommandBehaviorVersion(58),
         ),
         CommandCapabilityCompatibilityOutcome::Mismatch {
             current: CURRENT_COMMAND_BEHAVIOR_VERSION,
-            expected: CommandBehaviorVersion(57),
+            expected: CommandBehaviorVersion(58),
         },
     );
     assert_eq!(
@@ -14574,7 +14580,9 @@ fn every_simple_inline_family_validates_span_reference_kinds() {
         Vec<InlineSpan<CandidateIdentity>>,
     ) -> BlockContent<CandidateIdentity>;
     let cases: &[InlineBlockConstructor] = &[
+        BlockContent::Citation,
         BlockContent::Date,
+        BlockContent::Footnote,
         BlockContent::Definition,
         BlockContent::Heading,
         BlockContent::MarginNote,

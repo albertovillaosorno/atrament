@@ -87,12 +87,16 @@ pub struct Block<Identity> {
 pub enum BlockContent<Identity> {
     /// Bounded emphasized region containing semantic child blocks.
     Callout(Vec<Block<Identity>>),
+    /// Citation content retained as editable spans.
+    Citation(Vec<InlineSpan<Identity>>),
     /// Semantic date content retained as editable spans.
     Date(Vec<InlineSpan<Identity>>),
     /// Definition content retained as editable spans.
     Definition(Vec<InlineSpan<Identity>>),
     /// Figure backed by an admitted asset and semantic caption.
     Figure(Figure<Identity>),
+    /// Footnote content retained as editable spans.
+    Footnote(Vec<InlineSpan<Identity>>),
     /// Explicit freeform region containing semantic child blocks.
     Freeform(Vec<Block<Identity>>),
     /// Heading content retained as editable spans.
@@ -554,12 +558,16 @@ pub struct UnresolvedBlock {
 pub enum SemanticBlockKind {
     /// Callout block containing nested semantic blocks.
     Callout,
+    /// Citation block containing inline text spans.
+    Citation,
     /// Date block containing inline text spans.
     Date,
     /// Definition block containing inline text spans.
     Definition,
     /// Figure block with a figure identity and optional caption spans.
     Figure,
+    /// Footnote block containing inline text spans.
+    Footnote,
     /// Explicit freeform semantic region.
     Freeform,
     /// Heading block containing inline text spans.
@@ -1041,8 +1049,10 @@ where
             }
             None
         }
-        BlockContent::Date(spans)
+        BlockContent::Citation(spans)
+        | BlockContent::Date(spans)
         | BlockContent::Definition(spans)
+        | BlockContent::Footnote(spans)
         | BlockContent::Heading(spans)
         | BlockContent::MarginNote(spans)
         | BlockContent::Paragraph(spans)
@@ -1362,11 +1372,13 @@ const fn semantic_block_kind<Identity>(
 ) -> SemanticBlockKind {
     match content {
         BlockContent::Callout(_) => SemanticBlockKind::Callout,
+        BlockContent::Citation(_) => SemanticBlockKind::Citation,
         BlockContent::Date(_) => SemanticBlockKind::Date,
         BlockContent::Definition(_) => SemanticBlockKind::Definition,
         BlockContent::Quotation(_) => SemanticBlockKind::Quotation,
         BlockContent::SourceNote(_) => SemanticBlockKind::SourceNote,
         BlockContent::Figure(_) => SemanticBlockKind::Figure,
+        BlockContent::Footnote(_) => SemanticBlockKind::Footnote,
         BlockContent::Freeform(_) => SemanticBlockKind::Freeform,
         BlockContent::Heading(_) => SemanticBlockKind::Heading,
         BlockContent::List(_) => SemanticBlockKind::List,
@@ -1492,10 +1504,12 @@ where
             }
             None
         },
-        BlockContent::Date(spans)
+        BlockContent::Citation(spans)
+        | BlockContent::Date(spans)
         | BlockContent::Definition(spans)
         | BlockContent::Quotation(spans)
         | BlockContent::SourceNote(spans)
+        | BlockContent::Footnote(spans)
         | BlockContent::Heading(spans)
         | BlockContent::MarginNote(spans)
         | BlockContent::Paragraph(spans) => {
