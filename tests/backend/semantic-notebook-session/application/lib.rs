@@ -2388,7 +2388,10 @@ fn named_delimiter_tex_is_admitted_and_directly_editable() {
         initial,
     );
 
-    let edited_source = r"\lfloor x \rfloor + \Vert v \Vert";
+    let edited_source = concat!(
+        r"\lbrack x \rbrack + A \backslash B + ",
+        r"\Vert v \Vert",
+    );
     let outcome = session.replace_formula(
         revision, formula, FormulaMode::Display, edited_source.to_owned(),
     );
