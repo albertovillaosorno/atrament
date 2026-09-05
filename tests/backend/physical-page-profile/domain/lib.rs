@@ -71,6 +71,113 @@ fn base_profile(binding_edge: BindingEdge) -> PageProfile {
     }
 }
 
+fn next_profile_value(seed: &mut u64) -> u64 {
+    *seed = seed
+        .wrapping_mul(6_364_136_223_846_793_005)
+        .wrapping_add(1_442_695_040_888_963_407);
+    *seed >> 32
+}
+
+#[test]
+fn valid_profiles_match_writable_region_reference_oracle() {
+    const CASES: usize = 20_000;
+    let mut seed = 0x5eed_9a6e_2026_u64;
+    for case in 0..CASES {
+        let binding_edge = match next_profile_value(&mut seed) % 4 {
+            0 => BindingEdge::Bottom,
+            1 => BindingEdge::Left,
+            2 => BindingEdge::Right,
+            _ => BindingEdge::Top,
+        };
+        let orientation = if next_profile_value(&mut seed) & 1 == 0 {
+            Orientation::Portrait
+        } else {
+            Orientation::Landscape
+        };
+        let sheet = SheetSize {
+            height: Length::from_micrometres(800),
+            width: Length::from_micrometres(1_000),
+        };
+        let (sheet_width, sheet_height) = match orientation {
+            Orientation::Landscape => (800u64, 1_000u64),
+            Orientation::Portrait => (1_000u64, 800u64),
+        };
+        let x = next_profile_value(&mut seed) % sheet_width;
+        let y = next_profile_value(&mut seed) % sheet_height;
+        let width = next_profile_value(&mut seed) % (sheet_width - x) + 1;
+        let height = next_profile_value(&mut seed) % (sheet_height - y) + 1;
+        let top_clearance = next_profile_value(&mut seed) % height;
+        let remaining_height = height - top_clearance;
+        let binding_capacity = match binding_edge {
+            BindingEdge::Bottom | BindingEdge::Top => remaining_height,
+            BindingEdge::Left | BindingEdge::Right => width,
+        };
+        let binding_inset =
+            next_profile_value(&mut seed) % binding_capacity;
+        let outer_margin = binding_inset / 2;
+        let writing_inset = binding_inset - outer_margin;
+        let profile = PageProfile {
+            binding_edge,
+            border_shape: BorderShape::Rectangle,
+            corner_roundness: Length::ZERO,
+            orientation,
+            outer_margin: Length::from_micrometres(outer_margin),
+            paper_mark_appearance: PaperMarkAppearance {
+                join: PaperMarkJoin::Sharp,
+                maximum_ruler_error: Length::ZERO,
+            },
+            paper_mark_layer: PaperMarkLayer::BelowInk,
+            paper_pattern: PaperPattern::Blank,
+            printable_region: Rect {
+                height: Length::from_micrometres(height),
+                width: Length::from_micrometres(width),
+                x: Length::from_micrometres(x),
+                y: Length::from_micrometres(y),
+            },
+            sheet,
+            top_clearance: Length::from_micrometres(top_clearance),
+            writing_inset: Length::from_micrometres(writing_inset),
+        };
+        let top = y + top_clearance;
+        let expected = match binding_edge {
+            BindingEdge::Bottom => Rect {
+                height: Length::from_micrometres(
+                    remaining_height - binding_inset,
+                ),
+                width: Length::from_micrometres(width),
+                x: Length::from_micrometres(x),
+                y: Length::from_micrometres(top),
+            },
+            BindingEdge::Left => Rect {
+                height: Length::from_micrometres(remaining_height),
+                width: Length::from_micrometres(width - binding_inset),
+                x: Length::from_micrometres(x + binding_inset),
+                y: Length::from_micrometres(top),
+            },
+            BindingEdge::Right => Rect {
+                height: Length::from_micrometres(remaining_height),
+                width: Length::from_micrometres(width - binding_inset),
+                x: Length::from_micrometres(x),
+                y: Length::from_micrometres(top),
+            },
+            BindingEdge::Top => Rect {
+                height: Length::from_micrometres(
+                    remaining_height - binding_inset,
+                ),
+                width: Length::from_micrometres(width),
+                x: Length::from_micrometres(x),
+                y: Length::from_micrometres(top + binding_inset),
+            },
+        };
+        assert_eq!(profile.validate(), Ok(profile), "generated case {case}");
+        assert_eq!(
+            profile.writable_region(),
+            Ok(expected),
+            "generated case {case}",
+        );
+    }
+}
+
 #[test]
 fn canonical_length_round_trips_exact_micrometres() {
     let length = Length::from_micrometres(123_456);

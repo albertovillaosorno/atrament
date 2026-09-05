@@ -361,6 +361,50 @@ fn real_overflow_diagnostics(
 }
 
 #[test]
+fn complete_advisory_layout_evidence_is_ready_and_preserved() {
+    let mut session = SemanticNotebookSessionService::default();
+    let fixture = accepted_fixture(&mut session);
+    let mut diagnostics = real_overflow_diagnostics(&session, &fixture);
+    diagnostics.diagnostics[0].disposition = BlockingDisposition::Advisory;
+    let expected = diagnostics.clone();
+
+    assert_eq!(
+        preflight_layout_for_export(
+            session.current().expect("accepted revision"),
+            fixture.revision,
+            RevisionLayoutDiagnostics::bind(fixture.revision, &diagnostics)
+                .expect("advisory layout diagnostic binding"),
+        ),
+        Ok(ExportLayoutPreflightResult::Ready {
+            diagnostics: expected,
+            revision: fixture.revision,
+        }),
+    );
+}
+
+#[test]
+fn incomplete_blocking_layout_evidence_remains_incomplete() {
+    let mut session = SemanticNotebookSessionService::default();
+    let fixture = accepted_fixture(&mut session);
+    let mut diagnostics = real_overflow_diagnostics(&session, &fixture);
+    diagnostics.completeness = Completeness::Incomplete;
+    let expected = diagnostics.clone();
+
+    assert_eq!(
+        preflight_layout_for_export(
+            session.current().expect("accepted revision"),
+            fixture.revision,
+            RevisionLayoutDiagnostics::bind(fixture.revision, &diagnostics)
+                .expect("incomplete blocking diagnostic binding"),
+        ),
+        Ok(ExportLayoutPreflightResult::Incomplete {
+            diagnostics: expected,
+            revision: fixture.revision,
+        }),
+    );
+}
+
+#[test]
 fn diagnostic_revision_context_cannot_be_relabelled_as_current() {
     let mut session = SemanticNotebookSessionService::default();
     let fixture = accepted_fixture(&mut session);

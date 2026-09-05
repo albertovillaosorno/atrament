@@ -43,6 +43,82 @@ fn rect(x: u64, y: u64, width: u64, height: u64) -> Rect {
     }
 }
 
+
+fn reference_bounds(writable: Rect, object: Rect) -> Vec<BoundaryViolation> {
+    let writable_right =
+        writable.x.micrometres() + writable.width.micrometres();
+    let writable_bottom =
+        writable.y.micrometres() + writable.height.micrometres();
+    let object_right = object.x.micrometres() + object.width.micrometres();
+    let object_bottom = object.y.micrometres() + object.height.micrometres();
+    let mut violations = Vec::new();
+    if object_bottom > writable_bottom {
+        violations.push(BoundaryViolation {
+            amount: Length::from_micrometres(
+                object_bottom - writable_bottom,
+            ),
+            edge: BoundaryEdge::Bottom,
+        });
+    }
+    if object.x < writable.x {
+        violations.push(BoundaryViolation {
+            amount: Length::from_micrometres(
+                writable.x.micrometres() - object.x.micrometres(),
+            ),
+            edge: BoundaryEdge::Left,
+        });
+    }
+    if object_right > writable_right {
+        violations.push(BoundaryViolation {
+            amount: Length::from_micrometres(object_right - writable_right),
+            edge: BoundaryEdge::Right,
+        });
+    }
+    if object.y < writable.y {
+        violations.push(BoundaryViolation {
+            amount: Length::from_micrometres(
+                writable.y.micrometres() - object.y.micrometres(),
+            ),
+            edge: BoundaryEdge::Top,
+        });
+    }
+    violations
+}
+
+fn next_bounds_value(seed: &mut u64) -> u64 {
+    *seed = seed
+        .wrapping_mul(6_364_136_223_846_793_005)
+        .wrapping_add(1_442_695_040_888_963_407);
+    *seed >> 32
+}
+
+#[test]
+fn small_rectangles_match_reference_bounds_oracle() {
+    const CASES: usize = 20_000;
+    let mut seed = 0x5eed_b0ad_2026_u64;
+    for case in 0..CASES {
+        let writable = rect(
+            next_bounds_value(&mut seed) % 21,
+            next_bounds_value(&mut seed) % 21,
+            next_bounds_value(&mut seed) % 21,
+            next_bounds_value(&mut seed) % 21,
+        );
+        let object = rect(
+            next_bounds_value(&mut seed) % 31,
+            next_bounds_value(&mut seed) % 31,
+            next_bounds_value(&mut seed) % 31,
+            next_bounds_value(&mut seed) % 31,
+        );
+        let actual = check_bounds(writable, object)
+            .expect("small coordinates cannot overflow");
+        assert_eq!(
+            actual.violations,
+            reference_bounds(writable, object),
+            "bounds oracle mismatch in generated case {case}",
+        );
+    }
+}
+
 #[test]
 fn exact_fit_has_no_overflow() {
     let writable = rect(10_000, 20_000, 100_000, 200_000);

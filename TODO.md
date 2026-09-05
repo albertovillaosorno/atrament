@@ -418,6 +418,9 @@ metrics and move complete semantic fragments to following pages predictably.
 
 Current executable evidence paginates already-measured top-level flow blocks in
 semantic order over exact writable regions derived from accepted page profiles.
+The physical-profile root independently matches writable-region derivation
+across 20,000 valid profiles covering both orientations and all four binding
+edges.
 Measurements bind to one accepted revision and one accepted flow; stale,
 incomplete, reordered, unknown-flow, and out-of-flow measurements reject before
 layout. Repeated measured fragments may retain one block owner, and no fragment
@@ -490,7 +493,9 @@ the full physical `u64` range without diagnostic truncation.
 
 A read-only layout-only Export preflight now consumes revision-bound layout
 diagnostics and refuses layout readiness when evidence is blocking or explicitly
-incomplete. Stale revisions, evidence from another revision, and non-layout
+incomplete. Complete advisory evidence remains Ready and is preserved, while an
+incomplete set remains Incomplete even when it already contains a blocking
+diagnostic. Stale revisions, evidence from another revision, and non-layout
 diagnostics cannot be smuggled through that gate. It accepts no path, overwrite,
 retry, format, or file-commit input and therefore cannot report `Exported`.
 
