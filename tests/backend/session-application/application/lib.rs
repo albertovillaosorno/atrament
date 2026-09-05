@@ -2928,6 +2928,77 @@ fn raw_asset_bytes_are_write_once_and_follow_session_history_lifetime() {
 }
 
 #[test]
+fn nonmutating_attempts_preserve_redo_asset_bytes() {
+    let identities = IdentityAllocator::new();
+    let mut session = application::SessionApplication::default();
+    let AcceptanceOutcome::Accepted { revision: empty, .. } =
+        session.accept_candidate(minimal_candidate(&identities))
+    else {
+        panic!("empty candidate must be accepted");
+    };
+    let (asset_candidate, _, candidate_asset, _) =
+        asset_figure_candidate(&identities);
+    let AcceptanceOutcome::Accepted {
+        mapping,
+        revision: with_asset,
+    } = session.accept_candidate(asset_candidate)
+    else {
+        panic!("asset candidate must be accepted");
+    };
+    let asset = mapping
+        .iter()
+        .find(|entry| entry.candidate == candidate_asset)
+        .expect("asset identity must map")
+        .accepted;
+    assert!(matches!(
+        session.retain_asset_bytes(with_asset, asset, vec![7, 8, 9]),
+        Ok(application::AssetBytesRetention::Retained { .. })
+    ));
+
+    let HistoryTraversalOutcome::Traversed { revision: undone, .. } =
+        session.traverse_history(with_asset, HistoryDirection::Undo)
+    else {
+        panic!("asset candidate must Undo to empty state");
+    };
+    assert_ne!(undone, empty);
+    let expected_history =
+        HistoryAvailabilityOutcome::Available(HistoryAvailability {
+            can_redo: true,
+            can_undo: false,
+            revision: undone,
+        });
+    assert_eq!(session.history_availability(), expected_history);
+    assert_eq!(session.retained_asset_byte_count_for_test(), 1);
+
+    let no_op = DirectEditBatchProposal::<u32> {
+        base: undone,
+        capability_version: CURRENT_COMMAND_BEHAVIOR_VERSION,
+        commands: Vec::new(),
+    };
+    assert_eq!(
+        session.apply_direct_edit_batch(no_op),
+        DirectEditBatchApplyOutcome::NoOp {
+            commands: Vec::new(),
+            revision: undone,
+        },
+    );
+    assert_eq!(session.history_availability(), expected_history);
+    assert_eq!(session.retained_asset_byte_count_for_test(), 1);
+
+    let mut invalid = minimal_candidate(&identities);
+    invalid.assets.push(Asset {
+        id: invalid.id,
+        media_type: String::from("image/png"),
+    });
+    assert!(matches!(
+        session.accept_candidate(invalid),
+        AcceptanceOutcome::InvalidCandidate { .. }
+    ));
+    assert_eq!(session.history_availability(), expected_history);
+    assert_eq!(session.retained_asset_byte_count_for_test(), 1);
+}
+
+#[test]
 fn abandoned_redo_asset_bytes_cannot_attach_to_new_asset_identity() {
     let identities = IdentityAllocator::new();
     let mut session = application::SessionApplication::default();

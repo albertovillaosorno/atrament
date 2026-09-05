@@ -42,6 +42,8 @@ reattach: the old accepted asset identity is absent from the new revision, Redo
 is discarded, and newly accepted assets receive distinct identities with no
 retained bytes. The process owner now also prunes retained bytes whose accepted
 asset identities are unreachable from current, Undo, and Redo semantic state.
+No-op batches and rejected candidates preserve both Redo and its reachable
+bytes.
 
 A process fixture now retains bytes for two semantic assets, commits text and
 asset-reference history, and computes current measured pagination, fixed-region
