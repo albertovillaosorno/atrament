@@ -377,9 +377,11 @@ fn named_symbol_vocabulary_is_supported_without_rewriting() {
         r"\geqslant", r"\gets", r"\gg", r"\gtrsim", r"\hbar", r"\hookleftarrow",
         r"\hookrightarrow", r"\iff", r"\imath", r"\implies", r"\in", r"\infty",
         r"\iota", r"\jmath", r"\kappa", r"\lambda", r"\land", r"\langle",
-        r"\lbrace", r"\lbrack", r"\lceil", r"\ldots", r"\le", r"\leftarrow",
+        r"\lbrace", r"\lbrack", r"\lceil", r"\ldots", r"\le", r"\leadsto",
+        r"\leftarrow", r"\leftharpoondown", r"\leftharpoonup",
         r"\leftrightarrow", r"\leq", r"\leqslant", r"\lesssim", r"\lfloor",
-        r"\ll", r"\longleftarrow", r"\longleftrightarrow", r"\longrightarrow",
+        r"\ll", r"\longleftarrow", r"\longleftrightarrow", r"\longmapsto",
+        r"\longrightarrow",
         r"\lor", r"\mapsto", r"\mid", r"\models", r"\mp", r"\mu", r"\nabla",
         r"\ne", r"\nearrow", r"\neg", r"\neq", r"\nexists", r"\ni", r"\notin",
         r"\nu", r"\nwarrow", r"\odot", r"\omega", r"\ominus", r"\oplus",
@@ -387,7 +389,8 @@ fn named_symbol_vocabulary_is_supported_without_rewriting() {
         r"\partial", r"\perp", r"\phi", r"\pi", r"\pm", r"\prec", r"\preceq",
         r"\prime", r"\propto", r"\psi", r"\rangle", r"\rbrace", r"\rbrack",
         r"\rceil", r"\rfloor",
-        r"\rho", r"\rightarrow", r"\searrow", r"\setminus", r"\sigma", r"\sim",
+        r"\rho", r"\rightarrow", r"\rightharpoondown", r"\rightharpoonup",
+        r"\rightleftharpoons", r"\searrow", r"\setminus", r"\sigma", r"\sim",
         r"\simeq", r"\smile", r"\sqcap", r"\sqcup", r"\sqsubseteq",
         r"\sqsupseteq", r"\star", r"\subset", r"\subseteq",
         r"\subsetneq", r"\succ",
@@ -545,6 +548,30 @@ fn ellipsis_symbols_compose_in_matrix_notation_without_rewriting() {
             })
             .count(),
         6,
+    );
+}
+
+#[test]
+fn harpoon_and_mapped_arrows_compose_without_rewriting() {
+    let source = concat!(
+        r"A \leftharpoonup B \leftharpoondown C; ",
+        r"D \rightharpoonup E \rightharpoondown F; ",
+        r"G \rightleftharpoons H; x \longmapsto y; p \leadsto q",
+    );
+    let analyzed = analyze(source, FormulaMode::Display)
+        .expect("harpoon and mapped-arrow expression");
+    assert!(analyzed.is_supported());
+    assert_eq!(reconstructed(&analyzed), source);
+    assert_eq!(
+        analyzed
+            .tokens
+            .iter()
+            .filter(|token| {
+                token.kind
+                    == MathTokenKind::Command(SupportedCommand::NamedSymbol)
+            })
+            .count(),
+        7,
     );
 }
 
