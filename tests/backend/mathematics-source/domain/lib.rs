@@ -360,12 +360,15 @@ fn named_symbol_vocabulary_is_supported_without_rewriting() {
         r"\Longrightarrow", r"\Omega", r"\Phi", r"\Pi", r"\Psi", r"\Re",
         r"\Rightarrow",
         r"\Sigma", r"\Theta", r"\Uparrow", r"\Updownarrow", r"\Upsilon",
-        r"\Vert", r"\Xi", r"\alpha", r"\angle", r"\approx", r"\ast",
-        r"\backslash", r"\because", r"\beta", r"\bullet", r"\cap", r"\cdot",
+        r"\Vert", r"\Xi", r"\aleph", r"\alpha", r"\angle", r"\approx", r"\ast",
+        r"\backslash", r"\because", r"\beta", r"\bot", r"\bullet", r"\cap",
+        r"\cdot",
         r"\cdots",
         r"\chi", r"\circ", r"\cong", r"\cup", r"\dashv", r"\ddots", r"\delta",
-        r"\div", r"\dots", r"\downarrow", r"\ell", r"\emptyset", r"\epsilon",
-        r"\equiv", r"\eta", r"\exists", r"\forall", r"\gamma", r"\ge", r"\geq",
+        r"\diamond", r"\div", r"\dots", r"\downarrow", r"\ell", r"\emptyset",
+        r"\epsilon",
+        r"\equiv", r"\eta", r"\exists", r"\forall", r"\frown", r"\gamma",
+        r"\ge", r"\geq",
         r"\geqslant", r"\gets", r"\gg", r"\gtrsim", r"\hbar", r"\hookleftarrow",
         r"\hookrightarrow", r"\iff", r"\imath", r"\implies", r"\in", r"\infty",
         r"\iota", r"\jmath", r"\kappa", r"\lambda", r"\land", r"\langle",
@@ -379,12 +382,14 @@ fn named_symbol_vocabulary_is_supported_without_rewriting() {
         r"\prime", r"\propto", r"\psi", r"\rangle", r"\rbrace", r"\rbrack",
         r"\rceil", r"\rfloor",
         r"\rho", r"\rightarrow", r"\searrow", r"\setminus", r"\sigma", r"\sim",
-        r"\simeq", r"\star", r"\subset", r"\subseteq", r"\subsetneq", r"\succ",
+        r"\simeq", r"\smile", r"\star", r"\subset", r"\subseteq",
+        r"\subsetneq", r"\succ",
         r"\succeq", r"\supset", r"\supseteq", r"\supsetneq", r"\swarrow",
-        r"\tau", r"\therefore", r"\theta", r"\times", r"\to", r"\triangle",
+        r"\tau", r"\therefore", r"\theta", r"\times", r"\to", r"\top",
+        r"\triangle",
         r"\uparrow", r"\updownarrow", r"\upsilon", r"\varepsilon", r"\varphi",
         r"\varpi", r"\varrho", r"\varsigma", r"\vartheta", r"\vdash", r"\vdots",
-        r"\vee", r"\vert", r"\wedge", r"\xi", r"\zeta",
+        r"\vee", r"\vert", r"\wedge", r"\wp", r"\xi", r"\zeta",
     ] {
         let analyzed =
             analyze(source, FormulaMode::Inline).expect("named symbol formula");
@@ -403,6 +408,29 @@ fn named_symbol_vocabulary_is_supported_without_rewriting() {
             "{source}",
         );
     }
+}
+
+#[test]
+fn foundational_named_symbols_compose_without_rewriting() {
+    let source = concat!(
+        r"\aleph_0 + \wp(A); \top, \bot; ",
+        r"x \smile y, x \frown y; \diamond P",
+    );
+    let analyzed = analyze(source, FormulaMode::Display)
+        .expect("foundational named-symbol expression");
+    assert!(analyzed.is_supported());
+    assert_eq!(reconstructed(&analyzed), source);
+    assert_eq!(
+        analyzed
+            .tokens
+            .iter()
+            .filter(|token| {
+                token.kind
+                    == MathTokenKind::Command(SupportedCommand::NamedSymbol)
+            })
+            .count(),
+        7,
+    );
 }
 
 #[test]
