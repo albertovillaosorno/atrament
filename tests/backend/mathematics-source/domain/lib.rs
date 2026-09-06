@@ -188,7 +188,8 @@ fn escaped_tex_specials_remain_literal_in_math_and_text() {
 fn named_operator_vocabulary_is_supported_without_rewriting() {
     for source in [
         r"\Pr", r"\arccos", r"\arcsin", r"\arctan", r"\arg", r"\bigcap",
-        r"\bigcup", r"\bmod", r"\cos", r"\cosh", r"\cot", r"\coth", r"\csc",
+        r"\bigcup", r"\bigodot", r"\bigoplus", r"\bigotimes", r"\bigsqcup",
+        r"\bmod", r"\cos", r"\cosh", r"\cot", r"\coth", r"\csc",
         r"\deg", r"\det", r"\dim", r"\exp", r"\gcd", r"\hom", r"\iiint",
         r"\iint", r"\inf", r"\int", r"\ker", r"\lg", r"\lim", r"\liminf",
         r"\limsup", r"\ln", r"\log", r"\max", r"\min", r"\mod", r"\oint",
@@ -360,12 +361,16 @@ fn named_symbol_vocabulary_is_supported_without_rewriting() {
         r"\Longrightarrow", r"\Omega", r"\Phi", r"\Pi", r"\Psi", r"\Re",
         r"\Rightarrow",
         r"\Sigma", r"\Theta", r"\Uparrow", r"\Updownarrow", r"\Upsilon",
-        r"\Vert", r"\Xi", r"\aleph", r"\alpha", r"\angle", r"\approx", r"\ast",
-        r"\backslash", r"\because", r"\beta", r"\bot", r"\bullet", r"\cap",
+        r"\Vert", r"\Xi", r"\aleph", r"\alpha", r"\amalg", r"\angle",
+        r"\approx", r"\ast", r"\asymp",
+        r"\backslash", r"\because", r"\beta", r"\bigcirc", r"\bigtriangledown",
+        r"\bigtriangleup", r"\bot", r"\bowtie", r"\bullet", r"\cap",
         r"\cdot",
         r"\cdots",
-        r"\chi", r"\circ", r"\cong", r"\cup", r"\dashv", r"\ddots", r"\delta",
-        r"\diamond", r"\div", r"\dots", r"\downarrow", r"\ell", r"\emptyset",
+        r"\chi", r"\circ", r"\cong", r"\cup", r"\dagger", r"\dashv",
+        r"\ddagger", r"\ddots", r"\delta",
+        r"\diamond", r"\div", r"\doteq", r"\dots", r"\downarrow", r"\ell",
+        r"\emptyset",
         r"\epsilon",
         r"\equiv", r"\eta", r"\exists", r"\forall", r"\frown", r"\gamma",
         r"\ge", r"\geq",
@@ -377,19 +382,22 @@ fn named_symbol_vocabulary_is_supported_without_rewriting() {
         r"\ll", r"\longleftarrow", r"\longleftrightarrow", r"\longrightarrow",
         r"\lor", r"\mapsto", r"\mid", r"\models", r"\mp", r"\mu", r"\nabla",
         r"\ne", r"\nearrow", r"\neg", r"\neq", r"\nexists", r"\ni", r"\notin",
-        r"\nu", r"\nwarrow", r"\omega", r"\oplus", r"\otimes", r"\parallel",
+        r"\nu", r"\nwarrow", r"\odot", r"\omega", r"\ominus", r"\oplus",
+        r"\oslash", r"\otimes", r"\parallel",
         r"\partial", r"\perp", r"\phi", r"\pi", r"\pm", r"\prec", r"\preceq",
         r"\prime", r"\propto", r"\psi", r"\rangle", r"\rbrace", r"\rbrack",
         r"\rceil", r"\rfloor",
         r"\rho", r"\rightarrow", r"\searrow", r"\setminus", r"\sigma", r"\sim",
-        r"\simeq", r"\smile", r"\star", r"\subset", r"\subseteq",
+        r"\simeq", r"\smile", r"\sqcap", r"\sqcup", r"\sqsubseteq",
+        r"\sqsupseteq", r"\star", r"\subset", r"\subseteq",
         r"\subsetneq", r"\succ",
         r"\succeq", r"\supset", r"\supseteq", r"\supsetneq", r"\swarrow",
         r"\tau", r"\therefore", r"\theta", r"\times", r"\to", r"\top",
-        r"\triangle",
-        r"\uparrow", r"\updownarrow", r"\upsilon", r"\varepsilon", r"\varphi",
+        r"\triangle", r"\triangleleft", r"\triangleright",
+        r"\uparrow", r"\updownarrow", r"\uplus", r"\upsilon", r"\varepsilon",
+        r"\varphi",
         r"\varpi", r"\varrho", r"\varsigma", r"\vartheta", r"\vdash", r"\vdots",
-        r"\vee", r"\vert", r"\wedge", r"\wp", r"\xi", r"\zeta",
+        r"\vee", r"\vert", r"\wedge", r"\wp", r"\wr", r"\xi", r"\zeta",
     ] {
         let analyzed =
             analyze(source, FormulaMode::Inline).expect("named symbol formula");
@@ -408,6 +416,45 @@ fn named_symbol_vocabulary_is_supported_without_rewriting() {
             "{source}",
         );
     }
+}
+
+#[test]
+fn extended_binary_and_relation_symbols_compose_without_rewriting() {
+    let source = concat!(
+        r"\bigodot_i A_i + \bigoplus_j B_j + \bigotimes_k C_k + ",
+        r"\bigsqcup_l D_l; a \amalg b, a \asymp b, \bigcirc x; ",
+        r"\bigtriangledown + \bigtriangleup + a \bowtie b; ",
+        r"\dagger + \ddagger + a \doteq b + x \odot y + x \ominus y + ",
+        r"x \oslash y + A \sqcap B + A \sqcup B + A \sqsubseteq B + ",
+        r"A \sqsupseteq B + a \triangleleft b + a \triangleright b + ",
+        r"A \uplus B + a \wr b",
+    );
+    let analyzed = analyze(source, FormulaMode::Display)
+        .expect("extended binary and relation expression");
+    assert!(analyzed.is_supported());
+    assert_eq!(reconstructed(&analyzed), source);
+    assert_eq!(
+        analyzed
+            .tokens
+            .iter()
+            .filter(|token| {
+                token.kind
+                    == MathTokenKind::Command(SupportedCommand::NamedOperator)
+            })
+            .count(),
+        4,
+    );
+    assert_eq!(
+        analyzed
+            .tokens
+            .iter()
+            .filter(|token| {
+                token.kind
+                    == MathTokenKind::Command(SupportedCommand::NamedSymbol)
+            })
+            .count(),
+        20,
+    );
 }
 
 #[test]

@@ -69,8 +69,9 @@ standard and variant Greek control-sequence notation, common named and delimiter
 symbols including bracket, backslash, and foundational set/logic forms,
 real/imaginary-part and derivative-prime symbols, geometry/proof and
 ordering/set relations,
-binary-operator symbols,
-arrow and ellipsis symbols, relation and logic symbols, modular arithmetic,
+binary-operator symbols including square/lattice and circled forms, large
+n-ary operators, arrow and ellipsis symbols, relation and logic symbols, modular
+arithmetic,
 single, multiple, and contour calculus operators, set notation, aligned
 separators, and ordered
 aligned, brace-delimited-matrix, bracketed-matrix, cases,
