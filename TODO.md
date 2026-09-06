@@ -700,6 +700,12 @@ generic simulator. Ordered span commands validate cloned owning-table candidate
 grids, Apply revalidates affected final tables atomically, and one Undo restores
 the complete batch.
 
+A zero-content `Rule` block already supplies the semantic identity for a
+divider.
+Candidate acceptance preserves that block kind and its generic block style
+reference, so divider meaning is not flattened into paragraph text or inferred
+from drawn geometry. Ruler-like divider measurement and rendering remain open.
+
 The task remains open for cell alignment and wrapping semantics, ruler-like
 border geometry, table measurement/layout, command-batch cell content
 operations, and the remaining structured educational block families.

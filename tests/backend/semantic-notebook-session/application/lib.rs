@@ -6953,6 +6953,60 @@ fn constraint_kind_change_then_revert_is_net_noop() {
 }
 
 #[test]
+fn semantic_rule_is_an_accepted_styled_divider() {
+    let ids = IdentityAllocator::new();
+    let (mut candidate, _) = candidate_notebook_with_span(&ids, "discarded");
+    let candidate_block = candidate.pages[0].flows[0].blocks[0].id;
+    let candidate_flow = candidate.pages[0].flows[0].id;
+    let candidate_style = candidate_id(&ids);
+    candidate.styles.push(Style {
+        id: candidate_style,
+        name: String::from("divider-rule"),
+    });
+    candidate.pages[0].flows[0].blocks[0].content = BlockContent::Rule;
+    candidate.pages[0].flows[0].blocks[0].style = Some(candidate_style);
+
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(candidate)
+    else {
+        panic!("semantic divider candidate must be accepted");
+    };
+    let block = accepted_for(&mapping, candidate_block);
+    let flow = accepted_for(&mapping, candidate_flow);
+    let style = accepted_for(&mapping, candidate_style);
+
+    assert_eq!(
+        session.inspect_identity_kind(revision, block),
+        IdentityKindInspectOutcome::Inspected {
+            kind: SemanticIdentityKind::Block(SemanticBlockKind::Rule),
+            revision,
+            target: block,
+        },
+    );
+    let CommandTargetMaterialOutcome::Prepared { material } =
+        session.command_target_material(revision, block)
+    else {
+        panic!("divider style material must be prepared");
+    };
+    assert_eq!(
+        material.descriptor,
+        SemanticIdentityDescriptor {
+            kind: SemanticIdentityKind::Block(SemanticBlockKind::Rule),
+            owner: Some(flow),
+        },
+    );
+    assert_eq!(
+        material.editable_value,
+        Some(EditableSemanticValue::StyleReference(Some(style))),
+    );
+    assert_eq!(
+        material.direct_edit_family,
+        Some(SemanticCommandFamily::StyleRole),
+    );
+}
+
+#[test]
 fn block_style_reference_applies_atomically_and_undoes() {
     let ids = IdentityAllocator::new();
     let (mut candidate, _) = candidate_notebook_with_span(&ids, "styled");
