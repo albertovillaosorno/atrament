@@ -865,6 +865,27 @@ fn admitted_control_words_never_match_longer_ascii_names() {
 }
 
 #[test]
+fn package_only_strict_square_relations_remain_explicitly_unsupported() {
+    for (source, unsupported) in [
+        (r"A \sqsubset B", r"\sqsubset"),
+        (r"A \sqsupset B", r"\sqsupset"),
+    ] {
+        let analyzed = analyze(source, FormulaMode::Inline)
+            .expect("balanced package-only square relation");
+        assert!(!analyzed.is_supported(), "{source}");
+        assert_eq!(reconstructed(&analyzed), source);
+        assert_eq!(analyzed.unsupported.len(), 1, "{source}");
+        assert_eq!(analyzed.unsupported[0].name, unsupported, "{source}");
+    }
+
+    let admitted = r"A \sqsubseteq B; C \sqsupseteq D";
+    let analyzed = analyze(admitted, FormulaMode::Inline)
+        .expect("base square relations");
+    assert!(analyzed.is_supported());
+    assert_eq!(reconstructed(&analyzed), admitted);
+}
+
+#[test]
 fn parallel_control_symbol_is_supported_without_rewriting() {
     let source = r"a \| b + c \parallel d";
     let analyzed = analyze(source, FormulaMode::Inline)
