@@ -830,6 +830,13 @@ fn scan_command(source: &str, start: usize) -> ScannedCommand {
             required_groups: 0,
         };
     }
+    if source.as_bytes().get(after_slash) == Some(&b'|') {
+        return ScannedCommand {
+            end: after_slash.saturating_add(1),
+            kind: ScannedCommandKind::Supported(SupportedCommand::NamedSymbol),
+            required_groups: 0,
+        };
+    }
     if source.as_bytes().get(after_slash).is_some_and(|byte| {
         matches!(byte, b'{' | b'}' | b'%' | b'$' | b'#' | b'&' | b'_')
     }) {

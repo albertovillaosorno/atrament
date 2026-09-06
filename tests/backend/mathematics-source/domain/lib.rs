@@ -865,6 +865,30 @@ fn admitted_control_words_never_match_longer_ascii_names() {
 }
 
 #[test]
+fn parallel_control_symbol_is_supported_without_rewriting() {
+    let source = r"a \| b + c \parallel d";
+    let analyzed = analyze(source, FormulaMode::Inline)
+        .expect("parallel control-symbol expression");
+    assert!(analyzed.is_supported());
+    assert_eq!(reconstructed(&analyzed), source);
+    assert_eq!(
+        analyzed
+            .tokens
+            .iter()
+            .filter(|token| {
+                token.kind
+                    == MathTokenKind::Command(SupportedCommand::NamedSymbol)
+            })
+            .count(),
+        2,
+    );
+    assert!(analyzed.tokens.iter().any(|token| {
+        token.kind == MathTokenKind::Command(SupportedCommand::NamedSymbol)
+            && analyzed.token_source(*token) == Some(r"\|")
+    }));
+}
+
+#[test]
 fn unsupported_control_symbols_preserve_utf8_and_trailing_slash() {
     for (source, unsupported) in [(r"x \🙂 y", r"\🙂"), (r"z \", r"\")] {
         let analyzed = analyze(source, FormulaMode::Inline)

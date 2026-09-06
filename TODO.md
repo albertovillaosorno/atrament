@@ -230,12 +230,12 @@ supports read-only behavior-version drift checks. It deliberately advertises no
 command protocol, normalizer, command context, Validate, Apply, rebatching, or
 numeric command/context limits yet.
 
-Aggregate command behavior and typed-result behavior are version 63 after
-broadening exact-source standard operator and relation admission. Asset
-reference, Ordering and grouping, and Text content retain family behavior
-version 1; Provenance and Style role are version 2, Document constraint is
-version 3, and Structured content is version 51. The immediately previous
-aggregate version 62 rejects instead of being reinterpreted.
+Aggregate command behavior and typed-result behavior are version 64 after
+admitting the standard parallel control-symbol alias. Asset reference, Ordering
+and grouping, and Text content retain family behavior version 1; Provenance and
+Style role are version 2, Document constraint is version 3, and Structured
+content is version 52. The immediately previous aggregate version 63 rejects
+instead of being reinterpreted.
 
 A version-bound single-target proposal combines capability, exact local
 preconditions, and direct-edit simulation read-only. All five dedicated direct
@@ -620,7 +620,8 @@ annotations and relations, vector, directional over-arrows, overline, and
 underline
 decorations, escaped TeX special characters,
 standard and variant Greek control-sequence notation, common named and delimiter
-symbols including bracket, backslash, and foundational set/logic forms,
+symbols including bracket, backslash, parallel control-symbol, and foundational
+set/logic forms,
 real/imaginary-part and derivative-prime symbols, geometry/proof and
 ordering/set relations,
 binary-operator symbols including square/lattice and circled forms, large

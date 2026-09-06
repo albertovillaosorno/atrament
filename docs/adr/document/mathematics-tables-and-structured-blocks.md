@@ -66,7 +66,8 @@ relations, vector, directional over-arrows, overline, and underline decorations,
 escaped
 TeX special characters,
 standard and variant Greek control-sequence notation, common named and delimiter
-symbols including bracket, backslash, and foundational set/logic forms,
+symbols including bracket, backslash, parallel control-symbol, and foundational
+set/logic forms,
 real/imaginary-part and derivative-prime symbols, geometry/proof and
 ordering/set relations,
 binary-operator symbols including square/lattice and circled forms, large
