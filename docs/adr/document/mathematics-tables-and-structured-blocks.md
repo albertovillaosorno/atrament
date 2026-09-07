@@ -79,8 +79,8 @@ musical symbols, mathematical punctuation atoms, LaTeX-base paragraph, section,
 dollar, and variant large-triangle symbols, arrow and ellipsis symbols including
 harpoons and mapped arrows, relation and logic symbols, modular
 arithmetic,
-single, multiple, contour, and explicit integral-operator atoms, set notation,
-aligned
+single, multiple, contour, and explicit integral-operator atoms, direct/inverse
+and decorated limit operators, set notation, aligned
 separators, and ordered
 aligned, brace-delimited-matrix, bracketed-matrix, cases,
 double-vertical-bar-matrix, gathered, matrix, parenthesized-matrix,

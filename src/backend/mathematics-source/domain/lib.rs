@@ -41,12 +41,14 @@ const NAMED_OPERATOR_COMMANDS: &[&str] = &[
     "\\bigvee",
     "\\bigwedge", "\\bmod", "\\coprod", "\\cos",
     "\\cosh", "\\cot", "\\coth", "\\csc", "\\deg", "\\det",
-    "\\dim", "\\exp", "\\gcd", "\\hom", "\\iiint", "\\iint", "\\inf", "\\int",
-    "\\intop", "\\ker", "\\lg", "\\lim", "\\liminf", "\\limsup", "\\ln",
+    "\\dim", "\\exp", "\\gcd", "\\hom", "\\iiint", "\\iint", "\\inf",
+    "\\injlim", "\\int", "\\intop", "\\ker", "\\lg", "\\lim", "\\liminf",
+    "\\limsup", "\\ln",
     "\\log", "\\max",
-    "\\min", "\\mod", "\\oint", "\\ointop", "\\prod", "\\sec", "\\sin",
-    "\\sinh", "\\sum",
-    "\\sup", "\\tan", "\\tanh",
+    "\\min", "\\mod", "\\oint", "\\ointop", "\\prod", "\\projlim", "\\sec",
+    "\\sin", "\\sinh", "\\sum",
+    "\\sup", "\\tan", "\\tanh", "\\varinjlim", "\\varliminf", "\\varlimsup",
+    "\\varprojlim",
 ];
 
 const NAMED_SYMBOL_COMMANDS: &[&str] = &[

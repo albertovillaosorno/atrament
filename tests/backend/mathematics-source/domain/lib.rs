@@ -237,12 +237,12 @@ fn named_operator_vocabulary_is_supported_without_rewriting() {
         r"\biguplus", r"\bigvee", r"\bigwedge", r"\bmod", r"\coprod",
         r"\cos", r"\cosh", r"\cot", r"\coth", r"\csc",
         r"\deg", r"\det", r"\dim", r"\exp", r"\gcd", r"\hom", r"\iiint",
-        r"\iint", r"\inf", r"\int", r"\intop", r"\ker", r"\lg", r"\lim",
-        r"\liminf",
+        r"\iint", r"\inf", r"\injlim", r"\int", r"\intop", r"\ker", r"\lg",
+        r"\lim", r"\liminf",
         r"\limsup", r"\ln", r"\log", r"\max", r"\min", r"\mod", r"\oint",
-        r"\ointop", r"\prod", r"\sec", r"\sin", r"\sinh", r"\sum",
-        r"\sup", r"\tan",
-        r"\tanh",
+        r"\ointop", r"\prod", r"\projlim", r"\sec", r"\sin", r"\sinh", r"\sum",
+        r"\sup", r"\tan", r"\tanh", r"\varinjlim", r"\varliminf", r"\varlimsup",
+        r"\varprojlim",
     ] {
         let analyzed = analyze(source, FormulaMode::Inline)
             .expect("named operator formula");
@@ -318,6 +318,30 @@ fn extended_named_operators_compose_without_rewriting() {
             })
             .count(),
         10,
+    );
+}
+
+#[test]
+fn direct_inverse_and_decorated_limit_operators_preserve_source() {
+    let source = concat!(
+        r"\injlim_i A_i + \projlim_j B_j; ",
+        r"\varinjlim_i C_i + \varprojlim_j D_j; ",
+        r"\varliminf_n a_n + \varlimsup_n b_n",
+    );
+    let analyzed = analyze(source, FormulaMode::Display)
+        .expect("direct, inverse, and decorated limit operators");
+    assert!(analyzed.is_supported());
+    assert_eq!(reconstructed(&analyzed), source);
+    assert_eq!(
+        analyzed
+            .tokens
+            .iter()
+            .filter(|token| {
+                token.kind
+                    == MathTokenKind::Command(SupportedCommand::NamedOperator)
+            })
+            .count(),
+        6,
     );
 }
 
