@@ -786,6 +786,25 @@ fn layout_and_style_commands_remain_explicitly_unsupported() {
 }
 
 #[test]
+fn layout_sensitive_amsmath_commands_remain_explicitly_unsupported() {
+    for (source, unsupported) in [
+        (r"\cfrac[l]{1}{2}", r"\cfrac"),
+        (r"\genfrac{}{}{}{}{n}{2}", r"\genfrac"),
+        (r"\leftroot{-2}", r"\leftroot"),
+        (r"\uproot{2}", r"\uproot"),
+        (r"\xleftarrow[below]{above}", r"\xleftarrow"),
+        (r"\xrightarrow{above}", r"\xrightarrow"),
+    ] {
+        let analyzed = analyze(source, FormulaMode::Display)
+            .expect("balanced layout-sensitive amsmath source");
+        assert!(!analyzed.is_supported(), "{source}");
+        assert_eq!(reconstructed(&analyzed), source);
+        assert_eq!(analyzed.unsupported.len(), 1, "{source}");
+        assert_eq!(analyzed.unsupported[0].name, unsupported, "{source}");
+    }
+}
+
+#[test]
 fn latex_base_construction_atoms_remain_explicitly_unsupported() {
     for source in [
         r"\braceld",
