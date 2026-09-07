@@ -73,7 +73,7 @@ and delimiter symbols including bracket, backslash,
 paired vertical-bar spellings, parallel control-symbol, and foundational
 set/logic forms,
 real/imaginary-part and derivative-prime symbols, geometry/proof and
-ordering/set relations,
+ordering/set relations including AMS order, equality, and approximation forms,
 binary-operator symbols including the AMS boxed, circled, wedge, and product
 forms plus square/lattice forms, large
 n-ary operators including coproduct and logical joins/meets, card-suit and

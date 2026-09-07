@@ -505,7 +505,8 @@ fn calculus_commands_compose_with_scripts_without_rewriting() {
 #[test]
 fn named_symbol_vocabulary_is_supported_without_rewriting() {
     for source in [
-        r"\Bbbk", r"\Cap", r"\Cup", r"\Delta", r"\Downarrow", r"\Finv",
+        r"\Bbbk", r"\Bumpeq", r"\Cap", r"\Cup", r"\Delta", r"\Downarrow",
+        r"\Finv",
         r"\Game", r"\Gamma",
         r"\Im", r"\Lambda", r"\Leftarrow",
         r"\Leftrightarrow", r"\Longleftarrow", r"\Longleftrightarrow",
@@ -513,33 +514,37 @@ fn named_symbol_vocabulary_is_supported_without_rewriting() {
         r"\Rightarrow",
         r"\Sigma", r"\Theta", r"\Uparrow", r"\Updownarrow", r"\Upsilon",
         r"\Vert", r"\Xi", r"\aleph", r"\alpha", r"\amalg", r"\angle",
-        r"\approx", r"\ast", r"\asymp",
+        r"\approx", r"\approxeq", r"\ast", r"\asymp", r"\backsim",
+        r"\backsimeq",
         r"\backslash", r"\barwedge", r"\because", r"\beta", r"\beth",
         r"\bigcirc",
         r"\bigstar", r"\bigtriangledown",
         r"\bigtriangleup", r"\blacklozenge", r"\blacksquare", r"\blacktriangle",
         r"\blacktriangledown", r"\bot", r"\bowtie", r"\boxdot", r"\boxminus",
-        r"\boxplus", r"\boxtimes", r"\bullet", r"\cap",
+        r"\boxplus", r"\boxtimes", r"\bullet", r"\bumpeq", r"\cap",
         r"\cdot",
         r"\cdotp", r"\cdots", r"\centerdot",
-        r"\chi", r"\circ", r"\circledS", r"\circledast", r"\circledcirc",
+        r"\chi", r"\circ", r"\circeq", r"\circledS", r"\circledast",
+        r"\circledcirc",
         r"\circleddash",
         r"\clubsuit", r"\colon", r"\cong",
-        r"\cup", r"\curlyvee", r"\curlywedge",
+        r"\cup", r"\curlyeqprec", r"\curlyeqsucc", r"\curlyvee", r"\curlywedge",
         r"\dagger", r"\daleth",
         r"\dashv",
         r"\ddagger", r"\ddots", r"\delta", r"\diagdown", r"\diagup",
         r"\diamond", r"\diamondsuit", r"\digamma", r"\div", r"\divideontimes",
-        r"\doteq", r"\dotplus",
+        r"\doteq", r"\doteqdot", r"\dotplus",
         r"\dots", r"\doublebarwedge",
         r"\downarrow", r"\ell",
         r"\emptyset",
-        r"\epsilon",
-        r"\equiv", r"\eta", r"\eth", r"\exists", r"\flat", r"\forall",
+        r"\epsilon", r"\eqcirc", r"\eqsim", r"\eqslantgtr", r"\eqslantless",
+        r"\equiv", r"\eta", r"\eth", r"\exists", r"\fallingdotseq", r"\flat",
+        r"\forall",
         r"\frown",
         r"\gamma",
-        r"\ge", r"\geq",
-        r"\geqslant", r"\gets", r"\gg", r"\gimel", r"\gtrdot", r"\gtrsim",
+        r"\ge", r"\geq", r"\geqq",
+        r"\geqslant", r"\gets", r"\gg", r"\gimel", r"\gtrapprox", r"\gtrdot",
+        r"\gtreqless", r"\gtreqqless", r"\gtrless", r"\gtrsim",
         r"\hbar",
         r"\heartsuit",
         r"\hookleftarrow",
@@ -551,8 +556,10 @@ fn named_symbol_vocabulary_is_supported_without_rewriting() {
         r"\lbrace", r"\lbrack", r"\lceil", r"\ldotp", r"\ldots", r"\le",
         r"\leadsto",
         r"\leftarrow", r"\leftharpoondown", r"\leftharpoonup",
-        r"\leftrightarrow", r"\leftthreetimes", r"\leq", r"\leqslant",
-        r"\lessdot", r"\lesssim", r"\lfloor",
+        r"\leftrightarrow", r"\leftthreetimes", r"\leq", r"\leqq", r"\leqslant",
+        r"\lessapprox",
+        r"\lessdot", r"\lesseqgtr", r"\lesseqqgtr", r"\lessgtr", r"\lesssim",
+        r"\lfloor",
         r"\ll", r"\lnot", r"\longleftarrow", r"\longleftrightarrow",
         r"\longmapsto",
         r"\longrightarrow",
@@ -564,12 +571,14 @@ fn named_symbol_vocabulary_is_supported_without_rewriting() {
         r"\ni", r"\notin",
         r"\nu", r"\nwarrow", r"\odot", r"\omega", r"\ominus", r"\oplus",
         r"\oslash", r"\otimes", r"\owns", r"\parallel",
-        r"\partial", r"\perp", r"\phi", r"\pi", r"\pm", r"\prec", r"\preceq",
+        r"\partial", r"\perp", r"\phi", r"\pi", r"\pm", r"\prec",
+        r"\precapprox", r"\preccurlyeq", r"\preceq", r"\precsim",
         r"\prime", r"\propto", r"\psi", r"\rVert", r"\rangle", r"\rbrace",
         r"\rbrack",
         r"\rceil", r"\rfloor",
         r"\rho", r"\rightarrow", r"\rightharpoondown", r"\rightharpoonup",
-        r"\rightleftharpoons", r"\rightthreetimes", r"\rtimes", r"\rvert",
+        r"\rightleftharpoons", r"\rightthreetimes", r"\risingdotseq",
+        r"\rtimes", r"\rvert",
         r"\searrow", r"\setminus",
         r"\sharp", r"\sigma",
         r"\sim",
@@ -578,10 +587,13 @@ fn named_symbol_vocabulary_is_supported_without_rewriting() {
         r"\sqcup",
         r"\sqsubseteq",
         r"\sqsupseteq", r"\square", r"\star", r"\subset", r"\subseteq",
-        r"\subsetneq", r"\succ",
-        r"\succeq", r"\supset", r"\supseteq", r"\supsetneq", r"\swarrow",
-        r"\tau", r"\therefore", r"\theta", r"\times", r"\to", r"\top",
-        r"\triangle", r"\triangledown", r"\triangleleft", r"\triangleright",
+        r"\subsetneq", r"\succ", r"\succapprox", r"\succcurlyeq",
+        r"\succeq", r"\succsim", r"\supset", r"\supseteq", r"\supsetneq",
+        r"\swarrow",
+        r"\tau", r"\therefore", r"\theta", r"\thickapprox", r"\thicksim",
+        r"\times", r"\to", r"\top",
+        r"\triangle", r"\triangledown", r"\triangleleft", r"\triangleq",
+        r"\triangleright",
         r"\uparrow", r"\updownarrow", r"\uplus", r"\upsilon",
         r"\varDelta", r"\varGamma", r"\varLambda", r"\varOmega", r"\varPhi",
         r"\varPi", r"\varPsi", r"\varSigma", r"\varTheta", r"\varUpsilon",
@@ -1121,6 +1133,37 @@ fn variant_greek_symbols_compose_without_rewriting() {
             })
             .count(),
         6,
+    );
+}
+
+#[test]
+fn ams_order_and_equality_relations_compose_without_rewriting() {
+    let source = concat!(
+        r"a \circeq b \doteqdot c \eqcirc d \eqsim e; ",
+        r"p \preccurlyeq q \precsim r \precapprox s; ",
+        r"u \succcurlyeq v \succsim w \succapprox x; ",
+        r"a \leqq b \lessgtr c \lessapprox d \lesseqgtr e \lesseqqgtr f; ",
+        r"g \geqq h \gtrless i \gtrapprox j \gtreqless k \gtreqqless l; ",
+        r"m \eqslantless n \eqslantgtr o; ",
+        r"p \curlyeqprec q \curlyeqsucc r; ",
+        r"s \risingdotseq t \fallingdotseq u; ",
+        r"v \bumpeq w \Bumpeq x \triangleq y; ",
+        r"z \backsim a \backsimeq b \thicksim c \thickapprox d \approxeq e",
+    );
+    let analyzed = analyze(source, FormulaMode::Display)
+        .expect("AMS order and equality relation expression");
+    assert!(analyzed.is_supported());
+    assert_eq!(reconstructed(&analyzed), source);
+    assert_eq!(
+        analyzed
+            .tokens
+            .iter()
+            .filter(|token| {
+                token.kind
+                    == MathTokenKind::Command(SupportedCommand::NamedSymbol)
+            })
+            .count(),
+        34,
     );
 }
 
