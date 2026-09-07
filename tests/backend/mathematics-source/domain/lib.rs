@@ -662,6 +662,21 @@ fn layout_and_style_commands_remain_explicitly_unsupported() {
 }
 
 #[test]
+fn structural_and_size_sensitive_commands_remain_explicitly_unsupported() {
+    for (source, unsupported) in [
+        (r"a \not= b", r"\not"),
+        (r"\smallint_0^1 f(x) dx", r"\smallint"),
+    ] {
+        let analyzed = analyze(source, FormulaMode::Display)
+            .expect("balanced structural or size-sensitive source");
+        assert!(!analyzed.is_supported(), "{source}");
+        assert_eq!(reconstructed(&analyzed), source);
+        assert_eq!(analyzed.unsupported.len(), 1, "{source}");
+        assert_eq!(analyzed.unsupported[0].name, unsupported, "{source}");
+    }
+}
+
+#[test]
 fn sized_delimiter_commands_remain_explicitly_unsupported() {
     let source = r"\left\langle x \right\rangle";
     let analyzed = analyze(source, FormulaMode::Display)
@@ -912,8 +927,12 @@ fn admitted_control_words_never_match_longer_ascii_names() {
         (r"\alephs", r"\alephs"),
         (r"\angles", r"\angles"),
         (r"\bigodots", r"\bigodots"),
+        (r"\biguplusx", r"\biguplusx"),
         (r"\binomial{n}{k}", r"\binomial"),
         (r"\bmodulo", r"\bmodulo"),
+        (r"\clubsuits", r"\clubsuits"),
+        (r"\coproduct", r"\coproduct"),
+        (r"\diamondsuited", r"\diamondsuited"),
         (r"\iints", r"\iints"),
         (r"\impliesx", r"\impliesx"),
         (r"\infinite", r"\infinite"),
@@ -922,6 +941,7 @@ fn admitted_control_words_never_match_longer_ascii_names() {
         (r"\leqslanted", r"\leqslanted"),
         (r"\longmapstox", r"\longmapstox"),
         (r"\nablax", r"\nablax"),
+        (r"\naturally", r"\naturally"),
         (r"\overlined{x}", r"\overlined"),
         (r"\pmodulus{17}", r"\pmodulus"),
         (r"\rightleftharpoonsx", r"\rightleftharpoonsx"),
