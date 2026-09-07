@@ -851,6 +851,28 @@ fn layout_and_style_commands_remain_explicitly_unsupported() {
 }
 
 #[test]
+fn context_sensitive_math_commands_remain_explicitly_unsupported() {
+    for source in [
+        r"\displaylimits",
+        r"\dotsb",
+        r"\dotsc",
+        r"\dotsi",
+        r"\dotsm",
+        r"\dotso",
+        r"\idotsint",
+        r"\limits",
+        r"\nolimits",
+    ] {
+        let analyzed = analyze(source, FormulaMode::Display)
+            .expect("balanced context-sensitive mathematical source");
+        assert!(!analyzed.is_supported(), "{source}");
+        assert_eq!(reconstructed(&analyzed), source);
+        assert_eq!(analyzed.unsupported.len(), 1, "{source}");
+        assert_eq!(analyzed.unsupported[0].name, source, "{source}");
+    }
+}
+
+#[test]
 fn layout_sensitive_amsmath_commands_remain_explicitly_unsupported() {
     for (source, unsupported) in [
         (r"\cfrac[l]{1}{2}", r"\cfrac"),

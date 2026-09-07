@@ -86,7 +86,10 @@ aligned, brace-delimited-matrix, bracketed-matrix, cases,
 double-vertical-bar-matrix, gathered, matrix, parenthesized-matrix,
 small-matrix, split, and vertical-bar-matrix environments. Paired
 delimiter-sizing controls remain explicit unsupported input rather than being
-inferred from admitted delimiter glyph names. Unknown control words and
+inferred from admitted delimiter glyph names. Context-sensitive ellipsis forms,
+the dotted multi-integral form, and explicit limit-placement controls likewise
+remain unsupported until their presentation semantics have an owning model.
+Unknown control words and
 unadmitted control symbols remain explicit unsupported constructs, and malformed
 source returns typed syntax failures.
 
