@@ -505,31 +505,36 @@ fn calculus_commands_compose_with_scripts_without_rewriting() {
 #[test]
 fn named_symbol_vocabulary_is_supported_without_rewriting() {
     for source in [
-        r"\Delta", r"\Downarrow", r"\Gamma", r"\Im", r"\Lambda", r"\Leftarrow",
+        r"\Bbbk", r"\Delta", r"\Downarrow", r"\Finv", r"\Game", r"\Gamma",
+        r"\Im", r"\Lambda", r"\Leftarrow",
         r"\Leftrightarrow", r"\Longleftarrow", r"\Longleftrightarrow",
         r"\Longrightarrow", r"\Omega", r"\Phi", r"\Pi", r"\Psi", r"\Re",
         r"\Rightarrow",
         r"\Sigma", r"\Theta", r"\Uparrow", r"\Updownarrow", r"\Upsilon",
         r"\Vert", r"\Xi", r"\aleph", r"\alpha", r"\amalg", r"\angle",
         r"\approx", r"\ast", r"\asymp",
-        r"\backslash", r"\because", r"\beta", r"\bigcirc", r"\bigtriangledown",
+        r"\backslash", r"\because", r"\beta", r"\beth", r"\bigcirc",
+        r"\bigtriangledown",
         r"\bigtriangleup", r"\bot", r"\bowtie", r"\bullet", r"\cap",
         r"\cdot",
         r"\cdotp", r"\cdots",
         r"\chi", r"\circ", r"\clubsuit", r"\colon", r"\cong", r"\cup",
-        r"\dagger",
+        r"\dagger", r"\daleth",
         r"\dashv",
         r"\ddagger", r"\ddots", r"\delta",
-        r"\diamond", r"\diamondsuit", r"\div", r"\doteq", r"\dots",
+        r"\diamond", r"\diamondsuit", r"\digamma", r"\div", r"\doteq", r"\dots",
         r"\downarrow", r"\ell",
         r"\emptyset",
         r"\epsilon",
-        r"\equiv", r"\eta", r"\exists", r"\flat", r"\forall", r"\frown",
+        r"\equiv", r"\eta", r"\eth", r"\exists", r"\flat", r"\forall",
+        r"\frown",
         r"\gamma",
         r"\ge", r"\geq",
-        r"\geqslant", r"\gets", r"\gg", r"\gtrsim", r"\hbar", r"\heartsuit",
+        r"\geqslant", r"\gets", r"\gg", r"\gimel", r"\gtrsim", r"\hbar",
+        r"\heartsuit",
         r"\hookleftarrow",
-        r"\hookrightarrow", r"\iff", r"\imath", r"\impliedby", r"\implies",
+        r"\hookrightarrow", r"\hslash", r"\iff", r"\imath", r"\impliedby",
+        r"\implies",
         r"\in", r"\infty", r"\iota", r"\jmath", r"\kappa", r"\lVert",
         r"\lambda", r"\land", r"\langle",
         r"\lbrace", r"\lbrack", r"\lceil", r"\ldotp", r"\ldots", r"\le",
@@ -540,7 +545,7 @@ fn named_symbol_vocabulary_is_supported_without_rewriting() {
         r"\longmapsto",
         r"\longrightarrow",
         r"\lor", r"\lvert", r"\mapsto", r"\mathdollar", r"\mathparagraph",
-        r"\mathsection",
+        r"\mathsection", r"\mho",
         r"\mid", r"\models", r"\mp", r"\mu", r"\nabla",
         r"\natural", r"\ne", r"\nearrow", r"\neg", r"\neq", r"\nexists",
         r"\ni", r"\notin",
@@ -565,7 +570,7 @@ fn named_symbol_vocabulary_is_supported_without_rewriting() {
         r"\varDelta", r"\varGamma", r"\varLambda", r"\varOmega", r"\varPhi",
         r"\varPi", r"\varPsi", r"\varSigma", r"\varTheta", r"\varUpsilon",
         r"\varXi", r"\varbigtriangledown", r"\varbigtriangleup", r"\varepsilon",
-        r"\varphi",
+        r"\varkappa", r"\varnothing", r"\varphi",
         r"\varpi", r"\varrho", r"\varsigma", r"\vartheta", r"\vdash", r"\vdots",
         r"\vee", r"\vert", r"\wedge", r"\wp", r"\wr", r"\xi", r"\zeta",
     ] {
@@ -1001,6 +1006,29 @@ fn common_binary_operator_symbols_compose_without_rewriting() {
             })
             .count(),
         11,
+    );
+}
+
+#[test]
+fn ams_ordinary_and_letter_like_symbols_compose_without_rewriting() {
+    let source = concat!(
+        r"\Bbbk + \Finv + \Game + \beth + \daleth + \digamma + ",
+        r"\eth + \gimel + \hslash + \mho + \varkappa + \varnothing",
+    );
+    let analyzed = analyze(source, FormulaMode::Display)
+        .expect("AMS ordinary and letter-like symbol expression");
+    assert!(analyzed.is_supported());
+    assert_eq!(reconstructed(&analyzed), source);
+    assert_eq!(
+        analyzed
+            .tokens
+            .iter()
+            .filter(|token| {
+                token.kind
+                    == MathTokenKind::Command(SupportedCommand::NamedSymbol)
+            })
+            .count(),
+        12,
     );
 }
 

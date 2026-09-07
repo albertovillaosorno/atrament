@@ -68,7 +68,8 @@ under-arrows, overline, and underline decorations,
 escaped
 TeX special characters,
 standard and variant Greek control-sequence notation including italic capital
-Greek forms, common named and delimiter symbols including bracket, backslash,
+Greek forms, AMS ordinary and letter-like symbols, common named and delimiter
+symbols including bracket, backslash,
 paired vertical-bar spellings, parallel control-symbol, and foundational
 set/logic forms,
 real/imaginary-part and derivative-prime symbols, geometry/proof and
