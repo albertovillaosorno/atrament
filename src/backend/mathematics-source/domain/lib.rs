@@ -525,6 +525,8 @@ pub enum SupportedCommand {
     NamedSymbol,
     /// One grouped custom mathematical operator name.
     OperatorName,
+    /// One grouped custom mathematical operator name with limits placement.
+    OperatorNameWithLimits,
     /// One-group left-pointing over-arrow decoration.
     OverLeftArrow,
     /// One-group bidirectional over-arrow decoration.
@@ -796,11 +798,22 @@ fn scan_structured_control_word(
     let index = STRUCTURED_CONTROL_WORD_COMMANDS
         .binary_search_by(|(candidate, _, _)| candidate.cmp(&spelling))
         .ok()?;
-    let (_, supported, required_groups) =
+    let (_, base_kind, required_groups) =
         STRUCTURED_CONTROL_WORD_COMMANDS.get(index)?;
+    let (command_end, command_kind) = if *base_kind
+        == SupportedCommand::OperatorName
+        && source.as_bytes().get(end) == Some(&b'*')
+    {
+        (
+            end.saturating_add(1),
+            SupportedCommand::OperatorNameWithLimits,
+        )
+    } else {
+        (end, *base_kind)
+    };
     Some(ScannedCommand {
-        end,
-        kind: ScannedCommandKind::Supported(*supported),
+        end: command_end,
+        kind: ScannedCommandKind::Supported(command_kind),
         required_groups: *required_groups,
     })
 }

@@ -61,8 +61,9 @@ exact UTF-8 source and exposes structural spans for the admitted first slice:
 groups, scripts, plain and styled fractions, plain and styled binomial
 coefficients, square and indexed roots, grouped mathematical alphabets,
 common one-group, extended, and wide accents, upright unit or
-label groups, grouped text and custom operator names, stacked annotations and
-relations, vector, directional over-arrows, overline, and underline decorations,
+label groups, grouped text and custom operator names including the exact starred
+limits variant, stacked annotations and relations, vector, directional
+over-arrows, overline, and underline decorations,
 escaped
 TeX special characters,
 standard and variant Greek control-sequence notation, common named and delimiter

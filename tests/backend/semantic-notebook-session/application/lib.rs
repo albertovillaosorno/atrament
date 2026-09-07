@@ -84,7 +84,7 @@ use atrament_semantic_notebook_port::{
 use atrament_semantic_notebook_session::SemanticNotebookSessionService;
 
 const CURRENT_COMMAND_BEHAVIOR_VERSION: CommandBehaviorVersion =
-    CommandBehaviorVersion(68);
+    CommandBehaviorVersion(69);
 
 #[derive(Debug)]
 struct CountingCommandIdentity {
@@ -7878,7 +7878,7 @@ fn command_capability_snapshot_is_deterministic_and_does_not_overclaim() {
             family: SemanticCommandFamily::Provenance,
         },
         CommandFamilyCapability {
-            behavior_version: CommandBehaviorVersion(56),
+            behavior_version: CommandBehaviorVersion(57),
             family: SemanticCommandFamily::StructuredContent,
         },
         CommandFamilyCapability {
@@ -7946,11 +7946,11 @@ fn command_capability_version_detects_drift_independently_of_revision() {
     );
     assert_eq!(
         session.check_command_capability_compatibility(
-            CommandBehaviorVersion(67),
+            CommandBehaviorVersion(68),
         ),
         CommandCapabilityCompatibilityOutcome::Mismatch {
             current: CURRENT_COMMAND_BEHAVIOR_VERSION,
-            expected: CommandBehaviorVersion(67),
+            expected: CommandBehaviorVersion(68),
         },
     );
     assert_eq!(

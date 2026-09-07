@@ -1196,6 +1196,7 @@ fn required_groups_allow_ascii_whitespace_without_rewriting() {
         "\\binom\n{n}\r\n{k}",
         "\\sqrt \t{x}",
         "\\operatorname  {rank}",
+        "\\operatorname* \t{argmax}",
         "\\pmod \t{17}",
     ] {
         let analyzed = analyze(source, FormulaMode::Display)
@@ -1338,7 +1339,10 @@ fn grouped_math_alphabets_are_structural_and_require_one_group() {
 
 #[test]
 fn custom_operator_name_is_structural_and_requires_one_group() {
-    let source = r"\operatorname{Var}(X) + \operatorname{Cov}(X,Y)";
+    let source = concat!(
+        r"\operatorname{Var}(X) + ",
+        r"\operatorname*{argmax}_{x \in A} f(x)",
+    );
     let analyzed = analyze(source, FormulaMode::Display)
         .expect("custom operator formula");
     assert!(analyzed.is_supported());
@@ -1352,12 +1356,44 @@ fn custom_operator_name_is_structural_and_requires_one_group() {
                     == MathTokenKind::Command(SupportedCommand::OperatorName)
             })
             .count(),
-        2,
+        1,
     );
     assert_eq!(
-        analyze(r"\operatorname", FormulaMode::Inline),
+        analyzed
+            .tokens
+            .iter()
+            .filter(|token| {
+                token.kind
+                    == MathTokenKind::Command(
+                        SupportedCommand::OperatorNameWithLimits,
+                    )
+            })
+            .count(),
+        1,
+    );
+    assert!(analyzed.tokens.iter().any(|token| {
+        token.kind
+            == MathTokenKind::Command(
+                SupportedCommand::OperatorNameWithLimits,
+            )
+            && analyzed.token_source(*token) == Some(r"\operatorname*")
+    }));
+    for spelling in [r"\operatorname", r"\operatorname*"] {
+        assert_eq!(
+            analyze(spelling, FormulaMode::Inline),
+            Err(MathSyntaxError {
+                byte_offset: spelling.len(),
+                kind: MathSyntaxErrorKind::MissingRequiredGroup,
+            }),
+            "{spelling}",
+        );
+    }
+
+    let separated = analyze(r"\operatorname *{rank}", FormulaMode::Inline);
+    assert_eq!(
+        separated,
         Err(MathSyntaxError {
-            byte_offset: 13,
+            byte_offset: r"\operatorname ".len(),
             kind: MathSyntaxErrorKind::MissingRequiredGroup,
         }),
     );
