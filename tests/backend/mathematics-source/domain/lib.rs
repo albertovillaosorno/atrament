@@ -192,9 +192,11 @@ fn named_operator_vocabulary_is_supported_without_rewriting() {
         r"\biguplus", r"\bigvee", r"\bigwedge", r"\bmod", r"\coprod",
         r"\cos", r"\cosh", r"\cot", r"\coth", r"\csc",
         r"\deg", r"\det", r"\dim", r"\exp", r"\gcd", r"\hom", r"\iiint",
-        r"\iint", r"\inf", r"\int", r"\ker", r"\lg", r"\lim", r"\liminf",
+        r"\iint", r"\inf", r"\int", r"\intop", r"\ker", r"\lg", r"\lim",
+        r"\liminf",
         r"\limsup", r"\ln", r"\log", r"\max", r"\min", r"\mod", r"\oint",
-        r"\prod", r"\sec", r"\sin", r"\sinh", r"\sum", r"\sup", r"\tan",
+        r"\ointop", r"\prod", r"\sec", r"\sin", r"\sinh", r"\sum",
+        r"\sup", r"\tan",
         r"\tanh",
     ] {
         let analyzed = analyze(source, FormulaMode::Inline)
@@ -303,6 +305,40 @@ fn modular_arithmetic_commands_preserve_structure() {
 }
 
 #[test]
+fn punctuation_and_integral_atoms_compose_without_rewriting() {
+    let source = concat!(
+        r"\intop_0^1 f(x) dx; \ointop_C F ds; ",
+        r"x \colon y \ldotp z \cdotp w",
+    );
+    let analyzed = analyze(source, FormulaMode::Display)
+        .expect("punctuation and integral-operator atom expression");
+    assert!(analyzed.is_supported());
+    assert_eq!(reconstructed(&analyzed), source);
+    assert_eq!(
+        analyzed
+            .tokens
+            .iter()
+            .filter(|token| {
+                token.kind
+                    == MathTokenKind::Command(SupportedCommand::NamedOperator)
+            })
+            .count(),
+        2,
+    );
+    assert_eq!(
+        analyzed
+            .tokens
+            .iter()
+            .filter(|token| {
+                token.kind
+                    == MathTokenKind::Command(SupportedCommand::NamedSymbol)
+            })
+            .count(),
+        3,
+    );
+}
+
+#[test]
 fn multiple_integral_and_large_set_operators_compose_without_rewriting() {
     let source = concat!(
         r"\iint_D f dA + \iiint_V \rho dV + \oint_C F \cdot dr; ",
@@ -367,8 +403,9 @@ fn named_symbol_vocabulary_is_supported_without_rewriting() {
         r"\backslash", r"\because", r"\beta", r"\bigcirc", r"\bigtriangledown",
         r"\bigtriangleup", r"\bot", r"\bowtie", r"\bullet", r"\cap",
         r"\cdot",
-        r"\cdots",
-        r"\chi", r"\circ", r"\clubsuit", r"\cong", r"\cup", r"\dagger",
+        r"\cdotp", r"\cdots",
+        r"\chi", r"\circ", r"\clubsuit", r"\colon", r"\cong", r"\cup",
+        r"\dagger",
         r"\dashv",
         r"\ddagger", r"\ddots", r"\delta",
         r"\diamond", r"\diamondsuit", r"\div", r"\doteq", r"\dots",
@@ -382,7 +419,8 @@ fn named_symbol_vocabulary_is_supported_without_rewriting() {
         r"\hookleftarrow",
         r"\hookrightarrow", r"\iff", r"\imath", r"\implies", r"\in", r"\infty",
         r"\iota", r"\jmath", r"\kappa", r"\lambda", r"\land", r"\langle",
-        r"\lbrace", r"\lbrack", r"\lceil", r"\ldots", r"\le", r"\leadsto",
+        r"\lbrace", r"\lbrack", r"\lceil", r"\ldotp", r"\ldots", r"\le",
+        r"\leadsto",
         r"\leftarrow", r"\leftharpoondown", r"\leftharpoonup",
         r"\leftrightarrow", r"\leq", r"\leqslant", r"\lesssim", r"\lfloor",
         r"\ll", r"\lnot", r"\longleftarrow", r"\longleftrightarrow",

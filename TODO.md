@@ -230,12 +230,12 @@ supports read-only behavior-version drift checks. It deliberately advertises no
 command protocol, normalizer, command context, Validate, Apply, rebatching, or
 numeric command/context limits yet.
 
-Aggregate command behavior and typed-result behavior are version 66 after
-broadening exact-source n-ary and ordinary named-symbol admission. Asset
-reference, Ordering and grouping, and Text content retain family behavior
-version 1; Provenance and Style role are version 2, Document constraint is
-version 3, and Structured content is version 54. The immediately previous
-aggregate version 65 rejects instead of being reinterpreted.
+Aggregate command behavior and typed-result behavior are version 67 after
+broadening exact-source mathematical punctuation and integral-operator atom
+admission. Asset reference, Ordering and grouping, and Text content retain
+family behavior version 1; Provenance and Style role are version 2, Document
+constraint is version 3, and Structured content is version 55. The immediately
+previous aggregate version 66 rejects instead of being reinterpreted.
 
 A version-bound single-target proposal combines capability, exact local
 preconditions, and direct-edit simulation read-only. All five dedicated direct
@@ -626,10 +626,11 @@ real/imaginary-part and derivative-prime symbols, geometry/proof and
 ordering/set relations,
 binary-operator symbols including square/lattice and circled forms, large
 n-ary operators including coproduct and logical joins/meets, card-suit and
-musical symbols, arrow and ellipsis symbols including harpoons and mapped
-arrows, relation and logic symbols, modular
+musical symbols, mathematical punctuation atoms, arrow and ellipsis symbols
+including harpoons and mapped arrows, relation and logic symbols, modular
 arithmetic,
-single, multiple, and contour calculus operators, set notation, aligned row and
+single, multiple, contour, and explicit integral-operator atoms, set notation,
+aligned row and
 column separators,
 and ordered aligned, brace-delimited-matrix, bracketed-matrix, cases,
 double-vertical-bar-matrix, gathered, matrix, parenthesized-matrix,
