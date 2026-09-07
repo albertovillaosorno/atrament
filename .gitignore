@@ -31,6 +31,8 @@ Thumbs.db
 
 # Jig disposable graph query projection
 .jig/graph/jig.db
+.jig/graph/jig.db-shm
+.jig/graph/jig.db-wal
 
 # Jig telemetry
 JIG_SHIT.md

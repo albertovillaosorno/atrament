@@ -142,8 +142,9 @@ activated and validated when their corresponding surfaces are introduced.
 A missing or invalid compiled graph must not be misreported as a ready doctor
 state. Refreshing the graph is a disposable projection step, not a substitute
 for `jig check`: canonical repository validation must remain clean
-independently. The SQLite query projection stays ignored and is enforced through
-`git.required_ignored_paths` rather than becoming tracked authority.
+independently. The SQLite database and its WAL sidecars stay ignored and are
+enforced through `git.required_ignored_paths` rather than becoming tracked
+authority.
 
 ## Verification
 
