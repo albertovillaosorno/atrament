@@ -88,8 +88,13 @@ a compiled graph projection existed, so `jig doctor` reported `degraded`. The
 repository now configures the first-party graph compiler as disposable runtime
 state. Running `jig graph --refresh` materializes the JSON cache and SQLite
 query projection; with that graph ready, Jig 26.3.0 reports `ready` even when
-optional
 development and production installations remain absent.
+
+Current graph-bootstrap verification on 2026-09-07 reports validator SHA-256
+`3779cf22bd9ab7c8586b5bf61f923b988a3af522b8a6ce4d0cb4123c5e5694e6`,
+graph state `ready`, no configuration error, and a clean `jig check`. This is a
+current runtime observation, not a rewrite of the initial validator identity
+recorded above.
 
 ### Clean exhaustive validation
 
