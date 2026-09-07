@@ -29,5 +29,8 @@ coverage/
 .DS_Store
 Thumbs.db
 
+# Jig disposable graph query projection
+.jig/graph/jig.db
+
 # Jig telemetry
 JIG_SHIT.md

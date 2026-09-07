@@ -83,17 +83,20 @@ validator SHA-256:
 358009854c48f83f3aba1e3fea9bca6f4d36a9b02e3e6bb2725d0f6fd1d11218
 ```
 
-Jig is executed from the user's external installation. `jig doctor` therefore
-reports `degraded` because this repository does not contain a Jig development
-or production installation and does not yet have a compiled graph cache. That
-status is informational for this planning generation: configuration parsing is
-clean and `jig check` completes successfully.
+The initial 2026-08-31 record used the user's external Jig installation before
+a compiled graph projection existed, so `jig doctor` reported `degraded`. The
+repository now configures the first-party graph compiler as disposable runtime
+state. Running `jig graph --refresh` materializes the JSON cache and SQLite
+query projection; with that graph ready, Jig 26.3.0 reports `ready` even when
+optional
+development and production installations remain absent.
 
 ### Clean exhaustive validation
 
 From the repository root, the canonical validation commands are:
 
 ```text
+jig graph --refresh --root /home/albertovillaosorno/Developer/atrament
 jig doctor --root /home/albertovillaosorno/Developer/atrament
 jig check --root /home/albertovillaosorno/Developer/atrament
 ```
@@ -131,9 +134,11 @@ It is also invalid to cite this record as evidence that future Rust, TypeScript,
 transport generation, rendering, or hardware gates passed. Those gates must be
 activated and validated when their corresponding surfaces are introduced.
 
-The `jig doctor` degraded installation status must not be misreported as a clean
-doctor state. Conversely, it is not a substitute for a failing `jig check`:
-canonical repository validation must remain clean independently.
+A missing or invalid compiled graph must not be misreported as a ready doctor
+state. Refreshing the graph is a disposable projection step, not a substitute
+for `jig check`: canonical repository validation must remain clean
+independently. The SQLite query projection stays ignored and is enforced through
+`git.required_ignored_paths` rather than becoming tracked authority.
 
 ## Verification
 
@@ -156,9 +161,10 @@ test -x .git/hooks/commit-msg
 grep -F 'jig commit-message' .git/hooks/commit-msg
 ```
 
-Then run the canonical repository gates:
+Then refresh disposable graph state and run the canonical repository gates:
 
 ```text
+jig graph --refresh --root /home/albertovillaosorno/Developer/atrament
 jig doctor --root /home/albertovillaosorno/Developer/atrament
 jig check --root /home/albertovillaosorno/Developer/atrament
 git diff --check
