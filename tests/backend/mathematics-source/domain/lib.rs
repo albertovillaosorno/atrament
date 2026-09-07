@@ -426,7 +426,8 @@ fn named_symbol_vocabulary_is_supported_without_rewriting() {
         r"\ll", r"\lnot", r"\longleftarrow", r"\longleftrightarrow",
         r"\longmapsto",
         r"\longrightarrow",
-        r"\lor", r"\mapsto", r"\mid", r"\models", r"\mp", r"\mu", r"\nabla",
+        r"\lor", r"\mapsto", r"\mathdollar", r"\mathparagraph", r"\mathsection",
+        r"\mid", r"\models", r"\mp", r"\mu", r"\nabla",
         r"\natural", r"\ne", r"\nearrow", r"\neg", r"\neq", r"\nexists",
         r"\ni", r"\notin",
         r"\nu", r"\nwarrow", r"\odot", r"\omega", r"\ominus", r"\oplus",
@@ -444,7 +445,8 @@ fn named_symbol_vocabulary_is_supported_without_rewriting() {
         r"\succeq", r"\supset", r"\supseteq", r"\supsetneq", r"\swarrow",
         r"\tau", r"\therefore", r"\theta", r"\times", r"\to", r"\top",
         r"\triangle", r"\triangleleft", r"\triangleright",
-        r"\uparrow", r"\updownarrow", r"\uplus", r"\upsilon", r"\varepsilon",
+        r"\uparrow", r"\updownarrow", r"\uplus", r"\upsilon",
+        r"\varbigtriangledown", r"\varbigtriangleup", r"\varepsilon",
         r"\varphi",
         r"\varpi", r"\varrho", r"\varsigma", r"\vartheta", r"\vdash", r"\vdots",
         r"\vee", r"\vert", r"\wedge", r"\wp", r"\wr", r"\xi", r"\zeta",
@@ -466,6 +468,29 @@ fn named_symbol_vocabulary_is_supported_without_rewriting() {
             "{source}",
         );
     }
+}
+
+#[test]
+fn latex_base_ordinary_symbols_compose_without_rewriting() {
+    let source = concat!(
+        r"\varbigtriangleup A + \varbigtriangledown B; ",
+        r"\mathsection + \mathparagraph + \mathdollar",
+    );
+    let analyzed = analyze(source, FormulaMode::Inline)
+        .expect("LaTeX-base ordinary symbol expression");
+    assert!(analyzed.is_supported());
+    assert_eq!(reconstructed(&analyzed), source);
+    assert_eq!(
+        analyzed
+            .tokens
+            .iter()
+            .filter(|token| {
+                token.kind
+                    == MathTokenKind::Command(SupportedCommand::NamedSymbol)
+            })
+            .count(),
+        5,
+    );
 }
 
 #[test]
