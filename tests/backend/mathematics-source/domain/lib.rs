@@ -499,7 +499,9 @@ fn named_symbol_vocabulary_is_supported_without_rewriting() {
         r"\tau", r"\therefore", r"\theta", r"\times", r"\to", r"\top",
         r"\triangle", r"\triangleleft", r"\triangleright",
         r"\uparrow", r"\updownarrow", r"\uplus", r"\upsilon",
-        r"\varbigtriangledown", r"\varbigtriangleup", r"\varepsilon",
+        r"\varDelta", r"\varGamma", r"\varLambda", r"\varOmega", r"\varPhi",
+        r"\varPi", r"\varPsi", r"\varSigma", r"\varTheta", r"\varUpsilon",
+        r"\varXi", r"\varbigtriangledown", r"\varbigtriangleup", r"\varepsilon",
         r"\varphi",
         r"\varpi", r"\varrho", r"\varsigma", r"\vartheta", r"\vdash", r"\vdots",
         r"\vee", r"\vert", r"\wedge", r"\wp", r"\wr", r"\xi", r"\zeta",
@@ -960,6 +962,29 @@ fn common_relation_and_logic_symbols_compose_without_rewriting() {
             })
             .count(),
         10,
+    );
+}
+
+#[test]
+fn italic_capital_greek_symbols_compose_without_rewriting() {
+    let source = concat!(
+        r"\varGamma + \varDelta + \varTheta + \varLambda + \varXi + ",
+        r"\varPi + \varSigma + \varUpsilon + \varPhi + \varPsi + \varOmega",
+    );
+    let analyzed = analyze(source, FormulaMode::Display)
+        .expect("italic capital Greek symbol expression");
+    assert!(analyzed.is_supported());
+    assert_eq!(reconstructed(&analyzed), source);
+    assert_eq!(
+        analyzed
+            .tokens
+            .iter()
+            .filter(|token| {
+                token.kind
+                    == MathTokenKind::Command(SupportedCommand::NamedSymbol)
+            })
+            .count(),
+        11,
     );
 }
 

@@ -67,8 +67,9 @@ limits variant, stacked annotations and relations, vector, directional over- and
 under-arrows, overline, and underline decorations,
 escaped
 TeX special characters,
-standard and variant Greek control-sequence notation, common named and delimiter
-symbols including bracket, backslash, parallel control-symbol, and foundational
+standard and variant Greek control-sequence notation including italic capital
+Greek forms, common named and delimiter symbols including bracket, backslash,
+parallel control-symbol, and foundational
 set/logic forms,
 real/imaginary-part and derivative-prime symbols, geometry/proof and
 ordering/set relations,

@@ -96,7 +96,10 @@ const NAMED_SYMBOL_COMMANDS: &[&str] = &[
     "\\tau", "\\therefore", "\\theta", "\\times", "\\to", "\\top",
     "\\triangle", "\\triangleleft",
     "\\triangleright", "\\uparrow", "\\updownarrow", "\\uplus", "\\upsilon",
-    "\\varbigtriangledown", "\\varbigtriangleup", "\\varepsilon", "\\varphi",
+    "\\varDelta", "\\varGamma", "\\varLambda", "\\varOmega", "\\varPhi",
+    "\\varPi", "\\varPsi", "\\varSigma", "\\varTheta", "\\varUpsilon",
+    "\\varXi", "\\varbigtriangledown", "\\varbigtriangleup", "\\varepsilon",
+    "\\varphi",
     "\\varpi", "\\varrho", "\\varsigma", "\\vartheta", "\\vdash", "\\vdots",
     "\\vee", "\\vert", "\\wedge", "\\wp", "\\wr", "\\xi", "\\zeta",
 ];
