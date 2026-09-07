@@ -725,6 +725,26 @@ fn layout_and_style_commands_remain_explicitly_unsupported() {
 }
 
 #[test]
+fn latex_base_construction_atoms_remain_explicitly_unsupported() {
+    for source in [
+        r"\braceld",
+        r"\bracerd",
+        r"\bracelu",
+        r"\braceru",
+        r"\lhook",
+        r"\mapstochar",
+        r"\rhook",
+    ] {
+        let analyzed = analyze(source, FormulaMode::Inline)
+            .expect("balanced LaTeX-base construction atom");
+        assert!(!analyzed.is_supported(), "{source}");
+        assert_eq!(reconstructed(&analyzed), source);
+        assert_eq!(analyzed.unsupported.len(), 1, "{source}");
+        assert_eq!(analyzed.unsupported[0].name, source, "{source}");
+    }
+}
+
+#[test]
 fn structural_and_size_sensitive_commands_remain_explicitly_unsupported() {
     for (source, unsupported) in [
         (r"a \not= b", r"\not"),
@@ -991,20 +1011,28 @@ fn admitted_control_words_never_match_longer_ascii_names() {
         (r"\angles", r"\angles"),
         (r"\bigodots", r"\bigodots"),
         (r"\biguplusx", r"\biguplusx"),
+        (r"\cdotpx", r"\cdotpx"),
         (r"\binomial{n}{k}", r"\binomial"),
         (r"\bmodulo", r"\bmodulo"),
         (r"\clubsuits", r"\clubsuits"),
+        (r"\colonial", r"\colonial"),
         (r"\coproduct", r"\coproduct"),
         (r"\diamondsuited", r"\diamondsuited"),
         (r"\iints", r"\iints"),
+        (r"\intops", r"\intops"),
         (r"\impliesx", r"\impliesx"),
         (r"\infinite", r"\infinite"),
         (r"\integral_0^1", r"\integral"),
         (r"\leftharpoonups", r"\leftharpoonups"),
         (r"\leqslanted", r"\leqslanted"),
+        (r"\ldotpx", r"\ldotpx"),
         (r"\longmapstox", r"\longmapstox"),
+        (r"\mathdollars", r"\mathdollars"),
+        (r"\mathparagraphs", r"\mathparagraphs"),
+        (r"\mathsections", r"\mathsections"),
         (r"\nablax", r"\nablax"),
         (r"\naturally", r"\naturally"),
+        (r"\ointops", r"\ointops"),
         (r"\overlined{x}", r"\overlined"),
         (r"\pmodulus{17}", r"\pmodulus"),
         (r"\rightleftharpoonsx", r"\rightleftharpoonsx"),
@@ -1012,6 +1040,8 @@ fn admitted_control_words_never_match_longer_ascii_names() {
         (r"\sqsubseteqx", r"\sqsubseteqx"),
         (r"\subsetequal", r"\subsetequal"),
         (r"\thereforex", r"\thereforex"),
+        (r"\varbigtriangledowns", r"\varbigtriangledowns"),
+        (r"\varbigtriangleups", r"\varbigtriangleups"),
         (r"\vectored{x}", r"\vectored"),
         (r"\emptysets", r"\emptysets"),
     ] {
