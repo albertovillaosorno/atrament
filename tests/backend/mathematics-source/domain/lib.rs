@@ -236,7 +236,8 @@ fn named_operator_vocabulary_is_supported_without_rewriting() {
         r"\bigcup", r"\bigodot", r"\bigoplus", r"\bigotimes", r"\bigsqcup",
         r"\biguplus", r"\bigvee", r"\bigwedge", r"\bmod", r"\coprod",
         r"\cos", r"\cosh", r"\cot", r"\coth", r"\csc",
-        r"\deg", r"\det", r"\dim", r"\exp", r"\gcd", r"\hom", r"\iiint",
+        r"\deg", r"\det", r"\dim", r"\exp", r"\gcd", r"\hom", r"\iiiint",
+        r"\iiint",
         r"\iint", r"\inf", r"\injlim", r"\int", r"\intop", r"\ker", r"\lg",
         r"\lim", r"\liminf",
         r"\limsup", r"\ln", r"\log", r"\max", r"\min", r"\mod", r"\oint",
@@ -439,6 +440,25 @@ fn multiple_integral_and_large_set_operators_compose_without_rewriting() {
 }
 
 #[test]
+fn reverse_implication_and_fourfold_integral_preserve_source() {
+    let source = r"P \impliedby Q; \iiiint_A f(w,x,y,z) dw dx dy dz";
+    let analyzed = analyze(source, FormulaMode::Display)
+        .expect("reverse implication and fourfold integral expression");
+    assert!(analyzed.is_supported());
+    assert_eq!(reconstructed(&analyzed), source);
+    assert!(analyzed.tokens.iter().any(|token| {
+        token.kind
+            == MathTokenKind::Command(SupportedCommand::NamedSymbol)
+            && analyzed.token_source(*token) == Some(r"\impliedby")
+    }));
+    assert!(analyzed.tokens.iter().any(|token| {
+        token.kind
+            == MathTokenKind::Command(SupportedCommand::NamedOperator)
+            && analyzed.token_source(*token) == Some(r"\iiiint")
+    }));
+}
+
+#[test]
 fn calculus_commands_compose_with_scripts_without_rewriting() {
     let source = concat!(
         r"\sum_{i=1}^n i + \prod_{k=1}^m k + ",
@@ -494,8 +514,9 @@ fn named_symbol_vocabulary_is_supported_without_rewriting() {
         r"\ge", r"\geq",
         r"\geqslant", r"\gets", r"\gg", r"\gtrsim", r"\hbar", r"\heartsuit",
         r"\hookleftarrow",
-        r"\hookrightarrow", r"\iff", r"\imath", r"\implies", r"\in", r"\infty",
-        r"\iota", r"\jmath", r"\kappa", r"\lambda", r"\land", r"\langle",
+        r"\hookrightarrow", r"\iff", r"\imath", r"\impliedby", r"\implies",
+        r"\in", r"\infty", r"\iota", r"\jmath", r"\kappa", r"\lVert",
+        r"\lambda", r"\land", r"\langle",
         r"\lbrace", r"\lbrack", r"\lceil", r"\ldotp", r"\ldots", r"\le",
         r"\leadsto",
         r"\leftarrow", r"\leftharpoondown", r"\leftharpoonup",
@@ -503,17 +524,20 @@ fn named_symbol_vocabulary_is_supported_without_rewriting() {
         r"\ll", r"\lnot", r"\longleftarrow", r"\longleftrightarrow",
         r"\longmapsto",
         r"\longrightarrow",
-        r"\lor", r"\mapsto", r"\mathdollar", r"\mathparagraph", r"\mathsection",
+        r"\lor", r"\lvert", r"\mapsto", r"\mathdollar", r"\mathparagraph",
+        r"\mathsection",
         r"\mid", r"\models", r"\mp", r"\mu", r"\nabla",
         r"\natural", r"\ne", r"\nearrow", r"\neg", r"\neq", r"\nexists",
         r"\ni", r"\notin",
         r"\nu", r"\nwarrow", r"\odot", r"\omega", r"\ominus", r"\oplus",
         r"\oslash", r"\otimes", r"\owns", r"\parallel",
         r"\partial", r"\perp", r"\phi", r"\pi", r"\pm", r"\prec", r"\preceq",
-        r"\prime", r"\propto", r"\psi", r"\rangle", r"\rbrace", r"\rbrack",
+        r"\prime", r"\propto", r"\psi", r"\rVert", r"\rangle", r"\rbrace",
+        r"\rbrack",
         r"\rceil", r"\rfloor",
         r"\rho", r"\rightarrow", r"\rightharpoondown", r"\rightharpoonup",
-        r"\rightleftharpoons", r"\searrow", r"\setminus", r"\sharp", r"\sigma",
+        r"\rightleftharpoons", r"\rvert", r"\searrow", r"\setminus",
+        r"\sharp", r"\sigma",
         r"\sim",
         r"\simeq", r"\smile", r"\spadesuit", r"\sqcap", r"\sqcup",
         r"\sqsubseteq",
@@ -899,7 +923,8 @@ fn named_delimiters_compose_without_rewriting() {
         r"\langle x, y \rangle; \lceil x \rceil; ",
         r"\lfloor y \rfloor; \lbrace A \rbrace; ",
         r"\lbrack z \rbrack; A \backslash B; ",
-        r"\vert x \vert + \Vert v \Vert",
+        r"\vert x \vert + \Vert v \Vert; ",
+        r"\lvert a \rvert + \lVert w \rVert",
     );
     let analyzed = analyze(source, FormulaMode::Display)
         .expect("named delimiter expression");
@@ -914,7 +939,7 @@ fn named_delimiters_compose_without_rewriting() {
                     == MathTokenKind::Command(SupportedCommand::NamedSymbol)
             })
             .count(),
-        15,
+        19,
     );
 }
 
