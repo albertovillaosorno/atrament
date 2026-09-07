@@ -129,6 +129,51 @@ fn small_mixed_sources_preserve_analysis_invariants() {
 }
 
 #[test]
+fn named_and_control_symbol_mixes_preserve_analysis_invariants() {
+    const FRAGMENTS: &[&str] = &[
+        "ñ",
+        "{",
+        "}",
+        r"\intop",
+        r"\mathdollar",
+        r"\not",
+        r"\|",
+        r"\unknown",
+    ];
+
+    for first in FRAGMENTS {
+        for second in FRAGMENTS {
+            for third in FRAGMENTS {
+                let source = format!("{first}{second}{third}");
+                for mode in [
+                    FormulaMode::Inline,
+                    FormulaMode::Display,
+                    FormulaMode::Aligned,
+                ] {
+                    if let Ok(analyzed) = analyze(&source, mode) {
+                        assert_analysis_invariants(&analyzed, &source, mode);
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn long_unknown_control_word_is_one_exact_unsupported_span() {
+    let source = format!(r"\{}", "a".repeat(100_000));
+    let analyzed = analyze(&source, FormulaMode::Inline)
+        .expect("long balanced unknown control word");
+    assert_analysis_invariants(&analyzed, &source, FormulaMode::Inline);
+    assert!(!analyzed.is_supported());
+    assert_eq!(analyzed.tokens.len(), 1);
+    assert_eq!(analyzed.unsupported.len(), 1);
+    assert_eq!(analyzed.unsupported[0].start, 0);
+    assert_eq!(analyzed.unsupported[0].end, source.len());
+    assert_eq!(analyzed.unsupported[0].name, source);
+}
+
+#[test]
 fn unicode_school_formula_is_preserved_byte_for_byte() {
     let source = "y′ = 5(3x² + 1)⁴ · 6x";
     let analyzed =
