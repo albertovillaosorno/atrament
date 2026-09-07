@@ -45,7 +45,7 @@ use atrament_semantic_flow_pagination::{
 };
 use atrament_semantic_notebook::{
     AcceptedIdentity, Block, BlockContent, CandidateIdentity, Flow,
-    IdentityAllocator, Notebook, Page, PaperProfile,
+    IdentityAllocator, InlineSpan, Notebook, Page, PaperProfile,
 };
 use atrament_semantic_notebook_port::{
     AcceptanceOutcome, PageProfileEditOutcome, SemanticNotebookSession,
@@ -210,6 +210,94 @@ fn empty_accepted_flow_needs_no_page_profile_authority() {
     let plan = paginate_revision(&defensive, &measured)
         .expect("empty flow must not require page geometry");
     assert!(plan.placements.is_empty());
+}
+
+#[test]
+fn measured_inline_block_families_preserve_semantic_order_and_identity() {
+    type InlineBlockConstructor = fn(
+        Vec<InlineSpan<CandidateIdentity>>,
+    ) -> BlockContent<CandidateIdentity>;
+    let cases: &[InlineBlockConstructor] = &[
+        BlockContent::Citation,
+        BlockContent::Date,
+        BlockContent::Definition,
+        BlockContent::Footnote,
+        BlockContent::Heading,
+        BlockContent::MarginNote,
+        BlockContent::Paragraph,
+        BlockContent::Quotation,
+        BlockContent::SourceNote,
+    ];
+    let ids = IdentityAllocator::new();
+    let mut fixture = candidate_fixture(&ids);
+    let mut candidate_blocks = Vec::with_capacity(cases.len());
+    let mut blocks = Vec::with_capacity(cases.len());
+    for (index, constructor) in cases.iter().enumerate() {
+        let block = if index == 0 {
+            fixture.block
+        } else {
+            ids.allocate_candidate().expect("inline-family block")
+        };
+        let span = ids.allocate_candidate().expect("inline-family span");
+        candidate_blocks.push(block);
+        blocks.push(Block {
+            content: constructor(vec![InlineSpan {
+                id: span,
+                provenance: None,
+                style: None,
+                text: format!("measured inline family {index}"),
+            }]),
+            extensions: vec![],
+            id: block,
+            provenance: None,
+            style: None,
+        });
+    }
+    fixture.notebook.pages[0].flows[0].blocks = blocks;
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(fixture.notebook)
+    else {
+        panic!("inline-family candidate must be accepted");
+    };
+    let flow = accepted_for(&mapping, fixture.flow);
+    let page = accepted_for(&mapping, fixture.page_one);
+    let expected = candidate_blocks
+        .iter()
+        .map(|block| accepted_for(&mapping, *block))
+        .collect::<Vec<_>>();
+    let measured = RevisionFlowMeasurement {
+        flow,
+        revision,
+        units: vec![MeasuredFlowUnit {
+            fragments: expected
+                .iter()
+                .map(|owner| MeasuredFragment {
+                    height: Length::from_micrometres(1_000),
+                    owner: *owner,
+                    width: Length::from_micrometres(80_000),
+                })
+                .collect(),
+            policy: FlowUnitPolicy::Independent,
+        }],
+    };
+
+    let plan = paginate_revision(
+        session.current().expect("accepted inline-family revision"),
+        &measured,
+    )
+    .expect("already-measured inline families must paginate");
+    assert_eq!(
+        plan.placements
+            .iter()
+            .map(|placement| placement.owner)
+            .collect::<Vec<_>>(),
+        expected,
+    );
+    assert!(plan
+        .placements
+        .iter()
+        .all(|placement| placement.page == page));
 }
 
 #[test]

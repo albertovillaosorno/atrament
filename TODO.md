@@ -485,7 +485,10 @@ including coordinate overflow and simultaneous invalid conditions.
 Measurements bind to one accepted revision and one accepted flow; stale,
 incomplete, reordered, unknown-flow, and out-of-flow measurements reject before
 layout. Repeated measured fragments may retain one block owner, and no fragment
-is split by pagination.
+is split by pagination. Already-measured top-level citation, date, definition,
+footnote, heading, margin-note, paragraph, quotation, and source-note blocks
+retain their accepted block identities and semantic order through pagination;
+this admits upstream measurements without inventing metrics for those families.
 
 Keep-together groups move intact when a current or later page can contain them.
 Groups too tall for any one remaining page fall back only to measured-fragment
@@ -523,9 +526,9 @@ and assignments under new revision identities. Undo and Redo therefore never
 reactivate an older measurement merely because semantic content is restored.
 
 The task remains open for real handwriting and formula measurement, grapheme-
-aware line breaking and paragraph wrapping, quotation and citation measurement,
-column-flow policy, measurement diagnostics, and render or live-output
-consumption.
+aware line breaking and paragraph wrapping, quotation and citation metric
+generation, column-flow policy, measurement diagnostics, and render or
+live-output consumption.
 
 ### TODO - Implement fixed-region constraint solving
 
