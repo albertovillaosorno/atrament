@@ -505,7 +505,8 @@ fn calculus_commands_compose_with_scripts_without_rewriting() {
 #[test]
 fn named_symbol_vocabulary_is_supported_without_rewriting() {
     for source in [
-        r"\Bbbk", r"\Delta", r"\Downarrow", r"\Finv", r"\Game", r"\Gamma",
+        r"\Bbbk", r"\Cap", r"\Cup", r"\Delta", r"\Downarrow", r"\Finv",
+        r"\Game", r"\Gamma",
         r"\Im", r"\Lambda", r"\Leftarrow",
         r"\Leftrightarrow", r"\Longleftarrow", r"\Longleftrightarrow",
         r"\Longrightarrow", r"\Omega", r"\Phi", r"\Pi", r"\Psi", r"\Re",
@@ -513,18 +514,24 @@ fn named_symbol_vocabulary_is_supported_without_rewriting() {
         r"\Sigma", r"\Theta", r"\Uparrow", r"\Updownarrow", r"\Upsilon",
         r"\Vert", r"\Xi", r"\aleph", r"\alpha", r"\amalg", r"\angle",
         r"\approx", r"\ast", r"\asymp",
-        r"\backslash", r"\because", r"\beta", r"\beth", r"\bigcirc",
+        r"\backslash", r"\barwedge", r"\because", r"\beta", r"\beth",
+        r"\bigcirc",
         r"\bigstar", r"\bigtriangledown",
         r"\bigtriangleup", r"\blacklozenge", r"\blacksquare", r"\blacktriangle",
-        r"\blacktriangledown", r"\bot", r"\bowtie", r"\bullet", r"\cap",
+        r"\blacktriangledown", r"\bot", r"\bowtie", r"\boxdot", r"\boxminus",
+        r"\boxplus", r"\boxtimes", r"\bullet", r"\cap",
         r"\cdot",
-        r"\cdotp", r"\cdots",
-        r"\chi", r"\circ", r"\circledS", r"\clubsuit", r"\colon", r"\cong",
-        r"\cup",
+        r"\cdotp", r"\cdots", r"\centerdot",
+        r"\chi", r"\circ", r"\circledS", r"\circledast", r"\circledcirc",
+        r"\circleddash",
+        r"\clubsuit", r"\colon", r"\cong",
+        r"\cup", r"\curlyvee", r"\curlywedge",
         r"\dagger", r"\daleth",
         r"\dashv",
         r"\ddagger", r"\ddots", r"\delta", r"\diagdown", r"\diagup",
-        r"\diamond", r"\diamondsuit", r"\digamma", r"\div", r"\doteq", r"\dots",
+        r"\diamond", r"\diamondsuit", r"\digamma", r"\div", r"\divideontimes",
+        r"\doteq", r"\dotplus",
+        r"\dots", r"\doublebarwedge",
         r"\downarrow", r"\ell",
         r"\emptyset",
         r"\epsilon",
@@ -532,21 +539,24 @@ fn named_symbol_vocabulary_is_supported_without_rewriting() {
         r"\frown",
         r"\gamma",
         r"\ge", r"\geq",
-        r"\geqslant", r"\gets", r"\gg", r"\gimel", r"\gtrsim", r"\hbar",
+        r"\geqslant", r"\gets", r"\gg", r"\gimel", r"\gtrdot", r"\gtrsim",
+        r"\hbar",
         r"\heartsuit",
         r"\hookleftarrow",
         r"\hookrightarrow", r"\hslash", r"\iff", r"\imath", r"\impliedby",
         r"\implies",
-        r"\in", r"\infty", r"\iota", r"\jmath", r"\kappa", r"\lVert",
+        r"\in", r"\infty", r"\intercal", r"\iota", r"\jmath", r"\kappa",
+        r"\lVert",
         r"\lambda", r"\land", r"\langle",
         r"\lbrace", r"\lbrack", r"\lceil", r"\ldotp", r"\ldots", r"\le",
         r"\leadsto",
         r"\leftarrow", r"\leftharpoondown", r"\leftharpoonup",
-        r"\leftrightarrow", r"\leq", r"\leqslant", r"\lesssim", r"\lfloor",
+        r"\leftrightarrow", r"\leftthreetimes", r"\leq", r"\leqslant",
+        r"\lessdot", r"\lesssim", r"\lfloor",
         r"\ll", r"\lnot", r"\longleftarrow", r"\longleftrightarrow",
         r"\longmapsto",
         r"\longrightarrow",
-        r"\lor", r"\lozenge", r"\lvert", r"\mapsto", r"\mathdollar",
+        r"\lor", r"\lozenge", r"\ltimes", r"\lvert", r"\mapsto", r"\mathdollar",
         r"\mathparagraph",
         r"\mathsection", r"\measuredangle", r"\mho",
         r"\mid", r"\models", r"\mp", r"\mu", r"\nabla",
@@ -559,10 +569,12 @@ fn named_symbol_vocabulary_is_supported_without_rewriting() {
         r"\rbrack",
         r"\rceil", r"\rfloor",
         r"\rho", r"\rightarrow", r"\rightharpoondown", r"\rightharpoonup",
-        r"\rightleftharpoons", r"\rvert", r"\searrow", r"\setminus",
+        r"\rightleftharpoons", r"\rightthreetimes", r"\rtimes", r"\rvert",
+        r"\searrow", r"\setminus",
         r"\sharp", r"\sigma",
         r"\sim",
-        r"\simeq", r"\smile", r"\spadesuit", r"\sphericalangle", r"\sqcap",
+        r"\simeq", r"\smallsetminus", r"\smile", r"\spadesuit",
+        r"\sphericalangle", r"\sqcap",
         r"\sqcup",
         r"\sqsubseteq",
         r"\sqsupseteq", r"\square", r"\star", r"\subset", r"\subseteq",
@@ -576,7 +588,8 @@ fn named_symbol_vocabulary_is_supported_without_rewriting() {
         r"\varXi", r"\varbigtriangledown", r"\varbigtriangleup", r"\varepsilon",
         r"\varkappa", r"\varnothing", r"\varphi",
         r"\varpi", r"\varrho", r"\varsigma", r"\vartheta", r"\vdash", r"\vdots",
-        r"\vee", r"\vert", r"\wedge", r"\wp", r"\wr", r"\xi", r"\zeta",
+        r"\vee", r"\veebar", r"\vert", r"\wedge", r"\wp", r"\wr",
+        r"\xi", r"\zeta",
     ] {
         let analyzed =
             analyze(source, FormulaMode::Inline).expect("named symbol formula");
@@ -1010,6 +1023,34 @@ fn ams_geometric_ordinary_symbols_compose_without_rewriting() {
             })
             .count(),
         13,
+    );
+}
+
+#[test]
+fn ams_binary_operator_symbols_compose_without_rewriting() {
+    let source = concat!(
+        r"\Cap + \Cup + \barwedge + \boxdot + \boxminus + \boxplus + ",
+        r"\boxtimes + \centerdot + \circledast + \circledcirc + ",
+        r"\circleddash + ",
+        r"\curlyvee + \curlywedge + \divideontimes + \dotplus + ",
+        r"\doublebarwedge + \gtrdot + \intercal + \leftthreetimes + ",
+        r"\lessdot + \ltimes + \rightthreetimes + \rtimes + ",
+        r"\smallsetminus + \veebar",
+    );
+    let analyzed = analyze(source, FormulaMode::Display)
+        .expect("AMS binary operator symbol expression");
+    assert!(analyzed.is_supported());
+    assert_eq!(reconstructed(&analyzed), source);
+    assert_eq!(
+        analyzed
+            .tokens
+            .iter()
+            .filter(|token| {
+                token.kind
+                    == MathTokenKind::Command(SupportedCommand::NamedSymbol)
+            })
+            .count(),
+        25,
     );
 }
 

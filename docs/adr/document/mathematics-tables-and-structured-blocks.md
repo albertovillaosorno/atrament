@@ -74,7 +74,8 @@ paired vertical-bar spellings, parallel control-symbol, and foundational
 set/logic forms,
 real/imaginary-part and derivative-prime symbols, geometry/proof and
 ordering/set relations,
-binary-operator symbols including square/lattice and circled forms, large
+binary-operator symbols including the AMS boxed, circled, wedge, and product
+forms plus square/lattice forms, large
 n-ary operators including coproduct and logical joins/meets, card-suit and
 musical symbols, mathematical punctuation atoms, LaTeX-base paragraph, section,
 dollar, and variant large-triangle symbols, arrow and ellipsis symbols including
