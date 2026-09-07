@@ -144,6 +144,7 @@ const STRUCTURED_CONTROL_WORD_COMMANDS: &[(&str, SupportedCommand, usize)] = &[
     ("\\overrightarrow", SupportedCommand::OverRightArrow, 1),
     ("\\overset", SupportedCommand::Overset, 2),
     ("\\pmod", SupportedCommand::ParenthesizedModulo, 1),
+    ("\\pod", SupportedCommand::ParenthesizedModuloOperand, 1),
     ("\\sqrt", SupportedCommand::SquareRoot, 1),
     ("\\stackrel", SupportedCommand::StackRelation, 2),
     ("\\substack", SupportedCommand::Substack, 1),
@@ -556,6 +557,8 @@ pub enum SupportedCommand {
     Overset,
     /// One grouped parenthesized modular-arithmetic annotation.
     ParenthesizedModulo,
+    /// One grouped parenthesized modular operand without a `mod` label.
+    ParenthesizedModuloOperand,
     /// One-group quadruple-dot accent.
     QuadrupleDot,
     /// Roman/upright grouped content, useful for units and labels.

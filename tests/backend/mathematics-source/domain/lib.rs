@@ -348,7 +348,7 @@ fn direct_inverse_and_decorated_limit_operators_preserve_source() {
 
 #[test]
 fn modular_arithmetic_commands_preserve_structure() {
-    let source = r"a \bmod m; b \mod n; x \pmod{17}";
+    let source = r"a \bmod m; b \mod n; x \pmod{17}; y \pod{23}";
     let analyzed = analyze(source, FormulaMode::Inline)
         .expect("modular arithmetic expression");
     assert!(analyzed.is_supported());
@@ -369,17 +369,32 @@ fn modular_arithmetic_commands_preserve_structure() {
             == MathTokenKind::Command(SupportedCommand::ParenthesizedModulo)
             && analyzed.token_source(*token) == Some(r"\pmod")
     }));
-    assert_eq!(
-        analyze(r"\pmod", FormulaMode::Inline),
-        Err(MathSyntaxError {
-            byte_offset: r"\pmod".len(),
-            kind: MathSyntaxErrorKind::MissingRequiredGroup,
-        }),
-    );
-    let prefixed = analyze(r"\pmodulus{17}", FormulaMode::Inline)
-        .expect("balanced unsupported pmod prefix");
-    assert!(!prefixed.is_supported());
-    assert_eq!(prefixed.unsupported[0].name, r"\pmodulus");
+    assert!(analyzed.tokens.iter().any(|token| {
+        token.kind
+            == MathTokenKind::Command(
+                SupportedCommand::ParenthesizedModuloOperand,
+            )
+            && analyzed.token_source(*token) == Some(r"\pod")
+    }));
+    for spelling in [r"\pmod", r"\pod"] {
+        assert_eq!(
+            analyze(spelling, FormulaMode::Inline),
+            Err(MathSyntaxError {
+                byte_offset: spelling.len(),
+                kind: MathSyntaxErrorKind::MissingRequiredGroup,
+            }),
+            "{spelling}",
+        );
+    }
+    for (source, unsupported) in [
+        (r"\pmodulus{17}", r"\pmodulus"),
+        (r"\podcast{23}", r"\podcast"),
+    ] {
+        let prefixed = analyze(source, FormulaMode::Inline)
+            .expect("balanced unsupported modular prefix");
+        assert!(!prefixed.is_supported(), "{source}");
+        assert_eq!(prefixed.unsupported[0].name, unsupported);
+    }
 }
 
 #[test]
@@ -1291,6 +1306,7 @@ fn required_groups_allow_ascii_whitespace_without_rewriting() {
         "\\operatorname  {rank}",
         "\\operatorname* \t{argmax}",
         "\\pmod \t{17}",
+        "\\pod \t{23}",
     ] {
         let analyzed = analyze(source, FormulaMode::Display)
             .expect("whitespace-separated required groups");
