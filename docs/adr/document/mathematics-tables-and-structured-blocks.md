@@ -63,8 +63,8 @@ coefficients, square and indexed roots, grouped mathematical alphabets,
 common one-group, extended triple/quadruple-dot, and wide accents, upright unit
 or label groups, grouped text and custom operator names including the exact
 starred
-limits variant, stacked annotations and relations, vector, directional
-over-arrows, overline, and underline decorations,
+limits variant, stacked annotations and relations, vector, directional over- and
+under-arrows, overline, and underline decorations,
 escaped
 TeX special characters,
 standard and variant Greek control-sequence notation, common named and delimiter

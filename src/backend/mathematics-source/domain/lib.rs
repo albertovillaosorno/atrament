@@ -142,7 +142,10 @@ const STRUCTURED_CONTROL_WORD_COMMANDS: &[(&str, SupportedCommand, usize)] = &[
     ("\\tfrac", SupportedCommand::TextFraction, 2),
     ("\\tilde", SupportedCommand::Tilde, 1),
     ("\\underbrace", SupportedCommand::Underbrace, 1),
+    ("\\underleftarrow", SupportedCommand::UnderLeftArrow, 1),
+    ("\\underleftrightarrow", SupportedCommand::UnderLeftRightArrow, 1),
     ("\\underline", SupportedCommand::Underline, 1),
+    ("\\underrightarrow", SupportedCommand::UnderRightArrow, 1),
     ("\\underset", SupportedCommand::Underset, 2),
     ("\\vec", SupportedCommand::Vector, 1),
     ("\\widehat", SupportedCommand::WideHat, 1),
@@ -567,6 +570,12 @@ pub enum SupportedCommand {
     TripleDot,
     /// One-group typewriter mathematical alphabet.
     Typewriter,
+    /// One-group left-pointing under-arrow decoration.
+    UnderLeftArrow,
+    /// One-group bidirectional under-arrow decoration.
+    UnderLeftRightArrow,
+    /// One-group right-pointing under-arrow decoration.
+    UnderRightArrow,
     /// One-group underbrace decoration.
     Underbrace,
     /// One-group underline decoration.

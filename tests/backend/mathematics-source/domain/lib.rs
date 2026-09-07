@@ -1409,12 +1409,12 @@ fn custom_operator_name_is_structural_and_requires_one_group() {
 #[test]
 fn directional_over_arrows_are_structural_and_require_one_group() {
     let source = concat!(
-        r"\overleftarrow{AB}+",
-        r"\overleftrightarrow{CD}+",
-        r"\overrightarrow{EF}",
+        r"\overleftarrow{AB}+\overleftrightarrow{CD}+",
+        r"\overrightarrow{EF}+\underleftarrow{GH}+",
+        r"\underleftrightarrow{IJ}+\underrightarrow{KL}",
     );
     let analyzed = analyze(source, FormulaMode::Inline)
-        .expect("grouped directional over-arrows");
+        .expect("grouped directional over- and under-arrows");
     assert!(analyzed.is_supported());
     assert_eq!(reconstructed(&analyzed), source);
     for (spelling, kind) in [
@@ -1424,6 +1424,12 @@ fn directional_over_arrows_are_structural_and_require_one_group() {
             SupportedCommand::OverLeftRightArrow,
         ),
         (r"\overrightarrow", SupportedCommand::OverRightArrow),
+        (r"\underleftarrow", SupportedCommand::UnderLeftArrow),
+        (
+            r"\underleftrightarrow",
+            SupportedCommand::UnderLeftRightArrow,
+        ),
+        (r"\underrightarrow", SupportedCommand::UnderRightArrow),
     ] {
         assert!(analyzed.tokens.iter().any(|token| {
             token.kind == MathTokenKind::Command(kind)
