@@ -71,7 +71,8 @@ set/logic forms,
 real/imaginary-part and derivative-prime symbols, geometry/proof and
 ordering/set relations,
 binary-operator symbols including square/lattice and circled forms, large
-n-ary operators, arrow and ellipsis symbols including harpoons and mapped
+n-ary operators including coproduct and logical joins/meets, card-suit and
+musical symbols, arrow and ellipsis symbols including harpoons and mapped
 arrows, relation and logic symbols, modular
 arithmetic,
 single, multiple, and contour calculus operators, set notation, aligned

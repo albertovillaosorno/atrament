@@ -189,7 +189,8 @@ fn named_operator_vocabulary_is_supported_without_rewriting() {
     for source in [
         r"\Pr", r"\arccos", r"\arcsin", r"\arctan", r"\arg", r"\bigcap",
         r"\bigcup", r"\bigodot", r"\bigoplus", r"\bigotimes", r"\bigsqcup",
-        r"\bmod", r"\cos", r"\cosh", r"\cot", r"\coth", r"\csc",
+        r"\biguplus", r"\bigvee", r"\bigwedge", r"\bmod", r"\coprod",
+        r"\cos", r"\cosh", r"\cot", r"\coth", r"\csc",
         r"\deg", r"\det", r"\dim", r"\exp", r"\gcd", r"\hom", r"\iiint",
         r"\iint", r"\inf", r"\int", r"\ker", r"\lg", r"\lim", r"\liminf",
         r"\limsup", r"\ln", r"\log", r"\max", r"\min", r"\mod", r"\oint",
@@ -367,31 +368,39 @@ fn named_symbol_vocabulary_is_supported_without_rewriting() {
         r"\bigtriangleup", r"\bot", r"\bowtie", r"\bullet", r"\cap",
         r"\cdot",
         r"\cdots",
-        r"\chi", r"\circ", r"\cong", r"\cup", r"\dagger", r"\dashv",
+        r"\chi", r"\circ", r"\clubsuit", r"\cong", r"\cup", r"\dagger",
+        r"\dashv",
         r"\ddagger", r"\ddots", r"\delta",
-        r"\diamond", r"\div", r"\doteq", r"\dots", r"\downarrow", r"\ell",
+        r"\diamond", r"\diamondsuit", r"\div", r"\doteq", r"\dots",
+        r"\downarrow", r"\ell",
         r"\emptyset",
         r"\epsilon",
-        r"\equiv", r"\eta", r"\exists", r"\forall", r"\frown", r"\gamma",
+        r"\equiv", r"\eta", r"\exists", r"\flat", r"\forall", r"\frown",
+        r"\gamma",
         r"\ge", r"\geq",
-        r"\geqslant", r"\gets", r"\gg", r"\gtrsim", r"\hbar", r"\hookleftarrow",
+        r"\geqslant", r"\gets", r"\gg", r"\gtrsim", r"\hbar", r"\heartsuit",
+        r"\hookleftarrow",
         r"\hookrightarrow", r"\iff", r"\imath", r"\implies", r"\in", r"\infty",
         r"\iota", r"\jmath", r"\kappa", r"\lambda", r"\land", r"\langle",
         r"\lbrace", r"\lbrack", r"\lceil", r"\ldots", r"\le", r"\leadsto",
         r"\leftarrow", r"\leftharpoondown", r"\leftharpoonup",
         r"\leftrightarrow", r"\leq", r"\leqslant", r"\lesssim", r"\lfloor",
-        r"\ll", r"\longleftarrow", r"\longleftrightarrow", r"\longmapsto",
+        r"\ll", r"\lnot", r"\longleftarrow", r"\longleftrightarrow",
+        r"\longmapsto",
         r"\longrightarrow",
         r"\lor", r"\mapsto", r"\mid", r"\models", r"\mp", r"\mu", r"\nabla",
-        r"\ne", r"\nearrow", r"\neg", r"\neq", r"\nexists", r"\ni", r"\notin",
+        r"\natural", r"\ne", r"\nearrow", r"\neg", r"\neq", r"\nexists",
+        r"\ni", r"\notin",
         r"\nu", r"\nwarrow", r"\odot", r"\omega", r"\ominus", r"\oplus",
-        r"\oslash", r"\otimes", r"\parallel",
+        r"\oslash", r"\otimes", r"\owns", r"\parallel",
         r"\partial", r"\perp", r"\phi", r"\pi", r"\pm", r"\prec", r"\preceq",
         r"\prime", r"\propto", r"\psi", r"\rangle", r"\rbrace", r"\rbrack",
         r"\rceil", r"\rfloor",
         r"\rho", r"\rightarrow", r"\rightharpoondown", r"\rightharpoonup",
-        r"\rightleftharpoons", r"\searrow", r"\setminus", r"\sigma", r"\sim",
-        r"\simeq", r"\smile", r"\sqcap", r"\sqcup", r"\sqsubseteq",
+        r"\rightleftharpoons", r"\searrow", r"\setminus", r"\sharp", r"\sigma",
+        r"\sim",
+        r"\simeq", r"\smile", r"\spadesuit", r"\sqcap", r"\sqcup",
+        r"\sqsubseteq",
         r"\sqsupseteq", r"\star", r"\subset", r"\subseteq",
         r"\subsetneq", r"\succ",
         r"\succeq", r"\supset", r"\supseteq", r"\supsetneq", r"\swarrow",
@@ -419,6 +428,41 @@ fn named_symbol_vocabulary_is_supported_without_rewriting() {
             "{source}",
         );
     }
+}
+
+#[test]
+fn nary_card_and_music_symbols_compose_without_rewriting() {
+    let source = concat!(
+        r"\coprod_i A_i + \biguplus_j B_j + \bigvee_k P_k + ",
+        r"\bigwedge_l Q_l; \clubsuit + \diamondsuit + \heartsuit + ",
+        r"\spadesuit; \flat + \natural + \sharp; \lnot P; x \owns A",
+    );
+    let analyzed = analyze(source, FormulaMode::Display)
+        .expect("n-ary, card, and music symbol expression");
+    assert!(analyzed.is_supported());
+    assert_eq!(reconstructed(&analyzed), source);
+    assert_eq!(
+        analyzed
+            .tokens
+            .iter()
+            .filter(|token| {
+                token.kind
+                    == MathTokenKind::Command(SupportedCommand::NamedOperator)
+            })
+            .count(),
+        4,
+    );
+    assert_eq!(
+        analyzed
+            .tokens
+            .iter()
+            .filter(|token| {
+                token.kind
+                    == MathTokenKind::Command(SupportedCommand::NamedSymbol)
+            })
+            .count(),
+        9,
+    );
 }
 
 #[test]
