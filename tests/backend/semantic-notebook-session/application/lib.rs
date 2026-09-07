@@ -84,7 +84,7 @@ use atrament_semantic_notebook_port::{
 use atrament_semantic_notebook_session::SemanticNotebookSessionService;
 
 const CURRENT_COMMAND_BEHAVIOR_VERSION: CommandBehaviorVersion =
-    CommandBehaviorVersion(69);
+    CommandBehaviorVersion(70);
 
 #[derive(Debug)]
 struct CountingCommandIdentity {
@@ -2668,7 +2668,7 @@ fn common_tex_accents_are_admitted_and_directly_editable() {
 #[test]
 fn extended_accent_tex_is_admitted_and_directly_editable() {
     let ids = IdentityAllocator::new();
-    let initial = r"\acute{x}";
+    let initial = r"\dddot{x} + \ddddot{y}";
     let (candidate, formula) =
         candidate_math_notebook(&ids, initial, FormulaMode::Inline);
     let mut session = SemanticNotebookSessionService::default();
@@ -2686,7 +2686,7 @@ fn extended_accent_tex_is_admitted_and_directly_editable() {
         .source,
         initial,
     );
-    let edited_source = r"\mathring{y}";
+    let edited_source = r"\acute{x} + \mathring{y}";
     let outcome = session.replace_formula(
         revision,
         formula,
@@ -7878,7 +7878,7 @@ fn command_capability_snapshot_is_deterministic_and_does_not_overclaim() {
             family: SemanticCommandFamily::Provenance,
         },
         CommandFamilyCapability {
-            behavior_version: CommandBehaviorVersion(57),
+            behavior_version: CommandBehaviorVersion(58),
             family: SemanticCommandFamily::StructuredContent,
         },
         CommandFamilyCapability {
@@ -7946,11 +7946,11 @@ fn command_capability_version_detects_drift_independently_of_revision() {
     );
     assert_eq!(
         session.check_command_capability_compatibility(
-            CommandBehaviorVersion(68),
+            CommandBehaviorVersion(69),
         ),
         CommandCapabilityCompatibilityOutcome::Mismatch {
             current: CURRENT_COMMAND_BEHAVIOR_VERSION,
-            expected: CommandBehaviorVersion(68),
+            expected: CommandBehaviorVersion(69),
         },
     );
     assert_eq!(

@@ -1244,7 +1244,7 @@ fn common_accents_are_structural_and_require_one_group() {
 fn extended_accents_are_structural_and_require_one_group() {
     let source = concat!(
         r"\acute{x}+\breve{y}+\check{z}+",
-        r"\grave{a}+\mathring{b}",
+        r"\ddddot{q}+\dddot{r}+\grave{a}+\mathring{b}",
     );
     let analyzed = analyze(source, FormulaMode::Inline)
         .expect("extended grouped accents");
@@ -1254,6 +1254,8 @@ fn extended_accents_are_structural_and_require_one_group() {
         (r"\acute", SupportedCommand::Acute),
         (r"\breve", SupportedCommand::Breve),
         (r"\check", SupportedCommand::Check),
+        (r"\ddddot", SupportedCommand::QuadrupleDot),
+        (r"\dddot", SupportedCommand::TripleDot),
         (r"\grave", SupportedCommand::Grave),
         (r"\mathring", SupportedCommand::MathRing),
     ] {

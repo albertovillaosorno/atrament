@@ -230,12 +230,12 @@ supports read-only behavior-version drift checks. It deliberately advertises no
 command protocol, normalizer, command context, Validate, Apply, rebatching, or
 numeric command/context limits yet.
 
-Aggregate command behavior and typed-result behavior are version 69 after
-admitting the exact-source starred custom-operator limits form. Asset reference,
+Aggregate command behavior and typed-result behavior are version 70 after
+admitting exact-source triple- and quadruple-dot accents. Asset reference,
 Ordering and grouping, and Text content retain family behavior version 1;
 Provenance and Style role are version 2, Document constraint is version 3, and
-Structured content is version 57. The immediately previous aggregate version
-68 rejects instead of being reinterpreted.
+Structured content is version 58. The immediately previous aggregate version
+69 rejects instead of being reinterpreted.
 
 A version-bound single-target proposal combines capability, exact local
 preconditions, and direct-edit simulation read-only. All five dedicated direct
@@ -614,7 +614,8 @@ structurally recognizing ordinary Unicode notation, groups, scripts, plain and
 styled fractions, plain and styled binomial coefficients, square and indexed
 roots, grouped
 mathematical
-alphabets, common one-group and wide accents, upright unit or label groups,
+alphabets, common one-group, triple/quadruple-dot, and wide accents, upright
+unit or label groups,
 explicit `\text{...}` fragments, grouped custom operator names with the exact
 starred limits variant, stacked annotations and relations, vector, directional
 over-arrows, overline, and

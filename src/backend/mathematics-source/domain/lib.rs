@@ -109,6 +109,8 @@ const STRUCTURED_CONTROL_WORD_COMMANDS: &[(&str, SupportedCommand, usize)] = &[
     ("\\breve", SupportedCommand::Breve, 1),
     ("\\check", SupportedCommand::Check, 1),
     ("\\dbinom", SupportedCommand::DisplayBinomial, 2),
+    ("\\ddddot", SupportedCommand::QuadrupleDot, 1),
+    ("\\dddot", SupportedCommand::TripleDot, 1),
     ("\\ddot", SupportedCommand::DoubleDot, 1),
     ("\\dfrac", SupportedCommand::DisplayFraction, 2),
     ("\\dot", SupportedCommand::Dot, 1),
@@ -541,6 +543,8 @@ pub enum SupportedCommand {
     Overset,
     /// One grouped parenthesized modular-arithmetic annotation.
     ParenthesizedModulo,
+    /// One-group quadruple-dot accent.
+    QuadrupleDot,
     /// Roman/upright grouped content, useful for units and labels.
     Roman,
     /// One-group sans-serif mathematical alphabet.
@@ -559,6 +563,8 @@ pub enum SupportedCommand {
     TextFraction,
     /// One-group tilde accent.
     Tilde,
+    /// One-group triple-dot accent.
+    TripleDot,
     /// One-group typewriter mathematical alphabet.
     Typewriter,
     /// One-group underbrace decoration.
