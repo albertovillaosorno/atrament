@@ -514,14 +514,16 @@ fn named_symbol_vocabulary_is_supported_without_rewriting() {
         r"\Vert", r"\Xi", r"\aleph", r"\alpha", r"\amalg", r"\angle",
         r"\approx", r"\ast", r"\asymp",
         r"\backslash", r"\because", r"\beta", r"\beth", r"\bigcirc",
-        r"\bigtriangledown",
-        r"\bigtriangleup", r"\bot", r"\bowtie", r"\bullet", r"\cap",
+        r"\bigstar", r"\bigtriangledown",
+        r"\bigtriangleup", r"\blacklozenge", r"\blacksquare", r"\blacktriangle",
+        r"\blacktriangledown", r"\bot", r"\bowtie", r"\bullet", r"\cap",
         r"\cdot",
         r"\cdotp", r"\cdots",
-        r"\chi", r"\circ", r"\clubsuit", r"\colon", r"\cong", r"\cup",
+        r"\chi", r"\circ", r"\circledS", r"\clubsuit", r"\colon", r"\cong",
+        r"\cup",
         r"\dagger", r"\daleth",
         r"\dashv",
-        r"\ddagger", r"\ddots", r"\delta",
+        r"\ddagger", r"\ddots", r"\delta", r"\diagdown", r"\diagup",
         r"\diamond", r"\diamondsuit", r"\digamma", r"\div", r"\doteq", r"\dots",
         r"\downarrow", r"\ell",
         r"\emptyset",
@@ -544,8 +546,9 @@ fn named_symbol_vocabulary_is_supported_without_rewriting() {
         r"\ll", r"\lnot", r"\longleftarrow", r"\longleftrightarrow",
         r"\longmapsto",
         r"\longrightarrow",
-        r"\lor", r"\lvert", r"\mapsto", r"\mathdollar", r"\mathparagraph",
-        r"\mathsection", r"\mho",
+        r"\lor", r"\lozenge", r"\lvert", r"\mapsto", r"\mathdollar",
+        r"\mathparagraph",
+        r"\mathsection", r"\measuredangle", r"\mho",
         r"\mid", r"\models", r"\mp", r"\mu", r"\nabla",
         r"\natural", r"\ne", r"\nearrow", r"\neg", r"\neq", r"\nexists",
         r"\ni", r"\notin",
@@ -559,13 +562,14 @@ fn named_symbol_vocabulary_is_supported_without_rewriting() {
         r"\rightleftharpoons", r"\rvert", r"\searrow", r"\setminus",
         r"\sharp", r"\sigma",
         r"\sim",
-        r"\simeq", r"\smile", r"\spadesuit", r"\sqcap", r"\sqcup",
+        r"\simeq", r"\smile", r"\spadesuit", r"\sphericalangle", r"\sqcap",
+        r"\sqcup",
         r"\sqsubseteq",
-        r"\sqsupseteq", r"\star", r"\subset", r"\subseteq",
+        r"\sqsupseteq", r"\square", r"\star", r"\subset", r"\subseteq",
         r"\subsetneq", r"\succ",
         r"\succeq", r"\supset", r"\supseteq", r"\supsetneq", r"\swarrow",
         r"\tau", r"\therefore", r"\theta", r"\times", r"\to", r"\top",
-        r"\triangle", r"\triangleleft", r"\triangleright",
+        r"\triangle", r"\triangledown", r"\triangleleft", r"\triangleright",
         r"\uparrow", r"\updownarrow", r"\uplus", r"\upsilon",
         r"\varDelta", r"\varGamma", r"\varLambda", r"\varOmega", r"\varPhi",
         r"\varPi", r"\varPsi", r"\varSigma", r"\varTheta", r"\varUpsilon",
@@ -982,6 +986,30 @@ fn named_delimiters_compose_without_rewriting() {
             })
             .count(),
         19,
+    );
+}
+
+#[test]
+fn ams_geometric_ordinary_symbols_compose_without_rewriting() {
+    let source = concat!(
+        r"\square + \blacksquare + \lozenge + \blacklozenge; ",
+        r"\bigstar + \blacktriangle + \blacktriangledown + \triangledown; ",
+        r"\diagup + \diagdown + \measuredangle + \sphericalangle + \circledS",
+    );
+    let analyzed = analyze(source, FormulaMode::Display)
+        .expect("AMS geometric ordinary symbol expression");
+    assert!(analyzed.is_supported());
+    assert_eq!(reconstructed(&analyzed), source);
+    assert_eq!(
+        analyzed
+            .tokens
+            .iter()
+            .filter(|token| {
+                token.kind
+                    == MathTokenKind::Command(SupportedCommand::NamedSymbol)
+            })
+            .count(),
+        13,
     );
 }
 
