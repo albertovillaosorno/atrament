@@ -263,13 +263,15 @@ fn named_operator_vocabulary_is_supported_without_rewriting() {
             "{source}",
         );
 
-        let longer = format!("{source}x");
-        let prefixed = analyze(&longer, FormulaMode::Inline)
-            .expect("balanced longer named operator");
-        assert!(!prefixed.is_supported(), "{longer}");
-        assert_eq!(reconstructed(&prefixed), longer);
-        assert_eq!(prefixed.unsupported.len(), 1, "{source}");
-        assert_eq!(prefixed.unsupported[0].name, longer, "{source}");
+        for suffix in ['A', 'Z', 'x'] {
+            let longer = format!("{source}{suffix}");
+            let prefixed = analyze(&longer, FormulaMode::Inline)
+                .expect("balanced longer named operator");
+            assert!(!prefixed.is_supported(), "{longer}");
+            assert_eq!(reconstructed(&prefixed), longer);
+            assert_eq!(prefixed.unsupported.len(), 1, "{longer}");
+            assert_eq!(prefixed.unsupported[0].name, longer, "{longer}");
+        }
     }
 
     let prefixed = analyze(r"\sinewave", FormulaMode::Inline)
@@ -661,13 +663,15 @@ fn named_symbol_vocabulary_is_supported_without_rewriting() {
             "{source}",
         );
 
-        let longer = format!("{source}x");
-        let prefixed = analyze(&longer, FormulaMode::Inline)
-            .expect("balanced longer named symbol");
-        assert!(!prefixed.is_supported(), "{longer}");
-        assert_eq!(reconstructed(&prefixed), longer);
-        assert_eq!(prefixed.unsupported.len(), 1, "{source}");
-        assert_eq!(prefixed.unsupported[0].name, longer, "{source}");
+        for suffix in ['A', 'Z', 'x'] {
+            let longer = format!("{source}{suffix}");
+            let prefixed = analyze(&longer, FormulaMode::Inline)
+                .expect("balanced longer named symbol");
+            assert!(!prefixed.is_supported(), "{longer}");
+            assert_eq!(reconstructed(&prefixed), longer);
+            assert_eq!(prefixed.unsupported.len(), 1, "{longer}");
+            assert_eq!(prefixed.unsupported[0].name, longer, "{longer}");
+        }
     }
 }
 
