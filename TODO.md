@@ -1864,7 +1864,15 @@ A verified adapter-boundary guide now maps browser, localhost, clipboard, MCP,
 Render, Export, and Plan contracts to their separate admission, effect, retry,
 identity, persistence, and physical-safety boundaries. It also distinguishes
 implemented browser/runtime behavior from contract-only CLI, MCP, file, model,
-media, and hardware adapters. Troubleshooting documentation remains open.
+media, and hardware adapters.
+
+A verified first-release troubleshooting guide now maps current startup,
+handshake, draft, HTTP, clipboard, profile-integrity, capability, dry-run, and
+recovery outcomes to fail-closed operator/developer actions. It explicitly
+marks Export, CLI, MCP transport, model/media, encoders, and hardware adapters
+as
+unavailable rather than inventing recovery procedures. Packaged-release and
+future-adapter troubleshooting remain open until those surfaces exist.
 
 ### TODO - Close every known reproducible defect
 

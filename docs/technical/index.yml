@@ -103,3 +103,6 @@ contracts:
   - id: atrament.technical.adapter-boundary-validation
     status: verified
     path: adapter-boundary-validation.md
+  - id: atrament.technical.first-release-troubleshooting
+    status: verified
+    path: first-release-troubleshooting.md
