@@ -1043,6 +1043,12 @@ semantics, random generators, fitting policy, or a sampling algorithm.
 Allow one profile to expose body, title, subtitle, label, caption, formula,
 margin, and annotation roles without pretending they are unrelated writers.
 
+Current executable evidence now centralizes those eight handwriting roles and
+stores the profile identity once around caller-supplied role presentations. Role
+entries therefore carry size/style metadata but cannot independently claim a
+different writer identity. Size units, role defaults, style vocabulary, missing
+role policy, glyph behavior, and semantic document-style mappings remain open.
+
 ### TODO - Prevent repeated-glyph and repeated-line artifacts
 
 Detect frozen contours, identical word rhythms, mechanical baselines, local

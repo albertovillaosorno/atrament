@@ -1,0 +1,9 @@
+identity:
+  id: function:handwriting-role-profile
+  name: handwriting-role-profile
+  path: src/backend/handwriting-role-profile
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: domain
