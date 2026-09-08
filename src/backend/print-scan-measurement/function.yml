@@ -1,0 +1,9 @@
+identity:
+  id: function:print-scan-measurement
+  name: print-scan-measurement
+  path: src/backend/print-scan-measurement
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: domain

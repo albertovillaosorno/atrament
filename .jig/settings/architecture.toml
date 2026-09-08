@@ -76,6 +76,9 @@ depends_on = ["atrament_mathematics_source", "atrament_semantic_command_graph", 
 [component.atrament_vector_geometry]
 depends_on = []
 
+[component.atrament_print_scan_measurement]
+depends_on = []
+
 [component.atrament_render_manifest]
 depends_on = []
 

@@ -91,6 +91,10 @@ name = "atrament_physical_page_profile"
 version = "0.1.0"
 
 [[package]]
+name = "atrament_print_scan_measurement"
+version = "0.1.0"
+
+[[package]]
 name = "atrament_render_manifest"
 version = "0.1.0"
 
