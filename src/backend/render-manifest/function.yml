@@ -1,0 +1,9 @@
+identity:
+  id: function:render-manifest
+  name: render-manifest
+  path: src/backend/render-manifest
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: domain

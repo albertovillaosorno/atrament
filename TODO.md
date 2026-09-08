@@ -1149,6 +1149,15 @@ derive a sober, single-pen alternative without losing title hierarchy.
 Embed bounded texture and image resources, preserve physical page boxes and
 color, retain searchable semantics when compatible, and emit a render manifest.
 
+Current executable evidence now freezes the transport-neutral render-manifest
+input structure required by the accepted reproducibility contract. It retains
+accepted revision/document/profile/paper identities, asset identities, engine
+version, model choices, variation seed, material authority, renderer version,
+quality profile, and output-affecting render options. Render identity
+computation,
+serialization, PDF bytes, resource embedding, searchable-text policy, and file
+commit remain open.
+
 ### TODO - Calibrate print and scan round trips
 
 Measure physical scale, clipping, margins, grid registration, color shifts,
