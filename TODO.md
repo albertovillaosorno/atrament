@@ -1190,6 +1190,15 @@ export on ordinary integrated-graphics computers with no compute GPU.
 Include the complete backend-owned return format, allowed styles, output mode,
 source rules, ambiguity behavior, and exact return envelope in one copy action.
 
+Current executable evidence now freezes the transport-neutral initial formatting
+request as one self-contained value. It retains task, complete source material,
+paper/style constraints, output targets, backend-owned semantic format, source
+and provenance rules, diagnostic/ambiguity expectations, required return
+envelope, prompt identity, and prompt version. Prompt text
+wording/serialization,
+identity computation, clipboard presentation, response parsing, and semantic
+command refinement remain separate open authorities.
+
 ### TODO - Implement assignment-to-notebook structuring
 
 Support titles, explanations, derivations, tables, equations, diagrams,

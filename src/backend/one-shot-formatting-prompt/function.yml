@@ -1,0 +1,9 @@
+identity:
+  id: function:one-shot-formatting-prompt
+  name: one-shot-formatting-prompt
+  path: src/backend/one-shot-formatting-prompt
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: domain

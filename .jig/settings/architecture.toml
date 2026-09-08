@@ -46,6 +46,9 @@ depends_on = []
 [component.atrament_physical_page_profile]
 depends_on = []
 
+[component.atrament_one_shot_formatting_prompt]
+depends_on = []
+
 [component.atrament_page_texture_plan]
 depends_on = ["atrament_material_layer_plan"]
 

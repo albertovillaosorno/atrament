@@ -15,6 +15,7 @@ members = [
     "src/backend/mathematics-source",
     "src/backend/pdf-composition-plan",
     "src/backend/physical-page-profile",
+    "src/backend/one-shot-formatting-prompt",
     "src/backend/page-texture-plan",
     "src/backend/paper-mark-geometry",
     "src/backend/pen-contact-model",
