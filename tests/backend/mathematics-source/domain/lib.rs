@@ -514,7 +514,8 @@ fn named_symbol_vocabulary_is_supported_without_rewriting() {
         r"\Longrightarrow", r"\Lsh", r"\Omega", r"\Phi", r"\Pi", r"\Psi",
         r"\Re",
         r"\Rightarrow", r"\Rrightarrow", r"\Rsh",
-        r"\Sigma", r"\Theta", r"\Uparrow", r"\Updownarrow", r"\Upsilon",
+        r"\Sigma", r"\Subset", r"\Supset", r"\Theta", r"\Uparrow",
+        r"\Updownarrow", r"\Upsilon",
         r"\Vert", r"\Xi", r"\aleph", r"\alpha", r"\amalg", r"\angle",
         r"\approx", r"\approxeq", r"\ast", r"\asymp", r"\backsim",
         r"\backsimeq",
@@ -522,7 +523,8 @@ fn named_symbol_vocabulary_is_supported_without_rewriting() {
         r"\bigcirc",
         r"\bigstar", r"\bigtriangledown",
         r"\bigtriangleup", r"\blacklozenge", r"\blacksquare", r"\blacktriangle",
-        r"\blacktriangledown", r"\bot", r"\bowtie", r"\boxdot", r"\boxminus",
+        r"\blacktriangledown", r"\blacktriangleleft", r"\blacktriangleright",
+        r"\bot", r"\bowtie", r"\boxdot", r"\boxminus",
         r"\boxplus", r"\boxtimes", r"\bullet", r"\bumpeq", r"\cap",
         r"\cdot",
         r"\cdotp", r"\cdots", r"\centerdot",
@@ -597,20 +599,25 @@ fn named_symbol_vocabulary_is_supported_without_rewriting() {
         r"\sqcup",
         r"\sqsubseteq",
         r"\sqsupseteq", r"\square", r"\star", r"\subset", r"\subseteq",
+        r"\subseteqq",
         r"\subsetneq", r"\succ", r"\succapprox", r"\succcurlyeq",
-        r"\succeq", r"\succsim", r"\supset", r"\supseteq", r"\supsetneq",
+        r"\succeq", r"\succsim", r"\supset", r"\supseteq", r"\supseteqq",
+        r"\supsetneq",
         r"\swarrow",
         r"\tau", r"\therefore", r"\theta", r"\thickapprox", r"\thicksim",
         r"\times", r"\to", r"\top",
-        r"\triangle", r"\triangledown", r"\triangleleft", r"\triangleq",
-        r"\triangleright", r"\twoheadleftarrow", r"\twoheadrightarrow",
+        r"\triangle", r"\triangledown", r"\triangleleft", r"\trianglelefteq",
+        r"\triangleq",
+        r"\triangleright", r"\trianglerighteq", r"\twoheadleftarrow",
+        r"\twoheadrightarrow",
         r"\uparrow", r"\updownarrow", r"\upharpoonleft", r"\upharpoonright",
         r"\uplus", r"\upsilon", r"\upuparrows",
         r"\varDelta", r"\varGamma", r"\varLambda", r"\varOmega", r"\varPhi",
         r"\varPi", r"\varPsi", r"\varSigma", r"\varTheta", r"\varUpsilon",
         r"\varXi", r"\varbigtriangledown", r"\varbigtriangleup", r"\varepsilon",
         r"\varkappa", r"\varnothing", r"\varphi",
-        r"\varpi", r"\varrho", r"\varsigma", r"\vartheta", r"\vdash", r"\vdots",
+        r"\varpi", r"\varrho", r"\varsigma", r"\vartheta", r"\vartriangle",
+        r"\vartriangleleft", r"\vartriangleright", r"\vdash", r"\vdots",
         r"\vee", r"\veebar", r"\vert", r"\wedge", r"\wp", r"\wr",
         r"\xi", r"\zeta",
     ] {
@@ -1244,6 +1251,31 @@ fn italic_capital_greek_symbols_compose_without_rewriting() {
     );
     let analyzed = analyze(source, FormulaMode::Display)
         .expect("italic capital Greek symbol expression");
+    assert!(analyzed.is_supported());
+    assert_eq!(reconstructed(&analyzed), source);
+    assert_eq!(
+        analyzed
+            .tokens
+            .iter()
+            .filter(|token| {
+                token.kind
+                    == MathTokenKind::Command(SupportedCommand::NamedSymbol)
+            })
+            .count(),
+        11,
+    );
+}
+
+#[test]
+fn ams_triangle_and_containment_relations_compose_without_rewriting() {
+    let source = concat!(
+        r"A \Subset B \subseteqq C; D \Supset E \supseteqq F; ",
+        r"G \vartriangleleft H \trianglelefteq I; ",
+        r"J \vartriangleright K \trianglerighteq L; ",
+        r"M \blacktriangleleft N \blacktriangleright O; P \vartriangle Q",
+    );
+    let analyzed = analyze(source, FormulaMode::Display)
+        .expect("AMS triangle and containment relation expression");
     assert!(analyzed.is_supported());
     assert_eq!(reconstructed(&analyzed), source);
     assert_eq!(
