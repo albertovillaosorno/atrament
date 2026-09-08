@@ -375,6 +375,92 @@ fn section_projection_is_sorted_and_never_returns_opaque_assets() {
 }
 
 #[test]
+fn profile_compatibility_matrix_is_explicit_and_nondestructive() {
+    let current = manifest(vec![entry(
+        "assets/sample.bin",
+        "application/octet-stream",
+        7,
+    )]);
+    let current_before = current.clone();
+    assert_eq!(
+        validate_profile_manifest(&current, &["stroke-vocabulary"]),
+        Ok(()),
+    );
+    assert_eq!(current, current_before);
+    assert_eq!(current.optional_features, ["future-optional"]);
+
+    for version in ["atrament.profile/0", "atrament.profile/2"] {
+        let mut unsupported = current.clone();
+        unsupported.container_version = String::from(version);
+        let before = unsupported.clone();
+        assert_eq!(
+            validate_profile_manifest(&unsupported, &["stroke-vocabulary"]),
+            Err(ProfileManifestError::UnsupportedContainerVersion {
+                observed: String::from(version),
+            }),
+        );
+        assert_eq!(unsupported, before);
+    }
+
+    let mut unsupported_required = current.clone();
+    unsupported_required
+        .required_features
+        .push(String::from("future-required"));
+    let required_before = unsupported_required.clone();
+    assert_eq!(
+        validate_profile_manifest(
+            &unsupported_required,
+            &["stroke-vocabulary"],
+        ),
+        Err(ProfileManifestError::UnsupportedRequiredFeature {
+            feature: String::from("future-required"),
+        }),
+    );
+    assert_eq!(unsupported_required, required_before);
+
+    let declared = current.entries[0].clone();
+    let declared_before = declared.clone();
+    assert_eq!(
+        verify_profile_entry(
+            &declared,
+            ProfileEntryEvidence {
+                byte_length: 6,
+                digest: digest(7),
+            },
+        ),
+        Err(ProfileEntryVerificationError::ByteLengthMismatch {
+            declared: 7,
+            observed: 6,
+        }),
+    );
+    assert_eq!(declared, declared_before);
+    assert_eq!(
+        verify_profile_entry(
+            &declared,
+            ProfileEntryEvidence {
+                byte_length: 7,
+                digest: digest(3),
+            },
+        ),
+        Err(ProfileEntryVerificationError::DigestMismatch),
+    );
+    assert_eq!(declared, declared_before);
+
+    let inventory_before = current.clone();
+    assert_eq!(
+        validate_profile_entry_inventory(
+            &current,
+            &["stroke-vocabulary"],
+            &[PROFILE_MANIFEST_PATH],
+        ),
+        Err(ProfileEntryInventoryError::MissingDeclaredEntry {
+            path: String::from("assets/sample.bin"),
+        }),
+    );
+    assert_eq!(current, inventory_before);
+}
+
+#[test]
 fn future_version_and_unknown_required_feature_fail_closed() {
     let mut value = manifest(vec![]);
     value.container_version = String::from("atrament.profile/2");

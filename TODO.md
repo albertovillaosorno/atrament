@@ -1518,6 +1518,15 @@ tables, and line art on calibrated blank sheets with no manual content repair.
 Test current, prior, future, corrupted, truncated, and partially unsupported
 notebook and profile data with explicit, non-destructive outcomes.
 
+Current profile-container regressions now exercise a compatibility matrix over
+current, prior-version, future-version, partially unsupported, corrupted,
+truncated, and missing-entry evidence. Current data admits without mutation,
+unknown optional metadata remains intact, unsupported required features and
+non-current container versions fail closed, and corrupt/truncated/missing entry
+evidence leaves declarations unchanged. No prior migration is claimed because
+the accepted profile contract does not yet define one; notebook migrations and
+all real supported profile migrations remain open.
+
 ### TODO - Fuzz every untrusted input boundary
 
 Cover notebook bundles, `.atrament` profiles, clipboard HTML, images, TeX,
