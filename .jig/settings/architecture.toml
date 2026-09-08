@@ -115,6 +115,9 @@ depends_on = []
 [component.atrament_render_manifest]
 depends_on = []
 
+[component.atrament_render_regression_evidence]
+depends_on = []
+
 [component.atrament_render_quality_profile]
 depends_on = []
 

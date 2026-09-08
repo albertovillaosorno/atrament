@@ -30,6 +30,7 @@ members = [
     "src/backend/pen-contact-model",
     "src/backend/print-scan-measurement",
     "src/backend/render-manifest",
+    "src/backend/render-regression-evidence",
     "src/backend/render-quality-profile",
     "src/backend/runtime-bootstrap",
     "src/backend/semantic-command-graph",

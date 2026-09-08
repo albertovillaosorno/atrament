@@ -1569,6 +1569,14 @@ Responses never reflect the session secret.
 Compare semantic layout, vector topology, layer composition, final pixels,
 digital themes, live themes, and overflow overlays independently.
 
+Current executable evidence now requires one independently computed result for
+semantic layout, vector topology, layer composition, render seeds, physical
+bounds, final pixels, digital theme, live theme, and overflow overlays before a
+render-regression report is structurally complete. Duplicate or missing axes
+reject, while mismatches remain explicit per axis instead of being hidden by a
+passing final-pixel result. Axis-specific comparators, pixel tolerances, golden
+artifact storage, renderer output, and visual acceptance policy remain open.
+
 ### TODO - Complete accessibility and keyboard operation
 
 Make both editors, page navigation, diagnostics, drag alternatives, prompt copy,
