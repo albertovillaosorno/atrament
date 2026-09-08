@@ -1,0 +1,15 @@
+[package]
+name = "atrament_page_texture_plan"
+version = "0.1.0"
+edition = "2024"
+publish = false
+license = "MIT"
+
+[dependencies]
+atrament_material_layer_plan = { path = "../material-layer-plan" }
+
+[lib]
+path = "domain/lib.rs"
+
+[lints]
+workspace = true

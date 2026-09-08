@@ -1102,6 +1102,14 @@ open.
 Apply seeded low-frequency texture at declared physical scale and prove it does
 not move geometry, obscure small writing, or create repeated tiles.
 
+Current executable evidence now freezes page-level texture intent without
+generating pixels. A plan retains read-only vector-geometry authority, physical
+page bounds, caller-owned physical noise scale, a bounded strength envelope, and
+the complete stochastic replay key reused by material layers. Strength validates
+inside its inclusive envelope before generation. Frequency models, texture
+generation, tile detection, legibility thresholds, units, rasterization, and
+visual evaluation remain open.
+
 ### TODO - Implement fast and final CPU quality profiles
 
 Use the same vectors, seeds, blend order, and page geometry while varying only

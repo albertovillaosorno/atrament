@@ -1,0 +1,9 @@
+identity:
+  id: function:page-texture-plan
+  name: page-texture-plan
+  path: src/backend/page-texture-plan
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: domain
