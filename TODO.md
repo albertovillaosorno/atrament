@@ -1556,6 +1556,14 @@ secret or seeded private draft markers, and cannot change task, source, or
 candidate draft state. Socket-level timing/resource fuzzing and coverage-guided
 request generation remain open.
 
+A second 4,096-case corpus mutates only post-request-line bytes of one
+canonical
+authenticated Task replacement, so generated inputs cannot turn into private GET
+reads. Host, authorization, origin, framing, and body mutations must route
+deterministically. Any non-204 outcome leaves all seeded drafts unchanged; a
+successful replacement may change only Task and must agree across repeated runs.
+Responses never reflect the session secret.
+
 ### TODO - Complete visual regression coverage
 
 Compare semantic layout, vector topology, layer composition, final pixels,

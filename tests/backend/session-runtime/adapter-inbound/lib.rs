@@ -760,6 +760,113 @@ X-Probe: safe\r\n\r\n";
 }
 
 #[test]
+fn generated_authenticated_post_mutations_fail_closed_and_deterministic() {
+    let authorization = format!("Bearer {EXPECTED_SECRET}");
+    let base = draft_replace_request(
+        "/api/session/task",
+        Some(&authorization),
+        Some(EXPECTED_ORIGIN),
+        b"replacement-body",
+    );
+    let request_line_end = base
+        .windows(2)
+        .position(|window| window == b"\r\n")
+        .map(|position| position + 2)
+        .expect("canonical request has request-line terminator");
+    let mut state = 0x1319_8a2e_u32;
+
+    for case_index in 0..4_096_u32 {
+        let mut request = base.clone();
+        state = state
+            .wrapping_mul(1_664_525)
+            .wrapping_add(1_013_904_223 ^ case_index);
+        let mutation_count = usize::try_from((state >> 30) + 1)
+            .expect("bounded mutation count");
+        for mutation_index in 0..mutation_count {
+            state = state
+                .wrapping_mul(1_664_525)
+                .wrapping_add(
+                    1_013_904_223
+                        ^ u32::try_from(mutation_index)
+                            .expect("bounded mutation index"),
+                );
+            let mutable_len = request.len() - request_line_end;
+            let position = request_line_end
+                + usize::try_from(state >> 16)
+                    .expect("u32 fits usize on supported targets")
+                    % (mutable_len + 1);
+            let operation = state & 3;
+            let byte = u8::try_from((state >> 8) & 0xff)
+                .expect("masked byte fits u8");
+            match operation {
+                0 if position < request.len() => request[position] = byte,
+                1 => request.insert(position, byte),
+                2 if position < request.len() => {
+                    let _removed = request.remove(position);
+                }
+                _ if position < request.len() => {
+                    let duplicate = request[position];
+                    request.insert(position, duplicate);
+                }
+                _ => request.push(byte),
+            }
+        }
+
+        let mut first_draft = seeded_private_draft();
+        let mut second_draft = seeded_private_draft();
+        let first = route_with_draft(&request, EXPECTED_HOST, &mut first_draft);
+        let second = route_with_draft(
+            &request,
+            EXPECTED_HOST,
+            &mut second_draft,
+        );
+        assert_eq!(
+            first,
+            second,
+            "nondeterministic authenticated mutation case {case_index}",
+        );
+        assert!(first.starts_with(b"HTTP/1.1 "), "case {case_index}");
+        assert_eq!(
+            first_draft.value(DraftField::Source),
+            "source-private-marker",
+        );
+        assert_eq!(
+            first_draft.value(DraftField::Candidate),
+            "candidate-private-marker",
+        );
+        assert_eq!(
+            second_draft.value(DraftField::Source),
+            "source-private-marker",
+        );
+        assert_eq!(
+            second_draft.value(DraftField::Candidate),
+            "candidate-private-marker",
+        );
+        if status_line(&first) == "HTTP/1.1 204 No Content" {
+            assert_eq!(
+                first_draft.value(DraftField::Task),
+                second_draft.value(DraftField::Task),
+            );
+        } else {
+            assert_eq!(
+                first_draft.value(DraftField::Task),
+                "task-private-marker",
+            );
+            assert_eq!(
+                second_draft.value(DraftField::Task),
+                "task-private-marker",
+            );
+        }
+        assert!(
+            !first
+                .windows(EXPECTED_SECRET.len())
+                .any(|window| window == EXPECTED_SECRET.as_bytes()),
+            "secret reflection in authenticated mutation case {case_index}",
+        );
+    }
+}
+
+#[test]
 fn unrelated_paths_do_not_expose_runtime_state() {
     let response = route_runtime(
         b"GET /session HTTP/1.1\r\nHost: 127.0.0.1:43123\r\n\r\n",
