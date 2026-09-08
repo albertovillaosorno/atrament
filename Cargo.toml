@@ -13,6 +13,7 @@ members = [
     "src/backend/handwriting-variation",
     "src/backend/material-layer-plan",
     "src/backend/mathematics-source",
+    "src/backend/pdf-composition-plan",
     "src/backend/physical-page-profile",
     "src/backend/page-texture-plan",
     "src/backend/paper-mark-geometry",

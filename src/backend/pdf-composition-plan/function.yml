@@ -1,0 +1,9 @@
+identity:
+  id: function:pdf-composition-plan
+  name: pdf-composition-plan
+  path: src/backend/pdf-composition-plan
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: domain

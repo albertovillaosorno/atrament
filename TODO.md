@@ -1158,6 +1158,13 @@ computation,
 serialization, PDF bytes, resource embedding, searchable-text policy, and file
 commit remain open.
 
+A transport-neutral PDF composition plan now also preserves final page order,
+caller-owned physical page boxes, vector authority, color intent, explicit
+searchable-semantic-text disposition, explicit embedded-versus-safe-reference
+asset disposition, and render-manifest linkage. PDF object encoding, fonts,
+compression, concrete safe-reference policy, compatibility decisions, resource
+bytes, serialization, and file commit remain open.
+
 ### TODO - Calibrate print and scan round trips
 
 Measure physical scale, clipping, margins, grid registration, color shifts,
