@@ -515,11 +515,14 @@ fn named_symbol_vocabulary_is_supported_without_rewriting() {
         r"\Re",
         r"\Rightarrow", r"\Rrightarrow", r"\Rsh",
         r"\Sigma", r"\Subset", r"\Supset", r"\Theta", r"\Uparrow",
-        r"\Updownarrow", r"\Upsilon",
-        r"\Vert", r"\Xi", r"\aleph", r"\alpha", r"\amalg", r"\angle",
-        r"\approx", r"\approxeq", r"\ast", r"\asymp", r"\backsim",
+        r"\Updownarrow", r"\Upsilon", r"\Vdash",
+        r"\Vert", r"\Vvdash", r"\Xi", r"\aleph", r"\alpha", r"\amalg",
+        r"\angle",
+        r"\approx", r"\approxeq", r"\ast", r"\asymp", r"\backepsilon",
+        r"\backsim",
         r"\backsimeq",
         r"\backslash", r"\barwedge", r"\because", r"\beta", r"\beth",
+        r"\between",
         r"\bigcirc",
         r"\bigstar", r"\bigtriangledown",
         r"\bigtriangleup", r"\blacklozenge", r"\blacksquare", r"\blacktriangle",
@@ -550,7 +553,8 @@ fn named_symbol_vocabulary_is_supported_without_rewriting() {
         r"\frown",
         r"\gamma",
         r"\ge", r"\geq", r"\geqq",
-        r"\geqslant", r"\gets", r"\gg", r"\gimel", r"\gtrapprox", r"\gtrdot",
+        r"\geqslant", r"\gets", r"\gg", r"\ggg", r"\gimel", r"\gtrapprox",
+        r"\gtrdot",
         r"\gtreqless", r"\gtreqqless", r"\gtrless", r"\gtrsim",
         r"\hbar",
         r"\heartsuit",
@@ -570,7 +574,7 @@ fn named_symbol_vocabulary_is_supported_without_rewriting() {
         r"\lessapprox",
         r"\lessdot", r"\lesseqgtr", r"\lesseqqgtr", r"\lessgtr", r"\lesssim",
         r"\lfloor",
-        r"\ll", r"\lnot", r"\longleftarrow", r"\longleftrightarrow",
+        r"\ll", r"\lll", r"\lnot", r"\longleftarrow", r"\longleftrightarrow",
         r"\longmapsto",
         r"\longrightarrow", r"\looparrowleft", r"\looparrowright",
         r"\lor", r"\lozenge", r"\ltimes", r"\lvert", r"\mapsto", r"\mathdollar",
@@ -581,7 +585,7 @@ fn named_symbol_vocabulary_is_supported_without_rewriting() {
         r"\ni", r"\notin",
         r"\nu", r"\nwarrow", r"\odot", r"\omega", r"\ominus", r"\oplus",
         r"\oslash", r"\otimes", r"\owns", r"\parallel",
-        r"\partial", r"\perp", r"\phi", r"\pi", r"\pm", r"\prec",
+        r"\partial", r"\perp", r"\phi", r"\pi", r"\pitchfork", r"\pm", r"\prec",
         r"\precapprox", r"\preccurlyeq", r"\preceq", r"\precsim",
         r"\prime", r"\propto", r"\psi", r"\rVert", r"\rangle", r"\rbrace",
         r"\rbrack",
@@ -592,9 +596,10 @@ fn named_symbol_vocabulary_is_supported_without_rewriting() {
         r"\rightthreetimes", r"\risingdotseq",
         r"\rtimes", r"\rvert",
         r"\searrow", r"\setminus",
-        r"\sharp", r"\sigma",
+        r"\sharp", r"\shortmid", r"\shortparallel", r"\sigma",
         r"\sim",
-        r"\simeq", r"\smallsetminus", r"\smile", r"\spadesuit",
+        r"\simeq", r"\smallfrown", r"\smallsetminus", r"\smallsmile", r"\smile",
+        r"\spadesuit",
         r"\sphericalangle", r"\sqcap",
         r"\sqcup",
         r"\sqsubseteq",
@@ -611,12 +616,13 @@ fn named_symbol_vocabulary_is_supported_without_rewriting() {
         r"\triangleright", r"\trianglerighteq", r"\twoheadleftarrow",
         r"\twoheadrightarrow",
         r"\uparrow", r"\updownarrow", r"\upharpoonleft", r"\upharpoonright",
-        r"\uplus", r"\upsilon", r"\upuparrows",
+        r"\uplus", r"\upsilon", r"\upuparrows", r"\vDash",
         r"\varDelta", r"\varGamma", r"\varLambda", r"\varOmega", r"\varPhi",
         r"\varPi", r"\varPsi", r"\varSigma", r"\varTheta", r"\varUpsilon",
         r"\varXi", r"\varbigtriangledown", r"\varbigtriangleup", r"\varepsilon",
         r"\varkappa", r"\varnothing", r"\varphi",
-        r"\varpi", r"\varrho", r"\varsigma", r"\vartheta", r"\vartriangle",
+        r"\varpi", r"\varpropto", r"\varrho", r"\varsigma", r"\vartheta",
+        r"\vartriangle",
         r"\vartriangleleft", r"\vartriangleright", r"\vdash", r"\vdots",
         r"\vee", r"\veebar", r"\vert", r"\wedge", r"\wp", r"\wr",
         r"\xi", r"\zeta",
@@ -1216,6 +1222,31 @@ fn ams_order_and_equality_relations_compose_without_rewriting() {
             })
             .count(),
         34,
+    );
+}
+
+#[test]
+fn remaining_positive_ams_relations_compose_without_rewriting() {
+    let source = concat!(
+        r"A \Vdash B \Vvdash C \vDash D; E \backepsilon F; ",
+        r"G \between H \pitchfork I; J \varpropto K; ",
+        r"L \shortmid M \shortparallel N; ",
+        r"O \smallsmile P \smallfrown Q; R \lll S \ggg T",
+    );
+    let analyzed = analyze(source, FormulaMode::Display)
+        .expect("remaining positive AMS relation expression");
+    assert!(analyzed.is_supported());
+    assert_eq!(reconstructed(&analyzed), source);
+    assert_eq!(
+        analyzed
+            .tokens
+            .iter()
+            .filter(|token| {
+                token.kind
+                    == MathTokenKind::Command(SupportedCommand::NamedSymbol)
+            })
+            .count(),
+        13,
     );
 }
 
