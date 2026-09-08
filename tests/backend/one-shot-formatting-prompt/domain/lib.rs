@@ -32,8 +32,14 @@
 //
 use atrament_one_shot_formatting_prompt::{
     FormattingPromptConstraintInputs, FormattingPromptProtocolInputs,
-    FormattingPromptSourceInputs, OneShotFormattingPrompt,
+    FORMATTING_PROMPT_VERSION, FormattingPromptSourceInputs,
+    OneShotFormattingPrompt,
 };
+
+#[test]
+fn current_prompt_version_is_owned_by_the_prompt_domain() {
+    assert_eq!(FORMATTING_PROMPT_VERSION, "atrament.prompt/1");
+}
 
 #[test]
 fn one_shot_prompt_retains_every_frozen_self_contained_input() {

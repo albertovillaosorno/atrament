@@ -33,6 +33,7 @@ use atrament_diagnostic::{
     BlockingDisposition, Completeness, DiagnosticCode, Evidence, LocationKind,
     LocationRole, Operation, Remediation, Severity,
 };
+use atrament_one_shot_formatting_prompt::FORMATTING_PROMPT_VERSION;
 use atrament_session_handshake_port::{
     HandshakeResult, SessionHandshake, VersionDimension, Versions,
 };
@@ -42,6 +43,14 @@ use atrament_session_handshake_port::{
 mod handshake;
 
 use handshake::HandshakeService;
+
+#[test]
+fn handshake_prompt_version_comes_from_the_prompt_domain() {
+    assert_eq!(
+        HandshakeService::current_versions().prompt,
+        FORMATTING_PROMPT_VERSION,
+    );
+}
 
 #[test]
 fn current_version_set_is_compatible() {

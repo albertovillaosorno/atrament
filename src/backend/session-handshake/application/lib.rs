@@ -37,6 +37,7 @@
 //! First-release Atrament browser/backend compatibility handshake.
 
 use atrament_handwriting_profile_container::PROFILE_CONTAINER_VERSION;
+use atrament_one_shot_formatting_prompt::FORMATTING_PROMPT_VERSION;
 use atrament_diagnostic::{
     BlockingDisposition, Completeness, Diagnostic, DiagnosticCode,
     DiagnosticSet, Evidence, LocationKind, LocationRole, Operation,
@@ -56,7 +57,7 @@ pub const PRODUCT_VERSION: &str = match option_env!("CARGO_PKG_VERSION") {
     None => "0.1.0",
 };
 /// First-release model prompt contract identity.
-pub const PROMPT_VERSION: &str = "atrament.prompt/1";
+pub const PROMPT_VERSION: &str = FORMATTING_PROMPT_VERSION;
 /// Local browser/backend protocol identity.
 pub const PROTOCOL_VERSION: &str = "atrament.runtime/1";
 /// First-release deterministic renderer behavior identity.

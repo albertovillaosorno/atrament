@@ -134,7 +134,7 @@ depends_on = ["atrament_diagnostic", "atrament_session_draft_port"]
 depends_on = ["atrament_diagnostic"]
 
 [component.atrament_session_handshake]
-depends_on = ["atrament_diagnostic", "atrament_handwriting_profile_container", "atrament_session_handshake_port"]
+depends_on = ["atrament_diagnostic", "atrament_handwriting_profile_container", "atrament_one_shot_formatting_prompt", "atrament_session_handshake_port"]
 
 [component.atrament_session_handshake_port]
 depends_on = ["atrament_diagnostic"]

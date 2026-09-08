@@ -10,6 +10,7 @@
 // Boundary-Contract:
 // - Owns:
 //   - Transport-neutral self-contained initial formatting-prompt structure.
+//   - First-release formatting-prompt contract identity.
 // - Must-Not:
 //   - Serialize prompt text, compute prompt identity, parse model responses,
 //     define semantic command mode, access clipboard, or include session
@@ -39,6 +40,9 @@
 
 //! Self-contained one-shot formatting prompt authority before text
 //! serialization.
+
+/// First-release self-contained formatting-prompt contract identity.
+pub const FORMATTING_PROMPT_VERSION: &str = "atrament.prompt/1";
 
 /// User-provided task and complete source material included in one request.
 #[derive(Clone, Debug, Eq, PartialEq)]

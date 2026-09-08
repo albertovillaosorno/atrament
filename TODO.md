@@ -922,8 +922,10 @@ executed none of the text, and emitted no hostile `/evil` request. This proves
 browser transport inertness only; backend prompt construction and semantic
 validation remain authoritative for model-injection resistance.
 
-Backend prompt generation, identity, mode selection, and transport still keep
-this task open.
+The one-shot prompt domain now owns the shared `atrament.prompt/1` contract
+identity consumed by browser/backend handshake compatibility, eliminating a
+second hard-coded backend prompt-version source. Prompt serialization, identity
+computation, mode selection, and browser transport still keep this task open.
 
 ### TODO - Validate pasted model responses transactionally
 
