@@ -59,7 +59,7 @@ fn sample(position: &'static str, contact_state: StrokeContactState) -> Sample {
 
 #[test]
 fn ordered_samples_retain_all_continuous_stroke_inputs() {
-    let samples = vec![
+    let samples = [
         sample("p0", StrokeContactState::Down),
         sample("p1", StrokeContactState::Down),
         sample("p2", StrokeContactState::Up),
