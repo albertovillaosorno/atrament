@@ -623,7 +623,7 @@ fn named_symbol_vocabulary_is_supported_without_rewriting() {
         r"\succcurlyeq",
         r"\succeq", r"\succnapprox", r"\succneqq", r"\succnsim", r"\succsim",
         r"\supset", r"\supseteq", r"\supseteqq",
-        r"\supsetneq", r"\supsetneqq",
+        r"\supsetneq", r"\supsetneqq", r"\surd",
         r"\swarrow",
         r"\tau", r"\therefore", r"\theta", r"\thickapprox", r"\thicksim",
         r"\times", r"\to", r"\top",
@@ -766,6 +766,19 @@ fn extended_binary_and_relation_symbols_compose_without_rewriting() {
             .count(),
         20,
     );
+}
+
+#[test]
+fn surd_symbol_composes_without_rewriting() {
+    let source = r"\surd + x";
+    let analyzed =
+        analyze(source, FormulaMode::Inline).expect("surd symbol expression");
+    assert!(analyzed.is_supported());
+    assert_eq!(reconstructed(&analyzed), source);
+    assert!(analyzed.tokens.iter().any(|token| {
+        token.kind == MathTokenKind::Command(SupportedCommand::NamedSymbol)
+            && analyzed.token_source(*token) == Some(r"\surd")
+    }));
 }
 
 #[test]

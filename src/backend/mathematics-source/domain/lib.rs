@@ -161,6 +161,7 @@ const NAMED_SYMBOL_COMMANDS: &[&str] = &[
     "\\succ", "\\succapprox", "\\succcurlyeq", "\\succeq", "\\succnapprox",
     "\\succneqq", "\\succnsim", "\\succsim",
     "\\supset", "\\supseteq", "\\supseteqq", "\\supsetneq", "\\supsetneqq",
+    "\\surd",
     "\\swarrow",
     "\\tau", "\\therefore", "\\theta", "\\thickapprox", "\\thicksim", "\\times",
     "\\to", "\\top",

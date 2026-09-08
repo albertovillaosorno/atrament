@@ -71,8 +71,8 @@ standard and variant Greek control-sequence notation including italic capital
 Greek forms, complete AMS ordinary, letter-like, and geometric symbols, common
 named
 and delimiter symbols including bracket, backslash,
-paired vertical-bar spellings, parallel control-symbol, and foundational
-set/logic forms,
+paired vertical-bar spellings, parallel control-symbol, foundational
+set/logic forms, and the core plain-TeX surd glyph,
 real/imaginary-part and derivative-prime symbols, geometry/proof and
 ordering/set relations including AMS order, equality, approximation, triangle,
 and strong-containment forms,
