@@ -1066,6 +1066,14 @@ against samples excluded from extraction and publish known failure modes.
 Generate layout boxes, stroke centerlines, expanded ink contours, equations,
 rules, tables, and diagram paths with physical units and semantic provenance.
 
+Current executable evidence now centralizes those seven authoritative vector
+primitive families. Every primitive structurally carries caller-owned geometry
+and semantic provenance, while page geometry retains caller-owned physical
+bounds
+and composition order. Geometry generation, physical unit vocabulary, contour
+expansion, tessellation, rasterization, material behavior, PDF, and live-motion
+projection remain open.
+
 ### TODO - Implement layered ink materials
 
 Compose base deposition, edges, starvation, pooling, paper interaction, color,

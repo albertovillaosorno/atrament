@@ -29,6 +29,7 @@ members = [
     "src/backend/session-handshake-port",
     "src/backend/session-runtime",
     "src/backend/session-secret",
+    "src/backend/vector-geometry",
 ]
 resolver = "3"
 

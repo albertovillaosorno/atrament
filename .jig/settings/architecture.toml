@@ -64,6 +64,9 @@ depends_on = ["atrament_semantic_command_graph", "atrament_semantic_notebook"]
 [component.atrament_semantic_notebook_session]
 depends_on = ["atrament_mathematics_source", "atrament_semantic_command_graph", "atrament_semantic_notebook", "atrament_semantic_notebook_port"]
 
+[component.atrament_vector_geometry]
+depends_on = []
+
 [component.atrament_runtime_bootstrap]
 depends_on = ["atrament_browser_launch", "atrament_session_application", "atrament_session_handshake", "atrament_session_runtime", "atrament_session_secret"]
 

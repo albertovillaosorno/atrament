@@ -1,0 +1,9 @@
+identity:
+  id: function:vector-geometry
+  name: vector-geometry
+  path: src/backend/vector-geometry
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: domain
