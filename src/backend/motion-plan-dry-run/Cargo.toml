@@ -1,0 +1,16 @@
+[package]
+name = "atrament_motion_plan_dry_run"
+version = "0.1.0"
+edition = "2024"
+publish = false
+license = "MIT"
+
+[lib]
+path = "domain/lib.rs"
+
+[dependencies]
+atrament_device_coordinate_calibration = { path = "../device-coordinate-calibration" }
+atrament_device_neutral_motion_plan = { path = "../device-neutral-motion-plan" }
+
+[lints]
+workspace = true

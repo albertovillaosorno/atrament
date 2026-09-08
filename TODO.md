@@ -1436,6 +1436,14 @@ joins, ink behavior, semantics, or the handwriting profile require it.
 Visualize pen-up travel, pen-down paths, limits, time, pauses, and checkpoints
 without connecting to a physical machine.
 
+Current executable dry-run evidence now binds one exact device-neutral plan to
+one concrete coordinate-calibration record and one ordered limit-evidence entry
+per plan operation. Real plan operations classify as pen-up, pen-down, pause, or
+checkpoint; motion cannot mark limit checking inapplicable, and unknown or
+violated limits reject at the exact operation index. Coordinate transforms,
+limit geometry, visual rendering, timing simulation beyond plan evidence, and
+hardware contact remain open.
+
 ### TODO - Calibrate pen and blank-sheet coordinates
 
 Measure usable area, origin, axis orientation, scale, skew, pen-up height,

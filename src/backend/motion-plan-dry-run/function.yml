@@ -1,0 +1,9 @@
+identity:
+  id: function:motion-plan-dry-run
+  name: motion-plan-dry-run
+  path: src/backend/motion-plan-dry-run
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: domain

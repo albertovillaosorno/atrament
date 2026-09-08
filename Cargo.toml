@@ -20,6 +20,7 @@ members = [
     "src/backend/physical-compatibility-ledger",
     "src/backend/physical-recovery-state",
     "src/backend/physical-page-profile",
+    "src/backend/motion-plan-dry-run",
     "src/backend/one-shot-formatting-prompt",
     "src/backend/output-capability-matrix",
     "src/backend/page-texture-plan",

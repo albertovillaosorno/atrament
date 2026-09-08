@@ -77,6 +77,14 @@ name = "atrament_media_job_lifecycle"
 version = "0.1.0"
 
 [[package]]
+name = "atrament_motion_plan_dry_run"
+version = "0.1.0"
+dependencies = [
+ "atrament_device_coordinate_calibration",
+ "atrament_device_neutral_motion_plan",
+]
+
+[[package]]
 name = "atrament_one_shot_formatting_prompt"
 version = "0.1.0"
 
