@@ -1,0 +1,125 @@
+// Copyright:
+//   - Copyright © 2026 Alberto Villa Osorno.
+// SPDX-License-Identifier:
+//   - MIT
+// Confidential:
+//   - false
+// License-File:
+//   - LICENSE-MIT
+//
+// Boundary-Contract:
+// - Owns:
+//   - Regression evidence for honest empirical pen-contact model inputs.
+// - Must-Not:
+//   - Choose force units, proxy scales, transfer functions, material output,
+//     rendering, or physical-device behavior.
+// - Allows:
+//   - Inputs: Deterministic contact and fitted-evidence fixtures.
+//   - Outputs: Assertions over pressure provenance and calibrated range status.
+//   - Side effects: Process-local test allocation only.
+// - Split-When:
+//   - Transfer evaluation or material projection gains independent fixtures.
+// - Merge-When:
+//   - Contact evidence validation moves into another empirical-model harness.
+// - Summary:
+//   - Proves proxy pressure cannot masquerade as calibrated force evidence.
+// - Description:
+//   - Covers contact inputs, fitted evidence, and explicit extrapolation
+//     status.
+// - Usage:
+//   - Compile directly against the pen-contact-model domain.
+// - Defaults:
+//   - Out-of-range inputs are never silently admitted as calibrated.
+//
+use atrament_pen_contact_model::{
+    CalibratedInputRange, CalibratedInputRangeError, ContactInputAdmission,
+    ContactModelInput, FittedParameterEvidence, PressureInput,
+    classify_contact_input,
+};
+
+#[test]
+fn pressure_force_and_dimensionless_proxy_remain_distinct() {
+    let force: PressureInput<u16, &'static str, u16> =
+        PressureInput::CalibratedForce(3);
+    let proxy = PressureInput::DimensionlessProxy {
+        name: "tablet-pressure",
+        value: 3_u16,
+    };
+    assert_ne!(force, proxy);
+}
+
+#[test]
+fn contact_input_retains_all_measurable_model_inputs() {
+    let input = ContactModelInput {
+        contact_state: "down",
+        curvature: 9_i32,
+        direction: "north-east",
+        dwell_time: 4_u16,
+        position: (120_i32, 240_i32),
+        pressure: PressureInput::<u16, &str, u16>::DimensionlessProxy {
+            name: "capture-proxy",
+            value: 700,
+        },
+        speed: 18_u16,
+    };
+    assert_eq!(input.position, (120, 240));
+    assert_eq!(input.direction, "north-east");
+    assert_eq!(input.curvature, 9);
+    assert_eq!(input.speed, 18);
+    assert_eq!(input.dwell_time, 4);
+    assert_eq!(input.contact_state, "down");
+}
+
+#[test]
+fn fitted_parameter_evidence_retains_units_provenance_confidence_and_error() {
+    let evidence = FittedParameterEvidence {
+        confidence: "high",
+        error_measure: "rmse-0.7",
+        evidence: "controlled-line-17",
+        input_range: CalibratedInputRange {
+            maximum: 900_u16,
+            minimum: 100_u16,
+        },
+        unit: "dimensionless-proxy",
+    };
+    assert_eq!(evidence.unit, "dimensionless-proxy");
+    assert_eq!(evidence.evidence, "controlled-line-17");
+    assert_eq!(evidence.confidence, "high");
+    assert_eq!(evidence.error_measure, "rmse-0.7");
+}
+
+#[test]
+fn calibrated_range_classifies_boundaries_and_extrapolation_explicitly() {
+    let range = CalibratedInputRange {
+        maximum: 20_i32,
+        minimum: 10_i32,
+    };
+    assert_eq!(
+        classify_contact_input(&10, &range),
+        Ok(ContactInputAdmission::Calibrated),
+    );
+    assert_eq!(
+        classify_contact_input(&20, &range),
+        Ok(ContactInputAdmission::Calibrated),
+    );
+    assert_eq!(
+        classify_contact_input(&9, &range),
+        Ok(ContactInputAdmission::ExtrapolationRequired),
+    );
+    assert_eq!(
+        classify_contact_input(&21, &range),
+        Ok(ContactInputAdmission::ExtrapolationRequired),
+    );
+}
+
+#[test]
+fn inverted_calibrated_range_rejects_before_classification() {
+    let range = CalibratedInputRange {
+        maximum: 10_i32,
+        minimum: 20_i32,
+    };
+    assert_eq!(
+        classify_contact_input(&15, &range),
+        Err(CalibratedInputRangeError::MinimumAboveMaximum),
+    );
+}

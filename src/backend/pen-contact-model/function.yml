@@ -1,0 +1,9 @@
+identity:
+  id: function:pen-contact-model
+  name: pen-contact-model
+  path: src/backend/pen-contact-model
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: domain

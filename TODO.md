@@ -1071,6 +1071,16 @@ rules, tables, and diagram paths with physical units and semantic provenance.
 Compose base deposition, edges, starvation, pooling, paper interaction, color,
 and highlight layers without altering vector authority.
 
+Current executable evidence now freezes transport-neutral empirical
+contact-model
+inputs before material evaluation. Force-calibrated pressure and named
+dimensionless proxies are distinct, fitted parameter evidence retains
+caller-owned
+units, provenance, confidence, error measures, and calibrated input range, and
+out-of-range inputs require explicit extrapolation. Transfer functions, material
+outputs, preset vocabularies, force units, proxy scales, and rendering remain
+open.
+
 ### TODO - Implement bounded page texture and soft noise
 
 Apply seeded low-frequency texture at declared physical scale and prove it does
