@@ -1548,6 +1548,14 @@ and span invariants, while typed syntax failures must point to a UTF-8 boundary
 within the original source. This remains generated regression coverage rather
 than coverage-guided fuzzing.
 
+The localhost HTTP router now also runs 4,096 deterministic raw-byte mutation
+cases derived from a canonical public request. Replacement, insertion, deletion,
+and duplication mutations span arbitrary byte values and request positions.
+Repeated routing must return identical HTTP bytes, cannot reflect the session
+secret or seeded private draft markers, and cannot change task, source, or
+candidate draft state. Socket-level timing/resource fuzzing and coverage-guided
+request generation remain open.
+
 ### TODO - Complete visual regression coverage
 
 Compare semantic layout, vector topology, layer composition, final pixels,

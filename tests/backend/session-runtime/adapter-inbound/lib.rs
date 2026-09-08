@@ -656,6 +656,109 @@ fn origin_form_ascii_graphics_match_rfc3986_character_classes() {
     }
 }
 
+fn seeded_private_draft() -> SessionDraftService {
+    let mut draft = SessionDraftService::default();
+    assert_eq!(
+        draft.replace(DraftField::Task, String::from("task-private-marker")),
+        DraftMutation::Applied,
+    );
+    assert_eq!(
+        draft.replace(
+            DraftField::Source,
+            String::from("source-private-marker"),
+        ),
+        DraftMutation::Applied,
+    );
+    assert_eq!(
+        draft.replace(
+            DraftField::Candidate,
+            String::from("candidate-private-marker"),
+        ),
+        DraftMutation::Applied,
+    );
+    draft
+}
+
+fn assert_private_draft_unchanged(draft: &SessionDraftService) {
+    assert_eq!(draft.value(DraftField::Task), "task-private-marker");
+    assert_eq!(draft.value(DraftField::Source), "source-private-marker");
+    assert_eq!(
+        draft.value(DraftField::Candidate),
+        "candidate-private-marker",
+    );
+}
+
+#[test]
+fn generated_raw_request_mutations_are_deterministic_and_nonmutating() {
+    const BASE: &[u8] = b"GET /health HTTP/1.1\r\nHost: 127.0.0.1:43123\r\n\
+X-Probe: safe\r\n\r\n";
+    let mut state = 0x243f_6a88_u32;
+
+    for case_index in 0..4_096_u32 {
+        let mut request = BASE.to_vec();
+        state = state
+            .wrapping_mul(1_664_525)
+            .wrapping_add(1_013_904_223 ^ case_index);
+        let mutation_count = usize::try_from((state >> 30) + 1)
+            .expect("bounded mutation count");
+        for mutation_index in 0..mutation_count {
+            state = state
+                .wrapping_mul(1_664_525)
+                .wrapping_add(
+                    1_013_904_223
+                        ^ u32::try_from(mutation_index)
+                            .expect("bounded mutation index"),
+                );
+            let operation = state & 3;
+            let byte = u8::try_from((state >> 8) & 0xff)
+                .expect("masked byte fits u8");
+            let position = usize::try_from(state >> 16)
+                .expect("u32 fits usize on supported targets")
+                % (request.len() + 1);
+            match operation {
+                0 if position < request.len() => request[position] = byte,
+                1 => request.insert(position, byte),
+                2 if position < request.len() => {
+                    let _removed = request.remove(position);
+                }
+                _ if position < request.len() => {
+                    let duplicate = request[position];
+                    request.insert(position, duplicate);
+                }
+                _ => request.push(byte),
+            }
+        }
+
+        let mut first_draft = seeded_private_draft();
+        let mut second_draft = seeded_private_draft();
+        let first = route_with_draft(&request, EXPECTED_HOST, &mut first_draft);
+        let second = route_with_draft(
+            &request,
+            EXPECTED_HOST,
+            &mut second_draft,
+        );
+        assert_eq!(
+            first,
+            second,
+            "nondeterministic raw request case {case_index}",
+        );
+        assert!(first.starts_with(b"HTTP/1.1 "), "case {case_index}");
+        assert_private_draft_unchanged(&first_draft);
+        assert_private_draft_unchanged(&second_draft);
+        for private in [
+            EXPECTED_SECRET.as_bytes(),
+            b"task-private-marker",
+            b"source-private-marker",
+            b"candidate-private-marker",
+        ] {
+            assert!(
+                !first.windows(private.len()).any(|window| window == private),
+                "private reflection in raw request case {case_index}",
+            );
+        }
+    }
+}
+
 #[test]
 fn unrelated_paths_do_not_expose_runtime_state() {
     let response = route_runtime(
