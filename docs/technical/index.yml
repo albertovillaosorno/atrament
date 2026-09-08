@@ -97,3 +97,6 @@ contracts:
   - id: atrament.technical.live-physical-safety-validation
     status: verified
     path: live-physical-safety-validation.md
+  - id: atrament.technical.one-shot-formatting-prompt-validation
+    status: verified
+    path: one-shot-formatting-prompt-validation.md

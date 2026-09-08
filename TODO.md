@@ -1852,7 +1852,14 @@ runs, offline traces, interruption recovery, and exact compatibility records.
 It explicitly states that none of those types arm hardware or establish generic
 device support. Vendor adapters, operator recovery, physical certification,
 and compatibility admission/recertification policy remain open.
-The broader LLM, adapter, and troubleshooting documentation remains open.
+
+A verified one-shot formatting-prompt guide now documents complete initial
+request inputs, prompt identity/version, explicit clipboard egress, untrusted
+raw
+response handling, and the separation from later command-mode refinement. It
+keeps prompt serialization/identity computation, response parsing, candidate
+validation, provider guidance, and end-to-end execution explicitly open.
+The broader adapter and troubleshooting documentation remains open.
 
 ### TODO - Close every known reproducible defect
 
