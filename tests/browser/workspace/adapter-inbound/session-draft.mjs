@@ -39,20 +39,33 @@ const GENERATED_ROOT =
 const {
     draftMutationHeaders,
     draftMutationTarget,
+    draftReadHeaders,
+    draftReadTarget,
     isResourceLimit,
 } = await import(`${GENERATED_ROOT}session-draft.js`);
 
 test("draft targets are same-origin and contain no credential", () => {
     const secret = "a".repeat(64);
     for (const field of ["candidate", "source", "task"]) {
-        const target = draftMutationTarget(field);
-        assert.equal(target, `./api/session/${field}`);
-        assert.equal(target.includes(secret), false);
-        assert.equal(target.includes("session="), false);
+        for (const target of [
+            draftReadTarget(field),
+            draftMutationTarget(field),
+        ]) {
+            assert.equal(target, `./api/session/${field}`);
+            assert.equal(target.includes(secret), false);
+            assert.equal(target.includes("session="), false);
+        }
     }
 });
 
-test("draft headers carry only bearer credential and text media type", () => {
+test("draft read headers carry only the bearer credential", () => {
+    const secret = "a".repeat(64);
+    assert.deepEqual(draftReadHeaders(secret), {
+        Authorization: `Bearer ${secret}`,
+    });
+});
+
+test("draft mutation headers add only the text media type", () => {
     const secret = "a".repeat(64);
     assert.deepEqual(draftMutationHeaders(secret), {
         Authorization: `Bearer ${secret}`,

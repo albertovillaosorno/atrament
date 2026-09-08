@@ -446,8 +446,7 @@ async function completeSessionHandshake(secret: string): Promise<void> {
     }
     const outcome = sessionHandshake.parseHandshakePayload(payload);
     if (response.status === 200 && outcome.kind === "compatible") {
-        enableCompatibleEditing();
-        setTextIfChanged(sessionStatus, "Session ready");
+        await hydrateSessionDraft(secret);
         return;
     }
     if (response.status === 409 && outcome.kind === "incompatible") {
@@ -485,6 +484,119 @@ function disableDraftEditing(): void {
     taskInput.disabled = true;
     sourceInput.disabled = true;
     candidateInput.disabled = true;
+}
+
+type DraftInput = readonly [
+    sessionDraft.DraftField,
+    HTMLTextAreaElement,
+    HTMLElement,
+];
+
+const draftInputs: readonly DraftInput[] = [
+    ["task", taskInput, taskCount],
+    ["source", sourceInput, sourceCount],
+    ["candidate", candidateInput, candidateCount],
+];
+
+type DraftReadOutcome =
+    | { kind: "available"; value: string }
+    | { kind: "authorization-failed" }
+    | { kind: "rejected" }
+    | { kind: "stale" }
+    | { kind: "unavailable" };
+
+async function readDraftField(
+    field: sessionDraft.DraftField,
+    secret: string,
+    generation: number,
+): Promise<DraftReadOutcome> {
+    let response: Response;
+    try {
+        response = await fetch(sessionDraft.draftReadTarget(field), {
+            method: "GET",
+            headers: sessionDraft.draftReadHeaders(secret),
+            cache: "no-store",
+            credentials: "omit",
+            mode: "same-origin",
+            redirect: "error",
+            referrerPolicy: "no-referrer",
+            signal: sessionRequests.signal,
+        });
+    } catch {
+        return sessionSecret === secret
+            && draftSyncGeneration === generation
+            ? { kind: "unavailable" }
+            : { kind: "stale" };
+    }
+    if (
+        sessionSecret !== secret
+        || draftSyncGeneration !== generation
+    ) {
+        return { kind: "stale" };
+    }
+    if (response.status === 401) {
+        return { kind: "authorization-failed" };
+    }
+    if (response.status !== 200) {
+        return { kind: "rejected" };
+    }
+    try {
+        const value = await response.text();
+        return sessionSecret === secret
+            && draftSyncGeneration === generation
+            ? { kind: "available", value }
+            : { kind: "stale" };
+    } catch {
+        return sessionSecret === secret
+            && draftSyncGeneration === generation
+            ? { kind: "unavailable" }
+            : { kind: "stale" };
+    }
+}
+
+async function hydrateSessionDraft(secret: string): Promise<void> {
+    disableDraftEditing();
+    setTextIfChanged(sessionStatus, "Loading session draft…");
+    const generation = draftSyncGeneration;
+    const snapshot: Array<readonly [HTMLTextAreaElement, HTMLElement, string]> =
+        [];
+    for (const [field, input, count] of draftInputs) {
+        const outcome = await readDraftField(field, secret, generation);
+        if (outcome.kind === "stale") {
+            return;
+        }
+        if (outcome.kind === "authorization-failed") {
+            sessionSecret = null;
+            sessionRequests.abort();
+            invalidateDraftSync();
+            clearSessionText();
+            setTextIfChanged(sessionStatus, "Authorization failed");
+            return;
+        }
+        if (outcome.kind !== "available") {
+            setTextIfChanged(
+                sessionStatus,
+                outcome.kind === "unavailable"
+                    ? "Draft load unavailable · editing off"
+                    : "Draft load rejected · editing off",
+            );
+            return;
+        }
+        snapshot.push([input, count, outcome.value]);
+    }
+    if (
+        sessionSecret !== secret
+        || draftSyncGeneration !== generation
+    ) {
+        return;
+    }
+    for (const [input, count, value] of snapshot) {
+        input.defaultValue = value;
+        input.value = value;
+        updateCharacterCount(input, count);
+    }
+    enableCompatibleEditing();
+    setTextIfChanged(sessionStatus, "Session ready");
 }
 
 async function syncDraftField(

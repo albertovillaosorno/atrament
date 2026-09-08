@@ -9,7 +9,8 @@
 //
 // Boundary-Contract:
 // - Owns:
-//   - Browser request metadata for pre-acceptance session draft replacement.
+//   - Browser request metadata for pre-acceptance session draft reads and
+//     replacements.
 // - Must-Not:
 //   - Persist draft text, perform network requests, or define notebook
 //     authority.
@@ -28,7 +29,8 @@
 //   - Keeps route names and credential headers independently testable under
 //     Node.
 // - Usage:
-//   - Build a POST request after a compatible authenticated session handshake.
+//   - Build authenticated GET or POST requests after a compatible session
+//     handshake.
 // - Defaults:
 //   - Uses text/plain UTF-8 bodies and no ambient browser credentials.
 //
@@ -36,17 +38,29 @@ import { parseDiagnosticSet } from "./session-diagnostic.js";
 
 export type DraftField = "candidate" | "source" | "task";
 
-export function draftMutationHeaders(
+export function draftReadHeaders(
     sessionSecret: string,
 ): Record<string, string> {
     return {
         Authorization: `Bearer ${sessionSecret}`,
+    };
+}
+
+export function draftReadTarget(field: DraftField): string {
+    return `./api/session/${field}`;
+}
+
+export function draftMutationHeaders(
+    sessionSecret: string,
+): Record<string, string> {
+    return {
+        ...draftReadHeaders(sessionSecret),
         "Content-Type": "text/plain; charset=utf-8",
     };
 }
 
 export function draftMutationTarget(field: DraftField): string {
-    return `./api/session/${field}`;
+    return draftReadTarget(field);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

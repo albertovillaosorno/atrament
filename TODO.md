@@ -796,9 +796,15 @@ object navigation, diagnostics, and a safe raw-response inspection boundary.
 
 Current frontend evidence includes task, source, permanent prompt, backend-owned
 options, and a visually isolated raw model-response boundary that explicitly
-remains untrusted until backend validation. Structured completion, object
-navigation, candidate diagnostics, acceptance, and backend transport remain
-unfinished.
+remains untrusted until backend validation. After a compatible authenticated
+handshake, task, source, and raw-response draft fields are read from
+backend-owned session state, staged without partial DOM updates, then committed
+to the UI together before editing is enabled. Complete edits replace those same
+backend draft fields, while page exit aborts both reads and writes and clears
+browser text.
+
+Structured completion, object navigation, candidate diagnostics, semantic
+acceptance, and semantic-command transport remain unfinished.
 
 ### TODO - Build the human page editor
 

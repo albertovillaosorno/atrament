@@ -92,8 +92,8 @@ test("page session network requests are cancellable on exit", async () => {
     const signalUses = source.match(/signal: sessionRequests\.signal,/gu) ?? [];
     assert.equal(
         signalUses.length,
-        2,
-        "handshake and draft requests must share the page-session signal",
+        3,
+        "handshake, draft reads, and writes must share the page-session signal",
     );
     const draftStart = source.indexOf("async function syncDraftField(");
     const draftEnd = source.indexOf("function bindDraftSync(", draftStart);
@@ -120,6 +120,56 @@ test("page session network requests are cancellable on exit", async () => {
         handler.indexOf("sessionRequests.abort();")
             < handler.indexOf("clearSessionText();"),
         "page exit must abort requests before clearing session text",
+    );
+});
+
+
+test("draft hydration is atomic and stale-page guarded", async () => {
+    const source = await readFile(MAIN_MODULE, "utf8");
+    const start = source.indexOf(
+        "async function hydrateSessionDraft(secret) {",
+    );
+    const end = source.indexOf("async function syncDraftField(", start);
+    assert.notEqual(start, -1, "draft hydration function must exist");
+    assert.notEqual(end, -1, "draft hydration function must be bounded");
+    const hydration = source.slice(start, end);
+    const snapshotPush = hydration.indexOf("snapshot.push(");
+    const snapshotApply = hydration.indexOf("for (const [input, count, value]");
+    const enable = hydration.indexOf("enableCompatibleEditing();");
+    assert.notEqual(snapshotPush, -1, "hydration must stage draft text");
+    assert.ok(
+        snapshotPush < snapshotApply && snapshotApply < enable,
+        "all draft values must stage before DOM commit and editing enablement",
+    );
+    assert.equal(
+        hydration.includes("sessionSecret !== secret"),
+        true,
+        "hydration must reject stale credentials",
+    );
+    assert.equal(
+        hydration.includes("draftSyncGeneration !== generation"),
+        true,
+        "hydration must reject invalidated page generations",
+    );
+    const handshakeStart = source.indexOf(
+        "async function completeSessionHandshake(secret) {",
+    );
+    const handshakeEnd = source.indexOf(
+        "const syncingDraftFields",
+        handshakeStart,
+    );
+    assert.notEqual(handshakeStart, -1, "handshake function must exist");
+    assert.notEqual(handshakeEnd, -1, "handshake function must be bounded");
+    const handshake = source.slice(handshakeStart, handshakeEnd);
+    assert.equal(
+        handshake.includes("await hydrateSessionDraft(secret);"),
+        true,
+        "compatible handshake must await draft hydration before editing",
+    );
+    assert.equal(
+        handshake.includes("enableCompatibleEditing();"),
+        false,
+        "handshake must not enable editing before hydration commits",
     );
 });
 
