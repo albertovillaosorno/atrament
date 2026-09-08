@@ -45,6 +45,10 @@ name = "atrament_handwriting_profile_container"
 version = "0.1.0"
 
 [[package]]
+name = "atrament_handwriting_variation"
+version = "0.1.0"
+
+[[package]]
 name = "atrament_mathematics_source"
 version = "0.1.0"
 

@@ -1020,6 +1020,15 @@ word position, line geometry, semantic role, and calibrated writing style.
 Support observed or authorized minimum, maximum, distribution, and correlation
 for size, slant, roundness, flattening, spacing, drift, speed, and pressure.
 
+Current executable evidence now preserves independently observed or authorized
+minimum and maximum bounds, validates central tendency inside the envelope, and
+retains caller-owned typed units, distribution metadata, correlation groups,
+context rules, and the profile/document/page/line/word/character/stroke scale. A
+document seed plus stable semantic identity forms the typed replay key. This
+does
+not choose parameter vocabularies, distribution families, correlations, context
+semantics, random generators, fitting policy, or a sampling algorithm.
+
 ### TODO - Implement handwriting roles and sizes
 
 Allow one profile to expose body, title, subtitle, label, caption, formula,

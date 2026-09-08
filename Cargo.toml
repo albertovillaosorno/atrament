@@ -8,6 +8,7 @@ members = [
     "src/backend/handwriting-calibration-evidence",
     "src/backend/handwriting-calibration-session",
     "src/backend/handwriting-profile-container",
+    "src/backend/handwriting-variation",
     "src/backend/mathematics-source",
     "src/backend/physical-page-profile",
     "src/backend/paper-mark-geometry",

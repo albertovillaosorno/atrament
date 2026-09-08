@@ -1,0 +1,9 @@
+identity:
+  id: function:handwriting-variation
+  name: handwriting-variation
+  path: src/backend/handwriting-variation
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: domain
