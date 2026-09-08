@@ -519,6 +519,7 @@ fn named_symbol_vocabulary_is_supported_without_rewriting() {
         r"\Vert", r"\Vvdash", r"\Xi", r"\aleph", r"\alpha", r"\amalg",
         r"\angle",
         r"\approx", r"\approxeq", r"\ast", r"\asymp", r"\backepsilon",
+        r"\backprime",
         r"\backsim",
         r"\backsimeq",
         r"\backslash", r"\barwedge", r"\because", r"\beta", r"\beth",
@@ -535,7 +536,7 @@ fn named_symbol_vocabulary_is_supported_without_rewriting() {
         r"\circlearrowright", r"\circledS", r"\circledast",
         r"\circledcirc",
         r"\circleddash",
-        r"\clubsuit", r"\colon", r"\cong",
+        r"\clubsuit", r"\colon", r"\complement", r"\cong",
         r"\cup", r"\curlyeqprec", r"\curlyeqsucc", r"\curlyvee", r"\curlywedge",
         r"\curvearrowleft", r"\curvearrowright",
         r"\dagger", r"\daleth",
@@ -1191,8 +1192,9 @@ fn common_binary_operator_symbols_compose_without_rewriting() {
 #[test]
 fn ams_ordinary_and_letter_like_symbols_compose_without_rewriting() {
     let source = concat!(
-        r"\Bbbk + \Finv + \Game + \beth + \daleth + \digamma + ",
-        r"\eth + \gimel + \hslash + \mho + \varkappa + \varnothing",
+        r"\Bbbk + \Finv + \Game + \backprime + \beth + \complement + ",
+        r"\daleth + \digamma + \eth + \gimel + \hslash + \mho + ",
+        r"\varkappa + \varnothing",
     );
     let analyzed = analyze(source, FormulaMode::Display)
         .expect("AMS ordinary and letter-like symbol expression");
@@ -1207,7 +1209,7 @@ fn ams_ordinary_and_letter_like_symbols_compose_without_rewriting() {
                     == MathTokenKind::Command(SupportedCommand::NamedSymbol)
             })
             .count(),
-        12,
+        14,
     );
 }
 

@@ -481,11 +481,11 @@ that exact family, kind, owner, and optional base value.
 
 A deterministic capability snapshot now reports those seven discoverable family
 behaviors and one top-level behavior version. Aggregate command behavior and
-typed-result behavior are version 86 after completing exact-source AMS relation
-declarations except the deliberately unsupported strict square-subset spellings.
+typed-result behavior are version 87 after completing exact-source AMS ordinary
+symbol declarations with `\backprime` and `\complement`.
 Asset reference, Ordering and grouping, and Text content retain family behavior
 version 1; Document constraint is version 3;
-Structured content is version 74; Provenance and Style role are version 2.
+Structured content is version 75; Provenance and Style role are version 2.
 
 Because no serialized command protocol is implemented, the snapshot advertises
 no protocol or normalization version, no command-context, Validate, Apply, or
