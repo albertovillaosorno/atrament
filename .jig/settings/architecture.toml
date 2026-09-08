@@ -70,6 +70,9 @@ depends_on = ["atrament_mathematics_source", "atrament_semantic_command_graph", 
 [component.atrament_vector_geometry]
 depends_on = []
 
+[component.atrament_render_quality_profile]
+depends_on = []
+
 [component.atrament_runtime_bootstrap]
 depends_on = ["atrament_browser_launch", "atrament_session_application", "atrament_session_handshake", "atrament_session_runtime", "atrament_session_secret"]
 

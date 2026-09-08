@@ -1107,6 +1107,12 @@ not move geometry, obscure small writing, or create repeated tiles.
 Use the same vectors, seeds, blend order, and page geometry while varying only
 declared texture resolution and sampling cost.
 
+Current executable evidence now makes Preview and Final explicit quality roles.
+A pair validates only when vector geometry, render seed, material blend order,
+and physical bounds remain exactly shared; caller-owned texture resolution and
+sampling cost may differ. Rendering, concrete quality values, performance
+budgets, scheduling, and sampling algorithms remain open.
+
 Current design evidence freezes Render as a read-only application capability
 bound to one accepted revision and deterministic vector/material inputs. Preview
 and final profiles share geometry, seeds, physical dimensions, and blend order;

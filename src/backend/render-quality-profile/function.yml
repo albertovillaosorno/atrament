@@ -1,0 +1,9 @@
+identity:
+  id: function:render-quality-profile
+  name: render-quality-profile
+  path: src/backend/render-quality-profile
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: domain

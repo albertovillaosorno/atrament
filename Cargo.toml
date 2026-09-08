@@ -16,6 +16,7 @@ members = [
     "src/backend/physical-page-profile",
     "src/backend/paper-mark-geometry",
     "src/backend/pen-contact-model",
+    "src/backend/render-quality-profile",
     "src/backend/runtime-bootstrap",
     "src/backend/semantic-command-graph",
     "src/backend/semantic-flow-pagination",
