@@ -1475,6 +1475,13 @@ recertification policy, and physical support claims remain open.
 Test disconnect, power loss, user pause, emergency stop, process crash, partial
 stroke, unknown carriage position, restart, and refusal to resume unsafely.
 
+Current executable evidence now freezes fail-closed recovery admission after
+disconnect, power loss, pause, emergency stop, or process crash. Resume remains
+admissible only when required feedback is available, carriage position is known,
+bounds remain valid, and no partial stroke is unresolved; every other snapshot
+requires operator recovery. Adapter commands, homing, position acquisition,
+safe-stop execution, restart persistence, and operator procedures remain open.
+
 ### TODO - Prove complete single-pen notebook output
 
 Write a multi-page English and Spanish fixture with titles, prose, equations,

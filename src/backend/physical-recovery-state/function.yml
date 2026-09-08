@@ -1,0 +1,9 @@
+identity:
+  id: function:physical-recovery-state
+  name: physical-recovery-state
+  path: src/backend/physical-recovery-state
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: domain
