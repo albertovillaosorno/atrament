@@ -344,6 +344,68 @@ fn entry_kind_is_path_owned_and_rejects_noncanonical_names() {
 }
 
 #[test]
+fn generated_profile_path_corpus_pins_safe_path_admission() {
+    let segments = [
+        "",
+        ".",
+        "..",
+        "%2e%2e",
+        "a",
+        "café",
+        "sample.json",
+        "space name",
+        r"x\y",
+    ];
+    let mut exercised = 0_usize;
+    for (root, expected_kind) in [
+        ("assets", ProfileEntryKind::Asset),
+        ("sections", ProfileEntryKind::Section),
+    ] {
+        for left in segments {
+            for right in segments {
+                let path = format!("{root}/{left}/{right}");
+                let expected = if left.contains('\\') || right.contains('\\') {
+                    Err(ProfileEntryPathError::BackslashSeparator)
+                } else {
+                    let first_segment_error = [left, right]
+                        .into_iter()
+                        .find_map(|segment| {
+                            if segment.is_empty() {
+                                Some(ProfileEntryPathError::EmptySegment)
+                            } else if matches!(segment, "." | "..") {
+                                Some(ProfileEntryPathError::TraversalSegment)
+                            } else {
+                                None
+                            }
+                        });
+                    first_segment_error.map_or(Ok(expected_kind), Err)
+                };
+                assert_eq!(profile_entry_kind(&path), expected, "{path}");
+                exercised += 1;
+            }
+        }
+    }
+    assert_eq!(exercised, 162);
+
+    for path in [
+        "assets",
+        "other/sample.json",
+        "sections",
+        "sample.json",
+    ] {
+        assert_eq!(
+            profile_entry_kind(path),
+            Err(ProfileEntryPathError::UnsupportedRoot),
+            "{path}",
+        );
+    }
+    assert_eq!(
+        profile_entry_kind(r"other\sample.json"),
+        Err(ProfileEntryPathError::BackslashSeparator),
+    );
+}
+
+#[test]
 fn profile_rewrite_requires_canonical_bytes_only_after_change() {
     assert_eq!(
         profile_rewrite_disposition(ProfileContentChange::Changed),

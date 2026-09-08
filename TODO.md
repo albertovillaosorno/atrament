@@ -1532,6 +1532,13 @@ all real supported profile migrations remain open.
 Cover notebook bundles, `.atrament` profiles, clipboard HTML, images, TeX,
 model responses, media metadata, CLI, MCP, and hardware status messages.
 
+The `.atrament` profile path boundary now also has a deterministic generated
+162-case Cartesian corpus across both admitted roots and safe, empty, traversal,
+backslash, Unicode, space-containing, and percent-like path segments. It pins
+validation precedence and exact admission without treating percent-like text as
+URI decoding. This is targeted boundary hardening only; full coverage-guided
+fuzzing of profiles and the other listed untrusted inputs remains open.
+
 ### TODO - Complete visual regression coverage
 
 Compare semantic layout, vector topology, layer composition, final pixels,
