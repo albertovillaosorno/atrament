@@ -79,7 +79,8 @@ forms plus square/lattice forms, large
 n-ary operators including coproduct and logical joins/meets, card-suit and
 musical symbols, mathematical punctuation atoms, LaTeX-base paragraph, section,
 dollar, and variant large-triangle symbols, arrow and ellipsis symbols including
-harpoons and mapped arrows, relation and logic symbols, modular arithmetic
+AMS paired, loop, curve, tail, squiggle, and multimap arrows, harpoons, and
+mapped arrows, relation and logic symbols, modular arithmetic
 including grouped `\pod{...}` operands,
 single, multiple including fourfold, contour, and explicit integral-operator
 atoms, direct/inverse and decorated limit operators, set notation, aligned

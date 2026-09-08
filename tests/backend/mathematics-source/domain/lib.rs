@@ -509,9 +509,11 @@ fn named_symbol_vocabulary_is_supported_without_rewriting() {
         r"\Finv",
         r"\Game", r"\Gamma",
         r"\Im", r"\Lambda", r"\Leftarrow",
-        r"\Leftrightarrow", r"\Longleftarrow", r"\Longleftrightarrow",
-        r"\Longrightarrow", r"\Omega", r"\Phi", r"\Pi", r"\Psi", r"\Re",
-        r"\Rightarrow",
+        r"\Leftrightarrow", r"\Lleftarrow", r"\Longleftarrow",
+        r"\Longleftrightarrow",
+        r"\Longrightarrow", r"\Lsh", r"\Omega", r"\Phi", r"\Pi", r"\Psi",
+        r"\Re",
+        r"\Rightarrow", r"\Rrightarrow", r"\Rsh",
         r"\Sigma", r"\Theta", r"\Uparrow", r"\Updownarrow", r"\Upsilon",
         r"\Vert", r"\Xi", r"\aleph", r"\alpha", r"\amalg", r"\angle",
         r"\approx", r"\approxeq", r"\ast", r"\asymp", r"\backsim",
@@ -524,18 +526,21 @@ fn named_symbol_vocabulary_is_supported_without_rewriting() {
         r"\boxplus", r"\boxtimes", r"\bullet", r"\bumpeq", r"\cap",
         r"\cdot",
         r"\cdotp", r"\cdots", r"\centerdot",
-        r"\chi", r"\circ", r"\circeq", r"\circledS", r"\circledast",
+        r"\chi", r"\circ", r"\circeq", r"\circlearrowleft",
+        r"\circlearrowright", r"\circledS", r"\circledast",
         r"\circledcirc",
         r"\circleddash",
         r"\clubsuit", r"\colon", r"\cong",
         r"\cup", r"\curlyeqprec", r"\curlyeqsucc", r"\curlyvee", r"\curlywedge",
+        r"\curvearrowleft", r"\curvearrowright",
         r"\dagger", r"\daleth",
         r"\dashv",
         r"\ddagger", r"\ddots", r"\delta", r"\diagdown", r"\diagup",
         r"\diamond", r"\diamondsuit", r"\digamma", r"\div", r"\divideontimes",
         r"\doteq", r"\doteqdot", r"\dotplus",
         r"\dots", r"\doublebarwedge",
-        r"\downarrow", r"\ell",
+        r"\downarrow", r"\downdownarrows", r"\downharpoonleft",
+        r"\downharpoonright", r"\ell",
         r"\emptyset",
         r"\epsilon", r"\eqcirc", r"\eqsim", r"\eqslantgtr", r"\eqslantless",
         r"\equiv", r"\eta", r"\eth", r"\exists", r"\fallingdotseq", r"\flat",
@@ -555,18 +560,21 @@ fn named_symbol_vocabulary_is_supported_without_rewriting() {
         r"\lambda", r"\land", r"\langle",
         r"\lbrace", r"\lbrack", r"\lceil", r"\ldotp", r"\ldots", r"\le",
         r"\leadsto",
-        r"\leftarrow", r"\leftharpoondown", r"\leftharpoonup",
-        r"\leftrightarrow", r"\leftthreetimes", r"\leq", r"\leqq", r"\leqslant",
+        r"\leftarrow", r"\leftarrowtail", r"\leftharpoondown",
+        r"\leftharpoonup", r"\leftleftarrows",
+        r"\leftrightarrow", r"\leftrightarrows", r"\leftrightharpoons",
+        r"\leftrightsquigarrow", r"\leftthreetimes", r"\leq", r"\leqq",
+        r"\leqslant",
         r"\lessapprox",
         r"\lessdot", r"\lesseqgtr", r"\lesseqqgtr", r"\lessgtr", r"\lesssim",
         r"\lfloor",
         r"\ll", r"\lnot", r"\longleftarrow", r"\longleftrightarrow",
         r"\longmapsto",
-        r"\longrightarrow",
+        r"\longrightarrow", r"\looparrowleft", r"\looparrowright",
         r"\lor", r"\lozenge", r"\ltimes", r"\lvert", r"\mapsto", r"\mathdollar",
         r"\mathparagraph",
         r"\mathsection", r"\measuredangle", r"\mho",
-        r"\mid", r"\models", r"\mp", r"\mu", r"\nabla",
+        r"\mid", r"\models", r"\mp", r"\mu", r"\multimap", r"\nabla",
         r"\natural", r"\ne", r"\nearrow", r"\neg", r"\neq", r"\nexists",
         r"\ni", r"\notin",
         r"\nu", r"\nwarrow", r"\odot", r"\omega", r"\ominus", r"\oplus",
@@ -576,8 +584,10 @@ fn named_symbol_vocabulary_is_supported_without_rewriting() {
         r"\prime", r"\propto", r"\psi", r"\rVert", r"\rangle", r"\rbrace",
         r"\rbrack",
         r"\rceil", r"\rfloor",
-        r"\rho", r"\rightarrow", r"\rightharpoondown", r"\rightharpoonup",
-        r"\rightleftharpoons", r"\rightthreetimes", r"\risingdotseq",
+        r"\rho", r"\rightarrow", r"\rightarrowtail", r"\rightharpoondown",
+        r"\rightharpoonup", r"\rightleftarrows",
+        r"\rightleftharpoons", r"\rightrightarrows", r"\rightsquigarrow",
+        r"\rightthreetimes", r"\risingdotseq",
         r"\rtimes", r"\rvert",
         r"\searrow", r"\setminus",
         r"\sharp", r"\sigma",
@@ -593,8 +603,9 @@ fn named_symbol_vocabulary_is_supported_without_rewriting() {
         r"\tau", r"\therefore", r"\theta", r"\thickapprox", r"\thicksim",
         r"\times", r"\to", r"\top",
         r"\triangle", r"\triangledown", r"\triangleleft", r"\triangleq",
-        r"\triangleright",
-        r"\uparrow", r"\updownarrow", r"\uplus", r"\upsilon",
+        r"\triangleright", r"\twoheadleftarrow", r"\twoheadrightarrow",
+        r"\uparrow", r"\updownarrow", r"\upharpoonleft", r"\upharpoonright",
+        r"\uplus", r"\upsilon", r"\upuparrows",
         r"\varDelta", r"\varGamma", r"\varLambda", r"\varOmega", r"\varPhi",
         r"\varPi", r"\varPsi", r"\varSigma", r"\varTheta", r"\varUpsilon",
         r"\varXi", r"\varbigtriangledown", r"\varbigtriangleup", r"\varepsilon",
@@ -839,6 +850,40 @@ fn harpoon_and_mapped_arrows_compose_without_rewriting() {
             })
             .count(),
         7,
+    );
+}
+
+#[test]
+fn ams_positive_arrow_relations_compose_without_rewriting() {
+    let source = concat!(
+        r"A \circlearrowleft B \circlearrowright C; ",
+        r"D \curvearrowleft E \curvearrowright F; ",
+        r"G \twoheadleftarrow H \twoheadrightarrow I; ",
+        r"J \leftleftarrows K \rightrightarrows L; ",
+        r"M \upuparrows N \downdownarrows O; ",
+        r"P \upharpoonleft Q \upharpoonright R; ",
+        r"S \downharpoonleft T \downharpoonright U; ",
+        r"V \leftarrowtail W \rightarrowtail X; ",
+        r"Y \leftrightarrows Z \rightleftarrows A; ",
+        r"B \leftrightharpoons C; D \Lsh E \Rsh F; ",
+        r"G \rightsquigarrow H \leftrightsquigarrow I; ",
+        r"J \looparrowleft K \looparrowright L; ",
+        r"M \multimap N; O \Lleftarrow P \Rrightarrow Q",
+    );
+    let analyzed = analyze(source, FormulaMode::Display)
+        .expect("AMS positive arrow relation expression");
+    assert!(analyzed.is_supported());
+    assert_eq!(reconstructed(&analyzed), source);
+    assert_eq!(
+        analyzed
+            .tokens
+            .iter()
+            .filter(|token| {
+                token.kind
+                    == MathTokenKind::Command(SupportedCommand::NamedSymbol)
+            })
+            .count(),
+        28,
     );
 }
 

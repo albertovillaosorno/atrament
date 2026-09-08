@@ -230,12 +230,12 @@ supports read-only behavior-version drift checks. It deliberately advertises no
 command protocol, normalizer, command context, Validate, Apply, rebatching, or
 numeric command/context limits yet.
 
-Aggregate command behavior and typed-result behavior are version 79 after
-admitting exact-source AMS order, equality, and approximation relations. Asset
-reference, Ordering and grouping, and Text content retain family behavior
-version 1; Provenance and Style role are version 2, Document constraint is
-version 3, and Structured content is version 67. The immediately previous
-aggregate version 78 rejects instead of being reinterpreted.
+Aggregate command behavior and typed-result behavior are version 80 after
+admitting exact-source positive AMS arrow relations. Asset reference, Ordering
+and grouping, and Text content retain family behavior version 1; Provenance and
+Style role are version 2, Document constraint is version 3, and Structured
+content is version 68. The immediately previous aggregate version 79 rejects
+instead of being reinterpreted.
 
 A version-bound single-target proposal combines capability, exact local
 preconditions, and direct-edit simulation read-only. All five dedicated direct
@@ -635,7 +635,8 @@ forms plus square/lattice forms, large
 n-ary operators including coproduct and logical joins/meets, card-suit and
 musical symbols, mathematical punctuation atoms, LaTeX-base paragraph, section,
 dollar, and variant large-triangle symbols, arrow and ellipsis symbols including
-harpoons and mapped arrows, relation and logic symbols, modular arithmetic
+AMS paired, loop, curve, tail, squiggle, and multimap arrows, harpoons, and
+mapped arrows, relation and logic symbols, modular arithmetic
 including grouped `\pod{...}` operands,
 single, multiple including fourfold, contour, and explicit integral-operator
 atoms, direct/inverse and decorated limit operators, set notation, aligned row
