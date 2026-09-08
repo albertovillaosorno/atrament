@@ -45,6 +45,10 @@ name = "atrament_handwriting_profile_container"
 version = "0.1.0"
 
 [[package]]
+name = "atrament_handwriting_stroke_plan"
+version = "0.1.0"
+
+[[package]]
 name = "atrament_handwriting_variation"
 version = "0.1.0"
 

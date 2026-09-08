@@ -25,6 +25,9 @@ depends_on = []
 [component.atrament_handwriting_profile_container]
 depends_on = []
 
+[component.atrament_handwriting_stroke_plan]
+depends_on = []
+
 [component.atrament_handwriting_variation]
 depends_on = []
 

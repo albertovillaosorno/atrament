@@ -1,0 +1,9 @@
+identity:
+  id: function:handwriting-stroke-plan
+  name: handwriting-stroke-plan
+  path: src/backend/handwriting-stroke-plan
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: domain
