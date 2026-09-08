@@ -553,9 +553,10 @@ fn named_symbol_vocabulary_is_supported_without_rewriting() {
         r"\frown",
         r"\gamma",
         r"\ge", r"\geq", r"\geqq",
-        r"\geqslant", r"\gets", r"\gg", r"\ggg", r"\gimel", r"\gtrapprox",
+        r"\geqslant", r"\gets", r"\gg", r"\ggg", r"\gimel", r"\gnapprox",
+        r"\gneq", r"\gneqq", r"\gnsim", r"\gtrapprox",
         r"\gtrdot",
-        r"\gtreqless", r"\gtreqqless", r"\gtrless", r"\gtrsim",
+        r"\gtreqless", r"\gtreqqless", r"\gtrless", r"\gtrsim", r"\gvertneqq",
         r"\hbar",
         r"\heartsuit",
         r"\hookleftarrow",
@@ -574,20 +575,26 @@ fn named_symbol_vocabulary_is_supported_without_rewriting() {
         r"\lessapprox",
         r"\lessdot", r"\lesseqgtr", r"\lesseqqgtr", r"\lessgtr", r"\lesssim",
         r"\lfloor",
-        r"\ll", r"\lll", r"\lnot", r"\longleftarrow", r"\longleftrightarrow",
+        r"\ll", r"\lll", r"\lnapprox", r"\lneq", r"\lneqq", r"\lnot", r"\lnsim",
+        r"\longleftarrow", r"\longleftrightarrow",
         r"\longmapsto",
         r"\longrightarrow", r"\looparrowleft", r"\looparrowright",
-        r"\lor", r"\lozenge", r"\ltimes", r"\lvert", r"\mapsto", r"\mathdollar",
+        r"\lor", r"\lozenge", r"\ltimes", r"\lvert", r"\lvertneqq", r"\mapsto",
+        r"\mathdollar",
         r"\mathparagraph",
         r"\mathsection", r"\measuredangle", r"\mho",
         r"\mid", r"\models", r"\mp", r"\mu", r"\multimap", r"\nLeftarrow",
         r"\nLeftrightarrow", r"\nRightarrow", r"\nabla",
-        r"\natural", r"\ne", r"\nearrow", r"\neg", r"\neq", r"\nexists",
-        r"\ni", r"\nleftarrow", r"\nleftrightarrow", r"\notin", r"\nrightarrow",
+        r"\natural", r"\ncong", r"\ne", r"\nearrow", r"\neg", r"\neq",
+        r"\nexists", r"\ngeq", r"\ngeqq", r"\ngeqslant", r"\ngtr",
+        r"\ni", r"\nleftarrow", r"\nleftrightarrow", r"\nleq", r"\nleqq",
+        r"\nleqslant", r"\nless", r"\notin", r"\nprec", r"\npreceq",
+        r"\nrightarrow", r"\nsim", r"\nsucc", r"\nsucceq",
         r"\nu", r"\nwarrow", r"\odot", r"\omega", r"\ominus", r"\oplus",
         r"\oslash", r"\otimes", r"\owns", r"\parallel",
         r"\partial", r"\perp", r"\phi", r"\pi", r"\pitchfork", r"\pm", r"\prec",
-        r"\precapprox", r"\preccurlyeq", r"\preceq", r"\precsim",
+        r"\precapprox", r"\preccurlyeq", r"\preceq", r"\precnapprox",
+        r"\precneqq", r"\precnsim", r"\precsim",
         r"\prime", r"\propto", r"\psi", r"\rVert", r"\rangle", r"\rbrace",
         r"\rbrack",
         r"\rceil", r"\rfloor",
@@ -607,7 +614,8 @@ fn named_symbol_vocabulary_is_supported_without_rewriting() {
         r"\sqsupseteq", r"\square", r"\star", r"\subset", r"\subseteq",
         r"\subseteqq",
         r"\subsetneq", r"\succ", r"\succapprox", r"\succcurlyeq",
-        r"\succeq", r"\succsim", r"\supset", r"\supseteq", r"\supseteqq",
+        r"\succeq", r"\succnapprox", r"\succneqq", r"\succnsim", r"\succsim",
+        r"\supset", r"\supseteq", r"\supseteqq",
         r"\supsetneq",
         r"\swarrow",
         r"\tau", r"\therefore", r"\theta", r"\thickapprox", r"\thicksim",
@@ -1216,6 +1224,32 @@ fn variant_greek_symbols_compose_without_rewriting() {
             })
             .count(),
         6,
+    );
+}
+
+#[test]
+fn negated_ams_order_and_equality_relations_compose_without_rewriting() {
+    let source = concat!(
+        r"a \nleq b \ngeq c \nless d \ngtr e; ",
+        r"f \nleqq g \ngeqq h \nleqslant i \ngeqslant j; ",
+        r"k \lneq l \gneq m \lneqq n \gneqq o; ",
+        r"p \lvertneqq q \gvertneqq r; ",
+        r"s \nprec t \nsucc u \npreceq v \nsucceq w; ",
+        r"x \precneqq y \succneqq z; ",
+        r"a \precnsim b \succnsim c; ",
+        r"d \precnapprox e \succnapprox f; ",
+        r"g \lnsim h \gnsim i \lnapprox j \gnapprox k; ",
+        r"l \nsim m \ncong n",
+    );
+    let analyzed = analyze(source, FormulaMode::Display)
+        .expect("negated AMS order and equality relation expression");
+    assert!(analyzed.is_supported());
+    assert_eq!(reconstructed(&analyzed), source);
+    assert_eq!(
+        analyzed.tokens.iter().filter(|token| {
+            token.kind == MathTokenKind::Command(SupportedCommand::NamedSymbol)
+        }).count(),
+        30,
     );
 }
 
