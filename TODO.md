@@ -1839,8 +1839,14 @@ executable vector authority, pre-serialization PDF page/resource intent, render
 manifest inputs, preview/final invariants, print/scan evidence, and independent
 visual-regression axes. It explicitly keeps PDF serialization, image/resource
 adapters, manifest identity, visual comparators, and physical tolerances open.
-The broader calibration, LLM, live-safety, hardware, adapter, and
-troubleshooting documentation remains open.
+
+A verified calibration-evidence guide now documents observed/inferred parameter
+evidence, source/unit/confidence/correction retention, held-out separation,
+resumable prompt plans, underdetermination, and downstream bounded-variation
+invariants. It keeps capture geometry, extraction, minimum sample sets, quality
+metrics, confidence policy, and persistence explicitly open.
+The broader LLM, live-safety, hardware, adapter, and troubleshooting
+documentation remains open.
 
 ### TODO - Close every known reproducible defect
 

@@ -91,3 +91,6 @@ contracts:
   - id: atrament.technical.pdf-print-composition-validation
     status: verified
     path: pdf-print-composition-validation.md
+  - id: atrament.technical.handwriting-calibration-evidence-validation
+    status: verified
+    path: handwriting-calibration-evidence-validation.md
