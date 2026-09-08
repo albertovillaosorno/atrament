@@ -584,14 +584,18 @@ fn named_symbol_vocabulary_is_supported_without_rewriting() {
         r"\mathparagraph",
         r"\mathsection", r"\measuredangle", r"\mho",
         r"\mid", r"\models", r"\mp", r"\mu", r"\multimap", r"\nLeftarrow",
-        r"\nLeftrightarrow", r"\nRightarrow", r"\nabla",
+        r"\nLeftrightarrow", r"\nRightarrow", r"\nVDash", r"\nVdash", r"\nabla",
         r"\natural", r"\ncong", r"\ne", r"\nearrow", r"\neg", r"\neq",
         r"\nexists", r"\ngeq", r"\ngeqq", r"\ngeqslant", r"\ngtr",
         r"\ni", r"\nleftarrow", r"\nleftrightarrow", r"\nleq", r"\nleqq",
-        r"\nleqslant", r"\nless", r"\notin", r"\nprec", r"\npreceq",
-        r"\nrightarrow", r"\nsim", r"\nsubseteq", r"\nsubseteqq", r"\nsucc",
-        r"\nsucceq", r"\nsupseteq", r"\nsupseteqq",
-        r"\nu", r"\nwarrow", r"\odot", r"\omega", r"\ominus", r"\oplus",
+        r"\nleqslant", r"\nless", r"\nmid", r"\notin", r"\nparallel", r"\nprec",
+        r"\npreceq",
+        r"\nrightarrow", r"\nshortmid", r"\nshortparallel", r"\nsim",
+        r"\nsubseteq", r"\nsubseteqq", r"\nsucc",
+        r"\nsucceq", r"\nsupseteq", r"\nsupseteqq", r"\ntriangleleft",
+        r"\ntrianglelefteq", r"\ntriangleright", r"\ntrianglerighteq",
+        r"\nu", r"\nvDash", r"\nvdash", r"\nwarrow", r"\odot", r"\omega",
+        r"\ominus", r"\oplus",
         r"\oslash", r"\otimes", r"\owns", r"\parallel",
         r"\partial", r"\perp", r"\phi", r"\pi", r"\pitchfork", r"\pm", r"\prec",
         r"\precapprox", r"\preccurlyeq", r"\preceq", r"\precnapprox",
@@ -1284,6 +1288,26 @@ fn ams_order_and_equality_relations_compose_without_rewriting() {
             })
             .count(),
         34,
+    );
+}
+
+#[test]
+fn negated_ams_structural_relations_compose_without_rewriting() {
+    let source = concat!(
+        r"A \nmid B \nparallel C; D \nshortmid E \nshortparallel F; ",
+        r"G \nvdash H \nVdash I \nvDash J \nVDash K; ",
+        r"L \ntriangleleft M \ntriangleright N; ",
+        r"O \ntrianglelefteq P \ntrianglerighteq Q",
+    );
+    let analyzed = analyze(source, FormulaMode::Display)
+        .expect("negated AMS structural relation expression");
+    assert!(analyzed.is_supported());
+    assert_eq!(reconstructed(&analyzed), source);
+    assert_eq!(
+        analyzed.tokens.iter().filter(|token| {
+            token.kind == MathTokenKind::Command(SupportedCommand::NamedSymbol)
+        }).count(),
+        12,
     );
 }
 
