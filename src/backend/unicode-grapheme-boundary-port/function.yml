@@ -1,0 +1,9 @@
+identity:
+  id: function:unicode-grapheme-boundary-port
+  name: unicode-grapheme-boundary-port
+  path: src/backend/unicode-grapheme-boundary-port
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: port-outbound

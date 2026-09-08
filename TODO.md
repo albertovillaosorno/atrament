@@ -740,8 +740,14 @@ candidate acceptance, exact-base text replacement, ordered batch Apply, and
 Undo, including English and Spanish punctuation, curly quotes, guillemets,
 accents, en/em dashes, a decomposed accent sequence, and multi-code-point emoji.
 Existing precondition fixtures also keep NFC and NFD spellings distinct rather
-than inventing a normalization form. Normalization policy, grapheme-indexed
-mutation, punctuation generation, and language-aware wrapping remain open.
+than inventing a normalization form. A hexagonal grapheme-edit boundary now
+uses pinned Unicode extended-grapheme segmentation behind an outbound port;
+`SessionApplication` can replace an exact grapheme range through the existing
+atomic whole-text edit authority, and Undo restores the exact authored bytes.
+Invalid ranges reject before revision or history mutation.
+
+Normalization policy, punctuation generation, language-aware wrapping, cursor
+behavior, and browser, CLI, or MCP grapheme-range transport remain open.
 
 ### TODO - Make missing glyph coverage impossible to miss
 

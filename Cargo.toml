@@ -47,6 +47,9 @@ members = [
     "src/backend/session-runtime",
     "src/backend/session-secret",
     "src/backend/transcript-evidence",
+    "src/backend/unicode-grapheme-boundary-port",
+    "src/backend/unicode-grapheme-edit",
+    "src/backend/unicode-grapheme-segmentation",
     "src/backend/vector-geometry",
 ]
 resolver = "3"

@@ -1,0 +1,16 @@
+[package]
+name = "atrament_unicode_grapheme_segmentation"
+version = "0.1.0"
+edition = "2024"
+publish = false
+license = "MIT"
+
+[dependencies]
+atrament_unicode_grapheme_boundary_port = { path = "../unicode-grapheme-boundary-port" }
+unicode-segmentation = "=1.13.3"
+
+[lib]
+path = "adapter-outbound/lib.rs"
+
+[lints]
+workspace = true

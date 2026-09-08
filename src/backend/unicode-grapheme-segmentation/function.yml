@@ -1,0 +1,9 @@
+identity:
+  id: function:unicode-grapheme-segmentation
+  name: unicode-grapheme-segmentation
+  path: src/backend/unicode-grapheme-segmentation
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: adapter-outbound

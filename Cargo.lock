@@ -224,6 +224,8 @@ dependencies = [
  "atrament_semantic_notebook_session",
  "atrament_session_draft",
  "atrament_session_draft_port",
+ "atrament_unicode_grapheme_boundary_port",
+ "atrament_unicode_grapheme_edit",
 ]
 
 [[package]]
@@ -279,6 +281,25 @@ name = "atrament_transcript_evidence"
 version = "0.1.0"
 
 [[package]]
+name = "atrament_unicode_grapheme_boundary_port"
+version = "0.1.0"
+
+[[package]]
+name = "atrament_unicode_grapheme_edit"
+version = "0.1.0"
+dependencies = [
+ "atrament_unicode_grapheme_boundary_port",
+]
+
+[[package]]
+name = "atrament_unicode_grapheme_segmentation"
+version = "0.1.0"
+dependencies = [
+ "atrament_unicode_grapheme_boundary_port",
+ "unicode-segmentation",
+]
+
+[[package]]
 name = "atrament_vector_geometry"
 version = "0.1.0"
 
@@ -310,3 +331,9 @@ name = "r-efi"
 version = "6.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f8dcc9c7d52a811697d2151c701e0d08956f92b0e24136cf4cf27b57a6a0d9bf"
+
+[[package]]
+name = "unicode-segmentation"
+version = "1.13.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c6f5d3c3b1bf09027a88a6bc961fc00497d651009560b5463668dc81b0fa87a8"

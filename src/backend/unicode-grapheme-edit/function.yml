@@ -1,0 +1,9 @@
+identity:
+  id: function:unicode-grapheme-edit
+  name: unicode-grapheme-edit
+  path: src/backend/unicode-grapheme-edit
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: application

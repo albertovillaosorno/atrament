@@ -85,6 +85,10 @@ use atrament_semantic_notebook_port::{
 use atrament_semantic_notebook_session::SemanticNotebookSessionService;
 use atrament_session_draft::SessionDraftService;
 use atrament_session_draft_port::{DraftField, DraftMutation, SessionDraft};
+use atrament_unicode_grapheme_boundary_port::GraphemeBoundaryProvider;
+use atrament_unicode_grapheme_edit::{
+    GraphemeRange, GraphemeRangeError, replace_grapheme_range,
+};
 
 /// Typed failure to retain or inspect process-owned raw asset bytes.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -582,6 +586,66 @@ impl SessionApplication {
         self.mutate_semantic(|semantic| {
             semantic.replace_text(base, target, value)
         })
+    }
+
+    /// Replace one grapheme range inside an accepted inline text value.
+    ///
+    /// The exact current text is derived from `base` before grapheme boundaries
+    /// are queried. The resulting complete string is committed through the
+    /// existing atomic whole-text replacement authority.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed grapheme-range failure before semantic mutation when the
+    /// requested start/end cannot address the exact current text.
+    pub fn replace_text_grapheme_range(
+        &mut self,
+        boundaries: &dyn GraphemeBoundaryProvider,
+        base: RevisionIdentity,
+        target: AcceptedIdentity,
+        range: GraphemeRange,
+        replacement: &str,
+    ) -> Result<TextEditOutcome, GraphemeRangeError> {
+        let material_outcome = self.command_target_material_for_family(
+            base,
+            target,
+            SemanticCommandFamily::TextContent,
+        );
+        let current_text = match material_outcome {
+            CommandTargetMaterialOutcome::NoAcceptedRevision => {
+                return Ok(TextEditOutcome::NoAcceptedRevision);
+            },
+            CommandTargetMaterialOutcome::Prepared { material } => {
+                match material.editable_value {
+                    Some(EditableSemanticValue::Text(value)) => value,
+                    _ => {
+                        return Ok(TextEditOutcome::TargetNotText {
+                            revision: material.revision,
+                            target: material.target,
+                        });
+                    },
+                }
+            },
+            CommandTargetMaterialOutcome::StaleBase { current } => {
+                return Ok(TextEditOutcome::StaleBase { current });
+            },
+            CommandTargetMaterialOutcome::TargetNotFound {
+                revision,
+                target: missing_target,
+            } => {
+                return Ok(TextEditOutcome::TargetNotFound {
+                    revision,
+                    target: missing_target,
+                });
+            },
+        };
+        let value = replace_grapheme_range(
+            boundaries,
+            &current_text,
+            range,
+            replacement,
+        )?;
+        Ok(self.replace_text(base, target, value))
     }
 
     /// Retain already-validated raw bytes for one accepted semantic asset.

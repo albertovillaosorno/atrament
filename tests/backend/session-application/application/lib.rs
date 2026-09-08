@@ -87,6 +87,8 @@ use atrament_semantic_notebook_port::{
     TextEditOutcome,
 };
 use atrament_session_draft_port::{DraftField, DraftMutation, SessionDraft};
+use atrament_unicode_grapheme_edit::{GraphemeRange, GraphemeRangeError};
+use atrament_unicode_grapheme_segmentation::UnicodeGraphemeSegmentation;
 
 #[allow(dead_code)]
 #[path = "../../../../src/backend/session-application/application/lib.rs"]
@@ -4473,6 +4475,107 @@ fn abandoned_redo_asset_bytes_cannot_attach_to_new_asset_identity() {
             asset: branch_asset,
             revision: branched,
         }),
+    );
+}
+
+#[test]
+fn application_edits_and_undoes_exact_grapheme_ranges() {
+    let identities = IdentityAllocator::new();
+    let original = "A e\u{301} 👩‍🔬 Z";
+    let (candidate, candidate_span) =
+        editable_text_candidate(&identities, original);
+    let mut session = application::SessionApplication::default();
+    let AcceptanceOutcome::Accepted { mapping, revision: base } =
+        session.accept_candidate(candidate)
+    else {
+        panic!("grapheme fixture candidate must be accepted");
+    };
+    let span = mapping
+        .iter()
+        .find(|entry| entry.candidate == candidate_span)
+        .expect("grapheme span identity must map")
+        .accepted;
+    let provider = UnicodeGraphemeSegmentation;
+    let outcome = session
+        .replace_text_grapheme_range(
+            &provider,
+            base,
+            span,
+            GraphemeRange { count: 3, start: 2 },
+            "ñ",
+        )
+        .expect("valid grapheme range");
+    let TextEditOutcome::Applied { revision, .. } = outcome else {
+        panic!("grapheme replacement must apply");
+    };
+    let CommandTargetMaterialOutcome::Prepared { material } =
+        session.command_target_material(revision, span)
+    else {
+        panic!("edited grapheme target must remain inspectable");
+    };
+    assert_eq!(
+        material.editable_value,
+        Some(EditableSemanticValue::Text(String::from("A ñ Z"))),
+    );
+    let HistoryTraversalOutcome::Traversed {
+        direction: HistoryDirection::Undo,
+        revision: restored,
+        ..
+    } = session.traverse_history(revision, HistoryDirection::Undo)
+    else {
+        panic!("grapheme replacement must Undo");
+    };
+    let CommandTargetMaterialOutcome::Prepared { material } =
+        session.command_target_material(restored, span)
+    else {
+        panic!("restored grapheme target must remain inspectable");
+    };
+    assert_eq!(
+        material.editable_value,
+        Some(EditableSemanticValue::Text(String::from(original))),
+    );
+}
+
+#[test]
+fn invalid_grapheme_range_is_atomic_and_preserves_history() {
+    let identities = IdentityAllocator::new();
+    let (candidate, candidate_span) =
+        editable_text_candidate(&identities, "e\u{301}x");
+    let mut session = application::SessionApplication::default();
+    let AcceptanceOutcome::Accepted { mapping, revision: base } =
+        session.accept_candidate(candidate)
+    else {
+        panic!("grapheme range fixture candidate must be accepted");
+    };
+    let span = mapping
+        .iter()
+        .find(|entry| entry.candidate == candidate_span)
+        .expect("grapheme range span identity must map")
+        .accepted;
+    let before_history = session.history_availability();
+    let provider = UnicodeGraphemeSegmentation;
+    assert_eq!(
+        session.replace_text_grapheme_range(
+            &provider,
+            base,
+            span,
+            GraphemeRange { count: 1, start: 3 },
+            "z",
+        ),
+        Err(GraphemeRangeError::StartOutOfBounds {
+            grapheme_count: 2,
+            start: 3,
+        }),
+    );
+    assert_eq!(session.history_availability(), before_history);
+    let CommandTargetMaterialOutcome::Prepared { material } =
+        session.command_target_material(base, span)
+    else {
+        panic!("invalid grapheme range must preserve target");
+    };
+    assert_eq!(
+        material.editable_value,
+        Some(EditableSemanticValue::Text(String::from("e\u{301}x"))),
     );
 }
 
