@@ -1539,6 +1539,15 @@ validation precedence and exact admission without treating percent-like text as
 URI decoding. This is targeted boundary hardening only; full coverage-guided
 fuzzing of profiles and the other listed untrusted inputs remains open.
 
+The TeX-compatible mathematics boundary now also runs a deterministic generated
+4,096-source corpus in inline, display, and aligned modes. Generated mixtures
+cover supported and unsupported commands, malformed groups/environments,
+control symbols, whitespace, NUL, Unicode, alignment, scripts, and root syntax.
+Repeated analysis must agree exactly; successful parses retain complete source
+and span invariants, while typed syntax failures must point to a UTF-8 boundary
+within the original source. This remains generated regression coverage rather
+than coverage-guided fuzzing.
+
 ### TODO - Complete visual regression coverage
 
 Compare semantic layout, vector topology, layer composition, final pixels,

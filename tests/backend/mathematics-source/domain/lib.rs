@@ -129,6 +129,94 @@ fn small_mixed_sources_preserve_analysis_invariants() {
 }
 
 #[test]
+fn generated_tex_corpus_is_deterministic_and_source_safe() {
+    const FRAGMENTS: &[&str] = &[
+        "a",
+        "0",
+        "+",
+        "_",
+        "^",
+        " ",
+        "\t",
+        "\n",
+        "\0",
+        "ñ",
+        "β",
+        "🙂",
+        "{",
+        "}",
+        "[",
+        "]",
+        "&",
+        r"\",
+        r"\\",
+        r"\alpha",
+        r"\frac",
+        r"\sqrt",
+        r"\sqrt[",
+        r"\unknown",
+        r"\@",
+        r"\begin{matrix}",
+        r"\end{matrix}",
+        r"\begin{cases}",
+        r"\end{cases}",
+        r"\operatorname*",
+        r"\text",
+        r"\left",
+    ];
+
+    let mut state = 0x9e37_79b9_u32;
+    for case_index in 0..4_096_u32 {
+        state = state
+            .wrapping_mul(1_664_525)
+            .wrapping_add(1_013_904_223 ^ case_index);
+        let fragment_count = usize::try_from((state >> 27) + 1)
+            .expect("bounded fragment count");
+        let mut source = String::new();
+        for fragment_index in 0..fragment_count {
+            let fragment_index = u32::try_from(fragment_index)
+                .expect("bounded fragment index");
+            state = state
+                .wrapping_mul(1_664_525)
+                .wrapping_add(1_013_904_223 ^ fragment_index);
+            let index = usize::try_from(state)
+                .expect("u32 fits usize on supported targets")
+                % FRAGMENTS.len();
+            source.push_str(FRAGMENTS[index]);
+        }
+
+        for mode in [
+            FormulaMode::Inline,
+            FormulaMode::Display,
+            FormulaMode::Aligned,
+        ] {
+            let first = analyze(&source, mode);
+            let second = analyze(&source, mode);
+            assert_eq!(
+                first,
+                second,
+                "nondeterministic case {case_index}: {source:?}",
+            );
+            match first {
+                Ok(analyzed) => {
+                    assert_analysis_invariants(&analyzed, &source, mode);
+                }
+                Err(error) => {
+                    assert!(
+                        error.byte_offset <= source.len(),
+                        "error beyond source in case {case_index}: {source:?}",
+                    );
+                    assert!(
+                        source.is_char_boundary(error.byte_offset),
+                        "error splits UTF-8 in case {case_index}: {source:?}",
+                    );
+                }
+            }
+        }
+    }
+}
+
+#[test]
 fn named_and_control_symbol_mixes_preserve_analysis_invariants() {
     const FRAGMENTS: &[&str] = &[
         "ñ",
