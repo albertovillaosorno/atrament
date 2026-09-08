@@ -107,6 +107,10 @@ name = "atrament_pen_contact_model"
 version = "0.1.0"
 
 [[package]]
+name = "atrament_physical_compatibility_ledger"
+version = "0.1.0"
+
+[[package]]
 name = "atrament_physical_page_profile"
 version = "0.1.0"
 

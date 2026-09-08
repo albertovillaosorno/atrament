@@ -17,6 +17,7 @@ members = [
     "src/backend/material-layer-plan",
     "src/backend/mathematics-source",
     "src/backend/pdf-composition-plan",
+    "src/backend/physical-compatibility-ledger",
     "src/backend/physical-page-profile",
     "src/backend/one-shot-formatting-prompt",
     "src/backend/output-capability-matrix",

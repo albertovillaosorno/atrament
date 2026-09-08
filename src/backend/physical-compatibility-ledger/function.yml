@@ -1,0 +1,9 @@
+identity:
+  id: function:physical-compatibility-ledger
+  name: physical-compatibility-ledger
+  path: src/backend/physical-compatibility-ledger
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: domain

@@ -52,6 +52,9 @@ depends_on = []
 [component.atrament_pdf_composition_plan]
 depends_on = []
 
+[component.atrament_physical_compatibility_ledger]
+depends_on = []
+
 [component.atrament_physical_page_profile]
 depends_on = []
 

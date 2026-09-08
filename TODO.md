@@ -1463,6 +1463,13 @@ direct-device support for untested transports, firmware, or model behavior.
 Record exact model, firmware, adapter tier, transport, paper, pen, usable area,
 settings, evidence, known limitations, and last acceptance date.
 
+Current executable evidence now freezes that compatibility record without
+claiming support for any untested hardware. Exact model, firmware, transport,
+adapter tier, paper, pen, usable area, settings, acceptance evidence, known
+limitations, and last acceptance date remain caller-owned values tied to one
+combination. Hardware probing, compatibility admission, persistence, expiry or
+recertification policy, and physical support claims remain open.
+
 ### TODO - Prove safe interruption and uncertain-state recovery
 
 Test disconnect, power loss, user pause, emergency stop, process crash, partial
