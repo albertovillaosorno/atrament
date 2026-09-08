@@ -85,3 +85,6 @@ contracts:
   - id: atrament.technical.autonomous-agent-loop
     status: frozen
     path: autonomous-agent-loop-contract.md
+  - id: atrament.technical.portable-profile-container-validation
+    status: verified
+    path: portable-profile-container-validation.md

@@ -1827,6 +1827,15 @@ with checksums, licenses, offline startup, diagnostics, and clean uninstall.
 Document calibration, composition, one-shot LLM use, PDF, live safety, supported
 hardware, profile internals, schemas, adapters, validation, and troubleshooting.
 
+Current developer documentation now includes a verified portable-profile
+container guide mapping the accepted `.atrament` design to executable manifest,
+path, inventory, entry-evidence, ZIP-canonicality, rewrite, and compatibility
+behavior. The guide also marks the Rust values as non-wire-schema authority and
+lists the still-missing ZIP/JSON adapters, migrations, real digest computation,
+resource limits, typed section schemas, golden files, and inspection command.
+The broader calibration, composition, LLM, PDF, live-safety, hardware, adapter,
+and troubleshooting documentation remains open.
+
 ### TODO - Close every known reproducible defect
 
 Declare the first release complete only when P0 through P8 are closed, Jig is
