@@ -1,0 +1,9 @@
+identity:
+  id: function:handwriting-calibration-evidence
+  name: handwriting-calibration-evidence
+  path: src/backend/handwriting-calibration-evidence
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: domain

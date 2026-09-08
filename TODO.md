@@ -978,6 +978,15 @@ Collect isolated characters, joins, words, numerals, punctuation, mathematics,
 titles, labels, sizes, speeds, pressure proxies, and free writing on known
 paper.
 
+Current executable evidence now freezes transport-neutral calibration
+provenance. Parameter evidence retains caller-owned source region, units,
+confidence, and accepted correction history; observed evidence remains distinct
+from inferred extremes. Training and held-out sample identities cannot cross
+roles, and an underdetermined required behavior explicitly requests another
+sample. This does not choose a minimum sample set, confidence scale, unit
+vocabulary, source-region syntax, capture geometry, extraction algorithm, or
+calibration workflow.
+
 ### TODO - Correct photographed calibration geometry
 
 Detect reference marks, perspective, lens distortion, scale, grid, baseline,
