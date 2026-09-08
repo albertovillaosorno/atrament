@@ -88,3 +88,6 @@ contracts:
   - id: atrament.technical.portable-profile-container-validation
     status: verified
     path: portable-profile-container-validation.md
+  - id: atrament.technical.pdf-print-composition-validation
+    status: verified
+    path: pdf-print-composition-validation.md

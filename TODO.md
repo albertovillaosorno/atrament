@@ -1833,8 +1833,14 @@ path, inventory, entry-evidence, ZIP-canonicality, rewrite, and compatibility
 behavior. The guide also marks the Rust values as non-wire-schema authority and
 lists the still-missing ZIP/JSON adapters, migrations, real digest computation,
 resource limits, typed section schemas, golden files, and inspection command.
-The broader calibration, composition, LLM, PDF, live-safety, hardware, adapter,
-and troubleshooting documentation remains open.
+
+A verified PDF/print composition guide now maps the accepted output ADR to
+executable vector authority, pre-serialization PDF page/resource intent, render
+manifest inputs, preview/final invariants, print/scan evidence, and independent
+visual-regression axes. It explicitly keeps PDF serialization, image/resource
+adapters, manifest identity, visual comparators, and physical tolerances open.
+The broader calibration, LLM, live-safety, hardware, adapter, and
+troubleshooting documentation remains open.
 
 ### TODO - Close every known reproducible defect
 
