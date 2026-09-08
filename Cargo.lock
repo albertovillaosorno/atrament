@@ -57,6 +57,10 @@ name = "atrament_handwriting_variation"
 version = "0.1.0"
 
 [[package]]
+name = "atrament_material_layer_plan"
+version = "0.1.0"
+
+[[package]]
 name = "atrament_mathematics_source"
 version = "0.1.0"
 

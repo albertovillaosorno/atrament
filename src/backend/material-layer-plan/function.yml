@@ -1,0 +1,9 @@
+identity:
+  id: function:material-layer-plan
+  name: material-layer-plan
+  path: src/backend/material-layer-plan
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: domain

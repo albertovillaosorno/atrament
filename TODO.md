@@ -1079,6 +1079,14 @@ projection remain open.
 Compose base deposition, edges, starvation, pooling, paper interaction, color,
 and highlight layers without altering vector authority.
 
+Current executable evidence now also freezes the six accepted material-layer
+families: base ink, edge variation, deposition texture, paper interaction,
+highlight, and color. Layer plans preserve caller-owned clip geometry, material
+inputs, physical bounds, and blend order without evaluation. Every layer marked
+stochastic carries the complete document-seed, semantic-identity, profile, and
+material-preset replay key. Required-layer policy, transfer equations, blending,
+texture sampling, color spaces, rasterization, and output formats remain open.
+
 Current executable evidence now freezes transport-neutral empirical
 contact-model
 inputs before material evaluation. Force-calibrated pressure and named
