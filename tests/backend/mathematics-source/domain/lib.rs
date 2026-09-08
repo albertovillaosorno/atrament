@@ -580,9 +580,10 @@ fn named_symbol_vocabulary_is_supported_without_rewriting() {
         r"\lor", r"\lozenge", r"\ltimes", r"\lvert", r"\mapsto", r"\mathdollar",
         r"\mathparagraph",
         r"\mathsection", r"\measuredangle", r"\mho",
-        r"\mid", r"\models", r"\mp", r"\mu", r"\multimap", r"\nabla",
+        r"\mid", r"\models", r"\mp", r"\mu", r"\multimap", r"\nLeftarrow",
+        r"\nLeftrightarrow", r"\nRightarrow", r"\nabla",
         r"\natural", r"\ne", r"\nearrow", r"\neg", r"\neq", r"\nexists",
-        r"\ni", r"\notin",
+        r"\ni", r"\nleftarrow", r"\nleftrightarrow", r"\notin", r"\nrightarrow",
         r"\nu", r"\nwarrow", r"\odot", r"\omega", r"\ominus", r"\oplus",
         r"\oslash", r"\otimes", r"\owns", r"\parallel",
         r"\partial", r"\perp", r"\phi", r"\pi", r"\pitchfork", r"\pm", r"\prec",
@@ -897,6 +898,30 @@ fn ams_positive_arrow_relations_compose_without_rewriting() {
             })
             .count(),
         28,
+    );
+}
+
+#[test]
+fn negated_ams_arrow_relations_compose_without_rewriting() {
+    let source = concat!(
+        r"A \nleftarrow B \nrightarrow C; ",
+        r"D \nLeftarrow E \nRightarrow F; ",
+        r"G \nleftrightarrow H \nLeftrightarrow I",
+    );
+    let analyzed = analyze(source, FormulaMode::Display)
+        .expect("negated AMS arrow relation expression");
+    assert!(analyzed.is_supported());
+    assert_eq!(reconstructed(&analyzed), source);
+    assert_eq!(
+        analyzed
+            .tokens
+            .iter()
+            .filter(|token| {
+                token.kind
+                    == MathTokenKind::Command(SupportedCommand::NamedSymbol)
+            })
+            .count(),
+        6,
     );
 }
 
