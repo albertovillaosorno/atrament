@@ -94,3 +94,6 @@ contracts:
   - id: atrament.technical.handwriting-calibration-evidence-validation
     status: verified
     path: handwriting-calibration-evidence-validation.md
+  - id: atrament.technical.live-physical-safety-validation
+    status: verified
+    path: live-physical-safety-validation.md

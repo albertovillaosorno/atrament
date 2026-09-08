@@ -1845,8 +1845,14 @@ evidence, source/unit/confidence/correction retention, held-out separation,
 resumable prompt plans, underdetermination, and downstream bounded-variation
 invariants. It keeps capture geometry, extraction, minimum sample sets, quality
 metrics, confidence policy, and persistence explicitly open.
-The broader LLM, live-safety, hardware, adapter, and troubleshooting
-documentation remains open.
+
+A verified live physical-safety guide now documents capability disposition,
+device-neutral plan intent, coordinate-calibration evidence, fail-closed dry
+runs, offline traces, interruption recovery, and exact compatibility records.
+It explicitly states that none of those types arm hardware or establish generic
+device support. Vendor adapters, operator recovery, physical certification,
+and compatibility admission/recertification policy remain open.
+The broader LLM, adapter, and troubleshooting documentation remains open.
 
 ### TODO - Close every known reproducible defect
 
