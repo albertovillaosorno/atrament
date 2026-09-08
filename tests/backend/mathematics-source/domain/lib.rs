@@ -589,7 +589,8 @@ fn named_symbol_vocabulary_is_supported_without_rewriting() {
         r"\nexists", r"\ngeq", r"\ngeqq", r"\ngeqslant", r"\ngtr",
         r"\ni", r"\nleftarrow", r"\nleftrightarrow", r"\nleq", r"\nleqq",
         r"\nleqslant", r"\nless", r"\notin", r"\nprec", r"\npreceq",
-        r"\nrightarrow", r"\nsim", r"\nsucc", r"\nsucceq",
+        r"\nrightarrow", r"\nsim", r"\nsubseteq", r"\nsubseteqq", r"\nsucc",
+        r"\nsucceq", r"\nsupseteq", r"\nsupseteqq",
         r"\nu", r"\nwarrow", r"\odot", r"\omega", r"\ominus", r"\oplus",
         r"\oslash", r"\otimes", r"\owns", r"\parallel",
         r"\partial", r"\perp", r"\phi", r"\pi", r"\pitchfork", r"\pm", r"\prec",
@@ -613,10 +614,11 @@ fn named_symbol_vocabulary_is_supported_without_rewriting() {
         r"\sqsubseteq",
         r"\sqsupseteq", r"\square", r"\star", r"\subset", r"\subseteq",
         r"\subseteqq",
-        r"\subsetneq", r"\succ", r"\succapprox", r"\succcurlyeq",
+        r"\subsetneq", r"\subsetneqq", r"\succ", r"\succapprox",
+        r"\succcurlyeq",
         r"\succeq", r"\succnapprox", r"\succneqq", r"\succnsim", r"\succsim",
         r"\supset", r"\supseteq", r"\supseteqq",
-        r"\supsetneq",
+        r"\supsetneq", r"\supsetneqq",
         r"\swarrow",
         r"\tau", r"\therefore", r"\theta", r"\thickapprox", r"\thicksim",
         r"\times", r"\to", r"\top",
@@ -630,7 +632,8 @@ fn named_symbol_vocabulary_is_supported_without_rewriting() {
         r"\varPi", r"\varPsi", r"\varSigma", r"\varTheta", r"\varUpsilon",
         r"\varXi", r"\varbigtriangledown", r"\varbigtriangleup", r"\varepsilon",
         r"\varkappa", r"\varnothing", r"\varphi",
-        r"\varpi", r"\varpropto", r"\varrho", r"\varsigma", r"\vartheta",
+        r"\varpi", r"\varpropto", r"\varrho", r"\varsigma", r"\varsubsetneq",
+        r"\varsubsetneqq", r"\varsupsetneq", r"\varsupsetneqq", r"\vartheta",
         r"\vartriangle",
         r"\vartriangleleft", r"\vartriangleright", r"\vdash", r"\vdots",
         r"\vee", r"\veebar", r"\vert", r"\wedge", r"\wp", r"\wr",
@@ -1353,6 +1356,26 @@ fn italic_capital_greek_symbols_compose_without_rewriting() {
             })
             .count(),
         11,
+    );
+}
+
+#[test]
+fn negated_ams_containment_relations_compose_without_rewriting() {
+    let source = concat!(
+        r"A \nsubseteq B \nsubseteqq C; D \nsupseteq E \nsupseteqq F; ",
+        r"G \subsetneqq H \supsetneqq I; ",
+        r"J \varsubsetneq K \varsupsetneq L; ",
+        r"M \varsubsetneqq N \varsupsetneqq O",
+    );
+    let analyzed = analyze(source, FormulaMode::Display)
+        .expect("negated AMS containment relation expression");
+    assert!(analyzed.is_supported());
+    assert_eq!(reconstructed(&analyzed), source);
+    assert_eq!(
+        analyzed.tokens.iter().filter(|token| {
+            token.kind == MathTokenKind::Command(SupportedCommand::NamedSymbol)
+        }).count(),
+        10,
     );
 }
 
