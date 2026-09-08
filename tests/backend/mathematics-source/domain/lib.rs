@@ -1019,6 +1019,27 @@ fn context_sensitive_math_commands_remain_explicitly_unsupported() {
 }
 
 #[test]
+fn equation_reference_and_display_controls_remain_explicitly_unsupported() {
+    for (source, unsupported) in [
+        (r"\eqref{eq:energy}", r"\eqref"),
+        (r"\tag{energy}", r"\tag"),
+        (r"\notag", r"\notag"),
+        (r"\nonumber", r"\nonumber"),
+        (r"\intertext{therefore}", r"\intertext"),
+        (r"\displaybreak[2]", r"\displaybreak"),
+        (r"\allowdisplaybreaks[3]", r"\allowdisplaybreaks"),
+        (r"\raisetag{2pt}", r"\raisetag"),
+    ] {
+        let analyzed = analyze(source, FormulaMode::Display)
+            .expect("balanced equation-reference or display-control source");
+        assert!(!analyzed.is_supported(), "{source}");
+        assert_eq!(reconstructed(&analyzed), source);
+        assert_eq!(analyzed.unsupported.len(), 1, "{source}");
+        assert_eq!(analyzed.unsupported[0].name, unsupported, "{source}");
+    }
+}
+
+#[test]
 fn layout_sensitive_amsmath_commands_remain_explicitly_unsupported() {
     for (source, unsupported) in [
         (r"\cfrac[l]{1}{2}", r"\cfrac"),
