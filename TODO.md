@@ -1870,9 +1870,14 @@ A verified first-release troubleshooting guide now maps current startup,
 handshake, draft, HTTP, clipboard, profile-integrity, capability, dry-run, and
 recovery outcomes to fail-closed operator/developer actions. It explicitly
 marks Export, CLI, MCP transport, model/media, encoders, and hardware adapters
-as
-unavailable rather than inventing recovery procedures. Packaged-release and
-future-adapter troubleshooting remain open until those surfaces exist.
+as unavailable rather than inventing recovery procedures.
+
+A verified documentation-coverage record now maps every category named by this
+task to its current guide and marks design-only adapters, schemas, packaging,
+and hardware controls unavailable until their owning implementation tasks add
+real operator surfaces. This closes the documentation task for the executable
+first-release surface; future implementation tasks own the documentation they
+introduce.
 
 ### TODO - Close every known reproducible defect
 

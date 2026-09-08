@@ -106,3 +106,6 @@ contracts:
   - id: atrament.technical.first-release-troubleshooting
     status: verified
     path: first-release-troubleshooting.md
+  - id: atrament.technical.first-release-documentation-coverage
+    status: verified
+    path: first-release-documentation-coverage.md
