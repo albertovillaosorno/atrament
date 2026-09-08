@@ -961,7 +961,9 @@ observed non-manifest paths, rejecting missing, undeclared, duplicate, or unsafe
 names before entry decoding. Canonical archive evidence separately rejects
 compression and platform-specific extras and requires ZIP64 exactly when an
 adapter reports ordinary ZIP limits are exceeded; the domain does not invent
-those limits.
+those limits. Application-owned complete-profile change detection now maps
+changed content to mandatory canonical rewrite while unchanged content retains
+permission to preserve its original archive bytes.
 
 It does not parse or write ZIP or JSON, choose wire field names or numeric
 resource limits, compute hashes, decode typed sections, interpret opaque assets,

@@ -35,12 +35,13 @@ use atrament_handwriting_profile_container::{
     PROFILE_CONTAINER_VERSION, PROFILE_MANIFEST_PATH,
     ProfileArchiveEncodingError, ProfileArchiveEncodingEvidence,
     ProfileArchiveEntryEncoding, ProfileArchivePlatformExtras,
-    ProfileEntryEvidence,
+    ProfileContentChange, ProfileEntryEvidence,
     ProfileEntryInventoryError, ProfileEntryKind, ProfileEntryPathError,
     ProfileEntryVerificationError, ProfileManifest, ProfileManifestEntry,
-    ProfileManifestError, ProfileZip64Requirement, ProfileZip64Use,
-    Sha256Digest, canonical_profile_archive_paths,
-    canonical_profile_entry_order, profile_entry_kind, profile_section_entries,
+    ProfileManifestError, ProfileRewriteDisposition, ProfileZip64Requirement,
+    ProfileZip64Use, Sha256Digest, canonical_profile_archive_paths,
+    canonical_profile_entry_order, profile_entry_kind,
+    profile_rewrite_disposition, profile_section_entries,
     validate_profile_archive_encoding, validate_profile_entry_inventory,
     validate_profile_manifest, verify_profile_entry,
 };
@@ -339,6 +340,18 @@ fn entry_kind_is_path_owned_and_rejects_noncanonical_names() {
     assert_eq!(
         profile_entry_kind(PROFILE_MANIFEST_PATH),
         Err(ProfileEntryPathError::ManifestReserved),
+    );
+}
+
+#[test]
+fn profile_rewrite_requires_canonical_bytes_only_after_change() {
+    assert_eq!(
+        profile_rewrite_disposition(ProfileContentChange::Changed),
+        ProfileRewriteDisposition::CanonicalRewriteRequired,
+    );
+    assert_eq!(
+        profile_rewrite_disposition(ProfileContentChange::Unchanged),
+        ProfileRewriteDisposition::OriginalBytesMayBePreserved,
     );
 }
 

@@ -127,6 +127,24 @@ pub enum ProfileZip64Use {
     Present,
 }
 
+/// Whether the complete portable profile semantics changed.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ProfileContentChange {
+    /// Complete profile semantics changed and old archive bytes are stale.
+    Changed,
+    /// Complete profile semantics are unchanged.
+    Unchanged,
+}
+
+/// Archive-byte handling required after application-level change detection.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ProfileRewriteDisposition {
+    /// A changed profile must be serialized through the canonical writer.
+    CanonicalRewriteRequired,
+    /// Existing bytes may be retained because profile semantics are unchanged.
+    OriginalBytesMayBePreserved,
+}
+
 /// One non-manifest entry declared by a portable profile manifest.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ProfileManifestEntry {
@@ -267,6 +285,25 @@ pub enum ProfileEntryVerificationError {
     },
     /// Observed entry digest differs from the manifest declaration.
     DigestMismatch,
+}
+
+/// Choose archive-byte handling from complete application-level change state.
+///
+/// This function does not determine semantic equality from manifest metadata. A
+/// caller that owns the complete profile decides whether it changed; this
+/// domain only enforces the accepted rewrite consequence.
+#[must_use]
+pub const fn profile_rewrite_disposition(
+    change: ProfileContentChange,
+) -> ProfileRewriteDisposition {
+    match change {
+        ProfileContentChange::Changed => {
+            ProfileRewriteDisposition::CanonicalRewriteRequired
+        },
+        ProfileContentChange::Unchanged => {
+            ProfileRewriteDisposition::OriginalBytesMayBePreserved
+        },
+    }
 }
 
 /// Classify one canonical non-manifest profile entry path.
