@@ -955,16 +955,20 @@ the manifest.
 
 The same domain returns deterministic path-sorted writer order for the complete
 archive, including root `manifest.json`, and verifies one entry's independently
-observed byte length before its SHA-256 digest. Archive
-inventory validation now also requires exactly one root manifest and exact
-agreement between declared and observed non-manifest paths, rejecting missing,
-undeclared, duplicate, or unsafe names before entry decoding. It does not parse
-or write ZIP or JSON, choose wire field names or numeric resource limits,
-compute hashes, decode typed sections, interpret opaque assets, migrate
-versions,
-or expose the inspection command. Those adapter, canonical-encoding, migration,
-and inspection surfaces remain open together with golden byte-stable ZIP, ZIP64,
-archive-metadata, truncation, and real digest fixtures.
+observed byte length before its SHA-256 digest. Archive inventory validation now
+also requires exactly one root manifest and exact agreement between declared and
+observed non-manifest paths, rejecting missing, undeclared, duplicate, or unsafe
+names before entry decoding. Canonical archive evidence separately rejects
+compression and platform-specific extras and requires ZIP64 exactly when an
+adapter reports ordinary ZIP limits are exceeded; the domain does not invent
+those limits.
+
+It does not parse or write ZIP or JSON, choose wire field names or numeric
+resource limits, compute hashes, decode typed sections, interpret opaque assets,
+migrate versions, or expose the inspection command. Those adapter,
+canonical-encoding, migration, and inspection surfaces remain open together with
+golden byte-stable ZIP, fixed archive-metadata field values, truncation at the
+ZIP adapter boundary, and real digest fixtures.
 
 ### TODO - Build the guided calibration session
 

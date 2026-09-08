@@ -32,13 +32,17 @@
 //   - No filesystem, archive, or renderer behavior is exercised.
 //
 use atrament_handwriting_profile_container::{
-    PROFILE_CONTAINER_VERSION, PROFILE_MANIFEST_PATH, ProfileEntryEvidence,
+    PROFILE_CONTAINER_VERSION, PROFILE_MANIFEST_PATH,
+    ProfileArchiveEncodingError, ProfileArchiveEncodingEvidence,
+    ProfileArchiveEntryEncoding, ProfileArchivePlatformExtras,
+    ProfileEntryEvidence,
     ProfileEntryInventoryError, ProfileEntryKind, ProfileEntryPathError,
     ProfileEntryVerificationError, ProfileManifest, ProfileManifestEntry,
-    ProfileManifestError, Sha256Digest, canonical_profile_archive_paths,
+    ProfileManifestError, ProfileZip64Requirement, ProfileZip64Use,
+    Sha256Digest, canonical_profile_archive_paths,
     canonical_profile_entry_order, profile_entry_kind, profile_section_entries,
-    validate_profile_entry_inventory, validate_profile_manifest,
-    verify_profile_entry,
+    validate_profile_archive_encoding, validate_profile_entry_inventory,
+    validate_profile_manifest, verify_profile_entry,
 };
 
 fn digest(byte: u8) -> Sha256Digest {
@@ -62,6 +66,63 @@ fn manifest(entries: Vec<ProfileManifestEntry>) -> ProfileManifest {
         profile_identity: String::from("writer-fixture"),
         required_features: vec![String::from("stroke-vocabulary")],
     }
+}
+
+#[test]
+fn canonical_archive_encoding_requires_stored_entries_and_no_platform_extras() {
+    let ordinary = ProfileArchiveEncodingEvidence {
+        entry_encoding: ProfileArchiveEntryEncoding::Stored,
+        platform_extras: ProfileArchivePlatformExtras::Absent,
+        zip64_requirement: ProfileZip64Requirement::Ordinary,
+        zip64_use: ProfileZip64Use::Absent,
+    };
+    assert_eq!(validate_profile_archive_encoding(ordinary), Ok(()));
+    assert_eq!(
+        validate_profile_archive_encoding(ProfileArchiveEncodingEvidence {
+            entry_encoding: ProfileArchiveEntryEncoding::Compressed,
+            ..ordinary
+        }),
+        Err(ProfileArchiveEncodingError::CompressedEntry),
+    );
+    assert_eq!(
+        validate_profile_archive_encoding(ProfileArchiveEncodingEvidence {
+            platform_extras: ProfileArchivePlatformExtras::Present,
+            ..ordinary
+        }),
+        Err(ProfileArchiveEncodingError::PlatformSpecificExtras),
+    );
+}
+
+#[test]
+fn canonical_archive_encoding_uses_zip64_exactly_when_required() {
+    let ordinary = ProfileArchiveEncodingEvidence {
+        entry_encoding: ProfileArchiveEntryEncoding::Stored,
+        platform_extras: ProfileArchivePlatformExtras::Absent,
+        zip64_requirement: ProfileZip64Requirement::Ordinary,
+        zip64_use: ProfileZip64Use::Absent,
+    };
+    assert_eq!(
+        validate_profile_archive_encoding(ProfileArchiveEncodingEvidence {
+            zip64_use: ProfileZip64Use::Present,
+            ..ordinary
+        }),
+        Err(ProfileArchiveEncodingError::UnexpectedZip64),
+    );
+    assert_eq!(
+        validate_profile_archive_encoding(ProfileArchiveEncodingEvidence {
+            zip64_requirement: ProfileZip64Requirement::Required,
+            ..ordinary
+        }),
+        Err(ProfileArchiveEncodingError::MissingRequiredZip64),
+    );
+    assert_eq!(
+        validate_profile_archive_encoding(ProfileArchiveEncodingEvidence {
+            zip64_requirement: ProfileZip64Requirement::Required,
+            zip64_use: ProfileZip64Use::Present,
+            ..ordinary
+        }),
+        Ok(()),
+    );
 }
 
 #[test]

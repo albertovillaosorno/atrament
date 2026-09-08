@@ -65,6 +65,68 @@ impl Sha256Digest {
     }
 }
 
+/// Archive-member encoding class reported by a ZIP adapter.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ProfileArchiveEntryEncoding {
+    /// At least one archive member uses compression.
+    Compressed,
+    /// Every archive member, including the manifest, uses stored encoding.
+    Stored,
+}
+
+/// Canonical ZIP encoding failure independent from concrete ZIP field values.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ProfileArchiveEncodingError {
+    /// At least one archive member uses compression instead of stored encoding.
+    CompressedEntry,
+    /// ZIP64 is required by ordinary ZIP limits but absent.
+    MissingRequiredZip64,
+    /// Platform-specific archive extras are present.
+    PlatformSpecificExtras,
+    /// ZIP64 is present even though ordinary ZIP limits are sufficient.
+    UnexpectedZip64,
+}
+
+/// Adapter-observed canonical ZIP encoding facts without ZIP field syntax.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ProfileArchiveEncodingEvidence {
+    /// Encoding class across all archive members.
+    pub entry_encoding: ProfileArchiveEntryEncoding,
+    /// Whether platform-specific extra records or attributes are present.
+    pub platform_extras: ProfileArchivePlatformExtras,
+    /// Whether ordinary ZIP limits require ZIP64 for this exact archive.
+    pub zip64_requirement: ProfileZip64Requirement,
+    /// Whether the archive emits ZIP64 records.
+    pub zip64_use: ProfileZip64Use,
+}
+
+/// Platform-specific ZIP metadata presence reported by an archive adapter.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ProfileArchivePlatformExtras {
+    /// No platform-specific archive extras are present.
+    Absent,
+    /// Platform-specific archive extras are present.
+    Present,
+}
+
+/// Whether ordinary ZIP limits require ZIP64 for the exact archive.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ProfileZip64Requirement {
+    /// Ordinary ZIP limits are sufficient.
+    Ordinary,
+    /// Ordinary ZIP limits are insufficient and ZIP64 is required.
+    Required,
+}
+
+/// Whether parsed archive metadata emits ZIP64 records.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ProfileZip64Use {
+    /// ZIP64 records are absent.
+    Absent,
+    /// ZIP64 records are present.
+    Present,
+}
+
 /// One non-manifest entry declared by a portable profile manifest.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ProfileManifestEntry {
@@ -353,6 +415,44 @@ pub fn validate_profile_manifest(
                 path: entry.path.clone(),
             });
         }
+    }
+    Ok(())
+}
+
+/// Validate canonical ZIP encoding facts supplied by an archive adapter.
+///
+/// This does not compute ZIP limits or inspect concrete metadata fields. The
+/// adapter supplies whether ordinary ZIP limits are exceeded after parsing the
+/// archive; this domain only enforces the accepted canonical relationship.
+///
+/// # Errors
+///
+/// Returns a typed failure for compression, platform extras, missing required
+/// ZIP64, or unnecessary ZIP64.
+pub const fn validate_profile_archive_encoding(
+    evidence: ProfileArchiveEncodingEvidence,
+) -> Result<(), ProfileArchiveEncodingError> {
+    if matches!(
+        evidence.entry_encoding,
+        ProfileArchiveEntryEncoding::Compressed
+    ) {
+        return Err(ProfileArchiveEncodingError::CompressedEntry);
+    }
+    if matches!(
+        evidence.platform_extras,
+        ProfileArchivePlatformExtras::Present
+    ) {
+        return Err(ProfileArchiveEncodingError::PlatformSpecificExtras);
+    }
+    if matches!(evidence.zip64_requirement, ProfileZip64Requirement::Required)
+        && matches!(evidence.zip64_use, ProfileZip64Use::Absent)
+    {
+        return Err(ProfileArchiveEncodingError::MissingRequiredZip64);
+    }
+    if matches!(evidence.zip64_requirement, ProfileZip64Requirement::Ordinary)
+        && matches!(evidence.zip64_use, ProfileZip64Use::Present)
+    {
+        return Err(ProfileArchiveEncodingError::UnexpectedZip64);
     }
     Ok(())
 }
