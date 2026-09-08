@@ -77,6 +77,10 @@ name = "atrament_one_shot_formatting_prompt"
 version = "0.1.0"
 
 [[package]]
+name = "atrament_output_capability_matrix"
+version = "0.1.0"
+
+[[package]]
 name = "atrament_page_texture_plan"
 version = "0.1.0"
 dependencies = [

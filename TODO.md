@@ -1394,6 +1394,14 @@ formulas while retaining time ranges, confidence, speakers, and unresolved text.
 Reject or explicitly convert every color, highlight, photograph, shadow, paper
 note, raster-only effect, or multi-tool action before motion planning.
 
+Current executable evidence now implements all frozen first-release Digital/Live
+capability-matrix rows across semantic objects, handwriting/decoration styles,
+color, image treatments, page/paper objects, and hardware actions. Every one of
+the 118 rows has an exact `Accept`, `Convert`, `Reject`, or `Future` disposition
+for both modes; conversion is never treated as acceptance, and Future is never a
+best-effort fallback. Conversion choice/provenance, object enumeration, blocking
+diagnostics, and compilation into an accepted projection remain open.
+
 ### TODO - Implement the device-neutral motion plan
 
 Emit ordered pen-up and pen-down paths, speed, acceleration, optional pressure,

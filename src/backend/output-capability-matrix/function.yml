@@ -1,0 +1,9 @@
+identity:
+  id: function:output-capability-matrix
+  name: output-capability-matrix
+  path: src/backend/output-capability-matrix
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: domain

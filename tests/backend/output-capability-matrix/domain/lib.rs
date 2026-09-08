@@ -1,0 +1,759 @@
+// Copyright:
+//   - Copyright © 2026 Alberto Villa Osorno.
+// SPDX-License-Identifier:
+//   - MIT
+// Confidential:
+//   - false
+// License-File:
+//   - LICENSE-MIT
+//
+// Boundary-Contract:
+// - Owns:
+//   - Exhaustive regression evidence for the frozen Digital/Live matrix.
+// - Must-Not:
+//   - Execute conversions, mutate source, call hardware, or infer missing rows.
+// - Allows:
+//   - Inputs: Every frozen first-release capability row and output mode.
+//   - Outputs: Exact disposition assertions and coverage counts.
+//   - Side effects: Process-local test allocation only.
+// - Split-When:
+//   - Conversion planning or compiler diagnostics gains independent fixtures.
+// - Merge-When:
+//   - Matrix evidence moves into a capability-compiler harness.
+// - Summary:
+//   - Proves every frozen row has exactly one result per output mode.
+// - Description:
+//   - Covers semantic, style, color, image, paper, and hardware families.
+// - Usage:
+//   - Compile directly against the output-capability-matrix domain.
+// - Defaults:
+//   - Future and Convert are never treated as Accept.
+//
+use atrament_output_capability_matrix::{
+    CapabilityDisposition,
+    OutputMode,
+    ColorCapability,
+    HandwritingDecorationCapability,
+    HardwareActionCapability,
+    ImageTreatmentCapability,
+    PagePaperCapability,
+    SemanticCapability,
+    color_capability_disposition,
+    handwriting_decoration_capability_disposition,
+    hardware_action_capability_disposition,
+    image_treatment_capability_disposition,
+    page_paper_capability_disposition,
+    semantic_capability_disposition,
+};
+
+type Case<C> = (C, CapabilityDisposition, CapabilityDisposition);
+
+#[test]
+fn color_capability_covers_every_frozen_row() {
+    let cases: &[Case<ColorCapability>] = &[
+        (
+            ColorCapability::AutomaticPhysicalPenChange,
+            CapabilityDisposition::Reject,
+            CapabilityDisposition::Future,
+        ),
+        (
+            ColorCapability::ColoredDiagramStrokes,
+            CapabilityDisposition::Accept,
+            CapabilityDisposition::Convert,
+        ),
+        (
+            ColorCapability::ColoredTitleLayers,
+            CapabilityDisposition::Accept,
+            CapabilityDisposition::Convert,
+        ),
+        (
+            ColorCapability::FullColorPhotograph,
+            CapabilityDisposition::Accept,
+            CapabilityDisposition::Convert,
+        ),
+        (
+            ColorCapability::GrayscalePhotograph,
+            CapabilityDisposition::Accept,
+            CapabilityDisposition::Convert,
+        ),
+        (
+            ColorCapability::MarkerColor,
+            CapabilityDisposition::Accept,
+            CapabilityDisposition::Convert,
+        ),
+        (
+            ColorCapability::MultiplePhysicalPenColors,
+            CapabilityDisposition::Reject,
+            CapabilityDisposition::Future,
+        ),
+        (
+            ColorCapability::MultipleSimulatedInkColors,
+            CapabilityDisposition::Accept,
+            CapabilityDisposition::Convert,
+        ),
+        (
+            ColorCapability::OneInkColor,
+            CapabilityDisposition::Accept,
+            CapabilityDisposition::Accept,
+        ),
+        (
+            ColorCapability::TransparentAlpha,
+            CapabilityDisposition::Accept,
+            CapabilityDisposition::Convert,
+        ),
+    ];
+    assert_eq!(cases.len(), 10);
+    for (capability, digital, live) in cases {
+        assert_eq!(
+            color_capability_disposition(*capability, OutputMode::Digital),
+            *digital,
+        );
+        assert_eq!(
+            color_capability_disposition(*capability, OutputMode::Live),
+            *live,
+        );
+    }
+}
+
+#[test]
+fn handwriting_decoration_capability_covers_every_frozen_row() {
+    let cases: &[Case<HandwritingDecorationCapability>] = &[
+        (
+            HandwritingDecorationCapability::AnnotationHandwritingRole,
+            CapabilityDisposition::Accept,
+            CapabilityDisposition::Accept,
+        ),
+        (
+            HandwritingDecorationCapability::BodyHandwritingRole,
+            CapabilityDisposition::Accept,
+            CapabilityDisposition::Accept,
+        ),
+        (
+            HandwritingDecorationCapability::BoundedBaselineDrift,
+            CapabilityDisposition::Accept,
+            CapabilityDisposition::Accept,
+        ),
+        (
+            HandwritingDecorationCapability::BoundedRulerError,
+            CapabilityDisposition::Accept,
+            CapabilityDisposition::Accept,
+        ),
+        (
+            HandwritingDecorationCapability::CaptionHandwritingRole,
+            CapabilityDisposition::Accept,
+            CapabilityDisposition::Accept,
+        ),
+        (
+            HandwritingDecorationCapability::DecorativeTitleLayering,
+            CapabilityDisposition::Accept,
+            CapabilityDisposition::Convert,
+        ),
+        (
+            HandwritingDecorationCapability::DigitalPaperShadow,
+            CapabilityDisposition::Accept,
+            CapabilityDisposition::Reject,
+        ),
+        (
+            HandwritingDecorationCapability::FilledHighlight,
+            CapabilityDisposition::Accept,
+            CapabilityDisposition::Convert,
+        ),
+        (
+            HandwritingDecorationCapability::FormulaHandwritingRole,
+            CapabilityDisposition::Accept,
+            CapabilityDisposition::Accept,
+        ),
+        (
+            HandwritingDecorationCapability::HandDrawnLine,
+            CapabilityDisposition::Accept,
+            CapabilityDisposition::Accept,
+        ),
+        (
+            HandwritingDecorationCapability::LabelHandwritingRole,
+            CapabilityDisposition::Accept,
+            CapabilityDisposition::Accept,
+        ),
+        (
+            HandwritingDecorationCapability::LooseNoteFold,
+            CapabilityDisposition::Accept,
+            CapabilityDisposition::Reject,
+        ),
+        (
+            HandwritingDecorationCapability::MarginHandwritingRole,
+            CapabilityDisposition::Accept,
+            CapabilityDisposition::Accept,
+        ),
+        (
+            HandwritingDecorationCapability::MarkerHighlight,
+            CapabilityDisposition::Accept,
+            CapabilityDisposition::Convert,
+        ),
+        (
+            HandwritingDecorationCapability::RulerLikeLine,
+            CapabilityDisposition::Accept,
+            CapabilityDisposition::Accept,
+        ),
+        (
+            HandwritingDecorationCapability::SimulatedShadow,
+            CapabilityDisposition::Accept,
+            CapabilityDisposition::Reject,
+        ),
+        (
+            HandwritingDecorationCapability::SubtitleHandwritingRole,
+            CapabilityDisposition::Accept,
+            CapabilityDisposition::Accept,
+        ),
+        (
+            HandwritingDecorationCapability::TexturedPaperFill,
+            CapabilityDisposition::Accept,
+            CapabilityDisposition::Reject,
+        ),
+        (
+            HandwritingDecorationCapability::TitleHandwritingRole,
+            CapabilityDisposition::Accept,
+            CapabilityDisposition::Accept,
+        ),
+        (
+            HandwritingDecorationCapability::TitleOutline,
+            CapabilityDisposition::Accept,
+            CapabilityDisposition::Convert,
+        ),
+    ];
+    assert_eq!(cases.len(), 20);
+    for (capability, digital, live) in cases {
+        assert_eq!(
+            handwriting_decoration_capability_disposition(
+                *capability,
+                OutputMode::Digital,
+            ),
+            *digital,
+        );
+        assert_eq!(
+            handwriting_decoration_capability_disposition(
+                *capability,
+                OutputMode::Live,
+            ),
+            *live,
+        );
+    }
+}
+
+#[test]
+fn hardware_action_capability_covers_every_frozen_row() {
+    let cases: &[Case<HardwareActionCapability>] = &[
+        (
+            HardwareActionCapability::AccelerationValue,
+            CapabilityDisposition::Reject,
+            CapabilityDisposition::Accept,
+        ),
+        (
+            HardwareActionCapability::ArmDevice,
+            CapabilityDisposition::Reject,
+            CapabilityDisposition::Accept,
+        ),
+        (
+            HardwareActionCapability::AutomaticToolChange,
+            CapabilityDisposition::Reject,
+            CapabilityDisposition::Future,
+        ),
+        (
+            HardwareActionCapability::CalibratedPressure,
+            CapabilityDisposition::Reject,
+            CapabilityDisposition::Accept,
+        ),
+        (
+            HardwareActionCapability::CancelPlan,
+            CapabilityDisposition::Reject,
+            CapabilityDisposition::Accept,
+        ),
+        (
+            HardwareActionCapability::Checkpoint,
+            CapabilityDisposition::Reject,
+            CapabilityDisposition::Accept,
+        ),
+        (
+            HardwareActionCapability::ConnectDevice,
+            CapabilityDisposition::Reject,
+            CapabilityDisposition::Accept,
+        ),
+        (
+            HardwareActionCapability::EstimatedDuration,
+            CapabilityDisposition::Reject,
+            CapabilityDisposition::Accept,
+        ),
+        (
+            HardwareActionCapability::HomeDevice,
+            CapabilityDisposition::Reject,
+            CapabilityDisposition::Accept,
+        ),
+        (
+            HardwareActionCapability::IdentifyDevice,
+            CapabilityDisposition::Reject,
+            CapabilityDisposition::Accept,
+        ),
+        (
+            HardwareActionCapability::MultipleActivePens,
+            CapabilityDisposition::Reject,
+            CapabilityDisposition::Future,
+        ),
+        (
+            HardwareActionCapability::Pause,
+            CapabilityDisposition::Reject,
+            CapabilityDisposition::Accept,
+        ),
+        (
+            HardwareActionCapability::PausePlan,
+            CapabilityDisposition::Reject,
+            CapabilityDisposition::Accept,
+        ),
+        (
+            HardwareActionCapability::PenDownStroke,
+            CapabilityDisposition::Reject,
+            CapabilityDisposition::Accept,
+        ),
+        (
+            HardwareActionCapability::PenUpTravel,
+            CapabilityDisposition::Reject,
+            CapabilityDisposition::Accept,
+        ),
+        (
+            HardwareActionCapability::PressureProxy,
+            CapabilityDisposition::Reject,
+            CapabilityDisposition::Accept,
+        ),
+        (
+            HardwareActionCapability::RasterPrintingAction,
+            CapabilityDisposition::Reject,
+            CapabilityDisposition::Reject,
+        ),
+        (
+            HardwareActionCapability::ResumeKnownState,
+            CapabilityDisposition::Reject,
+            CapabilityDisposition::Accept,
+        ),
+        (
+            HardwareActionCapability::ResumeUncertainState,
+            CapabilityDisposition::Reject,
+            CapabilityDisposition::Reject,
+        ),
+        (
+            HardwareActionCapability::SafeBounds,
+            CapabilityDisposition::Reject,
+            CapabilityDisposition::Accept,
+        ),
+        (
+            HardwareActionCapability::SafeStop,
+            CapabilityDisposition::Reject,
+            CapabilityDisposition::Accept,
+        ),
+        (
+            HardwareActionCapability::SpeedValue,
+            CapabilityDisposition::Reject,
+            CapabilityDisposition::Accept,
+        ),
+        (
+            HardwareActionCapability::StartPlan,
+            CapabilityDisposition::Reject,
+            CapabilityDisposition::Accept,
+        ),
+    ];
+    assert_eq!(cases.len(), 23);
+    for (capability, digital, live) in cases {
+        assert_eq!(
+            hardware_action_capability_disposition(
+                *capability,
+                OutputMode::Digital,
+            ),
+            *digital,
+        );
+        assert_eq!(
+            hardware_action_capability_disposition(
+                *capability,
+                OutputMode::Live,
+            ),
+            *live,
+        );
+    }
+}
+
+#[test]
+fn image_treatment_capability_covers_every_frozen_row() {
+    let cases: &[Case<ImageTreatmentCapability>] = &[
+        (
+            ImageTreatmentCapability::AboveTextPlacement,
+            CapabilityDisposition::Accept,
+            CapabilityDisposition::Convert,
+        ),
+        (
+            ImageTreatmentCapability::BelowTextPlacement,
+            CapabilityDisposition::Accept,
+            CapabilityDisposition::Convert,
+        ),
+        (
+            ImageTreatmentCapability::ClippedRegionPlacement,
+            CapabilityDisposition::Accept,
+            CapabilityDisposition::Convert,
+        ),
+        (
+            ImageTreatmentCapability::ConfigurableLineArtLevels,
+            CapabilityDisposition::Accept,
+            CapabilityDisposition::Accept,
+        ),
+        (
+            ImageTreatmentCapability::Crop,
+            CapabilityDisposition::Accept,
+            CapabilityDisposition::Accept,
+        ),
+        (
+            ImageTreatmentCapability::InlinePlacement,
+            CapabilityDisposition::Accept,
+            CapabilityDisposition::Convert,
+        ),
+        (
+            ImageTreatmentCapability::JpegSource,
+            CapabilityDisposition::Accept,
+            CapabilityDisposition::Convert,
+        ),
+        (
+            ImageTreatmentCapability::Opacity,
+            CapabilityDisposition::Accept,
+            CapabilityDisposition::Convert,
+        ),
+        (
+            ImageTreatmentCapability::OriginalRasterPixels,
+            CapabilityDisposition::Accept,
+            CapabilityDisposition::Reject,
+        ),
+        (
+            ImageTreatmentCapability::PngSource,
+            CapabilityDisposition::Accept,
+            CapabilityDisposition::Convert,
+        ),
+        (
+            ImageTreatmentCapability::Position,
+            CapabilityDisposition::Accept,
+            CapabilityDisposition::Accept,
+        ),
+        (
+            ImageTreatmentCapability::Scale,
+            CapabilityDisposition::Accept,
+            CapabilityDisposition::Accept,
+        ),
+        (
+            ImageTreatmentCapability::SingleColorLineArt,
+            CapabilityDisposition::Accept,
+            CapabilityDisposition::Accept,
+        ),
+        (
+            ImageTreatmentCapability::SourceIdentity,
+            CapabilityDisposition::Accept,
+            CapabilityDisposition::Accept,
+        ),
+        (
+            ImageTreatmentCapability::WebpSource,
+            CapabilityDisposition::Accept,
+            CapabilityDisposition::Convert,
+        ),
+        (
+            ImageTreatmentCapability::ZOrder,
+            CapabilityDisposition::Accept,
+            CapabilityDisposition::Accept,
+        ),
+    ];
+    assert_eq!(cases.len(), 16);
+    for (capability, digital, live) in cases {
+        assert_eq!(
+            image_treatment_capability_disposition(
+                *capability,
+                OutputMode::Digital,
+            ),
+            *digital,
+        );
+        assert_eq!(
+            image_treatment_capability_disposition(
+                *capability,
+                OutputMode::Live,
+            ),
+            *live,
+        );
+    }
+}
+
+#[test]
+fn page_paper_capability_covers_every_frozen_row() {
+    let cases: &[Case<PagePaperCapability>] = &[
+        (
+            PagePaperCapability::BindingEdge,
+            CapabilityDisposition::Accept,
+            CapabilityDisposition::Accept,
+        ),
+        (
+            PagePaperCapability::BlankSheet,
+            CapabilityDisposition::Accept,
+            CapabilityDisposition::Accept,
+        ),
+        (
+            PagePaperCapability::BorderGeometry,
+            CapabilityDisposition::Accept,
+            CapabilityDisposition::Convert,
+        ),
+        (
+            PagePaperCapability::CustomDigitalPaper,
+            CapabilityDisposition::Accept,
+            CapabilityDisposition::Convert,
+        ),
+        (
+            PagePaperCapability::DottedPaper,
+            CapabilityDisposition::Accept,
+            CapabilityDisposition::Convert,
+        ),
+        (
+            PagePaperCapability::GridOrRuleGeometry,
+            CapabilityDisposition::Accept,
+            CapabilityDisposition::Convert,
+        ),
+        (
+            PagePaperCapability::Orientation,
+            CapabilityDisposition::Accept,
+            CapabilityDisposition::Accept,
+        ),
+        (
+            PagePaperCapability::OuterMargin,
+            CapabilityDisposition::Accept,
+            CapabilityDisposition::Accept,
+        ),
+        (
+            PagePaperCapability::PageBackgroundColor,
+            CapabilityDisposition::Accept,
+            CapabilityDisposition::Reject,
+        ),
+        (
+            PagePaperCapability::PaperTexture,
+            CapabilityDisposition::Accept,
+            CapabilityDisposition::Reject,
+        ),
+        (
+            PagePaperCapability::PrintableRegion,
+            CapabilityDisposition::Accept,
+            CapabilityDisposition::Accept,
+        ),
+        (
+            PagePaperCapability::RuledPaper,
+            CapabilityDisposition::Accept,
+            CapabilityDisposition::Convert,
+        ),
+        (
+            PagePaperCapability::SheetSize,
+            CapabilityDisposition::Accept,
+            CapabilityDisposition::Accept,
+        ),
+        (
+            PagePaperCapability::SimulatedLooseSheet,
+            CapabilityDisposition::Accept,
+            CapabilityDisposition::Reject,
+        ),
+        (
+            PagePaperCapability::SquaredPaper,
+            CapabilityDisposition::Accept,
+            CapabilityDisposition::Convert,
+        ),
+        (
+            PagePaperCapability::TopClearance,
+            CapabilityDisposition::Accept,
+            CapabilityDisposition::Accept,
+        ),
+        (
+            PagePaperCapability::WritingInset,
+            CapabilityDisposition::Accept,
+            CapabilityDisposition::Accept,
+        ),
+    ];
+    assert_eq!(cases.len(), 17);
+    for (capability, digital, live) in cases {
+        assert_eq!(
+            page_paper_capability_disposition(*capability, OutputMode::Digital),
+            *digital,
+        );
+        assert_eq!(
+            page_paper_capability_disposition(*capability, OutputMode::Live),
+            *live,
+        );
+    }
+}
+
+#[test]
+fn semantic_capability_covers_every_frozen_row() {
+    let cases: &[Case<SemanticCapability>] = &[
+        (
+            SemanticCapability::AlignedMathematics,
+            CapabilityDisposition::Accept,
+            CapabilityDisposition::Accept,
+        ),
+        (
+            SemanticCapability::Arrow,
+            CapabilityDisposition::Accept,
+            CapabilityDisposition::Accept,
+        ),
+        (
+            SemanticCapability::Box,
+            CapabilityDisposition::Accept,
+            CapabilityDisposition::Accept,
+        ),
+        (
+            SemanticCapability::Callout,
+            CapabilityDisposition::Accept,
+            CapabilityDisposition::Accept,
+        ),
+        (
+            SemanticCapability::Citation,
+            CapabilityDisposition::Accept,
+            CapabilityDisposition::Accept,
+        ),
+        (
+            SemanticCapability::Date,
+            CapabilityDisposition::Accept,
+            CapabilityDisposition::Accept,
+        ),
+        (
+            SemanticCapability::Definition,
+            CapabilityDisposition::Accept,
+            CapabilityDisposition::Accept,
+        ),
+        (
+            SemanticCapability::DisplayedMathematics,
+            CapabilityDisposition::Accept,
+            CapabilityDisposition::Accept,
+        ),
+        (
+            SemanticCapability::Divider,
+            CapabilityDisposition::Accept,
+            CapabilityDisposition::Accept,
+        ),
+        (
+            SemanticCapability::Footnote,
+            CapabilityDisposition::Accept,
+            CapabilityDisposition::Accept,
+        ),
+        (
+            SemanticCapability::FreeformRegion,
+            CapabilityDisposition::Accept,
+            CapabilityDisposition::Accept,
+        ),
+        (
+            SemanticCapability::Heading,
+            CapabilityDisposition::Accept,
+            CapabilityDisposition::Accept,
+        ),
+        (
+            SemanticCapability::InlineMathematics,
+            CapabilityDisposition::Accept,
+            CapabilityDisposition::Accept,
+        ),
+        (
+            SemanticCapability::LoosePaperNote,
+            CapabilityDisposition::Accept,
+            CapabilityDisposition::Reject,
+        ),
+        (
+            SemanticCapability::MarginNote,
+            CapabilityDisposition::Accept,
+            CapabilityDisposition::Accept,
+        ),
+        (
+            SemanticCapability::MatrixMathematics,
+            CapabilityDisposition::Accept,
+            CapabilityDisposition::Accept,
+        ),
+        (
+            SemanticCapability::MergedTableCells,
+            CapabilityDisposition::Accept,
+            CapabilityDisposition::Accept,
+        ),
+        (
+            SemanticCapability::OrderedList,
+            CapabilityDisposition::Accept,
+            CapabilityDisposition::Accept,
+        ),
+        (
+            SemanticCapability::PageReference,
+            CapabilityDisposition::Accept,
+            CapabilityDisposition::Accept,
+        ),
+        (
+            SemanticCapability::Paragraph,
+            CapabilityDisposition::Accept,
+            CapabilityDisposition::Accept,
+        ),
+        (
+            SemanticCapability::Photograph,
+            CapabilityDisposition::Accept,
+            CapabilityDisposition::Convert,
+        ),
+        (
+            SemanticCapability::Quotation,
+            CapabilityDisposition::Accept,
+            CapabilityDisposition::Accept,
+        ),
+        (
+            SemanticCapability::RasterIllustration,
+            CapabilityDisposition::Accept,
+            CapabilityDisposition::Convert,
+        ),
+        (
+            SemanticCapability::SemanticDiagram,
+            CapabilityDisposition::Accept,
+            CapabilityDisposition::Accept,
+        ),
+        (
+            SemanticCapability::SourceNote,
+            CapabilityDisposition::Accept,
+            CapabilityDisposition::Accept,
+        ),
+        (
+            SemanticCapability::Table,
+            CapabilityDisposition::Accept,
+            CapabilityDisposition::Accept,
+        ),
+        (
+            SemanticCapability::TextLabel,
+            CapabilityDisposition::Accept,
+            CapabilityDisposition::Accept,
+        ),
+        (
+            SemanticCapability::UnitsInMathematics,
+            CapabilityDisposition::Accept,
+            CapabilityDisposition::Accept,
+        ),
+        (
+            SemanticCapability::UnorderedList,
+            CapabilityDisposition::Accept,
+            CapabilityDisposition::Accept,
+        ),
+        (
+            SemanticCapability::UnresolvedClaim,
+            CapabilityDisposition::Accept,
+            CapabilityDisposition::Accept,
+        ),
+        (
+            SemanticCapability::UnresolvedUnsupportedBlock,
+            CapabilityDisposition::Reject,
+            CapabilityDisposition::Reject,
+        ),
+        (
+            SemanticCapability::VectorLineArt,
+            CapabilityDisposition::Accept,
+            CapabilityDisposition::Accept,
+        ),
+    ];
+    assert_eq!(cases.len(), 32);
+    for (capability, digital, live) in cases {
+        assert_eq!(
+            semantic_capability_disposition(*capability, OutputMode::Digital),
+            *digital,
+        );
+        assert_eq!(
+            semantic_capability_disposition(*capability, OutputMode::Live),
+            *live,
+        );
+    }
+}
