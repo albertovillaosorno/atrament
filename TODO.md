@@ -1374,6 +1374,14 @@ explicit unresolved fragments. Media decoding, bounded waveform conversion,
 WhisperX invocation, job progress/cancellation, temporary storage, and cleanup
 remain open adapter/lifecycle work.
 
+Terminal media-job cleanup state is now executable independently of filesystem
+implementation. Success, cancellation, and handled failure all remain unsettled
+while an owned waveform intermediate is pending cleanup; cleanup failure becomes
+an explicit retry-required state, and an intermediate owned by another job
+rejects. Temporary path selection, actual deletion, retry scheduling/limits,
+process interruption recovery, decoder/engine invocation, and persistence remain
+open application/adapter work.
+
 ### TODO - Structure transcripts without hiding uncertainty
 
 Turn reviewed transcript spans into sections, definitions, examples, and

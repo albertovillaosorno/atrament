@@ -1,0 +1,9 @@
+identity:
+  id: function:media-job-lifecycle
+  name: media-job-lifecycle
+  path: src/backend/media-job-lifecycle
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: domain
