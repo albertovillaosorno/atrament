@@ -35,9 +35,9 @@ use atrament_handwriting_profile_container::{
     PROFILE_CONTAINER_VERSION, PROFILE_MANIFEST_PATH, ProfileEntryEvidence,
     ProfileEntryInventoryError, ProfileEntryPathError,
     ProfileEntryVerificationError, ProfileManifest, ProfileManifestEntry,
-    ProfileManifestError, Sha256Digest, canonical_profile_entry_order,
-    validate_profile_entry_inventory, validate_profile_manifest,
-    verify_profile_entry,
+    ProfileManifestError, Sha256Digest, canonical_profile_archive_paths,
+    canonical_profile_entry_order, validate_profile_entry_inventory,
+    validate_profile_manifest, verify_profile_entry,
 };
 
 fn digest(byte: u8) -> Sha256Digest {
@@ -180,6 +180,24 @@ fn manifest_admits_sections_assets_and_preserves_optional_features() {
         Ok(()),
     );
     assert_eq!(value.optional_features, ["future-optional"]);
+}
+
+#[test]
+fn canonical_archive_order_includes_root_manifest_by_path() {
+    let value = manifest(vec![
+        entry("sections/z.json", "application/json", 3),
+        entry("assets/b.bin", "application/octet-stream", 2),
+        entry("sections/a.json", "application/json", 1),
+    ]);
+    assert_eq!(
+        canonical_profile_archive_paths(&value, &["stroke-vocabulary"]),
+        Ok(vec![
+            "assets/b.bin",
+            PROFILE_MANIFEST_PATH,
+            "sections/a.json",
+            "sections/z.json",
+        ]),
+    );
 }
 
 #[test]

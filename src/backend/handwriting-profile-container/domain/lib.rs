@@ -308,6 +308,31 @@ pub fn validate_profile_manifest(
     Ok(())
 }
 
+/// Return every archive path in deterministic canonical writer order.
+///
+/// The root manifest participates in the same lexicographic path ordering as
+/// declared non-manifest entries. This projects ordering only; ZIP metadata and
+/// byte encoding remain adapter responsibilities.
+///
+/// # Errors
+///
+/// Returns the same manifest failures as [`validate_profile_manifest`] before
+/// producing canonical archive path order.
+pub fn canonical_profile_archive_paths<'manifest>(
+    manifest: &'manifest ProfileManifest,
+    supported_required_features: &[&str],
+) -> Result<Vec<&'manifest str>, ProfileManifestError> {
+    validate_profile_manifest(manifest, supported_required_features)?;
+    let mut paths = manifest
+        .entries
+        .iter()
+        .map(|entry| entry.path.as_str())
+        .collect::<Vec<_>>();
+    paths.push(PROFILE_MANIFEST_PATH);
+    paths.sort_unstable();
+    Ok(paths)
+}
+
 /// Return non-manifest entries in deterministic canonical archive path order.
 ///
 /// # Errors

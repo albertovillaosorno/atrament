@@ -950,8 +950,9 @@ traversal segments, noncanonical backslash separators, and entries outside
 `sections/` or `assets/` before section decoding. Unknown optional features
 remain opaque manifest data.
 
-The same domain returns deterministic path-sorted writer order and verifies one
-entry's independently observed byte length before its SHA-256 digest. Archive
+The same domain returns deterministic path-sorted writer order for the complete
+archive, including root `manifest.json`, and verifies one entry's independently
+observed byte length before its SHA-256 digest. Archive
 inventory validation now also requires exactly one root manifest and exact
 agreement between declared and observed non-manifest paths, rejecting missing,
 undeclared, duplicate, or unsafe names before entry decoding. It does not parse
