@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "src/backend/browser-launch",
+    "src/backend/device-coordinate-calibration",
     "src/backend/device-neutral-motion-plan",
     "src/backend/diagnostic",
     "src/backend/export-layout-preflight",

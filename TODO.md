@@ -1441,6 +1441,13 @@ without connecting to a physical machine.
 Measure usable area, origin, axis orientation, scale, skew, pen-up height,
 contact height, speed, acceleration, page clamping, and boundary clearance.
 
+Current executable evidence now freezes those calibration measurements as one
+transport-neutral record bound to an identified device and explicit measurement
+evidence. Coordinate transform, pen-motion envelope, and blank-sheet
+registration remain separate grouped values while all units, tolerances, axis
+conventions, calibration algorithms, coordinate transforms, limit validation,
+dry-run admission, and physical arming remain open hardware-boundary work.
+
 ### TODO - Implement the NextDraw and AxiDraw CLI adapter
 
 Use documented SVG or CLI control behind a managed process boundary and prove

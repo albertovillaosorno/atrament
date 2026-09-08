@@ -1,0 +1,9 @@
+identity:
+  id: function:device-coordinate-calibration
+  name: device-coordinate-calibration
+  path: src/backend/device-coordinate-calibration
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: domain
