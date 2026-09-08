@@ -33,11 +33,12 @@
 //
 use atrament_handwriting_profile_container::{
     PROFILE_CONTAINER_VERSION, PROFILE_MANIFEST_PATH, ProfileEntryEvidence,
-    ProfileEntryInventoryError, ProfileEntryPathError,
+    ProfileEntryInventoryError, ProfileEntryKind, ProfileEntryPathError,
     ProfileEntryVerificationError, ProfileManifest, ProfileManifestEntry,
     ProfileManifestError, Sha256Digest, canonical_profile_archive_paths,
-    canonical_profile_entry_order, validate_profile_entry_inventory,
-    validate_profile_manifest, verify_profile_entry,
+    canonical_profile_entry_order, profile_entry_kind, profile_section_entries,
+    validate_profile_entry_inventory, validate_profile_manifest,
+    verify_profile_entry,
 };
 
 fn digest(byte: u8) -> Sha256Digest {
@@ -258,6 +259,45 @@ fn empty_media_type_rejects_before_entry_decoding() {
             path: String::from("sections/a.json"),
         }),
     );
+}
+
+#[test]
+fn entry_kind_is_path_owned_and_rejects_noncanonical_names() {
+    assert_eq!(
+        profile_entry_kind("assets/source/sample.webp"),
+        Ok(ProfileEntryKind::Asset),
+    );
+    assert_eq!(
+        profile_entry_kind("sections/identity.json"),
+        Ok(ProfileEntryKind::Section),
+    );
+    assert_eq!(
+        profile_entry_kind("sections/../identity.json"),
+        Err(ProfileEntryPathError::TraversalSegment),
+    );
+    assert_eq!(
+        profile_entry_kind(PROFILE_MANIFEST_PATH),
+        Err(ProfileEntryPathError::ManifestReserved),
+    );
+}
+
+#[test]
+fn section_projection_is_sorted_and_never_returns_opaque_assets() {
+    let value = manifest(vec![
+        entry("sections/z.json", "application/json", 3),
+        entry("assets/source.bin", "application/octet-stream", 2),
+        entry("sections/a.json", "application/json", 1),
+    ]);
+    let sections = profile_section_entries(&value, &["stroke-vocabulary"])
+        .expect("valid manifest exposes typed section metadata");
+    assert_eq!(
+        sections
+            .iter()
+            .map(|entry| entry.path.as_str())
+            .collect::<Vec<_>>(),
+        ["sections/a.json", "sections/z.json"],
+    );
+    assert_eq!(value.entries.len(), 3);
 }
 
 #[test]

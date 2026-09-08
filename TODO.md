@@ -948,7 +948,10 @@ discovery. Parsed manifest values can now reject future container versions,
 unknown required features, duplicate non-manifest paths, missing media types,
 traversal segments, noncanonical backslash separators, and entries outside
 `sections/` or `assets/` before section decoding. Unknown optional features
-remain opaque manifest data.
+remain opaque manifest data. Validated entry paths now
+also classify typed `sections/` separately from opaque `assets/`, and a default
+path-sorted section projection excludes asset entries without deleting them from
+the manifest.
 
 The same domain returns deterministic path-sorted writer order for the complete
 archive, including root `manifest.json`, and verifies one entry's independently

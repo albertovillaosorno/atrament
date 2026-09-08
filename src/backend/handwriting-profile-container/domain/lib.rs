@@ -94,6 +94,15 @@ pub struct ProfileManifest {
     pub required_features: Vec<String>,
 }
 
+/// Semantic container kind determined only from one validated archive path.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub enum ProfileEntryKind {
+    /// Opaque optional payload retained without content interpretation.
+    Asset,
+    /// Typed JSON section requiring section-schema decoding by an owner.
+    Section,
+}
+
 /// Why one declared profile entry path is not a canonical safe file path.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ProfileEntryPathError {
@@ -196,6 +205,46 @@ pub enum ProfileEntryVerificationError {
     },
     /// Observed entry digest differs from the manifest declaration.
     DigestMismatch,
+}
+
+/// Classify one canonical non-manifest profile entry path.
+///
+/// # Errors
+///
+/// Returns the same path failure used by manifest admission when the path is
+/// unsafe, reserved, or outside the admitted `sections/` and `assets/` roots.
+pub fn profile_entry_kind(
+    path: &str,
+) -> Result<ProfileEntryKind, ProfileEntryPathError> {
+    validate_profile_entry_path(path)?;
+    if path.starts_with("assets/") {
+        Ok(ProfileEntryKind::Asset)
+    } else {
+        Ok(ProfileEntryKind::Section)
+    }
+}
+
+/// Return validated typed-section entries in deterministic path order.
+///
+/// Opaque asset entries remain owned by the manifest but are deliberately not
+/// returned by this default section projection.
+///
+/// # Errors
+///
+/// Returns the same manifest failures as [`validate_profile_manifest`] before
+/// producing section-decoding or inspection input.
+pub fn profile_section_entries<'manifest>(
+    manifest: &'manifest ProfileManifest,
+    supported_required_features: &[&str],
+) -> Result<Vec<&'manifest ProfileManifestEntry>, ProfileManifestError> {
+    validate_profile_manifest(manifest, supported_required_features)?;
+    let mut sections = manifest
+        .entries
+        .iter()
+        .filter(|entry| entry.path.starts_with("sections/"))
+        .collect::<Vec<_>>();
+    sections.sort_unstable_by(|left, right| left.path.cmp(&right.path));
+    Ok(sections)
 }
 
 /// Validate that archive names exactly match one parsed profile manifest.
