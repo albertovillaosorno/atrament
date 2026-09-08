@@ -1431,6 +1431,14 @@ plan compilation remains open.
 Reduce pen-up travel and drying conflicts while preserving stroke order where
 joins, ink behavior, semantics, or the handwriting profile require it.
 
+Current executable evidence now freezes the order-preservation boundary without
+choosing an optimizer. One constraint set is bound to an exact plan identity and
+operation count, with explicit Join, InkBehavior, Semantic, or
+HandwritingProfile reasons. A proposed optimized order must be a complete
+permutation of source operation indexes and retain every declared earlier/later
+relation; unconstrained operations may move. Route selection, distance/cost
+metrics, drying-conflict detection, and optimization policy remain open.
+
 ### TODO - Build the hardware simulator and dry run
 
 Visualize pen-up travel, pen-down paths, limits, time, pauses, and checkpoints

@@ -77,6 +77,10 @@ name = "atrament_media_job_lifecycle"
 version = "0.1.0"
 
 [[package]]
+name = "atrament_motion_path_order_constraints"
+version = "0.1.0"
+
+[[package]]
 name = "atrament_motion_plan_dry_run"
 version = "0.1.0"
 dependencies = [

@@ -1,0 +1,9 @@
+identity:
+  id: function:motion-path-order-constraints
+  name: motion-path-order-constraints
+  path: src/backend/motion-path-order-constraints
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: domain
