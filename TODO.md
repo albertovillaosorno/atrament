@@ -1859,7 +1859,12 @@ raw
 response handling, and the separation from later command-mode refinement. It
 keeps prompt serialization/identity computation, response parsing, candidate
 validation, provider guidance, and end-to-end execution explicitly open.
-The broader adapter and troubleshooting documentation remains open.
+
+A verified adapter-boundary guide now maps browser, localhost, clipboard, MCP,
+Render, Export, and Plan contracts to their separate admission, effect, retry,
+identity, persistence, and physical-safety boundaries. It also distinguishes
+implemented browser/runtime behavior from contract-only CLI, MCP, file, model,
+media, and hardware adapters. Troubleshooting documentation remains open.
 
 ### TODO - Close every known reproducible defect
 
