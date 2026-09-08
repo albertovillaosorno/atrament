@@ -1,0 +1,9 @@
+identity:
+  id: function:device-neutral-motion-plan
+  name: device-neutral-motion-plan
+  path: src/backend/device-neutral-motion-plan
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: domain

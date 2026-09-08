@@ -1399,6 +1399,17 @@ note, raster-only effect, or multi-tool action before motion planning.
 Emit ordered pen-up and pen-down paths, speed, acceleration, optional pressure,
 safe bounds, pauses, checkpoints, semantic origin, and estimated duration.
 
+Current executable evidence now freezes the transport-neutral motion-plan
+content
+boundary without hardware authority. Ordered operations retain pen-up/pen-down
+physical geometry, semantic origin, speed/acceleration intent, optional
+pressure,
+pauses/checkpoints, physical/writable-bound evidence, calibrated pen and live
+capability assumptions, accepted revision identity, backend plan identity, and
+optional estimated duration. Path optimization, coordinate calibration, plan
+identity computation, capability compilation, simulation, vendor command
+projection, device I/O, and physical authorization remain open.
+
 Current design evidence freezes Plan as a read-only derived application
 capability bound to one accepted revision and live capability profile, with
 deterministic inputs, blocking diagnostics, plan identity, read-only
