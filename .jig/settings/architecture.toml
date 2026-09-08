@@ -64,6 +64,9 @@ depends_on = []
 [component.atrament_motion_plan_dry_run]
 depends_on = ["atrament_device_coordinate_calibration", "atrament_device_neutral_motion_plan"]
 
+[component.atrament_motion_plan_simulation_trace]
+depends_on = ["atrament_motion_plan_dry_run"]
+
 [component.atrament_one_shot_formatting_prompt]
 depends_on = []
 

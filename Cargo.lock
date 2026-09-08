@@ -85,6 +85,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "atrament_motion_plan_simulation_trace"
+version = "0.1.0"
+dependencies = [
+ "atrament_motion_plan_dry_run",
+]
+
+[[package]]
 name = "atrament_one_shot_formatting_prompt"
 version = "0.1.0"
 

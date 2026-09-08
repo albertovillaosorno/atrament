@@ -1,0 +1,9 @@
+identity:
+  id: function:motion-plan-simulation-trace
+  name: motion-plan-simulation-trace
+  path: src/backend/motion-plan-simulation-trace
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: domain

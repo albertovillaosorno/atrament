@@ -21,6 +21,7 @@ members = [
     "src/backend/physical-recovery-state",
     "src/backend/physical-page-profile",
     "src/backend/motion-plan-dry-run",
+    "src/backend/motion-plan-simulation-trace",
     "src/backend/one-shot-formatting-prompt",
     "src/backend/output-capability-matrix",
     "src/backend/page-texture-plan",

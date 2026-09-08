@@ -1444,6 +1444,14 @@ violated limits reject at the exact operation index. Coordinate transforms,
 limit geometry, visual rendering, timing simulation beyond plan evidence, and
 hardware contact remain open.
 
+Offline simulation now also produces a borrowed inspection trace only after the
+complete dry run validates. The trace retains the exact plan and calibration,
+operation order, pen-up/down geometry, pause/checkpoint payloads, per-operation
+limit evidence, plan/revision identities, physical bounds, and admitted total
+estimated duration without copying or rewriting plan authority. Pixel/vector
+visualization, coordinate transforms, limit geometry, and derived per-operation
+timing remain open.
+
 ### TODO - Calibrate pen and blank-sheet coordinates
 
 Measure usable area, origin, axis orientation, scale, skew, pen-up height,
