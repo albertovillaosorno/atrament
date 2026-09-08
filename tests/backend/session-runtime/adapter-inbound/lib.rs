@@ -783,6 +783,83 @@ fn generated_handshake_versions_match_backend_authority() {
 }
 
 #[test]
+fn generated_draft_transport_matches_backend_routes() {
+    let draft_module = std::str::from_utf8(SESSION_DRAFT_JAVASCRIPT)
+        .expect("generated draft module is UTF-8");
+    let main_module = std::str::from_utf8(MAIN_JAVASCRIPT)
+        .expect("generated main module is UTF-8");
+    for required in [
+        r#"return `./api/session/${field}`;"#,
+        r#"Authorization: `Bearer ${sessionSecret}`"#,
+        r#""Content-Type": "text/plain; charset=utf-8""#,
+    ] {
+        assert!(
+            draft_module.contains(required),
+            "generated draft transport drifted from {required}",
+        );
+    }
+    assert!(main_module.contains(r#"method: "GET""#));
+    assert!(main_module.contains(r#"method: "POST""#));
+
+    let authorization = format!("Bearer {EXPECTED_SECRET}");
+    let cases = [
+        (
+            "task",
+            "/api/session/task",
+            DraftField::Task,
+            "taskInput",
+            "task α",
+        ),
+        (
+            "source",
+            "/api/session/source",
+            DraftField::Source,
+            "sourceInput",
+            "fuente ñ",
+        ),
+        (
+            "candidate",
+            "/api/session/candidate",
+            DraftField::Candidate,
+            "candidateInput",
+            "respuesta π",
+        ),
+    ];
+    let mut draft = SessionDraftService::default();
+    for (name, target, field, input, initial) in cases {
+        let binding = format!(r#"["{name}", {input},"#);
+        assert!(
+            main_module.contains(&binding),
+            "generated main module omitted {name} draft binding",
+        );
+        assert_eq!(
+            draft.replace(field, String::from(initial)),
+            atrament_session_draft_port::DraftMutation::Applied,
+        );
+        let read = draft_read_request(
+            target,
+            Some(&authorization),
+            Some(EXPECTED_ORIGIN),
+        );
+        let response = route_with_draft(&read, EXPECTED_HOST, &mut draft);
+        let (head, body) = response_parts(&response);
+        assert!(head.starts_with("HTTP/1.1 200 OK\r\n"));
+        assert_eq!(body, initial.as_bytes());
+
+        let replacement = format!("edited {name}");
+        let write = draft_replace_request(
+            target,
+            Some(&authorization),
+            Some(EXPECTED_ORIGIN),
+            replacement.as_bytes(),
+        );
+        let response = route_with_draft(&write, EXPECTED_HOST, &mut draft);
+        assert_eq!(status_line(&response), "HTTP/1.1 204 No Content");
+        assert_eq!(draft.value(field), replacement);
+    }
+}
+
+#[test]
 fn serves_embedded_frontend_resources_without_caching() {
     let host = "127.0.0.1:43123";
     let cases = [

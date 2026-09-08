@@ -24,7 +24,7 @@
 //   - Browser draft replacement is subsumed by another session transport
 //     module.
 // - Summary:
-//   - Defines exact browser metadata for protected session draft replacement.
+//   - Defines exact browser metadata for protected session draft transport.
 // - Description:
 //   - Keeps route names and credential headers independently testable under
 //     Node.
