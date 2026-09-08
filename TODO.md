@@ -1366,6 +1366,14 @@ schemas, CLI/MCP executables, and packaging integration remain open.
 Normalize supported media to bounded temporary audio, invoke the admitted
 WhisperX adapter, preserve word timing and confidence, and always clean up.
 
+Current executable evidence now freezes a transport-neutral derived transcript
+separate from original media and any particular transcription engine. It retains
+original media kind/identity, unique job identity, replaceable engine identity,
+resolved word order, optional word timing/confidence/speaker evidence, and
+explicit unresolved fragments. Media decoding, bounded waveform conversion,
+WhisperX invocation, job progress/cancellation, temporary storage, and cleanup
+remain open adapter/lifecycle work.
+
 ### TODO - Structure transcripts without hiding uncertainty
 
 Turn reviewed transcript spans into sections, definitions, examples, and

@@ -227,6 +227,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "atrament_transcript_evidence"
+version = "0.1.0"
+
+[[package]]
 name = "atrament_vector_geometry"
 version = "0.1.0"
 

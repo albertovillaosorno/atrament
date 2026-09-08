@@ -1,0 +1,9 @@
+identity:
+  id: function:transcript-evidence
+  name: transcript-evidence
+  path: src/backend/transcript-evidence
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: domain
