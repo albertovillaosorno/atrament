@@ -37,6 +37,10 @@ name = "atrament_handwriting_calibration_evidence"
 version = "0.1.0"
 
 [[package]]
+name = "atrament_handwriting_calibration_session"
+version = "0.1.0"
+
+[[package]]
 name = "atrament_handwriting_profile_container"
 version = "0.1.0"
 

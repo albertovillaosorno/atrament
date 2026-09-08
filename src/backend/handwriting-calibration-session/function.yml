@@ -1,0 +1,9 @@
+identity:
+  id: function:handwriting-calibration-session
+  name: handwriting-calibration-session
+  path: src/backend/handwriting-calibration-session
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: domain

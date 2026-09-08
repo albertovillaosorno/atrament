@@ -987,6 +987,14 @@ sample. This does not choose a minimum sample set, confidence scale, unit
 vocabulary, source-region syntax, capture geometry, extraction algorithm, or
 calibration workflow.
 
+Guided-session evidence now also preserves a caller-supplied ordered prompt plan
+across resumptions, rejects duplicate prompt identities, derives completion from
+accepted prompt progress, and covers the ADR's isolated-character, join, word,
+sentence, numeral, punctuation, mathematical-symbol, heading, and free-writing
+categories. Caller-owned reference geometry, speed, and size travel with the
+plan; minimum counts, wording, sufficiency, capture UI, and geometry semantics
+remain open.
+
 ### TODO - Correct photographed calibration geometry
 
 Detect reference marks, perspective, lens distortion, scale, grid, baseline,
