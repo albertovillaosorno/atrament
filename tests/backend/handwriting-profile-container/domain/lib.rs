@@ -32,10 +32,12 @@
 //   - No filesystem, archive, or renderer behavior is exercised.
 //
 use atrament_handwriting_profile_container::{
-    PROFILE_CONTAINER_VERSION, ProfileEntryEvidence, ProfileEntryPathError,
+    PROFILE_CONTAINER_VERSION, PROFILE_MANIFEST_PATH, ProfileEntryEvidence,
+    ProfileEntryInventoryError, ProfileEntryPathError,
     ProfileEntryVerificationError, ProfileManifest, ProfileManifestEntry,
     ProfileManifestError, Sha256Digest, canonical_profile_entry_order,
-    validate_profile_manifest, verify_profile_entry,
+    validate_profile_entry_inventory, validate_profile_manifest,
+    verify_profile_entry,
 };
 
 fn digest(byte: u8) -> Sha256Digest {
@@ -59,6 +61,112 @@ fn manifest(entries: Vec<ProfileManifestEntry>) -> ProfileManifest {
         profile_identity: String::from("writer-fixture"),
         required_features: vec![String::from("stroke-vocabulary")],
     }
+}
+
+#[test]
+fn archive_inventory_exactly_matches_manifest_entries() {
+    let value = manifest(vec![
+        entry("sections/strokes.json", "application/json", 7),
+        entry("assets/sample.webp", "image/webp", 9),
+    ]);
+    assert_eq!(
+        validate_profile_entry_inventory(
+            &value,
+            &["stroke-vocabulary"],
+            &[
+                "assets/sample.webp",
+                PROFILE_MANIFEST_PATH,
+                "sections/strokes.json",
+            ],
+        ),
+        Ok(()),
+    );
+}
+
+#[test]
+fn archive_inventory_rejects_missing_and_undeclared_entries() {
+    let value = manifest(vec![
+        entry("sections/strokes.json", "application/json", 7),
+        entry("assets/sample.webp", "image/webp", 9),
+    ]);
+    assert_eq!(
+        validate_profile_entry_inventory(
+            &value,
+            &["stroke-vocabulary"],
+            &[PROFILE_MANIFEST_PATH, "sections/strokes.json"],
+        ),
+        Err(ProfileEntryInventoryError::MissingDeclaredEntry {
+            path: String::from("assets/sample.webp"),
+        }),
+    );
+    assert_eq!(
+        validate_profile_entry_inventory(
+            &value,
+            &["stroke-vocabulary"],
+            &[
+                PROFILE_MANIFEST_PATH,
+                "sections/strokes.json",
+                "assets/sample.webp",
+                "assets/extra.bin",
+            ],
+        ),
+        Err(ProfileEntryInventoryError::UndeclaredObservedEntry {
+            path: String::from("assets/extra.bin"),
+        }),
+    );
+}
+
+#[test]
+fn archive_inventory_rejects_duplicate_unsafe_and_missing_manifest_paths() {
+    let value = manifest(vec![entry(
+        "sections/strokes.json",
+        "application/json",
+        7,
+    )]);
+    assert_eq!(
+        validate_profile_entry_inventory(
+            &value,
+            &["stroke-vocabulary"],
+            &[PROFILE_MANIFEST_PATH, PROFILE_MANIFEST_PATH],
+        ),
+        Err(ProfileEntryInventoryError::DuplicateObservedEntryPath {
+            path: String::from(PROFILE_MANIFEST_PATH),
+        }),
+    );
+    assert_eq!(
+        validate_profile_entry_inventory(
+            &value,
+            &["stroke-vocabulary"],
+            &[PROFILE_MANIFEST_PATH, "sections/../strokes.json"],
+        ),
+        Err(ProfileEntryInventoryError::InvalidObservedEntryPath {
+            path: String::from("sections/../strokes.json"),
+            reason: ProfileEntryPathError::TraversalSegment,
+        }),
+    );
+    assert_eq!(
+        validate_profile_entry_inventory(
+            &value,
+            &["stroke-vocabulary"],
+            &["sections/strokes.json"],
+        ),
+        Err(ProfileEntryInventoryError::MissingManifest),
+    );
+
+    let mut future = value.clone();
+    future.container_version = String::from("atrament.profile/2");
+    assert_eq!(
+        validate_profile_entry_inventory(
+            &future,
+            &["stroke-vocabulary"],
+            &[PROFILE_MANIFEST_PATH, "sections/strokes.json"],
+        ),
+        Err(ProfileEntryInventoryError::InvalidManifest {
+            reason: ProfileManifestError::UnsupportedContainerVersion {
+                observed: String::from("atrament.profile/2"),
+            },
+        }),
+    );
 }
 
 #[test]
@@ -158,6 +266,19 @@ fn future_version_and_unknown_required_feature_fail_closed() {
 #[test]
 fn entry_evidence_checks_length_before_digest() {
     let value = entry("assets/sample.bin", "application/octet-stream", 7);
+    assert_eq!(
+        verify_profile_entry(
+            &value,
+            ProfileEntryEvidence {
+                byte_length: 6,
+                digest: digest(7),
+            },
+        ),
+        Err(ProfileEntryVerificationError::ByteLengthMismatch {
+            declared: 7,
+            observed: 6,
+        }),
+    );
     assert_eq!(
         verify_profile_entry(
             &value,

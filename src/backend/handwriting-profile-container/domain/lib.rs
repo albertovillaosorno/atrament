@@ -141,6 +141,40 @@ pub enum ProfileManifestError {
     },
 }
 
+/// Typed archive-inventory failure before any entry bytes are decoded.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum ProfileEntryInventoryError {
+    /// The archive contains the same observed path more than once.
+    DuplicateObservedEntryPath {
+        /// Duplicate observed archive path retained exactly for diagnostics.
+        path: String,
+    },
+    /// The supplied manifest is invalid before archive inventory comparison.
+    InvalidManifest {
+        /// Exact manifest validation failure.
+        reason: ProfileManifestError,
+    },
+    /// One observed non-manifest path is unsafe or outside admitted roots.
+    InvalidObservedEntryPath {
+        /// Observed archive path retained exactly for diagnostics.
+        path: String,
+        /// Exact canonical-path rule that rejected the observed path.
+        reason: ProfileEntryPathError,
+    },
+    /// One manifest-declared non-manifest entry is absent from the archive.
+    MissingDeclaredEntry {
+        /// Missing declared path retained exactly for diagnostics.
+        path: String,
+    },
+    /// The archive contains no root `manifest.json`.
+    MissingManifest,
+    /// One observed non-manifest entry has no manifest declaration.
+    UndeclaredObservedEntry {
+        /// Undeclared observed archive path retained exactly for diagnostics.
+        path: String,
+    },
+}
+
 /// Exact independently observed evidence for one archive entry.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ProfileEntryEvidence {
@@ -162,6 +196,68 @@ pub enum ProfileEntryVerificationError {
     },
     /// Observed entry digest differs from the manifest declaration.
     DigestMismatch,
+}
+
+/// Validate that archive names exactly match one parsed profile manifest.
+///
+/// The observed path list represents archive entries before their contents are
+/// decoded. It must contain exactly one root manifest and exactly the declared
+/// non-manifest entries, with no duplicate, unsafe, or undeclared paths.
+///
+/// # Errors
+///
+/// Returns a typed failure for invalid manifest metadata or any mismatch
+/// between manifest declarations and observed archive names.
+pub fn validate_profile_entry_inventory(
+    manifest: &ProfileManifest,
+    supported_required_features: &[&str],
+    observed_paths: &[&str],
+) -> Result<(), ProfileEntryInventoryError> {
+    validate_profile_manifest(manifest, supported_required_features).map_err(
+        |reason| ProfileEntryInventoryError::InvalidManifest { reason },
+    )?;
+    let declared = manifest
+        .entries
+        .iter()
+        .map(|entry| entry.path.as_str())
+        .collect::<BTreeSet<_>>();
+    let mut observed = BTreeSet::new();
+    let mut observed_non_manifest = BTreeSet::new();
+    let mut manifest_seen = false;
+    for path in observed_paths {
+        if !observed.insert(*path) {
+            return Err(ProfileEntryInventoryError::DuplicateObservedEntryPath {
+                path: String::from(*path),
+            });
+        }
+        if *path == PROFILE_MANIFEST_PATH {
+            manifest_seen = true;
+            continue;
+        }
+        if let Err(reason) = validate_profile_entry_path(path) {
+            return Err(ProfileEntryInventoryError::InvalidObservedEntryPath {
+                path: String::from(*path),
+                reason,
+            });
+        }
+        if !declared.contains(path) {
+            return Err(ProfileEntryInventoryError::UndeclaredObservedEntry {
+                path: String::from(*path),
+            });
+        }
+        let _inserted = observed_non_manifest.insert(*path);
+    }
+    if !manifest_seen {
+        return Err(ProfileEntryInventoryError::MissingManifest);
+    }
+    for entry in &manifest.entries {
+        if !observed_non_manifest.contains(entry.path.as_str()) {
+            return Err(ProfileEntryInventoryError::MissingDeclaredEntry {
+                path: entry.path.clone(),
+            });
+        }
+    }
+    Ok(())
 }
 
 /// Validate parsed portable-profile manifest values before entry decoding.

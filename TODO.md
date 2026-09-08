@@ -951,9 +951,11 @@ traversal segments, noncanonical backslash separators, and entries outside
 remain opaque manifest data.
 
 The same domain returns deterministic path-sorted writer order and verifies one
-entry's independently observed byte length before its SHA-256 digest. It does
-not
-parse or write ZIP or JSON, choose wire field names or numeric resource limits,
+entry's independently observed byte length before its SHA-256 digest. Archive
+inventory validation now also requires exactly one root manifest and exact
+agreement between declared and observed non-manifest paths, rejecting missing,
+undeclared, duplicate, or unsafe names before entry decoding. It does not parse
+or write ZIP or JSON, choose wire field names or numeric resource limits,
 compute hashes, decode typed sections, interpret opaque assets, migrate
 versions,
 or expose the inspection command. Those adapter, canonical-encoding, migration,
