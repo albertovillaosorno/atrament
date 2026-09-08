@@ -1059,6 +1059,50 @@ fn layout_sensitive_amsmath_commands_remain_explicitly_unsupported() {
 }
 
 #[test]
+fn primitive_tex_fraction_and_root_controls_remain_explicitly_unsupported() {
+    for (source, unsupported) in [
+        (r"x \over y", vec![r"\over"]),
+        (r"x \atop y", vec![r"\atop"]),
+        (r"x \above 1pt y", vec![r"\above"]),
+        (r"\root 3 \of{x}", vec![r"\root", r"\of"]),
+        (r"\buildrel{a}\over{=}", vec![r"\buildrel", r"\over"]),
+    ] {
+        let analyzed = analyze(source, FormulaMode::Display)
+            .expect("balanced primitive TeX structural source");
+        assert!(!analyzed.is_supported(), "{source}");
+        assert_eq!(reconstructed(&analyzed), source);
+        assert_eq!(
+            analyzed
+                .unsupported
+                .iter()
+                .map(|item| item.name.as_str())
+                .collect::<Vec<_>>(),
+            unsupported,
+            "{source}",
+        );
+    }
+}
+
+#[test]
+fn advanced_amsmath_layout_controls_remain_explicitly_unsupported() {
+    for (source, unsupported) in [
+        (r"x\mspace{5mu}y", r"\mspace"),
+        (r"x\nobreakdash-y", r"\nobreakdash"),
+        (r"\overunderset{a}{b}{=}", r"\overunderset"),
+        (r"\sideset{_a}{^b}{\sum}", r"\sideset"),
+        (r"\smash[b]{x}", r"\smash"),
+        (r"\hdotsfor{3}", r"\hdotsfor"),
+    ] {
+        let analyzed = analyze(source, FormulaMode::Display)
+            .expect("balanced advanced amsmath layout source");
+        assert!(!analyzed.is_supported(), "{source}");
+        assert_eq!(reconstructed(&analyzed), source);
+        assert_eq!(analyzed.unsupported.len(), 1, "{source}");
+        assert_eq!(analyzed.unsupported[0].name, unsupported, "{source}");
+    }
+}
+
+#[test]
 fn latex_base_construction_atoms_remain_explicitly_unsupported() {
     for source in [
         r"\braceld",

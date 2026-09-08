@@ -652,9 +652,9 @@ small-matrix, split, and vertical-bar-matrix environments. Paired
 delimiter-sizing controls remain explicit unsupported input rather than being
 inferred from admitted delimiter glyph names. Context-sensitive ellipsis forms,
 the dotted multi-integral form, explicit limit-placement controls, and equation
-reference, tag, intertext, and display-break controls likewise remain
-unsupported until their presentation or document-reference semantics have an
-owning model.
+reference, tag, intertext, display-break, primitive fraction/root, and advanced
+spacing or layout controls likewise remain unsupported until their presentation,
+expression-grammar, or document-reference semantics have an owning model.
 
 Math-only alignment, script, and row-break markers remain literal inside grouped
 text. Row breaks are structural inside grouped substacks without admitting
