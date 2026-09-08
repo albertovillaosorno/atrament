@@ -9,6 +9,9 @@ license = "MIT"
 atrament_diagnostic = { path = "../diagnostic" }
 atrament_session_handshake_port = { path = "../session-handshake-port" }
 
+[dependencies.atrament_handwriting_profile_container]
+path = "../handwriting-profile-container"
+
 [lib]
 path = "application/lib.rs"
 

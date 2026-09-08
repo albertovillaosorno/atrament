@@ -1,0 +1,9 @@
+identity:
+  id: function:handwriting-profile-container
+  name: handwriting-profile-container
+  path: src/backend/handwriting-profile-container
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: domain

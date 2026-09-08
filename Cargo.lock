@@ -33,6 +33,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "atrament_handwriting_profile_container"
+version = "0.1.0"
+
+[[package]]
 name = "atrament_mathematics_source"
 version = "0.1.0"
 
@@ -140,6 +144,7 @@ name = "atrament_session_handshake"
 version = "0.1.0"
 dependencies = [
  "atrament_diagnostic",
+ "atrament_handwriting_profile_container",
  "atrament_session_handshake_port",
 ]
 

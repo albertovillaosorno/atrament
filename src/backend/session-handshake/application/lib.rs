@@ -36,6 +36,7 @@
 
 //! First-release Atrament browser/backend compatibility handshake.
 
+use atrament_handwriting_profile_container::PROFILE_CONTAINER_VERSION;
 use atrament_diagnostic::{
     BlockingDisposition, Completeness, Diagnostic, DiagnosticCode,
     DiagnosticSet, Evidence, LocationKind, LocationRole, Operation,
@@ -48,7 +49,7 @@ use atrament_session_handshake_port::{
 /// First-release output-capability behavior identity.
 pub const CAPABILITY_VERSION: &str = "atrament.capability/1";
 /// First-release portable profile format identity.
-pub const PROFILE_VERSION: &str = "atrament.profile/1";
+pub const PROFILE_VERSION: &str = PROFILE_CONTAINER_VERSION;
 /// Product version participating in browser/backend compatibility.
 pub const PRODUCT_VERSION: &str = match option_env!("CARGO_PKG_VERSION") {
     Some(version) => version,

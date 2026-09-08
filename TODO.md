@@ -942,6 +942,24 @@ each overlay to the owning source object and correction actions.
 Choose canonical encoding, manifest, checksums, optional assets, version rules,
 unknown-field behavior, migration, and a human-readable inspection command.
 
+Current executable evidence centralizes the first portable-profile format
+identity in a dependency-free container domain shared by session compatibility
+discovery. Parsed manifest values can now reject future container versions,
+unknown required features, duplicate non-manifest paths, missing media types,
+traversal segments, noncanonical backslash separators, and entries outside
+`sections/` or `assets/` before section decoding. Unknown optional features
+remain opaque manifest data.
+
+The same domain returns deterministic path-sorted writer order and verifies one
+entry's independently observed byte length before its SHA-256 digest. It does
+not
+parse or write ZIP or JSON, choose wire field names or numeric resource limits,
+compute hashes, decode typed sections, interpret opaque assets, migrate
+versions,
+or expose the inspection command. Those adapter, canonical-encoding, migration,
+and inspection surfaces remain open together with golden byte-stable ZIP, ZIP64,
+archive-metadata, truncation, and real digest fixtures.
+
 ### TODO - Build the guided calibration session
 
 Collect isolated characters, joins, words, numerals, punctuation, mathematics,
