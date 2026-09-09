@@ -15,6 +15,7 @@ members = [
     "src/backend/handwriting-role-profile",
     "src/backend/handwriting-stroke-plan",
     "src/backend/handwriting-variation",
+    "src/backend/image-placement-intent",
     "src/backend/media-job-lifecycle",
     "src/backend/material-layer-plan",
     "src/backend/mathematics-source",

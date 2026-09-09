@@ -46,6 +46,9 @@ depends_on = []
 [component.atrament_handwriting_variation]
 depends_on = []
 
+[component.atrament_image_placement_intent]
+depends_on = []
+
 [component.atrament_media_job_lifecycle]
 depends_on = []
 

@@ -1,0 +1,9 @@
+identity:
+  id: function:image-placement-intent
+  name: image-placement-intent
+  path: src/backend/image-placement-intent
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: domain

@@ -899,15 +899,18 @@ construction, diagnostics, and notebook mutation remain open.
 Expose source identity, crop, scale, opacity, z-order, below-text, inline,
 above-text, and clipped-region placement without overwriting the original.
 
-Current executable command evidence covers only source identity on an existing
+Current executable command evidence covers source identity on an existing
 semantic figure. `AssetReference` can attach, replace, or remove a reference to
 an asset already admitted in the same accepted revision, including nested
 figures and atomic Undo. The value cannot carry raw bytes, base64, filesystem
 paths, or remote URLs, so it does not implement media ingestion.
 
-Crop, scale, opacity, z-order, below-text, inline, above-text, clipped-region
-placement, original-media ownership, and rendering remain open until their typed
-semantic authorities are executable.
+A transport-neutral placement intent now keeps that original source identity
+separate from caller-owned crop, position, size, transform, opacity, z-order,
+resolution policy, color handling, and placement constraints. Below-text,
+inline, above-text, and clipped-region modes are explicit. Coordinate units,
+transform/crop evaluation, opacity ranges, semantic figure integration, derived
+line-art, decoding, rendering, and command transport remain open.
 
 ### TODO - Keep the Copy prompt control permanently available
 
