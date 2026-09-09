@@ -6,9 +6,3 @@ path = ".dependencies/git/2.54.0/bin/git"
 
 [entry.rust_stable_cargo.linux]
 path = ".dependencies/rust/1.97.1/bin/cargo"
-
-[entry.rust_nightly_cargo_clippy.linux]
-path = ".dependencies/rust/nightly-2026-07-14/bin/cargo-clippy"
-
-[entry.rust_nightly_clippy.linux]
-path = ".dependencies/rust/nightly-2026-07-14/bin/clippy-driver"
