@@ -4943,3 +4943,130 @@ fn application_debug_does_not_expose_private_session_text() {
     assert!(!debug.contains(private_draft));
     assert!(!debug.contains(private_semantic));
 }
+
+#[test]
+fn grapheme_range_edits_respect_redo_asset_byte_lifecycle() {
+    #[derive(Clone, Copy)]
+    enum GraphemeAttempt {
+        Apply,
+        NoOp,
+        ProviderRejected,
+    }
+
+    for attempt in [
+        GraphemeAttempt::ProviderRejected,
+        GraphemeAttempt::NoOp,
+        GraphemeAttempt::Apply,
+    ] {
+        let identities = IdentityAllocator::new();
+        let (editable, candidate_span) =
+            editable_text_candidate(&identities, "before");
+        let mut session = application::SessionApplication::default();
+        let AcceptanceOutcome::Accepted { mapping, .. } =
+            session.accept_candidate(editable)
+        else {
+            panic!("grapheme branch fixture must be accepted");
+        };
+        let span = mapping
+            .iter()
+            .find(|entry| entry.candidate == candidate_span)
+            .expect("grapheme branch span identity must map")
+            .accepted;
+
+        let (asset_candidate, _, candidate_asset, _) =
+            asset_figure_candidate(&identities);
+        let AcceptanceOutcome::Accepted {
+            mapping: asset_mapping,
+            revision: with_asset,
+        } = session.accept_candidate(asset_candidate)
+        else {
+            panic!("grapheme branch asset candidate must be accepted");
+        };
+        let asset = asset_mapping
+            .iter()
+            .find(|entry| entry.candidate == candidate_asset)
+            .expect("grapheme branch asset identity must map")
+            .accepted;
+        assert!(matches!(
+            session.retain_asset_bytes(
+                with_asset,
+                asset,
+                b"grapheme-redo-only-asset".to_vec(),
+            ),
+            Ok(application::AssetBytesRetention::Retained { .. })
+        ));
+        let HistoryTraversalOutcome::Traversed { revision: undone, .. } =
+            session.traverse_history(with_asset, HistoryDirection::Undo)
+        else {
+            panic!("grapheme branch asset candidate must Undo");
+        };
+        let redo_history =
+            HistoryAvailabilityOutcome::Available(HistoryAvailability {
+                can_redo: true,
+                can_undo: false,
+                revision: undone,
+            });
+        assert_eq!(session.history_availability(), redo_history);
+        assert_eq!(session.retained_asset_byte_count_for_test(), 1);
+
+        match attempt {
+            GraphemeAttempt::ProviderRejected => {
+                assert_eq!(
+                    session.replace_text_grapheme_range(
+                        &UnderreportedAdvertisedBoundary,
+                        undone,
+                        span,
+                        GraphemeRange { count: 0, start: 1 },
+                        "x",
+                    ),
+                    Err(GraphemeRangeError::BoundaryAnchorMismatch {
+                        expected: "before".len(),
+                        grapheme_index: 0,
+                        observed: 0,
+                    }),
+                );
+                assert_eq!(session.history_availability(), redo_history);
+                assert_eq!(session.retained_asset_byte_count_for_test(), 1);
+            },
+            GraphemeAttempt::NoOp => {
+                assert_eq!(
+                    session.replace_text_grapheme_range(
+                        &UnicodeGraphemeSegmentation,
+                        undone,
+                        span,
+                        GraphemeRange { count: 1, start: 0 },
+                        "b",
+                    ),
+                    Ok(TextEditOutcome::NoOp {
+                        revision: undone,
+                        target: span,
+                    }),
+                );
+                assert_eq!(session.history_availability(), redo_history);
+                assert_eq!(session.retained_asset_byte_count_for_test(), 1);
+            },
+            GraphemeAttempt::Apply => {
+                let Ok(TextEditOutcome::Applied { revision, .. }) =
+                    session.replace_text_grapheme_range(
+                        &UnicodeGraphemeSegmentation,
+                        undone,
+                        span,
+                        GraphemeRange { count: 1, start: 0 },
+                        "B",
+                    )
+                else {
+                    panic!("grapheme branch edit must apply");
+                };
+                assert_eq!(session.retained_asset_byte_count_for_test(), 0);
+                assert_eq!(
+                    session.history_availability(),
+                    HistoryAvailabilityOutcome::Available(HistoryAvailability {
+                        can_redo: false,
+                        can_undo: true,
+                        revision,
+                    }),
+                );
+            },
+        }
+    }
+}
