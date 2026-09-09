@@ -4929,6 +4929,7 @@ fn application_debug_does_not_expose_private_session_data() {
     let private_draft = "session-only private source";
     let private_semantic = "accepted-only private paragraph";
     let private_asset = b"session-only private asset bytes";
+    let private_asset_debug = format!("{private_asset:?}");
     assert_eq!(
         session.replace(DraftField::Source, String::from(private_draft)),
         DraftMutation::Applied,
@@ -4960,6 +4961,7 @@ fn application_debug_does_not_expose_private_session_data() {
     assert!(!debug.contains(private_draft));
     assert!(!debug.contains(private_semantic));
     assert!(!debug.contains("session-only private asset bytes"));
+    assert!(!debug.contains(&private_asset_debug));
 }
 
 #[test]
