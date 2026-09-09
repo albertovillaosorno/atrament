@@ -61,11 +61,13 @@ exactly 128 Redo-only retained byte entries and preserves all 128 identities
 still reachable through older history, including their exact byte sequences.
 
 A process fixture now retains bytes for two semantic assets, commits text and
-asset-reference history, and computes current measured pagination, fixed-region
-overflow diagnostics, and layout-only Export preflight. Both orderly and forced
-termination leave a fresh process with no accepted revision, history, or bytes;
-the derived results exist only in the terminated process. Browser edits send
-complete authenticated replacements and no browser persistence API is used.
+asset-reference history, computes current measured pagination, fixed-region
+overflow diagnostics, and layout-only Export preflight, and owns one terminal
+media job with a registered waveform still requiring cleanup. Both orderly and
+forced termination leave a fresh process with no accepted revision, history,
+bytes, or prior media-job authority; the derived results and cleanup bookkeeping
+exist only in the terminated process. Browser edits send complete authenticated
+replacements and no browser persistence API is used.
 
 This evidence establishes raw-byte ownership after a separate ingestion
 boundary; it does not implement media decoding, format validation, clipboard or
@@ -110,9 +112,14 @@ orderly restart and forced process death yield empty fields in the fresh
 session. A checked-in application-process fixture now also populates an accepted
 semantic revision containing two semantic asset records and a figure reference,
 retains distinct raw byte sequences for both assets, commits text and
-asset-reference history, then proves orderly exit and forced process death both
-leave a fresh owner with no accepted revision, history position, or retained raw
-bytes. Media decoding and temporary conversion-file cleanup remain open.
+asset-reference history, and leaves one terminal media job with registered
+waveform cleanup pending in process memory. Orderly exit and forced process
+death both leave a fresh owner with no accepted revision, history position, raw
+bytes, or prior media-job authority.
+
+Media decoding and actual temporary
+conversion-file cleanup remain open because no filesystem intermediate exists
+yet.
 
 While private draft text is live, the runtime holds no writable regular-file
 descriptor and changes no declared repository runtime-root file.

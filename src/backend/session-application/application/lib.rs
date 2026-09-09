@@ -9,15 +9,16 @@
 //
 // Boundary-Contract:
 // - Owns:
-//   - Active-process draft, raw asset bytes, and accepted semantic notebook
-//     state.
+//   - Active-process draft, raw asset bytes, media-job cleanup state, and
+//     accepted semantic notebook state.
 // - Must-Not:
 //   - Persist session state, parse transport input, or duplicate semantic
 //     rules.
 // - Allows:
 //   - Inputs: Existing draft and semantic application-service operations,
-//     revision-bound flow measurements and derived fixed placements, plus raw
-//     bytes already validated by an ingestion boundary.
+//     revision-bound flow measurements, derived fixed placements, media-job
+//     terminal/cleanup observations, plus raw bytes already validated by an
+//     ingestion boundary.
 //   - Outputs: Typed outcomes, read-only pagination and fixed-layout results,
 //     borrowed accepted state, and raw asset bytes.
 //   - Side effects: Process-local mutation through owned application services.
@@ -28,8 +29,8 @@
 // - Summary:
 //   - Owns mutable Atrament application state for one disposable process.
 // - Description:
-//   - Gives draft, accepted notebook, and retained asset bytes one process
-//     owner while preserving their established application contracts.
+//   - Gives draft, accepted notebook, retained asset bytes, and media cleanup
+//     bookkeeping one process owner while preserving established contracts.
 // - Usage:
 //   - Construct one instance in the runtime composition root and drop it when
 //     the active localhost session ends.
@@ -46,6 +47,11 @@ use std::fmt;
 use atrament_export_layout_preflight::{
     ExportLayoutPreflightError, ExportLayoutPreflightResult,
     RevisionLayoutDiagnostics, preflight_layout_for_export,
+};
+use atrament_media_job_session::{
+    MediaJobCleanupStatus, MediaJobIdentity, MediaJobIdentityExhausted,
+    MediaJobOutcome, MediaJobSessionError, MediaJobSessionService,
+    WaveformIntermediateIdentity,
 };
 use atrament_semantic_flow_pagination::{
     RevisionFlowMeasurement, SemanticPaginationError, SemanticPaginationPlan,
@@ -178,6 +184,7 @@ pub enum AssetBytesRetention {
 pub struct SessionApplication {
     asset_bytes: BTreeMap<AcceptedIdentity, Vec<u8>>,
     draft: SessionDraftService,
+    media: MediaJobSessionService,
     semantic: SemanticNotebookSessionService,
 }
 
@@ -243,6 +250,18 @@ impl SessionApplication {
         self.asset_bytes.get(&asset).map(Vec::as_slice).ok_or(
             AssetBytesError::BytesNotRetained { asset, revision },
         )
+    }
+
+    /// Begin one process-local media job without creating an intermediate.
+    ///
+    /// # Errors
+    ///
+    /// Returns typed identity exhaustion if the active-process job sequence is
+    /// exhausted.
+    pub fn begin_media_job(
+        &mut self,
+    ) -> Result<MediaJobIdentity, MediaJobIdentityExhausted> {
+        self.media.begin_job()
     }
 
     /// Check one previously bound semantic command behavior version.
@@ -397,6 +416,19 @@ impl SessionApplication {
             .direct_edit_batch_selection_summary(batch, selected)
     }
 
+    /// Mark one process-local media job terminal without hiding cleanup work.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed lifecycle error when the job is unknown or terminal.
+    pub fn finish_media_job(
+        &mut self,
+        job: MediaJobIdentity,
+        outcome: MediaJobOutcome,
+    ) -> Result<MediaJobCleanupStatus, MediaJobSessionError> {
+        self.media.finish_job(job, outcome)
+    }
+
     /// Inspect in-memory semantic Undo and Redo availability.
     #[must_use]
     pub fn history_availability(&self) -> HistoryAvailabilityOutcome {
@@ -436,6 +468,25 @@ impl SessionApplication {
         target: AcceptedIdentity,
     ) -> IdentityKindInspectOutcome {
         self.semantic.inspect_identity_kind(revision, target)
+    }
+
+    /// Inspect terminal cleanup status for one process-local media job.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed lifecycle error for unknown or still-active jobs.
+    pub fn media_job_cleanup_status(
+        &self,
+        job: MediaJobIdentity,
+    ) -> Result<MediaJobCleanupStatus, MediaJobSessionError> {
+        self.media.cleanup_status(job)
+    }
+
+    /// Return media-job emptiness for root-fixture lifetime assertions.
+    #[cfg(test)]
+    #[must_use]
+    pub fn media_jobs_are_empty_for_test(&self) -> bool {
+        self.media.is_empty()
     }
 
     fn mutate_semantic<Outcome>(
@@ -519,12 +570,53 @@ impl SessionApplication {
             .retain(|asset, _bytes| reachable.contains(asset));
     }
 
+    /// Record a failed media cleanup attempt as retry-required.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed lifecycle error for invalid job or intermediate state.
+    pub fn record_media_cleanup_failure(
+        &mut self,
+        job: MediaJobIdentity,
+        intermediate: WaveformIntermediateIdentity,
+    ) -> Result<MediaJobCleanupStatus, MediaJobSessionError> {
+        self.media.record_cleanup_failure(job, intermediate)
+    }
+
+    /// Record successful cleanup after the owned intermediate is gone.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed lifecycle error for invalid job or intermediate state.
+    pub fn record_media_cleanup_success(
+        &mut self,
+        job: MediaJobIdentity,
+        intermediate: WaveformIntermediateIdentity,
+    ) -> Result<MediaJobCleanupStatus, MediaJobSessionError> {
+        self.media.record_cleanup_success(job, intermediate)
+    }
+
     fn redo_is_available(&self) -> bool {
         matches!(
             self.semantic.history_availability(),
             HistoryAvailabilityOutcome::Available(availability)
                 if availability.can_redo
         )
+    }
+
+    /// Register one job-owned waveform intermediate in process memory.
+    ///
+    /// This records lifecycle ownership only and never creates a file.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed lifecycle error when the job is unknown, terminal, or
+    /// already owns an intermediate, or identity allocation is exhausted.
+    pub fn register_media_waveform_intermediate(
+        &mut self,
+        job: MediaJobIdentity,
+    ) -> Result<WaveformIntermediateIdentity, MediaJobSessionError> {
+        self.media.register_waveform_intermediate(job)
     }
 
     /// Replace one mathematical source through the owned semantic authority.

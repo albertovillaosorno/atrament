@@ -269,6 +269,7 @@ name = "atrament_session_application"
 version = "0.1.0"
 dependencies = [
  "atrament_export_layout_preflight",
+ "atrament_media_job_session",
  "atrament_semantic_fixed_region_layout",
  "atrament_semantic_flow_pagination",
  "atrament_semantic_notebook",

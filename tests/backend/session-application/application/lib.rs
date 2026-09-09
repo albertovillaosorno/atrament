@@ -25,7 +25,8 @@
 //   - Verifies session state and derived outputs remain process-local.
 // - Description:
 //   - Proves the live-session application can own draft, notebook, history, raw
-//     asset bytes, and read-only derived layout results before process death.
+//     asset bytes, media cleanup bookkeeping, and read-only derived layout
+//     results before process death.
 // - Usage:
 //   - Compile against the session application and semantic inbound-port crates.
 // - Defaults:
@@ -40,6 +41,7 @@ use atrament_export_layout_preflight::{
     ExportLayoutPreflightError, ExportLayoutPreflightResult,
     RevisionLayoutDiagnostics,
 };
+use atrament_media_job_session::{MediaJobCleanupStatus, MediaJobOutcome};
 use atrament_flow_pagination::{
     FlowUnitPolicy, MeasuredFlowUnit, MeasuredFragment, PaginationError,
 };
@@ -434,6 +436,10 @@ fn run_process_fixture_child(mode: &str) {
             fresh.history_availability(),
             HistoryAvailabilityOutcome::NoAcceptedRevision,
         );
+        assert!(
+            fresh.media_jobs_are_empty_for_test(),
+            "fresh process must own no media jobs",
+        );
         let identities = IdentityAllocator::new();
         let (candidate, _, candidate_asset, _) =
             asset_figure_candidate(&identities);
@@ -493,6 +499,22 @@ fn run_process_fixture_child(mode: &str) {
         style: None,
     });
     let mut session = application::SessionApplication::default();
+    let media_job = session.begin_media_job().expect("process media job");
+    let _waveform = session
+        .register_media_waveform_intermediate(media_job)
+        .expect("process waveform intermediate");
+    assert_eq!(
+        session.finish_media_job(media_job, MediaJobOutcome::Succeeded),
+        Ok(MediaJobCleanupStatus::CleanupRequired),
+    );
+    assert_eq!(
+        session.media_job_cleanup_status(media_job),
+        Ok(MediaJobCleanupStatus::CleanupRequired),
+    );
+    assert!(
+        !session.media_jobs_are_empty_for_test(),
+        "populated process must own media job",
+    );
     let AcceptanceOutcome::Accepted { mapping, revision: base } =
         session.accept_candidate(candidate)
     else {

@@ -176,12 +176,12 @@ fn dropping_service_leaves_a_fresh_service_with_no_job_authority() {
         let _intermediate = session
             .register_waveform_intermediate(job)
             .expect("waveform identity");
-        assert_eq!(session.job_count_for_test(), 1);
+        assert!(!session.is_empty(), "populated service must own job");
         job
     };
 
     let fresh = MediaJobSessionService::new();
-    assert_eq!(fresh.job_count_for_test(), 0);
+    assert!(fresh.is_empty(), "fresh service must own no jobs");
     assert_eq!(
         fresh.cleanup_status(old_job),
         Err(MediaJobSessionError::UnknownJob),

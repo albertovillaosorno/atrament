@@ -40,10 +40,12 @@
 use std::collections::BTreeMap;
 use std::num::NonZeroU64;
 
+pub use atrament_media_job_lifecycle::{
+    MediaJobCleanupStatus, MediaJobOutcome,
+};
 use atrament_media_job_lifecycle::{
-    MediaJobCleanupStatus, MediaJobLifecycleError, MediaJobOutcome,
-    OwnedWaveformIntermediate,
-    TerminalMediaJob, WaveformCleanupState, media_job_cleanup_status,
+    MediaJobLifecycleError, OwnedWaveformIntermediate, TerminalMediaJob,
+    WaveformCleanupState, media_job_cleanup_status,
 };
 
 /// Exhaustion of one process-local media lifecycle identity sequence.
@@ -187,11 +189,10 @@ impl MediaJobSessionService {
         terminal_cleanup_status(job, record)
     }
 
-    /// Return job count for root-fixture lifetime assertions.
-    #[cfg(test)]
+    /// Whether this active-process owner has no registered media jobs.
     #[must_use]
-    pub fn job_count_for_test(&self) -> usize {
-        self.jobs.len()
+    pub fn is_empty(&self) -> bool {
+        self.jobs.is_empty()
     }
 
     /// Construct an empty service for one fresh active process.
