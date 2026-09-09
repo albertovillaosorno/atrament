@@ -167,6 +167,10 @@ identity without reflecting the browser-provided value. The browser accepts that
 mismatch only when the required identity equals its current value for the named
 dimension; contradictory mismatch metadata is an invalid handshake.
 
+Version identities are application strings, not pre-escaped JSON fragments. The
+HTTP adapter escapes JSON string syntax and control characters while preserving
+the exact decoded Unicode identity presented to the browser.
+
 Authentication or origin failure returns the same `401` response shape before
 compatibility is reported. The browser invalidates that session from the status
 without waiting for a diagnostic body, and it parses handshake JSON only for

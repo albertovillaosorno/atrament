@@ -543,6 +543,50 @@ const fn completeness_name(completeness: Completeness) -> &'static str {
     }
 }
 
+const fn hexadecimal_digit(value: u32) -> char {
+    match value {
+        1 => '1',
+        2 => '2',
+        3 => '3',
+        4 => '4',
+        5 => '5',
+        6 => '6',
+        7 => '7',
+        8 => '8',
+        9 => '9',
+        10 => 'a',
+        11 => 'b',
+        12 => 'c',
+        13 => 'd',
+        14 => 'e',
+        15 => 'f',
+        _ => '0',
+    }
+}
+
+fn json_string_content(value: &str) -> String {
+    let mut escaped = String::with_capacity(value.len());
+    for character in value.chars() {
+        match character {
+            '\"' => escaped.push_str("\\\""),
+            '\\' => escaped.push_str("\\\\"),
+            '\u{0008}' => escaped.push_str("\\b"),
+            '\u{000c}' => escaped.push_str("\\f"),
+            '\n' => escaped.push_str("\\n"),
+            '\r' => escaped.push_str("\\r"),
+            '\t' => escaped.push_str("\\t"),
+            control if control <= '\u{001f}' => {
+                let code = u32::from(control);
+                escaped.push_str("\\u00");
+                escaped.push(hexadecimal_digit(code >> 4));
+                escaped.push(hexadecimal_digit(code & 0x0f));
+            },
+            ordinary => escaped.push(ordinary),
+        }
+    }
+    escaped
+}
+
 fn invalid_diagnostic_response() -> Vec<u8> {
     json_response(
         "500 Internal Server Error",
@@ -573,7 +617,7 @@ fn handshake_incompatible_response(
         completeness_name(diagnostics.completeness),
         diagnostic.code.stable_name(),
         handshake_dimension_name(dimension),
-        expected,
+        json_string_content(expected),
     );
     response("409 Conflict", JSON_CONTENT_TYPE, body.as_bytes())
 }
@@ -589,12 +633,12 @@ fn handshake_success_response(versions: Versions<'_>) -> Vec<u8> {
             "\"protocol\":\"{}\",",
             "\"renderer\":\"{}\"}}}}",
         ),
-        versions.capability,
-        versions.product,
-        versions.profile,
-        versions.prompt,
-        versions.protocol,
-        versions.renderer,
+        json_string_content(versions.capability),
+        json_string_content(versions.product),
+        json_string_content(versions.profile),
+        json_string_content(versions.prompt),
+        json_string_content(versions.protocol),
+        json_string_content(versions.renderer),
     );
     response("200 OK", JSON_CONTENT_TYPE, body.as_bytes())
 }

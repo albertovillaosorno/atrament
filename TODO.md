@@ -145,6 +145,9 @@ credential from the rewritten browser URL or persistence API.
 Handshake response admission now invalidates `401` directly from the status and
 parses JSON bodies only for the two body-bearing handshake result classes,
 `200` and `409`; unrelated statuses cannot delay failure on an irrelevant body.
+The localhost adapter also JSON-escapes compatible and required backend version
+identities, so application-owned quotes, backslashes, controls, and Unicode
+cannot corrupt the handshake response syntax.
 
 The task remains open until temporary media exist and end-to-end fixtures also
 cover browser close, refresh, cancellation, media cleanup, and explicit-export

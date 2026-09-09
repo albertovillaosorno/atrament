@@ -1345,6 +1345,106 @@ fn browser_origin_requires_one_exact_canonical_value() {
     }
 }
 
+struct JsonEdgeCompatibleHandshake;
+
+impl SessionHandshake for JsonEdgeCompatibleHandshake {
+    fn evaluate<'version>(
+        &self,
+        _versions: Versions<'version>,
+    ) -> HandshakeResult<'version> {
+        HandshakeResult::Compatible {
+            versions: Versions {
+                capability: "capability\"\\\n\u{0001}🙂",
+                product: "product\rvalue",
+                profile: "profile\tvalue",
+                prompt: "prompt\u{0008}value",
+                protocol: "protocol\u{000c}value",
+                renderer: "renderer/value",
+            },
+        }
+    }
+}
+
+struct JsonEdgeIncompatibleHandshake;
+
+impl SessionHandshake for JsonEdgeIncompatibleHandshake {
+    fn evaluate<'version>(
+        &self,
+        versions: Versions<'version>,
+    ) -> HandshakeResult<'version> {
+        let mismatch = HandshakeService.evaluate(Versions {
+            prompt: "atrament.prompt/test-mismatch",
+            ..versions
+        });
+        let HandshakeResult::Incompatible { diagnostics, .. } = mismatch else {
+            panic!("fixture must obtain one valid mismatch diagnostic");
+        };
+        HandshakeResult::Incompatible {
+            diagnostics,
+            dimension: VersionDimension::Prompt,
+            expected: "prompt\"\\\n\u{0001}🙂",
+            observed: versions.prompt,
+        }
+    }
+}
+
+fn route_with_handshake(handshake: &dyn SessionHandshake) -> Vec<u8> {
+    let authorization = format!("Bearer {EXPECTED_SECRET}");
+    let request = format!(
+        concat!(
+            "POST /api/handshake HTTP/1.1\r\n",
+            "Host: {}\r\nAuthorization: {}\r\nOrigin: {}\r\n",
+            "X-Atrament-Capability-Version: {}\r\n",
+            "X-Atrament-Product-Version: {}\r\n",
+            "X-Atrament-Profile-Version: {}\r\n",
+            "X-Atrament-Prompt-Version: {}\r\n",
+            "X-Atrament-Protocol-Version: {}\r\n",
+            "X-Atrament-Renderer-Version: {}\r\n\r\n",
+        ),
+        EXPECTED_HOST,
+        authorization,
+        EXPECTED_ORIGIN,
+        CAPABILITY_VERSION,
+        PRODUCT_VERSION,
+        PROFILE_VERSION,
+        PROMPT_VERSION,
+        PROTOCOL_VERSION,
+        RENDERER_VERSION,
+    );
+    let mut draft = SessionDraftService::default();
+    runtime::route_request(
+        request.as_bytes(),
+        EXPECTED_HOST,
+        EXPECTED_ORIGIN,
+        EXPECTED_SECRET,
+        handshake,
+        &mut draft,
+    )
+}
+
+#[test]
+fn handshake_json_escapes_application_version_identities() {
+    let response = route_with_handshake(&JsonEdgeCompatibleHandshake);
+    let (head, body) = response_parts(&response);
+    assert!(head.starts_with("HTTP/1.1 200 OK\r\n"));
+    let body = std::str::from_utf8(body).expect("escaped JSON is UTF-8");
+    assert!(body.contains(
+        r#""capability":"capability\"\\\n\u0001🙂""#,
+    ));
+    assert!(body.contains(r#""product":"product\rvalue""#));
+    assert!(body.contains(r#""profile":"profile\tvalue""#));
+    assert!(body.contains(r#""prompt":"prompt\bvalue""#));
+    assert!(body.contains(r#""protocol":"protocol\fvalue""#));
+    assert!(!body.contains('\u{0001}'));
+
+    let response = route_with_handshake(&JsonEdgeIncompatibleHandshake);
+    let (head, body) = response_parts(&response);
+    assert!(head.starts_with("HTTP/1.1 409 Conflict\r\n"));
+    let body = std::str::from_utf8(body).expect("escaped JSON is UTF-8");
+    assert!(body.contains(r#""expected":"prompt\"\\\n\u0001🙂""#));
+    assert!(!body.contains('\u{0001}'));
+}
+
 #[test]
 fn authenticated_handshake_returns_current_version_set() {
     let authorization = format!("Bearer {EXPECTED_SECRET}");
