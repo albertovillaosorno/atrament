@@ -1,0 +1,9 @@
+identity:
+  id: function:output-capability-projection
+  name: output-capability-projection
+  path: src/backend/output-capability-projection
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: domain

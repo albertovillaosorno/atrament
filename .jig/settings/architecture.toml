@@ -97,6 +97,9 @@ depends_on = []
 [component.atrament_output_capability_matrix]
 depends_on = []
 
+[component.atrament_output_capability_projection]
+depends_on = ["atrament_output_capability_matrix"]
+
 [component.atrament_page_texture_plan]
 depends_on = ["atrament_material_layer_plan"]
 

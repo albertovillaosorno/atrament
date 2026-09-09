@@ -32,6 +32,7 @@ members = [
     "src/backend/motion-plan-simulation-trace",
     "src/backend/one-shot-formatting-prompt",
     "src/backend/output-capability-matrix",
+    "src/backend/output-capability-projection",
     "src/backend/page-texture-plan",
     "src/backend/paper-mark-geometry",
     "src/backend/pen-contact-model",

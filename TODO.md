@@ -1471,8 +1471,12 @@ capability-matrix rows across semantic objects, handwriting/decoration styles,
 color, image treatments, page/paper objects, and hardware actions. Every one of
 the 118 rows has an exact `Accept`, `Convert`, `Reject`, or `Future` disposition
 for both modes; conversion is never treated as acceptance, and Future is never a
-best-effort fallback. Conversion choice/provenance, object enumeration, blocking
-diagnostics, and compilation into an accepted projection remain open.
+best-effort fallback. A source-linked projection review now also enumerates
+every
+capability use in caller order, requires explicit conversion choice/provenance
+for `Convert`, keeps `Reject` and `Future` blocked, and rejects surprise
+conversions on directly accepted capabilities. Blocking diagnostics, conversion
+execution, semantic projection construction, and Plan compilation remain open.
 
 ### TODO - Implement the device-neutral motion plan
 
