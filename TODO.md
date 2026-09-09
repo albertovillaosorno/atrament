@@ -63,10 +63,11 @@ still reachable through older history, including their exact byte sequences.
 A process fixture now retains all three private draft fields, rejects one
 oversized draft replacement with the shared resource-limit diagnostic,
 retains bytes for two semantic assets, commits text and asset-reference history,
-computes a revision-bound direct-edit preview, measured pagination, fixed-region
-overflow
-diagnostics, and layout-only Export preflight, and owns one terminal media job
-with a registered waveform still requiring cleanup. Both orderly and forced
+computes a revision-bound direct-edit preview, measured pagination,
+fixed-region overflow diagnostics and layout-only Export preflight. It also
+owns one terminal media job with a registered waveform still requiring cleanup.
+Both
+orderly and forced
 termination leave a fresh process with empty draft fields, no accepted revision,
 history, bytes, or prior media-job authority; derived results and cleanup
 bookkeeping exist only in the terminated process. Browser edits send complete
