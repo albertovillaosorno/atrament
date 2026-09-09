@@ -400,12 +400,21 @@ async function completeSessionHandshake(secret) {
     const invalidMessage = "Invalid backend handshake · editing disabled";
     setTextIfChanged(sessionStatus, invalidMessage);
 }
+const failedDraftFields = new Set();
 const syncingDraftFields = new Set();
 let draftSyncGeneration = 0;
 function invalidateDraftSync() {
     draftSyncGeneration += 1;
+    failedDraftFields.clear();
     syncingDraftFields.clear();
     return draftSyncGeneration;
+}
+function draftSyncIsCurrent(secret, generation) {
+    return sessionSecret === secret && draftSyncGeneration === generation;
+}
+function recordDraftSyncFailure(field, message) {
+    failedDraftFields.add(field);
+    setTextIfChanged(sessionStatus, message);
 }
 function invalidateUnauthorizedSession() {
     sessionSecret = null;
@@ -530,19 +539,17 @@ async function syncDraftField(field, input, secret) {
                 });
             }
             catch {
-                if (sessionSecret === secret
-                    && draftSyncGeneration === generation) {
+                if (draftSyncIsCurrent(secret, generation)) {
                     const offlineMessage = "Draft offline · retry edit";
-                    setTextIfChanged(sessionStatus, offlineMessage);
+                    recordDraftSyncFailure(field, offlineMessage);
                 }
                 return;
             }
-            if (sessionSecret !== secret
-                || draftSyncGeneration !== generation) {
+            if (!draftSyncIsCurrent(secret, generation)) {
                 return;
             }
             if (response.status === 204) {
-                setTextIfChanged(sessionStatus, "Session ready");
+                failedDraftFields.delete(field);
                 if (input.value === attemptedValue) {
                     return;
                 }
@@ -554,29 +561,42 @@ async function syncDraftField(field, input, secret) {
                     payload = await response.json();
                 }
                 catch {
-                    setTextIfChanged(sessionStatus, "Invalid draft diagnostic");
+                    if (draftSyncIsCurrent(secret, generation)) {
+                        const invalidMessage = "Invalid draft diagnostic";
+                        recordDraftSyncFailure(field, invalidMessage);
+                    }
+                    return;
+                }
+                if (!draftSyncIsCurrent(secret, generation)) {
                     return;
                 }
                 const resourceLimit = sessionDraft.isResourceLimit(payload);
-                setTextIfChanged(sessionStatus, resourceLimit
+                const diagnosticMessage = resourceLimit
                     ? "Draft too large · reduce"
-                    : "Invalid draft diagnostic");
+                    : "Invalid draft diagnostic";
+                recordDraftSyncFailure(field, diagnosticMessage);
                 return;
             }
             if (response.status === 401) {
                 invalidateUnauthorizedSession();
                 return;
             }
-            setTextIfChanged(sessionStatus, "Draft sync rejected · retry edit");
+            const rejectedMessage = "Draft sync rejected · retry edit";
+            recordDraftSyncFailure(field, rejectedMessage);
             return;
         }
     }
     finally {
+        const current = draftSyncIsCurrent(secret, generation);
+        const needsRetry = current && input.value !== attemptedValue;
         syncingDraftFields.delete(field);
-        if (sessionSecret === secret
-            && draftSyncGeneration === generation
-            && input.value !== attemptedValue) {
+        if (needsRetry) {
             void syncDraftField(field, input, secret);
+        }
+        else if (current
+            && syncingDraftFields.size === 0
+            && failedDraftFields.size === 0) {
+            setTextIfChanged(sessionStatus, "Session ready");
         }
     }
 }

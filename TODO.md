@@ -134,9 +134,13 @@ consumption, credential invalidation on `pagehide`, in-flight handshake and
 draft request cancellation, pending clipboard/draft invalidation, session-text
 clearing, and bfcache subtree scrubbing. A `401` during handshake, draft
 hydration, or draft replacement now invalidates the same page-session work and
-scrubs all four session text surfaces before requiring restart. Aborted draft
-requests cannot repopulate status text after invalidation, and refresh cannot
-recover the launch credential from the rewritten browser URL or persistence API.
+scrubs all four session text surfaces before requiring restart.
+
+Aborted draft requests and stale `413` diagnostic-body completions cannot
+repopulate status text after invalidation. Concurrent field failures also remain
+visible until the failed field succeeds; another field cannot announce
+`Session ready` while work or failure remains. Refresh cannot recover the launch
+credential from the rewritten browser URL or persistence API.
 
 The task remains open until temporary media exist and end-to-end fixtures also
 cover browser close, refresh, cancellation, media cleanup, and explicit-export

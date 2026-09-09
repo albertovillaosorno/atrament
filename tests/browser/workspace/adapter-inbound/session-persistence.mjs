@@ -178,6 +178,55 @@ test(
 );
 
 
+test(
+    "draft sync status stays stale-safe and failure-aware",
+    async () => {
+        const source = await readFile(MAIN_MODULE, "utf8");
+        const start = source.indexOf("async function syncDraftField(");
+        const end = source.indexOf("function bindDraftSync(", start);
+        assert.notEqual(start, -1, "draft sync function must exist");
+        assert.notEqual(end, -1, "draft sync function must be bounded");
+        const draftSync = source.slice(start, end);
+        const responseJson = draftSync.indexOf("await response.json();");
+        const jsonCatch = draftSync.indexOf("catch {", responseJson);
+        const catchCurrent = draftSync.indexOf(
+            "if (draftSyncIsCurrent(secret, generation))",
+            jsonCatch,
+        );
+        const staleAfterJson = draftSync.indexOf(
+            "if (!draftSyncIsCurrent(secret, generation))",
+            jsonCatch,
+        );
+        const resourceStatus = draftSync.indexOf(
+            '"Draft too large · reduce"',
+            responseJson,
+        );
+        assert.ok(
+            responseJson < jsonCatch
+                && jsonCatch < catchCurrent
+                && catchCurrent < staleAfterJson
+                && staleAfterJson < resourceStatus,
+            "413 completion paths must recheck page-session freshness",
+        );
+        assert.equal(
+            draftSync.includes("failedDraftFields.delete(field);"),
+            true,
+            "a successful field sync must clear only that field failure",
+        );
+        assert.equal(
+            draftSync.includes("failedDraftFields.size === 0"),
+            true,
+            "ready status must require no outstanding field failures",
+        );
+        assert.equal(
+            draftSync.includes("syncingDraftFields.size === 0"),
+            true,
+            "ready status must require all field syncs to settle",
+        );
+    },
+);
+
+
 test("page session network requests are cancellable on exit", async () => {
     const source = await readFile(MAIN_MODULE, "utf8");
     const signalUses = source.match(/signal: sessionRequests\.signal,/gu) ?? [];

@@ -468,13 +468,27 @@ async function completeSessionHandshake(secret: string): Promise<void> {
 }
 
 
+const failedDraftFields = new Set<sessionDraft.DraftField>();
 const syncingDraftFields = new Set<sessionDraft.DraftField>();
 let draftSyncGeneration = 0;
 
 function invalidateDraftSync(): number {
     draftSyncGeneration += 1;
+    failedDraftFields.clear();
     syncingDraftFields.clear();
     return draftSyncGeneration;
+}
+
+function draftSyncIsCurrent(secret: string, generation: number): boolean {
+    return sessionSecret === secret && draftSyncGeneration === generation;
+}
+
+function recordDraftSyncFailure(
+    field: sessionDraft.DraftField,
+    message: string,
+): void {
+    failedDraftFields.add(field);
+    setTextIfChanged(sessionStatus, message);
 }
 
 function invalidateUnauthorizedSession(): void {
@@ -633,26 +647,17 @@ async function syncDraftField(
                     signal: sessionRequests.signal,
                 });
             } catch {
-                if (
-                    sessionSecret === secret
-                    && draftSyncGeneration === generation
-                ) {
+                if (draftSyncIsCurrent(secret, generation)) {
                     const offlineMessage = "Draft offline · retry edit";
-                    setTextIfChanged(sessionStatus, offlineMessage);
+                    recordDraftSyncFailure(field, offlineMessage);
                 }
                 return;
             }
-            if (
-                sessionSecret !== secret
-                || draftSyncGeneration !== generation
-            ) {
+            if (!draftSyncIsCurrent(secret, generation)) {
                 return;
             }
             if (response.status === 204) {
-                setTextIfChanged(
-                    sessionStatus,
-                    "Session ready",
-                );
+                failedDraftFields.delete(field);
                 if (input.value === attemptedValue) {
                     return;
                 }
@@ -663,40 +668,43 @@ async function syncDraftField(
                 try {
                     payload = await response.json();
                 } catch {
-                    setTextIfChanged(
-                        sessionStatus,
-                        "Invalid draft diagnostic",
-                    );
+                    if (draftSyncIsCurrent(secret, generation)) {
+                        const invalidMessage = "Invalid draft diagnostic";
+                        recordDraftSyncFailure(field, invalidMessage);
+                    }
+                    return;
+                }
+                if (!draftSyncIsCurrent(secret, generation)) {
                     return;
                 }
                 const resourceLimit =
                     sessionDraft.isResourceLimit(payload);
-                setTextIfChanged(
-                    sessionStatus,
-                    resourceLimit
-                        ? "Draft too large · reduce"
-                        : "Invalid draft diagnostic",
-                );
+                const diagnosticMessage = resourceLimit
+                    ? "Draft too large · reduce"
+                    : "Invalid draft diagnostic";
+                recordDraftSyncFailure(field, diagnosticMessage);
                 return;
             }
             if (response.status === 401) {
                 invalidateUnauthorizedSession();
                 return;
             }
-            setTextIfChanged(
-                sessionStatus,
-                "Draft sync rejected · retry edit",
-            );
+            const rejectedMessage = "Draft sync rejected · retry edit";
+            recordDraftSyncFailure(field, rejectedMessage);
             return;
         }
     } finally {
+        const current = draftSyncIsCurrent(secret, generation);
+        const needsRetry = current && input.value !== attemptedValue;
         syncingDraftFields.delete(field);
-        if (
-            sessionSecret === secret
-            && draftSyncGeneration === generation
-            && input.value !== attemptedValue
-        ) {
+        if (needsRetry) {
             void syncDraftField(field, input, secret);
+        } else if (
+            current
+            && syncingDraftFields.size === 0
+            && failedDraftFields.size === 0
+        ) {
+            setTextIfChanged(sessionStatus, "Session ready");
         }
     }
 }

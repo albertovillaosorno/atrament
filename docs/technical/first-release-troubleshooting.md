@@ -118,8 +118,11 @@ Current session-status text has these meanings:
   status. Inspect the runtime result and do not assume backend persistence.
 
 Page exit aborts current handshake/draft requests and invalidates stale
-completions. A late response from an abandoned page must not repopulate session
-text.
+completions. A late response or diagnostic-body completion from an abandoned
+page must not repopulate session text or status. Concurrent field
+synchronization keeps any field failure visible until that field succeeds;
+another field's success cannot advertise `Session ready` while failed or active
+work remains.
 
 ### Localhost HTTP status classes
 
