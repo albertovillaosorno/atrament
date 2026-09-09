@@ -166,8 +166,11 @@ semantic locations, typed evidence, remediation, operation binding, and
 explicit set completeness. The browser admits the same namespace and
 completeness metadata; handshake mismatch projection also requires the reported
 expected identity to equal the browser's current value for that exact dimension.
-The localhost adapter refuses to invent a code for an empty application
-diagnostic set.
+
+The localhost adapter requires exactly one application diagnostic for the
+current singleton handshake-mismatch and draft-resource response schemas. Empty
+or multi-item sets fail as `invalid_diagnostic`, so transport neither invents a
+code nor silently truncates application evidence.
 
 Layout now provides the first accepted-revision producer beyond handshake and
 session draft: fixed-region overflow emits stable blocking diagnostics with

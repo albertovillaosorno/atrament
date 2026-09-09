@@ -599,7 +599,7 @@ fn handshake_incompatible_response(
     dimension: VersionDimension,
     expected: &str,
 ) -> Vec<u8> {
-    let Some(diagnostic) = diagnostics.diagnostics.first() else {
+    let [diagnostic] = diagnostics.diagnostics.as_slice() else {
         return invalid_diagnostic_response();
     };
     let body = format!(
@@ -732,7 +732,7 @@ fn route_draft_read(
 }
 
 fn draft_resource_limit_response(diagnostics: &DiagnosticSet) -> Vec<u8> {
-    let Some(diagnostic) = diagnostics.diagnostics.first() else {
+    let [diagnostic] = diagnostics.diagnostics.as_slice() else {
         return invalid_diagnostic_response();
     };
     let body = format!(

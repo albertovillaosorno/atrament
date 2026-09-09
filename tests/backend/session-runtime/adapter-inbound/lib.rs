@@ -1981,6 +1981,66 @@ impl SessionDraft for EmptyDiagnosticDraft {
     }
 }
 
+struct DuplicateDiagnosticDraft;
+
+impl SessionDraft for DuplicateDiagnosticDraft {
+    fn replace(&mut self, field: DraftField, _value: String) -> DraftMutation {
+        let mut source = SessionDraftService::default();
+        let DraftMutation::ResourceLimit { mut diagnostics } = source.replace(
+            field,
+            "x".repeat(MAX_DRAFT_FIELD_BYTES + 1),
+        ) else {
+            panic!("oversized fixture must produce a resource diagnostic");
+        };
+        let diagnostic = diagnostics
+            .diagnostics
+            .first()
+            .expect("resource diagnostic must exist")
+            .clone();
+        diagnostics.diagnostics.push(diagnostic);
+        DraftMutation::ResourceLimit { diagnostics }
+    }
+
+    fn value(&self, _field: DraftField) -> &str {
+        ""
+    }
+}
+
+struct DuplicateDiagnosticHandshake;
+
+impl SessionHandshake for DuplicateDiagnosticHandshake {
+    fn evaluate<'version>(
+        &self,
+        versions: Versions<'version>,
+    ) -> HandshakeResult<'version> {
+        let mismatch = HandshakeService.evaluate(Versions {
+            prompt: "atrament.prompt/duplicate-diagnostic",
+            ..versions
+        });
+        let HandshakeResult::Incompatible {
+            mut diagnostics,
+            dimension,
+            expected,
+            ..
+        } = mismatch
+        else {
+            panic!("fixture must obtain a mismatch diagnostic");
+        };
+        let diagnostic = diagnostics
+            .diagnostics
+            .first()
+            .expect("handshake diagnostic must exist")
+            .clone();
+        diagnostics.diagnostics.push(diagnostic);
+        HandshakeResult::Incompatible {
+            diagnostics,
+            dimension,
+            expected,
+            observed: versions.prompt,
+        }
+    }
+}
+
 struct EmptyDiagnosticHandshake;
 
 impl SessionHandshake for EmptyDiagnosticHandshake {
@@ -2001,7 +2061,7 @@ impl SessionHandshake for EmptyDiagnosticHandshake {
 }
 
 #[test]
-fn adapter_never_invents_a_missing_application_diagnostic() {
+fn adapter_requires_exactly_one_route_specific_application_diagnostic() {
     let authorization = format!("Bearer {EXPECTED_SECRET}");
     let handshake_request = format!(
         concat!(
@@ -2039,6 +2099,21 @@ fn adapter_never_invents_a_missing_application_diagnostic() {
     );
     assert!(!response_text.contains("atrament.handshake.version-mismatch"));
 
+    let mut ordinary_draft = SessionDraftService::default();
+    let response = runtime::route_request(
+        handshake_request.as_bytes(),
+        EXPECTED_HOST,
+        EXPECTED_ORIGIN,
+        EXPECTED_SECRET,
+        &DuplicateDiagnosticHandshake,
+        &mut ordinary_draft,
+    );
+    let response_text = String::from_utf8(response).expect("response is UTF-8");
+    assert!(
+        response_text.starts_with("HTTP/1.1 500 Internal Server Error\r\n")
+    );
+    assert!(!response_text.contains("atrament.handshake.version-mismatch"));
+
     let request = draft_replace_request(
         "/api/session/task",
         Some(&authorization),
@@ -2053,6 +2128,21 @@ fn adapter_never_invents_a_missing_application_diagnostic() {
         EXPECTED_SECRET,
         &HANDSHAKE,
         &mut empty_diagnostic_draft,
+    );
+    let response_text = String::from_utf8(response).expect("response is UTF-8");
+    assert!(
+        response_text.starts_with("HTTP/1.1 500 Internal Server Error\r\n")
+    );
+    assert!(!response_text.contains("atrament.session-draft.resource-limit"));
+
+    let mut duplicate_diagnostic_draft = DuplicateDiagnosticDraft;
+    let response = runtime::route_request(
+        &request,
+        EXPECTED_HOST,
+        EXPECTED_ORIGIN,
+        EXPECTED_SECRET,
+        &HANDSHAKE,
+        &mut duplicate_diagnostic_draft,
     );
     let response_text = String::from_utf8(response).expect("response is UTF-8");
     assert!(

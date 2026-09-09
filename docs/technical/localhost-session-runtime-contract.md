@@ -171,6 +171,11 @@ Version identities are application strings, not pre-escaped JSON fragments. The
 HTTP adapter escapes JSON string syntax and control characters while preserving
 the exact decoded Unicode identity presented to the browser.
 
+The current handshake-mismatch and draft-resource projections each require one
+application diagnostic because their browser schemas are singleton. A missing or
+multi-item application set returns `500 invalid_diagnostic`; the adapter neither
+invents a diagnostic nor silently truncates a complete set.
+
 Authentication or origin failure returns the same `401` response shape before
 compatibility is reported. The browser invalidates that session from the status
 without waiting for a diagnostic body, and it parses handshake JSON only for
