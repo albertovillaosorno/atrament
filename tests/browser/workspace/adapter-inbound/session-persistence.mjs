@@ -14,7 +14,8 @@
 // - Must-Not:
 //   - Execute browser storage, perform network requests, or inspect user data.
 // - Allows:
-//   - Inputs: The tracked generated workspace JavaScript module.
+//   - Inputs: The tracked static workspace HTML and generated JavaScript
+//     module.
 //   - Outputs: Assertions that persistence-capable browser APIs are absent.
 //   - Side effects: Reads one repository test artifact.
 // - Split-When:
@@ -34,10 +35,44 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 
+const INDEX_HTML = new URL(
+    "../../../../src/browser/workspace/adapter-inbound/index.html",
+    import.meta.url,
+);
 const MAIN_MODULE = new URL(
     "../../../../src/browser/workspace/adapter-inbound/generated/main.js",
     import.meta.url,
 );
+
+test("static workspace starts session controls disabled", async () => {
+    const source = await readFile(INDEX_HTML, "utf8");
+    for (const id of [
+        "copy-prompt",
+        "task-input",
+        "source-input",
+        "profile-select",
+        "paper-select",
+        "style-select",
+        "output-select",
+        "prompt-output",
+        "candidate-input",
+        "zoom-out",
+        "zoom-reset",
+        "zoom-in",
+    ]) {
+        const idIndex = source.indexOf(`id="${id}"`);
+        assert.notEqual(idIndex, -1, `static workspace must contain #${id}`);
+        const tagStart = source.lastIndexOf("<", idIndex);
+        const tagEnd = source.indexOf(">", idIndex);
+        assert.ok(tagStart >= 0 && tagEnd > idIndex, `#${id} tag must close`);
+        const tag = source.slice(tagStart, tagEnd + 1);
+        assert.equal(
+            tag.includes("disabled"),
+            true,
+            `#${id} must be disabled before JavaScript starts`,
+        );
+    }
+});
 
 test(
     "workspace module has no undeclared outbound browser transport",
