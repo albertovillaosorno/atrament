@@ -1484,8 +1484,14 @@ best-effort fallback. A source-linked projection review now also enumerates
 every
 capability use in caller order, requires explicit conversion choice/provenance
 for `Convert`, keeps `Reject` and `Future` blocked, and rejects surprise
-conversions on directly accepted capabilities. Blocking diagnostics, conversion
-execution, semantic projection construction, and Plan compilation remain open.
+conversions on directly accepted capabilities.
+
+A Live-specific typed review now also validates the accepted conversion kind for
+all 27 Live `Convert` rows: highlight underline/box/spacing/stroke-weight, sober
+one-pen title, calibrated ink, accepted line-art projection, one-pen geometry,
+or same-pen paper marks. Conversion details and provenance remain caller-owned.
+Blocking diagnostics, conversion execution, semantic projection construction,
+and Plan compilation remain open.
 
 ### TODO - Implement the device-neutral motion plan
 

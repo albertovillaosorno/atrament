@@ -56,6 +56,38 @@ pub struct AcceptedCapabilityConversion<Choice, Provenance> {
     pub provenance: Provenance,
 }
 
+/// Frozen first-release kind of explicit single-pen live conversion.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub enum LiveConversionKind {
+    /// Raster/image content uses an explicitly accepted line-art projection.
+    AcceptedLineArtProjection,
+    /// Color meaning maps to one calibrated physical ink identity.
+    CalibratedInk,
+    /// Paper marks are deliberately drawn with the same physical pen.
+    DrawWithSamePen,
+    /// A highlight becomes an explicit one-pen box.
+    HighlightBox,
+    /// A highlight becomes explicit one-pen spacing hierarchy.
+    HighlightSpacing,
+    /// A highlight becomes an admitted one-pen stroke-weight change.
+    HighlightStrokeWeight,
+    /// A highlight becomes an explicit one-pen underline.
+    HighlightUnderline,
+    /// Digital tone/opacity resolves to explicit one-pen geometry.
+    OnePenGeometry,
+    /// Decorative title treatment becomes a sober one-pen title role.
+    SoberOnePenTitle,
+}
+
+/// One typed live conversion kind plus caller-owned conversion details.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct LiveConversionChoice<Details> {
+    /// Caller-owned details such as ink identity or projection evidence.
+    pub details: Details,
+    /// Frozen conversion family admitted for the source capability.
+    pub kind: LiveConversionKind,
+}
+
 /// One capability from any frozen first-release matrix family.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum OutputCapability {
@@ -129,6 +161,8 @@ pub enum OutputCapabilityProjectionStatus {
     Rejected,
     /// A conversion was supplied for a capability already accepted directly.
     UnexpectedConversion,
+    /// Explicit conversion evidence names a kind not admitted for this source.
+    UnsupportedConversionChoice,
 }
 
 /// One source-linked capability use before output projection review.
@@ -168,6 +202,69 @@ pub const fn output_capability_disposition(
         OutputCapability::Semantic(value) => {
             semantic_capability_disposition(value, mode)
         }
+    }
+}
+
+/// Whether this frozen live conversion kind is admitted for the capability.
+#[must_use]
+pub const fn live_conversion_kind_admitted(
+    capability: OutputCapability,
+    kind: LiveConversionKind,
+) -> bool {
+    match capability {
+        OutputCapability::HandwritingDecoration(
+            HandwritingDecorationCapability::FilledHighlight
+            | HandwritingDecorationCapability::MarkerHighlight,
+        ) => matches!(
+            kind,
+            LiveConversionKind::HighlightBox
+                | LiveConversionKind::HighlightSpacing
+                | LiveConversionKind::HighlightStrokeWeight
+                | LiveConversionKind::HighlightUnderline
+        ),
+        OutputCapability::HandwritingDecoration(
+            HandwritingDecorationCapability::DecorativeTitleLayering
+            | HandwritingDecorationCapability::TitleOutline,
+        ) => matches!(kind, LiveConversionKind::SoberOnePenTitle),
+        OutputCapability::Color(
+            ColorCapability::ColoredDiagramStrokes
+            | ColorCapability::ColoredTitleLayers
+            | ColorCapability::FullColorPhotograph
+            | ColorCapability::GrayscalePhotograph
+            | ColorCapability::MarkerColor
+            | ColorCapability::MultipleSimulatedInkColors
+            | ColorCapability::TransparentAlpha,
+        ) => matches!(kind, LiveConversionKind::CalibratedInk),
+        OutputCapability::ImageTreatment(
+            ImageTreatmentCapability::AboveTextPlacement
+            | ImageTreatmentCapability::BelowTextPlacement
+            | ImageTreatmentCapability::ClippedRegionPlacement
+            | ImageTreatmentCapability::InlinePlacement
+            | ImageTreatmentCapability::JpegSource
+            | ImageTreatmentCapability::PngSource
+            | ImageTreatmentCapability::WebpSource,
+        )
+        | OutputCapability::Semantic(
+            SemanticCapability::Photograph
+            | SemanticCapability::RasterIllustration,
+        ) => matches!(kind, LiveConversionKind::AcceptedLineArtProjection),
+        OutputCapability::ImageTreatment(ImageTreatmentCapability::Opacity) => {
+            matches!(kind, LiveConversionKind::OnePenGeometry)
+        }
+        OutputCapability::PagePaper(
+            PagePaperCapability::BorderGeometry
+            | PagePaperCapability::CustomDigitalPaper
+            | PagePaperCapability::DottedPaper
+            | PagePaperCapability::GridOrRuleGeometry
+            | PagePaperCapability::RuledPaper
+            | PagePaperCapability::SquaredPaper,
+        ) => matches!(kind, LiveConversionKind::DrawWithSamePen),
+        OutputCapability::Color(_)
+        | OutputCapability::HandwritingDecoration(_)
+        | OutputCapability::HardwareAction(_)
+        | OutputCapability::ImageTreatment(_)
+        | OutputCapability::PagePaper(_)
+        | OutputCapability::Semantic(_) => false,
     }
 }
 
@@ -212,4 +309,38 @@ pub fn review_output_capabilities<Choice, Provenance, SourceIdentity>(
         })
         .collect();
     OutputCapabilityProjection { entries, mode }
+}
+
+/// Review Live output and reject mismatched explicit conversion kinds.
+#[must_use]
+pub fn review_live_output_capabilities<Details, Provenance, SourceIdentity>(
+    requests: Vec<
+        OutputCapabilityRequest<
+            LiveConversionChoice<Details>,
+            Provenance,
+            SourceIdentity,
+        >,
+    >,
+) -> OutputCapabilityProjection<
+    LiveConversionChoice<Details>,
+    Provenance,
+    SourceIdentity,
+> {
+    let mut projection = review_output_capabilities(OutputMode::Live, requests);
+    for entry in &mut projection.entries {
+        if entry.status != OutputCapabilityProjectionStatus::Converted {
+            continue;
+        }
+        let Some(conversion) = entry.accepted_conversion.as_ref() else {
+            continue;
+        };
+        if !live_conversion_kind_admitted(
+            entry.capability,
+            conversion.choice.kind,
+        ) {
+            entry.status =
+                OutputCapabilityProjectionStatus::UnsupportedConversionChoice;
+        }
+    }
+    projection
 }
