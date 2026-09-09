@@ -44,7 +44,7 @@ use std::str;
 use std::time::{Duration, Instant};
 
 use atrament_diagnostic::{
-    Completeness, DIAGNOSTIC_VERSION, DiagnosticCode, DiagnosticSet,
+    Completeness, DIAGNOSTIC_VERSION, DiagnosticCode, DiagnosticSet, Operation,
 };
 use atrament_session_draft_port::{DraftField, DraftMutation, SessionDraft};
 use atrament_session_handshake_port::{
@@ -604,7 +604,9 @@ fn handshake_incompatible_response(
     let [diagnostic] = diagnostics.diagnostics.as_slice() else {
         return invalid_diagnostic_response();
     };
-    if diagnostic.code != DiagnosticCode::HandshakeVersionMismatch {
+    if diagnostic.code != DiagnosticCode::HandshakeVersionMismatch
+        || diagnostic.operation.operation != Operation::SessionHandshake
+    {
         return invalid_diagnostic_response();
     }
     let body = format!(
@@ -740,7 +742,9 @@ fn draft_resource_limit_response(diagnostics: &DiagnosticSet) -> Vec<u8> {
     let [diagnostic] = diagnostics.diagnostics.as_slice() else {
         return invalid_diagnostic_response();
     };
-    if diagnostic.code != DiagnosticCode::SessionDraftResourceLimit {
+    if diagnostic.code != DiagnosticCode::SessionDraftResourceLimit
+        || diagnostic.operation.operation != Operation::SessionDraftReplace
+    {
         return invalid_diagnostic_response();
     }
     let body = format!(

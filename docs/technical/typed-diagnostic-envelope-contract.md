@@ -32,9 +32,11 @@ draft resource limits are the first application results carrying versioned
 explanation.
 
 The localhost browser projection preserves diagnostic namespace, stable code,
-and explicit set completeness for those two conditions. The adapter treats an
-empty diagnostic set attached to a rejecting application result as an internal
-invariant failure rather than fabricating an adapter-owned diagnostic code.
+and explicit set completeness for those two conditions. Its current singleton
+route schemas also require exactly one diagnostic with the route's stable code
+and owning operation. Missing, multi-item, cross-code, or cross-operation
+evidence is an internal invariant failure rather than adapter-owned diagnostic
+authority.
 
 Fixed-region layout now adds accepted-revision diagnostic evidence outside the
 localhost handshake/draft boundary. A crossed writable page edge produces the

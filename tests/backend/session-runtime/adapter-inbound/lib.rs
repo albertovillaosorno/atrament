@@ -37,7 +37,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use atrament_diagnostic::{
-    Completeness, DIAGNOSTIC_VERSION, DiagnosticCode, DiagnosticSet,
+    Completeness, DIAGNOSTIC_VERSION, DiagnosticCode, DiagnosticSet, Operation,
 };
 use atrament_session_draft::{MAX_DRAFT_FIELD_BYTES, SessionDraftService};
 use atrament_session_draft_port::{DraftField, DraftMutation, SessionDraft};
@@ -2004,6 +2004,27 @@ impl SessionDraft for WrongCodeDiagnosticDraft {
     }
 }
 
+struct WrongOperationDiagnosticDraft;
+
+impl SessionDraft for WrongOperationDiagnosticDraft {
+    fn replace(&mut self, field: DraftField, _value: String) -> DraftMutation {
+        let mut source = SessionDraftService::default();
+        let DraftMutation::ResourceLimit { mut diagnostics } = source.replace(
+            field,
+            "x".repeat(MAX_DRAFT_FIELD_BYTES + 1),
+        ) else {
+            panic!("oversized fixture must produce a resource diagnostic");
+        };
+        diagnostics.diagnostics[0].operation.operation =
+            Operation::SessionHandshake;
+        DraftMutation::ResourceLimit { diagnostics }
+    }
+
+    fn value(&self, _field: DraftField) -> &str {
+        ""
+    }
+}
+
 struct DuplicateDiagnosticDraft;
 
 impl SessionDraft for DuplicateDiagnosticDraft {
@@ -2051,6 +2072,37 @@ impl SessionHandshake for WrongCodeDiagnosticHandshake {
         };
         diagnostics.diagnostics[0].code =
             DiagnosticCode::SessionDraftResourceLimit;
+        HandshakeResult::Incompatible {
+            diagnostics,
+            dimension,
+            expected,
+            observed: versions.prompt,
+        }
+    }
+}
+
+struct WrongOperationDiagnosticHandshake;
+
+impl SessionHandshake for WrongOperationDiagnosticHandshake {
+    fn evaluate<'version>(
+        &self,
+        versions: Versions<'version>,
+    ) -> HandshakeResult<'version> {
+        let mismatch = HandshakeService.evaluate(Versions {
+            prompt: "atrament.prompt/wrong-operation",
+            ..versions
+        });
+        let HandshakeResult::Incompatible {
+            mut diagnostics,
+            dimension,
+            expected,
+            ..
+        } = mismatch
+        else {
+            panic!("fixture must obtain a mismatch diagnostic");
+        };
+        diagnostics.diagnostics[0].operation.operation =
+            Operation::SessionDraftReplace;
         HandshakeResult::Incompatible {
             diagnostics,
             dimension,
@@ -2183,6 +2235,21 @@ fn adapter_requires_exactly_one_route_specific_application_diagnostic() {
     );
     assert!(!response_text.contains("atrament.session-draft.resource-limit"));
 
+    let mut ordinary_draft = SessionDraftService::default();
+    let response = runtime::route_request(
+        handshake_request.as_bytes(),
+        EXPECTED_HOST,
+        EXPECTED_ORIGIN,
+        EXPECTED_SECRET,
+        &WrongOperationDiagnosticHandshake,
+        &mut ordinary_draft,
+    );
+    let response_text = String::from_utf8(response).expect("response is UTF-8");
+    assert!(
+        response_text.starts_with("HTTP/1.1 500 Internal Server Error\r\n")
+    );
+    assert!(!response_text.contains("atrament.handshake.version-mismatch"));
+
     let request = draft_replace_request(
         "/api/session/task",
         Some(&authorization),
@@ -2233,4 +2300,19 @@ fn adapter_requires_exactly_one_route_specific_application_diagnostic() {
         response_text.starts_with("HTTP/1.1 500 Internal Server Error\r\n")
     );
     assert!(!response_text.contains("atrament.handshake.version-mismatch"));
+
+    let mut wrong_operation_draft = WrongOperationDiagnosticDraft;
+    let response = runtime::route_request(
+        &request,
+        EXPECTED_HOST,
+        EXPECTED_ORIGIN,
+        EXPECTED_SECRET,
+        &HANDSHAKE,
+        &mut wrong_operation_draft,
+    );
+    let response_text = String::from_utf8(response).expect("response is UTF-8");
+    assert!(
+        response_text.starts_with("HTTP/1.1 500 Internal Server Error\r\n")
+    );
+    assert!(!response_text.contains("atrament.session-draft.resource-limit"));
 }
