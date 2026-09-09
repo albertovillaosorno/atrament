@@ -1,0 +1,9 @@
+identity:
+  id: function:transcript-structure
+  name: transcript-structure
+  path: src/backend/transcript-structure
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: domain

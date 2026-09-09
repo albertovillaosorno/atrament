@@ -130,6 +130,9 @@ depends_on = ["atrament_mathematics_source", "atrament_semantic_command_graph", 
 [component.atrament_transcript_evidence]
 depends_on = []
 
+[component.atrament_transcript_structure]
+depends_on = ["atrament_transcript_evidence"]
+
 [component.atrament_unicode_grapheme_boundary_port]
 depends_on = []
 

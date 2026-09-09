@@ -1459,6 +1459,15 @@ open application/adapter work.
 Turn reviewed transcript spans into sections, definitions, examples, and
 formulas while retaining time ranges, confidence, speakers, and unresolved text.
 
+Current executable evidence now freezes an evidence-preserving reviewed-span
+boundary without choosing a structuring algorithm. Section, Definition, Example,
+Formula, and Unresolved roles remain caller-reviewed classifications linked to
+the complete source transcript. Resolved spans retain original word timing,
+confidence, speaker, and text evidence; explicit unresolved fragments retain
+their text, timing, and confidence and cannot be silently promoted to a
+confident role. Span segmentation, role selection, transcript correction,
+confidence policy, semantic notebook construction, and layout remain open.
+
 ## P7 — Honest single-pen live output
 
 ### TODO - Implement the live capability compiler

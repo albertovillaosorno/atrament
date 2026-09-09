@@ -326,6 +326,13 @@ name = "atrament_transcript_evidence"
 version = "0.1.0"
 
 [[package]]
+name = "atrament_transcript_structure"
+version = "0.1.0"
+dependencies = [
+ "atrament_transcript_evidence",
+]
+
+[[package]]
 name = "atrament_unicode_grapheme_boundary_port"
 version = "0.1.0"
 

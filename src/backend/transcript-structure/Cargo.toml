@@ -1,0 +1,15 @@
+[package]
+name = "atrament_transcript_structure"
+version = "0.1.0"
+edition = "2024"
+publish = false
+license = "MIT"
+
+[lib]
+path = "domain/lib.rs"
+
+[dependencies]
+atrament_transcript_evidence = { path = "../transcript-evidence" }
+
+[lints]
+workspace = true
