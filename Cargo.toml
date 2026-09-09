@@ -19,6 +19,7 @@ members = [
     "src/backend/handwriting-stroke-vocabulary",
     "src/backend/handwriting-variation",
     "src/backend/image-placement-intent",
+    "src/backend/line-art-extraction",
     "src/backend/media-job-lifecycle",
     "src/backend/material-layer-plan",
     "src/backend/mathematics-source",

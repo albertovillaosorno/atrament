@@ -58,6 +58,9 @@ depends_on = []
 [component.atrament_image_placement_intent]
 depends_on = []
 
+[component.atrament_line_art_extraction]
+depends_on = []
+
 [component.atrament_media_job_lifecycle]
 depends_on = []
 

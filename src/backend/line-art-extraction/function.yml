@@ -1,0 +1,9 @@
+identity:
+  id: function:line-art-extraction
+  name: line-art-extraction
+  path: src/backend/line-art-extraction
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: domain

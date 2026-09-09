@@ -1191,6 +1191,14 @@ open.
 Convert images to transparent single-color paths with levels, threshold,
 cleanup, detail, minimum feature, and preview controls suitable for hand color.
 
+Current executable evidence now freezes the accepted live-compatible boundary:
+one source image identity plus caller-owned configurable levels can produce an
+ordered transparent-black vector-path result linked back to that source. Result
+validation rejects source-identity or level-configuration drift from the exact
+request. Image decoding, threshold/cleanup/detail/minimum-feature semantics,
+preview controls, path extraction, vector geometry, acceptance diagnostics, and
+rendering remain open.
+
 ### TODO - Implement digital paper notes and shadows
 
 Render loose note fills, folds, stacking, and soft shadows as digital-only
