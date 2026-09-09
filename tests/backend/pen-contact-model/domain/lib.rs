@@ -34,9 +34,10 @@
 //
 use atrament_pen_contact_model::{
     CalibratedInputRange, CalibratedInputRangeError, ContactInputAdmission,
-    ContactModelInput, ContactModelOutput, ContactPresetEvidence,
-    FittedParameterEvidence, PressureInput,
-    classify_contact_input,
+    ContactModelInput, ContactModelOutput, ContactOutputAdmission,
+    ContactPresetEvidence, FittedParameterEvidence, ObservableOutputRange,
+    ObservableOutputRangeError, PressureInput, classify_contact_input,
+    classify_contact_output,
 };
 
 #[test]
@@ -162,5 +163,42 @@ fn inverted_calibrated_range_rejects_before_classification() {
     assert_eq!(
         classify_contact_input(&15, &range),
         Err(CalibratedInputRangeError::MinimumAboveMaximum),
+    );
+}
+
+
+#[test]
+fn observable_output_envelope_includes_both_boundaries() {
+    let range = ObservableOutputRange {
+        maximum: 480_u16,
+        minimum: 320_u16,
+    };
+    assert_eq!(
+        classify_contact_output(&320, &range),
+        Ok(ContactOutputAdmission::Bounded),
+    );
+    assert_eq!(
+        classify_contact_output(&480, &range),
+        Ok(ContactOutputAdmission::Bounded),
+    );
+    assert_eq!(
+        classify_contact_output(&319, &range),
+        Ok(ContactOutputAdmission::OutsideEnvelope),
+    );
+    assert_eq!(
+        classify_contact_output(&481, &range),
+        Ok(ContactOutputAdmission::OutsideEnvelope),
+    );
+}
+
+#[test]
+fn inverted_observable_output_envelope_rejects_before_classification() {
+    let range = ObservableOutputRange {
+        maximum: 10_i32,
+        minimum: 20_i32,
+    };
+    assert_eq!(
+        classify_contact_output(&15, &range),
+        Err(ObservableOutputRangeError::MinimumAboveMaximum),
     );
 }

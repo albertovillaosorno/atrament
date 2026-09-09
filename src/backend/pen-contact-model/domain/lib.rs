@@ -134,6 +134,15 @@ pub struct ContactPresetEvidence<
     pub pen_identity: PenIdentity,
 }
 
+/// One caller-owned inclusive envelope for an observable transfer output.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ObservableOutputRange<Value> {
+    /// Maximum admitted observable output value.
+    pub maximum: Value,
+    /// Minimum admitted observable output value.
+    pub minimum: Value,
+}
+
 /// One calibrated inclusive input range.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CalibratedInputRange<Value> {
@@ -162,6 +171,22 @@ pub struct FittedParameterEvidence<
     pub input_range: CalibratedInputRange<Value>,
     /// Caller-owned measurement unit.
     pub unit: Unit,
+}
+
+/// Admission status of one observable output against its declared envelope.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ContactOutputAdmission {
+    /// Output lies inside the inclusive declared envelope.
+    Bounded,
+    /// Output lies outside the declared envelope.
+    OutsideEnvelope,
+}
+
+/// Why one observable output range is invalid.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ObservableOutputRangeError {
+    /// Minimum exceeds maximum.
+    MinimumAboveMaximum,
 }
 
 /// Admission status of one input against calibrated evidence.
@@ -200,4 +225,25 @@ where
         return Ok(ContactInputAdmission::ExtrapolationRequired);
     }
     Ok(ContactInputAdmission::Calibrated)
+}
+
+/// Classify one observable transfer output against its inclusive envelope.
+///
+/// # Errors
+///
+/// Returns a typed error when the declared output envelope is inverted.
+pub fn classify_contact_output<Value>(
+    output: &Value,
+    range: &ObservableOutputRange<Value>,
+) -> Result<ContactOutputAdmission, ObservableOutputRangeError>
+where
+    Value: Ord,
+{
+    if range.minimum > range.maximum {
+        return Err(ObservableOutputRangeError::MinimumAboveMaximum);
+    }
+    if output < &range.minimum || output > &range.maximum {
+        return Ok(ContactOutputAdmission::OutsideEnvelope);
+    }
+    Ok(ContactOutputAdmission::Bounded)
 }

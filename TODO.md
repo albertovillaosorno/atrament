@@ -1106,10 +1106,13 @@ range, and out-of-range inputs require explicit extrapolation.
 
 The same boundary now retains the six accepted observable output families:
 trace width, coverage, starvation, pooling, edge displacement, and absorption or
-drying response. Preset evidence also retains caller-owned pen, ink, paper,
-conditions, calibrated input ranges, error measures, and known failure modes.
-Transfer functions, concrete output units/ranges, preset vocabularies, force
-units, proxy scales, and rendering remain open.
+drying response. A caller-owned inclusive output envelope can classify observed
+values as bounded or outside the declared range and rejects inverted
+envelopes. Preset evidence also retains caller-owned pen, ink, paper,
+conditions and
+calibrated input ranges, error measures, and known failure modes. Transfer
+functions, concrete output units/ranges, preset vocabularies, force units,
+proxy scales, and rendering remain open.
 
 ### TODO - Implement bounded page texture and soft noise
 
