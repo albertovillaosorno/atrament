@@ -166,9 +166,11 @@ authenticated mismatch returns `409` with the mismatched dimension and required
 identity without reflecting the browser-provided value. The browser accepts that
 mismatch only when the required identity equals its current value for the named
 dimension; contradictory mismatch metadata is an invalid handshake.
+
 Authentication or origin failure returns the same `401` response shape before
-compatibility is reported, and the service emits no permissive CORS response
-header.
+compatibility is reported. The browser invalidates that session from the status
+without waiting for a diagnostic body, and it parses handshake JSON only for
+`200` or `409`. The service emits no permissive CORS response header.
 
 Refreshing the browser does not create a new backend session. A refresh may
 rejoin the current process only when it still possesses the in-memory session

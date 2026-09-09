@@ -142,6 +142,10 @@ visible until the failed field succeeds; another field cannot announce
 `Session ready` while work or failure remains. Refresh cannot recover the launch
 credential from the rewritten browser URL or persistence API.
 
+Handshake response admission now invalidates `401` directly from the status and
+parses JSON bodies only for the two body-bearing handshake result classes,
+`200` and `409`; unrelated statuses cannot delay failure on an irrelevant body.
+
 The task remains open until temporary media exist and end-to-end fixtures also
 cover browser close, refresh, cancellation, media cleanup, and explicit-export
 survival.

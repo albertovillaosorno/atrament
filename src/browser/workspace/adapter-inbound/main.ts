@@ -435,6 +435,18 @@ async function completeSessionHandshake(secret: string): Promise<void> {
         }
         return;
     }
+    if (sessionSecret !== secret) {
+        return;
+    }
+    if (response.status === 401) {
+        invalidateUnauthorizedSession();
+        return;
+    }
+    if (response.status !== 200 && response.status !== 409) {
+        const invalidMessage = "Invalid backend handshake · editing disabled";
+        setTextIfChanged(sessionStatus, invalidMessage);
+        return;
+    }
     let payload: unknown;
     try {
         payload = await response.json();
@@ -457,10 +469,6 @@ async function completeSessionHandshake(secret: string): Promise<void> {
             outcome.expected,
         ].join("");
         setTextIfChanged(sessionStatus, mismatchMessage);
-        return;
-    }
-    if (response.status === 401) {
-        invalidateUnauthorizedSession();
         return;
     }
     const invalidMessage = "Invalid backend handshake · editing disabled";

@@ -264,6 +264,39 @@ test("page session network requests are cancellable on exit", async () => {
 });
 
 
+test(
+    "handshake rejects status before reading an irrelevant body",
+    async () => {
+        const source = await readFile(MAIN_MODULE, "utf8");
+        const start = source.indexOf(
+            "async function completeSessionHandshake(secret) {",
+        );
+        const end = source.indexOf(
+            "const failedDraftFields",
+            start,
+        );
+        assert.notEqual(start, -1, "handshake function must exist");
+        assert.notEqual(end, -1, "handshake function must be bounded");
+        const handshake = source.slice(start, end);
+        const unauthorized = handshake.indexOf(
+            "if (response.status === 401)",
+        );
+        const admittedStatuses = handshake.indexOf(
+            "response.status !== 200 && response.status !== 409",
+        );
+        const bodyRead = handshake.indexOf("await response.json();");
+        assert.ok(
+            unauthorized !== -1
+                && admittedStatuses !== -1
+                && bodyRead !== -1
+                && unauthorized < bodyRead
+                && admittedStatuses < bodyRead,
+            "401 and unrelated statuses must settle before JSON body parsing",
+        );
+    },
+);
+
+
 test("draft hydration is atomic and stale-page guarded", async () => {
     const source = await readFile(MAIN_MODULE, "utf8");
     const start = source.indexOf(

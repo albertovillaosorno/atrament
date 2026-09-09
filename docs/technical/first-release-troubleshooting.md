@@ -94,8 +94,10 @@ Current session-status text has these meanings:
   complete. Check the running local process; restart the session if needed.
 - `Incompatible <dimension> · expected <value>`: backend/frontend versions do
   not match. Use matching artifacts and do not downgrade the check.
-- `Authorization failed`: session credential or Origin admission failed. Treat
-  the session as unusable and restart rather than inventing a credential.
+- `Authorization failed`: session credential or Origin admission failed. The
+  browser treats the `401` status itself as authoritative and does not wait for
+  a response body before invalidating the session. Restart rather than inventing
+  a credential.
 - `Invalid backend handshake · editing disabled`: the response did not match
   the admitted handshake envelope. Diagnose backend/frontend drift.
 - `Loading session draft…`: authenticated draft reads are in progress. Do not
