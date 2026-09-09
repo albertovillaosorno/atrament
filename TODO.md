@@ -757,11 +757,14 @@ behavior, and browser, CLI, or MCP grapheme-range transport remain open.
 Report every unsupported grapheme by profile and offer only a visible declared
 fallback, profile repair, content replacement, or export refusal.
 
-This task is currently blocked on an executable handwriting-profile coverage
-authority. The accepted language ADR requires profiles to declare coverage per
-grapheme or compositional rule, but the backend does not yet implement a
-handwriting-profile domain or admitted fallback identity. Glyph validation must
-not infer support from an installed font, renderer behavior, or successful text
+Current executable evidence now gives one handwriting profile explicit exact
+grapheme declarations and compositional-rule identities. Coverage classification
+admits an exact grapheme first, otherwise accepts only caller-supplied rule
+evidence that names a rule declared by the same profile; absent or undeclared
+rule evidence remains `Missing`. Rule applicability, required English/Spanish
+corpus enumeration, fallback-style admission, diagnostics, measurement,
+rendering, and portable section schema remain open. Glyph validation must not
+infer support from an installed font, renderer behavior, or successful text
 acceptance.
 
 ## P3 — The dual human and LLM editor

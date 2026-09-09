@@ -28,6 +28,9 @@ depends_on = []
 [component.atrament_handwriting_calibration_session]
 depends_on = []
 
+[component.atrament_handwriting_glyph_coverage]
+depends_on = []
+
 [component.atrament_handwriting_profile_container]
 depends_on = []
 

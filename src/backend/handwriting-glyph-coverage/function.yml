@@ -1,0 +1,9 @@
+identity:
+  id: function:handwriting-glyph-coverage
+  name: handwriting-glyph-coverage
+  path: src/backend/handwriting-glyph-coverage
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: domain
