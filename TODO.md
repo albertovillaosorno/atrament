@@ -1248,6 +1248,13 @@ open.
 Benchmark long pages, many images, dense equations, zoom, rapid edits, and final
 export on ordinary integrated-graphics computers with no compute GPU.
 
+Current executable evidence now records transport-neutral CPU benchmark
+observations for those six workload scenarios. Each observation is explicitly
+Preview or Final, retains caller-owned latency and peak-memory measurements, and
+names a caller-owned machine/configuration classified as having no discrete GPU.
+Numeric budgets, units, representative machine tiers, benchmark execution,
+render scheduling, and pass/fail policy remain open.
+
 ## P6 — LLM, CLI, MCP, and media intake
 
 ### TODO - Freeze the one-shot formatting prompt

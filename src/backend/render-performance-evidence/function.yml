@@ -1,0 +1,9 @@
+identity:
+  id: function:render-performance-evidence
+  name: render-performance-evidence
+  path: src/backend/render-performance-evidence
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: domain

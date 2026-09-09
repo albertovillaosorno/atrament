@@ -177,6 +177,13 @@ name = "atrament_render_manifest"
 version = "0.1.0"
 
 [[package]]
+name = "atrament_render_performance_evidence"
+version = "0.1.0"
+dependencies = [
+ "atrament_render_quality_profile",
+]
+
+[[package]]
 name = "atrament_render_quality_profile"
 version = "0.1.0"
 

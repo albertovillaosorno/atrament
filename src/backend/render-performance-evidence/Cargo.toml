@@ -1,0 +1,15 @@
+[package]
+name = "atrament_render_performance_evidence"
+version = "0.1.0"
+edition = "2024"
+publish = false
+license = "MIT"
+
+[dependencies]
+atrament_render_quality_profile = { path = "../render-quality-profile" }
+
+[lib]
+path = "domain/lib.rs"
+
+[lints]
+workspace = true
