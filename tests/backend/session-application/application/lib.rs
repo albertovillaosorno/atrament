@@ -88,6 +88,7 @@ use atrament_semantic_notebook_port::{
     SemanticCommandFamily, TableCellSpanEditOutcome, TableRowRoleEditOutcome,
     TextEditOutcome,
 };
+use atrament_session_draft::MAX_DRAFT_FIELD_BYTES;
 use atrament_session_draft_port::{DraftField, DraftMutation, SessionDraft};
 use atrament_unicode_grapheme_boundary_port::GraphemeBoundaryProvider;
 use atrament_unicode_grapheme_edit::{GraphemeRange, GraphemeRangeError};
@@ -436,6 +437,13 @@ fn run_process_fixture_child(mode: &str) {
             fresh.history_availability(),
             HistoryAvailabilityOutcome::NoAcceptedRevision,
         );
+        for field in [
+            DraftField::Candidate,
+            DraftField::Source,
+            DraftField::Task,
+        ] {
+            assert_eq!(fresh.value(field), "");
+        }
         assert!(
             fresh.media_jobs_are_empty_for_test(),
             "fresh process must own no media jobs",
@@ -499,6 +507,28 @@ fn run_process_fixture_child(mode: &str) {
         style: None,
     });
     let mut session = application::SessionApplication::default();
+    for (field, value) in [
+        (DraftField::Task, "process-private task"),
+        (DraftField::Source, "process-private source"),
+        (DraftField::Candidate, "process-private model response"),
+    ] {
+        assert_eq!(
+            session.replace(field, String::from(value)),
+            DraftMutation::Applied,
+        );
+        assert_eq!(session.value(field), value);
+    }
+    let DraftMutation::ResourceLimit { diagnostics } = session.replace(
+        DraftField::Candidate,
+        "x".repeat(MAX_DRAFT_FIELD_BYTES + 1),
+    ) else {
+        panic!("oversized process draft must produce resource diagnostics");
+    };
+    assert_eq!(diagnostics.diagnostics.len(), 1);
+    assert_eq!(
+        session.value(DraftField::Candidate),
+        "process-private model response",
+    );
     let media_job = session.begin_media_job().expect("process media job");
     let _waveform = session
         .register_media_waveform_intermediate(media_job)
