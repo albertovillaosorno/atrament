@@ -115,6 +115,7 @@ pub struct ContactPresetEvidence<
     FailureModes,
     InkIdentity,
     InputRanges,
+    OutputRanges,
     PaperIdentity,
     PenIdentity,
 > {
@@ -128,6 +129,8 @@ pub struct ContactPresetEvidence<
     pub input_ranges: InputRanges,
     /// Caller-owned known failure modes.
     pub known_failure_modes: FailureModes,
+    /// Caller-owned bounded observable-output evidence.
+    pub output_ranges: OutputRanges,
     /// Validated paper identity.
     pub paper_identity: PaperIdentity,
     /// Validated pen identity.

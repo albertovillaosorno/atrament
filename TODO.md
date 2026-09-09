@@ -1109,10 +1109,10 @@ trace width, coverage, starvation, pooling, edge displacement, and absorption or
 drying response. A caller-owned inclusive output envelope can classify observed
 values as bounded or outside the declared range and rejects inverted
 envelopes. Preset evidence also retains caller-owned pen, ink, paper,
-conditions and
-calibrated input ranges, error measures, and known failure modes. Transfer
-functions, concrete output units/ranges, preset vocabularies, force units,
-proxy scales, and rendering remain open.
+conditions, calibrated input ranges, bounded output-range evidence, error
+measures, and known failure modes. Transfer functions, concrete output
+units/ranges, preset vocabularies, force units, proxy scales, and rendering
+remain open.
 
 ### TODO - Implement bounded page texture and soft noise
 

@@ -100,6 +100,14 @@ fn contact_preset_retains_validation_scope_and_known_failure_evidence(
         input_ranges: ["speed:2-30", "pressure:100-900"],
         ink_identity: "ink-black-4",
         known_failure_modes: ["glossy-paper"],
+        output_ranges: ContactModelOutput {
+            absorption_or_drying_response: "drying-envelope",
+            coverage: "coverage-envelope",
+            edge_displacement: "edge-envelope",
+            pooling: "pooling-envelope",
+            starvation: "starvation-envelope",
+            trace_width: "width-envelope",
+        },
         paper_identity: "paper-ruled-2",
         pen_identity: "pen-ballpoint-7",
     };
@@ -110,6 +118,8 @@ fn contact_preset_retains_validation_scope_and_known_failure_evidence(
     assert_eq!(evidence.input_ranges.len(), 2);
     assert_eq!(evidence.error_measures.len(), 2);
     assert_eq!(evidence.known_failure_modes, ["glossy-paper"]);
+    assert_eq!(evidence.output_ranges.trace_width, "width-envelope");
+    assert_eq!(evidence.output_ranges.coverage, "coverage-envelope");
 }
 
 #[test]
