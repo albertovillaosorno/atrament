@@ -87,6 +87,7 @@ use atrament_semantic_notebook_port::{
     TextEditOutcome,
 };
 use atrament_session_draft_port::{DraftField, DraftMutation, SessionDraft};
+use atrament_unicode_grapheme_boundary_port::GraphemeBoundaryProvider;
 use atrament_unicode_grapheme_edit::{GraphemeRange, GraphemeRangeError};
 use atrament_unicode_grapheme_segmentation::UnicodeGraphemeSegmentation;
 
@@ -4577,6 +4578,61 @@ fn invalid_grapheme_range_is_atomic_and_preserves_history() {
         material.editable_value,
         Some(EditableSemanticValue::Text(String::from("e\u{301}x"))),
     );
+}
+
+struct MissingAdvertisedBoundary;
+
+impl GraphemeBoundaryProvider for MissingAdvertisedBoundary {
+    fn byte_offset(
+        &self,
+        source: &str,
+        grapheme_index: usize,
+    ) -> Option<usize> {
+        match grapheme_index {
+            0 => Some(0),
+            1 => None,
+            _ => Some(source.len()),
+        }
+    }
+
+    fn grapheme_count(&self, _source: &str) -> usize {
+        2
+    }
+}
+
+#[test]
+fn grapheme_provider_invariant_failure_is_atomic_for_session_state() {
+    let identities = IdentityAllocator::new();
+    let (candidate, candidate_span) =
+        editable_text_candidate(&identities, "éx");
+    let mut session = application::SessionApplication::default();
+    let AcceptanceOutcome::Accepted { mapping, revision: base } =
+        session.accept_candidate(candidate)
+    else {
+        panic!("provider-invariant fixture candidate must be accepted");
+    };
+    let span = mapping
+        .iter()
+        .find(|entry| entry.candidate == candidate_span)
+        .expect("provider-invariant span identity must map")
+        .accepted;
+    let before_history = session.history_availability();
+    let before_revision = session
+        .accepted_revision()
+        .expect("provider-invariant accepted revision")
+        .clone();
+    assert_eq!(
+        session.replace_text_grapheme_range(
+            &MissingAdvertisedBoundary,
+            base,
+            span,
+            GraphemeRange { count: 1, start: 1 },
+            "z",
+        ),
+        Err(GraphemeRangeError::BoundaryUnavailable { grapheme_index: 1 }),
+    );
+    assert_eq!(session.history_availability(), before_history);
+    assert_eq!(session.accepted_revision(), Some(&before_revision));
 }
 
 #[test]
