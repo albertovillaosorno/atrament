@@ -39,6 +39,8 @@ use atrament_render_quality_profile::{
 type Authority = SharedRenderAuthority<
     &'static str,
     &'static str,
+    &'static str,
+    u64,
     (u64, u64),
     u64,
 >;
@@ -48,6 +50,8 @@ fn authority() -> Authority {
     SharedRenderAuthority {
         blend_order: "accepted-blend-order",
         geometry: "vector-geometry-12",
+        material_authority: "calibrated-contact-preset-4",
+        noise_scale: 1_200,
         physical_bounds: (210_000, 297_000),
         seed: 17,
     }
@@ -110,6 +114,40 @@ fn geometry_drift_rejects_preview_final_pair() {
         validate_preview_final_pair(&preview, &final_profile),
         Err(RenderQualityPairError::SharedAuthorityMismatch),
     );
+}
+
+#[test]
+fn material_or_noise_drift_rejects_as_shared_authority_mismatch() {
+    let preview = profile(
+        RenderQualityMode::Preview,
+        RenderQualityCost {
+            sampling_cost: 2,
+            texture_resolution: 512,
+        },
+    );
+    for authority in [
+        SharedRenderAuthority {
+            material_authority: "different-contact-preset",
+            ..authority()
+        },
+        SharedRenderAuthority {
+            noise_scale: 2_400,
+            ..authority()
+        },
+    ] {
+        let final_profile = RenderQualityProfile {
+            authority,
+            cost: RenderQualityCost {
+                sampling_cost: 8,
+                texture_resolution: 2048,
+            },
+            mode: RenderQualityMode::Final,
+        };
+        assert_eq!(
+            validate_preview_final_pair(&preview, &final_profile),
+            Err(RenderQualityPairError::SharedAuthorityMismatch),
+        );
+    }
 }
 
 #[test]

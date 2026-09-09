@@ -45,11 +45,22 @@ pub enum RenderQualityMode {
 
 /// Render authority that preview and final profiles must share exactly.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct SharedRenderAuthority<BlendOrder, Geometry, PhysicalBounds, Seed> {
+pub struct SharedRenderAuthority<
+    BlendOrder,
+    Geometry,
+    MaterialAuthority,
+    NoiseScale,
+    PhysicalBounds,
+    Seed,
+> {
     /// Accepted material blend order.
     pub blend_order: BlendOrder,
     /// Authoritative vector geometry identity or value.
     pub geometry: Geometry,
+    /// Calibrated material/contact interpretation shared across quality modes.
+    pub material_authority: MaterialAuthority,
+    /// Caller-owned physical scale of the page-level soft-noise field.
+    pub noise_scale: NoiseScale,
     /// Caller-owned physical page dimensions or bounds.
     pub physical_bounds: PhysicalBounds,
     /// Accepted deterministic render seed input.
@@ -83,7 +94,7 @@ pub enum RenderQualityPairError {
     FinalProfileRole,
     /// The supplied preview profile is not marked Preview.
     PreviewProfileRole,
-    /// Geometry, seed, blend order, or physical dimensions differ.
+    /// Geometry, material, noise, seed, blend, or physical authority differs.
     SharedAuthorityMismatch,
 }
 
