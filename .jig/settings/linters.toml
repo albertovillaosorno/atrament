@@ -63,7 +63,7 @@ reason = "Repository-local stable Cargo runs the configured RustCheck native val
 
 [applicability.rustfmt]
 enabled = false
-reason = "Repository-local Rust exists, but no Rustfmt native validation capability is configured yet."
+reason = "The reviewed nightly rustfmt check currently reports repository formatting drift."
 
 [applicability.typescript]
 enabled = true
