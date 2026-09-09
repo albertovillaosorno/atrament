@@ -37,3 +37,12 @@ stable = "7.0.2"
 kind = "package"
 target = "typescript"
 template = "{version}"
+
+[authority.rust-stable-cargo]
+current = "1.97.1"
+stable = "1.97.1"
+
+[authority.rust-stable-cargo.projection.tool]
+kind = "tool"
+target = "rust_stable_cargo"
+template = "{version}"
