@@ -128,8 +128,10 @@ availability, position knowledge, boundary state, and whether a partial stroke
 remains unresolved.
 
 The recognized interruption reasons are disconnect, emergency stop, power loss,
-process crash, and user pause. `physical_resume_disposition` returns
-`ResumeKnownState` only when:
+process crash, process restart, and user pause. Restart is retained as recovery
+provenance only; this domain does not persist or restore hardware state across a
+process lifetime. `physical_resume_disposition` returns `ResumeKnownState` only
+when:
 
 - required feedback is available;
 - the physical position is known;

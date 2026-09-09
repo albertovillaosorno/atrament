@@ -47,6 +47,9 @@ pub enum PhysicalInterruptionKind {
     PowerLoss,
     /// Atrament or its managed adapter process terminated unexpectedly.
     ProcessCrash,
+    /// Atrament or its managed adapter process restarted before recovery
+    /// review.
+    ProcessRestart,
     /// User requested an ordinary pause.
     UserPause,
 }

@@ -24,8 +24,8 @@
 // - Summary:
 //   - Proves uncertainty cannot be reclassified as resumable state.
 // - Description:
-//   - Covers disconnects, power loss, pause, emergency stop, crash, and stroke
-//     uncertainty.
+//   - Covers disconnects, power loss, pause, emergency stop, crash, restart,
+//     and stroke uncertainty.
 // - Usage:
 //   - Compile directly against the physical-recovery-state domain.
 // - Defaults:
@@ -56,6 +56,7 @@ fn fully_known_state_is_the_only_resumable_shape() {
         PhysicalInterruptionKind::EmergencyStop,
         PhysicalInterruptionKind::PowerLoss,
         PhysicalInterruptionKind::ProcessCrash,
+        PhysicalInterruptionKind::ProcessRestart,
         PhysicalInterruptionKind::UserPause,
     ] {
         let snapshot = safe_snapshot(interruption);
@@ -104,5 +105,20 @@ fn partial_stroke_requires_operator_recovery() {
     assert_eq!(
         physical_resume_disposition(&snapshot),
         PhysicalResumeDisposition::OperatorRecoveryRequired,
+    );
+}
+
+#[test]
+fn process_restart_does_not_bypass_unknown_physical_state() {
+    let mut snapshot = safe_snapshot(PhysicalInterruptionKind::ProcessRestart);
+    snapshot.feedback = PhysicalFeedbackState::Missing;
+    snapshot.position = PhysicalPositionState::Unknown;
+    assert_eq!(
+        physical_resume_disposition(&snapshot),
+        PhysicalResumeDisposition::OperatorRecoveryRequired,
+    );
+    assert_eq!(
+        snapshot.interruption,
+        PhysicalInterruptionKind::ProcessRestart,
     );
 }
