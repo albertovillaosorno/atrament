@@ -140,7 +140,7 @@ fn review_preserves_every_source_and_explicit_conversion_evidence() {
     assert_eq!(projection.entries[1].source_identity, "photo-2");
     assert_eq!(
         projection.entries[1].status,
-        OutputCapabilityProjectionStatus::Converted,
+        OutputCapabilityProjectionStatus::ConversionRequired,
     );
     let accepted = projection.entries[1].accepted_conversion.as_ref().unwrap();
     assert_eq!(accepted.choice, "photo-to-line-art");
@@ -219,7 +219,7 @@ fn conversion_cannot_override_reject_future_or_direct_acceptance() {
 }
 
 #[test]
-fn projection_is_ready_only_when_every_entry_is_direct_or_converted() {
+fn generic_live_review_cannot_admit_unvalidated_conversion_evidence() {
     let projection = review_output_capabilities(
         OutputMode::Live,
         vec![
@@ -231,7 +231,7 @@ fn projection_is_ready_only_when_every_entry_is_direct_or_converted() {
                 source_identity: "paragraph-1",
             },
             OutputCapabilityRequest {
-                accepted_conversion: Some(conversion("photo-to-line-art")),
+                accepted_conversion: Some(conversion("arbitrary-choice")),
                 capability: OutputCapability::Semantic(
                     SemanticCapability::Photograph,
                 ),
@@ -239,7 +239,11 @@ fn projection_is_ready_only_when_every_entry_is_direct_or_converted() {
             },
         ],
     );
-    assert!(projection.is_ready());
+    assert_eq!(
+        projection.entries[1].status,
+        OutputCapabilityProjectionStatus::ConversionRequired,
+    );
+    assert!(!projection.is_ready());
 }
 
 fn live_conversion(

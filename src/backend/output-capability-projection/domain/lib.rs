@@ -269,6 +269,10 @@ pub const fn live_conversion_kind_admitted(
 }
 
 /// Review every source capability use without dropping blocked entries.
+///
+/// Conversion evidence is retained but does not by itself admit a `Convert`
+/// row. Mode-specific validation must prove the conversion choice before the
+/// projection can become ready.
 #[must_use]
 pub fn review_output_capabilities<Choice, Provenance, SourceIdentity>(
     mode: OutputMode,
@@ -287,11 +291,8 @@ pub fn review_output_capabilities<Choice, Provenance, SourceIdentity>(
                     (CapabilityDisposition::Accept, true) => {
                         OutputCapabilityProjectionStatus::UnexpectedConversion
                     }
-                    (CapabilityDisposition::Convert, false) => {
+                    (CapabilityDisposition::Convert, _) => {
                         OutputCapabilityProjectionStatus::ConversionRequired
-                    }
-                    (CapabilityDisposition::Convert, true) => {
-                        OutputCapabilityProjectionStatus::Converted
                     }
                     (CapabilityDisposition::Future, _) => {
                         OutputCapabilityProjectionStatus::FutureUnavailable
@@ -328,19 +329,22 @@ pub fn review_live_output_capabilities<Details, Provenance, SourceIdentity>(
 > {
     let mut projection = review_output_capabilities(OutputMode::Live, requests);
     for entry in &mut projection.entries {
-        if entry.status != OutputCapabilityProjectionStatus::Converted {
+        if entry.status
+            != OutputCapabilityProjectionStatus::ConversionRequired
+        {
             continue;
         }
         let Some(conversion) = entry.accepted_conversion.as_ref() else {
             continue;
         };
-        if !live_conversion_kind_admitted(
+        entry.status = if live_conversion_kind_admitted(
             entry.capability,
             conversion.choice.kind,
         ) {
-            entry.status =
-                OutputCapabilityProjectionStatus::UnsupportedConversionChoice;
-        }
+            OutputCapabilityProjectionStatus::Converted
+        } else {
+            OutputCapabilityProjectionStatus::UnsupportedConversionChoice
+        };
     }
     projection
 }

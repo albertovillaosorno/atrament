@@ -1513,8 +1513,10 @@ A Live-specific typed review now also validates the accepted conversion kind for
 all 27 Live `Convert` rows: highlight underline/box/spacing/stroke-weight, sober
 one-pen title, calibrated ink, accepted line-art projection, one-pen geometry,
 or same-pen paper marks. Conversion details and provenance remain caller-owned.
-Blocking diagnostics, conversion execution, semantic projection construction,
-and Plan compilation remain open.
+The mode-neutral review retains supplied conversion evidence but cannot mark
+a Live `Convert` row ready; only the typed Live review promotes an admitted kind
+to `Converted`. Blocking diagnostics, conversion execution, semantic projection
+construction, and Plan compilation remain open.
 
 ### TODO - Implement the device-neutral motion plan
 
