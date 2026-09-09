@@ -165,8 +165,8 @@ pub fn replace_grapheme_range(
     } else {
         provider_boundary(boundaries, source, range.start)?
     };
-    let end_byte = if end == 0 {
-        first_byte
+    let end_byte = if end == range.start {
+        start_byte
     } else if end == total {
         final_byte
     } else {

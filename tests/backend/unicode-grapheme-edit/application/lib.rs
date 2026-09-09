@@ -29,6 +29,8 @@
 // - Defaults:
 //   - NFC and NFD source spellings remain distinct.
 //
+use std::cell::Cell;
+
 use atrament_unicode_grapheme_boundary_port::GraphemeBoundaryProvider;
 use atrament_unicode_grapheme_edit::{
     GraphemeRange, GraphemeRangeError, replace_grapheme_range,
@@ -69,6 +71,54 @@ fn zero_length_ranges_insert_at_start_middle_and_end() {
             Ok(String::from(expected)),
         );
     }
+}
+
+struct ChangingInsertionBoundaryProvider {
+    internal_calls: Cell<usize>,
+}
+
+impl GraphemeBoundaryProvider for ChangingInsertionBoundaryProvider {
+    fn byte_offset(
+        &self,
+        source: &str,
+        grapheme_index: usize,
+    ) -> Option<usize> {
+        match grapheme_index {
+            0 => Some(0),
+            1 => {
+                let calls = self.internal_calls.get();
+                self.internal_calls.set(calls.saturating_add(1));
+                if calls == 0 {
+                    Some("é".len())
+                } else {
+                    Some(source.len())
+                }
+            },
+            2 => Some(source.len()),
+            _ => None,
+        }
+    }
+
+    fn grapheme_count(&self, _source: &str) -> usize {
+        2
+    }
+}
+
+#[test]
+fn zero_length_range_resolves_one_internal_boundary_once() {
+    let provider = ChangingInsertionBoundaryProvider {
+        internal_calls: Cell::new(0),
+    };
+    assert_eq!(
+        replace_grapheme_range(
+            &provider,
+            "éx",
+            GraphemeRange { count: 0, start: 1 },
+            "!",
+        ),
+        Ok(String::from("é!x")),
+    );
+    assert_eq!(provider.internal_calls.get(), 1);
 }
 
 #[test]

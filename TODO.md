@@ -772,7 +772,9 @@ Invalid ranges reject before revision or history mutation.
 
 Missing, invalid, non-advancing, reversed, or inconsistent source-anchor
 boundaries from an injected segmentation provider remain typed failures and do
-not mutate accepted state. Normalization policy, punctuation generation,
+not mutate accepted state. Zero-length insertion resolves an internal provider
+boundary once, so a changing repeated answer cannot turn insertion into byte
+replacement. Normalization policy, punctuation generation,
 language-aware wrapping,
 cursor
 behavior, and browser, CLI, or MCP grapheme-range transport remain open.
