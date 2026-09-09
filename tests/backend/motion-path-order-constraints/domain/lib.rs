@@ -155,3 +155,19 @@ fn constraints_must_reference_forward_relations_in_exact_source_plan() {
         }),
     );
 }
+
+#[test]
+fn impossible_operation_count_rejects_before_candidate_position_allocation() {
+    let constraints = MotionOrderConstraintSet {
+        constraints: Vec::new(),
+        operation_count: usize::MAX,
+        plan_identity: "unmaterialized-plan",
+    };
+    assert_eq!(
+        validate_candidate_operation_order(&constraints, &[]),
+        Err(MotionOrderValidationError::CandidateLengthMismatch {
+            observed: 0,
+            required: usize::MAX,
+        }),
+    );
+}
