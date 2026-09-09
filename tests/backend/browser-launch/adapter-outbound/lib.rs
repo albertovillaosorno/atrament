@@ -102,3 +102,17 @@ fn credential_echoing_stderr_opener_is_silenced_and_typed() {
     ));
     assert!(!error.to_string().contains(PRIVATE_LAUNCH_URL));
 }
+
+#[cfg(target_os = "linux")]
+#[test]
+fn linux_graphical_session_markers_must_be_nonempty() {
+    assert!(!browser_launch::graphical_session_marker_is_usable(None));
+    assert!(!browser_launch::graphical_session_marker_is_usable(Some(
+        OsStr::new(""),
+    )));
+    for marker in [":0", "wayland-0"] {
+        assert!(browser_launch::graphical_session_marker_is_usable(Some(
+            OsStr::new(marker),
+        )));
+    }
+}

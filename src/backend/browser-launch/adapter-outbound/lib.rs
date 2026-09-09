@@ -138,8 +138,18 @@ pub fn launch(origin: &str) -> Result<(), LaunchError> {
 }
 
 #[cfg(target_os = "linux")]
+pub(crate) fn graphical_session_marker_is_usable(
+    value: Option<&OsStr>,
+) -> bool {
+    value.is_some_and(|marker| !marker.is_empty())
+}
+
+#[cfg(target_os = "linux")]
 fn has_linux_graphical_session() -> bool {
-    env::var_os("DISPLAY").is_some() || env::var_os("WAYLAND_DISPLAY").is_some()
+    let display = env::var_os("DISPLAY");
+    let wayland_display = env::var_os("WAYLAND_DISPLAY");
+    graphical_session_marker_is_usable(display.as_deref())
+        || graphical_session_marker_is_usable(wayland_display.as_deref())
 }
 
 #[cfg(target_os = "linux")]
