@@ -122,6 +122,24 @@ pub struct VariationReplayKey<Seed, SemanticIdentity> {
     pub semantic_identity: SemanticIdentity,
 }
 
+/// One caller-produced variation sample bound to deterministic replay inputs.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct VariationSample<ReplayKey, Value> {
+    /// Exact deterministic replay inputs used for this sample.
+    pub replay_key: ReplayKey,
+    /// Caller-produced sampled value in the parameter's declared unit.
+    pub value: Value,
+}
+
+/// Why one caller-produced sample violates its admitted variation envelope.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum VariationSampleError {
+    /// Sample exceeds the admitted maximum.
+    AboveMaximum,
+    /// Sample is below the admitted minimum.
+    BelowMinimum,
+}
+
 /// Validate one complete variable-parameter envelope before any sampling.
 ///
 /// # Errors
@@ -154,6 +172,44 @@ where
     }
     if parameter.central_tendency > parameter.maximum.value {
         return Err(VariationParameterError::CentralTendencyAboveMaximum);
+    }
+    Ok(())
+}
+
+/// Validate one sampled value against an already configured variation envelope.
+///
+/// This function does not produce the sample or interpret its replay key. It
+/// only proves that the caller-produced value stays inside the configured
+/// inclusive bounds.
+///
+/// # Errors
+///
+/// Returns a typed failure when the sampled value lies outside the envelope.
+pub fn validate_variation_sample<
+    Value,
+    Unit,
+    Distribution,
+    CorrelationGroup,
+    ContextRule,
+    ReplayKey,
+>(
+    parameter: &VariationParameter<
+        Value,
+        Unit,
+        Distribution,
+        CorrelationGroup,
+        ContextRule,
+    >,
+    sample: &VariationSample<ReplayKey, Value>,
+) -> Result<(), VariationSampleError>
+where
+    Value: Ord,
+{
+    if sample.value < parameter.minimum.value {
+        return Err(VariationSampleError::BelowMinimum);
+    }
+    if sample.value > parameter.maximum.value {
+        return Err(VariationSampleError::AboveMaximum);
     }
     Ok(())
 }

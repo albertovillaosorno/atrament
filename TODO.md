@@ -1082,8 +1082,9 @@ Current executable evidence now preserves independently observed or authorized
 minimum and maximum bounds, validates central tendency inside the envelope, and
 retains caller-owned typed units, distribution metadata, correlation groups,
 context rules, and the profile/document/page/line/word/character/stroke scale. A
-document seed plus stable semantic identity forms the typed replay key. This
-does
+document seed plus stable semantic identity forms the typed replay key. A
+caller-produced sample can now be checked against the parameter's inclusive
+minimum/maximum envelope while retaining those exact replay inputs. This does
 not choose parameter vocabularies, distribution families, correlations, context
 semantics, random generators, fitting policy, or a sampling algorithm.
 

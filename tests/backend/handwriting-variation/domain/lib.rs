@@ -33,8 +33,9 @@
 //
 use atrament_handwriting_variation::{
     VariationBound, VariationBoundBasis, VariationParameter,
-    VariationParameterError, VariationReplayKey, VariationScale,
-    validate_variation_parameter,
+    VariationParameterError, VariationReplayKey, VariationSample,
+    VariationSampleError, VariationScale, validate_variation_parameter,
+    validate_variation_sample,
 };
 
 type Parameter =
@@ -123,4 +124,62 @@ fn replay_key_retains_document_seed_and_stable_semantic_identity() {
     assert_eq!(first, same);
     assert_ne!(first, different_seed);
     assert_ne!(first, different_identity);
+}
+
+#[test]
+fn sampled_values_are_checked_against_inclusive_parameter_bounds() {
+    let parameter = parameter(-10, 0, 15);
+    for sampled_value in [-10, -3, 0, 15] {
+        let sample = VariationSample {
+            replay_key: VariationReplayKey {
+                document_seed: 41_u64,
+                semantic_identity: "block-7",
+            },
+            value: sampled_value,
+        };
+        assert_eq!(validate_variation_sample(&parameter, &sample), Ok(()));
+    }
+}
+
+#[test]
+fn sampled_value_outside_parameter_bounds_rejects_explicitly() {
+    let parameter = parameter(-10, 0, 15);
+    let below = VariationSample {
+        replay_key: VariationReplayKey {
+            document_seed: 41_u64,
+            semantic_identity: "block-7",
+        },
+        value: -11,
+    };
+    let above = VariationSample {
+        replay_key: VariationReplayKey {
+            document_seed: 41_u64,
+            semantic_identity: "block-7",
+        },
+        value: 16,
+    };
+    assert_eq!(
+        validate_variation_sample(&parameter, &below),
+        Err(VariationSampleError::BelowMinimum),
+    );
+    assert_eq!(
+        validate_variation_sample(&parameter, &above),
+        Err(VariationSampleError::AboveMaximum),
+    );
+}
+
+#[test]
+fn sampled_value_retains_exact_replay_inputs_without_interpretation() {
+    let parameter = parameter(-10, 0, 15);
+    let sample = VariationSample {
+        replay_key: VariationReplayKey {
+            document_seed: 9001_u64,
+            semantic_identity: "glyph-é-17",
+        },
+        value: 7,
+    };
+    assert_eq!(validate_variation_sample(&parameter, &sample), Ok(()));
+    assert_eq!(sample.replay_key.document_seed, 9001);
+    assert_eq!(sample.replay_key.semantic_identity, "glyph-é-17");
+    assert_eq!(sample.value, 7);
 }
