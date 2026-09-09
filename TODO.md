@@ -171,8 +171,9 @@ The localhost adapter requires exactly one route-specific application
 diagnostic for the current singleton handshake-mismatch and draft-resource
 response schemas.
 Empty, multi-item, cross-operation codes, or wrong operation bindings fail as
-`invalid_diagnostic`, so transport neither invents, truncates, nor relabels
-application evidence.
+`invalid_diagnostic`. Handshake projection also requires one `RequiredVersion`
+evidence item that exactly matches the reported dimension and expected identity,
+so transport neither invents, truncates, nor relabels application evidence.
 
 Layout now provides the first accepted-revision producer beyond handshake and
 session draft: fixed-region overflow emits stable blocking diagnostics with

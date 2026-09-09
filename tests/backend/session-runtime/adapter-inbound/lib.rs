@@ -37,7 +37,8 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use atrament_diagnostic::{
-    Completeness, DIAGNOSTIC_VERSION, DiagnosticCode, DiagnosticSet, Operation,
+    Completeness, DIAGNOSTIC_VERSION, DiagnosticCode, DiagnosticSet, Evidence,
+    Operation,
 };
 use atrament_session_draft::{MAX_DRAFT_FIELD_BYTES, SessionDraftService};
 use atrament_session_draft_port::{DraftField, DraftMutation, SessionDraft};
@@ -1378,13 +1379,21 @@ impl SessionHandshake for JsonEdgeIncompatibleHandshake {
             prompt: "atrament.prompt/test-mismatch",
             ..versions
         });
-        let HandshakeResult::Incompatible { diagnostics, .. } = mismatch else {
+        let HandshakeResult::Incompatible {
+            mut diagnostics, ..
+        } = mismatch
+        else {
             panic!("fixture must obtain one valid mismatch diagnostic");
         };
+        const EXPECTED: &str = "prompt\"\\\n\u{0001}🙂";
+        diagnostics.diagnostics[0].evidence = vec![Evidence::RequiredVersion {
+            dimension: "prompt",
+            expected: EXPECTED,
+        }];
         HandshakeResult::Incompatible {
             diagnostics,
             dimension: VersionDimension::Prompt,
-            expected: "prompt\"\\\n\u{0001}🙂",
+            expected: EXPECTED,
             observed: versions.prompt,
         }
     }
@@ -2081,6 +2090,70 @@ impl SessionHandshake for WrongCodeDiagnosticHandshake {
     }
 }
 
+struct WrongEvidenceDiagnosticHandshake;
+
+impl SessionHandshake for WrongEvidenceDiagnosticHandshake {
+    fn evaluate<'version>(
+        &self,
+        versions: Versions<'version>,
+    ) -> HandshakeResult<'version> {
+        let mismatch = HandshakeService.evaluate(Versions {
+            prompt: "atrament.prompt/wrong-evidence",
+            ..versions
+        });
+        let HandshakeResult::Incompatible {
+            mut diagnostics,
+            dimension,
+            expected,
+            ..
+        } = mismatch
+        else {
+            panic!("fixture must obtain a mismatch diagnostic");
+        };
+        diagnostics.diagnostics[0].evidence = vec![Evidence::RequiredVersion {
+            dimension: "renderer",
+            expected: RENDERER_VERSION,
+        }];
+        HandshakeResult::Incompatible {
+            diagnostics,
+            dimension,
+            expected,
+            observed: versions.prompt,
+        }
+    }
+}
+
+struct ExtraEvidenceDiagnosticHandshake;
+
+impl SessionHandshake for ExtraEvidenceDiagnosticHandshake {
+    fn evaluate<'version>(
+        &self,
+        versions: Versions<'version>,
+    ) -> HandshakeResult<'version> {
+        let mismatch = HandshakeService.evaluate(Versions {
+            prompt: "atrament.prompt/extra-evidence",
+            ..versions
+        });
+        let HandshakeResult::Incompatible {
+            mut diagnostics,
+            dimension,
+            expected,
+            ..
+        } = mismatch
+        else {
+            panic!("fixture must obtain a mismatch diagnostic");
+        };
+        let evidence = diagnostics.diagnostics[0].evidence[0];
+        diagnostics.diagnostics[0].evidence.push(evidence);
+        HandshakeResult::Incompatible {
+            diagnostics,
+            dimension,
+            expected,
+            observed: versions.prompt,
+        }
+    }
+}
+
 struct WrongOperationDiagnosticHandshake;
 
 impl SessionHandshake for WrongOperationDiagnosticHandshake {
@@ -2249,6 +2322,28 @@ fn adapter_requires_exactly_one_route_specific_application_diagnostic() {
         response_text.starts_with("HTTP/1.1 500 Internal Server Error\r\n")
     );
     assert!(!response_text.contains("atrament.handshake.version-mismatch"));
+
+    for handshake in [
+        &WrongEvidenceDiagnosticHandshake as &dyn SessionHandshake,
+        &ExtraEvidenceDiagnosticHandshake as &dyn SessionHandshake,
+    ] {
+        let mut ordinary_draft = SessionDraftService::default();
+        let response = runtime::route_request(
+            handshake_request.as_bytes(),
+            EXPECTED_HOST,
+            EXPECTED_ORIGIN,
+            EXPECTED_SECRET,
+            handshake,
+            &mut ordinary_draft,
+        );
+        let response_text =
+            String::from_utf8(response).expect("response is UTF-8");
+        assert!(response_text
+            .starts_with("HTTP/1.1 500 Internal Server Error\r\n"));
+        assert!(
+            !response_text.contains("atrament.handshake.version-mismatch")
+        );
+    }
 
     let request = draft_replace_request(
         "/api/session/task",

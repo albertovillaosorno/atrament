@@ -173,8 +173,11 @@ the exact decoded Unicode identity presented to the browser.
 
 The current handshake-mismatch and draft-resource projections each require one
 application diagnostic with that route's stable code and owning operation
-because their browser schemas are singleton and operation-specific. Missing,
-multi-item, wrong-code, or wrong-operation application evidence returns
+because their browser schemas are singleton and operation-specific. The
+handshake item must also contain exactly one `RequiredVersion` evidence value
+matching the
+result dimension and expected identity. Missing, multi-item, wrong-code,
+wrong-operation, or contradictory handshake evidence returns
 `500 invalid_diagnostic`; the adapter neither invents, truncates, nor relabels
 an application diagnostic.
 

@@ -44,7 +44,8 @@ use std::str;
 use std::time::{Duration, Instant};
 
 use atrament_diagnostic::{
-    Completeness, DIAGNOSTIC_VERSION, DiagnosticCode, DiagnosticSet, Operation,
+    Completeness, DIAGNOSTIC_VERSION, DiagnosticCode, DiagnosticSet, Evidence,
+    Operation,
 };
 use atrament_session_draft_port::{DraftField, DraftMutation, SessionDraft};
 use atrament_session_handshake_port::{
@@ -606,6 +607,18 @@ fn handshake_incompatible_response(
     };
     if diagnostic.code != DiagnosticCode::HandshakeVersionMismatch
         || diagnostic.operation.operation != Operation::SessionHandshake
+    {
+        return invalid_diagnostic_response();
+    }
+    let [Evidence::RequiredVersion {
+        dimension: evidence_dimension,
+        expected: evidence_expected,
+    }] = diagnostic.evidence.as_slice()
+    else {
+        return invalid_diagnostic_response();
+    };
+    if *evidence_dimension != handshake_dimension_name(dimension)
+        || *evidence_expected != expected
     {
         return invalid_diagnostic_response();
     }
