@@ -4716,6 +4716,25 @@ impl GraphemeBoundaryProvider for MissingAdvertisedBoundary {
     }
 }
 
+struct NonAdvancingAdvertisedBoundary;
+
+impl GraphemeBoundaryProvider for NonAdvancingAdvertisedBoundary {
+    fn byte_offset(
+        &self,
+        source: &str,
+        grapheme_index: usize,
+    ) -> Option<usize> {
+        match grapheme_index {
+            0 => Some(0),
+            _ => Some(source.len()),
+        }
+    }
+
+    fn grapheme_count(&self, _source: &str) -> usize {
+        2
+    }
+}
+
 #[test]
 fn grapheme_provider_invariant_failure_is_atomic_for_session_state() {
     let identities = IdentityAllocator::new();
@@ -4746,6 +4765,21 @@ fn grapheme_provider_invariant_failure_is_atomic_for_session_state() {
             "z",
         ),
         Err(GraphemeRangeError::BoundaryUnavailable { grapheme_index: 1 }),
+    );
+    assert_eq!(session.history_availability(), before_history);
+    assert_eq!(session.accepted_revision(), Some(&before_revision));
+    assert_eq!(
+        session.replace_text_grapheme_range(
+            &NonAdvancingAdvertisedBoundary,
+            base,
+            span,
+            GraphemeRange { count: 1, start: 1 },
+            "z",
+        ),
+        Err(GraphemeRangeError::NonAdvancingBoundaries {
+            end_byte: "éx".len(),
+            start_byte: "éx".len(),
+        }),
     );
     assert_eq!(session.history_availability(), before_history);
     assert_eq!(session.accepted_revision(), Some(&before_revision));

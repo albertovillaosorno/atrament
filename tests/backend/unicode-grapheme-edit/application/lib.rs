@@ -136,6 +136,7 @@ fn invalid_ranges_return_typed_errors() {
 enum BrokenBoundaryMode {
     InvalidUtf8,
     Missing,
+    NonAdvancing,
     Reversed,
 }
 
@@ -157,6 +158,10 @@ impl GraphemeBoundaryProvider for BrokenBoundaryProvider {
             },
             BrokenBoundaryMode::Missing => {
                 (grapheme_index != 1).then_some(source.len())
+            },
+            BrokenBoundaryMode::NonAdvancing => match grapheme_index {
+                0 => Some(0),
+                _ => Some(source.len()),
             },
             BrokenBoundaryMode::Reversed => match grapheme_index {
                 0 => Some(0),
@@ -197,6 +202,20 @@ fn provider_boundary_failures_are_not_reported_as_user_range_errors() {
         Err(GraphemeRangeError::InvalidBoundary {
             byte_offset: 1,
             grapheme_index: 1,
+        }),
+    );
+    assert_eq!(
+        replace_grapheme_range(
+            &BrokenBoundaryProvider {
+                mode: BrokenBoundaryMode::NonAdvancing,
+            },
+            source,
+            GraphemeRange { count: 1, start: 1 },
+            "z",
+        ),
+        Err(GraphemeRangeError::NonAdvancingBoundaries {
+            end_byte: source.len(),
+            start_byte: source.len(),
         }),
     );
     assert_eq!(

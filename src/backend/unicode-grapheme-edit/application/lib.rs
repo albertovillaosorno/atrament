@@ -75,6 +75,13 @@ pub enum GraphemeRangeError {
         /// Grapheme boundary index that produced the invalid byte offset.
         grapheme_index: usize,
     },
+    /// Provider returned equal boundaries for a non-empty grapheme range.
+    NonAdvancingBoundaries {
+        /// Exclusive range-end byte offset returned by the provider.
+        end_byte: usize,
+        /// Range-start byte offset returned by the provider.
+        start_byte: usize,
+    },
     /// Provider returned an end boundary before the start boundary.
     ReversedBoundaries {
         /// Exclusive range-end byte offset returned by the provider.
@@ -140,6 +147,12 @@ pub fn replace_grapheme_range(
     validate_boundary(source, end, end_byte)?;
     if end_byte < start_byte {
         return Err(GraphemeRangeError::ReversedBoundaries {
+            end_byte,
+            start_byte,
+        });
+    }
+    if range.count > 0 && end_byte == start_byte {
+        return Err(GraphemeRangeError::NonAdvancingBoundaries {
             end_byte,
             start_byte,
         });
