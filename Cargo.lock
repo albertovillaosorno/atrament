@@ -7,6 +7,10 @@ name = "atrament_browser_launch"
 version = "0.1.0"
 
 [[package]]
+name = "atrament_clipboard_intake_evidence"
+version = "0.1.0"
+
+[[package]]
 name = "atrament_device_coordinate_calibration"
 version = "0.1.0"
 

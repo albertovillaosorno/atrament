@@ -1,0 +1,9 @@
+identity:
+  id: function:clipboard-intake-evidence
+  name: clipboard-intake-evidence
+  path: src/backend/clipboard-intake-evidence
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: domain

@@ -887,6 +887,13 @@ cancellation, and browser/CLI/MCP parity.
 Accept text, structured table fragments, formulas, PNG, JPEG, and WebP while
 reporting exactly which source structure or metadata cannot be retained.
 
+Current executable evidence now freezes those six first-release clipboard
+content families before adapter parsing. One intake value keeps caller-owned
+content separate from source provenance, preserves unresolved fragments, and
+retains ordered typed metadata-versus-structure loss details without inventing
+MIME parsing or retention policy. Clipboard access, decoding, semantic candidate
+construction, diagnostics, and notebook mutation remain open.
+
 ### TODO - Implement image placement and layering
 
 Expose source identity, crop, scale, opacity, z-order, below-text, inline,
