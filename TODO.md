@@ -1457,6 +1457,14 @@ rejects. Temporary path selection, actual deletion, retry scheduling/limits,
 process interruption recovery, decoder/engine invocation, and persistence remain
 open application/adapter work.
 
+A process-local media-job application service now owns opaque job and waveform
+identities around that terminal rule. One active job can register at most one
+waveform intermediate, terminal outcome cannot be rewritten, cleanup failure
+remains retry-required, and recorded cleanup success is the only transition to
+Settled after an intermediate existed. Dropping the service leaves a fresh owner
+with no prior job authority. The service still chooses no path, creates or
+deletes no file, invokes no decoder or engine, and schedules no retry.
+
 ### TODO - Structure transcripts without hiding uncertainty
 
 Turn reviewed transcript spans into sections, definitions, examples, and

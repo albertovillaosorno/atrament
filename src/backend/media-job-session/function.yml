@@ -1,0 +1,9 @@
+identity:
+  id: function:media-job-session
+  name: media-job-session
+  path: src/backend/media-job-session
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: application

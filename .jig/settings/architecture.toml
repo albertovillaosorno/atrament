@@ -64,6 +64,9 @@ depends_on = []
 [component.atrament_media_job_lifecycle]
 depends_on = []
 
+[component.atrament_media_job_session]
+depends_on = ["atrament_media_job_lifecycle"]
+
 [component.atrament_material_layer_plan]
 depends_on = []
 

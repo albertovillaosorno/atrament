@@ -108,6 +108,13 @@ name = "atrament_media_job_lifecycle"
 version = "0.1.0"
 
 [[package]]
+name = "atrament_media_job_session"
+version = "0.1.0"
+dependencies = [
+ "atrament_media_job_lifecycle",
+]
+
+[[package]]
 name = "atrament_motion_path_order_constraints"
 version = "0.1.0"
 

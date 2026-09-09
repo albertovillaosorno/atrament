@@ -21,6 +21,7 @@ members = [
     "src/backend/image-placement-intent",
     "src/backend/line-art-extraction",
     "src/backend/media-job-lifecycle",
+    "src/backend/media-job-session",
     "src/backend/material-layer-plan",
     "src/backend/mathematics-source",
     "src/backend/pdf-composition-plan",

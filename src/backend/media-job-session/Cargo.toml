@@ -1,0 +1,15 @@
+[package]
+name = "atrament_media_job_session"
+version = "0.1.0"
+edition = "2024"
+publish = false
+license = "MIT"
+
+[dependencies]
+atrament_media_job_lifecycle = { path = "../media-job-lifecycle" }
+
+[lib]
+path = "application/lib.rs"
+
+[lints]
+workspace = true
