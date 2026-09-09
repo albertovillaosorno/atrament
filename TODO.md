@@ -1032,6 +1032,13 @@ and capture quality before treating any observed stroke as evidence.
 Derive centerlines, contours, entry and exit conditions, pen lifts, ligatures,
 diacritics, contextual forms, and confidence with sample provenance.
 
+Current executable evidence now freezes the transport-neutral vocabulary entry
+produced by later extraction. Each entry retains caller-owned centerline and
+contour evidence, entry/exit conditions, pen-lift evidence, ligature, diacritic,
+and contextual-form evidence, plus confidence and sample provenance. Extraction,
+geometry/units, form inference, confidence calculation, profile-section schema,
+and candidate generation remain open.
+
 ### TODO - Implement compositional diacritics safely
 
 Reuse accents only when profile evidence admits the composition and preserve

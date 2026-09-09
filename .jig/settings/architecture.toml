@@ -49,6 +49,9 @@ depends_on = []
 [component.atrament_handwriting_stroke_plan]
 depends_on = []
 
+[component.atrament_handwriting_stroke_vocabulary]
+depends_on = []
+
 [component.atrament_handwriting_variation]
 depends_on = []
 

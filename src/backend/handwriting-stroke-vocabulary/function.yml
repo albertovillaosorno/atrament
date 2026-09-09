@@ -1,0 +1,9 @@
+identity:
+  id: function:handwriting-stroke-vocabulary
+  name: handwriting-stroke-vocabulary
+  path: src/backend/handwriting-stroke-vocabulary
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: domain
