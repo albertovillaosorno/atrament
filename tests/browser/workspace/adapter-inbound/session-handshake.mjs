@@ -117,6 +117,29 @@ test("typed incompatibility requires the stable diagnostic shape", () => {
     );
 });
 
+test("typed incompatibility requires the dimension's current version", () => {
+    for (const expected of [
+        "arbitrary-version",
+        CURRENT_VERSIONS.renderer,
+    ]) {
+        assert.deepEqual(
+            parseHandshakePayload({
+                result: "incompatible",
+                diagnostics: {
+                    version: "atrament.diagnostic/1",
+                    completeness: "complete",
+                    items: [{
+                        code: "atrament.handshake.version-mismatch",
+                        dimension: "prompt",
+                        expected,
+                    }],
+                },
+            }),
+            { kind: "invalid" },
+        );
+    }
+});
+
 test("typed incompatibility rejects diagnostic namespace drift", () => {
     assert.deepEqual(
         parseHandshakePayload({

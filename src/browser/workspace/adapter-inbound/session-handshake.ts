@@ -132,7 +132,7 @@ export function parseHandshakePayload(value: unknown): HandshakeOutcome {
         diagnostic === undefined
         || diagnostic.code !== "atrament.handshake.version-mismatch"
         || !isVersionDimension(diagnostic.dimension)
-        || typeof diagnostic.expected !== "string"
+        || diagnostic.expected !== CURRENT_VERSIONS[diagnostic.dimension]
     ) {
         return { kind: "invalid" };
     }

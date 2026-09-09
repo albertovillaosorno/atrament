@@ -157,8 +157,10 @@ resource-limit results preserve their application result classes while carrying
 shared diagnostic sets with stable codes, severity, blocking disposition,
 semantic locations, typed evidence, remediation, operation binding, and
 explicit set completeness. The browser admits the same namespace and
-completeness metadata, and the localhost adapter refuses to invent a code for
-an empty application diagnostic set.
+completeness metadata; handshake mismatch projection also requires the reported
+expected identity to equal the browser's current value for that exact dimension.
+The localhost adapter refuses to invent a code for an empty application
+diagnostic set.
 
 Layout now provides the first accepted-revision producer beyond handshake and
 session draft: fixed-region overflow emits stable blocking diagnostics with
