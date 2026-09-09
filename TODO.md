@@ -795,7 +795,9 @@ Invalid ranges reject before revision or history mutation.
 
 Missing, invalid, non-advancing, reversed, or inconsistent source-anchor
 boundaries from an injected segmentation provider remain typed failures and do
-not mutate accepted state. Zero-length insertion resolves an internal provider
+not mutate accepted state. Source-anchor validation runs before caller range
+bounds, so an underreported provider count cannot masquerade as a user error.
+Zero-length insertion resolves an internal provider
 boundary once, so a changing repeated answer cannot turn insertion into byte
 replacement. Normalization policy, punctuation generation,
 language-aware wrapping,
