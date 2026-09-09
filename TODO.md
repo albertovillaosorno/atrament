@@ -178,8 +178,11 @@ so transport neither invents, truncates, nor relabels application evidence.
 Layout now provides the first accepted-revision producer beyond handshake and
 session draft: fixed-region overflow emits stable blocking diagnostics with
 semantic object/page locations, typed boundary and physical-length evidence,
-operation binding, and complete-set semantics. A layout-only Export preflight
-preserves those diagnostics rather than interpreting prose.
+operation binding, and complete-set semantics. Their current opaque object,
+page, and revision identities use one in-process Debug-shaped projection only;
+no browser, CLI, MCP, or file-format identity encoding is admitted by this
+evidence. A layout-only Export preflight preserves those diagnostics through
+that same internal projection rather than interpreting prose.
 
 A transport-neutral semantic-command Apply producer now exists, but its typed
 results do not yet carry `DiagnosticSet`. The shared envelope now reserves the
@@ -189,9 +192,9 @@ editability, and exact-value checks. Domain fixtures prove the code, Semantic
 Validate binding, command/object/field locations, and typed evidence shape
 without inventing adapter prose.
 
-Complete Apply diagnostic projection remains open because accepted semantic
-identities are intentionally opaque and command identities are still generic in
-the pre-normalization batch. No stable diagnostic identity text or final command
+Complete external diagnostic identity projection remains open because accepted
+semantic identities are intentionally opaque and command identities are still
+generic in the pre-normalization batch. No stable diagnostic identity text or
 context binding exists yet, so the application must not leak Debug formatting to
 satisfy the fixture. Render, full Export, and Plan producers also remain open,
 and CLI/MCP parity cannot yet prove cross-capability semantics.

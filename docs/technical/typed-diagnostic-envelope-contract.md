@@ -44,13 +44,17 @@ localhost handshake/draft boundary. A crossed writable page edge produces the
 stable `atrament.layout.fixed-region-overflow` code, blocking disposition,
 semantic object and page locations, typed boundary evidence, and a lossless
 physical overflow amount. The first complete-journey 6 mm bottom overflow is an
-executable fixture rather than prose-only evidence.
+executable fixture rather than prose-only evidence. Current object, page, and
+accepted-revision location strings are an in-process projection of opaque
+semantic identities using Rust Debug formatting; they are not an admitted
+browser, CLI, MCP, or file-format identity representation.
 
-A read-only layout-only Export preflight consumes those revision-bound
-diagnostic
-sets without parsing messages. Blocking or explicitly incomplete layout evidence
-cannot report layout readiness, and diagnostic sets with missing, duplicate,
-forged, stale, or non-layout operation context are rejected before preflight.
+The read-only layout-only Export preflight consumes those revision-bound
+diagnostic sets using the same in-process identity projection, without parsing
+messages. It does not make that projection adapter-stable. Blocking or
+explicitly incomplete layout evidence cannot report layout readiness, and
+diagnostic sets with missing, duplicate, forged, stale, or non-layout
+operation context are rejected before preflight.
 This gate performs no path or persistent file operation and is not full Export.
 
 The diagnostic vocabulary now also reserves the stable
