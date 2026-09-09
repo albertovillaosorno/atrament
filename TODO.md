@@ -1619,7 +1619,9 @@ Current executable dry-run evidence now binds one exact device-neutral plan to
 one concrete coordinate-calibration record and one ordered limit-evidence entry
 per plan operation. Real plan operations classify as pen-up, pen-down, pause, or
 checkpoint; motion cannot mark limit checking inapplicable, and unknown or
-violated limits reject at the exact operation index. Coordinate transforms,
+violated limits reject at the exact operation index. A 16-case matrix covers
+all four limit states at pen-up, pause, checkpoint, and pen-down operations.
+Coordinate transforms,
 limit geometry, visual rendering, timing simulation beyond plan evidence, and
 hardware contact remain open.
 
