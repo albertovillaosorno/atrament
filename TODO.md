@@ -1252,8 +1252,11 @@ Current executable evidence now records transport-neutral CPU benchmark
 observations for those six workload scenarios. Each observation is explicitly
 Preview or Final, retains caller-owned latency and peak-memory measurements, and
 names a caller-owned machine/configuration classified as having no discrete GPU.
-Numeric budgets, units, representative machine tiers, benchmark execution,
-render scheduling, and pass/fail policy remain open.
+A completeness validator requires evidence for all six scenarios and requires
+both Preview and Final quality to be represented without demanding a Cartesian
+scenario-by-quality matrix. Numeric budgets, units, representative machine
+tiers,
+benchmark execution, render scheduling, and pass/fail policy remain open.
 
 ## P6 — LLM, CLI, MCP, and media intake
 

@@ -31,8 +31,9 @@
 //   - No performance threshold is implicit.
 //
 use atrament_render_performance_evidence::{
-    NoDiscreteGpuMachine, RenderPerformanceObservation,
-    RenderPerformanceScenario,
+    NoDiscreteGpuMachine, RenderPerformanceCoverageError,
+    RenderPerformanceObservation, RenderPerformanceScenario,
+    validate_render_performance_coverage,
 };
 use atrament_render_quality_profile::RenderQualityMode;
 
@@ -90,4 +91,147 @@ fn measurement_units_and_values_remain_caller_owned() {
     assert_eq!(observation.latency, "caller-latency-evidence");
     assert_eq!(observation.peak_memory, [1, 2, 3]);
     assert_eq!(observation.machine.machine_identity, 77);
+}
+
+fn observation(
+    scenario: RenderPerformanceScenario,
+    quality_mode: RenderQualityMode,
+) -> RenderPerformanceObservation<u64, &'static str, u64> {
+    RenderPerformanceObservation {
+        latency: 1,
+        machine: NoDiscreteGpuMachine {
+            machine_identity: "no-discrete-gpu-host",
+        },
+        peak_memory: 2,
+        quality_mode,
+        scenario,
+    }
+}
+
+#[test]
+fn complete_evidence_covers_all_scenarios_and_both_quality_roles() {
+    let observations = [
+        observation(
+            RenderPerformanceScenario::DenseEquations,
+            RenderQualityMode::Preview,
+        ),
+        observation(
+            RenderPerformanceScenario::FinalExport,
+            RenderQualityMode::Final,
+        ),
+        observation(
+            RenderPerformanceScenario::LongPage,
+            RenderQualityMode::Preview,
+        ),
+        observation(
+            RenderPerformanceScenario::ManyImages,
+            RenderQualityMode::Preview,
+        ),
+        observation(
+            RenderPerformanceScenario::RapidEdits,
+            RenderQualityMode::Preview,
+        ),
+        observation(
+            RenderPerformanceScenario::Zoom,
+            RenderQualityMode::Preview,
+        ),
+    ];
+    assert_eq!(validate_render_performance_coverage(&observations), Ok(()));
+}
+
+#[test]
+fn missing_workload_scenario_is_reported_without_budgeting() {
+    let observations = [
+        observation(
+            RenderPerformanceScenario::DenseEquations,
+            RenderQualityMode::Preview,
+        ),
+        observation(
+            RenderPerformanceScenario::FinalExport,
+            RenderQualityMode::Final,
+        ),
+        observation(
+            RenderPerformanceScenario::LongPage,
+            RenderQualityMode::Preview,
+        ),
+        observation(
+            RenderPerformanceScenario::ManyImages,
+            RenderQualityMode::Preview,
+        ),
+        observation(
+            RenderPerformanceScenario::RapidEdits,
+            RenderQualityMode::Preview,
+        ),
+    ];
+    assert_eq!(
+        validate_render_performance_coverage(&observations),
+        Err(RenderPerformanceCoverageError::MissingScenario(
+            RenderPerformanceScenario::Zoom,
+        )),
+    );
+}
+
+#[test]
+fn scenario_coverage_does_not_substitute_for_final_quality_evidence() {
+    let observations = [
+        observation(
+            RenderPerformanceScenario::DenseEquations,
+            RenderQualityMode::Preview,
+        ),
+        observation(
+            RenderPerformanceScenario::FinalExport,
+            RenderQualityMode::Preview,
+        ),
+        observation(
+            RenderPerformanceScenario::LongPage,
+            RenderQualityMode::Preview,
+        ),
+        observation(
+            RenderPerformanceScenario::ManyImages,
+            RenderQualityMode::Preview,
+        ),
+        observation(
+            RenderPerformanceScenario::RapidEdits,
+            RenderQualityMode::Preview,
+        ),
+        observation(
+            RenderPerformanceScenario::Zoom,
+            RenderQualityMode::Preview,
+        ),
+    ];
+    assert_eq!(
+        validate_render_performance_coverage(&observations),
+        Err(RenderPerformanceCoverageError::MissingFinalQuality),
+    );
+}
+
+#[test]
+fn scenario_coverage_does_not_substitute_for_preview_quality_evidence() {
+    let observations = [
+        observation(
+            RenderPerformanceScenario::DenseEquations,
+            RenderQualityMode::Final,
+        ),
+        observation(
+            RenderPerformanceScenario::FinalExport,
+            RenderQualityMode::Final,
+        ),
+        observation(
+            RenderPerformanceScenario::LongPage,
+            RenderQualityMode::Final,
+        ),
+        observation(
+            RenderPerformanceScenario::ManyImages,
+            RenderQualityMode::Final,
+        ),
+        observation(
+            RenderPerformanceScenario::RapidEdits,
+            RenderQualityMode::Final,
+        ),
+        observation(RenderPerformanceScenario::Zoom, RenderQualityMode::Final),
+    ];
+    assert_eq!(
+        validate_render_performance_coverage(&observations),
+        Err(RenderPerformanceCoverageError::MissingPreviewQuality),
+    );
 }

@@ -74,3 +74,63 @@ pub struct RenderPerformanceObservation<Latency, MachineIdentity, PeakMemory> {
     /// First-release workload scenario exercised by this observation.
     pub scenario: RenderPerformanceScenario,
 }
+
+/// Missing evidence required for a complete first-release CPU benchmark set.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum RenderPerformanceCoverageError {
+    /// No Final-quality observation is present.
+    MissingFinalQuality,
+    /// No Preview-quality observation is present.
+    MissingPreviewQuality,
+    /// One required first-release workload scenario has no observation.
+    MissingScenario(RenderPerformanceScenario),
+}
+
+/// Validate scenario and quality-role completeness without applying budgets.
+///
+/// # Errors
+///
+/// Returns [`RenderPerformanceCoverageError`] when any of the six required
+/// workload scenarios is absent, or when the evidence has no Preview or no
+/// Final-quality observation.
+pub fn validate_render_performance_coverage<
+    Latency,
+    MachineIdentity,
+    PeakMemory,
+>(
+    observations: &[RenderPerformanceObservation<
+        Latency,
+        MachineIdentity,
+        PeakMemory,
+    >],
+) -> Result<(), RenderPerformanceCoverageError> {
+    for scenario in [
+        RenderPerformanceScenario::DenseEquations,
+        RenderPerformanceScenario::FinalExport,
+        RenderPerformanceScenario::LongPage,
+        RenderPerformanceScenario::ManyImages,
+        RenderPerformanceScenario::RapidEdits,
+        RenderPerformanceScenario::Zoom,
+    ] {
+        if !observations
+            .iter()
+            .any(|observation| observation.scenario == scenario)
+        {
+            return Err(RenderPerformanceCoverageError::MissingScenario(
+                scenario,
+            ));
+        }
+    }
+    if !observations
+        .iter()
+        .any(|observation| observation.quality_mode == RenderQualityMode::Final)
+    {
+        return Err(RenderPerformanceCoverageError::MissingFinalQuality);
+    }
+    if !observations.iter().any(|observation| {
+        observation.quality_mode == RenderQualityMode::Preview
+    }) {
+        return Err(RenderPerformanceCoverageError::MissingPreviewQuality);
+    }
+    Ok(())
+}
