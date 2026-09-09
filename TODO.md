@@ -648,8 +648,9 @@ creating file authority.
 Complete advisory evidence remains Ready and is
 preserved, while an incomplete set remains Incomplete even when it already
 contains a blocking diagnostic. Stale revisions, evidence from another revision,
-and non-layout diagnostics cannot be smuggled through that gate. It accepts no
-path, overwrite, retry, format, or file-commit input and therefore cannot report
+and non-layout diagnostic codes or operations cannot be smuggled through that
+gate. It accepts no path, overwrite, retry, format, or file-commit input and
+therefore cannot report
 `Exported`.
 
 The task remains open until full Export preflight combines layout with semantic,

@@ -307,6 +307,23 @@ fn layout_evidence_from_another_revision_cannot_be_reused() {
 }
 
 #[test]
+fn non_layout_code_cannot_be_relabelled_as_layout() {
+    let mut session = SemanticNotebookSessionService::default();
+    let fixture = accepted_fixture(&mut session);
+    let mut diagnostics = real_overflow_diagnostics(&session, &fixture);
+    diagnostics.diagnostics[0].code = DiagnosticCode::SessionDraftResourceLimit;
+
+    assert_eq!(
+        diagnostics.diagnostics[0].operation.operation,
+        Operation::Layout,
+    );
+    assert!(matches!(
+        RevisionLayoutDiagnostics::bind(fixture.revision, &diagnostics),
+        Err(ExportLayoutPreflightError::NonLayoutDiagnostic),
+    ));
+}
+
+#[test]
 fn non_layout_diagnostic_cannot_be_smuggled_into_layout_preflight() {
     let mut session = SemanticNotebookSessionService::default();
     let fixture = accepted_fixture(&mut session);

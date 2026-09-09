@@ -35,7 +35,7 @@
 //! Read-only layout diagnostic gate for later explicit Export operations.
 
 use atrament_diagnostic::{
-    BlockingDisposition, Completeness, DiagnosticSet, Operation,
+    BlockingDisposition, Completeness, DiagnosticCode, DiagnosticSet, Operation,
     OperationContextKind,
 };
 use atrament_semantic_notebook::{AcceptedRevision, RevisionIdentity};
@@ -58,15 +58,17 @@ impl<'diagnostics> RevisionLayoutDiagnostics<'diagnostics> {
     ///
     /// # Errors
     ///
-    /// Returns a typed failure when a diagnostic belongs to another operation,
-    /// omits accepted-revision context, or names a different accepted revision.
+    /// Returns a typed failure when a diagnostic uses another stable code or
+    /// operation, omits accepted-revision context, or names another revision.
     pub fn bind(
         revision: RevisionIdentity,
         diagnostics: &'diagnostics DiagnosticSet,
     ) -> Result<Self, ExportLayoutPreflightError> {
         let expected = format!("{revision:?}");
         for diagnostic in &diagnostics.diagnostics {
-            if diagnostic.operation.operation != Operation::Layout {
+            if diagnostic.code != DiagnosticCode::LayoutFixedRegionOverflow
+                || diagnostic.operation.operation != Operation::Layout
+            {
                 return Err(ExportLayoutPreflightError::NonLayoutDiagnostic);
             }
             let mut revision_contexts =
