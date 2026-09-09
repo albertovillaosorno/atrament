@@ -54,7 +54,10 @@ are exercised through that same gate after Undo with Redo-only asset bytes:
 successful changes prune the discarded branch, while exact-value no-ops preserve
 Redo and its retained bytes. Malformed mathematics, invalid page geometry, and
 invalid table grids also reject without dropping that branch or its bytes.
-Direct text and bounded-batch branches are covered separately.
+Direct text and bounded-batch branches are covered separately. Grapheme-range
+editing now also preserves Redo and its reachable bytes on provider rejection
+or semantic no-op, while an applied grapheme mutation prunes the abandoned
+Redo-only bytes through the same gate.
 
 A 256-state asset-history fixture undoes halfway, then branches: cleanup removes
 exactly 128 Redo-only retained byte entries and preserves all 128 identities
@@ -1561,6 +1564,10 @@ A Live-specific typed review now also validates the accepted conversion kind for
 all 27 Live `Convert` rows: highlight underline/box/spacing/stroke-weight, sober
 one-pen title, calibrated ink, accepted line-art projection, one-pen geometry,
 or same-pen paper marks. Conversion details and provenance remain caller-owned.
+
+An exhaustive 27-by-9 regression checks every Live `Convert` row against every
+frozen conversion kind so over-admission cannot silently make an unsupported
+projection ready.
 The mode-neutral review retains supplied conversion evidence but cannot mark
 a Live `Convert` row ready; only the typed Live review promotes an admitted kind
 to `Converted`. Blocking diagnostics, conversion execution, semantic projection
@@ -1668,7 +1675,10 @@ disconnect, power loss, pause, emergency stop, process crash, or process
 restart.
 Resume remains admissible only when required feedback is available, carriage
 position is known, bounds remain valid, and no partial stroke is unresolved;
-every other snapshot requires operator recovery. Restart is provenance only:
+every other snapshot requires operator recovery. A 96-state Cartesian fixture
+covers all six interruption provenances across feedback, position, boundary,
+and stroke certainty; only the six fully known states remain resumable.
+Restart is provenance only:
 adapter commands, homing, position acquisition, safe-stop execution, restart
 persistence, and operator procedures remain open.
 
