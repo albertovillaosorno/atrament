@@ -57,6 +57,17 @@ const EXPECTED_SECRET: &str =
 
 static HANDSHAKE: HandshakeService = HandshakeService;
 
+struct MustNotEvaluateHandshake;
+
+impl SessionHandshake for MustNotEvaluateHandshake {
+    fn evaluate<'version>(
+        &self,
+        _versions: Versions<'version>,
+    ) -> HandshakeResult<'version> {
+        panic!("malformed transport must not invoke handshake application");
+    }
+}
+
 #[allow(dead_code)]
 #[path = "../../../../src/backend/session-runtime/adapter-inbound/lib.rs"]
 mod runtime;
@@ -1618,69 +1629,59 @@ fn handshake_requires_post_method() {
 }
 
 #[test]
-fn missing_required_handshake_version_blocks_compatibility() {
+fn every_required_handshake_version_header_requires_exactly_one_value() {
     let authorization = format!("Bearer {EXPECTED_SECRET}");
-    let request = format!(
+    let version_headers = [
+        ("X-Atrament-Capability-Version", CAPABILITY_VERSION),
+        ("X-Atrament-Product-Version", PRODUCT_VERSION),
+        ("X-Atrament-Profile-Version", PROFILE_VERSION),
+        ("X-Atrament-Prompt-Version", PROMPT_VERSION),
+        ("X-Atrament-Protocol-Version", PROTOCOL_VERSION),
+        ("X-Atrament-Renderer-Version", RENDERER_VERSION),
+    ];
+    let mut request = format!(
         concat!(
             "POST /api/handshake HTTP/1.1\r\n",
-            "Host: {}\r\n",
-            "Authorization: {}\r\n",
-            "Origin: {}\r\n",
-            "X-Atrament-Capability-Version: {}\r\n",
-            "X-Atrament-Product-Version: {}\r\n",
-            "X-Atrament-Profile-Version: {}\r\n",
-            "X-Atrament-Protocol-Version: {}\r\n",
-            "X-Atrament-Renderer-Version: {}\r\n\r\n",
+            "Host: {EXPECTED_HOST}\r\n",
+            "Authorization: {authorization}\r\n",
+            "Origin: {EXPECTED_ORIGIN}\r\n",
         ),
-        EXPECTED_HOST,
-        authorization,
-        EXPECTED_ORIGIN,
-        CAPABILITY_VERSION,
-        PRODUCT_VERSION,
-        PROFILE_VERSION,
-        PROTOCOL_VERSION,
-        RENDERER_VERSION,
     );
-    let response = route_runtime(request.as_bytes(), EXPECTED_HOST);
-    let (head, body) = response_parts(&response);
-    assert!(head.starts_with("HTTP/1.1 409 Conflict\r\n"));
-    let body = std::str::from_utf8(body).expect("handshake JSON is UTF-8");
-    assert!(body.contains("\"dimension\":\"prompt\""));
-}
+    for (name, value) in version_headers {
+        request.push_str(&format!("{name}: {value}\r\n"));
+    }
+    request.push_str("\r\n");
 
-#[test]
-fn duplicate_required_handshake_version_blocks_compatibility() {
-    let authorization = format!("Bearer {EXPECTED_SECRET}");
-    let request = format!(
-        concat!(
-            "POST /api/handshake HTTP/1.1\r\n",
-            "Host: {}\r\n",
-            "Authorization: {}\r\n",
-            "Origin: {}\r\n",
-            "X-Atrament-Capability-Version: {}\r\n",
-            "X-Atrament-Product-Version: {}\r\n",
-            "X-Atrament-Profile-Version: {}\r\n",
-            "X-Atrament-Prompt-Version: {}\r\n",
-            "X-Atrament-Prompt-Version: atrament.prompt/0\r\n",
-            "X-Atrament-Protocol-Version: {}\r\n",
-            "X-Atrament-Renderer-Version: {}\r\n\r\n",
-        ),
-        EXPECTED_HOST,
-        authorization,
-        EXPECTED_ORIGIN,
-        CAPABILITY_VERSION,
-        PRODUCT_VERSION,
-        PROFILE_VERSION,
-        PROMPT_VERSION,
-        PROTOCOL_VERSION,
-        RENDERER_VERSION,
-    );
-    let response = route_runtime(request.as_bytes(), EXPECTED_HOST);
-    let (head, body) = response_parts(&response);
-    assert!(head.starts_with("HTTP/1.1 409 Conflict\r\n"));
-    let body = std::str::from_utf8(body).expect("handshake JSON is UTF-8");
-    assert!(body.contains("\"dimension\":\"prompt\""));
-    assert!(!body.contains("atrament.prompt/0"));
+    for (name, value) in version_headers {
+        let header = format!("{name}: {value}\r\n");
+        for (case, candidate) in [
+            ("missing", request.replacen(&header, "", 1)),
+            (
+                "duplicate",
+                request.replacen(&header, &format!("{header}{header}"), 1),
+            ),
+        ] {
+            let mut draft = SessionDraftService::default();
+            let response = runtime::route_request(
+                candidate.as_bytes(),
+                EXPECTED_HOST,
+                EXPECTED_ORIGIN,
+                EXPECTED_SECRET,
+                &MustNotEvaluateHandshake,
+                &mut draft,
+            );
+            let (head, body) = response_parts(&response);
+            assert!(
+                head.starts_with("HTTP/1.1 400 Bad Request\r\n"),
+                "{case} {name}",
+            );
+            assert_eq!(
+                body,
+                br#"{\"error\":\"invalid_request\"}"#,
+                "{case} {name}",
+            );
+        }
+    }
 }
 
 fn draft_replace_request(

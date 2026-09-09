@@ -508,24 +508,18 @@ pub fn request_has_session_credential(
     fixed_work_secret_match(expected_secret, candidate)
 }
 
-fn handshake_versions(request: &[u8]) -> Versions<'_> {
-    Versions {
+fn handshake_versions(request: &[u8]) -> Option<Versions<'_>> {
+    Some(Versions {
         capability: single_header_value(
             request,
             "x-atrament-capability-version",
-        )
-        .unwrap_or(""),
-        product: single_header_value(request, "x-atrament-product-version")
-            .unwrap_or(""),
-        profile: single_header_value(request, "x-atrament-profile-version")
-            .unwrap_or(""),
-        prompt: single_header_value(request, "x-atrament-prompt-version")
-            .unwrap_or(""),
-        protocol: single_header_value(request, "x-atrament-protocol-version")
-            .unwrap_or(""),
-        renderer: single_header_value(request, "x-atrament-renderer-version")
-            .unwrap_or(""),
-    }
+        )?,
+        product: single_header_value(request, "x-atrament-product-version")?,
+        profile: single_header_value(request, "x-atrament-profile-version")?,
+        prompt: single_header_value(request, "x-atrament-prompt-version")?,
+        protocol: single_header_value(request, "x-atrament-protocol-version")?,
+        renderer: single_header_value(request, "x-atrament-renderer-version")?,
+    })
 }
 
 const fn handshake_dimension_name(dimension: VersionDimension) -> &'static str {
@@ -684,7 +678,13 @@ fn route_handshake(
             br#"{"error":"invalid_request"}"#,
         );
     }
-    match handshake.evaluate(handshake_versions(request)) {
+    let Some(presented_versions) = handshake_versions(request) else {
+        return json_response(
+            "400 Bad Request",
+            br#"{"error":"invalid_request"}"#,
+        );
+    };
+    match handshake.evaluate(presented_versions) {
         HandshakeResult::Compatible { versions } => {
             handshake_success_response(versions)
         },
