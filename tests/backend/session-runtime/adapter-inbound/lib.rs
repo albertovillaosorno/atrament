@@ -36,7 +36,9 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use atrament_diagnostic::{Completeness, DIAGNOSTIC_VERSION, DiagnosticSet};
+use atrament_diagnostic::{
+    Completeness, DIAGNOSTIC_VERSION, DiagnosticCode, DiagnosticSet,
+};
 use atrament_session_draft::{MAX_DRAFT_FIELD_BYTES, SessionDraftService};
 use atrament_session_draft_port::{DraftField, DraftMutation, SessionDraft};
 use atrament_session_handshake::{
@@ -1981,6 +1983,27 @@ impl SessionDraft for EmptyDiagnosticDraft {
     }
 }
 
+struct WrongCodeDiagnosticDraft;
+
+impl SessionDraft for WrongCodeDiagnosticDraft {
+    fn replace(&mut self, field: DraftField, _value: String) -> DraftMutation {
+        let mut source = SessionDraftService::default();
+        let DraftMutation::ResourceLimit { mut diagnostics } = source.replace(
+            field,
+            "x".repeat(MAX_DRAFT_FIELD_BYTES + 1),
+        ) else {
+            panic!("oversized fixture must produce a resource diagnostic");
+        };
+        diagnostics.diagnostics[0].code =
+            DiagnosticCode::HandshakeVersionMismatch;
+        DraftMutation::ResourceLimit { diagnostics }
+    }
+
+    fn value(&self, _field: DraftField) -> &str {
+        ""
+    }
+}
+
 struct DuplicateDiagnosticDraft;
 
 impl SessionDraft for DuplicateDiagnosticDraft {
@@ -2003,6 +2026,37 @@ impl SessionDraft for DuplicateDiagnosticDraft {
 
     fn value(&self, _field: DraftField) -> &str {
         ""
+    }
+}
+
+struct WrongCodeDiagnosticHandshake;
+
+impl SessionHandshake for WrongCodeDiagnosticHandshake {
+    fn evaluate<'version>(
+        &self,
+        versions: Versions<'version>,
+    ) -> HandshakeResult<'version> {
+        let mismatch = HandshakeService.evaluate(Versions {
+            prompt: "atrament.prompt/wrong-code",
+            ..versions
+        });
+        let HandshakeResult::Incompatible {
+            mut diagnostics,
+            dimension,
+            expected,
+            ..
+        } = mismatch
+        else {
+            panic!("fixture must obtain a mismatch diagnostic");
+        };
+        diagnostics.diagnostics[0].code =
+            DiagnosticCode::SessionDraftResourceLimit;
+        HandshakeResult::Incompatible {
+            diagnostics,
+            dimension,
+            expected,
+            observed: versions.prompt,
+        }
     }
 }
 
@@ -2114,6 +2168,21 @@ fn adapter_requires_exactly_one_route_specific_application_diagnostic() {
     );
     assert!(!response_text.contains("atrament.handshake.version-mismatch"));
 
+    let mut ordinary_draft = SessionDraftService::default();
+    let response = runtime::route_request(
+        handshake_request.as_bytes(),
+        EXPECTED_HOST,
+        EXPECTED_ORIGIN,
+        EXPECTED_SECRET,
+        &WrongCodeDiagnosticHandshake,
+        &mut ordinary_draft,
+    );
+    let response_text = String::from_utf8(response).expect("response is UTF-8");
+    assert!(
+        response_text.starts_with("HTTP/1.1 500 Internal Server Error\r\n")
+    );
+    assert!(!response_text.contains("atrament.session-draft.resource-limit"));
+
     let request = draft_replace_request(
         "/api/session/task",
         Some(&authorization),
@@ -2149,4 +2218,19 @@ fn adapter_requires_exactly_one_route_specific_application_diagnostic() {
         response_text.starts_with("HTTP/1.1 500 Internal Server Error\r\n")
     );
     assert!(!response_text.contains("atrament.session-draft.resource-limit"));
+
+    let mut wrong_code_draft = WrongCodeDiagnosticDraft;
+    let response = runtime::route_request(
+        &request,
+        EXPECTED_HOST,
+        EXPECTED_ORIGIN,
+        EXPECTED_SECRET,
+        &HANDSHAKE,
+        &mut wrong_code_draft,
+    );
+    let response_text = String::from_utf8(response).expect("response is UTF-8");
+    assert!(
+        response_text.starts_with("HTTP/1.1 500 Internal Server Error\r\n")
+    );
+    assert!(!response_text.contains("atrament.handshake.version-mismatch"));
 }

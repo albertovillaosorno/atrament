@@ -43,7 +43,9 @@ use std::net::{Ipv4Addr, SocketAddr, TcpListener, TcpStream};
 use std::str;
 use std::time::{Duration, Instant};
 
-use atrament_diagnostic::{Completeness, DIAGNOSTIC_VERSION, DiagnosticSet};
+use atrament_diagnostic::{
+    Completeness, DIAGNOSTIC_VERSION, DiagnosticCode, DiagnosticSet,
+};
 use atrament_session_draft_port::{DraftField, DraftMutation, SessionDraft};
 use atrament_session_handshake_port::{
     HandshakeResult, SessionHandshake, VersionDimension, Versions,
@@ -602,6 +604,9 @@ fn handshake_incompatible_response(
     let [diagnostic] = diagnostics.diagnostics.as_slice() else {
         return invalid_diagnostic_response();
     };
+    if diagnostic.code != DiagnosticCode::HandshakeVersionMismatch {
+        return invalid_diagnostic_response();
+    }
     let body = format!(
         concat!(
             "{{\"result\":\"incompatible\",",
@@ -735,6 +740,9 @@ fn draft_resource_limit_response(diagnostics: &DiagnosticSet) -> Vec<u8> {
     let [diagnostic] = diagnostics.diagnostics.as_slice() else {
         return invalid_diagnostic_response();
     };
+    if diagnostic.code != DiagnosticCode::SessionDraftResourceLimit {
+        return invalid_diagnostic_response();
+    }
     let body = format!(
         concat!(
             "{{\"error\":\"resource_limit\",",

@@ -172,9 +172,10 @@ HTTP adapter escapes JSON string syntax and control characters while preserving
 the exact decoded Unicode identity presented to the browser.
 
 The current handshake-mismatch and draft-resource projections each require one
-application diagnostic because their browser schemas are singleton. A missing or
-multi-item application set returns `500 invalid_diagnostic`; the adapter neither
-invents a diagnostic nor silently truncates a complete set.
+application diagnostic with that route's stable code because their browser
+schemas are singleton and operation-specific. Missing, multi-item, or wrong-code
+application evidence returns `500 invalid_diagnostic`; the adapter neither
+invents, truncates, nor relabels an application diagnostic.
 
 Authentication or origin failure returns the same `401` response shape before
 compatibility is reported. The browser invalidates that session from the status
