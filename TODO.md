@@ -132,10 +132,11 @@ descriptor and changes no declared repository runtime-root file.
 Checked-in browser policy tests guard one-time launch-credential fragment
 consumption, credential invalidation on `pagehide`, in-flight handshake and
 draft request cancellation, pending clipboard/draft invalidation, session-text
-clearing, and bfcache subtree scrubbing. Aborted draft requests cannot
-repopulate status text after page-exit invalidation. Refresh therefore cannot
-recover the launch credential
-from the rewritten browser URL or persistence API.
+clearing, and bfcache subtree scrubbing. A `401` during handshake, draft
+hydration, or draft replacement now invalidates the same page-session work and
+scrubs all four session text surfaces before requiring restart. Aborted draft
+requests cannot repopulate status text after invalidation, and refresh cannot
+recover the launch credential from the rewritten browser URL or persistence API.
 
 The task remains open until temporary media exist and end-to-end fixtures also
 cover browser close, refresh, cancellation, media cleanup, and explicit-export

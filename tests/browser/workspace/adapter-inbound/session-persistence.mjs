@@ -130,6 +130,54 @@ test("page exit invalidates credential, work, and session text", async () => {
 });
 
 
+test(
+    "authorization loss invalidates the complete browser session",
+    async () => {
+        const source = await readFile(MAIN_MODULE, "utf8");
+        const start = source.indexOf(
+            "function invalidateUnauthorizedSession() {",
+        );
+        const end = source.indexOf("\n}", start);
+        assert.notEqual(
+            start,
+            -1,
+            "authorization invalidation helper must exist",
+        );
+        assert.notEqual(
+            end,
+            -1,
+            "authorization invalidation helper must be bounded",
+        );
+        const invalidation = source.slice(start, end);
+        const required = [
+            "sessionSecret = null;",
+            "sessionRequests.abort();",
+            "invalidateClipboardRequests();",
+            "invalidateDraftSync();",
+            "clearSessionText();",
+            'setTextIfChanged(sessionStatus, "Authorization failed");',
+        ];
+        let prior = -1;
+        for (const operation of required) {
+            const position = invalidation.indexOf(operation);
+            assert.ok(
+                position > prior,
+                `authorization loss must perform ${operation}`,
+            );
+            prior = position;
+        }
+        const calls =
+            source.match(/invalidateUnauthorizedSession\(\);/gu) ?? [];
+        assert.equal(
+            calls.length,
+            3,
+            "handshake, hydration, and draft-write authorization loss "
+                + "must invalidate",
+        );
+    },
+);
+
+
 test("page session network requests are cancellable on exit", async () => {
     const source = await readFile(MAIN_MODULE, "utf8");
     const signalUses = source.match(/signal: sessionRequests\.signal,/gu) ?? [];

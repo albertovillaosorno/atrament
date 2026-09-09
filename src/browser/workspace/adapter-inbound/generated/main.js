@@ -394,9 +394,7 @@ async function completeSessionHandshake(secret) {
         return;
     }
     if (response.status === 401) {
-        sessionSecret = null;
-        const authorizationMessage = "Authorization failed";
-        setTextIfChanged(sessionStatus, authorizationMessage);
+        invalidateUnauthorizedSession();
         return;
     }
     const invalidMessage = "Invalid backend handshake · editing disabled";
@@ -408,6 +406,14 @@ function invalidateDraftSync() {
     draftSyncGeneration += 1;
     syncingDraftFields.clear();
     return draftSyncGeneration;
+}
+function invalidateUnauthorizedSession() {
+    sessionSecret = null;
+    sessionRequests.abort();
+    invalidateClipboardRequests();
+    invalidateDraftSync();
+    clearSessionText();
+    setTextIfChanged(sessionStatus, "Authorization failed");
 }
 function disableDraftEditing() {
     taskInput.disabled = true;
@@ -474,11 +480,7 @@ async function hydrateSessionDraft(secret) {
             return;
         }
         if (outcome.kind === "authorization-failed") {
-            sessionSecret = null;
-            sessionRequests.abort();
-            invalidateDraftSync();
-            clearSessionText();
-            setTextIfChanged(sessionStatus, "Authorization failed");
+            invalidateUnauthorizedSession();
             return;
         }
         if (outcome.kind !== "available") {
@@ -562,11 +564,7 @@ async function syncDraftField(field, input, secret) {
                 return;
             }
             if (response.status === 401) {
-                sessionSecret = null;
-                sessionRequests.abort();
-                invalidateDraftSync();
-                disableDraftEditing();
-                setTextIfChanged(sessionStatus, "Authorization failed");
+                invalidateUnauthorizedSession();
                 return;
             }
             setTextIfChanged(sessionStatus, "Draft sync rejected · retry edit");
