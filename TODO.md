@@ -769,9 +769,10 @@ uses pinned Unicode extended-grapheme segmentation behind an outbound port;
 atomic whole-text edit authority, and Undo restores the exact authored bytes.
 Invalid ranges reject before revision or history mutation.
 
-Missing, invalid, non-advancing, or reversed boundaries from an injected
-segmentation provider remain distinct typed invariant failures and cannot mutate
-state. Normalization policy, punctuation generation, language-aware wrapping,
+Missing, invalid, non-advancing, reversed, or inconsistent source-anchor
+boundaries from an injected segmentation provider remain typed failures and do
+not mutate accepted state. Normalization policy, punctuation generation,
+language-aware wrapping,
 cursor
 behavior, and browser, CLI, or MCP grapheme-range transport remain open.
 

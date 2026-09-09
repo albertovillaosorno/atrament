@@ -4716,6 +4716,25 @@ impl GraphemeBoundaryProvider for MissingAdvertisedBoundary {
     }
 }
 
+struct ShiftedFirstAdvertisedBoundary;
+
+impl GraphemeBoundaryProvider for ShiftedFirstAdvertisedBoundary {
+    fn byte_offset(
+        &self,
+        source: &str,
+        grapheme_index: usize,
+    ) -> Option<usize> {
+        match grapheme_index {
+            0 | 1 => Some("é".len()),
+            _ => Some(source.len()),
+        }
+    }
+
+    fn grapheme_count(&self, _source: &str) -> usize {
+        2
+    }
+}
+
 struct NonAdvancingAdvertisedBoundary;
 
 impl GraphemeBoundaryProvider for NonAdvancingAdvertisedBoundary {
@@ -4765,6 +4784,22 @@ fn grapheme_provider_invariant_failure_is_atomic_for_session_state() {
             "z",
         ),
         Err(GraphemeRangeError::BoundaryUnavailable { grapheme_index: 1 }),
+    );
+    assert_eq!(session.history_availability(), before_history);
+    assert_eq!(session.accepted_revision(), Some(&before_revision));
+    assert_eq!(
+        session.replace_text_grapheme_range(
+            &ShiftedFirstAdvertisedBoundary,
+            base,
+            span,
+            GraphemeRange { count: 1, start: 1 },
+            "z",
+        ),
+        Err(GraphemeRangeError::BoundaryAnchorMismatch {
+            expected: 0,
+            grapheme_index: 0,
+            observed: "é".len(),
+        }),
     );
     assert_eq!(session.history_availability(), before_history);
     assert_eq!(session.accepted_revision(), Some(&before_revision));

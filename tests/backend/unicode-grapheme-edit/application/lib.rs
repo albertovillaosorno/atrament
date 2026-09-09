@@ -138,6 +138,8 @@ enum BrokenBoundaryMode {
     Missing,
     NonAdvancing,
     Reversed,
+    ShiftedFirst,
+    TruncatedFinal,
 }
 
 struct BrokenBoundaryProvider {
@@ -164,21 +166,63 @@ impl GraphemeBoundaryProvider for BrokenBoundaryProvider {
                 _ => Some(source.len()),
             },
             BrokenBoundaryMode::Reversed => match grapheme_index {
+                0 | 2 => Some(0),
+                _ => Some(source.len()),
+            },
+            BrokenBoundaryMode::ShiftedFirst => match grapheme_index {
+                0 => Some("é".len()),
+                1 => Some("é".len()),
+                _ => Some(source.len()),
+            },
+            BrokenBoundaryMode::TruncatedFinal => match grapheme_index {
                 0 => Some(0),
-                1 => Some(source.len()),
-                _ => Some(0),
+                1 => Some("é".len()),
+                _ => Some("é".len()),
             },
         }
     }
 
     fn grapheme_count(&self, _source: &str) -> usize {
-        2
+        match self.mode {
+            BrokenBoundaryMode::Reversed => 3,
+            _ => 2,
+        }
     }
 }
 
 #[test]
 fn provider_boundary_failures_are_not_reported_as_user_range_errors() {
     let source = "éx";
+    assert_eq!(
+        replace_grapheme_range(
+            &BrokenBoundaryProvider {
+                mode: BrokenBoundaryMode::ShiftedFirst,
+            },
+            source,
+            GraphemeRange { count: 1, start: 1 },
+            "z",
+        ),
+        Err(GraphemeRangeError::BoundaryAnchorMismatch {
+            expected: 0,
+            grapheme_index: 0,
+            observed: "é".len(),
+        }),
+    );
+    assert_eq!(
+        replace_grapheme_range(
+            &BrokenBoundaryProvider {
+                mode: BrokenBoundaryMode::TruncatedFinal,
+            },
+            source,
+            GraphemeRange { count: 1, start: 0 },
+            "z",
+        ),
+        Err(GraphemeRangeError::BoundaryAnchorMismatch {
+            expected: source.len(),
+            grapheme_index: 2,
+            observed: "é".len(),
+        }),
+    );
     assert_eq!(
         replace_grapheme_range(
             &BrokenBoundaryProvider {

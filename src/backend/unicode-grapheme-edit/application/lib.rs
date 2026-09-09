@@ -49,6 +49,15 @@ pub struct GraphemeRange {
 /// Typed rejection of one grapheme range.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum GraphemeRangeError {
+    /// Provider's first or final boundary does not match the source anchor.
+    BoundaryAnchorMismatch {
+        /// Required UTF-8 byte offset for this boundary index.
+        expected: usize,
+        /// Grapheme boundary index whose anchor is inconsistent.
+        grapheme_index: usize,
+        /// UTF-8 byte offset reported by the provider.
+        observed: usize,
+    },
     /// Provider omitted a boundary that its grapheme count advertised.
     BoundaryUnavailable {
         /// Grapheme boundary index whose byte offset was unavailable.
@@ -133,18 +142,36 @@ pub fn replace_grapheme_range(
             grapheme_count: total,
         });
     }
-    let start_byte = boundaries.byte_offset(source, range.start).ok_or(
-        GraphemeRangeError::BoundaryUnavailable {
-            grapheme_index: range.start,
-        },
-    )?;
-    validate_boundary(source, range.start, start_byte)?;
-    let end_byte = boundaries.byte_offset(source, end).ok_or(
-        GraphemeRangeError::BoundaryUnavailable {
-            grapheme_index: end,
-        },
-    )?;
-    validate_boundary(source, end, end_byte)?;
+    let first_byte = provider_boundary(boundaries, source, 0)?;
+    if first_byte != 0 {
+        return Err(GraphemeRangeError::BoundaryAnchorMismatch {
+            expected: 0,
+            grapheme_index: 0,
+            observed: first_byte,
+        });
+    }
+    let final_byte = provider_boundary(boundaries, source, total)?;
+    if final_byte != source.len() {
+        return Err(GraphemeRangeError::BoundaryAnchorMismatch {
+            expected: source.len(),
+            grapheme_index: total,
+            observed: final_byte,
+        });
+    }
+    let start_byte = if range.start == 0 {
+        first_byte
+    } else if range.start == total {
+        final_byte
+    } else {
+        provider_boundary(boundaries, source, range.start)?
+    };
+    let end_byte = if end == 0 {
+        first_byte
+    } else if end == total {
+        final_byte
+    } else {
+        provider_boundary(boundaries, source, end)?
+    };
     if end_byte < start_byte {
         return Err(GraphemeRangeError::ReversedBoundaries {
             end_byte,
@@ -174,6 +201,18 @@ pub fn replace_grapheme_range(
     output.push_str(replacement);
     output.push_str(suffix);
     Ok(output)
+}
+
+fn provider_boundary(
+    boundaries: &dyn GraphemeBoundaryProvider,
+    source: &str,
+    grapheme_index: usize,
+) -> Result<usize, GraphemeRangeError> {
+    let byte_offset = boundaries.byte_offset(source, grapheme_index).ok_or(
+        GraphemeRangeError::BoundaryUnavailable { grapheme_index },
+    )?;
+    validate_boundary(source, grapheme_index, byte_offset)?;
+    Ok(byte_offset)
 }
 
 const fn validate_boundary(
