@@ -59,7 +59,7 @@ reason = "The Rust session runtime requires a pinned toolchain policy."
 
 [applicability.rustc-lints]
 enabled = false
-reason = "Stable Cargo check is externally validated until repository-local Rust tool provisioning exists."
+reason = "Stable Cargo is repository-local, but no RustCheck native validation capability is configured yet."
 
 [applicability.rustfmt]
 enabled = false
