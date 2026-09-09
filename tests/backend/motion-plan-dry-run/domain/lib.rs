@@ -240,3 +240,54 @@ fn unknown_or_violated_limit_state_blocks_exact_operation() {
         Err(DryRunValidationError::ViolatedBoundary { operation_index: 0 }),
     );
 }
+
+#[test]
+fn every_operation_kind_and_limit_state_has_explicit_fail_closed_behavior() {
+    let states = [
+        DryRunLimitState::NotApplicable,
+        DryRunLimitState::Unknown,
+        DryRunLimitState::Violated,
+        DryRunLimitState::WithinLimits,
+    ];
+    let mut cases = 0_u32;
+
+    for operation_index in 0..4 {
+        let is_motion = matches!(operation_index, 0 | 3);
+        for state in states {
+            cases += 1;
+            let mut evaluations = clean_evaluations();
+            evaluations[operation_index].state = state;
+            let dry_run = MotionPlanDryRun {
+                calibration: calibration(),
+                limit_evaluations: evaluations,
+                plan: plan(),
+            };
+            let expected = match state {
+                DryRunLimitState::NotApplicable if is_motion => {
+                    Err(DryRunValidationError::MotionLimitMissing {
+                        operation_index,
+                    })
+                },
+                DryRunLimitState::Unknown => {
+                    Err(DryRunValidationError::UnknownLimitState {
+                        operation_index,
+                    })
+                },
+                DryRunLimitState::Violated => {
+                    Err(DryRunValidationError::ViolatedBoundary {
+                        operation_index,
+                    })
+                },
+                DryRunLimitState::NotApplicable
+                | DryRunLimitState::WithinLimits => Ok(()),
+            };
+            assert_eq!(
+                validate_motion_plan_dry_run(&dry_run),
+                expected,
+                "limit-state mismatch at operation {operation_index}",
+            );
+        }
+    }
+
+    assert_eq!(cases, 16);
+}
