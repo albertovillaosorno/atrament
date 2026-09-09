@@ -191,6 +191,9 @@ Explicit candidate acceptance validates
 duplicate, dangling, and wrong-kind references before mutation, promotes
 candidate-local identities through one backend-owned mapping, and commits one
 new accepted revision atomically while preserving nested semantic references.
+A specialized-reference matrix now pins wrong-kind rejection for figure assets,
+block provenance/style, and figure-caption provenance/style without changing the
+current accepted revision.
 
 A direct accepted-text edit now preconditions the exact current revision,
 preserves all semantic identities while replacing one admitted inline text

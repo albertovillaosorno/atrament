@@ -14625,6 +14625,74 @@ fn nested_semantic_families_promote_all_owned_and_referenced_identities() {
 }
 
 #[test]
+fn specialized_candidate_references_reject_wrong_owned_classes() {
+    for case in 0..5 {
+        let candidate_ids = IdentityAllocator::new();
+        let (valid, _) =
+            candidate_notebook_with_figure_assets(&candidate_ids);
+        let (mut invalid, ids) =
+            candidate_notebook_with_figure_assets(&candidate_ids);
+        let wrong_owner = ids.page;
+        let expected = match case {
+            0 => {
+                invalid.pages[0].flows[0].blocks[0].provenance =
+                    Some(wrong_owner);
+                CandidateReferenceKind::Provenance
+            },
+            1 => {
+                invalid.pages[0].flows[0].blocks[0].style =
+                    Some(wrong_owner);
+                CandidateReferenceKind::Style
+            },
+            2 => {
+                let BlockContent::Figure(figure) =
+                    &mut invalid.pages[0].flows[0].blocks[0].content
+                else {
+                    panic!("asset fixture must contain a figure");
+                };
+                figure.asset = Some(wrong_owner);
+                CandidateReferenceKind::Asset
+            },
+            3 | 4 => {
+                let caption = InlineSpan {
+                    id: candidate_id(&candidate_ids),
+                    provenance: (case == 3).then_some(wrong_owner),
+                    style: (case == 4).then_some(wrong_owner),
+                    text: String::from("caption"),
+                };
+                let BlockContent::Figure(figure) =
+                    &mut invalid.pages[0].flows[0].blocks[0].content
+                else {
+                    panic!("caption fixture must contain a figure");
+                };
+                figure.caption.push(caption);
+                if case == 3 {
+                    CandidateReferenceKind::Provenance
+                } else {
+                    CandidateReferenceKind::Style
+                }
+            },
+            _ => unreachable!("five specialized reference cases"),
+        };
+        let mut session = SemanticNotebookSessionService::default();
+        let _ = session.accept(valid);
+        let before = session.current().expect("accepted revision").clone();
+
+        assert_eq!(
+            session.accept(invalid),
+            AcceptanceOutcome::InvalidCandidate {
+                reason: CandidateGraphError::ReferenceKindMismatch {
+                    candidate: wrong_owner,
+                    expected,
+                },
+            },
+            "specialized reference case {case} must reject",
+        );
+        assert_eq!(session.current(), Some(&before));
+    }
+}
+
+#[test]
 fn wrong_reference_kind_rejects_without_changing_current_revision() {
     let candidate_ids = IdentityAllocator::new();
     let valid = candidate_notebook(&candidate_ids, "accepted");
