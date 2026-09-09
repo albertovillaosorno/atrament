@@ -645,13 +645,13 @@ incomplete. The live `SessionApplication` routes that gate against its current
 accepted revision, so post-placement overflow evidence can be checked without
 creating file authority.
 
-Complete advisory evidence remains Ready and is
-preserved, while an incomplete set remains Incomplete even when it already
-contains a blocking diagnostic. Stale revisions, evidence from another revision,
-and non-layout diagnostic codes or operations cannot be smuggled through that
-gate. It accepts no path, overwrite, retry, format, or file-commit input and
-therefore cannot report
-`Exported`.
+Complete empty evidence remains Ready, while an incomplete set remains
+Incomplete even when it already contains a blocking diagnostic. The sole current
+layout code is fixed-region overflow, so callers cannot downgrade its backend-
+owned blocking disposition to advisory. Stale revisions, evidence from another
+revision, and non-layout diagnostic codes or operations cannot be smuggled
+through that gate. It accepts no path, overwrite, retry, format, or file-commit
+input and therefore cannot report `Exported`.
 
 The task remains open until full Export preflight combines layout with semantic,
 source, asset, capability, and format validation before file commit. Move, crop,

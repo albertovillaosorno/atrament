@@ -58,8 +58,9 @@ impl<'diagnostics> RevisionLayoutDiagnostics<'diagnostics> {
     ///
     /// # Errors
     ///
-    /// Returns a typed failure when a diagnostic uses another stable code or
-    /// operation, omits accepted-revision context, or names another revision.
+    /// Returns a typed failure when a diagnostic uses another stable code,
+    /// downgrades overflow to advisory, belongs to another operation, omits
+    /// accepted-revision context, or names another revision.
     pub fn bind(
         revision: RevisionIdentity,
         diagnostics: &'diagnostics DiagnosticSet,
@@ -67,6 +68,7 @@ impl<'diagnostics> RevisionLayoutDiagnostics<'diagnostics> {
         let expected = format!("{revision:?}");
         for diagnostic in &diagnostics.diagnostics {
             if diagnostic.code != DiagnosticCode::LayoutFixedRegionOverflow
+                || diagnostic.disposition != BlockingDisposition::Blocking
                 || diagnostic.operation.operation != Operation::Layout
             {
                 return Err(ExportLayoutPreflightError::NonLayoutDiagnostic);

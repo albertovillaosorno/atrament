@@ -53,8 +53,9 @@ The read-only layout-only Export preflight consumes those revision-bound
 diagnostic sets using the same in-process identity projection, without parsing
 messages. It does not make that projection adapter-stable. Blocking or
 explicitly incomplete layout evidence cannot report layout readiness, and
-diagnostic sets with missing, duplicate, forged, stale, or non-layout code or
-operation context are rejected before preflight.
+diagnostic sets with missing, duplicate, forged, stale, non-layout code or
+operation context, or advisory overflow disposition are rejected before
+preflight.
 This gate performs no path or persistent file operation and is not full Export.
 
 The diagnostic vocabulary now also reserves the stable
