@@ -39,6 +39,49 @@ const MAIN_MODULE = new URL(
     import.meta.url,
 );
 
+test(
+    "workspace module has no undeclared outbound browser transport",
+    async () => {
+    const source = await readFile(MAIN_MODULE, "utf8");
+    const fetchCalls = source.match(/\bfetch\(/gu) ?? [];
+    assert.equal(
+        fetchCalls.length,
+        3,
+        "only handshake and draft fetches exist",
+    );
+
+    for (const required of [
+        'cache: "no-store"',
+        'credentials: "omit"',
+        'mode: "same-origin"',
+        'redirect: "error"',
+        'referrerPolicy: "no-referrer"',
+    ]) {
+        const occurrences = source.split(required).length - 1;
+        assert.equal(
+            occurrences,
+            3,
+            `all admitted fetches must retain ${required}`,
+        );
+    }
+
+    for (const forbidden of [
+        "http://",
+        "https://",
+        "navigator.sendBeacon",
+        "XMLHttpRequest",
+        "new WebSocket",
+        "new EventSource",
+    ]) {
+        assert.equal(
+            source.includes(forbidden),
+            false,
+            `generated workspace uses undeclared transport ${forbidden}`,
+        );
+    }
+    },
+);
+
 test("workspace module contains no browser persistence API", async () => {
     const source = await readFile(MAIN_MODULE, "utf8");
     const forbidden = [

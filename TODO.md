@@ -1726,6 +1726,12 @@ Origin, and Bearer credential before protected draft mutation. The request line
 requires exactly one ASCII space between method, target, and HTTP/1.1; tabs,
 repeated spaces, trailing whitespace, and other versions reject before routing.
 
+Browser privacy regression evidence also pins the generated workspace to exactly
+three admitted same-origin `fetch` call sites for handshake and draft transport.
+All three omit ambient credentials, reject redirects, use no-referrer and
+no-store behavior, and contain no absolute HTTP(S), beacon, XHR, WebSocket, or
+EventSource transport path.
+
 Malformed bare-LF or bare-CR header line endings reject while the peer remains
 connected instead of occupying the listener until the request timeout. EOF also
 cannot replace the required blank CRLF header terminator. Exhaustive prefix and
