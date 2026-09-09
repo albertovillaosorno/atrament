@@ -122,3 +122,72 @@ fn process_restart_does_not_bypass_unknown_physical_state() {
         PhysicalInterruptionKind::ProcessRestart,
     );
 }
+
+#[test]
+fn every_physical_recovery_state_combination_fails_closed_except_fully_known() {
+    let interruptions = [
+        PhysicalInterruptionKind::Disconnect,
+        PhysicalInterruptionKind::EmergencyStop,
+        PhysicalInterruptionKind::PowerLoss,
+        PhysicalInterruptionKind::ProcessCrash,
+        PhysicalInterruptionKind::ProcessRestart,
+        PhysicalInterruptionKind::UserPause,
+    ];
+    let feedback_states = [
+        PhysicalFeedbackState::Available,
+        PhysicalFeedbackState::Missing,
+    ];
+    let boundary_states = [
+        PhysicalBoundaryState::Violated,
+        PhysicalBoundaryState::WithinBounds,
+    ];
+    let stroke_states = [
+        PhysicalStrokeState::BetweenStrokes,
+        PhysicalStrokeState::PartialStroke,
+    ];
+    let mut cases = 0_u32;
+    let mut resumable = 0_u32;
+
+    for interruption in interruptions {
+        for feedback in feedback_states {
+            for position_is_known in [false, true] {
+                for boundary in boundary_states {
+                    for stroke in stroke_states {
+                        cases += 1;
+                        let position = if position_is_known {
+                            PhysicalPositionState::Known((120_i32, 340_i32))
+                        } else {
+                            PhysicalPositionState::Unknown
+                        };
+                        let snapshot = PhysicalRecoverySnapshot {
+                            boundary,
+                            feedback,
+                            interruption,
+                            position,
+                            stroke,
+                        };
+                        let expected = if feedback
+                            == PhysicalFeedbackState::Available
+                            && position_is_known
+                            && boundary == PhysicalBoundaryState::WithinBounds
+                            && stroke == PhysicalStrokeState::BetweenStrokes
+                        {
+                            resumable += 1;
+                            PhysicalResumeDisposition::ResumeKnownState
+                        } else {
+                            PhysicalResumeDisposition::OperatorRecoveryRequired
+                        };
+                        assert_eq!(
+                            physical_resume_disposition(&snapshot),
+                            expected,
+                            "recovery mismatch for {snapshot:?}",
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    assert_eq!(cases, 96);
+    assert_eq!(resumable, 6);
+}
