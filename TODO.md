@@ -1051,14 +1051,20 @@ selection, stroke planning, rendering, and fallback remain open.
 Select, connect, deform, space, and lift strokes from neighboring graphemes,
 word position, line geometry, semantic role, and calibrated writing style.
 
-Current executable evidence now freezes the transport-neutral inspectable stroke
-plan produced by later contextual planning. Ordered samples retain caller-owned
-position, tangent, curvature, width or pressure proxy, velocity, and explicit
-contact state; each declared stroke retains semantic origin, profile choice, and
+Current executable evidence now freezes both sides of the transport-neutral
+planner boundary. Profile-provided contextual candidates retain caller-owned
+candidate identity, character intent, stroke-vocabulary payload, semantic
+origin, profile choice, and entry/exit conditions. One complete planning input
+also retains neighboring graphemes, word position, line geometry, semantic role,
+and calibrated writing style while preserving caller candidate order.
+
+The inspectable output plan keeps ordered samples with caller-owned position,
+tangent, curvature, width or pressure proxy, velocity, and explicit contact
+state; each declared stroke retains semantic origin, profile choice, and
 contextual entry/exit conditions. Empty declared strokes reject before any
 projection, while an empty plan remains valid for content with no handwriting.
-This does not choose geometry, units, candidate selection, joins, deformation,
-spacing, interpolation, rendering, PDF, or machine-motion behavior.
+Candidate ranking/selection, geometry, units, joins, deformation, spacing,
+interpolation, rendering, PDF, and machine-motion behavior remain open.
 
 ### TODO - Implement bounded correlated variation
 

@@ -1,0 +1,9 @@
+identity:
+  id: function:handwriting-contextual-stroke-candidates
+  name: handwriting-contextual-stroke-candidates
+  path: src/backend/handwriting-contextual-stroke-candidates
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: domain
