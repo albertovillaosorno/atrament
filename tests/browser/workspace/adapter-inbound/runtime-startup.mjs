@@ -106,3 +106,47 @@ test("failed browser launch never publishes runtime ready", () => {
         fs.rmSync(fixture, { recursive: true, force: true });
     }
 });
+
+test(
+    "empty Linux display marker fails before opener can publish ready",
+    { skip: process.platform !== "linux" },
+    () => {
+        buildRuntime();
+        fs.mkdirSync(".temp", { recursive: true });
+        const fixture = fs.mkdtempSync(".temp/startup-empty-display-");
+        try {
+            const openerDirectory = path.join(fixture, "bin");
+            fs.mkdirSync(openerDirectory);
+            const opener = path.join(openerDirectory, "xdg-open");
+            fs.writeFileSync(opener, "#!/bin/sh\nexit 0\n", { mode: 0o755 });
+            const environment = {
+                ...process.env,
+                DISPLAY: "",
+                PATH: `${openerDirectory}:${process.env.PATH ?? ""}`,
+            };
+            delete environment.WAYLAND_DISPLAY;
+            const result = spawnSync(RUNTIME_BINARY, [], {
+                encoding: "utf8",
+                env: environment,
+                timeout: 2_000,
+            });
+            assert.notEqual(result.status, 0);
+            assert.equal(result.signal, null);
+            assert.equal(result.error, undefined);
+            const records = result.stdout
+                .trim()
+                .split("\n")
+                .filter((line) => line !== "")
+                .map((line) => JSON.parse(line));
+            assert.deepEqual(
+                records.map((record) => record.state),
+                ["starting", "listening"],
+            );
+            assert.match(result.stderr, /no graphical session/u);
+            assert.equal(result.stderr.includes("#session="), false);
+            assert.equal(result.stderr.includes(records[1].origin), false);
+        } finally {
+            fs.rmSync(fixture, { recursive: true, force: true });
+        }
+    },
+);
