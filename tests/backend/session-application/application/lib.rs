@@ -4923,11 +4923,12 @@ fn dropping_application_leaves_a_fresh_session_empty() {
 }
 
 #[test]
-fn application_debug_does_not_expose_private_session_text() {
+fn application_debug_does_not_expose_private_session_data() {
     let identities = IdentityAllocator::new();
     let mut session = application::SessionApplication::default();
     let private_draft = "session-only private source";
     let private_semantic = "accepted-only private paragraph";
+    let private_asset = b"session-only private asset bytes";
     assert_eq!(
         session.replace(DraftField::Source, String::from(private_draft)),
         DraftMutation::Applied,
@@ -4937,11 +4938,28 @@ fn application_debug_does_not_expose_private_session_text() {
         session.accept_candidate(candidate),
         AcceptanceOutcome::Accepted { .. }
     ));
+    let (asset_candidate, _, candidate_asset, _) =
+        asset_figure_candidate(&identities);
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept_candidate(asset_candidate)
+    else {
+        panic!("private asset fixture must be accepted");
+    };
+    let asset = mapping
+        .iter()
+        .find(|entry| entry.candidate == candidate_asset)
+        .expect("private asset identity must map")
+        .accepted;
+    assert!(matches!(
+        session.retain_asset_bytes(revision, asset, private_asset.to_vec()),
+        Ok(application::AssetBytesRetention::Retained { .. })
+    ));
 
     let debug = format!("{session:?}");
     assert!(debug.contains("SessionApplication"));
     assert!(!debug.contains(private_draft));
     assert!(!debug.contains(private_semantic));
+    assert!(!debug.contains("session-only private asset bytes"));
 }
 
 #[test]
