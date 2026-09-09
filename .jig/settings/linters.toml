@@ -58,8 +58,8 @@ enabled = true
 reason = "The Rust session runtime requires a pinned toolchain policy."
 
 [applicability.rustc-lints]
-enabled = false
-reason = "Stable Cargo is repository-local, but no RustCheck native validation capability is configured yet."
+enabled = true
+reason = "Repository-local stable Cargo runs the configured RustCheck native validation gate."
 
 [applicability.rustfmt]
 enabled = false

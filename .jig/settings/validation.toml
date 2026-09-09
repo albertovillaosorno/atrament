@@ -1,2 +1,9 @@
 domain = "validation"
 schema_version = 1
+
+[gate.rust_stable_check]
+args = ["check", "--locked", "--workspace", "--all-features"]
+capability = "rust-check"
+config_files = [".cargo/config.toml", "Cargo.lock", "Cargo.toml"]
+scope_applicability = "selectable"
+tool = "rust_stable_cargo"
