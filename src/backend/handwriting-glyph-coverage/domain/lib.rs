@@ -61,6 +61,24 @@ pub enum HandwritingCoverage<'profile, Rule> {
     Missing,
 }
 
+/// One caller-ordered grapheme coverage query.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct HandwritingCoverageQuery<'query, Grapheme, Rule> {
+    /// Exact already-segmented grapheme being checked.
+    pub grapheme: &'query Grapheme,
+    /// Optional externally matched compositional rule for this grapheme.
+    pub matched_compositional_rule: Option<&'query Rule>,
+}
+
+/// One missing handwriting-coverage result in caller query order.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct MissingHandwritingCoverage<'query, Grapheme> {
+    /// Exact grapheme whose handwriting coverage is missing.
+    pub grapheme: &'query Grapheme,
+    /// Zero-based index of the caller-supplied coverage query.
+    pub query_index: usize,
+}
+
 /// Classify one grapheme against one handwriting profile's declarations.
 ///
 /// `matched_compositional_rule` is evidence from a separate rule evaluator.
@@ -95,4 +113,39 @@ where
         .map_or(HandwritingCoverage::Missing, |rule| {
             HandwritingCoverage::Compositional { rule }
         })
+}
+
+/// Report every caller-supplied grapheme whose handwriting coverage is missing.
+///
+/// The function preserves query order and occurrences. It performs no Unicode
+/// normalization, deduplication, semantic-location mapping, or fallback choice.
+#[must_use]
+pub fn missing_handwriting_coverage<'query, ProfileIdentity, Grapheme, Rule>(
+    profile: &HandwritingCoverageProfile<
+        ProfileIdentity, Grapheme, Rule,
+    >,
+    queries: &[HandwritingCoverageQuery<'query, Grapheme, Rule>],
+) -> Vec<MissingHandwritingCoverage<'query, Grapheme>>
+where
+    Grapheme: PartialEq,
+    Rule: PartialEq,
+{
+    queries
+        .iter()
+        .enumerate()
+        .filter_map(|(query_index, query)| {
+            matches!(
+                classify_handwriting_coverage(
+                    profile,
+                    query.grapheme,
+                    query.matched_compositional_rule,
+                ),
+                HandwritingCoverage::Missing,
+            )
+            .then_some(MissingHandwritingCoverage {
+                grapheme: query.grapheme,
+                query_index,
+            })
+        })
+        .collect()
 }

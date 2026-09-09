@@ -32,8 +32,9 @@
 //   - Missing coverage has no implicit fallback.
 //
 use atrament_handwriting_glyph_coverage::{
-    HandwritingCoverage, HandwritingCoverageProfile,
-    classify_handwriting_coverage,
+    HandwritingCoverage, HandwritingCoverageProfile, HandwritingCoverageQuery,
+    MissingHandwritingCoverage, classify_handwriting_coverage,
+    missing_handwriting_coverage,
 };
 
 fn profile(
@@ -98,5 +99,70 @@ fn absent_or_undeclared_rule_evidence_leaves_coverage_missing() {
             Some(&"generic-font-fallback"),
         ),
         HandwritingCoverage::Missing,
+    );
+}
+
+
+#[test]
+fn missing_report_preserves_query_order_and_duplicate_occurrences() {
+    let profile = profile();
+    let first = "ø";
+    let covered = "a";
+    let second = "ø";
+    let queries = [
+        HandwritingCoverageQuery {
+            grapheme: &first,
+            matched_compositional_rule: None,
+        },
+        HandwritingCoverageQuery {
+            grapheme: &covered,
+            matched_compositional_rule: None,
+        },
+        HandwritingCoverageQuery {
+            grapheme: &second,
+            matched_compositional_rule: None,
+        },
+    ];
+    assert_eq!(
+        missing_handwriting_coverage(&profile, &queries),
+        [
+            MissingHandwritingCoverage {
+                grapheme: &first,
+                query_index: 0,
+            },
+            MissingHandwritingCoverage {
+                grapheme: &second,
+                query_index: 2,
+            },
+        ],
+    );
+}
+
+#[test]
+fn admitted_compositional_rule_removes_query_from_missing_report() {
+    let profile = profile();
+    let composed = "n\u{303}";
+    let rule = "latin-base-plus-tilde";
+    let queries = [HandwritingCoverageQuery {
+        grapheme: &composed,
+        matched_compositional_rule: Some(&rule),
+    }];
+    assert!(missing_handwriting_coverage(&profile, &queries).is_empty());
+}
+
+#[test]
+fn missing_report_preserves_normalization_spelling_without_equivalence() {
+    let profile = profile();
+    let nfd = "a\u{301}";
+    let queries = [HandwritingCoverageQuery {
+        grapheme: &nfd,
+        matched_compositional_rule: None,
+    }];
+    assert_eq!(
+        missing_handwriting_coverage(&profile, &queries),
+        [MissingHandwritingCoverage {
+            grapheme: &nfd,
+            query_index: 0,
+        }],
     );
 }
