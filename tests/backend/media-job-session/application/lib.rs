@@ -187,3 +187,31 @@ fn dropping_service_leaves_a_fresh_service_with_no_job_authority() {
         Err(MediaJobSessionError::UnknownJob),
     );
 }
+
+#[test]
+fn settled_job_rejects_late_cleanup_events_without_recreating_work() {
+    let mut session = MediaJobSessionService::new();
+    let job = session.begin_job().expect("job identity");
+    let intermediate = session
+        .register_waveform_intermediate(job)
+        .expect("waveform identity");
+    assert_eq!(
+        session.finish_job(job, MediaJobOutcome::Succeeded),
+        Ok(MediaJobCleanupStatus::CleanupRequired),
+    );
+    assert_eq!(
+        session.record_cleanup_success(job, intermediate),
+        Ok(MediaJobCleanupStatus::Settled),
+    );
+
+    for late in [
+        session.record_cleanup_failure(job, intermediate),
+        session.record_cleanup_success(job, intermediate),
+    ] {
+        assert_eq!(late, Err(MediaJobSessionError::WaveformNotRegistered));
+        assert_eq!(
+            session.cleanup_status(job),
+            Ok(MediaJobCleanupStatus::Settled),
+        );
+    }
+}

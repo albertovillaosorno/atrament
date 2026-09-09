@@ -41,7 +41,9 @@ use atrament_export_layout_preflight::{
     ExportLayoutPreflightError, ExportLayoutPreflightResult,
     RevisionLayoutDiagnostics,
 };
-use atrament_media_job_session::{MediaJobCleanupStatus, MediaJobOutcome};
+use atrament_media_job_session::{
+    MediaJobCleanupStatus, MediaJobOutcome, MediaJobSessionError,
+};
 use atrament_flow_pagination::{
     FlowUnitPolicy, MeasuredFlowUnit, MeasuredFragment, PaginationError,
 };
@@ -895,6 +897,18 @@ fn application_routes_media_cleanup_through_owned_process_authority() {
     assert_eq!(
         session.record_media_cleanup_success(job, intermediate),
         Ok(MediaJobCleanupStatus::Settled),
+    );
+    assert_eq!(
+        session.media_job_cleanup_status(job),
+        Ok(MediaJobCleanupStatus::Settled),
+    );
+    assert_eq!(
+        session.record_media_cleanup_failure(job, intermediate),
+        Err(MediaJobSessionError::WaveformNotRegistered),
+    );
+    assert_eq!(
+        session.record_media_cleanup_success(job, intermediate),
+        Err(MediaJobSessionError::WaveformNotRegistered),
     );
     assert_eq!(
         session.media_job_cleanup_status(job),
