@@ -31,6 +31,9 @@ depends_on = []
 [component.atrament_handwriting_calibration_session]
 depends_on = []
 
+[component.atrament_handwriting_diacritic_composition]
+depends_on = ["atrament_handwriting_glyph_coverage"]
+
 [component.atrament_handwriting_glyph_coverage]
 depends_on = []
 

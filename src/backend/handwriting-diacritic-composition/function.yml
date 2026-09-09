@@ -1,0 +1,9 @@
+identity:
+  id: function:handwriting-diacritic-composition
+  name: handwriting-diacritic-composition
+  path: src/backend/handwriting-diacritic-composition
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: domain

@@ -53,6 +53,13 @@ name = "atrament_handwriting_calibration_session"
 version = "0.1.0"
 
 [[package]]
+name = "atrament_handwriting_diacritic_composition"
+version = "0.1.0"
+dependencies = [
+ "atrament_handwriting_glyph_coverage",
+]
+
+[[package]]
 name = "atrament_handwriting_glyph_coverage"
 version = "0.1.0"
 

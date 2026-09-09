@@ -1037,6 +1037,15 @@ diacritics, contextual forms, and confidence with sample provenance.
 Reuse accents only when profile evidence admits the composition and preserve
 placement, scale, collision, and language-specific forms.
 
+Current executable evidence now admits one compositional diacritic intent only
+when the exact handwriting profile classifies its externally matched rule as
+`Compositional`. The admitted value retains the profile-declared rule together
+with caller-owned placement, scale, collision evidence, and language-specific
+form. Exact-covered graphemes and missing or undeclared composition rules reject
+instead of silently switching to accent reuse. Unicode decomposition, rule
+applicability, placement/scale geometry, collision evaluation, language-form
+selection, stroke planning, rendering, and fallback remain open.
+
 ### TODO - Implement continuous contextual stroke planning
 
 Select, connect, deform, space, and lift strokes from neighboring graphemes,

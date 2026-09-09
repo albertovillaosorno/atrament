@@ -1,0 +1,15 @@
+[package]
+name = "atrament_handwriting_diacritic_composition"
+version = "0.1.0"
+edition = "2024"
+publish = false
+license = "MIT"
+
+[dependencies]
+atrament_handwriting_glyph_coverage = { path = "../handwriting-glyph-coverage" }
+
+[lib]
+path = "domain/lib.rs"
+
+[lints]
+workspace = true
