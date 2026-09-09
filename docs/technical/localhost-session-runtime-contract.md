@@ -161,6 +161,10 @@ the exact startup `Origin`, and exactly one of each required version header:
 - `X-Atrament-Protocol-Version: atrament.runtime/1`; and
 - `X-Atrament-Renderer-Version: atrament.renderer/1`.
 
+Missing or duplicate required version headers are malformed transport input and
+return `400` before the application handshake is invoked. Only a single-valued
+version identity that differs from backend policy is a compatibility mismatch.
+
 A compatible exchange returns `200` with all six backend identities. An
 authenticated mismatch returns `409` with the mismatched dimension and required
 identity without reflecting the browser-provided value. The browser accepts that

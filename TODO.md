@@ -1854,6 +1854,9 @@ The transport admits at most 16 KiB of request headers and 2 MiB of request
 body. Exact-limit fixtures pass while one byte over either ceiling rejects. The
 first-release authenticated handshake additionally admits no request body;
 absent or zero `Content-Length` is accepted only when no trailing bytes exist.
+Each of its six required version headers must appear exactly once: a 12-case
+missing/duplicate matrix rejects malformed multiplicity with `400` before the
+application compatibility service is invoked.
 
 Automatic browser launch now fails startup closed before `ready`: the bound
 loopback listener and fresh credential are released instead of leaving an

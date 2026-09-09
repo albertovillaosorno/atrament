@@ -133,8 +133,8 @@ The current runtime uses these response classes at the inbound HTTP boundary:
 - `200 OK`: public resource or health success, a compatible handshake, or an
   authenticated draft read.
 - `204 No Content`: authenticated whole-field draft replacement applied.
-- `400 Bad Request`: invalid method, target, framing, body, UTF-8, or another
-  malformed request.
+- `400 Bad Request`: invalid method, target, framing, body, UTF-8, missing or
+  duplicate required handshake version header, or another malformed request.
 - `401 Unauthorized`: credential and/or required Origin admission failed.
 - `404 Not Found`: unknown public GET target.
 - `408 Request Timeout`: the complete request did not arrive within the total
