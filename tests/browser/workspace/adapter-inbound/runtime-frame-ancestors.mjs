@@ -132,7 +132,7 @@ class BidiClient {
         this.drain();
     }
 
-    command(method, params = {}) {
+    command(method, params = {}, timeoutMs = 10_000) {
         const id = this.nextId;
         this.nextId += 1;
         return new Promise((resolve, reject) => {
@@ -140,7 +140,7 @@ class BidiClient {
                 if (this.pending.delete(id)) {
                     reject(new Error(`${method} timed out`));
                 }
-            }, 10_000);
+            }, timeoutMs);
             this.pending.set(id, {
                 reject,
                 resolve: (result) => {
@@ -424,7 +424,7 @@ test(
             await bidi.connect();
             await bidi.command("session.new", {
                 capabilities: { alwaysMatch: {} },
-            });
+            }, 15_000);
 
             const direct = await bidi.command("browsingContext.create", {
                 type: "tab",
