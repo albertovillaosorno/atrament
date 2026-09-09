@@ -190,6 +190,7 @@ enum BrokenBoundaryMode {
     Reversed,
     ShiftedFirst,
     TruncatedFinal,
+    UnderreportedCount,
 }
 
 struct BrokenBoundaryProvider {
@@ -229,12 +230,14 @@ impl GraphemeBoundaryProvider for BrokenBoundaryProvider {
                 1 => Some("é".len()),
                 _ => Some("é".len()),
             },
+            BrokenBoundaryMode::UnderreportedCount => Some(0),
         }
     }
 
     fn grapheme_count(&self, _source: &str) -> usize {
         match self.mode {
             BrokenBoundaryMode::Reversed => 3,
+            BrokenBoundaryMode::UnderreportedCount => 0,
             _ => 2,
         }
     }
@@ -243,6 +246,21 @@ impl GraphemeBoundaryProvider for BrokenBoundaryProvider {
 #[test]
 fn provider_boundary_failures_are_not_reported_as_user_range_errors() {
     let source = "éx";
+    assert_eq!(
+        replace_grapheme_range(
+            &BrokenBoundaryProvider {
+                mode: BrokenBoundaryMode::UnderreportedCount,
+            },
+            source,
+            GraphemeRange { count: 0, start: 1 },
+            "z",
+        ),
+        Err(GraphemeRangeError::BoundaryAnchorMismatch {
+            expected: source.len(),
+            grapheme_index: 0,
+            observed: 0,
+        }),
+    );
     assert_eq!(
         replace_grapheme_range(
             &BrokenBoundaryProvider {

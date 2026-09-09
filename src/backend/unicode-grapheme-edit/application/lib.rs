@@ -123,6 +123,22 @@ pub fn replace_grapheme_range(
     replacement: &str,
 ) -> Result<String, GraphemeRangeError> {
     let total = boundaries.grapheme_count(source);
+    let first_byte = provider_boundary(boundaries, source, 0)?;
+    if first_byte != 0 {
+        return Err(GraphemeRangeError::BoundaryAnchorMismatch {
+            expected: 0,
+            grapheme_index: 0,
+            observed: first_byte,
+        });
+    }
+    let final_byte = provider_boundary(boundaries, source, total)?;
+    if final_byte != source.len() {
+        return Err(GraphemeRangeError::BoundaryAnchorMismatch {
+            expected: source.len(),
+            grapheme_index: total,
+            observed: final_byte,
+        });
+    }
     if range.start > total {
         return Err(GraphemeRangeError::StartOutOfBounds {
             grapheme_count: total,
@@ -140,22 +156,6 @@ pub fn replace_grapheme_range(
         return Err(GraphemeRangeError::EndOutOfBounds {
             end,
             grapheme_count: total,
-        });
-    }
-    let first_byte = provider_boundary(boundaries, source, 0)?;
-    if first_byte != 0 {
-        return Err(GraphemeRangeError::BoundaryAnchorMismatch {
-            expected: 0,
-            grapheme_index: 0,
-            observed: first_byte,
-        });
-    }
-    let final_byte = provider_boundary(boundaries, source, total)?;
-    if final_byte != source.len() {
-        return Err(GraphemeRangeError::BoundaryAnchorMismatch {
-            expected: source.len(),
-            grapheme_index: total,
-            observed: final_byte,
         });
     }
     let start_byte = if range.start == 0 {
