@@ -1513,8 +1513,10 @@ A process-local media-job application service now owns opaque job and waveform
 identities around that terminal rule. One active job can register at most one
 waveform intermediate, terminal outcome cannot be rewritten, cleanup failure
 remains retry-required, and recorded cleanup success is the only transition to
-Settled after an intermediate existed. Dropping the service leaves a fresh owner
-with no prior job authority. The service still chooses no path, creates or
+Settled after an intermediate existed; late cleanup success or failure for that
+retired intermediate rejects without recreating cleanup work. Dropping the
+service leaves a fresh owner with no prior job authority. The service still
+chooses no path, creates or
 deletes no file, invokes no decoder or engine, and schedules no retry.
 
 ### TODO - Structure transcripts without hiding uncertainty
@@ -1854,7 +1856,9 @@ from source order: successful launch emits exactly `starting`, `listening`, then
 `ready`, with no origin until the listener exists and no credential field in any
 record. A deterministic failing opener emits only `starting` and `listening`,
 exits nonzero, and keeps both the fragment and bound origin out of recovery
-stderr.
+stderr. On Linux, absent or empty `DISPLAY` and `WAYLAND_DISPLAY` markers are
+unavailable; an empty-marker process fixture still fails before `ready` even
+when its fake opener would succeed.
 
 The opener process now receives null stdin, stdout, and stderr. Before that
 change, a synthetic opener that echoed its URL copied the credential-bearing
