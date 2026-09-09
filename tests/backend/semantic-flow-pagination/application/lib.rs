@@ -45,7 +45,7 @@ use atrament_semantic_flow_pagination::{
 };
 use atrament_semantic_notebook::{
     AcceptedIdentity, Block, BlockContent, CandidateIdentity, Flow,
-    IdentityAllocator, InlineSpan, Notebook, Page, PaperProfile,
+    IdentityAllocator, InlineSpan, List, ListItem, Notebook, Page, PaperProfile,
 };
 use atrament_semantic_notebook_port::{
     AcceptanceOutcome, PageProfileEditOutcome, SemanticNotebookSession,
@@ -298,6 +298,71 @@ fn measured_inline_block_families_preserve_semantic_order_and_identity() {
         .placements
         .iter()
         .all(|placement| placement.page == page));
+}
+
+#[test]
+fn measured_list_block_keeps_containing_block_as_pagination_owner() {
+    let ids = IdentityAllocator::new();
+    let mut fixture = candidate_fixture(&ids);
+    let list = ids.allocate_candidate().expect("list");
+    let item = ids.allocate_candidate().expect("list item");
+    let child = ids.allocate_candidate().expect("list child block");
+    let span = ids.allocate_candidate().expect("list child span");
+    fixture.notebook.pages[0].flows[0].blocks[0].content =
+        BlockContent::List(List {
+            id: list,
+            items: vec![ListItem {
+                blocks: vec![Block {
+                    content: BlockContent::Paragraph(vec![InlineSpan {
+                        id: span,
+                        provenance: None,
+                        style: None,
+                        text: String::from("already measured list item"),
+                    }]),
+                    extensions: vec![],
+                    id: child,
+                    provenance: None,
+                    style: None,
+                }],
+                id: item,
+            }],
+            ordered: true,
+        });
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(fixture.notebook)
+    else {
+        panic!("list candidate must be accepted");
+    };
+    let flow = accepted_for(&mapping, fixture.flow);
+    let page = accepted_for(&mapping, fixture.page_one);
+    let owner = accepted_for(&mapping, fixture.block);
+    let accepted_list = accepted_for(&mapping, list);
+    let accepted_item = accepted_for(&mapping, item);
+    let accepted_child = accepted_for(&mapping, child);
+    let accepted = session.current().expect("accepted list revision");
+    let BlockContent::List(current_list) =
+        &accepted.notebook.pages[0].flows[0].blocks[0].content
+    else {
+        panic!("accepted top-level block must remain a list");
+    };
+    assert_eq!(current_list.id, accepted_list);
+    assert_eq!(current_list.items[0].id, accepted_item);
+    assert_eq!(current_list.items[0].blocks[0].id, accepted_child);
+
+    let measured = measurement(
+        revision,
+        flow,
+        owner,
+        &[(80_000, 6_000), (90_000, 7_000)],
+    );
+    let plan = paginate_revision(accepted, &measured)
+        .expect("already-measured list block must paginate");
+    assert_eq!(plan.placements.len(), 2);
+    assert!(plan
+        .placements
+        .iter()
+        .all(|placement| placement.owner == owner && placement.page == page));
 }
 
 #[test]

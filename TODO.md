@@ -500,9 +500,13 @@ Measurements bind to one accepted revision and one accepted flow; stale,
 incomplete, reordered, unknown-flow, and out-of-flow measurements reject before
 layout. Repeated measured fragments may retain one block owner, and no fragment
 is split by pagination. Already-measured top-level citation, date, definition,
-footnote, heading, margin-note, paragraph, quotation, and source-note blocks
-retain their accepted block identities and semantic order through pagination;
-this admits upstream measurements without inventing metrics for those families.
+footnote, heading, list, margin-note, paragraph, quotation, and source-note
+blocks retain their accepted block identities and semantic order through
+pagination.
+
+List pagination keeps the containing top-level block as the measured owner while
+preserving its accepted list, item, and child-block identities. This admits
+upstream measurements without inventing metrics for those families.
 
 Keep-together groups move intact when a current or later page can contain them.
 Groups too tall for any one remaining page fall back only to measured-fragment
