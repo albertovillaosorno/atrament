@@ -44,8 +44,10 @@ use atrament_semantic_flow_pagination::{
     RevisionFlowMeasurement, SemanticPaginationError, paginate_revision,
 };
 use atrament_semantic_notebook::{
-    AcceptedIdentity, Block, BlockContent, CandidateIdentity, Flow,
-    IdentityAllocator, InlineSpan, List, ListItem, Notebook, Page, PaperProfile,
+    AcceptedIdentity, Block, BlockContent, CandidateIdentity, Figure, Flow,
+    Formula, FormulaMode, IdentityAllocator, InlineSpan, List, ListItem,
+    Notebook, Page, PaperProfile, Table, TableCell, TableCellSpan, TableRow,
+    TableRowRole, UnresolvedBlock, UnresolvedReason,
 };
 use atrament_semantic_notebook_port::{
     AcceptanceOutcome, PageProfileEditOutcome, SemanticNotebookSession,
@@ -363,6 +365,170 @@ fn measured_list_block_keeps_containing_block_as_pagination_owner() {
         .placements
         .iter()
         .all(|placement| placement.owner == owner && placement.page == page));
+}
+
+#[test]
+fn measured_structured_block_families_preserve_top_level_owner_order() {
+    let ids = IdentityAllocator::new();
+    let mut fixture = candidate_fixture(&ids);
+    let callout_child = ids.allocate_candidate().expect("callout child");
+    let figure_block = ids.allocate_candidate().expect("figure block");
+    let figure = ids.allocate_candidate().expect("figure");
+    let freeform_block = ids.allocate_candidate().expect("freeform block");
+    let freeform_child = ids.allocate_candidate().expect("freeform child");
+    let math_block = ids.allocate_candidate().expect("mathematics block");
+    let formula = ids.allocate_candidate().expect("formula");
+    let rule_block = ids.allocate_candidate().expect("rule block");
+    let table_block = ids.allocate_candidate().expect("table block");
+    let table = ids.allocate_candidate().expect("table");
+    let row = ids.allocate_candidate().expect("table row");
+    let cell = ids.allocate_candidate().expect("table cell");
+    let unresolved = ids.allocate_candidate().expect("unresolved block");
+
+    fixture.notebook.pages[0].flows[0].blocks = vec![
+        Block {
+            content: BlockContent::Callout(vec![Block {
+                content: BlockContent::Rule,
+                extensions: vec![],
+                id: callout_child,
+                provenance: None,
+                style: None,
+            }]),
+            extensions: vec![],
+            id: fixture.block,
+            provenance: None,
+            style: None,
+        },
+        Block {
+            content: BlockContent::Figure(Figure {
+                asset: None,
+                caption: vec![],
+                id: figure,
+            }),
+            extensions: vec![],
+            id: figure_block,
+            provenance: None,
+            style: None,
+        },
+        Block {
+            content: BlockContent::Freeform(vec![Block {
+                content: BlockContent::Rule,
+                extensions: vec![],
+                id: freeform_child,
+                provenance: None,
+                style: None,
+            }]),
+            extensions: vec![],
+            id: freeform_block,
+            provenance: None,
+            style: None,
+        },
+        Block {
+            content: BlockContent::Mathematics(Formula {
+                id: formula,
+                mode: FormulaMode::Display,
+                source: String::from("x"),
+            }),
+            extensions: vec![],
+            id: math_block,
+            provenance: None,
+            style: None,
+        },
+        Block {
+            content: BlockContent::Rule,
+            extensions: vec![],
+            id: rule_block,
+            provenance: None,
+            style: None,
+        },
+        Block {
+            content: BlockContent::Table(Table {
+                id: table,
+                rows: vec![TableRow {
+                    cells: vec![TableCell {
+                        blocks: vec![],
+                        id: cell,
+                        span: TableCellSpan::SINGLE,
+                    }],
+                    id: row,
+                    role: TableRowRole::Body,
+                }],
+            }),
+            extensions: vec![],
+            id: table_block,
+            provenance: None,
+            style: None,
+        },
+        Block {
+            content: BlockContent::Unresolved(UnresolvedBlock {
+                extensions: vec![],
+                reason: UnresolvedReason::Unsupported,
+                source: String::from("unsupported measured source"),
+            }),
+            extensions: vec![],
+            id: unresolved,
+            provenance: None,
+            style: None,
+        },
+    ];
+    let candidates = [
+        fixture.block,
+        figure_block,
+        freeform_block,
+        math_block,
+        rule_block,
+        table_block,
+        unresolved,
+    ];
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(fixture.notebook)
+    else {
+        panic!("structured-family candidate must be accepted");
+    };
+    let flow = accepted_for(&mapping, fixture.flow);
+    let page = accepted_for(&mapping, fixture.page_one);
+    let expected = candidates
+        .iter()
+        .map(|candidate| accepted_for(&mapping, *candidate))
+        .collect::<Vec<_>>();
+    let before = session
+        .current()
+        .expect("accepted structured-family revision")
+        .clone();
+    let measured = RevisionFlowMeasurement {
+        flow,
+        revision,
+        units: vec![MeasuredFlowUnit {
+            fragments: expected
+                .iter()
+                .map(|owner| MeasuredFragment {
+                    height: Length::from_micrometres(1_000),
+                    owner: *owner,
+                    width: Length::from_micrometres(80_000),
+                })
+                .collect(),
+            policy: FlowUnitPolicy::Independent,
+        }],
+    };
+
+    let plan = paginate_revision(
+        session.current().expect("accepted revision remains current"),
+        &measured,
+    )
+    .expect("already-measured structured families must paginate");
+    assert_eq!(
+        plan.placements
+            .iter()
+            .map(|placement| placement.owner)
+            .collect::<Vec<_>>(),
+        expected,
+    );
+    assert!(plan
+        .placements
+        .iter()
+        .all(|placement| placement.page == page));
+    assert_eq!(session.current(), Some(&before));
 }
 
 #[test]

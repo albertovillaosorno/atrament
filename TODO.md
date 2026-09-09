@@ -508,6 +508,11 @@ List pagination keeps the containing top-level block as the measured owner while
 preserving its accepted list, item, and child-block identities. This admits
 upstream measurements without inventing metrics for those families.
 
+Already-measured callout, figure, freeform, mathematics, rule, table, and
+unresolved blocks now complete direct top-level vocabulary coverage. Pagination
+preserves their accepted top-level owner order without reinterpreting nested
+semantic structure or unresolved source content.
+
 Keep-together groups move intact when a current or later page can contain them.
 Groups too tall for any one remaining page fall back only to measured-fragment
 boundaries, while exact-bottom fits do not manufacture page breaks. A page
