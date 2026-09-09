@@ -167,6 +167,67 @@ fn unresolved_fragment_keeps_text_timing_and_confidence() {
 }
 
 #[test]
+fn reviewed_sources_must_borrow_from_the_supplied_transcript() {
+    let transcript = transcript_fixture();
+    let foreign = transcript_fixture();
+    let foreign_words = vec![ReviewedTranscriptSpan {
+        role: ReviewedTranscriptRole::Section,
+        source: ReviewedTranscriptSource::ResolvedWords(&foreign.words[0..1]),
+    }];
+    assert_eq!(
+        review_transcript_structure(&transcript, foreign_words),
+        Err(TranscriptStructureError::ForeignResolvedWords { span_index: 0 }),
+    );
+
+    let foreign_unresolved = vec![ReviewedTranscriptSpan {
+        role: ReviewedTranscriptRole::Unresolved,
+        source: ReviewedTranscriptSource::UnresolvedFragment(
+            &foreign.unresolved_fragments[0],
+        ),
+    }];
+    assert_eq!(
+        review_transcript_structure(&transcript, foreign_unresolved),
+        Err(TranscriptStructureError::ForeignUnresolvedFragment {
+            span_index: 0,
+        }),
+    );
+}
+
+#[test]
+fn zero_sized_evidence_cannot_claim_source_provenance() {
+    let transcript = TranscriptEvidence {
+        engine_identity: "engine",
+        job_identity: "job",
+        media_identity: "media",
+        media_kind: TranscriptMediaKind::Audio,
+        unresolved_fragments: vec![()],
+        words: vec![()],
+    };
+    let spans = vec![ReviewedTranscriptSpan {
+        role: ReviewedTranscriptRole::Section,
+        source: ReviewedTranscriptSource::ResolvedWords(&transcript.words[..]),
+    }];
+    assert_eq!(
+        review_transcript_structure(&transcript, spans),
+        Err(TranscriptStructureError::UnverifiableSourceEvidence {
+            span_index: 0,
+        }),
+    );
+    let unresolved = vec![ReviewedTranscriptSpan {
+        role: ReviewedTranscriptRole::Unresolved,
+        source: ReviewedTranscriptSource::UnresolvedFragment(
+            &transcript.unresolved_fragments[0],
+        ),
+    }];
+    assert_eq!(
+        review_transcript_structure(&transcript, unresolved),
+        Err(TranscriptStructureError::UnverifiableSourceEvidence {
+            span_index: 0,
+        }),
+    );
+}
+
+#[test]
 fn explicit_unresolved_fragment_cannot_be_promoted_silently() {
     let transcript = transcript_fixture();
     let spans = vec![

@@ -1497,11 +1497,15 @@ formulas while retaining time ranges, confidence, speakers, and unresolved text.
 Current executable evidence now freezes an evidence-preserving reviewed-span
 boundary without choosing a structuring algorithm. Section, Definition, Example,
 Formula, and Unresolved roles remain caller-reviewed classifications linked to
-the complete source transcript. Resolved spans retain original word timing,
-confidence, speaker, and text evidence; explicit unresolved fragments retain
-their text, timing, and confidence and cannot be silently promoted to a
-confident role. Span segmentation, role selection, transcript correction,
-confidence policy, semantic notebook construction, and layout remain open.
+the complete source transcript. Review now rejects resolved-word slices or
+unresolved-fragment references borrowed from a different transcript instead of
+relabeling them under the supplied transcript provenance.
+
+Resolved spans retain original word timing, confidence, speaker, and text
+evidence; explicit unresolved fragments retain their text, timing, and
+confidence and cannot be silently promoted to a confident role. Span
+segmentation, role selection, transcript correction, confidence policy, semantic
+notebook construction, and layout remain open.
 
 ## P7 — Honest single-pen live output
 

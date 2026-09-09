@@ -39,6 +39,8 @@
 //! Reviewed transcript structure without parsing or notebook mutation
 //! authority.
 
+use std::ptr::eq as ptr_eq;
+
 use atrament_transcript_evidence::TranscriptEvidence;
 
 /// Caller-reviewed role for one transcript span.
@@ -100,9 +102,24 @@ pub struct ReviewedTranscriptStructure<
 /// Fail-closed reviewed-structure validation error.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum TranscriptStructureError {
+    /// A resolved-word slice does not borrow from the supplied transcript.
+    ForeignResolvedWords {
+        /// Zero-based reviewed-span index carrying foreign word evidence.
+        span_index: usize,
+    },
+    /// An unresolved fragment does not borrow from the supplied transcript.
+    ForeignUnresolvedFragment {
+        /// Zero-based reviewed-span index carrying foreign fragment evidence.
+        span_index: usize,
+    },
     /// An explicit unresolved source fragment was assigned a confident role.
     UnresolvedFragmentPromotion {
         /// Zero-based reviewed-span index that attempted the promotion.
+        span_index: usize,
+    },
+    /// Source provenance is indistinguishable for zero-sized evidence.
+    UnverifiableSourceEvidence {
+        /// Zero-based reviewed-span index carrying unverifiable evidence.
         span_index: usize,
     },
 }
@@ -111,8 +128,9 @@ pub enum TranscriptStructureError {
 ///
 /// # Errors
 ///
-/// Returns [`TranscriptStructureError::UnresolvedFragmentPromotion`] when an
-/// explicit unresolved source fragment is assigned any role other than
+/// Returns a typed source-membership failure when one reviewed span borrows
+/// evidence from another transcript. Explicit unresolved source fragments
+/// also reject when assigned any role other than
 /// [`ReviewedTranscriptRole::Unresolved`].
 pub fn review_transcript_structure<
     'transcript,
@@ -142,18 +160,72 @@ pub fn review_transcript_structure<
     TranscriptStructureError,
 > {
     for (span_index, span) in spans.iter().enumerate() {
-        if matches!(
-            span.source,
-            ReviewedTranscriptSource::UnresolvedFragment(_)
-        ) && span.role != ReviewedTranscriptRole::Unresolved
-        {
-            return Err(
-                TranscriptStructureError::UnresolvedFragmentPromotion {
-                    span_index,
-                },
-            );
+        match span.source {
+            ReviewedTranscriptSource::ResolvedWords(words) => {
+                if size_of::<Word>() == 0 {
+                    return Err(
+                        TranscriptStructureError::UnverifiableSourceEvidence {
+                            span_index,
+                        },
+                    );
+                }
+                if !resolved_words_belong_to_transcript(
+                    &transcript.words,
+                    words,
+                ) {
+                    return Err(TranscriptStructureError::ForeignResolvedWords {
+                        span_index,
+                    });
+                }
+            },
+            ReviewedTranscriptSource::UnresolvedFragment(fragment) => {
+                if size_of::<UnresolvedFragment>() == 0 {
+                    return Err(
+                        TranscriptStructureError::UnverifiableSourceEvidence {
+                            span_index,
+                        },
+                    );
+                }
+                if !transcript
+                    .unresolved_fragments
+                    .iter()
+                    .any(|candidate| ptr_eq(candidate, fragment))
+                {
+                    return Err(
+                        TranscriptStructureError::ForeignUnresolvedFragment {
+                            span_index,
+                        },
+                    );
+                }
+                if span.role != ReviewedTranscriptRole::Unresolved {
+                    return Err(
+                        TranscriptStructureError::UnresolvedFragmentPromotion {
+                            span_index,
+                        },
+                    );
+                }
+            },
         }
     }
 
     Ok(ReviewedTranscriptStructure { spans, transcript })
+}
+
+fn resolved_words_belong_to_transcript<Word>(
+    transcript_words: &[Word],
+    reviewed_words: &[Word],
+) -> bool {
+    if reviewed_words.is_empty() {
+        return (0..=transcript_words.len()).any(|index| {
+            transcript_words
+                .get(index..index)
+                .is_some_and(|candidate| ptr_eq(candidate, reviewed_words))
+        });
+    }
+    if reviewed_words.len() > transcript_words.len() {
+        return false;
+    }
+    transcript_words
+        .windows(reviewed_words.len())
+        .any(|candidate| ptr_eq(candidate, reviewed_words))
 }
