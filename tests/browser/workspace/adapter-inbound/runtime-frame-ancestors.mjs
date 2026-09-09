@@ -62,7 +62,9 @@ function waitForLine(stream, select, timeoutMs = 15_000) {
         stream.setEncoding("utf8");
         stream.on("data", (chunk) => {
             text += chunk;
-            for (const line of text.split("\n")) {
+            const lines = text.split("\n");
+            text = lines.pop() ?? "";
+            for (const line of lines) {
                 const value = select(line);
                 if (value !== null) {
                     clearTimeout(timer);
@@ -333,14 +335,30 @@ test(
                 stdio: ["ignore", "pipe", "pipe"],
             });
             children.push(runtime);
+            const startupRecords = [];
             const origin = await waitForLine(runtime.stdout, (line) => {
                 try {
                     const record = JSON.parse(line);
+                    startupRecords.push(record);
                     return record.state === "ready" ? record.origin : null;
                 } catch {
                     return null;
                 }
             });
+            assert.deepEqual(
+                startupRecords.map((record) => record.state),
+                ["starting", "listening", "ready"],
+            );
+            assert.equal(startupRecords[0].origin, null);
+            assert.equal(startupRecords[1].origin, origin);
+            assert.equal(startupRecords[2].origin, origin);
+            for (const record of startupRecords) {
+                assert.equal(record.product, "atrament");
+                assert.equal(typeof record.process_version, "string");
+                assert.equal(typeof record.protocol_version, "string");
+                assert.equal("secret" in record, false);
+                assert.equal("session_secret" in record, false);
+            }
 
             let resolveAtramentReferrer;
             const atramentReferrer = new Promise((resolve) => {
