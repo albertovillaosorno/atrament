@@ -1847,6 +1847,13 @@ process forever in `listening`. Recovery text is secret-free and directs a
 restart after browser launch is fixed; it does not present the bare origin as an
 authenticated continuation URL.
 
+A real process fixture now records startup publication rather than inferring it
+from source order: successful launch emits exactly `starting`, `listening`, then
+`ready`, with no origin until the listener exists and no credential field in any
+record. A deterministic failing opener emits only `starting` and `listening`,
+exits nonzero, and keeps both the fragment and bound origin out of recovery
+stderr.
+
 The opener process now receives null stdin, stdout, and stderr. Before that
 change, a synthetic opener that echoed its URL copied the credential-bearing
 fragment into both Atrament output streams; the same probe is now silent. A live
