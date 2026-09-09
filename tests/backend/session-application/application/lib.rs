@@ -632,6 +632,40 @@ fn run_process_fixture_child(mode: &str) {
         Ok(PROCESS_SECOND_ASSET_BYTES),
     );
 
+    let preview_requested = EditableSemanticValue::Text(String::from(
+        "process-private preview",
+    ));
+    let DirectEditChangePreviewOutcome::Predicted {
+        changes,
+        effect,
+        impact_seeds,
+        revision: preview_revision,
+    } = session.preview_direct_edit_changes(
+        revision,
+        span,
+        preview_requested.clone(),
+    ) else {
+        panic!("process fixture direct edit preview must predict change");
+    };
+    assert_eq!(preview_revision, revision);
+    assert_eq!(effect, DirectEditEffectClass::Mutation);
+    assert_eq!(
+        changes,
+        vec![DirectEditSemanticChange {
+            after: preview_requested,
+            before: EditableSemanticValue::Text(String::from(
+                "process-private after",
+            )),
+            family: SemanticCommandFamily::TextContent,
+            target: span,
+        }],
+    );
+    assert!(!impact_seeds.is_empty());
+    assert_eq!(
+        session.accepted_revision().map(|accepted| accepted.revision),
+        Some(revision),
+    );
+
     let measurement = RevisionFlowMeasurement {
         flow,
         revision,

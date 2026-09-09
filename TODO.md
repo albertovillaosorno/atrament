@@ -61,19 +61,21 @@ exactly 128 Redo-only retained byte entries and preserves all 128 identities
 still reachable through older history, including their exact byte sequences.
 
 A process fixture now retains bytes for two semantic assets, commits text and
-asset-reference history, computes current measured pagination, fixed-region
-overflow diagnostics, and layout-only Export preflight, and owns one terminal
-media job with a registered waveform still requiring cleanup. Both orderly and
-forced termination leave a fresh process with no accepted revision, history,
-bytes, or prior media-job authority; the derived results and cleanup bookkeeping
-exist only in the terminated process. Browser edits send complete authenticated
-replacements and no browser persistence API is used.
+asset-reference history, computes a revision-bound direct-edit preview, measured
+pagination, fixed-region overflow diagnostics, and layout-only Export preflight,
+and owns one terminal media job with a registered waveform still requiring
+cleanup. Both orderly and forced termination leave a fresh process with no
+accepted revision, history, bytes, or prior media-job authority; the derived
+results and cleanup bookkeeping exist only in the terminated process. Browser
+edits send complete authenticated replacements and no browser persistence API is
+used.
 
 This evidence establishes raw-byte ownership after a separate ingestion
-boundary; it does not implement media decoding, format validation, clipboard or
-file intake, or temporary conversion files. The task remains open until
-previews, diagnostics, renders, plans, and the remaining media operations join
-the same lifecycle invariant.
+boundary and one semantic direct-edit preview lifecycle; it does not implement
+media decoding, format validation, clipboard or file intake, or temporary
+conversion files. The task remains open until the remaining preview and
+diagnostic producers, renders, plans, and media operations join the same
+lifecycle invariant.
 
 ### TODO - Implement explicit import and export
 
