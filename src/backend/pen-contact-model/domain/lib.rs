@@ -9,13 +9,14 @@
 //
 // Boundary-Contract:
 // - Owns:
-//   - Transport-neutral empirical pen-contact input and fitted-evidence bounds.
+//   - Transport-neutral empirical contact inputs, outputs, and evidence.
 // - Must-Not:
-//   - Choose force units, proxy scales, fitted functions, material outputs,
-//     hidden physical state, rendering, or machine-motion behavior.
+//   - Choose force units, proxy scales, fitted functions, concrete output
+//     units or ranges, hidden physical state, rendering, or machine motion.
 // - Allows:
-//   - Inputs: Caller-owned measurable contact inputs and calibrated evidence.
-//   - Outputs: Typed pressure provenance, fitted evidence, and range admission.
+//   - Inputs: Caller-owned contact inputs, outputs, and calibrated evidence.
+//   - Outputs: Typed pressure, transfer-output, preset-evidence, and admission
+//     values.
 //   - Side effects: None.
 // - Split-When:
 //   - Contact-transfer evaluation or material projection gains executable
@@ -33,7 +34,7 @@
 //   - Out-of-range inputs never silently become calibrated evidence.
 //
 
-//! Honest input and calibration evidence for empirical pen-contact models.
+//! Honest inputs, observable outputs, and evidence for pen-contact models.
 
 /// Pressure evidence admitted by an empirical contact model.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -74,6 +75,63 @@ pub struct ContactModelInput<
     pub pressure: Pressure,
     /// Caller-owned motion speed.
     pub speed: Speed,
+}
+
+/// Observable outputs produced by one empirical contact-transfer evaluation.
+///
+/// The six value types remain caller-owned. This structure does not choose
+/// transfer equations, physical units, calibrated output ranges, or rendering.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ContactModelOutput<
+    AbsorptionOrDryingResponse,
+    Coverage,
+    EdgeDisplacement,
+    Pooling,
+    Starvation,
+    TraceWidth,
+> {
+    /// Caller-owned absorption or drying response.
+    pub absorption_or_drying_response: AbsorptionOrDryingResponse,
+    /// Caller-owned deposited coverage response.
+    pub coverage: Coverage,
+    /// Caller-owned edge displacement response around geometric authority.
+    pub edge_displacement: EdgeDisplacement,
+    /// Caller-owned pooling response.
+    pub pooling: Pooling,
+    /// Caller-owned starvation response.
+    pub starvation: Starvation,
+    /// Caller-owned trace-width response around the unchanged centerline.
+    pub trace_width: TraceWidth,
+}
+
+/// Evidence carried by one empirically validated contact preset.
+///
+/// Collection and identity types remain caller-owned so this value does not
+/// choose media identifiers, condition vocabulary, or numeric range policy.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ContactPresetEvidence<
+    Conditions,
+    ErrorMeasures,
+    FailureModes,
+    InkIdentity,
+    InputRanges,
+    PaperIdentity,
+    PenIdentity,
+> {
+    /// Caller-owned validation conditions.
+    pub conditions: Conditions,
+    /// Caller-owned fitted or observed error measures.
+    pub error_measures: ErrorMeasures,
+    /// Validated ink identity.
+    pub ink_identity: InkIdentity,
+    /// Caller-owned calibrated input-range evidence.
+    pub input_ranges: InputRanges,
+    /// Caller-owned known failure modes.
+    pub known_failure_modes: FailureModes,
+    /// Validated paper identity.
+    pub paper_identity: PaperIdentity,
+    /// Validated pen identity.
+    pub pen_identity: PenIdentity,
 }
 
 /// One calibrated inclusive input range.

@@ -1099,14 +1099,17 @@ material-preset replay key. Required-layer policy, transfer equations, blending,
 texture sampling, color spaces, rasterization, and output formats remain open.
 
 Current executable evidence now freezes transport-neutral empirical
-contact-model
-inputs before material evaluation. Force-calibrated pressure and named
-dimensionless proxies are distinct, fitted parameter evidence retains
-caller-owned
-units, provenance, confidence, error measures, and calibrated input range, and
-out-of-range inputs require explicit extrapolation. Transfer functions, material
-outputs, preset vocabularies, force units, proxy scales, and rendering remain
-open.
+contact-model inputs before material evaluation. Force-calibrated pressure and
+named dimensionless proxies are distinct, fitted parameter evidence retains
+caller-owned units, provenance, confidence, error measures, and calibrated input
+range, and out-of-range inputs require explicit extrapolation.
+
+The same boundary now retains the six accepted observable output families:
+trace width, coverage, starvation, pooling, edge displacement, and absorption or
+drying response. Preset evidence also retains caller-owned pen, ink, paper,
+conditions, calibrated input ranges, error measures, and known failure modes.
+Transfer functions, concrete output units/ranges, preset vocabularies, force
+units, proxy scales, and rendering remain open.
 
 ### TODO - Implement bounded page texture and soft noise
 

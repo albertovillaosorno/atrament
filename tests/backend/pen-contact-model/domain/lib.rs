@@ -14,8 +14,9 @@
 //   - Choose force units, proxy scales, transfer functions, material output,
 //     rendering, or physical-device behavior.
 // - Allows:
-//   - Inputs: Deterministic contact and fitted-evidence fixtures.
-//   - Outputs: Assertions over pressure provenance and calibrated range status.
+//   - Inputs: Deterministic contact, output, and fitted-evidence fixtures.
+//   - Outputs: Assertions over pressure, output vocabulary, preset evidence,
+//     and calibrated range status.
 //   - Side effects: Process-local test allocation only.
 // - Split-When:
 //   - Transfer evaluation or material projection gains independent fixtures.
@@ -33,7 +34,8 @@
 //
 use atrament_pen_contact_model::{
     CalibratedInputRange, CalibratedInputRangeError, ContactInputAdmission,
-    ContactModelInput, FittedParameterEvidence, PressureInput,
+    ContactModelInput, ContactModelOutput, ContactPresetEvidence,
+    FittedParameterEvidence, PressureInput,
     classify_contact_input,
 };
 
@@ -68,6 +70,45 @@ fn contact_input_retains_all_measurable_model_inputs() {
     assert_eq!(input.speed, 18);
     assert_eq!(input.dwell_time, 4);
     assert_eq!(input.contact_state, "down");
+}
+
+#[test]
+fn contact_output_retains_all_accepted_observable_response_families() {
+    let output = ContactModelOutput {
+        absorption_or_drying_response: "drying-12",
+        coverage: 84_u16,
+        edge_displacement: -3_i16,
+        pooling: 7_u16,
+        starvation: 2_u16,
+        trace_width: 410_u16,
+    };
+    assert_eq!(output.trace_width, 410);
+    assert_eq!(output.coverage, 84);
+    assert_eq!(output.starvation, 2);
+    assert_eq!(output.pooling, 7);
+    assert_eq!(output.edge_displacement, -3);
+    assert_eq!(output.absorption_or_drying_response, "drying-12");
+}
+
+#[test]
+fn contact_preset_retains_validation_scope_and_known_failure_evidence(
+) {
+    let evidence = ContactPresetEvidence {
+        conditions: ["room-temperature", "flat-sheet"],
+        error_measures: ["width-rmse", "coverage-rmse"],
+        input_ranges: ["speed:2-30", "pressure:100-900"],
+        ink_identity: "ink-black-4",
+        known_failure_modes: ["glossy-paper"],
+        paper_identity: "paper-ruled-2",
+        pen_identity: "pen-ballpoint-7",
+    };
+    assert_eq!(evidence.pen_identity, "pen-ballpoint-7");
+    assert_eq!(evidence.ink_identity, "ink-black-4");
+    assert_eq!(evidence.paper_identity, "paper-ruled-2");
+    assert_eq!(evidence.conditions.len(), 2);
+    assert_eq!(evidence.input_ranges.len(), 2);
+    assert_eq!(evidence.error_measures.len(), 2);
+    assert_eq!(evidence.known_failure_modes, ["glossy-paper"]);
 }
 
 #[test]
