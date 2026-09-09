@@ -15,7 +15,7 @@ reason = "The Rust session runtime is governed by explicit Clippy policy."
 
 [applicability.clippy-lints]
 enabled = false
-reason = "Pinned nightly Clippy is externally validated until repository-local Rust tool provisioning exists."
+reason = "Repository-local Rust exists, but no RustClippy native validation capability is configured yet."
 
 [applicability.coverage-py]
 enabled = false
@@ -63,7 +63,7 @@ reason = "Stable Cargo is repository-local, but no RustCheck native validation c
 
 [applicability.rustfmt]
 enabled = false
-reason = "Pinned nightly rustfmt is externally validated until repository-local Rust tool provisioning exists."
+reason = "Repository-local Rust exists, but no Rustfmt native validation capability is configured yet."
 
 [applicability.typescript]
 enabled = true
