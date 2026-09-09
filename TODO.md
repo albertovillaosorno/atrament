@@ -1503,7 +1503,9 @@ boundary without choosing a structuring algorithm. Section, Definition, Example,
 Formula, and Unresolved roles remain caller-reviewed classifications linked to
 the complete source transcript. Review now rejects resolved-word slices or
 unresolved-fragment references borrowed from a different transcript instead of
-relabeling them under the supplied transcript provenance.
+relabeling them under the supplied transcript provenance. Empty resolved-word
+slices also fail as unverifiable because they contain no addressable word
+evidence that can prove source membership.
 
 Resolved spans retain original word timing, confidence, speaker, and text
 evidence; explicit unresolved fragments retain their text, timing, and

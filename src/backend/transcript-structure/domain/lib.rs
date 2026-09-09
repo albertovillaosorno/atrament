@@ -162,7 +162,7 @@ pub fn review_transcript_structure<
     for (span_index, span) in spans.iter().enumerate() {
         match span.source {
             ReviewedTranscriptSource::ResolvedWords(words) => {
-                if size_of::<Word>() == 0 {
+                if words.is_empty() || size_of::<Word>() == 0 {
                     return Err(
                         TranscriptStructureError::UnverifiableSourceEvidence {
                             span_index,
@@ -215,13 +215,6 @@ fn resolved_words_belong_to_transcript<Word>(
     transcript_words: &[Word],
     reviewed_words: &[Word],
 ) -> bool {
-    if reviewed_words.is_empty() {
-        return (0..=transcript_words.len()).any(|index| {
-            transcript_words
-                .get(index..index)
-                .is_some_and(|candidate| ptr_eq(candidate, reviewed_words))
-        });
-    }
     if reviewed_words.len() > transcript_words.len() {
         return false;
     }

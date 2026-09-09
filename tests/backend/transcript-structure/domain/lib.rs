@@ -194,6 +194,42 @@ fn reviewed_sources_must_borrow_from_the_supplied_transcript() {
 }
 
 #[test]
+fn empty_resolved_words_cannot_claim_source_provenance() {
+    let transcript = transcript_fixture();
+    let spans = vec![ReviewedTranscriptSpan {
+        role: ReviewedTranscriptRole::Section,
+        source: ReviewedTranscriptSource::ResolvedWords(
+            &transcript.words[1..1],
+        ),
+    }];
+    assert_eq!(
+        review_transcript_structure(&transcript, spans),
+        Err(TranscriptStructureError::UnverifiableSourceEvidence {
+            span_index: 0,
+        }),
+    );
+
+    let empty: Transcript = TranscriptEvidence {
+        engine_identity: "engine/model-a",
+        job_identity: "job-empty",
+        media_identity: "lecture-video-empty",
+        media_kind: TranscriptMediaKind::Video,
+        unresolved_fragments: vec![],
+        words: vec![],
+    };
+    let empty_span = vec![ReviewedTranscriptSpan {
+        role: ReviewedTranscriptRole::Section,
+        source: ReviewedTranscriptSource::ResolvedWords(&empty.words[..]),
+    }];
+    assert_eq!(
+        review_transcript_structure(&empty, empty_span),
+        Err(TranscriptStructureError::UnverifiableSourceEvidence {
+            span_index: 0,
+        }),
+    );
+}
+
+#[test]
 fn zero_sized_evidence_cannot_claim_source_provenance() {
     let transcript = TranscriptEvidence {
         engine_identity: "engine",
