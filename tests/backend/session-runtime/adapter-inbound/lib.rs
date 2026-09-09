@@ -870,6 +870,47 @@ fn generated_authenticated_post_mutations_fail_closed_and_deterministic() {
 }
 
 #[test]
+fn protected_routes_do_not_decode_aliases_or_ignore_queries() {
+    let authorization = format!("Bearer {EXPECTED_SECRET}");
+    let get_cases = [
+        "/api/session/%74ask",
+        "/api/session/task?source=alias",
+    ];
+    for target in get_cases {
+        let request = draft_read_request(
+            target,
+            Some(&authorization),
+            Some(EXPECTED_ORIGIN),
+        );
+        let mut draft = seeded_private_draft();
+        let response = route_with_draft(&request, EXPECTED_HOST, &mut draft);
+        assert_eq!(status_line(&response), "HTTP/1.1 404 Not Found");
+        assert_private_draft_unchanged(&draft);
+    }
+
+    let post_cases = ["/api/%68andshake", "/api/handshake?mode=alias"];
+    for target in post_cases {
+        let request = format!(
+            concat!(
+                "POST {target} HTTP/1.1\r\n",
+                "Host: {EXPECTED_HOST}\r\n",
+                "Authorization: {authorization}\r\n",
+                "Origin: {EXPECTED_ORIGIN}\r\n",
+                "Content-Length: 0\r\n\r\n",
+            ),
+        );
+        let mut draft = seeded_private_draft();
+        let response = route_with_draft(
+            request.as_bytes(),
+            EXPECTED_HOST,
+            &mut draft,
+        );
+        assert_eq!(status_line(&response), "HTTP/1.1 400 Bad Request");
+        assert_private_draft_unchanged(&draft);
+    }
+}
+
+#[test]
 fn unrelated_paths_do_not_expose_runtime_state() {
     let response = route_runtime(
         b"GET /session HTTP/1.1\r\nHost: 127.0.0.1:43123\r\n\r\n",
