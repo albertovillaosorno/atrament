@@ -7,3 +7,10 @@ capability = "rust-check"
 config_files = [".cargo/config.toml", "Cargo.lock", "Cargo.toml"]
 scope_applicability = "selectable"
 tool = "rust_stable_cargo"
+
+[gate.rust_nightly_clippy]
+args = ["--no-deps", "--locked", "--workspace", "--all-targets", "--all-features", "--", "-D", "warnings"]
+capability = "rust-clippy"
+config_files = [".jig/lang/rust/clippy.toml", "Cargo.lock", "Cargo.toml"]
+scope_applicability = "selectable"
+tool = "rust_nightly_cargo_clippy"

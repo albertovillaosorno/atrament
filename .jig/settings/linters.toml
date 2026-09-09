@@ -14,8 +14,8 @@ enabled = true
 reason = "The Rust session runtime is governed by explicit Clippy policy."
 
 [applicability.clippy-lints]
-enabled = false
-reason = "Repository-local Rust exists, but no RustClippy native validation capability is configured yet."
+enabled = true
+reason = "Pinned nightly Clippy runs through the configured native validation gate."
 
 [applicability.coverage-py]
 enabled = false
