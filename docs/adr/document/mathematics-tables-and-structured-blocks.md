@@ -71,7 +71,8 @@ standard and variant Greek control-sequence notation including italic capital
 Greek forms, complete AMS ordinary, letter-like, geometric, and standalone
 special symbols including the large box/diamond aliases, checkmark, registered
 mark, maltese cross, and yen sign, common named and delimiter symbols including
-bracket, backslash, AMS corner delimiters, paired vertical-bar spellings,
+bracket, backslash, AMS corner delimiters and fixed symbol aliases, paired
+vertical-bar spellings,
 parallel control-symbol,
 foundational set/logic forms, and the core plain-TeX surd glyph,
 real/imaginary-part and derivative-prime symbols, geometry/proof and

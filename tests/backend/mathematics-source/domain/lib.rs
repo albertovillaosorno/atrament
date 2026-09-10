@@ -639,7 +639,7 @@ fn calculus_commands_compose_with_scripts_without_rewriting() {
 fn named_symbol_vocabulary_is_supported_without_rewriting() {
     for source in [
         r"\Bbbk", r"\Box", r"\Bumpeq", r"\Cap", r"\Cup", r"\Delta",
-        r"\Diamond", r"\Downarrow", r"\Finv",
+        r"\Diamond", r"\Doteq", r"\Downarrow", r"\Finv",
         r"\Game", r"\Gamma",
         r"\Im", r"\Lambda", r"\Leftarrow",
         r"\Leftrightarrow", r"\Lleftarrow", r"\Longleftarrow",
@@ -677,7 +677,7 @@ fn named_symbol_vocabulary_is_supported_without_rewriting() {
         r"\ddagger", r"\ddots", r"\delta", r"\diagdown", r"\diagup",
         r"\diamond", r"\diamondsuit", r"\digamma", r"\div", r"\divideontimes",
         r"\doteq", r"\doteqdot", r"\dotplus",
-        r"\dots", r"\doublebarwedge",
+        r"\dots", r"\doublebarwedge", r"\doublecap", r"\doublecup",
         r"\downarrow", r"\downdownarrows", r"\downharpoonleft",
         r"\downharpoonright", r"\ell",
         r"\emptyset",
@@ -687,7 +687,8 @@ fn named_symbol_vocabulary_is_supported_without_rewriting() {
         r"\frown",
         r"\gamma",
         r"\ge", r"\geq", r"\geqq",
-        r"\geqslant", r"\gets", r"\gg", r"\ggg", r"\gimel", r"\gnapprox",
+        r"\geqslant", r"\gets", r"\gg", r"\ggg", r"\gggtr", r"\gimel",
+        r"\gnapprox",
         r"\gneq", r"\gneqq", r"\gnsim", r"\gtrapprox",
         r"\gtrdot",
         r"\gtreqless", r"\gtreqqless", r"\gtrless", r"\gtrsim", r"\gvertneqq",
@@ -709,7 +710,7 @@ fn named_symbol_vocabulary_is_supported_without_rewriting() {
         r"\lessapprox",
         r"\lessdot", r"\lesseqgtr", r"\lesseqqgtr", r"\lessgtr", r"\lesssim",
         r"\lfloor",
-        r"\ll", r"\llcorner", r"\lll", r"\lnapprox", r"\lneq",
+        r"\ll", r"\llcorner", r"\lll", r"\llless", r"\lnapprox", r"\lneq",
         r"\lneqq", r"\lnot", r"\lnsim",
         r"\longleftarrow", r"\longleftrightarrow",
         r"\longmapsto",
@@ -739,7 +740,7 @@ fn named_symbol_vocabulary_is_supported_without_rewriting() {
         r"\precneqq", r"\precnsim", r"\precsim",
         r"\prime", r"\propto", r"\psi", r"\rVert", r"\rangle", r"\rbrace",
         r"\rbrack",
-        r"\rceil", r"\rfloor",
+        r"\rceil", r"\restriction", r"\rfloor",
         r"\rho", r"\rightarrow", r"\rightarrowtail", r"\rightharpoondown",
         r"\rightharpoonup", r"\rightleftarrows",
         r"\rightleftharpoons", r"\rightrightarrows", r"\rightsquigarrow",
@@ -1437,6 +1438,29 @@ fn ams_special_symbols_and_large_aliases_compose_without_rewriting() {
     );
     let analyzed = analyze(source, FormulaMode::Display)
         .expect("AMS special-symbol expression");
+    assert!(analyzed.is_supported());
+    assert_eq!(reconstructed(&analyzed), source);
+    assert_eq!(
+        analyzed
+            .tokens
+            .iter()
+            .filter(|token| {
+                token.kind
+                    == MathTokenKind::Command(SupportedCommand::NamedSymbol)
+            })
+            .count(),
+        6,
+    );
+}
+
+#[test]
+fn ams_symbol_aliases_compose_without_rewriting() {
+    let source = concat!(
+        r"\restriction + \Doteq + \doublecup + \doublecap + ",
+        r"\llless + \gggtr",
+    );
+    let analyzed = analyze(source, FormulaMode::Display)
+        .expect("AMS symbol-alias expression");
     assert!(analyzed.is_supported());
     assert_eq!(reconstructed(&analyzed), source);
     assert_eq!(
