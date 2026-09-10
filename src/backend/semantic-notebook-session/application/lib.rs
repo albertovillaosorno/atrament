@@ -1604,11 +1604,7 @@ impl SemanticNotebookHistory for SemanticNotebookSessionService {
                 requested: base,
             };
         }
-        let source_is_empty = match direction {
-            HistoryDirection::Redo => self.redo_notebooks.is_empty(),
-            HistoryDirection::Undo => self.undo_notebooks.is_empty(),
-        };
-        if source_is_empty {
+        if self.history_source_is_empty(direction) {
             return HistoryTraversalOutcome::Boundary {
                 direction,
                 revision: current.id,
@@ -1817,6 +1813,15 @@ impl SemanticNotebookSessionService {
         assets
     }
 
+    const fn history_source_is_empty(
+        &self,
+        direction: HistoryDirection,
+    ) -> bool {
+        match direction {
+            HistoryDirection::Redo => self.redo_notebooks.is_empty(),
+            HistoryDirection::Undo => self.undo_notebooks.is_empty(),
+        }
+    }
 }
 
 fn accept_asset(
