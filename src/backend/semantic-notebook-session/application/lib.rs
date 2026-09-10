@@ -92,6 +92,20 @@ use atrament_semantic_notebook_port::{
 
 type DirectEditMaterialKey = (AcceptedIdentity, SemanticCommandFamily);
 
+type AcceptedIdentityMap = BTreeMap<CandidateIdentity, AcceptedIdentity>;
+type IdentityAllocationResult = Result<
+    (AcceptedIdentityMap, Vec<IdentityMapping>),
+    IdentityExhausted,
+>;
+type AcceptedBlocksResult =
+    Result<Vec<Block<AcceptedIdentity>>, CandidateGraphError>;
+type AcceptedSpansResult =
+    Result<Vec<InlineSpan<AcceptedIdentity>>, CandidateGraphError>;
+type DirectEditAncestorScope =
+    (Option<AcceptedIdentity>, AcceptedIdentity, AcceptedIdentity);
+type DirectEditChangeIndexMap =
+    BTreeMap<DirectEditMaterialKey, (usize, usize)>;
+
 #[derive(Default)]
 struct DirectEditBatchIndex {
     impacts: BTreeMap<DirectEditMaterialKey, DirectEditImpactScope>,
@@ -1702,13 +1716,7 @@ impl SemanticNotebookSessionService {
     fn allocate_mapping(
         &self,
         owners: &[CandidateIdentity],
-    ) -> Result<
-        (
-            BTreeMap<CandidateIdentity, AcceptedIdentity>,
-            Vec<IdentityMapping>,
-        ),
-        IdentityExhausted,
-    > {
+    ) -> IdentityAllocationResult {
         let mut identity_map = BTreeMap::new();
         let mut mapping = Vec::with_capacity(owners.len());
         for candidate in owners {
@@ -1946,7 +1954,7 @@ fn accept_block_content(
 fn accept_blocks(
     blocks: Vec<Block<CandidateIdentity>>,
     identities: &BTreeMap<CandidateIdentity, AcceptedIdentity>,
-) -> Result<Vec<Block<AcceptedIdentity>>, CandidateGraphError> {
+) -> AcceptedBlocksResult {
     blocks
         .into_iter()
         .map(|block| accept_block(block, identities))
@@ -2116,7 +2124,7 @@ fn accept_provenance(
 fn accept_spans(
     spans: Vec<InlineSpan<CandidateIdentity>>,
     identities: &BTreeMap<CandidateIdentity, AcceptedIdentity>,
-) -> Result<Vec<InlineSpan<AcceptedIdentity>>, CandidateGraphError> {
+) -> AcceptedSpansResult {
     spans
         .into_iter()
         .map(|span| {
@@ -3232,7 +3240,7 @@ where
             commands.len(),
         );
     let mut changed_targets =
-        BTreeMap::<DirectEditMaterialKey, (usize, usize)>::new();
+        DirectEditChangeIndexMap::new();
     let mut remaining = commands.into_iter();
     while let Some(command) = remaining.next() {
         let target = command.target;
@@ -3449,7 +3457,7 @@ fn direct_edit_structured_scope(
 fn direct_edit_ancestor_scope(
     notebook: &Notebook<AcceptedIdentity>,
     target: AcceptedIdentity,
-) -> Option<(Option<AcceptedIdentity>, AcceptedIdentity, AcceptedIdentity)> {
+) -> Option<DirectEditAncestorScope> {
     let path = semantic_identity_path(notebook, target)?;
     let mut block = None;
     for entry in path {
@@ -3742,7 +3750,7 @@ fn restore_direct_edit_batch_material(
 }
 
 fn record_direct_edit_batch_change_index(
-    aggregate: &mut BTreeMap<DirectEditMaterialKey, (usize, usize)>,
+    aggregate: &mut DirectEditChangeIndexMap,
     index: usize,
     key: DirectEditMaterialKey,
 ) {
@@ -3755,7 +3763,7 @@ fn record_direct_edit_batch_change_index(
 
 fn collect_direct_edit_batch_changes<CommandIdentity>(
     evaluated: &[DirectEditBatchCommandPrediction<CommandIdentity>],
-    aggregate: BTreeMap<DirectEditMaterialKey, (usize, usize)>,
+    aggregate: DirectEditChangeIndexMap,
 ) -> Vec<DirectEditSemanticChange> {
     let mut ordered = aggregate.into_iter().collect::<Vec<_>>();
     ordered.sort_by_key(|(_, (first, _))| *first);
