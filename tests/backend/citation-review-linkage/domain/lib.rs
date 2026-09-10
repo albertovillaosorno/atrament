@@ -33,24 +33,30 @@ use atrament_citation_review_linkage::{
     CitationClaimLink, CitationReviewLinkage, CitationReviewLinkageError,
     CitationSource, ClaimProvenance, validate_citation_review_linkage,
 };
-use atrament_semantic_notebook::ProvenanceKind;
+use atrament_semantic_notebook::{Provenance, ProvenanceKind};
 
 type Claim = ClaimProvenance<u8, u8>;
 type Link = CitationClaimLink<u8, u8, u8>;
 type Source = CitationSource<&'static str, u8>;
-type Review = CitationReviewLinkage<Claim, Link, Source>;
+type Review = CitationReviewLinkage<Claim, Link, Provenance<u8>, Source>;
+
+fn provenance(id: u8, kind: ProvenanceKind) -> Provenance<u8> {
+    Provenance {
+        id,
+        kind,
+        reference: None,
+    }
+}
 
 fn review() -> Review {
     CitationReviewLinkage {
         claims: vec![
             ClaimProvenance {
                 claim_identity: 1,
-                kind: ProvenanceKind::Cited,
                 provenance_identity: 11,
             },
             ClaimProvenance {
                 claim_identity: 2,
-                kind: ProvenanceKind::Derived,
                 provenance_identity: 12,
             },
         ],
@@ -59,6 +65,10 @@ fn review() -> Review {
             provenance_identity: 11,
             source_identity: 21,
         }],
+        provenance: vec![
+            provenance(11, ProvenanceKind::Cited),
+            provenance(12, ProvenanceKind::Derived),
+        ],
         sources: vec![CitationSource {
             metadata: "doi:10.1000/example; title=Example Source",
             source_identity: 21,
@@ -72,6 +82,7 @@ fn cited_claim_resolves_through_exact_provenance_to_reviewable_source() {
     assert_eq!(validate_citation_review_linkage(&review), Ok(()));
     assert_eq!(review.links[0].claim_identity, 1);
     assert_eq!(review.links[0].provenance_identity, 11);
+    assert_eq!(review.provenance[0].kind, ProvenanceKind::Cited);
     assert_eq!(review.links[0].source_identity, 21);
     assert_eq!(
         review.sources[0].metadata,
@@ -80,7 +91,16 @@ fn cited_claim_resolves_through_exact_provenance_to_reviewable_source() {
 }
 
 #[test]
-fn unknown_and_mismatched_link_identities_fail_in_documented_order() {
+fn unknown_and_mismatched_identities_fail_in_documented_order() {
+    let mut unknown_assignment = review();
+    unknown_assignment.claims[0].provenance_identity = 99;
+    assert_eq!(
+        validate_citation_review_linkage(&unknown_assignment),
+        Err(CitationReviewLinkageError::UnknownProvenance {
+            provenance: 99,
+        }),
+    );
+
     let mut unknown_claim = review();
     unknown_claim.links[0].claim_identity = 9;
     assert_eq!(
@@ -89,7 +109,7 @@ fn unknown_and_mismatched_link_identities_fail_in_documented_order() {
     );
 
     let mut wrong_provenance = review();
-    wrong_provenance.links[0].provenance_identity = 99;
+    wrong_provenance.links[0].provenance_identity = 12;
     assert_eq!(
         validate_citation_review_linkage(&wrong_provenance),
         Err(CitationReviewLinkageError::ProvenanceIdentityMismatch {
@@ -106,7 +126,7 @@ fn unknown_and_mismatched_link_identities_fail_in_documented_order() {
 }
 
 #[test]
-fn only_cited_claims_may_own_citation_links_and_each_cited_claim_needs_one() {
+fn only_cited_provenance_records_admit_links_and_each_cited_claim_needs_one() {
     let mut non_cited = review();
     non_cited.links[0].claim_identity = 2;
     non_cited.links[0].provenance_identity = 12;
@@ -124,12 +144,23 @@ fn only_cited_claims_may_own_citation_links_and_each_cited_claim_needs_one() {
 }
 
 #[test]
-fn duplicate_claim_source_and_exact_link_are_rejected_deterministically() {
+fn duplicate_claim_provenance_source_and_link_reject_deterministically() {
     let mut duplicate_claim = review();
     duplicate_claim.claims.push(duplicate_claim.claims[0].clone());
     assert_eq!(
         validate_citation_review_linkage(&duplicate_claim),
         Err(CitationReviewLinkageError::DuplicateClaim { claim: 1 }),
+    );
+
+    let mut duplicate_provenance = review();
+    duplicate_provenance
+        .provenance
+        .push(duplicate_provenance.provenance[0].clone());
+    assert_eq!(
+        validate_citation_review_linkage(&duplicate_provenance),
+        Err(CitationReviewLinkageError::DuplicateProvenance {
+            provenance: 11,
+        }),
     );
 
     let mut duplicate_source = review();
@@ -182,7 +213,6 @@ fn compact_provenance_link_state_space_matches_structural_oracle() {
                     let review = CitationReviewLinkage {
                         claims: vec![ClaimProvenance {
                             claim_identity: 1,
-                            kind,
                             provenance_identity: 11,
                         }],
                         links: link_present
@@ -197,6 +227,7 @@ fn compact_provenance_link_state_space_matches_structural_oracle() {
                             })
                             .into_iter()
                             .collect(),
+                        provenance: vec![provenance(11, kind)],
                         sources: source_present
                             .then(|| CitationSource {
                                 metadata: "source-21",

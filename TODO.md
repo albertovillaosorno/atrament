@@ -1496,11 +1496,15 @@ identities; they preserve authored content and remain atomic with other generic
 families on the same target. Undo restores the prior linkage.
 
 A transport-neutral citation-review linkage now additionally requires every
-`Cited` claim in a review set to resolve through its exact assigned provenance
-identity to at least one exact source-metadata identity. Links to unknown
+cited claim in a review set to resolve through its exact assigned revision-owned
+`Provenance` record and from there to at least one exact source-metadata
+identity.
+The validator derives `Cited` status from that record rather than a copied claim
+field. Links to unknown
 claims,
-unknown sources, mismatched provenance records, non-cited claims, duplicate
-claims/sources, or duplicate exact claim/source relationships reject with typed
+unknown sources, unknown or duplicated provenance records, mismatched
+provenance links, non-cited claims, duplicate claims/sources, or duplicate exact
+claim/source relationships reject with typed
 structural errors. Multiple distinct sources for one cited claim remain valid.
 
 A 32-case compact oracle crosses all four semantic provenance kinds with link

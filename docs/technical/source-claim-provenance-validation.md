@@ -24,8 +24,10 @@ source-status vocabulary.
 
 The boundary retains three caller-owned inventories:
 
-- claim provenance records identifying one claim, its assigned provenance
-  identity, and the existing semantic provenance kind;
+- claim provenance assignments identifying one claim and its exact assigned
+  semantic provenance identity;
+- revision-owned semantic `Provenance` records whose existing kind is the only
+  authority for whether an assigned claim is `Cited`;
 - source records identifying exact caller-owned metadata for human or agent
   review; and
 - citation links identifying the exact claim, assigned provenance record, and
@@ -38,19 +40,21 @@ caller without making this validator the authority for its syntax or quality.
 ## Contract
 
 `validate_citation_review_linkage` rejects deterministic structural ambiguity.
-Claim identities and source identities must be unique in their inventories.
-Every citation link must resolve to a known claim, must name that claim's exact
-assigned provenance identity, must resolve to known source metadata, and may
-only target a claim whose semantic provenance kind is `Cited`.
+Claim, provenance, and source identities must be unique in their inventories.
+Every claim assignment must resolve to a revision-owned semantic `Provenance`
+record. Every citation link must resolve to a known claim, must name that
+claim's exact assigned provenance identity, must resolve to known source
+metadata, and may only target a claim whose resolved provenance kind is `Cited`.
 
 An exact claim/source relationship may appear only once. One cited claim may
 still link to multiple distinct sources. After link validation, every `Cited`
 claim must own at least one valid citation link.
 
-The failure order is part of executable evidence: duplicate claim inventory,
-duplicate source inventory, link-order identity/kind/duplicate checks, then
-claim-order missing-link checks. No invalid set is reordered or repaired by the
-validator.
+The failure order is part of executable evidence: duplicate claim,
+provenance, and source inventories; claim-order provenance resolution;
+link-order
+identity/kind/duplicate checks; then claim-order missing-link checks. No invalid
+set is reordered or repaired by the validator.
 
 ### Relationship to semantic notebook provenance
 
@@ -80,7 +84,9 @@ cross-adapter projection where those capabilities become executable.
 The present boundary fails structurally when:
 
 - a claim identity appears more than once;
+- a provenance identity appears more than once;
 - a source metadata identity appears more than once;
+- a claim assignment names an unknown semantic provenance record;
 - a link names an unknown claim;
 - a link names a provenance identity other than the one assigned to its claim;
 - a link names unknown source metadata;
@@ -97,7 +103,8 @@ according to any citation style.
 
 `tests/backend/citation-review-linkage/domain/lib.rs` proves exact claim,
 provenance, source, and metadata retention; unknown and mismatched identities;
-non-cited and missing-link rejection; duplicate inventory/link rejection; and
+resolved provenance-kind authority; non-cited and missing-link rejection;
+duplicate inventory/link rejection; and
 multiple distinct sources for one cited claim.
 
 A 32-case compact oracle crosses all four semantic provenance kinds with link

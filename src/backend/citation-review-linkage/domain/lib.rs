@@ -14,8 +14,8 @@
 //   - Fetch sources, infer claims, parse citations, choose citation formats,
 //     judge source quality, mutate notebooks, or define transaction provenance.
 // - Allows:
-//   - Inputs: Caller-owned claim/provenance identities, source metadata, and
-//     citation links using the semantic notebook provenance-kind authority.
+//   - Inputs: Caller-owned claim/provenance identities, revision-owned semantic
+//     provenance records, source metadata, and exact citation links.
 //   - Outputs: Deterministic structural review-link validation.
 //   - Side effects: None.
 // - Split-When:
@@ -25,7 +25,7 @@
 // - Summary:
 //   - Requires cited claims to resolve to exact reviewable source metadata.
 // - Description:
-//   - Validates identities and links without interpreting source content.
+//   - Resolves source status from semantic provenance instead of caller copies.
 // - Usage:
 //   - Validate candidate citation linkage before review or acceptance.
 // - Defaults:
@@ -34,26 +34,15 @@
 
 //! Citation linkage validation independent of source retrieval or formatting.
 
-use atrament_semantic_notebook::ProvenanceKind;
+use atrament_semantic_notebook::{Provenance, ProvenanceKind};
 
 /// One claim and the revision-owned provenance record assigned to it.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ClaimProvenance<ClaimIdentity, ProvenanceIdentity> {
     /// Stable or candidate-local claim identity.
     pub claim_identity: ClaimIdentity,
-    /// Provenance category already owned by semantic-notebook authority.
-    pub kind: ProvenanceKind,
     /// Exact provenance record identity assigned to this claim.
     pub provenance_identity: ProvenanceIdentity,
-}
-
-/// Reviewable source metadata retained behind one exact source identity.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct CitationSource<Metadata, SourceIdentity> {
-    /// Caller-owned source metadata presented for review.
-    pub metadata: Metadata,
-    /// Exact source identity referenced by citation links.
-    pub source_identity: SourceIdentity,
 }
 
 /// One exact citation relationship from claim/provenance to source metadata.
@@ -73,18 +62,33 @@ pub struct CitationClaimLink<
 
 /// Complete caller-owned citation review linkage before UI presentation.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct CitationReviewLinkage<Claim, Link, Source> {
-    /// Claims whose provenance state participates in this review set.
+pub struct CitationReviewLinkage<Claim, Link, ProvenanceRecord, Source> {
+    /// Claims whose provenance assignment participates in this review set.
     pub claims: Vec<Claim>,
     /// Citation links in caller-owned deterministic order.
     pub links: Vec<Link>,
+    /// Revision-owned semantic provenance records used by claim assignments.
+    pub provenance: Vec<ProvenanceRecord>,
     /// Reviewable source metadata in caller-owned deterministic order.
     pub sources: Vec<Source>,
 }
 
+/// Reviewable source metadata retained behind one exact source identity.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct CitationSource<Metadata, SourceIdentity> {
+    /// Caller-owned source metadata presented for review.
+    pub metadata: Metadata,
+    /// Exact source identity referenced by citation links.
+    pub source_identity: SourceIdentity,
+}
+
 /// Structural failure in one citation review linkage set.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub enum CitationReviewLinkageError<ClaimIdentity, SourceIdentity> {
+pub enum CitationReviewLinkageError<
+    ClaimIdentity,
+    ProvenanceIdentity,
+    SourceIdentity,
+> {
     /// The same exact claim/source relationship appears more than once.
     DuplicateCitationLink {
         /// Repeated claim identity.
@@ -96,6 +100,11 @@ pub enum CitationReviewLinkageError<ClaimIdentity, SourceIdentity> {
     DuplicateClaim {
         /// Repeated claim identity.
         claim: ClaimIdentity,
+    },
+    /// The same provenance identity appears more than once.
+    DuplicateProvenance {
+        /// Repeated semantic provenance identity.
+        provenance: ProvenanceIdentity,
     },
     /// The same source identity appears more than once in source metadata.
     DuplicateSource {
@@ -109,7 +118,7 @@ pub enum CitationReviewLinkageError<ClaimIdentity, SourceIdentity> {
     },
     /// A citation link targets a claim that is not marked cited.
     NonCitedClaimLink {
-        /// Linked claim whose provenance kind is not `Cited`.
+        /// Linked claim whose resolved provenance kind is not `Cited`.
         claim: ClaimIdentity,
     },
     /// A citation link disagrees with the claim's assigned provenance identity.
@@ -121,6 +130,11 @@ pub enum CitationReviewLinkageError<ClaimIdentity, SourceIdentity> {
     UnknownClaim {
         /// Missing claim identity.
         claim: ClaimIdentity,
+    },
+    /// A claim assignment names no revision-owned semantic provenance record.
+    UnknownProvenance {
+        /// Missing provenance identity.
+        provenance: ProvenanceIdentity,
     },
     /// A citation link names source metadata absent from the review inventory.
     UnknownSource {
@@ -138,14 +152,25 @@ pub type TypedCitationReviewLinkage<
 > = CitationReviewLinkage<
     ClaimProvenance<ClaimIdentity, ProvenanceIdentity>,
     CitationClaimLink<ClaimIdentity, ProvenanceIdentity, SourceIdentity>,
+    Provenance<ProvenanceIdentity>,
     CitationSource<Metadata, SourceIdentity>,
 >;
 
+type CitationReviewResult<ClaimIdentity, ProvenanceIdentity, SourceIdentity> =
+    Result<
+        (),
+        CitationReviewLinkageError<
+            ClaimIdentity,
+            ProvenanceIdentity,
+            SourceIdentity,
+        >,
+    >;
+
 /// Validate exact citation-to-claim-to-source metadata relationships.
 ///
-/// Error precedence is duplicate claims, duplicate sources, then link-order
-/// claim/provenance/source/kind/duplicate checks, then claim-order missing
-/// links.
+/// Error precedence is duplicate claim/provenance/source inventories, then
+/// claim-order provenance resolution, link-order identity/kind/duplicate
+/// checks, then claim-order missing links.
 ///
 /// # Errors
 ///
@@ -162,14 +187,39 @@ pub fn validate_citation_review_linkage<
         ProvenanceIdentity,
         SourceIdentity,
     >,
-) -> Result<(), CitationReviewLinkageError<ClaimIdentity, SourceIdentity>>
+) -> CitationReviewResult<ClaimIdentity, ProvenanceIdentity, SourceIdentity>
 where
     ClaimIdentity: Clone + Eq,
-    ProvenanceIdentity: Eq,
+    ProvenanceIdentity: Clone + Eq,
+    SourceIdentity: Clone + Eq,
+{
+    validate_inventories_and_assignments(review)?;
+    validate_links(review)?;
+    validate_required_links(review)
+}
+
+fn validate_inventories_and_assignments<
+    ClaimIdentity,
+    Metadata,
+    ProvenanceIdentity,
+    SourceIdentity,
+>(
+    review: &TypedCitationReviewLinkage<
+        ClaimIdentity,
+        Metadata,
+        ProvenanceIdentity,
+        SourceIdentity,
+    >,
+) -> CitationReviewResult<ClaimIdentity, ProvenanceIdentity, SourceIdentity>
+where
+    ClaimIdentity: Clone + Eq,
+    ProvenanceIdentity: Clone + Eq,
     SourceIdentity: Clone + Eq,
 {
     for (index, claim) in review.claims.iter().enumerate() {
-        if review.claims.iter()
+        if review
+            .claims
+            .iter()
             .take(index)
             .any(|prior| prior.claim_identity == claim.claim_identity)
         {
@@ -178,8 +228,22 @@ where
             });
         }
     }
+    for (index, provenance) in review.provenance.iter().enumerate() {
+        if review
+            .provenance
+            .iter()
+            .take(index)
+            .any(|prior| prior.id == provenance.id)
+        {
+            return Err(CitationReviewLinkageError::DuplicateProvenance {
+                provenance: provenance.id.clone(),
+            });
+        }
+    }
     for (index, source) in review.sources.iter().enumerate() {
-        if review.sources.iter()
+        if review
+            .sources
+            .iter()
             .take(index)
             .any(|prior| prior.source_identity == source.source_identity)
         {
@@ -188,6 +252,33 @@ where
             });
         }
     }
+    for claim in &review.claims {
+        if !review
+            .provenance
+            .iter()
+            .any(|provenance| provenance.id == claim.provenance_identity)
+        {
+            return Err(CitationReviewLinkageError::UnknownProvenance {
+                provenance: claim.provenance_identity.clone(),
+            });
+        }
+    }
+    Ok(())
+}
+
+fn validate_links<ClaimIdentity, Metadata, ProvenanceIdentity, SourceIdentity>(
+    review: &TypedCitationReviewLinkage<
+        ClaimIdentity,
+        Metadata,
+        ProvenanceIdentity,
+        SourceIdentity,
+    >,
+) -> CitationReviewResult<ClaimIdentity, ProvenanceIdentity, SourceIdentity>
+where
+    ClaimIdentity: Clone + Eq,
+    ProvenanceIdentity: Clone + Eq,
+    SourceIdentity: Clone + Eq,
+{
     for (index, link) in review.links.iter().enumerate() {
         let Some(claim) = review
             .claims
@@ -212,7 +303,14 @@ where
                 source: link.source_identity.clone(),
             });
         }
-        if claim.kind != ProvenanceKind::Cited {
+        let provenance = review
+            .provenance
+            .iter()
+            .find(|provenance| provenance.id == claim.provenance_identity);
+        if !matches!(
+            provenance.map(|record| record.kind),
+            Some(ProvenanceKind::Cited)
+        ) {
             return Err(CitationReviewLinkageError::NonCitedClaimLink {
                 claim: link.claim_identity.clone(),
             });
@@ -227,8 +325,34 @@ where
             });
         }
     }
+    Ok(())
+}
+
+fn validate_required_links<
+    ClaimIdentity,
+    Metadata,
+    ProvenanceIdentity,
+    SourceIdentity,
+>(
+    review: &TypedCitationReviewLinkage<
+        ClaimIdentity,
+        Metadata,
+        ProvenanceIdentity,
+        SourceIdentity,
+    >,
+) -> CitationReviewResult<ClaimIdentity, ProvenanceIdentity, SourceIdentity>
+where
+    ClaimIdentity: Clone + Eq,
+    ProvenanceIdentity: Eq,
+    SourceIdentity: Clone + Eq,
+{
     for claim in &review.claims {
-        if claim.kind == ProvenanceKind::Cited
+        let cited = review
+            .provenance
+            .iter()
+            .find(|provenance| provenance.id == claim.provenance_identity)
+            .is_some_and(|provenance| provenance.kind == ProvenanceKind::Cited);
+        if cited
             && !review
                 .links
                 .iter()
