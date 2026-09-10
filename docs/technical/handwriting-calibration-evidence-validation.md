@@ -154,23 +154,30 @@ how reference marks are represented geometrically.
 
 ### Bounded variation remains downstream evidence
 
-`VariationParameter` can later retain a minimum, central tendency, maximum,
-caller-owned units, distribution metadata, correlation groups, context rules,
-and one explicit variation scale. Each minimum or maximum bound is marked
-`Observed` or `Authorized`.
+`VariationParameter` retains a minimum, central tendency, maximum, caller-owned
+units, distribution metadata, correlation groups, context rules, and one
+explicit variation scale. Each minimum or maximum bound is marked `Observed` or
+`Authorized`.
 
-`VariationParameter::validate` only enforces numeric ordering of the
-caller-owned bounds and central tendency. It does not infer a distribution, fit
-a statistical
-model, choose correlation semantics, or turn an authorized creative limit into
-an observation.
+`VariationParameter::validate` only enforces ordering of the caller-owned bounds
+and central tendency. Individual caller-produced samples validate against the
+inclusive envelope without choosing how they were generated.
 
 `VariationReplayKey` retains the document seed plus stable semantic identity
-required by later deterministic sampling. A compact integer oracle independently
-cross-checks all 343 minimum/central/maximum triples in `[-3, 3]` and all 756
-sample values in `[-4, 4]` for valid envelopes, reaching every typed parameter
-and sample validation outcome. Sampling itself remains outside the calibration
-and variation domains.
+required by deterministic sampling. Repeated observations with the same exact
+replay key must retain the same sampled value. A replay disagreement identifies
+the first conflicting observation and its earliest contradictory predecessor;
+changing either seed or semantic identity produces a distinct replay key.
+
+`validate_variation_sample_set` composes the structural checks in deterministic
+order: parameter validity, caller-order sample bounds, then replay consistency.
+Compact evidence covers 341 replay sequences and 675 complete two-sample sets in
+addition to the existing 1,099 parameter/bound cases.
+
+The variation domain still does not infer a distribution, fit a statistical
+model, choose correlation semantics or an RNG, interpret context rules, or turn
+an authorized creative limit into an observation. Sampling itself remains
+outside the calibration and variation domains.
 
 ## Failure Modes
 
@@ -211,9 +218,9 @@ Current checked-in regression evidence includes:
   duplicate-prompt rejection, and every compact progress mask through eight
   prompts; and
 - `tests/backend/handwriting-variation/domain/lib.rs`, which pins bound
-  evidence,
-  envelope ordering, metadata preservation, variation scale, and deterministic
-  replay inputs without sampling.
+  evidence, envelope ordering, metadata preservation, variation scale, sample
+  bounds, exact replay consistency, and complete sample-set validation without
+  implementing sampling.
 
 Before extending calibration, preserve these boundaries:
 
