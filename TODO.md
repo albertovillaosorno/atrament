@@ -271,14 +271,12 @@ supports read-only behavior-version drift checks. It deliberately advertises no
 command protocol, normalizer, command context, Validate, Apply, rebatching, or
 numeric command/context limits yet.
 
-Aggregate command behavior and typed-result behavior are version 89 after
-admitting the remaining standalone AMS special symbols and large box/diamond
-aliases as exact source. Asset reference, Ordering and grouping, and Text
-content retain family behavior version 1; Provenance and Style role are
-version 2,
-Document constraint is version 3, and Structured content is version 77. The
-immediately previous aggregate version 88 rejects instead of being
-reinterpreted.
+Aggregate command behavior and typed-result behavior are version 90 after
+admitting the AMS corner delimiters as exact source. Asset reference, Ordering
+and grouping, and Text content retain family behavior version 1; Provenance and
+Style role are version 2, Document constraint is version 3, and Structured
+content is version 78. The immediately previous aggregate version 89 rejects
+instead of being reinterpreted.
 
 A version-bound single-target proposal combines capability, exact local
 preconditions, and direct-edit simulation read-only. All five dedicated direct
@@ -707,7 +705,8 @@ standard and variant Greek control-sequence notation including italic capital
 Greek forms, complete AMS ordinary, letter-like, geometric, and standalone
 special symbols including the large box/diamond aliases, checkmark, registered
 mark, maltese cross, and yen sign, common named and delimiter symbols including
-bracket, backslash, paired vertical-bar spellings, parallel control-symbol,
+bracket, backslash, AMS corner delimiters, paired vertical-bar spellings,
+parallel control-symbol,
 foundational set/logic forms, and the core plain-TeX surd glyph,
 real/imaginary-part and derivative-prime symbols, geometry/proof and
 ordering/set relations including AMS order, equality, approximation, triangle,

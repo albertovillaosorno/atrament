@@ -709,11 +709,13 @@ fn named_symbol_vocabulary_is_supported_without_rewriting() {
         r"\lessapprox",
         r"\lessdot", r"\lesseqgtr", r"\lesseqqgtr", r"\lessgtr", r"\lesssim",
         r"\lfloor",
-        r"\ll", r"\lll", r"\lnapprox", r"\lneq", r"\lneqq", r"\lnot", r"\lnsim",
+        r"\ll", r"\llcorner", r"\lll", r"\lnapprox", r"\lneq",
+        r"\lneqq", r"\lnot", r"\lnsim",
         r"\longleftarrow", r"\longleftrightarrow",
         r"\longmapsto",
         r"\longrightarrow", r"\looparrowleft", r"\looparrowright",
-        r"\lor", r"\lozenge", r"\ltimes", r"\lvert", r"\lvertneqq", r"\maltese",
+        r"\lor", r"\lozenge", r"\lrcorner", r"\ltimes", r"\lvert",
+        r"\lvertneqq", r"\maltese",
         r"\mapsto",
         r"\mathdollar",
         r"\mathparagraph",
@@ -765,8 +767,9 @@ fn named_symbol_vocabulary_is_supported_without_rewriting() {
         r"\triangleq",
         r"\triangleright", r"\trianglerighteq", r"\twoheadleftarrow",
         r"\twoheadrightarrow",
-        r"\uparrow", r"\updownarrow", r"\upharpoonleft", r"\upharpoonright",
-        r"\uplus", r"\upsilon", r"\upuparrows", r"\vDash",
+        r"\ulcorner", r"\uparrow", r"\updownarrow", r"\upharpoonleft",
+        r"\upharpoonright",
+        r"\uplus", r"\upsilon", r"\upuparrows", r"\urcorner", r"\vDash",
         r"\varDelta", r"\varGamma", r"\varLambda", r"\varOmega", r"\varPhi",
         r"\varPi", r"\varPsi", r"\varSigma", r"\varTheta", r"\varUpsilon",
         r"\varXi", r"\varbigtriangledown", r"\varbigtriangleup", r"\varepsilon",
@@ -1324,6 +1327,29 @@ fn named_delimiters_compose_without_rewriting() {
             })
             .count(),
         19,
+    );
+}
+
+#[test]
+fn ams_corner_delimiters_compose_without_rewriting() {
+    let source = concat!(
+        r"\ulcorner A \urcorner + ",
+        r"\llcorner B \lrcorner",
+    );
+    let analyzed = analyze(source, FormulaMode::Display)
+        .expect("AMS corner delimiter expression");
+    assert!(analyzed.is_supported());
+    assert_eq!(reconstructed(&analyzed), source);
+    assert_eq!(
+        analyzed
+            .tokens
+            .iter()
+            .filter(|token| {
+                token.kind
+                    == MathTokenKind::Command(SupportedCommand::NamedSymbol)
+            })
+            .count(),
+        4,
     );
 }
 
