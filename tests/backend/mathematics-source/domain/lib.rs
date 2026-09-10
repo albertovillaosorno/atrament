@@ -168,6 +168,11 @@ fn generated_tex_corpus_is_deterministic_and_source_safe() {
     let mut state = 0x9e37_79b9_u32;
     let mut seen_fragment_counts = [false; 32];
     let mut seen_fragments = [false; FRAGMENTS.len()];
+    let mut seen_mode_success = [false; 3];
+    let mut seen_mode_error = [false; 3];
+    let mut seen_syntax_classes = [false; 9];
+    let mut saw_supported_success = false;
+    let mut saw_unsupported_success = false;
     for case_index in 0..4_096_u32 {
         state = state
             .wrapping_mul(1_664_525)
@@ -189,11 +194,14 @@ fn generated_tex_corpus_is_deterministic_and_source_safe() {
             source.push_str(FRAGMENTS[index]);
         }
 
-        for mode in [
+        for (mode_index, mode) in [
             FormulaMode::Inline,
             FormulaMode::Display,
             FormulaMode::Aligned,
-        ] {
+        ]
+        .into_iter()
+        .enumerate()
+        {
             let first = analyze(&source, mode);
             let second = analyze(&source, mode);
             assert_eq!(
@@ -203,9 +211,33 @@ fn generated_tex_corpus_is_deterministic_and_source_safe() {
             );
             match first {
                 Ok(analyzed) => {
+                    seen_mode_success[mode_index] = true;
+                    if analyzed.is_supported() {
+                        saw_supported_success = true;
+                    } else {
+                        saw_unsupported_success = true;
+                    }
                     assert_analysis_invariants(&analyzed, &source, mode);
                 }
                 Err(error) => {
+                    seen_mode_error[mode_index] = true;
+                    let class_index = match error.kind {
+                        MathSyntaxErrorKind::AlignmentOutsideStructure => {
+                            Some(0)
+                        }
+                        MathSyntaxErrorKind::ExtraCasesEnd => Some(1),
+                        MathSyntaxErrorKind::ExtraGroupClose => Some(2),
+                        MathSyntaxErrorKind::ExtraMatrixEnd => Some(3),
+                        MathSyntaxErrorKind::MissingCasesEnd => Some(4),
+                        MathSyntaxErrorKind::MissingMatrixEnd => Some(5),
+                        MathSyntaxErrorKind::MissingRequiredGroup => Some(6),
+                        MathSyntaxErrorKind::MissingRootIndexEnd => Some(7),
+                        MathSyntaxErrorKind::UnclosedGroup => Some(8),
+                        _ => None,
+                    };
+                    if let Some(class_index) = class_index {
+                        seen_syntax_classes[class_index] = true;
+                    }
                     assert!(
                         error.byte_offset <= source.len(),
                         "error beyond source in case {case_index}: {source:?}",
@@ -220,6 +252,11 @@ fn generated_tex_corpus_is_deterministic_and_source_safe() {
     }
     assert!(seen_fragment_counts.into_iter().all(|seen| seen));
     assert!(seen_fragments.into_iter().all(|seen| seen));
+    assert!(seen_mode_success.into_iter().all(|seen| seen));
+    assert!(seen_mode_error.into_iter().all(|seen| seen));
+    assert!(seen_syntax_classes.into_iter().all(|seen| seen));
+    assert!(saw_supported_success);
+    assert!(saw_unsupported_success);
 }
 
 #[test]

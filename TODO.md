@@ -1789,6 +1789,13 @@ The deterministic HTTP and TeX generators now also assert that every declared
 mutation operation, mutation/fragment-count bucket, and TeX fragment token is
 actually exercised, preventing a passing corpus from silently starving one of
 its advertised selector classes.
+The TeX corpus also requires success and syntax-error outcomes in Inline,
+Display, and Aligned modes, with both fully supported and unsupported-preserving
+successful analyses.
+Its malformed-source coverage also pins group open/close, matrix/cases
+open/close,
+missing required groups, incomplete root indexes, and out-of-structure alignment
+as observed syntax classes.
 HTTP corpus guards additionally require both public health success/rejection and
 authenticated draft apply/reject outcomes, so the mutation checks cannot pass by
 exercising only one routing disposition.
