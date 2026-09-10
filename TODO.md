@@ -1762,6 +1762,11 @@ secret or seeded private draft markers, and cannot change task, source, or
 candidate draft state. Socket-level timing/resource fuzzing and coverage-guided
 request generation remain open.
 
+The deterministic HTTP and TeX generators now also assert that every declared
+mutation operation, mutation/fragment-count bucket, and TeX fragment token is
+actually exercised, preventing a passing corpus from silently starving one of
+its advertised selector classes.
+
 A second 4,096-case corpus mutates only post-request-line bytes of one
 canonical
 authenticated Task replacement, so generated inputs cannot turn into private GET

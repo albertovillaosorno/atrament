@@ -166,12 +166,15 @@ fn generated_tex_corpus_is_deterministic_and_source_safe() {
     ];
 
     let mut state = 0x9e37_79b9_u32;
+    let mut seen_fragment_counts = [false; 32];
+    let mut seen_fragments = [false; FRAGMENTS.len()];
     for case_index in 0..4_096_u32 {
         state = state
             .wrapping_mul(1_664_525)
             .wrapping_add(1_013_904_223 ^ case_index);
         let fragment_count = usize::try_from((state >> 27) + 1)
             .expect("bounded fragment count");
+        seen_fragment_counts[fragment_count - 1] = true;
         let mut source = String::new();
         for fragment_index in 0..fragment_count {
             let fragment_index = u32::try_from(fragment_index)
@@ -182,6 +185,7 @@ fn generated_tex_corpus_is_deterministic_and_source_safe() {
             let index = usize::try_from(state)
                 .expect("u32 fits usize on supported targets")
                 % FRAGMENTS.len();
+            seen_fragments[index] = true;
             source.push_str(FRAGMENTS[index]);
         }
 
@@ -214,6 +218,8 @@ fn generated_tex_corpus_is_deterministic_and_source_safe() {
             }
         }
     }
+    assert!(seen_fragment_counts.into_iter().all(|seen| seen));
+    assert!(seen_fragments.into_iter().all(|seen| seen));
 }
 
 #[test]

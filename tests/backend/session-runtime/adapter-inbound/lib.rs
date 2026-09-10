@@ -731,6 +731,8 @@ fn generated_raw_request_mutations_are_deterministic_and_nonmutating() {
     const BASE: &[u8] = b"GET /health HTTP/1.1\r\nHost: 127.0.0.1:43123\r\n\
 X-Probe: safe\r\n\r\n";
     let mut state = 0x243f_6a88_u32;
+    let mut seen_mutation_counts = [false; 4];
+    let mut seen_operations = [false; 4];
 
     for case_index in 0..4_096_u32 {
         let mut request = BASE.to_vec();
@@ -739,6 +741,7 @@ X-Probe: safe\r\n\r\n";
             .wrapping_add(1_013_904_223 ^ case_index);
         let mutation_count = usize::try_from((state >> 30) + 1)
             .expect("bounded mutation count");
+        seen_mutation_counts[mutation_count - 1] = true;
         for mutation_index in 0..mutation_count {
             state = state
                 .wrapping_mul(1_664_525)
@@ -748,6 +751,8 @@ X-Probe: safe\r\n\r\n";
                             .expect("bounded mutation index"),
                 );
             let operation = state & 3;
+            seen_operations[usize::try_from(operation)
+                .expect("bounded mutation operation")] = true;
             let byte = u8::try_from((state >> 8) & 0xff)
                 .expect("masked byte fits u8");
             let position = usize::try_from(state >> 16)
@@ -795,6 +800,8 @@ X-Probe: safe\r\n\r\n";
             );
         }
     }
+    assert!(seen_mutation_counts.into_iter().all(|seen| seen));
+    assert!(seen_operations.into_iter().all(|seen| seen));
 }
 
 #[test]
@@ -812,6 +819,8 @@ fn generated_authenticated_post_mutations_fail_closed_and_deterministic() {
         .map(|position| position + 2)
         .expect("canonical request has request-line terminator");
     let mut state = 0x1319_8a2e_u32;
+    let mut seen_mutation_counts = [false; 4];
+    let mut seen_operations = [false; 4];
 
     for case_index in 0..4_096_u32 {
         let mut request = base.clone();
@@ -820,6 +829,7 @@ fn generated_authenticated_post_mutations_fail_closed_and_deterministic() {
             .wrapping_add(1_013_904_223 ^ case_index);
         let mutation_count = usize::try_from((state >> 30) + 1)
             .expect("bounded mutation count");
+        seen_mutation_counts[mutation_count - 1] = true;
         for mutation_index in 0..mutation_count {
             state = state
                 .wrapping_mul(1_664_525)
@@ -834,6 +844,8 @@ fn generated_authenticated_post_mutations_fail_closed_and_deterministic() {
                     .expect("u32 fits usize on supported targets")
                     % (mutable_len + 1);
             let operation = state & 3;
+            seen_operations[usize::try_from(operation)
+                .expect("bounded mutation operation")] = true;
             let byte = u8::try_from((state >> 8) & 0xff)
                 .expect("masked byte fits u8");
             match operation {
@@ -902,6 +914,8 @@ fn generated_authenticated_post_mutations_fail_closed_and_deterministic() {
             "secret reflection in authenticated mutation case {case_index}",
         );
     }
+    assert!(seen_mutation_counts.into_iter().all(|seen| seen));
+    assert!(seen_operations.into_iter().all(|seen| seen));
 }
 
 #[test]
