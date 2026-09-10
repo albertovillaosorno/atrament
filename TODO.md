@@ -1780,6 +1780,9 @@ The deterministic HTTP and TeX generators now also assert that every declared
 mutation operation, mutation/fragment-count bucket, and TeX fragment token is
 actually exercised, preventing a passing corpus from silently starving one of
 its advertised selector classes.
+HTTP corpus guards additionally require both public health success/rejection and
+authenticated draft apply/reject outcomes, so the mutation checks cannot pass by
+exercising only one routing disposition.
 
 The profile manifest/evidence and browser fragment/draft generators likewise
 assert their declared selector and result classes, so deterministic P8 coverage

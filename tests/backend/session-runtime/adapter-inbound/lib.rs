@@ -733,6 +733,8 @@ X-Probe: safe\r\n\r\n";
     let mut state = 0x243f_6a88_u32;
     let mut seen_mutation_counts = [false; 4];
     let mut seen_operations = [false; 4];
+    let mut saw_health_success = false;
+    let mut saw_health_rejection = false;
 
     for case_index in 0..4_096_u32 {
         let mut request = BASE.to_vec();
@@ -786,6 +788,11 @@ X-Probe: safe\r\n\r\n";
             "nondeterministic raw request case {case_index}",
         );
         assert!(first.starts_with(b"HTTP/1.1 "), "case {case_index}");
+        if status_line(&first) == "HTTP/1.1 200 OK" {
+            saw_health_success = true;
+        } else {
+            saw_health_rejection = true;
+        }
         assert_private_draft_unchanged(&first_draft);
         assert_private_draft_unchanged(&second_draft);
         for private in [
@@ -802,6 +809,8 @@ X-Probe: safe\r\n\r\n";
     }
     assert!(seen_mutation_counts.into_iter().all(|seen| seen));
     assert!(seen_operations.into_iter().all(|seen| seen));
+    assert!(saw_health_success);
+    assert!(saw_health_rejection);
 }
 
 #[test]
@@ -821,6 +830,8 @@ fn generated_authenticated_post_mutations_fail_closed_and_deterministic() {
     let mut state = 0x1319_8a2e_u32;
     let mut seen_mutation_counts = [false; 4];
     let mut seen_operations = [false; 4];
+    let mut saw_applied = false;
+    let mut saw_rejected = false;
 
     for case_index in 0..4_096_u32 {
         let mut request = base.clone();
@@ -893,11 +904,13 @@ fn generated_authenticated_post_mutations_fail_closed_and_deterministic() {
             "candidate-private-marker",
         );
         if status_line(&first) == "HTTP/1.1 204 No Content" {
+            saw_applied = true;
             assert_eq!(
                 first_draft.value(DraftField::Task),
                 second_draft.value(DraftField::Task),
             );
         } else {
+            saw_rejected = true;
             assert_eq!(
                 first_draft.value(DraftField::Task),
                 "task-private-marker",
@@ -916,6 +929,8 @@ fn generated_authenticated_post_mutations_fail_closed_and_deterministic() {
     }
     assert!(seen_mutation_counts.into_iter().all(|seen| seen));
     assert!(seen_operations.into_iter().all(|seen| seen));
+    assert!(saw_applied);
+    assert!(saw_rejected);
 }
 
 #[test]
