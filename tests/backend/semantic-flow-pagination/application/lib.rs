@@ -1026,6 +1026,10 @@ fn streaming_owner_admission_matches_reference_oracle() {
     let alphabet = [blocks[0], blocks[1], blocks[2], outsider];
     let accepted = session.current().expect("accepted revision");
     let mut cases = 0usize;
+    let mut saw_success = false;
+    let mut saw_incomplete = false;
+    let mut saw_sequence_mismatch = false;
+    let mut saw_foreign_owner = false;
 
     for length in 0..=4usize {
         let combinations = 4usize.pow(length as u32);
@@ -1059,13 +1063,39 @@ fn streaming_owner_admission_matches_reference_oracle() {
             );
             let actual = paginate_revision(accepted, &measured);
             match expected {
-                Ok(()) => assert!(actual.is_ok()),
-                Err(reason) => assert_eq!(actual, Err(reason)),
+                Ok(()) => {
+                    saw_success = true;
+                    assert!(actual.is_ok());
+                },
+                Err(reason) => {
+                    match reason {
+                        SemanticPaginationError::MeasurementIncomplete {
+                            ..
+                        } => {
+                            saw_incomplete = true;
+                        },
+                        SemanticPaginationError::
+                            MeasurementBlockSequenceMismatch { .. } => {
+                                saw_sequence_mismatch = true;
+                            },
+                        SemanticPaginationError::MeasuredBlockNotInFlow {
+                            ..
+                        } => {
+                            saw_foreign_owner = true;
+                        },
+                        _ => panic!("unexpected exhaustive owner outcome"),
+                    }
+                    assert_eq!(actual, Err(reason));
+                },
             }
             cases += 1;
         }
     }
     assert_eq!(cases, 341);
+    assert!(saw_success);
+    assert!(saw_incomplete);
+    assert!(saw_sequence_mismatch);
+    assert!(saw_foreign_owner);
 }
 
 fn next_owner_oracle_value(seed: &mut u64) -> u64 {

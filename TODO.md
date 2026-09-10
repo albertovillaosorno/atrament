@@ -565,6 +565,10 @@ Another 20,341 owner-sequence cases cover complete, incomplete, repeated,
 reordered, and out-of-flow semantic measurements, including owner runs split
 across empty, independent, and keep-together measurement units.
 
+The exhaustive 341-case owner alphabet walk independently requires success,
+incomplete measurement, sequence mismatch, and foreign-owner outcomes before the
+larger generated corpus is considered sufficient.
+
 The three exhaustive Cartesian placement oracles also require valid plans plus
 both no-fit and no-page placement failures, while their page rectangles remain
 valid by construction.
