@@ -38,6 +38,7 @@
 //! routing, authenticated handshake transport, and protected draft mutation
 //! transport without owning the application state those routes mutate.
 
+use std::fmt;
 use std::io::{self, Read as _, Write as _};
 use std::net::{Ipv4Addr, SocketAddr, TcpListener, TcpStream};
 use std::str;
@@ -95,11 +96,40 @@ struct ParsedRequestTarget<'request> {
     target: &'request str,
 }
 
-struct RouteContext<'context> {
+/// Immutable admission authority shared by one routed session request.
+pub struct RouteRequestContext<'context> {
     expected_host: &'context str,
     expected_origin: &'context str,
     expected_secret: &'context str,
     handshake: &'context dyn SessionHandshake,
+}
+
+impl fmt::Debug for RouteRequestContext<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f
+            .debug_struct("RouteRequestContext")
+            .field("expected_host", &self.expected_host)
+            .field("expected_origin", &self.expected_origin)
+            .finish_non_exhaustive()
+    }
+}
+
+impl<'context> RouteRequestContext<'context> {
+    /// Bind canonical Host, Origin, credential, and handshake authority.
+    #[must_use]
+    pub const fn new(
+        expected_host: &'context str,
+        expected_origin: &'context str,
+        expected_secret: &'context str,
+        handshake: &'context dyn SessionHandshake,
+    ) -> Self {
+        Self {
+            expected_host,
+            expected_origin,
+            expected_secret,
+            handshake,
+        }
+    }
 }
 
 /// A listener bound to one operating-system-assigned IPv4 loopback endpoint.
@@ -162,12 +192,12 @@ impl Runtime {
         handshake: &dyn SessionHandshake,
         draft: &mut dyn SessionDraft,
     ) {
-        let context = RouteContext {
-            expected_host: &self.expected_host,
-            expected_origin: &self.origin,
+        let context = RouteRequestContext::new(
+            &self.expected_host,
+            &self.origin,
             expected_secret,
             handshake,
-        };
+        );
         for incoming in self.listener.incoming() {
             let Ok(mut connection) = incoming else {
                 break;
@@ -758,7 +788,7 @@ fn draft_field_for_target(target: &str) -> Option<DraftField> {
 fn route_draft_read(
     request: &[u8],
     field: DraftField,
-    context: &RouteContext<'_>,
+    context: &RouteRequestContext<'_>,
     draft: &dyn SessionDraft,
 ) -> Vec<u8> {
     let credential_valid =
@@ -801,7 +831,7 @@ fn draft_resource_limit_response(diagnostics: &DiagnosticSet) -> Vec<u8> {
 fn route_draft_replace(
     request: &[u8],
     field: DraftField,
-    context: &RouteContext<'_>,
+    context: &RouteRequestContext<'_>,
     draft: &mut dyn SessionDraft,
 ) -> Vec<u8> {
     let credential_valid =
@@ -966,28 +996,11 @@ fn public_get_response(target: &str) -> Option<Vec<u8>> {
     }
 }
 
-/// Route one parsed HTTP request after exact canonical `Host` admission.
+/// Route one parsed HTTP request through explicit session admission authority.
 #[must_use]
 pub fn route_request(
     request: &[u8],
-    expected_host: &str,
-    expected_origin: &str,
-    expected_secret: &str,
-    handshake: &dyn SessionHandshake,
-    draft: &mut dyn SessionDraft,
-) -> Vec<u8> {
-    let context = RouteContext {
-        expected_host,
-        expected_origin,
-        expected_secret,
-        handshake,
-    };
-    route_request_with_context(request, &context, draft)
-}
-
-fn route_request_with_context(
-    request: &[u8],
-    context: &RouteContext<'_>,
+    context: &RouteRequestContext<'_>,
     draft: &mut dyn SessionDraft,
 ) -> Vec<u8> {
     let Some(parsed) = request_method_host_and_target(request) else {
@@ -1038,7 +1051,7 @@ fn route_request_with_context(
 
 fn serve_connection(
     stream: &mut TcpStream,
-    context: &RouteContext<'_>,
+    context: &RouteRequestContext<'_>,
     draft: &mut dyn SessionDraft,
 ) -> io::Result<()> {
     let request = match read_request(stream) {
@@ -1069,6 +1082,6 @@ fn serve_connection(
         },
         Err(error) => return Err(error),
     };
-    let response = route_request_with_context(&request, context, draft);
+    let response = route_request(&request, context, draft);
     write_response(stream, &response)
 }
