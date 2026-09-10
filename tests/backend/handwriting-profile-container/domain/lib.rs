@@ -576,7 +576,8 @@ fn generated_manifest_values_match_reference_admission_oracle() {
         seen_feature_sets[feature_index] = true;
         let entry_count = next_inventory_value(&mut seed) as usize % 5;
         seen_entry_counts[entry_count] = true;
-        let mut entries = Vec::with_capacity(entry_count);
+        let mut entries: Vec<ProfileManifestEntry> =
+            Vec::with_capacity(entry_count);
         for entry_index in 0..entry_count {
             let path_index =
                 next_inventory_value(&mut seed) as usize % paths.len();

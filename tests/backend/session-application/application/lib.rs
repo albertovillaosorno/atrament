@@ -695,7 +695,7 @@ fn run_process_fixture_child(mode: &str) {
     );
     assert!(!impact_seeds.is_empty());
     assert_eq!(
-        session.accepted_revision().map(|accepted| accepted.revision),
+        session.accepted_revision().map(|accepted| accepted.id),
         Some(revision),
     );
 

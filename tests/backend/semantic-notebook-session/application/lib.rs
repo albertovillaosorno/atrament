@@ -5847,7 +5847,7 @@ fn provenance_material_stays_exact_with_many_unrelated_blocks() {
     let notebook = accepted_for(&mapping, candidate_ids.notebook);
     let provenance = accepted_for(&mapping, candidate_ids.edited);
     let expected = CommandTargetMaterialOutcome::Prepared {
-        material: CommandTargetMaterial {
+        material: Box::new(CommandTargetMaterial {
             descriptor: SemanticIdentityDescriptor {
                 kind: SemanticIdentityKind::Provenance,
                 owner: Some(notebook),
@@ -5859,7 +5859,7 @@ fn provenance_material_stays_exact_with_many_unrelated_blocks() {
             }),
             revision,
             target: provenance,
-        },
+        }),
     };
     for _ in 0..100 {
         assert_eq!(
@@ -6890,7 +6890,7 @@ fn global_constraint_kind_edit_preserves_target_and_seeds_notebook() {
     candidate.pages.push(Page {
         flows: vec![],
         id: second_page,
-        page_profile,
+        paper_profile: page_profile,
     });
     let mut session = SemanticNotebookSessionService::default();
     let AcceptanceOutcome::Accepted { mapping, revision: base } =
@@ -8283,7 +8283,7 @@ fn command_target_material_combines_owner_and_editable_value_read_only() {
     let span = accepted_for(&mapping, span);
     let before = session.current().expect("accepted revision").clone();
     let expected_span = CommandTargetMaterialOutcome::Prepared {
-        material: CommandTargetMaterial {
+        material: Box::new(CommandTargetMaterial {
             direct_edit_family: Some(SemanticCommandFamily::TextContent),
             descriptor: SemanticIdentityDescriptor {
                 kind: SemanticIdentityKind::InlineSpan,
@@ -8294,7 +8294,7 @@ fn command_target_material_combines_owner_and_editable_value_read_only() {
             ))),
             revision,
             target: span,
-        },
+        }),
     };
     assert_eq!(
         session.command_target_material(revision, span),
@@ -8307,7 +8307,7 @@ fn command_target_material_combines_owner_and_editable_value_read_only() {
     assert_eq!(
         session.command_target_material(revision, block),
         CommandTargetMaterialOutcome::Prepared {
-            material: CommandTargetMaterial {
+            material: Box::new(CommandTargetMaterial {
                 direct_edit_family: Some(SemanticCommandFamily::StyleRole),
                 descriptor: SemanticIdentityDescriptor {
                     kind: SemanticIdentityKind::Block(
@@ -8320,7 +8320,7 @@ fn command_target_material_combines_owner_and_editable_value_read_only() {
                 ),
                 revision,
                 target: block,
-            },
+            }),
         },
     );
     assert_eq!(session.current(), Some(&before));

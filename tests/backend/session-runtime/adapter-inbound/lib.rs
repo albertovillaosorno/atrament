@@ -957,11 +957,15 @@ fn protected_routes_do_not_decode_aliases_or_ignore_queries() {
         let request = format!(
             concat!(
                 "POST {target} HTTP/1.1\r\n",
-                "Host: {EXPECTED_HOST}\r\n",
+                "Host: {host}\r\n",
                 "Authorization: {authorization}\r\n",
-                "Origin: {EXPECTED_ORIGIN}\r\n",
+                "Origin: {origin}\r\n",
                 "Content-Length: 0\r\n\r\n",
             ),
+            target = target,
+            host = EXPECTED_HOST,
+            authorization = authorization,
+            origin = EXPECTED_ORIGIN,
         );
         let mut draft = seeded_private_draft();
         let response = route_with_draft(
@@ -1700,10 +1704,13 @@ fn every_required_handshake_version_header_requires_exactly_one_value() {
     let mut request = format!(
         concat!(
             "POST /api/handshake HTTP/1.1\r\n",
-            "Host: {EXPECTED_HOST}\r\n",
+            "Host: {host}\r\n",
             "Authorization: {authorization}\r\n",
-            "Origin: {EXPECTED_ORIGIN}\r\n",
+            "Origin: {origin}\r\n",
         ),
+        host = EXPECTED_HOST,
+        authorization = authorization,
+        origin = EXPECTED_ORIGIN,
     );
     for (name, value) in version_headers {
         request.push_str(&format!("{name}: {value}\r\n"));
@@ -1721,14 +1728,14 @@ fn every_required_handshake_version_header_requires_exactly_one_value() {
         ] {
             let mut draft = SessionDraftService::default();
             let response = runtime::route_request(
-            let response =     candidate.as_bytes(),
-            let response =     &route_context(
-            let response =         EXPECTED_HOST,
-            let response =         EXPECTED_SECRET,
-            let response =         &MustNotEvaluateHandshake,
-            let response =     ),
-            let response =     &mut draft,
-            let response = );
+                candidate.as_bytes(),
+                &route_context(
+                    EXPECTED_HOST,
+                    EXPECTED_SECRET,
+                    &MustNotEvaluateHandshake,
+                ),
+                &mut draft,
+            );
             let (head, body) = response_parts(&response);
             assert!(
                 head.starts_with("HTTP/1.1 400 Bad Request\r\n"),
@@ -2366,14 +2373,14 @@ fn adapter_requires_exactly_one_route_specific_application_diagnostic() {
     );
     let mut ordinary_draft = SessionDraftService::default();
     let response = runtime::route_request(
-    let response =     handshake_request.as_bytes(),
-    let response =     &route_context(
-    let response =         EXPECTED_HOST,
-    let response =         EXPECTED_SECRET,
-    let response =         &EmptyDiagnosticHandshake,
-    let response =     ),
-    let response =     &mut ordinary_draft,
-    let response = );
+        handshake_request.as_bytes(),
+        &route_context(
+            EXPECTED_HOST,
+            EXPECTED_SECRET,
+            &EmptyDiagnosticHandshake,
+        ),
+        &mut ordinary_draft,
+    );
     let response_text = String::from_utf8(response).expect("response is UTF-8");
     assert!(
         response_text.starts_with("HTTP/1.1 500 Internal Server Error\r\n")
@@ -2382,14 +2389,14 @@ fn adapter_requires_exactly_one_route_specific_application_diagnostic() {
 
     let mut ordinary_draft = SessionDraftService::default();
     let response = runtime::route_request(
-    let response =     handshake_request.as_bytes(),
-    let response =     &route_context(
-    let response =         EXPECTED_HOST,
-    let response =         EXPECTED_SECRET,
-    let response =         &DuplicateDiagnosticHandshake,
-    let response =     ),
-    let response =     &mut ordinary_draft,
-    let response = );
+        handshake_request.as_bytes(),
+        &route_context(
+            EXPECTED_HOST,
+            EXPECTED_SECRET,
+            &DuplicateDiagnosticHandshake,
+        ),
+        &mut ordinary_draft,
+    );
     let response_text = String::from_utf8(response).expect("response is UTF-8");
     assert!(
         response_text.starts_with("HTTP/1.1 500 Internal Server Error\r\n")
@@ -2398,14 +2405,14 @@ fn adapter_requires_exactly_one_route_specific_application_diagnostic() {
 
     let mut ordinary_draft = SessionDraftService::default();
     let response = runtime::route_request(
-    let response =     handshake_request.as_bytes(),
-    let response =     &route_context(
-    let response =         EXPECTED_HOST,
-    let response =         EXPECTED_SECRET,
-    let response =         &WrongCodeDiagnosticHandshake,
-    let response =     ),
-    let response =     &mut ordinary_draft,
-    let response = );
+        handshake_request.as_bytes(),
+        &route_context(
+            EXPECTED_HOST,
+            EXPECTED_SECRET,
+            &WrongCodeDiagnosticHandshake,
+        ),
+        &mut ordinary_draft,
+    );
     let response_text = String::from_utf8(response).expect("response is UTF-8");
     assert!(
         response_text.starts_with("HTTP/1.1 500 Internal Server Error\r\n")
@@ -2414,14 +2421,14 @@ fn adapter_requires_exactly_one_route_specific_application_diagnostic() {
 
     let mut ordinary_draft = SessionDraftService::default();
     let response = runtime::route_request(
-    let response =     handshake_request.as_bytes(),
-    let response =     &route_context(
-    let response =         EXPECTED_HOST,
-    let response =         EXPECTED_SECRET,
-    let response =         &WrongOperationDiagnosticHandshake,
-    let response =     ),
-    let response =     &mut ordinary_draft,
-    let response = );
+        handshake_request.as_bytes(),
+        &route_context(
+            EXPECTED_HOST,
+            EXPECTED_SECRET,
+            &WrongOperationDiagnosticHandshake,
+        ),
+        &mut ordinary_draft,
+    );
     let response_text = String::from_utf8(response).expect("response is UTF-8");
     assert!(
         response_text.starts_with("HTTP/1.1 500 Internal Server Error\r\n")
@@ -2434,14 +2441,14 @@ fn adapter_requires_exactly_one_route_specific_application_diagnostic() {
     ] {
         let mut ordinary_draft = SessionDraftService::default();
         let response = runtime::route_request(
-        let response =     handshake_request.as_bytes(),
-        let response =     &route_context(
-        let response =         EXPECTED_HOST,
-        let response =         EXPECTED_SECRET,
-        let response =         handshake,
-        let response =     ),
-        let response =     &mut ordinary_draft,
-        let response = );
+            handshake_request.as_bytes(),
+            &route_context(
+                EXPECTED_HOST,
+                EXPECTED_SECRET,
+                handshake,
+            ),
+            &mut ordinary_draft,
+        );
         let response_text =
             String::from_utf8(response).expect("response is UTF-8");
         assert!(response_text
@@ -2459,14 +2466,14 @@ fn adapter_requires_exactly_one_route_specific_application_diagnostic() {
     );
     let mut empty_diagnostic_draft = EmptyDiagnosticDraft;
     let response = runtime::route_request(
-    let response =     &request,
-    let response =     &route_context(
-    let response =         EXPECTED_HOST,
-    let response =         EXPECTED_SECRET,
-    let response =         &HANDSHAKE,
-    let response =     ),
-    let response =     &mut empty_diagnostic_draft,
-    let response = );
+        &request,
+        &route_context(
+            EXPECTED_HOST,
+            EXPECTED_SECRET,
+            &HANDSHAKE,
+        ),
+        &mut empty_diagnostic_draft,
+    );
     let response_text = String::from_utf8(response).expect("response is UTF-8");
     assert!(
         response_text.starts_with("HTTP/1.1 500 Internal Server Error\r\n")
@@ -2475,14 +2482,14 @@ fn adapter_requires_exactly_one_route_specific_application_diagnostic() {
 
     let mut duplicate_diagnostic_draft = DuplicateDiagnosticDraft;
     let response = runtime::route_request(
-    let response =     &request,
-    let response =     &route_context(
-    let response =         EXPECTED_HOST,
-    let response =         EXPECTED_SECRET,
-    let response =         &HANDSHAKE,
-    let response =     ),
-    let response =     &mut duplicate_diagnostic_draft,
-    let response = );
+        &request,
+        &route_context(
+            EXPECTED_HOST,
+            EXPECTED_SECRET,
+            &HANDSHAKE,
+        ),
+        &mut duplicate_diagnostic_draft,
+    );
     let response_text = String::from_utf8(response).expect("response is UTF-8");
     assert!(
         response_text.starts_with("HTTP/1.1 500 Internal Server Error\r\n")
@@ -2491,14 +2498,14 @@ fn adapter_requires_exactly_one_route_specific_application_diagnostic() {
 
     let mut wrong_code_draft = WrongCodeDiagnosticDraft;
     let response = runtime::route_request(
-    let response =     &request,
-    let response =     &route_context(
-    let response =         EXPECTED_HOST,
-    let response =         EXPECTED_SECRET,
-    let response =         &HANDSHAKE,
-    let response =     ),
-    let response =     &mut wrong_code_draft,
-    let response = );
+        &request,
+        &route_context(
+            EXPECTED_HOST,
+            EXPECTED_SECRET,
+            &HANDSHAKE,
+        ),
+        &mut wrong_code_draft,
+    );
     let response_text = String::from_utf8(response).expect("response is UTF-8");
     assert!(
         response_text.starts_with("HTTP/1.1 500 Internal Server Error\r\n")
@@ -2507,14 +2514,14 @@ fn adapter_requires_exactly_one_route_specific_application_diagnostic() {
 
     let mut wrong_operation_draft = WrongOperationDiagnosticDraft;
     let response = runtime::route_request(
-    let response =     &request,
-    let response =     &route_context(
-    let response =         EXPECTED_HOST,
-    let response =         EXPECTED_SECRET,
-    let response =         &HANDSHAKE,
-    let response =     ),
-    let response =     &mut wrong_operation_draft,
-    let response = );
+        &request,
+        &route_context(
+            EXPECTED_HOST,
+            EXPECTED_SECRET,
+            &HANDSHAKE,
+        ),
+        &mut wrong_operation_draft,
+    );
     let response_text = String::from_utf8(response).expect("response is UTF-8");
     assert!(
         response_text.starts_with("HTTP/1.1 500 Internal Server Error\r\n")
