@@ -115,6 +115,15 @@ pub enum PaginationError<Identity, PageIdentity> {
     },
 }
 
+/// Result of paginating a complete measured flow.
+pub type PaginationResult<Identity, PageIdentity> = Result<
+    PaginationPlan<Identity, PageIdentity>,
+    PaginationError<Identity, PageIdentity>,
+>;
+
+type PlacementResult<Identity, PageIdentity> =
+    Result<(), PaginationError<Identity, PageIdentity>>;
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct Cursor {
     page_index: usize,
@@ -145,10 +154,7 @@ struct GroupExtent {
 pub fn paginate<Identity, PageIdentity>(
     pages: &[PageRegion<PageIdentity>],
     units: &[MeasuredFlowUnit<Identity>],
-) -> Result<
-    PaginationPlan<Identity, PageIdentity>,
-    PaginationError<Identity, PageIdentity>,
->
+) -> PaginationResult<Identity, PageIdentity>
 where
     Identity: Copy,
     PageIdentity: Copy,
@@ -234,7 +240,7 @@ fn place_independent<Identity, PageIdentity>(
     fragments: &[MeasuredFragment<Identity>],
     cursor: &mut Cursor,
     placements: &mut Vec<PlacedFragment<Identity, PageIdentity>>,
-) -> Result<(), PaginationError<Identity, PageIdentity>>
+) -> PlacementResult<Identity, PageIdentity>
 where
     Identity: Copy,
     PageIdentity: Copy,
@@ -250,7 +256,7 @@ fn place_keep_together_when_possible<Identity, PageIdentity>(
     fragments: &[MeasuredFragment<Identity>],
     cursor: &mut Cursor,
     placements: &mut Vec<PlacedFragment<Identity, PageIdentity>>,
-) -> Result<(), PaginationError<Identity, PageIdentity>>
+) -> PlacementResult<Identity, PageIdentity>
 where
     Identity: Copy,
     PageIdentity: Copy,
@@ -295,7 +301,7 @@ fn place_on_current<Identity, PageIdentity>(
     page: PageRegion<PageIdentity>,
     cursor: &mut Cursor,
     placements: &mut Vec<PlacedFragment<Identity, PageIdentity>>,
-) -> Result<(), PaginationError<Identity, PageIdentity>>
+) -> PlacementResult<Identity, PageIdentity>
 where
     Identity: Copy,
     PageIdentity: Copy,
@@ -331,7 +337,7 @@ fn place_one<Identity, PageIdentity>(
     fragment: MeasuredFragment<Identity>,
     cursor: &mut Cursor,
     placements: &mut Vec<PlacedFragment<Identity, PageIdentity>>,
-) -> Result<(), PaginationError<Identity, PageIdentity>>
+) -> PlacementResult<Identity, PageIdentity>
 where
     Identity: Copy,
     PageIdentity: Copy,
@@ -381,7 +387,7 @@ const fn remaining_height(region: Rect, used_height: Length) -> Length {
 
 fn validate_pages<Identity, PageIdentity>(
     pages: &[PageRegion<PageIdentity>],
-) -> Result<(), PaginationError<Identity, PageIdentity>>
+) -> PlacementResult<Identity, PageIdentity>
 where
     PageIdentity: Copy,
 {
