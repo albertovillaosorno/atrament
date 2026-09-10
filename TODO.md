@@ -386,7 +386,7 @@ identity they reference through Document constraint. Replacement must name a
 wrong-kind, or prior-revision identities reject before mutation.
 
 Retargeting preserves page identity, flows, and the page-profile catalog while
-changing only `Page.page_profile`. It seeds that exact page with `AllDerived`;
+changing only `Page.paper_profile`. It seeds that exact page with `AllDerived`;
 downstream reflow remains derived work outside this semantic mutation service.
 Profile creation/deletion and serialized command syntax remain open.
 

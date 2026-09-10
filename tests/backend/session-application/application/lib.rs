@@ -169,7 +169,7 @@ fn editable_text_candidate(
                     id: flow,
                 }],
                 id: page,
-                page_profile: profile,
+                paper_profile: profile,
             }],
             provenance: vec![],
             styles: vec![],
@@ -346,7 +346,7 @@ fn asset_figure_candidate(
                 id: flow,
             }],
             id: page,
-            page_profile: profile,
+            paper_profile: profile,
         }],
         provenance: vec![],
         styles: vec![],
@@ -1946,7 +1946,7 @@ fn application_routes_page_profile_reference_through_owned_authority() {
     };
     let current = session.accepted_revision().expect("retargeted revision");
     assert_eq!(current.notebook.pages[0].id, page);
-    assert_eq!(current.notebook.pages[0].page_profile, second);
+    assert_eq!(current.notebook.pages[0].paper_profile, second);
 
     let HistoryTraversalOutcome::Traversed { .. } =
         session.traverse_history(revision, HistoryDirection::Undo)
@@ -1955,7 +1955,7 @@ fn application_routes_page_profile_reference_through_owned_authority() {
     };
     let current = session.accepted_revision().expect("retarget Undo revision");
     assert_eq!(current.notebook.pages[0].id, page);
-    assert_eq!(current.notebook.pages[0].page_profile, first);
+    assert_eq!(current.notebook.pages[0].paper_profile, first);
 }
 
 #[test]

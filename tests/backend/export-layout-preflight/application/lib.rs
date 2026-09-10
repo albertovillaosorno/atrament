@@ -123,7 +123,7 @@ fn accepted_fixture(
                 id: flow,
             }],
             id: page,
-            page_profile: profile,
+            paper_profile: profile,
         }],
         provenance: vec![],
         styles: vec![],

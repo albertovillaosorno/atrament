@@ -145,12 +145,12 @@ fn candidate_fixture(ids: &IdentityAllocator) -> CandidateFixture {
                         id: flow_id,
                     }],
                     id: page_one,
-                    page_profile: profile_one,
+                    paper_profile: profile_one,
                 },
                 Page {
                     flows: vec![],
                     id: page_two,
-                    page_profile: profile_two,
+                    paper_profile: profile_two,
                 },
             ],
             provenance: vec![],
@@ -594,7 +594,7 @@ fn many_pages_can_share_one_cached_page_profile() {
         fixture.notebook.pages.push(Page {
             flows: Vec::new(),
             id: page,
-            page_profile: fixture.profile_one,
+            paper_profile: fixture.profile_one,
         });
     }
     let mut session = SemanticNotebookSessionService::default();
@@ -633,7 +633,7 @@ fn large_page_profile_index_preserves_pagination() {
         fixture.notebook.pages.push(Page {
             flows: Vec::new(),
             id: page,
-            page_profile: profile,
+            paper_profile: profile,
         });
     }
     let mut session = SemanticNotebookSessionService::default();
@@ -1491,7 +1491,7 @@ fn keep_group_skip_never_backfills_earlier_accepted_page() {
     fixture.notebook.pages.push(Page {
         flows: Vec::new(),
         id: page_three,
-        page_profile: profile_three,
+        paper_profile: profile_three,
     });
 
     let second = ids.allocate_candidate().expect("second block");

@@ -225,7 +225,7 @@ fn candidate_notebook_with_span(
                 id: flow_id,
             }],
             id: page_id,
-            page_profile: page_profile_id,
+            paper_profile: page_profile_id,
         }],
         provenance: vec![],
         styles: vec![],
@@ -334,7 +334,7 @@ fn candidate_notebook_with_figure_assets(
                 id: flow,
             }],
             id: page,
-            page_profile: profile,
+            paper_profile: profile,
         }],
         provenance: vec![],
         styles: vec![],
@@ -603,7 +603,7 @@ fn candidate_math_notebook(
                 id: flow_id,
             }],
             id: page_id,
-            page_profile: page_profile_id,
+            paper_profile: page_profile_id,
         }],
         provenance: vec![],
         styles: vec![],
@@ -6486,7 +6486,7 @@ fn page_profile_reference_applies_atomically_and_undoes() {
         .iter()
         .find(|value| value.id == page)
         .expect("retargeted page");
-    assert_eq!(changed_page.page_profile, second);
+    assert_eq!(changed_page.paper_profile, second);
     assert_eq!(changed_page.flows, before_flows);
     assert_eq!(current.notebook.page_profiles, before_profiles);
 
@@ -10873,7 +10873,7 @@ fn direct_edit_batch_apply_replays_every_established_value_family() {
     let current = service.current().expect("mixed-family revision");
     assert_eq!(current.notebook.page_profiles[0].geometry, changed_profile);
     assert_eq!(current.notebook.pages[0].id, page);
-    assert_eq!(current.notebook.pages[0].page_profile, second_profile);
+    assert_eq!(current.notebook.pages[0].paper_profile, second_profile);
     let blocks = &current.notebook.pages[0].flows[0].blocks;
     let BlockContent::Paragraph(spans) = &blocks[0].content else {
         panic!("first block must remain paragraph");
@@ -10934,7 +10934,7 @@ fn direct_edit_batch_apply_replays_every_established_value_family() {
         physical_page_profile(),
     );
     assert_eq!(current.notebook.pages[0].id, page);
-    assert_eq!(current.notebook.pages[0].page_profile, profile);
+    assert_eq!(current.notebook.pages[0].paper_profile, profile);
     let blocks = &current.notebook.pages[0].flows[0].blocks;
     let BlockContent::Paragraph(spans) = &blocks[0].content else {
         panic!("Undo first block must remain paragraph");
@@ -12647,7 +12647,7 @@ fn ordered_direct_edit_batch_seeds_structured_and_profile_impacts() {
     candidate.pages.push(Page {
         flows: vec![],
         id: second_page,
-        page_profile: profile,
+        paper_profile: profile,
     });
     let AcceptanceOutcome::Accepted { mapping, revision } =
         session.accept(candidate)
@@ -13511,7 +13511,7 @@ fn direct_formula_edit_reaches_nested_structures_across_revisions() {
                 id: flow_id,
             }],
             id: page_id,
-            page_profile: profile_id,
+            paper_profile: profile_id,
         }],
         provenance: vec![],
         styles: vec![],
@@ -14199,7 +14199,7 @@ fn first_candidate_acceptance_commits_one_revision_and_identity_mapping() {
         physical_page_profile()
     );
     assert_eq!(
-        current.notebook.pages[0].page_profile,
+        current.notebook.pages[0].paper_profile,
         current.notebook.page_profiles[0].id,
     );
 }
@@ -14224,7 +14224,7 @@ fn rejected_candidates_do_not_consume_future_accepted_identity_sequences() {
                 exercised.accept(invalid)
             },
             2 => {
-                invalid.pages[0].page_profile = invalid.pages[0].id;
+                invalid.pages[0].paper_profile = invalid.pages[0].id;
                 exercised.accept(invalid)
             },
             _ => {
@@ -14354,7 +14354,7 @@ fn page_profile_reference_kind_rejects_without_changing_current_revision() {
     let candidate_ids = IdentityAllocator::new();
     let valid = candidate_notebook(&candidate_ids, "accepted");
     let mut invalid = candidate_notebook(&candidate_ids, "wrong paper owner");
-    invalid.pages[0].page_profile = invalid.pages[0].id;
+    invalid.pages[0].paper_profile = invalid.pages[0].id;
     let wrong_owner = invalid.pages[0].id;
     let mut session = SemanticNotebookSessionService::default();
     let _ = session.accept(valid);
@@ -14562,7 +14562,7 @@ fn nested_semantic_families_promote_all_owned_and_referenced_identities() {
                 id: flow_id,
             }],
             id: page_id,
-            page_profile: page_profile_id,
+            paper_profile: page_profile_id,
         }],
         provenance: vec![Provenance {
             id: provenance_id,
@@ -14613,7 +14613,7 @@ fn nested_semantic_families_promote_all_owned_and_referenced_identities() {
         accepted_for(&mapping, page_profile_id),
     );
     assert_eq!(
-        current.notebook.pages[0].page_profile,
+        current.notebook.pages[0].paper_profile,
         accepted_for(&mapping, page_profile_id),
     );
     let table_block = &current.notebook.pages[0].flows[0].blocks[3];
@@ -15672,7 +15672,7 @@ fn direct_text_edit_reaches_nested_text_families_across_revisions() {
                 id: flow_id,
             }],
             id: page_id,
-            page_profile: page_profile_id,
+            paper_profile: page_profile_id,
         }],
         provenance: vec![],
         styles: vec![],
@@ -15769,7 +15769,7 @@ fn direct_page_profile_edit_preserves_profile_and_page_identity() {
     assert_eq!(after.notebook.id, before.notebook.id);
     assert_eq!(after.notebook.pages[0].id, before.notebook.pages[0].id);
     assert_eq!(after.notebook.page_profiles[0].id, target);
-    assert_eq!(after.notebook.pages[0].page_profile, target);
+    assert_eq!(after.notebook.pages[0].paper_profile, target);
     assert_eq!(after.notebook.page_profiles[0].geometry, geometry);
     assert_eq!(
         after.notebook.pages[0].flows,

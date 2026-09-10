@@ -165,7 +165,7 @@ fn candidate_fixture(ids: &IdentityAllocator) -> CandidateFixture {
                         id: flow_one,
                     }],
                     id: page_one,
-                    page_profile: profile_one,
+                    paper_profile: profile_one,
                 },
                 Page {
                     flows: vec![Flow {
@@ -179,7 +179,7 @@ fn candidate_fixture(ids: &IdentityAllocator) -> CandidateFixture {
                         id: flow_two,
                     }],
                     id: page_two,
-                    page_profile: profile_two,
+                    paper_profile: profile_two,
                 },
             ],
             provenance: vec![],

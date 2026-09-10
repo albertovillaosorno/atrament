@@ -172,11 +172,11 @@ pub fn validate_fixed_placement(
         .notebook
         .page_profiles
         .iter()
-        .find(|profile| profile.id == page.page_profile)
+        .find(|profile| profile.id == page.paper_profile)
     else {
         return Err(FixedRegionLayoutError::MissingPageProfile {
             page: page.id,
-            profile: page.page_profile,
+            profile: page.paper_profile,
         });
     };
     let valid = profile.geometry.validate().map_err(|reason| {

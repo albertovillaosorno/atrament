@@ -340,7 +340,7 @@ pub struct Page<Identity> {
     /// Stable or candidate-local semantic identity.
     pub id: Identity,
     /// Physical page-profile identity used by this page.
-    pub page_profile: Identity,
+    pub paper_profile: Identity,
 }
 
 /// One semantic identity owning a complete physical page profile.

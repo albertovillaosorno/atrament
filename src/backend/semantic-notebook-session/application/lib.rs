@@ -2085,7 +2085,7 @@ fn accept_page(
             .map(|flow| accept_flow(flow, identities))
             .collect::<Result<Vec<_>, _>>()?,
         id: accepted_id(page.id, identities)?,
-        page_profile: accepted_id(page.page_profile, identities)?,
+        paper_profile: accepted_id(page.paper_profile, identities)?,
     })
 }
 
@@ -2545,11 +2545,11 @@ fn index_direct_edit_page_profiles(
         BTreeMap::<AcceptedIdentity, Vec<AcceptedIdentity>>::new();
     for page in &notebook.pages {
         if request.contains_family(
-            page.page_profile,
+            page.paper_profile,
             SemanticCommandFamily::DocumentConstraint,
         ) {
             profile_pages
-                .entry(page.page_profile)
+                .entry(page.paper_profile)
                 .or_default()
                 .push(page.id);
         }
@@ -2601,7 +2601,7 @@ fn index_direct_edit_pages(
                 kind: SemanticIdentityKind::Page,
                 owner: Some(notebook.id),
             },
-            EditableSemanticValue::PageProfileReference(page.page_profile),
+            EditableSemanticValue::PageProfileReference(page.paper_profile),
             DirectEditImpactScope::Pages { pages: vec![page.id] },
             revision,
         );
@@ -3407,7 +3407,7 @@ fn direct_edit_document_constraint_scope(
     let pages = notebook
         .pages
         .iter()
-        .filter(|page| page.page_profile == target)
+        .filter(|page| page.paper_profile == target)
         .map(|page| page.id)
         .collect::<Vec<_>>();
     if pages.is_empty() {
@@ -5126,7 +5126,7 @@ fn page_profile_reference_value(
         .pages
         .iter()
         .find(|page| page.id == target)
-        .map(|page| page.page_profile)
+        .map(|page| page.paper_profile)
 }
 
 fn page_profile_value(
@@ -5370,7 +5370,7 @@ fn replace_page_profile_reference_value(
     else {
         return false;
     };
-    page.page_profile = reference;
+    page.paper_profile = reference;
     true
 }
 
@@ -6394,7 +6394,7 @@ fn candidate_page(
 ) -> Result<(), CandidateGraphError> {
     graph.register(page.id, CandidateReferenceKind::Semantic)?;
     graph.reference(
-        Some(page.page_profile),
+        Some(page.paper_profile),
         CandidateReferenceKind::PageProfile,
     );
     for flow in &page.flows {

@@ -180,14 +180,14 @@ fn page_regions(
     let mut regions = Vec::with_capacity(remaining_pages);
     let mut writable_by_profile = BTreeMap::new();
     for page in revision.notebook.pages.iter().skip(start_page_index) {
-        let Some(profile) = profiles.get(&page.page_profile).copied() else {
+        let Some(profile) = profiles.get(&page.paper_profile).copied() else {
             return Err(SemanticPaginationError::MissingPageProfile {
                 page: page.id,
-                profile: page.page_profile,
+                profile: page.paper_profile,
             });
         };
         let writable = if let Some(writable) =
-            writable_by_profile.get(&page.page_profile).copied()
+            writable_by_profile.get(&page.paper_profile).copied()
         {
             writable
         } else {
@@ -204,7 +204,7 @@ fn page_regions(
                 }
             })?;
             let _previous =
-                writable_by_profile.insert(page.page_profile, writable);
+                writable_by_profile.insert(page.paper_profile, writable);
             writable
         };
         regions.push(PageRegion { page: page.id, writable });
