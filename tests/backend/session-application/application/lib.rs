@@ -4723,6 +4723,123 @@ fn invalid_grapheme_range_is_atomic_and_preserves_history() {
     );
 }
 
+struct PanicBoundaryProvider;
+
+impl GraphemeBoundaryProvider for PanicBoundaryProvider {
+    fn byte_offset(
+        &self,
+        _source: &str,
+        _grapheme_index: usize,
+    ) -> Option<usize> {
+        panic!("inadmissible semantic target must not query boundaries");
+    }
+
+    fn grapheme_count(&self, _source: &str) -> usize {
+        panic!("inadmissible semantic target must not count graphemes");
+    }
+}
+
+#[test]
+fn inadmissible_text_edits_do_not_query_grapheme_boundaries() {
+
+    let provider = PanicBoundaryProvider;
+    let synthetic = IdentityAllocator::new();
+    let unavailable_base = synthetic.allocate_revision().expect("revision id");
+    let unavailable_target = synthetic
+        .allocate_accepted()
+        .expect("accepted id");
+    let mut session = application::SessionApplication::default();
+    assert_eq!(
+        session.replace_text_grapheme_range(
+            &provider,
+            application::TextGraphemeRangeEdit {
+                base: unavailable_base,
+                range: GraphemeRange { count: 0, start: 0 },
+                replacement: "unused",
+                target: unavailable_target,
+            },
+        ),
+        Ok(TextEditOutcome::NoAcceptedRevision),
+    );
+
+    let candidate_ids = IdentityAllocator::new();
+    let (candidate, candidate_span) =
+        editable_text_candidate(&candidate_ids, "current text");
+    let AcceptanceOutcome::Accepted { mapping, revision: base } =
+        session.accept_candidate(candidate)
+    else {
+        panic!("text target candidate must be accepted");
+    };
+    let span = mapping
+        .iter()
+        .find(|entry| entry.candidate == candidate_span)
+        .expect("text span identity must map")
+        .accepted;
+    let TextEditOutcome::Applied { revision: current, .. } =
+        session.replace_text(base, span, String::from("new current text"))
+    else {
+        panic!("intervening text edit must apply");
+    };
+    assert_eq!(
+        session.replace_text_grapheme_range(
+            &provider,
+            application::TextGraphemeRangeEdit {
+                base,
+                range: GraphemeRange { count: 0, start: 0 },
+                replacement: "unused",
+                target: span,
+            },
+        ),
+        Ok(TextEditOutcome::StaleBase { current }),
+    );
+
+    let replacement_ids = IdentityAllocator::new();
+    let (replacement, candidate_formula, _, _, _) =
+        replacement_family_candidate(&replacement_ids);
+    let AcceptanceOutcome::Accepted {
+        mapping: replacement_mapping,
+        revision: replacement_revision,
+    } = session.accept_candidate(replacement)
+    else {
+        panic!("replacement-family candidate must be accepted");
+    };
+    let formula = replacement_mapping
+        .iter()
+        .find(|entry| entry.candidate == candidate_formula)
+        .expect("formula identity must map")
+        .accepted;
+    assert_eq!(
+        session.replace_text_grapheme_range(
+            &provider,
+            application::TextGraphemeRangeEdit {
+                base: replacement_revision,
+                range: GraphemeRange { count: 0, start: 0 },
+                replacement: "unused",
+                target: span,
+            },
+        ),
+        Ok(TextEditOutcome::TargetNotFound {
+            revision: replacement_revision,
+            target: span,
+        }),
+    );
+    assert_eq!(
+        session.replace_text_grapheme_range(
+            &provider,
+            application::TextGraphemeRangeEdit {
+                base: replacement_revision,
+                range: GraphemeRange { count: 0, start: 0 },
+                replacement: "unused",
+                target: formula,
+            },
+        ),
+        Ok(TextEditOutcome::TargetNotText {
+            revision: replacement_revision,
+            target: formula,
+        }),
+    );
+}
+
 struct MissingAdvertisedBoundary;
 
 impl GraphemeBoundaryProvider for MissingAdvertisedBoundary {
