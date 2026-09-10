@@ -184,6 +184,7 @@ fn exact_plan_and_calibration_with_complete_limits_passes_dry_run() {
 #[test]
 fn operation_count_mismatch_rejects_before_limit_interpretation() {
     let mut evaluations = clean_evaluations();
+    evaluations[0].state = DryRunLimitState::Violated;
     evaluations.pop();
     let dry_run = MotionPlanDryRun {
         calibration: calibration(),
@@ -238,6 +239,23 @@ fn unknown_or_violated_limit_state_blocks_exact_operation() {
     assert_eq!(
         validate_motion_plan_dry_run(&violated_run),
         Err(DryRunValidationError::ViolatedBoundary { operation_index: 0 }),
+    );
+}
+
+#[test]
+fn first_invalid_limit_state_wins_in_plan_order() {
+    let mut evaluations = clean_evaluations();
+    evaluations[1].state = DryRunLimitState::Unknown;
+    evaluations[2].state = DryRunLimitState::Violated;
+    evaluations[3].state = DryRunLimitState::Unknown;
+    let dry_run = MotionPlanDryRun {
+        calibration: calibration(),
+        limit_evaluations: evaluations,
+        plan: plan(),
+    };
+    assert_eq!(
+        validate_motion_plan_dry_run(&dry_run),
+        Err(DryRunValidationError::UnknownLimitState { operation_index: 1 }),
     );
 }
 
