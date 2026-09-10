@@ -5719,35 +5719,7 @@ fn replace_table_cell_span_content(
             Ok(false)
         },
         BlockContent::Table(table) => {
-            let mut changed = false;
-            for row in &mut table.rows {
-                for cell in &mut row.cells {
-                    if cell.id == target {
-                        cell.span = span;
-                        changed = true;
-                        break;
-                    }
-                }
-                if changed {
-                    break;
-                }
-            }
-            if changed {
-                table.validate_grid()?;
-                return Ok(true);
-            }
-            for row in &mut table.rows {
-                for cell in &mut row.cells {
-                    if replace_table_cell_span_blocks(
-                        &mut cell.blocks,
-                        target,
-                        span,
-                    )? {
-                        return Ok(true);
-                    }
-                }
-            }
-            Ok(false)
+            replace_table_cell_span_table(table, target, span)
         },
         BlockContent::Citation(_)
         | BlockContent::Date(_)
@@ -5763,6 +5735,38 @@ fn replace_table_cell_span_content(
         | BlockContent::Rule
         | BlockContent::Unresolved(_) => Ok(false),
     }
+}
+
+fn replace_table_cell_span_table(
+    table: &mut Table<AcceptedIdentity>,
+    target: AcceptedIdentity,
+    span: TableCellSpan,
+) -> Result<bool, TableGridError<AcceptedIdentity>> {
+    let mut changed = false;
+    for row in &mut table.rows {
+        for cell in &mut row.cells {
+            if cell.id == target {
+                cell.span = span;
+                changed = true;
+                break;
+            }
+        }
+        if changed {
+            break;
+        }
+    }
+    if changed {
+        table.validate_grid()?;
+        return Ok(true);
+    }
+    for row in &mut table.rows {
+        for cell in &mut row.cells {
+            if replace_table_cell_span_blocks(&mut cell.blocks, target, span)? {
+                return Ok(true);
+            }
+        }
+    }
+    Ok(false)
 }
 
 fn replace_table_cell_span_value(
