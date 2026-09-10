@@ -1408,6 +1408,9 @@ dependency validity, retry-safe batch-local insertion handles, and backend-owned
 resource limits without choosing final wire field names or JSON Schema. The task
 remains open until the backend-owned envelope and compatibility rules are
 implemented and versioned.
+The exhaustive three-node dependency-mask oracle requires valid, self, missing,
+cyclic, and forward-dependency outcomes to occur. Duplicate identities remain a
+separate fixture because that Cartesian graph uses fixed-unique command IDs.
 
 ### TODO - Implement atomic command validation and apply
 

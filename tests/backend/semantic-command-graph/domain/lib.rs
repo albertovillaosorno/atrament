@@ -723,6 +723,11 @@ fn reference_three_node_graph(
 #[test]
 fn every_three_command_graph_matches_invalid_precedence_oracle() {
     let mut cases = 0_u32;
+    let mut saw_valid = false;
+    let mut saw_self_dependency = false;
+    let mut saw_missing_dependency = false;
+    let mut saw_cycle = false;
+    let mut saw_forward_dependency = false;
     for first_mask in 0_u8..16 {
         for second_mask in 0_u8..16 {
             for third_mask in 0_u8..16 {
@@ -731,9 +736,28 @@ fn every_three_command_graph_matches_invalid_precedence_oracle() {
                     node(1, &exhaustive_dependency_mask(second_mask)),
                     node(2, &exhaustive_dependency_mask(third_mask)),
                 ];
+                let expected = reference_three_node_graph(&nodes);
+                match &expected {
+                    Ok(()) => saw_valid = true,
+                    Err(CommandGraphError::SelfDependency { .. }) => {
+                        saw_self_dependency = true;
+                    },
+                    Err(CommandGraphError::MissingDependency { .. }) => {
+                        saw_missing_dependency = true;
+                    },
+                    Err(CommandGraphError::Cycle) => saw_cycle = true,
+                    Err(CommandGraphError::DependencyAfterCommand { .. }) => {
+                        saw_forward_dependency = true;
+                    },
+                    Err(CommandGraphError::DuplicateIdentity { .. }) => {
+                        panic!(
+                            "three-node oracle uses fixed unique identities",
+                        );
+                    },
+                }
                 assert_eq!(
                     validate_command_graph(&nodes),
-                    reference_three_node_graph(&nodes),
+                    expected,
                     "graph mismatch for masks {}/{}/{}",
                     first_mask,
                     second_mask,
@@ -744,6 +768,11 @@ fn every_three_command_graph_matches_invalid_precedence_oracle() {
         }
     }
     assert_eq!(cases, 4_096);
+    assert!(saw_valid);
+    assert!(saw_self_dependency);
+    assert!(saw_missing_dependency);
+    assert!(saw_cycle);
+    assert!(saw_forward_dependency);
 }
 
 fn reference_dependency_requirements(
