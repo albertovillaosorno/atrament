@@ -11,20 +11,21 @@
 // - Owns:
 //   - Transport-neutral line-art extraction request/result authority.
 // - Must-Not:
-//   - Decode images, choose thresholds, cleanup/detail/min-feature semantics,
-//     derive paths, rasterize, render, or mutate source assets.
+//   - Decode images, choose control units/ranges/semantics, derive paths,
+//     rasterize, render, or mutate source assets.
 // - Allows:
-//   - Inputs: Caller-owned source identity and configurable extraction levels.
+//   - Inputs: Caller-owned source identity and configurable extraction
+//     controls.
 //   - Outputs: Source-linked transparent black vector-path evidence.
 //   - Side effects: None.
 // - Split-When:
-//   - Extraction controls or algorithms gain independent executable authority.
+//   - Extraction-control semantics or algorithms gain executable authority.
 // - Merge-When:
 //   - Line-art extraction becomes inseparable from image-placement authority.
 // - Summary:
 //   - Freezes the live-compatible transparent black path boundary.
 // - Description:
-//   - Retains source identity and extraction levels without choosing an
+//   - Retains source identity and exact extraction controls without choosing an
 //     algorithm.
 // - Usage:
 //   - Carry admitted line-art results into later vector/live projections.
@@ -41,31 +42,55 @@ pub enum LineArtAppearance {
     TransparentBlack,
 }
 
+/// Exact caller-owned controls for one line-art extraction request.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct LineArtExtractionControls<
+    Cleanup,
+    Detail,
+    Levels,
+    MinimumFeature,
+    Preview,
+    Threshold,
+> {
+    /// Caller-owned cleanup control.
+    pub cleanup: Cleanup,
+    /// Caller-owned detail control.
+    pub detail: Detail,
+    /// Caller-owned configurable extraction levels.
+    pub levels: Levels,
+    /// Caller-owned minimum-feature control.
+    pub minimum_feature: MinimumFeature,
+    /// Caller-owned preview control.
+    pub preview: Preview,
+    /// Caller-owned threshold control.
+    pub threshold: Threshold,
+}
+
 /// Why one extracted result does not belong to its originating request.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum LineArtExtractionPairError {
-    /// Result reports a different extraction-level configuration.
-    LevelsMismatch,
+    /// Result reports a different extraction-control configuration.
+    ControlsMismatch,
     /// Result reports a different source image identity.
     SourceIdentityMismatch,
 }
 
 /// One source-linked line-art extraction request.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct LineArtExtractionRequest<Levels, SourceIdentity> {
-    /// Caller-owned configurable extraction levels.
-    pub levels: Levels,
+pub struct LineArtExtractionRequest<Controls, SourceIdentity> {
+    /// Exact caller-owned extraction controls.
+    pub controls: Controls,
     /// Stable identity of the original source image.
     pub source_identity: SourceIdentity,
 }
 
 /// One inspectable line-art result produced by a separate extractor.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct LineArtExtractionResult<Levels, Path, SourceIdentity> {
+pub struct LineArtExtractionResult<Controls, Path, SourceIdentity> {
     /// Accepted live-compatible appearance.
     pub appearance: LineArtAppearance,
-    /// Exact caller-owned levels used for this extraction.
-    pub levels: Levels,
+    /// Exact caller-owned controls used for this extraction.
+    pub controls: Controls,
     /// Ordered caller-produced vector paths.
     pub paths: Vec<Path>,
     /// Original source identity retained without overwriting the asset.
@@ -76,17 +101,17 @@ pub struct LineArtExtractionResult<Levels, Path, SourceIdentity> {
 ///
 /// # Errors
 ///
-/// Returns a typed mismatch when source identity or level configuration drifts.
-pub fn validate_line_art_extraction_pair<Levels, Path, SourceIdentity>(
-    request: &LineArtExtractionRequest<Levels, SourceIdentity>,
-    result: &LineArtExtractionResult<Levels, Path, SourceIdentity>,
+/// Returns a typed mismatch when source identity or extraction controls drift.
+pub fn validate_line_art_extraction_pair<Controls, Path, SourceIdentity>(
+    request: &LineArtExtractionRequest<Controls, SourceIdentity>,
+    result: &LineArtExtractionResult<Controls, Path, SourceIdentity>,
 ) -> Result<(), LineArtExtractionPairError>
 where
-    Levels: PartialEq,
+    Controls: PartialEq,
     SourceIdentity: PartialEq,
 {
-    if request.levels != result.levels {
-        return Err(LineArtExtractionPairError::LevelsMismatch);
+    if request.controls != result.controls {
+        return Err(LineArtExtractionPairError::ControlsMismatch);
     }
     if request.source_identity != result.source_identity {
         return Err(LineArtExtractionPairError::SourceIdentityMismatch);

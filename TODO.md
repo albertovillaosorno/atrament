@@ -1351,12 +1351,15 @@ Convert images to transparent single-color paths with levels, threshold,
 cleanup, detail, minimum feature, and preview controls suitable for hand color.
 
 Current executable evidence now freezes the accepted live-compatible boundary:
-one source image identity plus caller-owned configurable levels can produce an
-ordered transparent-black vector-path result linked back to that source. Result
-validation rejects source-identity or level-configuration drift from the exact
-request. Image decoding, threshold/cleanup/detail/minimum-feature semantics,
-preview controls, path extraction, vector geometry, acceptance diagnostics, and
-rendering remain open.
+one source image identity plus caller-owned levels, threshold, cleanup, detail,
+minimum-feature, and preview controls can produce an ordered transparent-black
+vector-path result linked back to that source. Result validation rejects drift
+in any control or source identity from the exact request, with control drift
+checked first. The control values remain generic and have no inferred defaults.
+
+Image decoding, control units/ranges/semantics, path extraction, vector
+geometry,
+acceptance diagnostics, preview rendering, and final rendering remain open.
 
 ### TODO - Implement digital paper notes and shadows
 

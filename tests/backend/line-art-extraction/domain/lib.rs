@@ -11,11 +11,11 @@
 // - Owns:
 //   - Regression evidence for source-linked live line-art authority.
 // - Must-Not:
-//   - Decode images, choose extraction controls, derive paths, or render
-//     output.
+//   - Decode images, choose control semantics, derive paths, or render output.
 // - Allows:
-//   - Inputs: Deterministic source, level, and vector-path fixtures.
-//   - Outputs: Assertions over transparent black appearance and source linkage.
+//   - Inputs: Deterministic source, control, and vector-path fixtures.
+//   - Outputs: Assertions over exact controls, fixed appearance, and source
+//     linkage.
 //   - Side effects: Process-local test allocation only.
 // - Split-When:
 //   - Extraction algorithms gain independent fixtures.
@@ -24,85 +24,117 @@
 // - Summary:
 //   - Proves line art stays source-linked and live-compatible by structure.
 // - Description:
-//   - Covers configurable levels, ordered paths, and fixed appearance.
+//   - Covers every configurable control, ordered paths, and fixed appearance.
 // - Usage:
 //   - Compile directly against the line-art-extraction domain.
 // - Defaults:
-//   - No path or level is synthesized implicitly.
+//   - No control value or path is synthesized implicitly.
 //
 use atrament_line_art_extraction::{
-    LineArtAppearance, LineArtExtractionPairError, LineArtExtractionRequest,
-    LineArtExtractionResult, validate_line_art_extraction_pair,
+    LineArtAppearance, LineArtExtractionControls, LineArtExtractionPairError,
+    LineArtExtractionRequest, LineArtExtractionResult,
+    validate_line_art_extraction_pair,
 };
 
-#[test]
-fn request_retains_source_identity_and_caller_owned_levels() {
-    let request = LineArtExtractionRequest {
-        levels: [2_u8, 5_u8, 9_u8],
-        source_identity: "photo-17",
-    };
-    assert_eq!(request.source_identity, "photo-17");
-    assert_eq!(request.levels, [2, 5, 9]);
+type Controls = LineArtExtractionControls<u8, u8, u8, u8, u8, u8>;
+
+fn controls() -> Controls {
+    LineArtExtractionControls {
+        cleanup: 3,
+        detail: 4,
+        levels: 5,
+        minimum_feature: 6,
+        preview: 7,
+        threshold: 8,
+    }
 }
 
-#[test]
-fn result_is_explicitly_transparent_black_and_source_linked() {
-    let result = LineArtExtractionResult {
+fn request() -> LineArtExtractionRequest<Controls, &'static str> {
+    LineArtExtractionRequest {
+        controls: controls(),
+        source_identity: "photo-17",
+    }
+}
+
+fn result() -> LineArtExtractionResult<Controls, &'static str, &'static str> {
+    LineArtExtractionResult {
         appearance: LineArtAppearance::TransparentBlack,
-        levels: 4_u8,
+        controls: controls(),
         paths: vec!["path-1", "path-2"],
         source_identity: "photo-17",
-    };
-    assert_eq!(
-        result.appearance,
-        LineArtAppearance::TransparentBlack,
-    );
+    }
+}
+
+#[test]
+fn request_retains_source_identity_and_every_caller_owned_control() {
+    let request = request();
+    assert_eq!(request.source_identity, "photo-17");
+    assert_eq!(request.controls.cleanup, 3);
+    assert_eq!(request.controls.detail, 4);
+    assert_eq!(request.controls.levels, 5);
+    assert_eq!(request.controls.minimum_feature, 6);
+    assert_eq!(request.controls.preview, 7);
+    assert_eq!(request.controls.threshold, 8);
+}
+
+#[test]
+fn result_is_transparent_black_source_linked_and_order_preserving() {
+    let result = result();
+    assert_eq!(result.appearance, LineArtAppearance::TransparentBlack);
     assert_eq!(result.source_identity, "photo-17");
     assert_eq!(result.paths, ["path-1", "path-2"]);
+    assert_eq!(result.controls, controls());
 }
 
 #[test]
-fn result_preserves_extractor_path_order_and_exact_level_value() {
-    let result = LineArtExtractionResult {
-        appearance: LineArtAppearance::TransparentBlack,
-        levels: "caller-level-config-v3",
-        paths: vec![3_u32, 1_u32, 7_u32],
-        source_identity: 88_u64,
-    };
-    assert_eq!(result.levels, "caller-level-config-v3");
-    assert_eq!(result.paths, [3, 1, 7]);
-    assert_eq!(result.source_identity, 88);
+fn every_extraction_control_is_part_of_exact_request_result_identity() {
+    for changed_index in 0..6 {
+        let request = request();
+        let mut result = result();
+        match changed_index {
+            0 => result.controls.cleanup += 1,
+            1 => result.controls.detail += 1,
+            2 => result.controls.levels += 1,
+            3 => result.controls.minimum_feature += 1,
+            4 => result.controls.preview += 1,
+            5 => result.controls.threshold += 1,
+            _ => unreachable!("six controls are enumerated"),
+        }
+        assert_eq!(
+            validate_line_art_extraction_pair(&request, &result),
+            Err(LineArtExtractionPairError::ControlsMismatch),
+            "changed control index {changed_index}",
+        );
+    }
 }
 
 #[test]
-fn result_must_match_originating_source_and_level_configuration() {
-    let request = LineArtExtractionRequest {
-        levels: "levels-v2",
-        source_identity: "photo-17",
-    };
-    let matching = LineArtExtractionResult {
-        appearance: LineArtAppearance::TransparentBlack,
-        levels: "levels-v2",
-        paths: vec!["path-1"],
-        source_identity: "photo-17",
-    };
-    assert_eq!(validate_line_art_extraction_pair(&request, &matching), Ok(()));
-
-    let wrong_levels = LineArtExtractionResult {
-        levels: "levels-v3",
-        ..matching.clone()
-    };
+fn control_drift_rejects_before_source_identity_drift() {
+    let request = request();
+    let mut result = result();
+    result.controls.threshold += 1;
+    result.source_identity = "photo-18";
     assert_eq!(
-        validate_line_art_extraction_pair(&request, &wrong_levels),
-        Err(LineArtExtractionPairError::LevelsMismatch),
+        validate_line_art_extraction_pair(&request, &result),
+        Err(LineArtExtractionPairError::ControlsMismatch),
     );
+}
 
-    let wrong_source = LineArtExtractionResult {
-        source_identity: "photo-18",
-        ..matching
-    };
+#[test]
+fn source_identity_drift_rejects_when_controls_match_exactly() {
+    let request = request();
+    let mut result = result();
+    result.source_identity = "photo-18";
     assert_eq!(
-        validate_line_art_extraction_pair(&request, &wrong_source),
+        validate_line_art_extraction_pair(&request, &result),
         Err(LineArtExtractionPairError::SourceIdentityMismatch),
+    );
+}
+
+#[test]
+fn exact_request_result_pair_is_valid_without_interpreting_controls() {
+    assert_eq!(
+        validate_line_art_extraction_pair(&request(), &result()),
+        Ok(()),
     );
 }

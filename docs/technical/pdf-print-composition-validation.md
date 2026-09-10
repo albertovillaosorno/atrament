@@ -186,7 +186,15 @@ Before extending this output path, preserve these boundaries:
    only
    in the adapters or policies that can observe them.
 
+The line-art extraction boundary now also preserves caller-owned levels,
+threshold, cleanup, detail, minimum-feature, and preview controls as one exact
+request configuration. A result must match that entire configuration and the
+source image identity before its ordered transparent-black vector paths can be
+accepted as belonging to the request. Control units, ranges, algorithms, and
+defaults remain intentionally unspecified.
+
 Still-open implementation work includes PDF serialization and validation,
 resource embedding, font/searchable-text compatibility, image intake and
 placement, render-manifest serialization/identity, output file adapters, actual
-visual comparators and goldens, and measured print/scan acceptance thresholds.
+visual comparators and goldens, line-art algorithms, and measured print/scan
+acceptance thresholds.
