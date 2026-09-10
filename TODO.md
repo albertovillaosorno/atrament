@@ -1878,7 +1878,9 @@ semantic layout, vector topology, layer composition, render seeds, physical
 bounds, final pixels, digital theme, live theme, and overflow overlays before a
 render-regression report is structurally complete. Duplicate or missing axes
 reject, while mismatches remain explicit per axis instead of being hidden by a
-passing final-pixel result. Axis-specific comparators, pixel tolerances, golden
+passing final-pixel result. Leave-one-out and
+one-duplicate-at-a-time matrices prove every axis independently participates in
+both completeness checks. Axis-specific comparators, pixel tolerances, golden
 artifact storage, renderer output, and visual acceptance policy remain open.
 
 ### TODO - Complete accessibility and keyboard operation

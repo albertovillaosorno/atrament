@@ -36,19 +36,21 @@ use atrament_render_regression_evidence::{
     validate_render_regression_evidence,
 };
 
+const AXES: [RenderRegressionAxis; 9] = [
+    RenderRegressionAxis::DigitalTheme,
+    RenderRegressionAxis::FinalPixels,
+    RenderRegressionAxis::LayerComposition,
+    RenderRegressionAxis::LiveTheme,
+    RenderRegressionAxis::OverflowOverlay,
+    RenderRegressionAxis::PhysicalBounds,
+    RenderRegressionAxis::RenderSeeds,
+    RenderRegressionAxis::SemanticLayout,
+    RenderRegressionAxis::VectorTopology,
+];
+
 fn complete_evidence() -> Vec<RenderRegressionEvidence> {
-    [
-        RenderRegressionAxis::DigitalTheme,
-        RenderRegressionAxis::FinalPixels,
-        RenderRegressionAxis::LayerComposition,
-        RenderRegressionAxis::LiveTheme,
-        RenderRegressionAxis::OverflowOverlay,
-        RenderRegressionAxis::PhysicalBounds,
-        RenderRegressionAxis::RenderSeeds,
-        RenderRegressionAxis::SemanticLayout,
-        RenderRegressionAxis::VectorTopology,
-    ]
-    .into_iter()
+    AXES
+        .into_iter()
     .map(|axis| RenderRegressionEvidence {
         axis,
         comparison: RenderRegressionComparison::Match,
@@ -65,31 +67,42 @@ fn every_first_release_regression_axis_is_required_independently() {
 }
 
 #[test]
-fn missing_axis_rejects_even_when_final_pixels_match() {
-    let mut evidence = complete_evidence();
-    evidence.retain(|item| item.axis != RenderRegressionAxis::VectorTopology);
-    assert_eq!(
-        validate_render_regression_evidence(&evidence),
-        Err(RenderRegressionEvidenceError::MissingAxis {
-            axis: RenderRegressionAxis::VectorTopology,
-        }),
-    );
-    assert!(evidence.iter().any(|item| {
-        item.axis == RenderRegressionAxis::FinalPixels
-            && item.comparison == RenderRegressionComparison::Match
-    }));
+fn every_axis_is_independently_required_even_when_other_axes_match() {
+    for missing in AXES {
+        let mut evidence = complete_evidence();
+        evidence.retain(|item| item.axis != missing);
+        assert_eq!(
+            validate_render_regression_evidence(&evidence),
+            Err(RenderRegressionEvidenceError::MissingAxis { axis: missing }),
+            "missing axis {missing:?}",
+        );
+        if missing != RenderRegressionAxis::FinalPixels {
+            assert!(evidence.iter().any(|item| {
+                item.axis == RenderRegressionAxis::FinalPixels
+                    && item.comparison == RenderRegressionComparison::Match
+            }));
+        }
+    }
 }
 
 #[test]
-fn duplicate_axis_rejects_before_completeness_is_claimed() {
-    let mut evidence = complete_evidence();
-    evidence.insert(4, evidence[0]);
-    assert_eq!(
-        validate_render_regression_evidence(&evidence),
-        Err(RenderRegressionEvidenceError::DuplicateAxis {
-            axis: RenderRegressionAxis::DigitalTheme,
-        }),
-    );
+fn every_duplicate_axis_rejects_before_completeness_is_claimed() {
+    for duplicate in AXES {
+        let mut evidence = complete_evidence();
+        let item = evidence
+            .iter()
+            .find(|item| item.axis == duplicate)
+            .copied()
+            .expect("complete evidence contains every axis");
+        evidence.insert(4, item);
+        assert_eq!(
+            validate_render_regression_evidence(&evidence),
+            Err(RenderRegressionEvidenceError::DuplicateAxis {
+                axis: duplicate,
+            }),
+            "duplicate axis {duplicate:?}",
+        );
+    }
 }
 
 #[test]
