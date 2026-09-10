@@ -72,15 +72,9 @@ pub struct UnresolvedTranscriptFragment<Confidence, Text, TimeRange> {
     pub time_range: Option<TimeRange>,
 }
 
-/// Derived transcript evidence linked to original media and one ingestion job.
+/// Typed origin facts retained for one derived transcript.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct TranscriptEvidence<
-    EngineIdentity,
-    JobIdentity,
-    MediaIdentity,
-    Word,
-    UnresolvedFragment,
-> {
+pub struct TranscriptOrigin<EngineIdentity, JobIdentity, MediaIdentity> {
     /// Replaceable transcription engine/model identity or version.
     pub engine_identity: EngineIdentity,
     /// Unique ingestion/transcription job identity.
@@ -90,6 +84,14 @@ pub struct TranscriptEvidence<
     pub media_identity: MediaIdentity,
     /// Whether the original source was audio or video.
     pub media_kind: TranscriptMediaKind,
+}
+
+/// Derived transcript evidence linked to original media and one ingestion job.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct TranscriptEvidence<Origin, Word, UnresolvedFragment> {
+    /// Complete typed media/job/engine origin retained without
+    /// reinterpretation.
+    pub origin: Origin,
     /// Explicit unresolved fragments requiring review.
     pub unresolved_fragments: Vec<UnresolvedFragment>,
     /// Resolved words in caller-owned transcript order.

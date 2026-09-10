@@ -80,9 +80,7 @@ pub struct ReviewedTranscriptSpan<'transcript, Word, UnresolvedFragment> {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ReviewedTranscriptStructure<
     'transcript,
-    EngineIdentity,
-    JobIdentity,
-    MediaIdentity,
+    Origin,
     Word,
     UnresolvedFragment,
 > {
@@ -90,13 +88,8 @@ pub struct ReviewedTranscriptStructure<
     pub spans:
         Vec<ReviewedTranscriptSpan<'transcript, Word, UnresolvedFragment>>,
     /// Complete source transcript, including its provenance and uncertainty.
-    pub transcript: &'transcript TranscriptEvidence<
-        EngineIdentity,
-        JobIdentity,
-        MediaIdentity,
-        Word,
-        UnresolvedFragment,
-    >,
+    pub transcript:
+        &'transcript TranscriptEvidence<Origin, Word, UnresolvedFragment>,
 }
 
 /// Fail-closed reviewed-structure validation error.
@@ -124,6 +117,23 @@ pub enum TranscriptStructureError {
     },
 }
 
+/// Result of validating one reviewed transcript structure.
+pub type TranscriptStructureResult<
+    'transcript,
+    Origin,
+    Word,
+    UnresolvedFragment,
+> =
+    Result<
+        ReviewedTranscriptStructure<
+            'transcript,
+            Origin,
+            Word,
+            UnresolvedFragment,
+        >,
+        TranscriptStructureError,
+    >;
+
 /// Validate reviewed roles while preserving the complete source transcript.
 ///
 /// # Errors
@@ -134,30 +144,18 @@ pub enum TranscriptStructureError {
 /// [`ReviewedTranscriptRole::Unresolved`].
 pub fn review_transcript_structure<
     'transcript,
-    EngineIdentity,
-    JobIdentity,
-    MediaIdentity,
+    Origin,
     Word,
     UnresolvedFragment,
 >(
-    transcript: &'transcript TranscriptEvidence<
-        EngineIdentity,
-        JobIdentity,
-        MediaIdentity,
-        Word,
-        UnresolvedFragment,
-    >,
+    transcript:
+        &'transcript TranscriptEvidence<Origin, Word, UnresolvedFragment>,
     spans: Vec<ReviewedTranscriptSpan<'transcript, Word, UnresolvedFragment>>,
-) -> Result<
-    ReviewedTranscriptStructure<
-        'transcript,
-        EngineIdentity,
-        JobIdentity,
-        MediaIdentity,
-        Word,
-        UnresolvedFragment,
-    >,
-    TranscriptStructureError,
+) -> TranscriptStructureResult<
+    'transcript,
+    Origin,
+    Word,
+    UnresolvedFragment,
 > {
     for (span_index, span) in spans.iter().enumerate() {
         match span.source {

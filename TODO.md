@@ -1499,8 +1499,9 @@ WhisperX adapter, preserve word timing and confidence, and always clean up.
 
 Current executable evidence now freezes a transport-neutral derived transcript
 separate from original media and any particular transcription engine. It retains
-original media kind/identity, unique job identity, replaceable engine identity,
-resolved word order, optional word timing/confidence/speaker evidence, and
+original media kind/identity, unique job identity, and replaceable engine
+identity inside one typed origin bundle. It also retains resolved word order,
+optional word timing/confidence/speaker evidence, and
 explicit unresolved fragments. Media decoding, bounded waveform conversion,
 WhisperX invocation, job progress/cancellation, temporary storage, and cleanup
 remain open adapter/lifecycle work.

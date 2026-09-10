@@ -32,17 +32,19 @@
 //     fake.
 //
 use atrament_transcript_evidence::{
-    TranscriptEvidence, TranscriptMediaKind, TranscriptWord,
+    TranscriptEvidence, TranscriptMediaKind, TranscriptOrigin, TranscriptWord,
     UnresolvedTranscriptFragment,
 };
 
 #[test]
 fn transcript_keeps_original_media_job_and_replaceable_engine_identity() {
     let transcript = TranscriptEvidence {
-        engine_identity: "whisper-adapter/model-a",
-        job_identity: "job-17",
-        media_identity: "original-video-4",
-        media_kind: TranscriptMediaKind::Video,
+        origin: TranscriptOrigin {
+            engine_identity: "whisper-adapter/model-a",
+            job_identity: "job-17",
+            media_identity: "original-video-4",
+            media_kind: TranscriptMediaKind::Video,
+        },
         unresolved_fragments:
             Vec::<UnresolvedTranscriptFragment<u8, &str, (u32, u32)>>::new(),
         words: vec![TranscriptWord {
@@ -52,10 +54,10 @@ fn transcript_keeps_original_media_job_and_replaceable_engine_identity() {
             time_range: Some((1_200_u32, 1_430_u32)),
         }],
     };
-    assert_eq!(transcript.media_identity, "original-video-4");
-    assert_eq!(transcript.job_identity, "job-17");
-    assert_eq!(transcript.engine_identity, "whisper-adapter/model-a");
-    assert_eq!(transcript.media_kind, TranscriptMediaKind::Video);
+    assert_eq!(transcript.origin.media_identity, "original-video-4");
+    assert_eq!(transcript.origin.job_identity, "job-17");
+    assert_eq!(transcript.origin.engine_identity, "whisper-adapter/model-a");
+    assert_eq!(transcript.origin.media_kind, TranscriptMediaKind::Video);
 }
 
 #[test]
@@ -80,10 +82,12 @@ fn unresolved_fragment_is_not_promoted_to_resolved_word() {
         time_range: Some((4_000_u32, 4_600_u32)),
     };
     let transcript = TranscriptEvidence {
-        engine_identity: "engine-b",
-        job_identity: "job-3",
-        media_identity: "audio-9",
-        media_kind: TranscriptMediaKind::Audio,
+        origin: TranscriptOrigin {
+            engine_identity: "engine-b",
+            job_identity: "job-3",
+            media_identity: "audio-9",
+            media_kind: TranscriptMediaKind::Audio,
+        },
         unresolved_fragments: vec![unresolved.clone()],
         words: Vec::<TranscriptWord<u8, &str, &str, (u32, u32)>>::new(),
     };

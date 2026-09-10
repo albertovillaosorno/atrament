@@ -32,7 +32,7 @@
 //   - Explicit unresolved fragments remain unresolved without correction.
 //
 use atrament_transcript_evidence::{
-    TranscriptEvidence, TranscriptMediaKind, TranscriptWord,
+    TranscriptEvidence, TranscriptMediaKind, TranscriptOrigin, TranscriptWord,
     UnresolvedTranscriptFragment,
 };
 use atrament_transcript_structure::{
@@ -42,20 +42,17 @@ use atrament_transcript_structure::{
 
 type Word = TranscriptWord<u8, &'static str, &'static str, (u32, u32)>;
 type Unresolved = UnresolvedTranscriptFragment<u8, &'static str, (u32, u32)>;
-type Transcript = TranscriptEvidence<
-    &'static str,
-    &'static str,
-    &'static str,
-    Word,
-    Unresolved,
->;
+type Origin = TranscriptOrigin<&'static str, &'static str, &'static str>;
+type Transcript = TranscriptEvidence<Origin, Word, Unresolved>;
 
 fn transcript_fixture() -> Transcript {
     TranscriptEvidence {
-        engine_identity: "engine/model-a",
-        job_identity: "job-17",
-        media_identity: "lecture-video-3",
-        media_kind: TranscriptMediaKind::Video,
+        origin: TranscriptOrigin {
+            engine_identity: "engine/model-a",
+            job_identity: "job-17",
+            media_identity: "lecture-video-3",
+            media_kind: TranscriptMediaKind::Video,
+        },
         unresolved_fragments: vec![UnresolvedTranscriptFragment {
             confidence: Some(21),
             text: "[inaudible denominator]",
@@ -95,10 +92,16 @@ fn reviewed_structure_keeps_complete_transcript_provenance() {
     }];
     let reviewed = review_transcript_structure(&transcript, spans)
         .expect("resolved section review is admitted");
-    assert_eq!(reviewed.transcript.media_identity, "lecture-video-3");
-    assert_eq!(reviewed.transcript.job_identity, "job-17");
-    assert_eq!(reviewed.transcript.engine_identity, "engine/model-a");
-    assert_eq!(reviewed.transcript.media_kind, TranscriptMediaKind::Video);
+    assert_eq!(
+        reviewed.transcript.origin.media_identity,
+        "lecture-video-3",
+    );
+    assert_eq!(reviewed.transcript.origin.job_identity, "job-17");
+    assert_eq!(reviewed.transcript.origin.engine_identity, "engine/model-a");
+    assert_eq!(
+        reviewed.transcript.origin.media_kind,
+        TranscriptMediaKind::Video,
+    );
 }
 
 #[test]
@@ -210,10 +213,12 @@ fn empty_resolved_words_cannot_claim_source_provenance() {
     );
 
     let empty: Transcript = TranscriptEvidence {
-        engine_identity: "engine/model-a",
-        job_identity: "job-empty",
-        media_identity: "lecture-video-empty",
-        media_kind: TranscriptMediaKind::Video,
+        origin: TranscriptOrigin {
+            engine_identity: "engine/model-a",
+            job_identity: "job-empty",
+            media_identity: "lecture-video-empty",
+            media_kind: TranscriptMediaKind::Video,
+        },
         unresolved_fragments: vec![],
         words: vec![],
     };
@@ -232,10 +237,12 @@ fn empty_resolved_words_cannot_claim_source_provenance() {
 #[test]
 fn zero_sized_evidence_cannot_claim_source_provenance() {
     let transcript = TranscriptEvidence {
-        engine_identity: "engine",
-        job_identity: "job",
-        media_identity: "media",
-        media_kind: TranscriptMediaKind::Audio,
+        origin: TranscriptOrigin {
+            engine_identity: "engine",
+            job_identity: "job",
+            media_identity: "media",
+            media_kind: TranscriptMediaKind::Audio,
+        },
         unresolved_fragments: vec![()],
         words: vec![()],
     };
