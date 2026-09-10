@@ -121,9 +121,9 @@ caller-owned units, distribution metadata, correlation groups, context rules,
 and one explicit variation scale. Each minimum or maximum bound is marked
 `Observed` or `Authorized`.
 
-`validate_variation_parameter` only enforces numeric ordering of the
-caller-owned
-bounds and central tendency. It does not infer a distribution, fit a statistical
+`VariationParameter::validate` only enforces numeric ordering of the
+caller-owned bounds and central tendency. It does not infer a distribution, fit
+a statistical
 model, choose correlation semantics, or turn an authorized creative limit into
 an observation.
 
