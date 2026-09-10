@@ -1438,14 +1438,6 @@ Representative-device selection, concrete units, tolerances, statistical
 analysis, correction transforms, calibration fitting, and pass/fail policy
 remain open.
 
-Current executable evidence now freezes the four physical round-trip measurement
-families required by the accepted PDF ADR: physical scale, clipping, grid
-registration, and photo placement. Each observation retains caller-owned
-device/capture provenance, unit, value, and the rendered/output identity under
-measurement. Margins, color shifts, line weight, scanner distortion, concrete
-units, tolerances, fitting, correction transforms, and pass/fail policy remain
-open.
-
 ### TODO - Meet CPU preview latency and memory budgets
 
 Benchmark long pages, many images, dense equations, zoom, rapid edits, and final
