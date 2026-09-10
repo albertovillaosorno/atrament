@@ -233,7 +233,10 @@ function referenceHandshakeOutcome(value) {
 }
 
 function nextHandshakeMutation(state) {
-    return (Math.imul(state, 1_103_515_245) + 12_345) >>> 0;
+    state ^= state << 13;
+    state ^= state >>> 17;
+    state ^= state << 5;
+    return state >>> 0;
 }
 
 test("generated handshake payloads match fail-closed reference", () => {
@@ -247,15 +250,23 @@ test("generated handshake payloads match fail-closed reference", () => {
         null,
     ];
     let state = 0x5eed_4a11;
+    const seenResults = new Set();
+    const seenVersionModes = new Set();
+    const seenExpectedModes = new Set();
+    const seenOutcomes = new Set();
     for (let caseIndex = 0; caseIndex < 4_096; caseIndex += 1) {
         state = nextHandshakeMutation(state);
-        const result = results[state % results.length];
+        const resultIndex = state % results.length;
+        seenResults.add(resultIndex);
+        const result = results[resultIndex];
         state = nextHandshakeMutation(state);
         const dimension = dimensions[state % dimensions.length];
         state = nextHandshakeMutation(state);
         const versionsMode = state % 4;
+        seenVersionModes.add(versionsMode);
         state = nextHandshakeMutation(state);
         const expectedMode = state % 3;
+        seenExpectedModes.add(expectedMode);
         state = nextHandshakeMutation(state);
         const completenessValue = completeness[state % completeness.length];
         state = nextHandshakeMutation(state);
@@ -285,10 +296,19 @@ test("generated handshake payloads match fail-closed reference", () => {
                     : [{ code, dimension, expected }],
             },
         };
+        const expectedOutcome = referenceHandshakeOutcome(payload);
+        seenOutcomes.add(expectedOutcome.kind);
         assert.deepEqual(
             parseHandshakePayload(payload),
-            referenceHandshakeOutcome(payload),
+            expectedOutcome,
             `generated handshake case ${caseIndex}`,
         );
     }
+    assert.equal(seenResults.size, results.length);
+    assert.equal(seenVersionModes.size, 4);
+    assert.equal(seenExpectedModes.size, 3);
+    assert.deepEqual(
+        [...seenOutcomes].sort(),
+        ["compatible", "incompatible", "invalid"],
+    );
 });

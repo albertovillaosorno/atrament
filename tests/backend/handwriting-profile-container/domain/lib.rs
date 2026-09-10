@@ -362,6 +362,10 @@ fn next_inventory_value(seed: &mut u64) -> u64 {
     *seed
 }
 
+fn next_inventory_selector(seed: &mut u64) -> usize {
+    (next_inventory_value(seed) >> 32) as usize
+}
+
 #[test]
 fn generated_archive_inventory_mutations_match_reference_oracle() {
     const CASES: usize = 4_096;
@@ -392,14 +396,14 @@ fn generated_archive_inventory_mutations_match_reference_oracle() {
         "",
     ];
     let mut seed = 0x5eed_a2c4_2026_u64;
+    let mut seen_operations = [false; 4];
     for case in 0..CASES {
-        let operation = next_inventory_value(&mut seed) % 4;
-        let member_index =
-            next_inventory_value(&mut seed) as usize % canonical.len();
+        let operation = next_inventory_selector(&mut seed) % 4;
+        seen_operations[operation] = true;
+        let member_index = next_inventory_selector(&mut seed) % canonical.len();
         let insertion_index =
-            next_inventory_value(&mut seed) as usize % (canonical.len() + 1);
-        let token_index =
-            next_inventory_value(&mut seed) as usize % tokens.len();
+            next_inventory_selector(&mut seed) % (canonical.len() + 1);
+        let token_index = next_inventory_selector(&mut seed) % tokens.len();
         let mut observed = canonical
             .iter()
             .map(|path| String::from(*path))
@@ -433,6 +437,7 @@ fn generated_archive_inventory_mutations_match_reference_oracle() {
             "generated archive inventory case {case}",
         );
     }
+    assert!(seen_operations.into_iter().all(|seen| seen));
 }
 
 
