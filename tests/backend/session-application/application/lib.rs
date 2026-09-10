@@ -699,6 +699,41 @@ fn run_process_fixture_child(mode: &str) {
         Some(revision),
     );
 
+    let proposal_requested = EditableSemanticValue::Text(String::from(
+        "process-private proposal",
+    ));
+    assert_eq!(
+        session.simulate_direct_edit_proposal(DirectEditProposal {
+            capability_version: CURRENT_COMMAND_BEHAVIOR_VERSION,
+            preconditions: CommandTargetPreconditions {
+                expected_value: Some(EditableSemanticValue::Text(String::from(
+                    "process-private after",
+                ))),
+                identity: IdentityPrecondition {
+                    expected_kind: Some(SemanticIdentityKind::InlineSpan),
+                    expected_owner:
+                        IdentityOwnerExpectation::Direct(text_block),
+                },
+                requested_family: SemanticCommandFamily::TextContent,
+            },
+            requested: proposal_requested.clone(),
+            revision,
+            target: span,
+        }),
+        DirectEditProposalOutcome::Simulated {
+            outcome: DirectEditSimulationOutcome::Applicable {
+                family: SemanticCommandFamily::TextContent,
+                requested: proposal_requested,
+                revision,
+                target: span,
+            },
+        },
+    );
+    assert_eq!(
+        session.accepted_revision().map(|accepted| accepted.id),
+        Some(revision),
+    );
+
     let measurement = RevisionFlowMeasurement {
         flow,
         revision,

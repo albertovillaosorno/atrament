@@ -66,8 +66,9 @@ still reachable through older history, including their exact byte sequences.
 A process fixture now retains all three private draft fields, rejects one
 oversized draft replacement with the shared resource-limit diagnostic,
 retains bytes for two semantic assets, commits text and asset-reference history,
-computes a revision-bound direct-edit preview, measured pagination,
-fixed-region overflow diagnostics and layout-only Export preflight. It also
+computes a revision-bound direct-edit preview and version-bound direct-edit
+proposal, measured pagination, fixed-region overflow diagnostics and layout-only
+Export preflight. It also
 owns one terminal media job with a registered waveform still requiring cleanup.
 Both
 orderly and forced
