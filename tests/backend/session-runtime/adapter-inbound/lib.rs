@@ -1743,7 +1743,7 @@ fn every_required_handshake_version_header_requires_exactly_one_value() {
             );
             assert_eq!(
                 body,
-                br#"{\"error\":\"invalid_request\"}"#,
+                br#"{"error":"invalid_request"}"#,
                 "{case} {name}",
             );
         }
