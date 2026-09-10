@@ -71,6 +71,19 @@ fn exact_grapheme_declaration_takes_precedence_over_rule_evidence() {
 }
 
 #[test]
+fn exact_grapheme_precedes_undeclared_rule_evidence() {
+    let profile = profile();
+    assert_eq!(
+        classify_handwriting_coverage(
+            &profile,
+            &"á",
+            Some(&"generic-font-fallback"),
+        ),
+        HandwritingCoverage::Exact,
+    );
+}
+
+#[test]
 fn declared_compositional_rule_can_admit_non_exact_grapheme() {
     let profile = profile();
     assert_eq!(
