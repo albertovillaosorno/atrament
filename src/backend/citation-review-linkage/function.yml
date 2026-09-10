@@ -1,0 +1,9 @@
+identity:
+  id: function:citation-review-linkage
+  name: citation-review-linkage
+  path: src/backend/citation-review-linkage
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: domain

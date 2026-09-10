@@ -1495,6 +1495,16 @@ for existing block and inline-span targets through admitted provenance
 identities; they preserve authored content and remain atomic with other generic
 families on the same target. Undo restores the prior linkage.
 
+A transport-neutral citation-review linkage now additionally requires every
+`Cited` claim in a review set to resolve through its exact assigned provenance
+identity to at least one exact source-metadata identity. Links to unknown
+claims,
+unknown sources, mismatched provenance records, non-cited claims, duplicate
+claims/sources, or duplicate exact claim/source relationships reject with typed
+structural errors. Multiple distinct sources for one cited claim remain valid.
+Source retrieval, source-quality policy, citation parsing/formatting, and review
+UI remain separate.
+
 The task remains open for richer source/citation linkage semantics, provenance
 diagnostics, citation UI, and any source-authority model beyond existing
 revision-owned provenance records.

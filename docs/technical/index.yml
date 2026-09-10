@@ -103,6 +103,9 @@ contracts:
   - id: atrament.technical.one-shot-formatting-prompt-validation
     status: verified
     path: one-shot-formatting-prompt-validation.md
+  - id: atrament.technical.source-claim-provenance-validation
+    status: verified
+    path: source-claim-provenance-validation.md
   - id: atrament.technical.adapter-boundary-validation
     status: verified
     path: adapter-boundary-validation.md

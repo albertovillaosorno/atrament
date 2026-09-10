@@ -7,6 +7,13 @@ name = "atrament_browser_launch"
 version = "0.1.0"
 
 [[package]]
+name = "atrament_citation_review_linkage"
+version = "0.1.0"
+dependencies = [
+ "atrament_semantic_notebook",
+]
+
+[[package]]
 name = "atrament_clipboard_intake_evidence"
 version = "0.1.0"
 

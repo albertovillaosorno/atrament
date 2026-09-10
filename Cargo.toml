@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "src/backend/browser-launch",
+    "src/backend/citation-review-linkage",
     "src/backend/clipboard-intake-evidence",
     "src/backend/device-coordinate-calibration",
     "src/backend/device-neutral-motion-plan",

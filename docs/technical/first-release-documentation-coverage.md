@@ -14,9 +14,9 @@ described as if it already shipped.
 
 ## Scope
 
-The coverage record includes calibration, composition, one-shot model use, PDF,
-live safety, hardware support status, profile/container internals, schema
-status, adapters, validation, and troubleshooting.
+The coverage record includes calibration, composition, source/claim provenance,
+one-shot model use, PDF, live safety, hardware support status, profile/container
+internals, schema status, adapters, validation, and troubleshooting.
 
 It does not turn design-only capabilities into implemented ones. Documentation
 for a future installer, CLI/MCP transport, file encoder, model/media adapter, or
@@ -37,6 +37,9 @@ The present first-release documentation categories are covered as follows:
 - **Composition:** `pdf-print-composition-validation.md` documents vector,
   render-manifest, preview/final, print/scan, and regression-evidence
   boundaries.
+- **Source and claim provenance:** `source-claim-provenance-validation.md`
+  documents exact cited-claim/provenance/source-metadata linkage, deterministic
+  structural failures, and separation from transaction provenance.
 - **One-shot LLM use:** `one-shot-formatting-prompt-validation.md` documents the
   self-contained request, clipboard egress, untrusted response boundary, and
   intentionally absent provider/parser behavior.
@@ -102,9 +105,10 @@ The technical index must contain and resolve the following verified guides:
 5. `handwriting-variation-quality-evidence.md`;
 6. `live-physical-safety-validation.md`;
 7. `one-shot-formatting-prompt-validation.md`;
-8. `adapter-boundary-validation.md`;
-9. `first-release-troubleshooting.md`; and
-10. this documentation-coverage record.
+8. `source-claim-provenance-validation.md`;
+9. `adapter-boundary-validation.md`;
+10. `first-release-troubleshooting.md`; and
+11. this documentation-coverage record.
 
 A repository check resolves every `path:` entry in `docs/technical/index.yml`
 and verifies the implementation/test references inside each verified guide.

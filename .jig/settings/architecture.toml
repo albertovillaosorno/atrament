@@ -4,6 +4,9 @@ schema_version = 1
 [component.atrament_browser_launch]
 depends_on = []
 
+[component.atrament_citation_review_linkage]
+depends_on = ["atrament_semantic_notebook"]
+
 [component.atrament_clipboard_intake_evidence]
 depends_on = []
 
