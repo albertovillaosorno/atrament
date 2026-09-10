@@ -623,6 +623,8 @@ the no-overflow case.
 A second 200,000-case oracle uses `u128` reference arithmetic over full-range
 `u64` rectangles to verify writable and object coordinate-overflow precedence
 plus exact surviving edge amounts.
+Its representable surviving cases also assert all 16 edge masks, preventing the
+full-range corpus from degenerating into overflow-only coverage.
 
 A second 20,000-case accepted placement oracle verifies those reports project
 one

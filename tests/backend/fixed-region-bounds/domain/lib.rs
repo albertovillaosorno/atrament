@@ -181,6 +181,7 @@ fn full_range_rectangles_match_u128_reference_oracle() {
     let mut object_overflows = 0usize;
     let mut valid = 0usize;
     let mut writable_overflows = 0usize;
+    let mut seen_boundary_masks = [false; 16];
     for case in 0..CASES {
         let writable = rect(
             next_full_bounds_value(&mut seed),
@@ -195,6 +196,9 @@ fn full_range_rectangles_match_u128_reference_oracle() {
             next_full_bounds_value(&mut seed),
         );
         let expected = reference_bounds_full_range(writable, object);
+        if let Ok(violations) = &expected {
+            seen_boundary_masks[boundary_mask(violations)] = true;
+        }
         match expected {
             Ok(_) => valid = valid.saturating_add(1),
             Err(BoundsError::ObjectCoordinateOverflow) => {
@@ -213,6 +217,7 @@ fn full_range_rectangles_match_u128_reference_oracle() {
     assert!(valid > 1_000);
     assert!(object_overflows > 1_000);
     assert!(writable_overflows > 1_000);
+    assert!(seen_boundary_masks.into_iter().all(|seen| seen));
 }
 
 #[test]
