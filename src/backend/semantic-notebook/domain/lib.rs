@@ -422,33 +422,17 @@ where
             active.sort_unstable_by_key(|span| span.start);
             let mut cursor = 0u64;
             let mut additions = Vec::<TableActiveSpan>::new();
+            let context = TableGridRowContext {
+                active: &active,
+                current_row,
+                row_count,
+                width,
+            };
             for cell in &row.cells {
-                cursor = table_grid_advance_cursor(cursor, &active);
-                let columns = NonZeroU64::from(cell.span.columns).get();
-                let end = cursor.checked_add(columns).ok_or(
-                    TableGridError::ColumnSpan { cell: cell.id },
-                )?;
-                if end > width
-                    || active
-                        .iter()
-                        .any(|span| span.start < end && cursor < span.end)
-                {
-                    return Err(TableGridError::ColumnSpan { cell: cell.id });
-                }
-                let until_row = current_row
-                    .checked_add(NonZeroU64::from(cell.span.rows).get())
-                    .ok_or(TableGridError::RowSpan { cell: cell.id })?;
-                if until_row > row_count {
-                    return Err(TableGridError::RowSpan { cell: cell.id });
-                }
-                if cell.span.rows.get() > 1 {
-                    additions.push(TableActiveSpan {
-                        end,
-                        start: cursor,
-                        until_row,
-                    });
-                }
-                cursor = end;
+                cursor = table_grid_advance_cursor(cursor, context.active);
+                let placement = table_grid_place_cell(cell, cursor, context)?;
+                additions.extend(placement.active_span);
+                cursor = placement.end;
             }
             cursor = table_grid_advance_cursor(cursor, &active);
             if cursor != width {
@@ -520,6 +504,19 @@ struct TableActiveSpan {
     end: u64,
     start: u64,
     until_row: u64,
+}
+
+struct TableGridCellPlacement {
+    active_span: Option<TableActiveSpan>,
+    end: u64,
+}
+
+#[derive(Clone, Copy)]
+struct TableGridRowContext<'row> {
+    active: &'row [TableActiveSpan],
+    current_row: u64,
+    row_count: u64,
+    width: u64,
 }
 
 /// One semantic table row.
@@ -1670,6 +1667,41 @@ fn table_grid_advance_cursor(
         }
     }
     cursor
+}
+
+fn table_grid_place_cell<Identity>(
+    cell: &TableCell<Identity>,
+    cursor: u64,
+    context: TableGridRowContext<'_>,
+) -> Result<TableGridCellPlacement, TableGridError<Identity>>
+where
+    Identity: Copy,
+{
+    let columns = NonZeroU64::from(cell.span.columns).get();
+    let end = cursor
+        .checked_add(columns)
+        .ok_or(TableGridError::ColumnSpan { cell: cell.id })?;
+    if end > context.width
+        || context
+            .active
+            .iter()
+            .any(|span| span.start < end && cursor < span.end)
+    {
+        return Err(TableGridError::ColumnSpan { cell: cell.id });
+    }
+    let until_row = context
+        .current_row
+        .checked_add(NonZeroU64::from(cell.span.rows).get())
+        .ok_or(TableGridError::RowSpan { cell: cell.id })?;
+    if until_row > context.row_count {
+        return Err(TableGridError::RowSpan { cell: cell.id });
+    }
+    let active_span = (cell.span.rows.get() > 1).then_some(TableActiveSpan {
+        end,
+        start: cursor,
+        until_row,
+    });
+    Ok(TableGridCellPlacement { active_span, end })
 }
 
 fn table_grid_width<Identity>(
