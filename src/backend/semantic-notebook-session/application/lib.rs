@@ -105,6 +105,14 @@ type DirectEditAncestorScope =
     (Option<AcceptedIdentity>, AcceptedIdentity, AcceptedIdentity);
 type DirectEditChangeIndexMap =
     BTreeMap<DirectEditMaterialKey, (usize, usize)>;
+type DirectEditBatchCommandResult<CommandIdentity> = Result<
+    DirectEditBatchCommandPrediction<CommandIdentity>,
+    (CommandIdentity, DirectEditBatchCommandRejection<CommandIdentity>),
+>;
+type DirectEditBatchMaterialResult<CommandIdentity> = Result<
+    (CommandTargetMaterial, bool),
+    DirectEditBatchCommandRejection<CommandIdentity>,
+>;
 
 #[derive(Default)]
 struct DirectEditBatchIndex {
@@ -3484,13 +3492,7 @@ fn simulate_direct_edit_batch_command<CommandIdentity>(
     command: DirectEditBatchCommand<CommandIdentity>,
     previous: Option<&CommandIdentity>,
     revision: atrament_semantic_notebook::RevisionIdentity,
-) -> Result<
-    DirectEditBatchCommandPrediction<CommandIdentity>,
-    (
-        CommandIdentity,
-        DirectEditBatchCommandRejection<CommandIdentity>,
-    ),
->
+) -> DirectEditBatchCommandResult<CommandIdentity>
 where
     CommandIdentity: Clone + Ord,
 {
@@ -3570,10 +3572,7 @@ fn batch_command_target_material<CommandIdentity>(
     revision: atrament_semantic_notebook::RevisionIdentity,
     target: AcceptedIdentity,
     family: SemanticCommandFamily,
-) -> Result<
-    (CommandTargetMaterial, bool),
-    DirectEditBatchCommandRejection<CommandIdentity>,
-> {
+) -> DirectEditBatchMaterialResult<CommandIdentity> {
     let key = (target, family);
     if let Some(material) = materials.remove(&key) {
         return Ok((material, true));
@@ -3615,10 +3614,7 @@ fn batch_command_prediction<CommandIdentity>(
     command: CommandIdentity,
     metadata: DirectEditBatchMaterialMetadata,
     simulation: DirectEditSimulation,
-) -> Result<
-    DirectEditBatchCommandPrediction<CommandIdentity>,
-    (CommandIdentity, DirectEditBatchCommandRejection<CommandIdentity>),
-> {
+) -> DirectEditBatchCommandResult<CommandIdentity> {
     match simulation.outcome {
         DirectEditSimulationOutcome::Applicable {
             family,
@@ -3723,10 +3719,7 @@ fn batch_command_prediction<CommandIdentity>(
 fn reject_batch_command_simulation<CommandIdentity>(
     command: CommandIdentity,
     outcome: DirectEditSimulationOutcome,
-) -> Result<
-    DirectEditBatchCommandPrediction<CommandIdentity>,
-    (CommandIdentity, DirectEditBatchCommandRejection<CommandIdentity>),
-> {
+) -> DirectEditBatchCommandResult<CommandIdentity> {
     Err((command, DirectEditBatchCommandRejection::Simulation {
         outcome: Box::new(outcome),
     }))
