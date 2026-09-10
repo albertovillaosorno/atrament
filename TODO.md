@@ -1856,8 +1856,11 @@ The browser session-fragment parser now also runs a deterministic 4,096-case
 mutation corpus against an independent ASCII oracle. Replacement, insertion,
 deletion, and duplication mutations cover credential-prefix bytes, lowercase and
 uppercase hexadecimal, delimiters, percent-like text, NUL, Unicode, and emoji.
-Repeated parsing must agree exactly, and only 64 lowercase hexadecimal
-characters after the exact `#session=` prefix are admitted.
+Upper LCG bits drive mutation selection, and the corpus requires every
+operation/token and operation/position pair. Repeated parsing must agree
+exactly,
+and only 64 lowercase hexadecimal characters after the exact `#session=` prefix
+are admitted.
 
 
 Browser handshake response admission now adds a deterministic 4,096-case corpus
