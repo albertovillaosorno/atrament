@@ -1086,11 +1086,8 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
         replacement: FormulaReplacement,
     ) -> FormulaEditOutcome {
         let FormulaReplacement { mode, source } = replacement;
-        let simulation = self.simulate_direct_edit(
-            base,
-            target,
-            EditableSemanticValue::Formula { mode, source },
-        );
+        let requested = EditableSemanticValue::Formula { mode, source };
+        let simulation = simulate_replacement(self, base, target, requested);
         let (replacement_mode, replacement_source) = match simulation {
             DirectEditSimulationOutcome::Applicable {
                 requested:
@@ -1160,28 +1157,15 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
                 };
             },
         };
-        let Some(current) = self.current.as_ref() else {
-            return FormulaEditOutcome::NoAcceptedRevision;
-        };
-        let mut notebook = current.notebook.clone();
-        if !replace_formula_value(
-            &mut notebook,
+        commit_formula_replacement(
+            self,
+            base,
             target,
-            replacement_mode,
-            replacement_source,
-        ) {
-            return FormulaEditOutcome::TargetNotFound {
-                revision: current.id,
-                target,
-            };
-        }
-        let revision = match self.commit_semantic_edit(notebook) {
-            Ok(revision) => revision,
-            Err(sequence) => {
-                return FormulaEditOutcome::IdentityExhausted { sequence };
+            FormulaReplacement {
+                mode: replacement_mode,
+                source: replacement_source,
             },
-        };
-        FormulaEditOutcome::Applied { base, revision, target }
+        )
     }
 
     fn replace_page_profile(
@@ -1190,11 +1174,8 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
         target: AcceptedIdentity,
         geometry: atrament_semantic_notebook::PhysicalPageProfile,
     ) -> PageProfileEditOutcome {
-        let simulation = self.simulate_direct_edit(
-            base,
-            target,
-            EditableSemanticValue::PageProfile(geometry),
-        );
+        let edit_value = EditableSemanticValue::PageProfile(geometry);
+        let simulation = simulate_replacement(self, base, target, edit_value);
         let replacement = match simulation {
             DirectEditSimulationOutcome::Applicable {
                 requested: EditableSemanticValue::PageProfile(requested),
@@ -1252,23 +1233,7 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
                 };
             },
         };
-        let Some(current) = self.current.as_ref() else {
-            return PageProfileEditOutcome::NoAcceptedRevision;
-        };
-        let mut notebook = current.notebook.clone();
-        if !replace_page_profile_value(&mut notebook, target, replacement) {
-            return PageProfileEditOutcome::TargetNotFound {
-                revision: current.id,
-                target,
-            };
-        }
-        let revision = match self.commit_semantic_edit(notebook) {
-            Ok(revision) => revision,
-            Err(sequence) => {
-                return PageProfileEditOutcome::IdentityExhausted { sequence };
-            },
-        };
-        PageProfileEditOutcome::Applied { base, revision, target }
+        commit_page_profile_replacement(self, base, target, replacement)
     }
 
     fn replace_table_cell_span(
@@ -1277,11 +1242,8 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
         target: AcceptedIdentity,
         span: TableCellSpan,
     ) -> TableCellSpanEditOutcome {
-        let simulation = self.simulate_direct_edit(
-            base,
-            target,
-            EditableSemanticValue::TableCellSpan(span),
-        );
+        let edit_value = EditableSemanticValue::TableCellSpan(span);
+        let simulation = simulate_replacement(self, base, target, edit_value);
         let replacement = match simulation {
             DirectEditSimulationOutcome::Applicable {
                 requested: EditableSemanticValue::TableCellSpan(requested),
@@ -1339,37 +1301,7 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
                 };
             },
         };
-        let Some(current) = self.current.as_ref() else {
-            return TableCellSpanEditOutcome::NoAcceptedRevision;
-        };
-        let mut notebook = current.notebook.clone();
-        match replace_table_cell_span_value(
-            &mut notebook,
-            target,
-            replacement,
-        ) {
-            Ok(true) => {},
-            Ok(false) => {
-                return TableCellSpanEditOutcome::TargetNotFound {
-                    revision: current.id,
-                    target,
-                };
-            },
-            Err(reason) => {
-                return TableCellSpanEditOutcome::InvalidTableGrid {
-                    reason,
-                    revision: current.id,
-                    target,
-                };
-            },
-        }
-        let revision = match self.commit_semantic_edit(notebook) {
-            Ok(revision) => revision,
-            Err(sequence) => {
-                return TableCellSpanEditOutcome::IdentityExhausted { sequence };
-            },
-        };
-        TableCellSpanEditOutcome::Applied { base, revision, target }
+        commit_table_cell_span_replacement(self, base, target, replacement)
     }
 
     fn replace_table_row_role(
@@ -1430,23 +1362,7 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
                 };
             },
         };
-        let Some(current) = self.current.as_ref() else {
-            return TableRowRoleEditOutcome::NoAcceptedRevision;
-        };
-        let mut notebook = current.notebook.clone();
-        if !replace_table_row_role_value(&mut notebook, target, replacement) {
-            return TableRowRoleEditOutcome::TargetNotFound {
-                revision: current.id,
-                target,
-            };
-        }
-        let revision = match self.commit_semantic_edit(notebook) {
-            Ok(revision) => revision,
-            Err(sequence) => {
-                return TableRowRoleEditOutcome::IdentityExhausted { sequence };
-            },
-        };
-        TableRowRoleEditOutcome::Applied { base, revision, target }
+        commit_table_row_role_replacement(self, base, target, replacement)
     }
 
     fn replace_text(
@@ -1507,23 +1423,7 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
                 };
             },
         };
-        let Some(current) = self.current.as_ref() else {
-            return TextEditOutcome::NoAcceptedRevision;
-        };
-        let mut notebook = current.notebook.clone();
-        if !replace_text_value(&mut notebook, target, replacement) {
-            return TextEditOutcome::TargetNotFound {
-                revision: current.id,
-                target,
-            };
-        }
-        let revision = match self.commit_semantic_edit(notebook) {
-            Ok(revision) => revision,
-            Err(sequence) => {
-                return TextEditOutcome::IdentityExhausted { sequence };
-            },
-        };
-        TextEditOutcome::Applied { base, revision, target }
+        commit_text_replacement(self, base, target, replacement)
     }
 
     fn simulate_direct_edit(
@@ -5277,6 +5177,155 @@ fn apply_direct_edit_changes(
         }
     }
     Ok(())
+}
+
+fn simulate_replacement(
+    service: &SemanticNotebookSessionService,
+    revision: atrament_semantic_notebook::RevisionIdentity,
+    target: AcceptedIdentity,
+    requested: EditableSemanticValue,
+) -> DirectEditSimulationOutcome {
+    service.simulate_direct_edit(revision, target, requested)
+}
+
+fn commit_formula_replacement(
+    service: &mut SemanticNotebookSessionService,
+    base: atrament_semantic_notebook::RevisionIdentity,
+    target: AcceptedIdentity,
+    replacement: FormulaReplacement,
+) -> FormulaEditOutcome {
+    let Some(current) = service.current.as_ref() else {
+        return FormulaEditOutcome::NoAcceptedRevision;
+    };
+    let mut notebook = current.notebook.clone();
+    if !replace_formula_value(
+        &mut notebook,
+        target,
+        replacement.mode,
+        replacement.source,
+    ) {
+        return FormulaEditOutcome::TargetNotFound {
+            revision: current.id,
+            target,
+        };
+    }
+    let revision = match service.commit_semantic_edit(notebook) {
+        Ok(revision) => revision,
+        Err(sequence) => {
+            return FormulaEditOutcome::IdentityExhausted { sequence };
+        },
+    };
+    FormulaEditOutcome::Applied { base, revision, target }
+}
+
+fn commit_page_profile_replacement(
+    service: &mut SemanticNotebookSessionService,
+    base: atrament_semantic_notebook::RevisionIdentity,
+    target: AcceptedIdentity,
+    replacement: atrament_semantic_notebook::PhysicalPageProfile,
+) -> PageProfileEditOutcome {
+    let Some(current) = service.current.as_ref() else {
+        return PageProfileEditOutcome::NoAcceptedRevision;
+    };
+    let mut notebook = current.notebook.clone();
+    if !replace_page_profile_value(&mut notebook, target, replacement) {
+        return PageProfileEditOutcome::TargetNotFound {
+            revision: current.id,
+            target,
+        };
+    }
+    let revision = match service.commit_semantic_edit(notebook) {
+        Ok(revision) => revision,
+        Err(sequence) => {
+            return PageProfileEditOutcome::IdentityExhausted { sequence };
+        },
+    };
+    PageProfileEditOutcome::Applied { base, revision, target }
+}
+
+fn commit_table_cell_span_replacement(
+    service: &mut SemanticNotebookSessionService,
+    base: atrament_semantic_notebook::RevisionIdentity,
+    target: AcceptedIdentity,
+    replacement: TableCellSpan,
+) -> TableCellSpanEditOutcome {
+    let Some(current) = service.current.as_ref() else {
+        return TableCellSpanEditOutcome::NoAcceptedRevision;
+    };
+    let mut notebook = current.notebook.clone();
+    match replace_table_cell_span_value(&mut notebook, target, replacement) {
+        Ok(true) => {},
+        Ok(false) => {
+            return TableCellSpanEditOutcome::TargetNotFound {
+                revision: current.id,
+                target,
+            };
+        },
+        Err(reason) => {
+            return TableCellSpanEditOutcome::InvalidTableGrid {
+                reason,
+                revision: current.id,
+                target,
+            };
+        },
+    }
+    let revision = match service.commit_semantic_edit(notebook) {
+        Ok(revision) => revision,
+        Err(sequence) => {
+            return TableCellSpanEditOutcome::IdentityExhausted { sequence };
+        },
+    };
+    TableCellSpanEditOutcome::Applied { base, revision, target }
+}
+
+fn commit_table_row_role_replacement(
+    service: &mut SemanticNotebookSessionService,
+    base: atrament_semantic_notebook::RevisionIdentity,
+    target: AcceptedIdentity,
+    replacement: TableRowRole,
+) -> TableRowRoleEditOutcome {
+    let Some(current) = service.current.as_ref() else {
+        return TableRowRoleEditOutcome::NoAcceptedRevision;
+    };
+    let mut notebook = current.notebook.clone();
+    if !replace_table_row_role_value(&mut notebook, target, replacement) {
+        return TableRowRoleEditOutcome::TargetNotFound {
+            revision: current.id,
+            target,
+        };
+    }
+    let revision = match service.commit_semantic_edit(notebook) {
+        Ok(revision) => revision,
+        Err(sequence) => {
+            return TableRowRoleEditOutcome::IdentityExhausted { sequence };
+        },
+    };
+    TableRowRoleEditOutcome::Applied { base, revision, target }
+}
+
+fn commit_text_replacement(
+    service: &mut SemanticNotebookSessionService,
+    base: atrament_semantic_notebook::RevisionIdentity,
+    target: AcceptedIdentity,
+    replacement: String,
+) -> TextEditOutcome {
+    let Some(current) = service.current.as_ref() else {
+        return TextEditOutcome::NoAcceptedRevision;
+    };
+    let mut notebook = current.notebook.clone();
+    if !replace_text_value(&mut notebook, target, replacement) {
+        return TextEditOutcome::TargetNotFound {
+            revision: current.id,
+            target,
+        };
+    }
+    let revision = match service.commit_semantic_edit(notebook) {
+        Ok(revision) => revision,
+        Err(sequence) => {
+            return TextEditOutcome::IdentityExhausted { sequence };
+        },
+    };
+    TextEditOutcome::Applied { base, revision, target }
 }
 
 fn apply_direct_edit_change(
