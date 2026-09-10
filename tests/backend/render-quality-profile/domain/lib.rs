@@ -209,3 +209,26 @@ fn swapped_quality_roles_reject_before_authority_comparison() {
         Err(RenderQualityPairError::PreviewProfileRole),
     );
 }
+
+#[test]
+fn wrong_final_role_rejects_before_authority_comparison() {
+    let preview = profile(
+        RenderQualityMode::Preview,
+        RenderQualityCost {
+            sampling_cost: 2,
+            texture_resolution: 512,
+        },
+    );
+    let mut final_profile = profile(
+        RenderQualityMode::Preview,
+        RenderQualityCost {
+            sampling_cost: 8,
+            texture_resolution: 2048,
+        },
+    );
+    final_profile.authority.geometry = "different-geometry";
+    assert_eq!(
+        validate_preview_final_pair(&preview, &final_profile),
+        Err(RenderQualityPairError::FinalProfileRole),
+    );
+}

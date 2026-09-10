@@ -1268,6 +1268,8 @@ physical noise scale, render seed, material blend order, and physical bounds
 remain exactly shared; caller-owned texture resolution and sampling cost may
 differ. Rendering, concrete quality values, performance budgets, scheduling,
 and sampling algorithms remain open.
+Both wrong-role paths reject before shared-authority comparison, including when
+other authority fields also drift.
 
 Current design evidence freezes Render as a read-only application capability
 bound to one accepted revision and deterministic vector/material inputs. Preview
