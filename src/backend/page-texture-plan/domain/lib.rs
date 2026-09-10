@@ -80,36 +80,32 @@ pub enum PageTexturePlanError {
     SelectedOutsideBounds,
 }
 
-/// Validate the bounded texture-strength envelope before generation.
-///
-/// # Errors
-///
-/// Returns a typed range error without generating texture or changing geometry.
-pub fn validate_page_texture_plan<
-    GeometryAuthority,
-    PhysicalBounds,
-    PhysicalScale,
-    Strength,
-    ReplayKey,
->(
-    plan: &PageTexturePlan<
+impl<GeometryAuthority, PhysicalBounds, PhysicalScale, Strength, ReplayKey>
+    PageTexturePlan<
         GeometryAuthority,
         PhysicalBounds,
         PhysicalScale,
         Strength,
         ReplayKey,
-    >,
-) -> Result<(), PageTexturePlanError>
+    >
 where
     Strength: Ord,
 {
-    if plan.strength.minimum > plan.strength.maximum {
-        return Err(PageTexturePlanError::MinimumAboveMaximum);
+    /// Validate the bounded texture-strength envelope before generation.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed range error without generating texture or changing
+    /// geometry.
+    pub fn validate(&self) -> Result<(), PageTexturePlanError> {
+        if self.strength.minimum > self.strength.maximum {
+            return Err(PageTexturePlanError::MinimumAboveMaximum);
+        }
+        if self.strength.selected < self.strength.minimum
+            || self.strength.selected > self.strength.maximum
+        {
+            return Err(PageTexturePlanError::SelectedOutsideBounds);
+        }
+        Ok(())
     }
-    if plan.strength.selected < plan.strength.minimum
-        || plan.strength.selected > plan.strength.maximum
-    {
-        return Err(PageTexturePlanError::SelectedOutsideBounds);
-    }
-    Ok(())
 }

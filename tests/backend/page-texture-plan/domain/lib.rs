@@ -33,7 +33,7 @@
 //
 use atrament_page_texture_plan::{
     BoundedTextureStrength, PageTexturePlan, PageTexturePlanError,
-    StochasticLayerReplayKey, validate_page_texture_plan,
+    StochasticLayerReplayKey,
 };
 
 type ReplayKey = StochasticLayerReplayKey<
@@ -72,7 +72,7 @@ fn valid_plan() -> Plan {
 #[test]
 fn texture_plan_retains_geometry_scale_bounds_and_complete_replay_key() {
     let plan = valid_plan();
-    assert_eq!(validate_page_texture_plan(&plan), Ok(()));
+    assert_eq!(plan.validate(), Ok(()));
     assert_eq!(plan.geometry_authority, "vector-page-9");
     assert_eq!(plan.physical_bounds, (210_000, 297_000));
     assert_eq!(plan.physical_scale, "caller-owned-low-frequency-scale");
@@ -86,9 +86,9 @@ fn texture_plan_retains_geometry_scale_bounds_and_complete_replay_key() {
 fn inclusive_strength_boundaries_are_valid() {
     let mut plan = valid_plan();
     plan.strength.selected = plan.strength.minimum;
-    assert_eq!(validate_page_texture_plan(&plan), Ok(()));
+    assert_eq!(plan.validate(), Ok(()));
     plan.strength.selected = plan.strength.maximum;
-    assert_eq!(validate_page_texture_plan(&plan), Ok(()));
+    assert_eq!(plan.validate(), Ok(()));
 }
 
 #[test]
@@ -96,12 +96,12 @@ fn selected_strength_outside_bounds_rejects() {
     let mut plan = valid_plan();
     plan.strength.selected = 3;
     assert_eq!(
-        validate_page_texture_plan(&plan),
+        plan.validate(),
         Err(PageTexturePlanError::SelectedOutsideBounds),
     );
     plan.strength.selected = 21;
     assert_eq!(
-        validate_page_texture_plan(&plan),
+        plan.validate(),
         Err(PageTexturePlanError::SelectedOutsideBounds),
     );
 }
@@ -113,7 +113,7 @@ fn inverted_strength_envelope_rejects_before_selected_value() {
     plan.strength.maximum = 20;
     plan.strength.selected = 25;
     assert_eq!(
-        validate_page_texture_plan(&plan),
+        plan.validate(),
         Err(PageTexturePlanError::MinimumAboveMaximum),
     );
 }
