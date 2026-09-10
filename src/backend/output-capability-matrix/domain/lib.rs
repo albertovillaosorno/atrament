@@ -600,81 +600,94 @@ pub const fn semantic_capability_disposition(
     capability: SemanticCapability,
     mode: OutputMode,
 ) -> CapabilityDisposition {
+    match mode {
+        OutputMode::Digital => {
+            semantic_capability_disposition_digital(capability)
+        },
+        OutputMode::Live => semantic_capability_disposition_live(capability),
+    }
+}
+
+const fn semantic_capability_disposition_digital(
+    capability: SemanticCapability,
+) -> CapabilityDisposition {
     use CapabilityDisposition as Disposition;
     use SemanticCapability as Capability;
-    match mode {
-        OutputMode::Digital => match capability {
-            Capability::AlignedMathematics
-            | Capability::Arrow
-            | Capability::Box
-            | Capability::Callout
-            | Capability::Citation
-            | Capability::Date
-            | Capability::Definition
-            | Capability::DisplayedMathematics
-            | Capability::Divider
-            | Capability::Footnote
-            | Capability::FreeformRegion
-            | Capability::Heading
-            | Capability::InlineMathematics
-            | Capability::LoosePaperNote
-            | Capability::MarginNote
-            | Capability::MatrixMathematics
-            | Capability::MergedTableCells
-            | Capability::OrderedList
-            | Capability::PageReference
-            | Capability::Paragraph
-            | Capability::Photograph
-            | Capability::Quotation
-            | Capability::RasterIllustration
-            | Capability::SemanticDiagram
-            | Capability::SourceNote
-            | Capability::Table
-            | Capability::TextLabel
-            | Capability::UnitsInMathematics
-            | Capability::UnorderedList
-            | Capability::UnresolvedClaim
-            | Capability::VectorLineArt
-            => Disposition::Accept,
-            Capability::UnresolvedUnsupportedBlock
-            => Disposition::Reject,
+    match capability {
+        Capability::AlignedMathematics
+        | Capability::Arrow
+        | Capability::Box
+        | Capability::Callout
+        | Capability::Citation
+        | Capability::Date
+        | Capability::Definition
+        | Capability::DisplayedMathematics
+        | Capability::Divider
+        | Capability::Footnote
+        | Capability::FreeformRegion
+        | Capability::Heading
+        | Capability::InlineMathematics
+        | Capability::LoosePaperNote
+        | Capability::MarginNote
+        | Capability::MatrixMathematics
+        | Capability::MergedTableCells
+        | Capability::OrderedList
+        | Capability::PageReference
+        | Capability::Paragraph
+        | Capability::Photograph
+        | Capability::Quotation
+        | Capability::RasterIllustration
+        | Capability::SemanticDiagram
+        | Capability::SourceNote
+        | Capability::Table
+        | Capability::TextLabel
+        | Capability::UnitsInMathematics
+        | Capability::UnorderedList
+        | Capability::UnresolvedClaim
+        | Capability::VectorLineArt => Disposition::Accept,
+        Capability::UnresolvedUnsupportedBlock => Disposition::Reject,
+    }
+}
+
+const fn semantic_capability_disposition_live(
+    capability: SemanticCapability,
+) -> CapabilityDisposition {
+    use CapabilityDisposition as Disposition;
+    use SemanticCapability as Capability;
+    match capability {
+        Capability::AlignedMathematics
+        | Capability::Arrow
+        | Capability::Box
+        | Capability::Callout
+        | Capability::Citation
+        | Capability::Date
+        | Capability::Definition
+        | Capability::DisplayedMathematics
+        | Capability::Divider
+        | Capability::Footnote
+        | Capability::FreeformRegion
+        | Capability::Heading
+        | Capability::InlineMathematics
+        | Capability::MarginNote
+        | Capability::MatrixMathematics
+        | Capability::MergedTableCells
+        | Capability::OrderedList
+        | Capability::PageReference
+        | Capability::Paragraph
+        | Capability::Quotation
+        | Capability::SemanticDiagram
+        | Capability::SourceNote
+        | Capability::Table
+        | Capability::TextLabel
+        | Capability::UnitsInMathematics
+        | Capability::UnorderedList
+        | Capability::UnresolvedClaim
+        | Capability::VectorLineArt => Disposition::Accept,
+        Capability::Photograph | Capability::RasterIllustration => {
+            Disposition::Convert
         },
-        OutputMode::Live => match capability {
-            Capability::AlignedMathematics
-            | Capability::Arrow
-            | Capability::Box
-            | Capability::Callout
-            | Capability::Citation
-            | Capability::Date
-            | Capability::Definition
-            | Capability::DisplayedMathematics
-            | Capability::Divider
-            | Capability::Footnote
-            | Capability::FreeformRegion
-            | Capability::Heading
-            | Capability::InlineMathematics
-            | Capability::MarginNote
-            | Capability::MatrixMathematics
-            | Capability::MergedTableCells
-            | Capability::OrderedList
-            | Capability::PageReference
-            | Capability::Paragraph
-            | Capability::Quotation
-            | Capability::SemanticDiagram
-            | Capability::SourceNote
-            | Capability::Table
-            | Capability::TextLabel
-            | Capability::UnitsInMathematics
-            | Capability::UnorderedList
-            | Capability::UnresolvedClaim
-            | Capability::VectorLineArt
-            => Disposition::Accept,
-            Capability::Photograph
-            | Capability::RasterIllustration
-            => Disposition::Convert,
-            Capability::LoosePaperNote
-            | Capability::UnresolvedUnsupportedBlock
-            => Disposition::Reject,
+        Capability::LoosePaperNote | Capability::UnresolvedUnsupportedBlock => {
+            Disposition::Reject
         },
     }
 }
