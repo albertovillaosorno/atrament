@@ -104,18 +104,19 @@ one layout/render authority rather than separate layout engines.
 
 ### Physical round-trip evidence is typed but uninterpreted
 
-`PrintScanMeasurementKind` explicitly names the four measurement families
-required by the accepted output ADR:
+`PrintScanMeasurementKind` explicitly names all eight first-release physical
+round-trip measurement families. The accepted output ADR requires four minimum
+verification families:
 
 - physical scale;
 - clipping;
 - grid registration; and
 - photo placement.
 
-Each observation retains its caller-owned source/provenance, unit, and measured
-value. `PrintScanEvidence` binds an ordered observation set to the exact
-rendered
-or exported output identity being measured.
+The P5 product task additionally requires margins, color shift, line weight, and
+scanner distortion. Each observation retains its caller-owned source/provenance,
+unit, and measured value. `PrintScanEvidence` binds an ordered observation set
+to the exact rendered or exported output identity being measured.
 
 No tolerance or calibration conclusion is inferred from a measurement. Device
 selection, correction transforms, statistical treatment, and pass/fail policy
@@ -172,8 +173,8 @@ Current checked-in regression evidence includes:
   ordered vector paths;
 - `tests/backend/digital-paper-note-plan/domain/lib.rs`, which pins fill, fold,
   stacking, soft-shadow intent, and caller-provided readable-contrast evidence;
-- `tests/backend/print-scan-measurement/domain/lib.rs`, which pins the four
-  required physical observation families and their provenance; and
+- `tests/backend/print-scan-measurement/domain/lib.rs`, which pins all eight
+  first-release physical observation families and their provenance; and
 - `tests/backend/render-regression-evidence/domain/lib.rs`, which pins complete,
   independent visual-regression evidence and explicit mismatches.
 

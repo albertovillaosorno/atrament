@@ -25,8 +25,7 @@
 // - Summary:
 //   - Makes required physical-output measurements inspectable before fitting.
 // - Description:
-//   - Covers ADR-required scale, clipping, grid registration, and photo
-//     placement.
+//   - Covers the complete P5 physical round-trip measurement vocabulary.
 // - Usage:
 //   - Attach representative-device observations to one rendered output
 //     identity.
@@ -36,17 +35,25 @@
 
 //! Typed print/scan measurement evidence without calibration algorithms.
 
-/// Physical-output measurement families required by the accepted PDF ADR.
+/// Physical-output measurement families required by the first-release task.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum PrintScanMeasurementKind {
     /// Observed clipping against the intended physical page projection.
     Clipping,
+    /// Color shift observed across the physical print/scan round trip.
+    ColorShift,
     /// Registration of printed or scanned grid/rule geometry.
     GridRegistration,
+    /// Observed physical line-weight behavior.
+    LineWeight,
+    /// Physical page-margin observation.
+    Margins,
     /// Placement of accepted photographic content.
     PhotoPlacement,
     /// Physical output scale relative to the intended page geometry.
     PhysicalScale,
+    /// Scanner-introduced geometric distortion observation.
+    ScannerDistortion,
 }
 
 /// One caller-owned physical-output observation.

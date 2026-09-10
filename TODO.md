@@ -1421,6 +1421,18 @@ bytes, serialization, and file commit remain open.
 Measure physical scale, clipping, margins, grid registration, color shifts,
 photo placement, line weight, and scanner distortion on representative devices.
 
+Current executable evidence now names all eight physical round-trip measurement
+families explicitly and keeps each caller-owned observation tied to its source,
+unit, value, and rendered/exported output identity. The four ADR verification
+families remain physical scale, clipping, grid registration, and photo
+placement;
+P5 additionally retains margins, color shift, line weight, and scanner
+distortion. No observation is interpreted as calibration success.
+
+Representative-device selection, concrete units, tolerances, statistical
+analysis, correction transforms, calibration fitting, and pass/fail policy
+remain open.
+
 Current executable evidence now freezes the four physical round-trip measurement
 families required by the accepted PDF ADR: physical scale, clipping, grid
 registration, and photo placement. Each observation retains caller-owned

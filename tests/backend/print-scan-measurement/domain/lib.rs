@@ -25,8 +25,7 @@
 //   - Proves required physical-output observations remain typed and
 //     attributable.
 // - Description:
-//   - Covers scale, clipping, grid registration, photo placement, and
-//     provenance.
+//   - Covers every first-release round-trip family plus provenance.
 // - Usage:
 //   - Compile directly against the print-scan-measurement domain.
 // - Defaults:
@@ -37,14 +36,18 @@ use atrament_print_scan_measurement::{
 };
 
 #[test]
-fn accepted_pdf_round_trip_measurement_families_are_explicit() {
+fn first_release_pdf_round_trip_measurement_families_are_explicit() {
     let kinds = [
         PrintScanMeasurementKind::Clipping,
+        PrintScanMeasurementKind::ColorShift,
         PrintScanMeasurementKind::GridRegistration,
+        PrintScanMeasurementKind::LineWeight,
+        PrintScanMeasurementKind::Margins,
         PrintScanMeasurementKind::PhotoPlacement,
         PrintScanMeasurementKind::PhysicalScale,
+        PrintScanMeasurementKind::ScannerDistortion,
     ];
-    assert_eq!(kinds.len(), 4);
+    assert_eq!(kinds.len(), 8);
 }
 
 #[test]
