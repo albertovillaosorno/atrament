@@ -268,6 +268,18 @@ enum DirectEditBatchEvaluationOutcome<CommandIdentity> {
     Rejected(DirectEditBatchSimulationOutcome<CommandIdentity>),
 }
 
+struct DirectEditBatchMutation<CommandIdentity> {
+    base: atrament_semantic_notebook::RevisionIdentity,
+    changes: Vec<DirectEditSemanticChange>,
+    commands: Vec<DirectEditBatchCommandPrediction<CommandIdentity>>,
+    impact_seeds: Vec<DirectEditImpactSeed>,
+}
+
+enum DirectEditBatchApplyPreparation<CommandIdentity> {
+    Mutation(DirectEditBatchMutation<CommandIdentity>),
+    Outcome(DirectEditBatchApplyOutcome<CommandIdentity>),
+}
+
 #[derive(Clone, Copy)]
 struct DirectEditBatchMaterialMetadata {
     descriptor: SemanticIdentityDescriptor<AcceptedIdentity>,
@@ -1644,98 +1656,11 @@ impl SemanticNotebookSessionService {
         &mut self,
         simulation: DirectEditBatchSimulationOutcome<CommandIdentity>,
     ) -> DirectEditBatchApplyOutcome<CommandIdentity> {
-        let (base, changes, commands, impact_seeds) = match simulation {
-            DirectEditBatchSimulationOutcome::CapabilityMismatch {
-                current,
-                expected,
-            } => {
-                return DirectEditBatchApplyOutcome::CapabilityMismatch {
-                    current,
-                    expected,
-                };
-            },
-            DirectEditBatchSimulationOutcome::DependencyGraphRejected {
-                reason,
-            } => {
-                return DirectEditBatchApplyOutcome::DependencyGraphRejected {
-                    reason,
-                };
-            },
-            DirectEditBatchSimulationOutcome::NoAcceptedRevision => {
-                return DirectEditBatchApplyOutcome::NoAcceptedRevision;
-            },
-            DirectEditBatchSimulationOutcome::Predicted {
-                commands,
-                effect: DirectEditEffectClass::NoOp,
-                revision,
-                ..
-            } => {
-                return DirectEditBatchApplyOutcome::NoOp {
-                    commands,
-                    revision,
-                };
-            },
-            DirectEditBatchSimulationOutcome::Predicted {
-                changes,
-                commands,
-                effect: DirectEditEffectClass::Mutation,
-                impact_seeds,
-                revision,
-            } => (revision, changes, commands, impact_seeds),
-            DirectEditBatchSimulationOutcome::Rejected {
-                command,
-                evaluated,
-                not_evaluated,
-                reason,
-                revision,
-            } => {
-                return DirectEditBatchApplyOutcome::Rejected {
-                    command,
-                    evaluated,
-                    not_evaluated,
-                    reason,
-                    revision,
-                };
-            },
-            DirectEditBatchSimulationOutcome::ResourceRejected { reason } => {
-                return DirectEditBatchApplyOutcome::ResourceRejected { reason };
-            },
-            DirectEditBatchSimulationOutcome::StaleBase { current } => {
-                return DirectEditBatchApplyOutcome::StaleBase { current };
-            },
+        let mutation = match prepare_direct_edit_batch_apply(simulation) {
+            DirectEditBatchApplyPreparation::Mutation(mutation) => mutation,
+            DirectEditBatchApplyPreparation::Outcome(outcome) => return outcome,
         };
-        let Some(current) = self.current.as_ref() else {
-            return DirectEditBatchApplyOutcome::NoAcceptedRevision;
-        };
-        if current.id != base {
-            return DirectEditBatchApplyOutcome::StaleBase {
-                current: current.id,
-            };
-        }
-        let mut notebook = current.notebook.clone();
-        if let Err(target) =
-            apply_direct_edit_changes(&mut notebook, &changes)
-        {
-            return DirectEditBatchApplyOutcome::CandidateReplayFailed {
-                revision: base,
-                target,
-            };
-        }
-        let revision = match self.commit_semantic_edit(notebook) {
-            Ok(revision) => revision,
-            Err(sequence) => {
-                return DirectEditBatchApplyOutcome::IdentityExhausted {
-                    sequence,
-                };
-            },
-        };
-        DirectEditBatchApplyOutcome::Applied {
-            base,
-            changes,
-            commands,
-            impact_seeds,
-            revision,
-        }
+        commit_direct_edit_batch_mutation(self, mutation)
     }
 
     fn commit_semantic_edit(
@@ -5391,6 +5316,110 @@ fn simulate_replacement(
     requested: EditableSemanticValue,
 ) -> DirectEditSimulationOutcome {
     service.simulate_direct_edit(revision, target, requested)
+}
+
+fn prepare_direct_edit_batch_apply<CommandIdentity>(
+    simulation: DirectEditBatchSimulationOutcome<CommandIdentity>,
+) -> DirectEditBatchApplyPreparation<CommandIdentity> {
+    let preparation = match simulation {
+        DirectEditBatchSimulationOutcome::CapabilityMismatch {
+            current,
+            expected,
+        } => DirectEditBatchApplyOutcome::CapabilityMismatch {
+            current,
+            expected,
+        },
+        DirectEditBatchSimulationOutcome::DependencyGraphRejected {
+            reason,
+        } => {
+            DirectEditBatchApplyOutcome::DependencyGraphRejected { reason }
+        },
+        DirectEditBatchSimulationOutcome::NoAcceptedRevision => {
+            DirectEditBatchApplyOutcome::NoAcceptedRevision
+        },
+        DirectEditBatchSimulationOutcome::Predicted {
+            commands,
+            effect: DirectEditEffectClass::NoOp,
+            revision,
+            ..
+        } => DirectEditBatchApplyOutcome::NoOp { commands, revision },
+        DirectEditBatchSimulationOutcome::Predicted {
+            changes,
+            commands,
+            effect: DirectEditEffectClass::Mutation,
+            impact_seeds,
+            revision,
+        } => {
+            return DirectEditBatchApplyPreparation::Mutation(
+                DirectEditBatchMutation {
+                    base: revision,
+                    changes,
+                    commands,
+                    impact_seeds,
+                },
+            );
+        },
+        DirectEditBatchSimulationOutcome::Rejected {
+            command,
+            evaluated,
+            not_evaluated,
+            reason,
+            revision,
+        } => DirectEditBatchApplyOutcome::Rejected {
+            command,
+            evaluated,
+            not_evaluated,
+            reason,
+            revision,
+        },
+        DirectEditBatchSimulationOutcome::ResourceRejected { reason } => {
+            DirectEditBatchApplyOutcome::ResourceRejected { reason }
+        },
+        DirectEditBatchSimulationOutcome::StaleBase { current } => {
+            DirectEditBatchApplyOutcome::StaleBase { current }
+        },
+    };
+    DirectEditBatchApplyPreparation::Outcome(preparation)
+}
+
+fn commit_direct_edit_batch_mutation<CommandIdentity>(
+    service: &mut SemanticNotebookSessionService,
+    mutation: DirectEditBatchMutation<CommandIdentity>,
+) -> DirectEditBatchApplyOutcome<CommandIdentity> {
+    let DirectEditBatchMutation {
+        base,
+        changes,
+        commands,
+        impact_seeds,
+    } = mutation;
+    let Some(current) = service.current.as_ref() else {
+        return DirectEditBatchApplyOutcome::NoAcceptedRevision;
+    };
+    if current.id != base {
+        return DirectEditBatchApplyOutcome::StaleBase {
+            current: current.id,
+        };
+    }
+    let mut notebook = current.notebook.clone();
+    if let Err(target) = apply_direct_edit_changes(&mut notebook, &changes) {
+        return DirectEditBatchApplyOutcome::CandidateReplayFailed {
+            revision: base,
+            target,
+        };
+    }
+    let revision = match service.commit_semantic_edit(notebook) {
+        Ok(revision) => revision,
+        Err(sequence) => {
+            return DirectEditBatchApplyOutcome::IdentityExhausted { sequence };
+        },
+    };
+    DirectEditBatchApplyOutcome::Applied {
+        base,
+        changes,
+        commands,
+        impact_seeds,
+        revision,
+    }
 }
 
 fn commit_formula_replacement(
