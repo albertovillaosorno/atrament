@@ -232,6 +232,154 @@ fn archive_inventory_rejects_duplicate_unsafe_and_missing_manifest_paths() {
     );
 }
 
+
+fn reference_inventory_path_error(path: &str) -> Option<ProfileEntryPathError> {
+    if path.contains('\\') {
+        return Some(ProfileEntryPathError::BackslashSeparator);
+    }
+    if !path.starts_with("sections/") && !path.starts_with("assets/") {
+        return Some(ProfileEntryPathError::UnsupportedRoot);
+    }
+    for segment in path.split('/') {
+        if segment.is_empty() {
+            return Some(ProfileEntryPathError::EmptySegment);
+        }
+        if matches!(segment, "." | "..") {
+            return Some(ProfileEntryPathError::TraversalSegment);
+        }
+    }
+    None
+}
+
+fn reference_inventory(
+    value: &ProfileManifest,
+    observed: &[String],
+) -> Result<(), ProfileEntryInventoryError> {
+    let declared = value
+        .entries
+        .iter()
+        .map(|entry| entry.path.as_str())
+        .collect::<Vec<_>>();
+    let mut seen = Vec::new();
+    let mut observed_non_manifest = Vec::new();
+    let mut manifest_seen = false;
+    for path in observed {
+        if seen.iter().any(|previous| *previous == path.as_str()) {
+            return Err(ProfileEntryInventoryError::DuplicateObservedEntryPath {
+                path: path.clone(),
+            });
+        }
+        seen.push(path.as_str());
+        if path == PROFILE_MANIFEST_PATH {
+            manifest_seen = true;
+            continue;
+        }
+        if let Some(reason) = reference_inventory_path_error(path) {
+            return Err(ProfileEntryInventoryError::InvalidObservedEntryPath {
+                path: path.clone(),
+                reason,
+            });
+        }
+        if !declared.contains(&path.as_str()) {
+            return Err(ProfileEntryInventoryError::UndeclaredObservedEntry {
+                path: path.clone(),
+            });
+        }
+        observed_non_manifest.push(path.as_str());
+    }
+    if !manifest_seen {
+        return Err(ProfileEntryInventoryError::MissingManifest);
+    }
+    for entry in &value.entries {
+        if !observed_non_manifest.contains(&entry.path.as_str()) {
+            return Err(ProfileEntryInventoryError::MissingDeclaredEntry {
+                path: entry.path.clone(),
+            });
+        }
+    }
+    Ok(())
+}
+
+fn next_inventory_value(seed: &mut u64) -> u64 {
+    *seed = seed
+        .wrapping_mul(6_364_136_223_846_793_005)
+        .wrapping_add(1_442_695_040_888_963_407);
+    *seed
+}
+
+#[test]
+fn generated_archive_inventory_mutations_match_reference_oracle() {
+    const CASES: usize = 4_096;
+    let value = manifest(vec![
+        entry("sections/strokes.json", "application/json", 7),
+        entry("assets/sample.webp", "image/webp", 9),
+        entry("sections/identity.json", "application/json", 11),
+    ]);
+    let canonical = [
+        PROFILE_MANIFEST_PATH,
+        "sections/strokes.json",
+        "assets/sample.webp",
+        "sections/identity.json",
+    ];
+    let tokens = [
+        PROFILE_MANIFEST_PATH,
+        "sections/strokes.json",
+        "assets/sample.webp",
+        "sections/identity.json",
+        "assets/extra.bin",
+        "sections/../strokes.json",
+        r"assets\sample.webp",
+        "sections//identity.json",
+        "other/value.bin",
+        "sections/%2e%2e/value.json",
+        "assets/é.bin",
+        "sections/value with space.json",
+        "",
+    ];
+    let mut seed = 0x5eed_a2c4_2026_u64;
+    for case in 0..CASES {
+        let operation = next_inventory_value(&mut seed) % 4;
+        let member_index =
+            next_inventory_value(&mut seed) as usize % canonical.len();
+        let insertion_index =
+            next_inventory_value(&mut seed) as usize % (canonical.len() + 1);
+        let token_index =
+            next_inventory_value(&mut seed) as usize % tokens.len();
+        let mut observed = canonical
+            .iter()
+            .map(|path| String::from(*path))
+            .collect::<Vec<_>>();
+        match operation {
+            0 => observed[member_index] = String::from(tokens[token_index]),
+            1 => observed.insert(
+                insertion_index,
+                String::from(tokens[token_index]),
+            ),
+            2 => {
+                let _removed = observed.remove(member_index);
+            },
+            _ => {
+                let duplicate = observed[member_index].clone();
+                observed.insert(insertion_index, duplicate);
+            },
+        }
+        let observed_refs = observed
+            .iter()
+            .map(String::as_str)
+            .collect::<Vec<_>>();
+        let expected = reference_inventory(&value, &observed);
+        assert_eq!(
+            validate_profile_entry_inventory(
+                &value,
+                &["stroke-vocabulary"],
+                &observed_refs,
+            ),
+            expected,
+            "generated archive inventory case {case}",
+        );
+    }
+}
+
 #[test]
 fn manifest_admits_sections_assets_and_preserves_optional_features() {
     let value = manifest(vec![

@@ -1723,6 +1723,14 @@ validation precedence and exact admission without treating percent-like text as
 URI decoding. This is targeted boundary hardening only; full coverage-guided
 fuzzing of profiles and the other listed untrusted inputs remains open.
 
+
+Archive inventory admission now adds a deterministic 4,096-case mutation corpus
+against an independent reference oracle. Replacement, insertion, deletion, and
+duplication of observed member names exercise duplicate detection, missing
+manifest and declared members, unsafe separators and traversal, undeclared
+members, Unicode, spaces, and percent-like names with exact first-error
+precedence.
+
 The TeX-compatible mathematics boundary now also runs a deterministic generated
 4,096-source corpus in inline, display, and aligned modes. Generated mixtures
 cover supported and unsupported commands, malformed groups/environments,
