@@ -152,6 +152,10 @@ fn generated_tex_corpus_is_deterministic_and_source_safe() {
         r"\\",
         r"\alpha",
         r"\Doteq",
+        r"\P",
+        r"\S",
+        r"\dag",
+        r"\ddag",
         r"\doublecap",
         r"\doublecup",
         r"\frac",
@@ -660,9 +664,9 @@ fn named_symbol_vocabulary_is_supported_without_rewriting() {
         r"\Im", r"\Lambda", r"\Leftarrow",
         r"\Leftrightarrow", r"\Lleftarrow", r"\Longleftarrow",
         r"\Longleftrightarrow",
-        r"\Longrightarrow", r"\Lsh", r"\Omega", r"\Phi", r"\Pi", r"\Psi",
-        r"\Re",
-        r"\Rightarrow", r"\Rrightarrow", r"\Rsh",
+        r"\Longrightarrow", r"\Lsh", r"\Omega", r"\P", r"\Phi", r"\Pi",
+        r"\Psi", r"\Re",
+        r"\Rightarrow", r"\Rrightarrow", r"\Rsh", r"\S",
         r"\Sigma", r"\Subset", r"\Supset", r"\Theta", r"\Uparrow",
         r"\Updownarrow", r"\Upsilon", r"\Vdash",
         r"\Vert", r"\Vvdash", r"\Xi", r"\aleph", r"\alpha", r"\amalg",
@@ -688,9 +692,9 @@ fn named_symbol_vocabulary_is_supported_without_rewriting() {
         r"\clubsuit", r"\colon", r"\complement", r"\cong",
         r"\cup", r"\curlyeqprec", r"\curlyeqsucc", r"\curlyvee", r"\curlywedge",
         r"\curvearrowleft", r"\curvearrowright",
-        r"\dagger", r"\daleth",
+        r"\dag", r"\dagger", r"\daleth",
         r"\dashv",
-        r"\ddagger", r"\ddots", r"\delta", r"\diagdown", r"\diagup",
+        r"\ddag", r"\ddagger", r"\ddots", r"\delta", r"\diagdown", r"\diagup",
         r"\diamond", r"\diamondsuit", r"\digamma", r"\div", r"\divideontimes",
         r"\doteq", r"\doteqdot", r"\dotplus",
         r"\dots", r"\doublebarwedge", r"\doublecap", r"\doublecup",
@@ -849,6 +853,26 @@ fn latex_base_ordinary_symbols_compose_without_rewriting() {
             })
             .count(),
         7,
+    );
+}
+
+#[test]
+fn latex_base_math_mode_glyph_aliases_compose_without_rewriting() {
+    let source = r"\P + \S + \dag + \ddag";
+    let analyzed = analyze(source, FormulaMode::Inline)
+        .expect("LaTeX-base math-mode glyph aliases");
+    assert!(analyzed.is_supported());
+    assert_eq!(reconstructed(&analyzed), source);
+    assert_eq!(
+        analyzed
+            .tokens
+            .iter()
+            .filter(|token| {
+                token.kind
+                    == MathTokenKind::Command(SupportedCommand::NamedSymbol)
+            })
+            .count(),
+        4,
     );
 }
 

@@ -85,7 +85,7 @@ use atrament_semantic_notebook_port::{
 use atrament_semantic_notebook_session::SemanticNotebookSessionService;
 
 const CURRENT_COMMAND_BEHAVIOR_VERSION: CommandBehaviorVersion =
-    CommandBehaviorVersion(93);
+    CommandBehaviorVersion(94);
 
 #[derive(Debug)]
 struct CountingCommandIdentity {
@@ -1810,7 +1810,7 @@ fn expanded_tex_vocabulary_is_admitted_and_directly_editable() {
         r"\coprod_i A_i; \clubsuit + \heartsuit; \natural; \lnot P; ",
         r"\intop_0^1 f dx; x \colon y \ldotp z \cdotp w; ",
         r"\varbigtriangleup A; \mathsection + \mathdollar + ",
-        r"\mathsterling + \pounds; ",
+        r"\mathsterling + \pounds; \P + \S + \dag + \ddag; ",
         r"\varGamma + \varOmega; \injlim_i A_i + \varprojlim_j B_j; ",
         r"P \impliedby Q; \iiiint_A f; \lvert x \rvert; y \pod{23}; ",
         r"\beth + \gimel + \varnothing + \hslash; ",
@@ -8017,7 +8017,7 @@ fn command_capability_snapshot_is_deterministic_and_does_not_overclaim() {
             family: SemanticCommandFamily::Provenance,
         },
         CommandFamilyCapability {
-            behavior_version: CommandBehaviorVersion(81),
+            behavior_version: CommandBehaviorVersion(82),
             family: SemanticCommandFamily::StructuredContent,
         },
         CommandFamilyCapability {
@@ -8085,11 +8085,11 @@ fn command_capability_version_detects_drift_independently_of_revision() {
     );
     assert_eq!(
         session.check_command_capability_compatibility(
-            CommandBehaviorVersion(92),
+            CommandBehaviorVersion(93),
         ),
         CommandCapabilityCompatibilityOutcome::Mismatch {
             current: CURRENT_COMMAND_BEHAVIOR_VERSION,
-            expected: CommandBehaviorVersion(92),
+            expected: CommandBehaviorVersion(93),
         },
     );
     assert_eq!(

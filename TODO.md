@@ -272,13 +272,13 @@ supports read-only behavior-version drift checks. It deliberately advertises no
 command protocol, normalizer, command context, Validate, Apply, rebatching, or
 numeric command/context limits yet.
 
-Aggregate command behavior and typed-result behavior are version 93 after
-admitting the LaTeX-base `\pounds` math-mode alias as exact source. Asset
+Aggregate command behavior and typed-result behavior are version 94 after
+admitting LaTeX-base math-mode glyph aliases as exact source. Asset
 reference,
 Ordering and grouping, and Text content retain family behavior version 1;
 Provenance and Style role are version 2, Document constraint is version 3, and
 Structured
-content is version 81. The immediately previous aggregate version 92 rejects
+content is version 82. The immediately previous aggregate version 93 rejects
 instead of being reinterpreted.
 
 A version-bound single-target proposal combines capability, exact local
@@ -720,7 +720,8 @@ binary-operator symbols including the AMS boxed, circled, wedge, and product
 forms plus square/lattice forms, large
 n-ary operators including coproduct and logical joins/meets, card-suit and
 musical symbols, mathematical punctuation atoms, LaTeX-base paragraph, section,
-dollar, math sterling and pound aliases, and variant large-triangle symbols,
+dollar, math sterling, pound, paragraph, section, and dagger aliases, and
+variant large-triangle symbols,
 arrow and ellipsis
 symbols including
 AMS paired, loop, curve, tail, squiggle, and multimap arrows, harpoons, and
