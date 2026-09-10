@@ -955,65 +955,63 @@ fn scan_structured_environment_command(
     })
 }
 
+fn scan_control_symbol(
+    source: &str,
+    after_slash: usize,
+) -> Option<ScannedCommand> {
+    let byte = source.as_bytes().get(after_slash).copied()?;
+    let kind = match byte {
+        b'\\' => ScannedCommandKind::RowBreak,
+        b'|' => ScannedCommandKind::Supported(SupportedCommand::NamedSymbol),
+        b'{' | b'}' | b'%' | b'$' | b'#' | b'&' | b'_' => {
+            ScannedCommandKind::Supported(SupportedCommand::EscapedSpecial)
+        },
+        _ => return None,
+    };
+    Some(ScannedCommand {
+        end: after_slash.saturating_add(1),
+        kind,
+        required_groups: 0,
+    })
+}
+
+fn scan_control_word(source: &str, start: usize, end: usize) -> ScannedCommand {
+    if let Some(command) = scan_named_command(
+        source,
+        start..end,
+        NAMED_OPERATOR_COMMANDS,
+        SupportedCommand::NamedOperator,
+    ) {
+        return command;
+    }
+    if let Some(command) = scan_named_command(
+        source,
+        start..end,
+        NAMED_SYMBOL_COMMANDS,
+        SupportedCommand::NamedSymbol,
+    ) {
+        return command;
+    }
+    if let Some(command) = scan_structured_control_word(source, start, end) {
+        return command;
+    }
+    if let Some(command) = scan_structured_environment_command(source, start) {
+        return command;
+    }
+    ScannedCommand {
+        end,
+        kind: ScannedCommandKind::Unsupported,
+        required_groups: 0,
+    }
+}
+
 fn scan_command(source: &str, start: usize) -> ScannedCommand {
     let after_slash = start.saturating_add(1);
-    if source.as_bytes().get(after_slash) == Some(&b'\\') {
-        return ScannedCommand {
-            end: after_slash.saturating_add(1),
-            kind: ScannedCommandKind::RowBreak,
-            required_groups: 0,
-        };
-    }
-    if source.as_bytes().get(after_slash) == Some(&b'|') {
-        return ScannedCommand {
-            end: after_slash.saturating_add(1),
-            kind: ScannedCommandKind::Supported(SupportedCommand::NamedSymbol),
-            required_groups: 0,
-        };
-    }
-    if source.as_bytes().get(after_slash).is_some_and(|byte| {
-        matches!(byte, b'{' | b'}' | b'%' | b'$' | b'#' | b'&' | b'_')
-    }) {
-        return ScannedCommand {
-            end: after_slash.saturating_add(1),
-            kind: ScannedCommandKind::Supported(
-                SupportedCommand::EscapedSpecial,
-            ),
-            required_groups: 0,
-        };
+    if let Some(command) = scan_control_symbol(source, after_slash) {
+        return command;
     }
     if let Some(end) = scan_ascii_control_word_end(source, after_slash) {
-        if let Some(command) = scan_named_command(
-            source,
-            start..end,
-            NAMED_OPERATOR_COMMANDS,
-            SupportedCommand::NamedOperator,
-        ) {
-            return command;
-        }
-        if let Some(command) = scan_named_command(
-            source,
-            start..end,
-            NAMED_SYMBOL_COMMANDS,
-            SupportedCommand::NamedSymbol,
-        ) {
-            return command;
-        }
-        if let Some(command) = scan_structured_control_word(
-            source, start, end,
-        ) {
-            return command;
-        }
-        if let Some(command) =
-            scan_structured_environment_command(source, start)
-        {
-            return command;
-        }
-        return ScannedCommand {
-            end,
-            kind: ScannedCommandKind::Unsupported,
-            required_groups: 0,
-        };
+        return scan_control_word(source, start, end);
     }
     if let Some(command) = scan_structured_environment_command(source, start) {
         return command;
