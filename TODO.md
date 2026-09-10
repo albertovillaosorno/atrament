@@ -1192,8 +1192,13 @@ tangent, curvature, width or pressure proxy, velocity, and explicit contact
 state; each declared stroke retains semantic origin, profile choice, and
 contextual entry/exit conditions. Empty declared strokes reject before any
 projection, while an empty plan remains valid for content with no handwriting.
-Candidate ranking/selection, geometry, units, joins, deformation, spacing,
-interpolation, rendering, PDF, and machine-motion behavior remain open.
+A validated plan can project the exact planner-order stroke indices owned by one
+semantic origin, providing an edit-local dependency region without mutating or
+replanning the plan.
+
+Candidate ranking/selection, invalidation orchestration, geometry, units, joins,
+deformation, spacing, interpolation, rendering, PDF, and machine-motion behavior
+remain open.
 
 ### TODO - Implement bounded correlated variation
 

@@ -16,7 +16,8 @@
 // - Allows:
 //   - Inputs: Caller-owned stroke samples, semantic origins, profile choices,
 //     and contextual entry/exit conditions.
-//   - Outputs: Ordered stroke plans and empty-stroke validation failures.
+//   - Outputs: Ordered plans, semantic-origin index projection, and
+//     empty-stroke validation failures.
 //   - Side effects: Process-local validation only.
 // - Split-When:
 //   - Contextual planning, vector projection, or machine motion gains
@@ -113,6 +114,32 @@ impl<SemanticOrigin, ProfileChoice, EntryCondition, ExitCondition, Sample>
     }
 }
 
+/// Stroke-plan entry that exposes semantic origin for dependency inspection.
+pub trait SemanticStrokePlanEntry: StrokePlanEntry {
+    /// Caller-owned semantic origin identity.
+    type SemanticOrigin;
+
+    /// Return the semantic origin retained by this stroke.
+    fn semantic_origin(&self) -> &Self::SemanticOrigin;
+}
+
+impl<SemanticOrigin, ProfileChoice, EntryCondition, ExitCondition, Sample>
+    SemanticStrokePlanEntry
+    for PlannedStroke<
+        SemanticOrigin,
+        ProfileChoice,
+        EntryCondition,
+        ExitCondition,
+        Sample,
+    >
+{
+    type SemanticOrigin = SemanticOrigin;
+
+    fn semantic_origin(&self) -> &Self::SemanticOrigin {
+        &self.semantic_origin
+    }
+}
+
 /// Complete inspectable handwriting stroke authority in planner order.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct StrokePlan<Stroke> {
@@ -128,6 +155,36 @@ pub enum StrokePlanError {
         /// Zero-based stroke index in planner order.
         stroke_index: usize,
     },
+}
+
+/// Return planner-order stroke indices for one semantic origin.
+///
+/// Structural validation runs before provenance projection so an invalid plan
+/// cannot expose a partial dependency region. The returned indices identify
+/// existing plan dependencies only; this function does not replan or invalidate
+/// any stroke.
+///
+/// # Errors
+///
+/// Returns the first empty declared stroke before inspecting semantic origins.
+pub fn semantic_origin_stroke_indices<Stroke>(
+    plan: &StrokePlan<Stroke>,
+    semantic_origin: &Stroke::SemanticOrigin,
+) -> Result<Vec<usize>, StrokePlanError>
+where
+    Stroke: SemanticStrokePlanEntry,
+    Stroke::SemanticOrigin: PartialEq,
+{
+    validate_stroke_plan(plan)?;
+    Ok(plan
+        .strokes
+        .iter()
+        .enumerate()
+        .filter_map(|(stroke_index, stroke)| {
+            (stroke.semantic_origin() == semantic_origin)
+                .then_some(stroke_index)
+        })
+        .collect())
 }
 
 /// Validate structural stroke-plan invariants before any projection.

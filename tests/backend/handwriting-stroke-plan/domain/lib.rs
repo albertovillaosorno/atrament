@@ -33,8 +33,7 @@
 //
 use atrament_handwriting_stroke_plan::{
     PlannedStroke, StrokeContactState, StrokePlan, StrokePlanError,
-    StrokeSample,
-    validate_stroke_plan,
+    StrokeSample, semantic_origin_stroke_indices, validate_stroke_plan,
 };
 
 type Sample = StrokeSample<&'static str, &'static str, i32, u16, i32>;
@@ -113,6 +112,69 @@ fn stroke_order_is_preserved_without_projection_or_reclassification() {
     assert_eq!(validate_stroke_plan(&plan), Ok(()));
     assert_eq!(plan.strokes[0].semantic_origin, "span-a");
     assert_eq!(plan.strokes[1].semantic_origin, "span-b");
+}
+
+#[test]
+fn semantic_origin_projection_returns_only_dependent_strokes_in_plan_order() {
+    let plan = StrokePlan {
+        strokes: vec![
+            Stroke {
+                entry_condition: "entry-a0",
+                exit_condition: "exit-a0",
+                profile_choice: "choice-a",
+                samples: vec![sample("a0", StrokeContactState::Down)],
+                semantic_origin: "span-a",
+            },
+            Stroke {
+                entry_condition: "entry-b",
+                exit_condition: "exit-b",
+                profile_choice: "choice-b",
+                samples: vec![sample("b", StrokeContactState::Up)],
+                semantic_origin: "span-b",
+            },
+            Stroke {
+                entry_condition: "entry-a1",
+                exit_condition: "exit-a1",
+                profile_choice: "choice-a",
+                samples: vec![sample("a1", StrokeContactState::Down)],
+                semantic_origin: "span-a",
+            },
+        ],
+    };
+
+    assert_eq!(
+        semantic_origin_stroke_indices(&plan, &"span-a"),
+        Ok(vec![0, 2]),
+    );
+    assert_eq!(semantic_origin_stroke_indices(&plan, &"span-b"), Ok(vec![1]));
+    assert_eq!(semantic_origin_stroke_indices(&plan, &"span-c"), Ok(vec![]));
+}
+
+#[test]
+fn semantic_origin_projection_rejects_invalid_plan_before_partial_results() {
+    let plan = StrokePlan {
+        strokes: vec![
+            Stroke {
+                entry_condition: "entry-invalid",
+                exit_condition: "exit-invalid",
+                profile_choice: "choice-a",
+                samples: Vec::new(),
+                semantic_origin: "span-other",
+            },
+            Stroke {
+                entry_condition: "entry-target",
+                exit_condition: "exit-target",
+                profile_choice: "choice-b",
+                samples: vec![sample("target", StrokeContactState::Down)],
+                semantic_origin: "span-target",
+            },
+        ],
+    };
+
+    assert_eq!(
+        semantic_origin_stroke_indices(&plan, &"span-target"),
+        Err(StrokePlanError::EmptyStroke { stroke_index: 0 }),
+    );
 }
 
 #[test]
