@@ -181,6 +181,21 @@ fn graph_resource_limits_reject_one_command_or_edge_over() {
 }
 
 #[test]
+fn command_count_limit_precedes_simultaneous_edge_limit_excess() {
+    let nodes = [node(1, &[]), node(2, &[1, 1]), node(3, &[1, 2])];
+    assert_eq!(
+        validate_command_graph_limits(&nodes, CommandGraphLimits {
+            commands: 2,
+            dependency_edges: 2,
+        },),
+        Err(CommandGraphLimitError::CommandCountExceeded {
+            actual: 3,
+            limit: 2,
+        }),
+    );
+}
+
+#[test]
 fn command_identity_representation_is_generic() {
     let nodes = [
         CommandNode {
