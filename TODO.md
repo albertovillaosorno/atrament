@@ -1778,6 +1778,13 @@ uppercase hexadecimal, delimiters, percent-like text, NUL, Unicode, and emoji.
 Repeated parsing must agree exactly, and only 64 lowercase hexadecimal
 characters after the exact `#session=` prefix are admitted.
 
+
+Browser handshake response admission now adds a deterministic 4,096-case corpus
+against an independent fail-closed oracle. Generated compatible, incompatible,
+and invalid payloads vary all six version dimensions, diagnostic namespace and
+completeness, item count, code, dimension, and expected version without enabling
+compatibility on malformed values.
+
 ### TODO - Complete visual regression coverage
 
 Compare semantic layout, vector topology, layer composition, final pixels,
