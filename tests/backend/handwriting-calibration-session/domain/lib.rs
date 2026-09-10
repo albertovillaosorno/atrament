@@ -169,3 +169,38 @@ fn completion_is_derived_only_from_caller_supplied_prompt_progress() {
     assert_eq!(complete.is_complete(), Ok(true));
     assert_eq!(complete.next_pending_prompt_index(), Ok(None));
 }
+
+#[test]
+fn first_duplicate_prompt_follows_plan_order_not_identity_order() {
+    let session = Session {
+        prompts: vec![
+            prompt(
+                "z-later-key",
+                CalibrationPromptKind::Word,
+                CalibrationPromptProgress::Pending,
+            ),
+            prompt(
+                "a-earlier-key",
+                CalibrationPromptKind::Sentence,
+                CalibrationPromptProgress::Pending,
+            ),
+            prompt(
+                "z-later-key",
+                CalibrationPromptKind::Heading,
+                CalibrationPromptProgress::Pending,
+            ),
+            prompt(
+                "a-earlier-key",
+                CalibrationPromptKind::Join,
+                CalibrationPromptProgress::Pending,
+            ),
+        ],
+        reference_geometry: "reference",
+    };
+    assert_eq!(
+        session.validate(),
+        Err(CalibrationSessionError::DuplicatePromptIdentity {
+            prompt: "z-later-key",
+        }),
+    );
+}

@@ -116,3 +116,31 @@ fn held_out_and_training_sample_identities_must_be_disjoint() {
         }),
     );
 }
+
+#[test]
+fn first_role_conflict_follows_sample_order_not_identity_order() {
+    let samples = vec![
+        CalibrationSample {
+            identity: "z-later-key",
+            role: CalibrationSampleRole::Training,
+        },
+        CalibrationSample {
+            identity: "a-earlier-key",
+            role: CalibrationSampleRole::Training,
+        },
+        CalibrationSample {
+            identity: "z-later-key",
+            role: CalibrationSampleRole::HeldOut,
+        },
+        CalibrationSample {
+            identity: "a-earlier-key",
+            role: CalibrationSampleRole::HeldOut,
+        },
+    ];
+    assert_eq!(
+        validate_calibration_sample_roles(&samples),
+        Err(CalibrationSampleRoleError::ConflictingRole {
+            sample: "z-later-key",
+        }),
+    );
+}
