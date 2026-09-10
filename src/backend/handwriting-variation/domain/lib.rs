@@ -113,6 +113,15 @@ pub enum VariationParameterError {
     MinimumAboveMaximum,
 }
 
+/// Why caller-produced samples contradict deterministic replay.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct VariationReplayConsistencyError {
+    /// Later observation that contradicts the earlier replay result.
+    pub conflicting_index: usize,
+    /// Earlier observation with the same replay key and a different value.
+    pub first_index: usize,
+}
+
 /// Deterministic replay inputs required by accepted variation sampling.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct VariationReplayKey<Seed, SemanticIdentity> {
@@ -184,4 +193,40 @@ where
         }
         Ok(())
     }
+}
+
+/// Require equal sampled values whenever exact replay inputs repeat.
+///
+/// Samples remain caller-produced. This function does not choose a random
+/// generator, distribution, correlation model, or sampling algorithm. It only
+/// enforces the accepted replay invariant over already-produced observations.
+///
+/// # Errors
+///
+/// Returns the first observation-order conflict, paired with the earliest
+/// prior observation carrying the same replay key and a different value.
+pub fn validate_variation_replay_consistency<ReplayKey, Value>(
+    samples: &[VariationSample<ReplayKey, Value>],
+) -> Result<(), VariationReplayConsistencyError>
+where
+    ReplayKey: Eq,
+    Value: Eq,
+{
+    for (conflicting_index, sample) in samples.iter().enumerate() {
+        if let Some((first_index, _)) = samples
+            .iter()
+            .take(conflicting_index)
+            .enumerate()
+            .find(|(_, prior)| {
+                prior.replay_key == sample.replay_key
+                    && prior.value != sample.value
+            })
+        {
+            return Err(VariationReplayConsistencyError {
+                conflicting_index,
+                first_index,
+            });
+        }
+    }
+    Ok(())
 }

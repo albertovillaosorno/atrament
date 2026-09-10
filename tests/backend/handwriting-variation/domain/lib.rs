@@ -33,8 +33,9 @@
 //
 use atrament_handwriting_variation::{
     VariationBound, VariationBoundBasis, VariationParameter,
-    VariationParameterError, VariationReplayKey, VariationSample,
-    VariationSampleError, VariationScale,
+    VariationParameterError, VariationReplayConsistencyError,
+    VariationReplayKey, VariationSample, VariationSampleError, VariationScale,
+    validate_variation_replay_consistency,
 };
 
 type Parameter =
@@ -258,4 +259,146 @@ fn every_compact_parameter_and_sample_value_matches_bounds_oracle() {
     assert_eq!(sample_cases, 756);
     assert!(parameter_outcomes.into_iter().all(|seen| seen));
     assert!(sample_outcomes.into_iter().all(|seen| seen));
+}
+
+#[test]
+fn repeated_replay_key_requires_the_exact_same_sampled_value() {
+    let samples = vec![
+        VariationSample {
+            replay_key: VariationReplayKey {
+                document_seed: 41_u64,
+                semantic_identity: "glyph-a",
+            },
+            value: 7_i32,
+        },
+        VariationSample {
+            replay_key: VariationReplayKey {
+                document_seed: 41_u64,
+                semantic_identity: "glyph-a",
+            },
+            value: 7_i32,
+        },
+    ];
+    assert_eq!(validate_variation_replay_consistency(&samples), Ok(()));
+}
+
+#[test]
+fn replay_key_requires_both_document_seed_and_semantic_identity_to_match() {
+    let samples = vec![
+        VariationSample {
+            replay_key: VariationReplayKey {
+                document_seed: 41_u64,
+                semantic_identity: "glyph-a",
+            },
+            value: 1_i32,
+        },
+        VariationSample {
+            replay_key: VariationReplayKey {
+                document_seed: 42_u64,
+                semantic_identity: "glyph-a",
+            },
+            value: 2_i32,
+        },
+        VariationSample {
+            replay_key: VariationReplayKey {
+                document_seed: 41_u64,
+                semantic_identity: "glyph-b",
+            },
+            value: 3_i32,
+        },
+    ];
+    assert_eq!(validate_variation_replay_consistency(&samples), Ok(()));
+}
+
+#[test]
+fn replay_conflict_reports_first_later_observation_and_earliest_prior_match() {
+    let key_a = VariationReplayKey {
+        document_seed: 41_u8,
+        semantic_identity: "glyph-a",
+    };
+    let key_b = VariationReplayKey {
+        document_seed: 41_u8,
+        semantic_identity: "glyph-b",
+    };
+    let samples = vec![
+        VariationSample {
+            replay_key: key_a.clone(),
+            value: 3_u8,
+        },
+        VariationSample {
+            replay_key: key_b,
+            value: 9_u8,
+        },
+        VariationSample {
+            replay_key: key_a.clone(),
+            value: 3_u8,
+        },
+        VariationSample {
+            replay_key: key_a,
+            value: 4_u8,
+        },
+    ];
+    assert_eq!(
+        validate_variation_replay_consistency(&samples),
+        Err(VariationReplayConsistencyError {
+            conflicting_index: 3,
+            first_index: 0,
+        }),
+    );
+}
+
+#[test]
+fn compact_replay_sequences_match_independent_first_conflict_oracle() {
+    let mut cases = 0_u16;
+    let mut saw_consistent = false;
+    let mut saw_conflict = false;
+    for length in 0_u32..=4 {
+        let case_count = 4_u32.pow(length);
+        for encoded in 0_u32..case_count {
+            let mut state = encoded;
+            let mut samples = Vec::new();
+            for _ in 0..length {
+                let symbol = state % 4;
+                state /= 4;
+                samples.push(VariationSample {
+                    replay_key: VariationReplayKey {
+                        document_seed: 17_u8,
+                        semantic_identity: (symbol / 2) as u8,
+                    },
+                    value: (symbol % 2) as u8,
+                });
+            }
+
+            let mut expected = Ok(());
+            'outer: for conflicting_index in 0..samples.len() {
+                for first_index in 0..conflicting_index {
+                    if samples[first_index].replay_key
+                        == samples[conflicting_index].replay_key
+                        && samples[first_index].value
+                            != samples[conflicting_index].value
+                    {
+                        expected = Err(VariationReplayConsistencyError {
+                            conflicting_index,
+                            first_index,
+                        });
+                        break 'outer;
+                    }
+                }
+            }
+            if expected.is_ok() {
+                saw_consistent = true;
+            } else {
+                saw_conflict = true;
+            }
+            assert_eq!(
+                validate_variation_replay_consistency(&samples),
+                expected,
+                "length {length}, encoded {encoded}",
+            );
+            cases = cases.saturating_add(1);
+        }
+    }
+    assert_eq!(cases, 341);
+    assert!(saw_consistent);
+    assert!(saw_conflict);
 }
