@@ -531,7 +531,8 @@ writable-region results against an independent integer-arithmetic model,
 including coordinate overflow and simultaneous invalid conditions.
 The mixed-profile oracle also requires every typed page-profile validation error
 plus a valid outcome to occur, preventing precedence coverage from collapsing to
-a subset of its nine failure classes.
+a subset of its nine failure classes. Its generated binding edge and orientation
+selectors use upper LCG bits and require all eight combinations.
 
 Measurements bind to one accepted revision and one accepted flow; stale,
 incomplete, reordered, unknown-flow, and out-of-flow measurements reject before

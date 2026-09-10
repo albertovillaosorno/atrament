@@ -85,6 +85,10 @@ fn next_validation_value(seed: &mut u64) -> u64 {
     *seed
 }
 
+fn next_validation_selector(seed: &mut u64) -> u64 {
+    next_validation_value(seed) >> 32
+}
+
 fn reference_writable_region(
     profile: PageProfile,
 ) -> Result<Rect, PageProfileError> {
@@ -256,13 +260,13 @@ fn reference_printable_region(
 }
 
 fn generated_validation_profile(seed: &mut u64, case: usize) -> PageProfile {
-    let mut profile = base_profile(match next_validation_value(seed) % 4 {
+    let mut profile = base_profile(match next_validation_selector(seed) % 4 {
         0 => BindingEdge::Bottom,
         1 => BindingEdge::Left,
         2 => BindingEdge::Right,
         _ => BindingEdge::Top,
     });
-    profile.orientation = if next_validation_value(seed) & 1 == 0 {
+    profile.orientation = if next_validation_selector(seed) & 1 == 0 {
         Orientation::Portrait
     } else {
         Orientation::Landscape
@@ -315,7 +319,7 @@ fn generated_validation_profile(seed: &mut u64, case: usize) -> PageProfile {
             profile.writing_inset = Length::ZERO;
         },
         10 => {
-            let jitter = next_validation_value(seed) % 5_000;
+            let jitter = next_validation_selector(seed) % 5_000;
             profile.top_clearance = Length::from_micrometres(jitter);
             profile.outer_margin = Length::from_micrometres(jitter / 2);
             profile.writing_inset = Length::from_micrometres(jitter / 3);
@@ -335,8 +339,20 @@ fn mixed_profile_failures_match_independent_precedence_oracle() {
     let mut valid = 0usize;
     let mut invalid = 0usize;
     let mut seen_errors = [false; 9];
+    let mut seen_binding_orientation = [false; 8];
     for case in 0..CASES {
         let profile = generated_validation_profile(&mut seed, case);
+        let binding_index = match profile.binding_edge {
+            BindingEdge::Bottom => 0,
+            BindingEdge::Left => 1,
+            BindingEdge::Right => 2,
+            BindingEdge::Top => 3,
+        };
+        let orientation_index = match profile.orientation {
+            Orientation::Portrait => 0,
+            Orientation::Landscape => 1,
+        };
+        seen_binding_orientation[binding_index * 2 + orientation_index] = true;
         let expected = reference_profile_validation(profile);
         if let Err(reason) = expected {
             invalid = invalid.saturating_add(1);
@@ -371,6 +387,7 @@ fn mixed_profile_failures_match_independent_precedence_oracle() {
     assert!(valid > 10_000);
     assert!(invalid > 50_000);
     assert!(seen_errors.into_iter().all(|seen| seen));
+    assert!(seen_binding_orientation.into_iter().all(|seen| seen));
 }
 
 #[test]
