@@ -85,8 +85,24 @@ ownership,
 and workflow persistence belong to the future calibration application layer.
 
 Held-out samples are therefore structurally prevented from also serving as
-training evidence in one validated role set. This domain does not calculate the
-final held-out quality report.
+training evidence in one validated role set.
+
+### Held-out quality evidence stays attributable
+
+`HeldOutQualityReport` retains caller-ordered measurements plus caller-owned
+known failure modes. Each `HeldOutQualityMeasurement` names exactly one of the
+six required first-release dimensions: geometry, rhythm, joins, spacing,
+punctuation, or perceptual fidelity. Measured values and supporting evidence
+remain generic so this boundary does not invent units, thresholds, or a scoring
+model.
+
+`validate_held_out_quality_report` first applies the existing training/held-out
+role-separation rule. It then requires every report measurement to reference a
+declared held-out sample, preserving report order for the first invalid sample,
+and finally requires all six dimensions. Repeated measurements remain valid and
+known failures may be empty because aggregation, failure discovery, sample
+sufficiency, report generation, and pass/fail policy remain outside this pure
+evidence boundary.
 
 ### Guided calibration plans are caller supplied and resumable
 
@@ -153,6 +169,8 @@ calibration and variation domains.
 The present calibration domains fail structurally when:
 
 - one sample identity is declared as both Training and HeldOut;
+- a held-out report measurement names a training or unknown sample;
+- a held-out report omits any required quality dimension;
 - one guided plan repeats a stable prompt identity;
 - a variation minimum exceeds its maximum;
 - a variation central tendency falls below the minimum; or
@@ -177,7 +195,8 @@ Current checked-in regression evidence includes:
 
 - `tests/backend/handwriting-calibration-evidence/domain/lib.rs`, which pins
   complete evidence retention, observed/inferred separation, held-out/training
-  conflict rejection, and explicit additional-sample requirements;
+  conflict rejection, held-out report attribution/completeness, and explicit
+  additional-sample requirements;
 - `tests/backend/handwriting-calibration-session/domain/lib.rs`, which pins all
   nine prompt categories, caller-owned plan order/reference geometry, completed
   sample inspection and exact replacement, resume position, completion state,
@@ -204,6 +223,5 @@ Before extending calibration, preserve these boundaries:
 Still-open implementation work includes the minimum viable sample set, capture
 UI and persistence, photographic/scanner/digital input adapters, physical
 reference-mark geometry and transform fitting, handwriting extraction,
-confidence
-policy, weak-sample classification/workflow and persistence, held-out quality
-metrics, and the final calibration quality report.
+confidence policy, weak-sample classification/workflow and persistence,
+held-out metric/scoring algorithms, and quality-report generation policy.

@@ -1236,6 +1236,16 @@ white noise, and configurations that leave the calibrated writer's envelope.
 Measure geometry, rhythm, joins, spacing, punctuation, and perceptual fidelity
 against samples excluded from extraction and publish known failure modes.
 
+Current executable evidence now freezes a transport-neutral held-out quality
+report with those six required dimensions, caller-owned measured values and
+supporting evidence, and caller-owned known failure modes. Structural admission
+first rejects conflicting calibration sample roles, then rejects measurements
+that reference training or unknown samples in report order, and finally requires
+all six quality dimensions. Repeated held-out measurements and an empty known-
+failure list remain valid because aggregation and failure discovery are not
+inferred here. Metric units, thresholds, scoring, statistical/perceptual models,
+sample sufficiency, quality-report generation, and pass/fail policy remain open.
+
 ## P5 — Deterministic CPU rendering and digital output
 
 ### TODO - Implement authoritative vector geometry

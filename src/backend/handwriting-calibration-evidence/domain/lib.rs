@@ -9,13 +9,15 @@
 //
 // Boundary-Contract:
 // - Owns:
-//   - Transport-neutral calibration evidence provenance and sample roles.
+//   - Transport-neutral calibration evidence provenance, sample roles, and
+//     held-out quality-report structure.
 // - Must-Not:
 //   - Define capture geometry, confidence scales, unit vocabularies, extraction
 //     algorithms, minimum sample sets, or handwriting synthesis behavior.
 // - Allows:
-//   - Inputs: Typed caller-owned parameter evidence and calibration sample IDs.
-//   - Outputs: Preserved evidence records, role conflicts, and sample requests.
+//   - Inputs: Typed caller-owned parameter evidence, calibration sample IDs,
+//     held-out measurements, and known failure modes.
+//   - Outputs: Preserved evidence, role/report validation, and sample requests.
 //   - Side effects: Process-local validation allocation only.
 // - Split-When:
 //   - Capture geometry, extraction, or calibration workflow gains independent
@@ -27,8 +29,7 @@
 //     policy.
 // - Description:
 //   - Separates observations from inferred extremes and training from held-out
-//     writing while retaining source, unit, confidence, and correction
-//     evidence.
+//     writing while retaining source evidence and quality-report provenance.
 // - Usage:
 //   - Attach caller-owned evidence vocabulary to extracted profile parameters.
 // - Defaults:
@@ -38,7 +39,7 @@
 
 //! Transport-neutral provenance for handwriting calibration evidence.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 /// Evidentiary basis of one extracted calibration parameter.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -110,6 +111,70 @@ pub struct CalibrationSample<Identity> {
     pub role: CalibrationSampleRole,
 }
 
+/// Required evidence dimension in the final held-out quality report.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub enum HeldOutQualityDimension {
+    /// Geometric fidelity to held-out writing.
+    Geometry,
+    /// Join behavior fidelity to held-out writing.
+    Joins,
+    /// Perceptual fidelity evidence retained without choosing a scoring model.
+    PerceptualFidelity,
+    /// Punctuation fidelity to held-out writing.
+    Punctuation,
+    /// Word and line rhythm fidelity to held-out writing.
+    Rhythm,
+    /// Spacing fidelity to held-out writing.
+    Spacing,
+}
+
+/// One quality measurement attributed to one held-out sample.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct HeldOutQualityMeasurement<Identity, Value, Evidence> {
+    /// Required quality dimension represented by this measurement.
+    pub dimension: HeldOutQualityDimension,
+    /// Caller-owned measurement provenance or supporting evidence.
+    pub evidence: Evidence,
+    /// Stable calibration sample identity measured by this observation.
+    pub sample: Identity,
+    /// Caller-owned measured value, including units when applicable.
+    pub value: Value,
+}
+
+/// Final held-out calibration-quality evidence before score policy.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct HeldOutQualityReport<Identity, Value, Evidence, Failure> {
+    /// Caller-owned known failure modes published with this report.
+    pub known_failures: Vec<Failure>,
+    /// Held-out measurements retained in caller-supplied report order.
+    pub measurements: Vec<HeldOutQualityMeasurement<Identity, Value, Evidence>>,
+}
+
+/// Why held-out quality evidence cannot be admitted structurally.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum HeldOutQualityReportError<Identity> {
+    /// The underlying calibration sample-role declarations conflict.
+    ConflictingSampleRole {
+        /// Sample identity that appears in both evidence roles.
+        sample: Identity,
+    },
+    /// One of the six required report dimensions has no measurement.
+    MissingDimension {
+        /// First missing dimension in the accepted requirement order.
+        dimension: HeldOutQualityDimension,
+    },
+    /// A report measurement references a sample reserved for training.
+    TrainingSample {
+        /// Training sample incorrectly used for held-out quality evidence.
+        sample: Identity,
+    },
+    /// A report measurement references no declared calibration sample.
+    UnknownSample {
+        /// Unknown sample identity retained exactly for diagnostics.
+        sample: Identity,
+    },
+}
+
 /// Why calibration sample roles violate held-out separation.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum CalibrationSampleRoleError<Identity> {
@@ -144,6 +209,71 @@ where
             }
         } else {
             let _previous = roles.insert(sample.identity.clone(), sample.role);
+        }
+    }
+    Ok(())
+}
+/// Validate that a final quality report is driven only by held-out writing.
+///
+/// This structural boundary requires measurements for geometry, rhythm, joins,
+/// spacing, punctuation, and perceptual fidelity. It does not choose metric
+/// units, thresholds, aggregation, perceptual models, or a passing score.
+/// Repeated measurements remain caller-owned evidence rather than being
+/// deduplicated or averaged here.
+///
+/// # Errors
+///
+/// Returns a conflicting sample-role declaration first. Otherwise returns the
+/// first invalid measurement sample in report order, then the first missing
+/// required quality dimension.
+pub fn validate_held_out_quality_report<Identity, Value, Evidence, Failure>(
+    samples: &[CalibrationSample<Identity>],
+    report: &HeldOutQualityReport<Identity, Value, Evidence, Failure>,
+) -> Result<(), HeldOutQualityReportError<Identity>>
+where
+    Identity: Clone + Ord,
+{
+    validate_calibration_sample_roles(samples).map_err(|error| match error {
+        CalibrationSampleRoleError::ConflictingRole { sample } => {
+            HeldOutQualityReportError::ConflictingSampleRole { sample }
+        },
+    })?;
+
+    let roles = samples
+        .iter()
+        .map(|sample| (sample.identity.clone(), sample.role))
+        .collect::<BTreeMap<_, _>>();
+    let mut dimensions = BTreeSet::new();
+    for measurement in &report.measurements {
+        match roles.get(&measurement.sample) {
+            Some(CalibrationSampleRole::HeldOut) => {},
+            Some(CalibrationSampleRole::Training) => {
+                return Err(HeldOutQualityReportError::TrainingSample {
+                    sample: measurement.sample.clone(),
+                });
+            },
+            None => {
+                return Err(HeldOutQualityReportError::UnknownSample {
+                    sample: measurement.sample.clone(),
+                });
+            },
+        }
+        let _inserted = dimensions.insert(measurement.dimension);
+    }
+
+    let required_dimensions = [
+        HeldOutQualityDimension::Geometry,
+        HeldOutQualityDimension::Rhythm,
+        HeldOutQualityDimension::Joins,
+        HeldOutQualityDimension::Spacing,
+        HeldOutQualityDimension::Punctuation,
+        HeldOutQualityDimension::PerceptualFidelity,
+    ];
+    for dimension in required_dimensions {
+        if !dimensions.contains(&dimension) {
+            return Err(HeldOutQualityReportError::MissingDimension {
+                dimension,
+            });
         }
     }
     Ok(())

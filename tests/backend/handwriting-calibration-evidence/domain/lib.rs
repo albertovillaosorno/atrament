@@ -35,7 +35,9 @@
 use atrament_handwriting_calibration_evidence::{
     CalibrationDetermination, CalibrationEvidenceBasis,
     CalibrationParameterEvidence, CalibrationSample, CalibrationSampleRole,
-    CalibrationSampleRoleError, validate_calibration_sample_roles,
+    CalibrationSampleRoleError, HeldOutQualityDimension,
+    HeldOutQualityMeasurement, HeldOutQualityReport, HeldOutQualityReportError,
+    validate_calibration_sample_roles, validate_held_out_quality_report,
 };
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -203,4 +205,164 @@ fn every_compact_sample_role_sequence_matches_separation_oracle() {
     assert_eq!(cases, 5_461);
     assert!(saw_valid);
     assert!(saw_conflict.into_iter().all(|seen| seen));
+}
+
+fn held_out_samples() -> Vec<CalibrationSample<&'static str>> {
+    vec![
+        CalibrationSample {
+            identity: "held-a",
+            role: CalibrationSampleRole::HeldOut,
+        },
+        CalibrationSample {
+            identity: "held-b",
+            role: CalibrationSampleRole::HeldOut,
+        },
+        CalibrationSample {
+            identity: "training-a",
+            role: CalibrationSampleRole::Training,
+        },
+    ]
+}
+
+fn complete_quality_report(
+) -> HeldOutQualityReport<&'static str, i32, &'static str, &'static str> {
+    use HeldOutQualityDimension::{
+        Geometry, Joins, PerceptualFidelity, Punctuation, Rhythm, Spacing,
+    };
+    HeldOutQualityReport {
+        known_failures: vec!["weak-terminal-join-on-small-writing"],
+        measurements: vec![
+            HeldOutQualityMeasurement {
+                dimension: Geometry,
+                evidence: "geometry-evidence",
+                sample: "held-a",
+                value: 91,
+            },
+            HeldOutQualityMeasurement {
+                dimension: Rhythm,
+                evidence: "rhythm-evidence",
+                sample: "held-b",
+                value: 87,
+            },
+            HeldOutQualityMeasurement {
+                dimension: Joins,
+                evidence: "join-evidence",
+                sample: "held-a",
+                value: 84,
+            },
+            HeldOutQualityMeasurement {
+                dimension: Spacing,
+                evidence: "spacing-evidence",
+                sample: "held-b",
+                value: 93,
+            },
+            HeldOutQualityMeasurement {
+                dimension: Punctuation,
+                evidence: "punctuation-evidence",
+                sample: "held-a",
+                value: 89,
+            },
+            HeldOutQualityMeasurement {
+                dimension: PerceptualFidelity,
+                evidence: "perceptual-evidence",
+                sample: "held-b",
+                value: 86,
+            },
+        ],
+    }
+}
+
+#[test]
+fn held_out_report_retains_all_required_dimensions_and_known_failures() {
+    let report = complete_quality_report();
+    assert_eq!(
+        validate_held_out_quality_report(&held_out_samples(), &report),
+        Ok(()),
+    );
+    assert_eq!(report.measurements.len(), 6);
+    assert_eq!(
+        report.known_failures,
+        ["weak-terminal-join-on-small-writing"],
+    );
+    assert_eq!(report.measurements[0].sample, "held-a");
+    assert_eq!(report.measurements[0].value, 91);
+    assert_eq!(report.measurements[0].evidence, "geometry-evidence");
+}
+
+#[test]
+fn held_out_report_rejects_training_and_unknown_measurement_samples_in_order() {
+    let mut report = complete_quality_report();
+    report.measurements[0].sample = "training-a";
+    report.measurements[1].sample = "unknown-a";
+    assert_eq!(
+        validate_held_out_quality_report(&held_out_samples(), &report),
+        Err(HeldOutQualityReportError::TrainingSample {
+            sample: "training-a",
+        }),
+    );
+
+    report.measurements[0].sample = "held-a";
+    assert_eq!(
+        validate_held_out_quality_report(&held_out_samples(), &report),
+        Err(HeldOutQualityReportError::UnknownSample {
+            sample: "unknown-a",
+        }),
+    );
+}
+
+#[test]
+fn sample_role_conflict_rejects_before_held_out_report_measurements() {
+    let samples = vec![
+        CalibrationSample {
+            identity: "conflict",
+            role: CalibrationSampleRole::Training,
+        },
+        CalibrationSample {
+            identity: "conflict",
+            role: CalibrationSampleRole::HeldOut,
+        },
+    ];
+    let mut report = complete_quality_report();
+    report.measurements[0].sample = "unknown-first-measurement";
+    assert_eq!(
+        validate_held_out_quality_report(&samples, &report),
+        Err(HeldOutQualityReportError::ConflictingSampleRole {
+            sample: "conflict",
+        }),
+    );
+}
+
+#[test]
+fn held_out_report_requires_every_dimension_without_metric_thresholds() {
+    let required = [
+        HeldOutQualityDimension::Geometry,
+        HeldOutQualityDimension::Rhythm,
+        HeldOutQualityDimension::Joins,
+        HeldOutQualityDimension::Spacing,
+        HeldOutQualityDimension::Punctuation,
+        HeldOutQualityDimension::PerceptualFidelity,
+    ];
+    for (index, missing) in required.into_iter().enumerate() {
+        let mut report = complete_quality_report();
+        report.measurements.remove(index);
+        assert_eq!(
+            validate_held_out_quality_report(&held_out_samples(), &report),
+            Err(HeldOutQualityReportError::MissingDimension {
+                dimension: missing,
+            }),
+            "missing dimension at report requirement index {index}",
+        );
+    }
+}
+
+#[test]
+fn repeated_held_out_measurements_and_empty_known_failures_remain_valid() {
+    let mut report = complete_quality_report();
+    report.known_failures.clear();
+    report.measurements.push(report.measurements[0].clone());
+    assert_eq!(
+        validate_held_out_quality_report(&held_out_samples(), &report),
+        Ok(()),
+    );
+    assert_eq!(report.measurements.len(), 7);
 }
