@@ -151,7 +151,14 @@ fn generated_tex_corpus_is_deterministic_and_source_safe() {
         r"\",
         r"\\",
         r"\alpha",
+        r"\Doteq",
+        r"\doublecap",
+        r"\doublecup",
         r"\frac",
+        r"\gggtr",
+        r"\llless",
+        r"\mathsterling",
+        r"\restriction",
         r"\sqrt",
         r"\sqrt[",
         r"\unknown",
@@ -165,9 +172,11 @@ fn generated_tex_corpus_is_deterministic_and_source_safe() {
         r"\left",
     ];
 
+    const FRAGMENT_COUNT: usize = FRAGMENTS.len();
     let mut state = 0x9e37_79b9_u32;
     let mut seen_fragment_counts = [false; 32];
-    let mut seen_fragments = [false; FRAGMENTS.len()];
+    let mut seen_fragments = [false; FRAGMENT_COUNT];
+    let mut seen_adjacent_pairs = [false; FRAGMENT_COUNT * FRAGMENT_COUNT];
     let mut seen_mode_success = [false; 3];
     let mut seen_mode_error = [false; 3];
     let mut seen_syntax_classes = [false; 9];
@@ -181,16 +190,21 @@ fn generated_tex_corpus_is_deterministic_and_source_safe() {
             .expect("bounded fragment count");
         seen_fragment_counts[fragment_count - 1] = true;
         let mut source = String::new();
+        let mut previous_fragment = None;
         for fragment_index in 0..fragment_count {
             let fragment_index = u32::try_from(fragment_index)
                 .expect("bounded fragment index");
             state = state
                 .wrapping_mul(1_664_525)
                 .wrapping_add(1_013_904_223 ^ fragment_index);
-            let index = usize::try_from(state)
-                .expect("u32 fits usize on supported targets")
-                % FRAGMENTS.len();
+            let index = usize::try_from(state >> 16)
+                .expect("u16 fits usize on supported targets")
+                % FRAGMENT_COUNT;
             seen_fragments[index] = true;
+            if let Some(previous) = previous_fragment {
+                seen_adjacent_pairs[previous * FRAGMENT_COUNT + index] = true;
+            }
+            previous_fragment = Some(index);
             source.push_str(FRAGMENTS[index]);
         }
 
@@ -252,6 +266,7 @@ fn generated_tex_corpus_is_deterministic_and_source_safe() {
     }
     assert!(seen_fragment_counts.into_iter().all(|seen| seen));
     assert!(seen_fragments.into_iter().all(|seen| seen));
+    assert!(seen_adjacent_pairs.into_iter().all(|seen| seen));
     assert!(seen_mode_success.into_iter().all(|seen| seen));
     assert!(seen_mode_error.into_iter().all(|seen| seen));
     assert!(seen_syntax_classes.into_iter().all(|seen| seen));

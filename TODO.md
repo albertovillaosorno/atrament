@@ -1823,7 +1823,11 @@ The deterministic HTTP and TeX generators now also assert that every declared
 mutation operation, mutation/fragment-count bucket, and TeX fragment token is
 actually exercised, preventing a passing corpus from silently starving one of
 its advertised selector classes.
-The TeX corpus also requires success and syntax-error outcomes in Inline,
+
+TeX fragment selection uses upper LCG bits and requires every ordered adjacent
+fragment pair, including the current fixed AMS aliases and LaTeX math sterling
+symbol, to occur in the generated corpus. The TeX corpus also requires success
+and syntax-error outcomes in Inline,
 Display, and Aligned modes, with both fully supported and unsupported-preserving
 successful analyses.
 Its malformed-source coverage also pins group open/close, matrix/cases
