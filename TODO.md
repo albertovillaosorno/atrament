@@ -1349,6 +1349,9 @@ scenario-by-quality matrix. Numeric budgets, units, representative machine
 tiers,
 benchmark execution, render scheduling, and pass/fail policy remain open.
 
+A leave-one-scenario-out matrix proves each workload is independently required
+before quality-role completeness can pass.
+
 ## P6 — LLM, CLI, MCP, and media intake
 
 ### TODO - Freeze the one-shot formatting prompt

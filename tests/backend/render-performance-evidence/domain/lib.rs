@@ -37,17 +37,18 @@ use atrament_render_performance_evidence::{
 };
 use atrament_render_quality_profile::RenderQualityMode;
 
+const SCENARIOS: [RenderPerformanceScenario; 6] = [
+    RenderPerformanceScenario::DenseEquations,
+    RenderPerformanceScenario::FinalExport,
+    RenderPerformanceScenario::LongPage,
+    RenderPerformanceScenario::ManyImages,
+    RenderPerformanceScenario::RapidEdits,
+    RenderPerformanceScenario::Zoom,
+];
+
 #[test]
 fn first_release_cpu_benchmark_scenarios_are_explicit() {
-    let scenarios = [
-        RenderPerformanceScenario::DenseEquations,
-        RenderPerformanceScenario::FinalExport,
-        RenderPerformanceScenario::LongPage,
-        RenderPerformanceScenario::ManyImages,
-        RenderPerformanceScenario::RapidEdits,
-        RenderPerformanceScenario::Zoom,
-    ];
-    assert_eq!(scenarios.len(), 6);
+    assert_eq!(SCENARIOS.len(), 6);
 }
 
 #[test]
@@ -140,35 +141,28 @@ fn complete_evidence_covers_all_scenarios_and_both_quality_roles() {
 }
 
 #[test]
-fn missing_workload_scenario_is_reported_without_budgeting() {
-    let observations = [
-        observation(
-            RenderPerformanceScenario::DenseEquations,
-            RenderQualityMode::Preview,
-        ),
-        observation(
-            RenderPerformanceScenario::FinalExport,
-            RenderQualityMode::Final,
-        ),
-        observation(
-            RenderPerformanceScenario::LongPage,
-            RenderQualityMode::Preview,
-        ),
-        observation(
-            RenderPerformanceScenario::ManyImages,
-            RenderQualityMode::Preview,
-        ),
-        observation(
-            RenderPerformanceScenario::RapidEdits,
-            RenderQualityMode::Preview,
-        ),
-    ];
-    assert_eq!(
-        validate_render_performance_coverage(&observations),
-        Err(RenderPerformanceCoverageError::ScenarioAbsent(
-            RenderPerformanceScenario::Zoom,
-        )),
-    );
+fn every_workload_scenario_is_independently_required() {
+    for missing in SCENARIOS {
+        let observations = SCENARIOS
+            .into_iter()
+            .filter(|scenario| *scenario != missing)
+            .map(|scenario| {
+                let quality_mode = if scenario
+                    == RenderPerformanceScenario::FinalExport
+                {
+                    RenderQualityMode::Final
+                } else {
+                    RenderQualityMode::Preview
+                };
+                observation(scenario, quality_mode)
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            validate_render_performance_coverage(&observations),
+            Err(RenderPerformanceCoverageError::ScenarioAbsent(missing)),
+            "missing scenario {missing:?}",
+        );
+    }
 }
 
 #[test]
