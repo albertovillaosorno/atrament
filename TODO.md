@@ -1383,6 +1383,18 @@ shadow rendering, raster composition, and digital preview/export remain open.
 Support layered lettering, outlines, highlights, and motifs in digital mode and
 derive a sober, single-pen alternative without losing title hierarchy.
 
+Current executable evidence now freezes a caller-produced digital/live title
+pair around one stable semantic title identity and one exact hierarchy value.
+The digital treatment structurally carries layered lettering, outline,
+highlight,
+and motif inputs while the live treatment remains caller-owned one-pen intent.
+Validation rejects title-identity drift first and hierarchy drift second while
+allowing the mode-specific treatments themselves to differ.
+
+Title-style derivation, hierarchy semantics, typography, colors, motif
+generation, one-pen geometry, layout, rendering, and conversion orchestration
+remain open.
+
 ### TODO - Produce vector-preserving PDF
 
 Embed bounded texture and image resources, preserve physical page boxes and

@@ -101,6 +101,13 @@ convert only to an explicit underline, box, spacing, or admitted stroke-weight
 change. Decorative title layers and outlines convert to a sober one-pen title
 role; the original digital treatment remains part of the source document.
 
+`ThemeSafeTitlePlan` now provides the transport-neutral proof boundary for that
+title conversion: digital and live projections must retain the same semantic
+title identity and exact hierarchy value. The digital side structurally carries
+layering, outline, highlight, and motif inputs while the live treatment remains
+caller-owned one-pen intent. The domain validates a produced pair; it does not
+derive either treatment or interpret hierarchy semantics.
+
 ### Color
 
 | Capability | Digital | Live |

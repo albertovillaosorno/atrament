@@ -1,0 +1,9 @@
+identity:
+  id: function:theme-safe-title-plan
+  name: theme-safe-title-plan
+  path: src/backend/theme-safe-title-plan
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: domain

@@ -193,3 +193,6 @@ depends_on = ["atrament_diagnostic", "atrament_session_draft_port", "atrament_se
 
 [component.atrament_session_secret]
 depends_on = []
+
+[component.atrament_theme_safe_title_plan]
+depends_on = []

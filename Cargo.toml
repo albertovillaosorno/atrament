@@ -58,6 +58,7 @@ members = [
     "src/backend/session-handshake-port",
     "src/backend/session-runtime",
     "src/backend/session-secret",
+    "src/backend/theme-safe-title-plan",
     "src/backend/transcript-evidence",
     "src/backend/transcript-structure",
     "src/backend/unicode-grapheme-boundary-port",
