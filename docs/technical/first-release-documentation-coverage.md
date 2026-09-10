@@ -95,15 +95,16 @@ that future package manual.
 
 The technical index must contain and resolve the following verified guides:
 
-1. `portable-profile-container-validation.md`;
-2. `pdf-print-composition-validation.md`;
-3. `handwriting-calibration-evidence-validation.md`;
-4. `handwriting-variation-quality-evidence.md`;
-5. `live-physical-safety-validation.md`;
-6. `one-shot-formatting-prompt-validation.md`;
-7. `adapter-boundary-validation.md`;
-8. `first-release-troubleshooting.md`; and
-9. this documentation-coverage record.
+1. `initial-repository-validation.md`;
+2. `portable-profile-container-validation.md`;
+3. `pdf-print-composition-validation.md`;
+4. `handwriting-calibration-evidence-validation.md`;
+5. `handwriting-variation-quality-evidence.md`;
+6. `live-physical-safety-validation.md`;
+7. `one-shot-formatting-prompt-validation.md`;
+8. `adapter-boundary-validation.md`;
+9. `first-release-troubleshooting.md`; and
+10. this documentation-coverage record.
 
 A repository check resolves every `path:` entry in `docs/technical/index.yml`
 and verifies the implementation/test references inside each verified guide.
