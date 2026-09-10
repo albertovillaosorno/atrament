@@ -105,10 +105,11 @@ speed and size, and either `Pending` progress or one completed sample identity.
 known reference geometry.
 
 `CalibrationSession::validate` rejects duplicate prompt identities.
+`CalibrationSession::completed_prompts` returns borrowed completed prompts in
+original guidance order for inspection without choosing replacement policy.
 `CalibrationSession::next_pending_prompt_index` returns the first pending
-prompt in the original guidance order, while `CalibrationSession::is_complete`
-reports whether
-all supplied prompts are complete.
+prompt in that same order, while `CalibrationSession::is_complete` reports
+whether all supplied prompts are complete.
 
 The session domain does not decide how many prompts exist, which category mix is
 minimum, what wording is shown to a user, which speeds or sizes are selected, or
@@ -162,8 +163,9 @@ Current checked-in regression evidence includes:
   complete evidence retention, observed/inferred separation, held-out/training
   conflict rejection, and explicit additional-sample requirements;
 - `tests/backend/handwriting-calibration-session/domain/lib.rs`, which pins all
-  nine prompt categories, caller-owned plan order/reference geometry, resume
-  position, completion state, and duplicate-prompt rejection; and
+  nine prompt categories, caller-owned plan order/reference geometry, completed
+  sample inspection, resume position, completion state, duplicate-prompt
+  rejection, and every compact progress mask through eight prompts; and
 - `tests/backend/handwriting-variation/domain/lib.rs`, which pins bound
   evidence,
   envelope ordering, metadata preservation, variation scale, and deterministic

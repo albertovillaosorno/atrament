@@ -107,6 +107,55 @@ fn completed_prompts_resume_at_first_pending_prompt_without_reordering() {
 }
 
 #[test]
+fn completed_prompt_projection_preserves_plan_order_and_sample_links() {
+    let session = Session {
+        prompts: vec![
+            prompt(
+                "character-a",
+                CalibrationPromptKind::IsolatedCharacter,
+                CalibrationPromptProgress::Completed {
+                    sample: "sample-character-a",
+                },
+            ),
+            prompt(
+                "join-ab",
+                CalibrationPromptKind::Join,
+                CalibrationPromptProgress::Pending,
+            ),
+            prompt(
+                "word-casa",
+                CalibrationPromptKind::Word,
+                CalibrationPromptProgress::Completed {
+                    sample: "sample-word-casa",
+                },
+            ),
+        ],
+        reference_geometry: "reference",
+    };
+
+    let completed = session
+        .completed_prompts()
+        .expect("unique prompt identities project completed work");
+    assert_eq!(completed.len(), 2);
+    assert_eq!(completed[0].identity, "character-a");
+    assert_eq!(
+        completed[0].progress,
+        CalibrationPromptProgress::Completed {
+            sample: "sample-character-a",
+        },
+    );
+    assert_eq!(completed[1].identity, "word-casa");
+    assert_eq!(
+        completed[1].progress,
+        CalibrationPromptProgress::Completed {
+            sample: "sample-word-casa",
+        },
+    );
+    assert_eq!(completed[0].speed, 3);
+    assert_eq!(completed[0].size, 12);
+}
+
+#[test]
 fn duplicate_prompt_identity_rejects_before_resume_or_completion() {
     let session = Session {
         prompts: vec![
@@ -131,6 +180,12 @@ fn duplicate_prompt_identity_rejects_before_resume_or_completion() {
     );
     assert_eq!(
         session.is_complete(),
+        Err(CalibrationSessionError::DuplicatePromptIdentity {
+            prompt: "duplicate",
+        }),
+    );
+    assert_eq!(
+        session.completed_prompts(),
         Err(CalibrationSessionError::DuplicatePromptIdentity {
             prompt: "duplicate",
         }),
@@ -167,6 +222,65 @@ fn completion_is_derived_only_from_caller_supplied_prompt_progress() {
     };
     assert_eq!(complete.is_complete(), Ok(true));
     assert_eq!(complete.next_pending_prompt_index(), Ok(None));
+}
+
+#[test]
+fn every_compact_progress_mask_matches_resume_and_inspection_oracle() {
+    type CompactSession = CalibrationSession<u8, u8, u8, u8, ()>;
+    let mut cases = 0_u16;
+    for prompt_count in 0_u8..=8 {
+        let state_count = 1_u16 << prompt_count;
+        for mask in 0_u16..state_count {
+            let prompts = (0..prompt_count)
+                .map(|identity| CalibrationPrompt {
+                    identity,
+                    kind: CalibrationPromptKind::Word,
+                    progress: if mask & (1_u16 << identity) == 0 {
+                        CalibrationPromptProgress::Pending
+                    } else {
+                        CalibrationPromptProgress::Completed {
+                            sample: identity.saturating_add(40),
+                        }
+                    },
+                    size: 12,
+                    speed: 3,
+                })
+                .collect::<Vec<_>>();
+            let session = CompactSession {
+                prompts,
+                reference_geometry: (),
+            };
+            let expected_pending = (0..prompt_count).find(|identity| {
+                mask & (1_u16 << identity) == 0
+            });
+            let expected_completed = (0..prompt_count)
+                .filter(|identity| mask & (1_u16 << identity) != 0)
+                .collect::<Vec<_>>();
+            let completed = session
+                .completed_prompts()
+                .expect("compact plan identities are unique");
+            assert_eq!(
+                session.next_pending_prompt_index(),
+                Ok(expected_pending.map(usize::from)),
+                "resume mismatch for count {prompt_count} mask {mask:#x}",
+            );
+            assert_eq!(
+                session.is_complete(),
+                Ok(expected_pending.is_none()),
+                "completion mismatch for count {prompt_count} mask {mask:#x}",
+            );
+            assert_eq!(
+                completed
+                    .iter()
+                    .map(|prompt| prompt.identity)
+                    .collect::<Vec<_>>(),
+                expected_completed,
+                "inspection mismatch for count {prompt_count} mask {mask:#x}",
+            );
+            cases = cases.saturating_add(1);
+        }
+    }
+    assert_eq!(cases, 511);
 }
 
 #[test]

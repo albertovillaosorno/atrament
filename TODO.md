@@ -1121,9 +1121,14 @@ Guided-session evidence now also preserves a caller-supplied ordered prompt plan
 across resumptions, rejects duplicate prompt identities, derives completion from
 accepted prompt progress, and covers the ADR's isolated-character, join, word,
 sentence, numeral, punctuation, mathematical-symbol, heading, and free-writing
-categories. Caller-owned reference geometry, speed, and size travel with the
-plan; minimum counts, wording, sufficiency, capture UI, and geometry semantics
-remain open.
+categories. Completed prompts can be projected read-only in original plan order
+without losing sample links, speed, size, or category metadata.
+
+An exhaustive 511-state compact corpus covers every pending/completed mask from
+zero through eight prompts and cross-checks completion, next-pending position,
+and completed-prompt inspection against an independent bit-mask oracle. Minimum
+counts, wording, sufficiency, weak-sample replacement policy, capture UI, and
+geometry semantics remain open.
 
 ### TODO - Correct photographed calibration geometry
 

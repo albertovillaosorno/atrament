@@ -128,6 +128,34 @@ impl<Identity, Speed, Size, SampleIdentity, ReferenceGeometry>
 where
     Identity: Clone + Ord,
 {
+    /// Return completed prompts in caller-supplied guidance order.
+    ///
+    /// The returned borrowed prompts preserve identity, category, speed, size,
+    /// and sample links for read-only inspection. This domain does not decide
+    /// whether a completed sample is weak or authorize replacement.
+    ///
+    /// # Errors
+    ///
+    /// Returns duplicate prompt identity before projecting completed work.
+    pub fn completed_prompts(
+        &self,
+    ) -> Result<
+        Vec<&CalibrationPrompt<Identity, Speed, Size, SampleIdentity>>,
+        CalibrationSessionError<Identity>,
+    > {
+        self.validate()?;
+        Ok(self
+            .prompts
+            .iter()
+            .filter(|prompt| {
+                matches!(
+                    prompt.progress,
+                    CalibrationPromptProgress::Completed { .. }
+                )
+            })
+            .collect())
+    }
+
     /// Return whether every caller-supplied calibration prompt is complete.
     ///
     /// # Errors
