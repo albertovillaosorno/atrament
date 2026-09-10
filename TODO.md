@@ -1748,6 +1748,14 @@ deterministically. Any non-204 outcome leaves all seeded drafts unchanged; a
 successful replacement may change only Task and must agree across repeated runs.
 Responses never reflect the session secret.
 
+
+The browser session-fragment parser now also runs a deterministic 4,096-case
+mutation corpus against an independent ASCII oracle. Replacement, insertion,
+deletion, and duplication mutations cover credential-prefix bytes, lowercase and
+uppercase hexadecimal, delimiters, percent-like text, NUL, Unicode, and emoji.
+Repeated parsing must agree exactly, and only 64 lowercase hexadecimal
+characters after the exact `#session=` prefix are admitted.
+
 ### TODO - Complete visual regression coverage
 
 Compare semantic layout, vector topology, layer composition, final pixels,
