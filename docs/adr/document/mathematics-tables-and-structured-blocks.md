@@ -68,11 +68,11 @@ under-arrows, overline, and underline decorations,
 escaped
 TeX special characters,
 standard and variant Greek control-sequence notation including italic capital
-Greek forms, complete AMS ordinary, letter-like, and geometric symbols, common
-named
-and delimiter symbols including bracket, backslash,
-paired vertical-bar spellings, parallel control-symbol, foundational
-set/logic forms, and the core plain-TeX surd glyph,
+Greek forms, complete AMS ordinary, letter-like, geometric, and standalone
+special symbols including the large box/diamond aliases, checkmark, registered
+mark, maltese cross, and yen sign, common named and delimiter symbols including
+bracket, backslash, paired vertical-bar spellings, parallel control-symbol,
+foundational set/logic forms, and the core plain-TeX surd glyph,
 real/imaginary-part and derivative-prime symbols, geometry/proof and
 ordering/set relations including AMS order, equality, approximation, triangle,
 and strong-containment forms,

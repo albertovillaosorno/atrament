@@ -55,7 +55,8 @@ const NAMED_OPERATOR_COMMANDS: &[&str] = &[
 ];
 
 const NAMED_SYMBOL_COMMANDS: &[&str] = &[
-    "\\Bbbk", "\\Bumpeq", "\\Cap", "\\Cup", "\\Delta", "\\Downarrow", "\\Finv",
+    "\\Bbbk", "\\Box", "\\Bumpeq", "\\Cap", "\\Cup", "\\Delta", "\\Diamond",
+    "\\Downarrow", "\\Finv",
     "\\Game", "\\Gamma",
     "\\Im", "\\Lambda", "\\Leftarrow",
     "\\Leftrightarrow", "\\Lleftarrow", "\\Longleftarrow",
@@ -75,9 +76,10 @@ const NAMED_SYMBOL_COMMANDS: &[&str] = &[
     "\\blacktriangledown", "\\blacktriangleleft", "\\blacktriangleright",
     "\\bot", "\\bowtie", "\\boxdot", "\\boxminus",
     "\\boxplus", "\\boxtimes", "\\bullet", "\\bumpeq", "\\cap", "\\cdot",
-    "\\cdotp", "\\cdots", "\\centerdot", "\\chi", "\\circ", "\\circeq",
+    "\\cdotp", "\\cdots", "\\centerdot", "\\checkmark", "\\chi", "\\circ",
+    "\\circeq",
     "\\circlearrowleft", "\\circlearrowright",
-    "\\circledS",
+    "\\circledR", "\\circledS",
     "\\circledast", "\\circledcirc", "\\circleddash",
     "\\clubsuit", "\\colon", "\\complement",
     "\\cong",
@@ -118,7 +120,7 @@ const NAMED_SYMBOL_COMMANDS: &[&str] = &[
     "\\longmapsto", "\\longrightarrow", "\\looparrowleft", "\\looparrowright",
     "\\lor", "\\lozenge", "\\ltimes",
     "\\lvert", "\\lvertneqq",
-    "\\mapsto",
+    "\\maltese", "\\mapsto",
     "\\mathdollar",
     "\\mathparagraph", "\\mathsection", "\\measuredangle", "\\mho", "\\mid",
     "\\models", "\\mp",
@@ -181,7 +183,8 @@ const NAMED_SYMBOL_COMMANDS: &[&str] = &[
     "\\varsubsetneqq", "\\varsupsetneq", "\\varsupsetneqq", "\\vartheta",
     "\\vartriangle",
     "\\vartriangleleft", "\\vartriangleright", "\\vdash", "\\vdots",
-    "\\vee", "\\veebar", "\\vert", "\\wedge", "\\wp", "\\wr", "\\xi", "\\zeta",
+    "\\vee", "\\veebar", "\\vert", "\\wedge", "\\wp", "\\wr", "\\xi", "\\yen",
+    "\\zeta",
 ];
 
 const STRUCTURED_CONTROL_WORD_COMMANDS: &[StructuredControlWordDefinition] = &[

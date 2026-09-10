@@ -638,8 +638,8 @@ fn calculus_commands_compose_with_scripts_without_rewriting() {
 #[test]
 fn named_symbol_vocabulary_is_supported_without_rewriting() {
     for source in [
-        r"\Bbbk", r"\Bumpeq", r"\Cap", r"\Cup", r"\Delta", r"\Downarrow",
-        r"\Finv",
+        r"\Bbbk", r"\Box", r"\Bumpeq", r"\Cap", r"\Cup", r"\Delta",
+        r"\Diamond", r"\Downarrow", r"\Finv",
         r"\Game", r"\Gamma",
         r"\Im", r"\Lambda", r"\Leftarrow",
         r"\Leftrightarrow", r"\Lleftarrow", r"\Longleftarrow",
@@ -664,9 +664,9 @@ fn named_symbol_vocabulary_is_supported_without_rewriting() {
         r"\bot", r"\bowtie", r"\boxdot", r"\boxminus",
         r"\boxplus", r"\boxtimes", r"\bullet", r"\bumpeq", r"\cap",
         r"\cdot",
-        r"\cdotp", r"\cdots", r"\centerdot",
+        r"\cdotp", r"\cdots", r"\centerdot", r"\checkmark",
         r"\chi", r"\circ", r"\circeq", r"\circlearrowleft",
-        r"\circlearrowright", r"\circledS", r"\circledast",
+        r"\circlearrowright", r"\circledR", r"\circledS", r"\circledast",
         r"\circledcirc",
         r"\circleddash",
         r"\clubsuit", r"\colon", r"\complement", r"\cong",
@@ -713,7 +713,8 @@ fn named_symbol_vocabulary_is_supported_without_rewriting() {
         r"\longleftarrow", r"\longleftrightarrow",
         r"\longmapsto",
         r"\longrightarrow", r"\looparrowleft", r"\looparrowright",
-        r"\lor", r"\lozenge", r"\ltimes", r"\lvert", r"\lvertneqq", r"\mapsto",
+        r"\lor", r"\lozenge", r"\ltimes", r"\lvert", r"\lvertneqq", r"\maltese",
+        r"\mapsto",
         r"\mathdollar",
         r"\mathparagraph",
         r"\mathsection", r"\measuredangle", r"\mho",
@@ -775,7 +776,7 @@ fn named_symbol_vocabulary_is_supported_without_rewriting() {
         r"\vartriangle",
         r"\vartriangleleft", r"\vartriangleright", r"\vdash", r"\vdots",
         r"\vee", r"\veebar", r"\vert", r"\wedge", r"\wp", r"\wr",
-        r"\xi", r"\zeta",
+        r"\xi", r"\yen", r"\zeta",
     ] {
         let analyzed =
             analyze(source, FormulaMode::Inline).expect("named symbol formula");
@@ -1399,6 +1400,29 @@ fn common_binary_operator_symbols_compose_without_rewriting() {
             })
             .count(),
         11,
+    );
+}
+
+#[test]
+fn ams_special_symbols_and_large_aliases_compose_without_rewriting() {
+    let source = concat!(
+        r"\Box + \Diamond + \checkmark + ",
+        r"\circledR + \maltese + \yen",
+    );
+    let analyzed = analyze(source, FormulaMode::Display)
+        .expect("AMS special-symbol expression");
+    assert!(analyzed.is_supported());
+    assert_eq!(reconstructed(&analyzed), source);
+    assert_eq!(
+        analyzed
+            .tokens
+            .iter()
+            .filter(|token| {
+                token.kind
+                    == MathTokenKind::Command(SupportedCommand::NamedSymbol)
+            })
+            .count(),
+        6,
     );
 }
 
