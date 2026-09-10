@@ -88,6 +88,13 @@ const SESSION_HANDSHAKE_JAVASCRIPT: &[u8] = include_bytes!(
     "../../../browser/workspace/adapter-inbound/generated/session-handshake.js"
 );
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct ParsedRequestTarget<'request> {
+    host: &'request str,
+    method: &'request str,
+    target: &'request str,
+}
+
 /// A listener bound to one operating-system-assigned IPv4 loopback endpoint.
 #[derive(Debug)]
 pub struct Runtime {
@@ -149,22 +156,20 @@ impl Runtime {
         draft: &mut dyn SessionDraft,
     ) {
         for incoming in self.listener.incoming() {
-            match incoming {
-                Ok(mut connection) => {
-                    if configure_connection_deadline(&connection).is_err() {
-                        continue;
-                    }
-                    drop(serve_connection(
-                        &mut connection,
-                        &self.expected_host,
-                        &self.origin,
-                        expected_secret,
-                        handshake,
-                        draft,
-                    ));
-                },
-                Err(_) => break,
+            let Ok(mut connection) = incoming else {
+                break;
+            };
+            if configure_connection_deadline(&connection).is_err() {
+                continue;
             }
+            drop(serve_connection(
+                &mut connection,
+                &self.expected_host,
+                &self.origin,
+                expected_secret,
+                handshake,
+                draft,
+            ));
         }
     }
 }
@@ -854,7 +859,7 @@ fn is_origin_form_target(target: &str) -> bool {
 
 fn request_method_host_and_target(
     request: &[u8],
-) -> Option<(&str, &str, &str)> {
+) -> Option<ParsedRequestTarget<'_>> {
     let text = str::from_utf8(request).ok()?;
     let mut lines = text.split("\r\n");
     let request_line = lines.next()?;
@@ -880,7 +885,11 @@ fn request_method_host_and_target(
             host = Some(trim_http_ows(value));
         }
     }
-    Some((method, host?, target))
+    Some(ParsedRequestTarget {
+        host: host?,
+        method,
+        target,
+    })
 }
 
 fn response(status: &str, content_type: &str, body: &[u8]) -> Vec<u8> {
@@ -952,25 +961,24 @@ pub fn route_request(
     handshake: &dyn SessionHandshake,
     draft: &mut dyn SessionDraft,
 ) -> Vec<u8> {
-    let Some((method, host, target)) = request_method_host_and_target(request)
-    else {
+    let Some(parsed) = request_method_host_and_target(request) else {
         return json_response(
             "400 Bad Request",
             br#"{"error":"invalid_request"}"#,
         );
     };
-    if host != expected_host {
+    if parsed.host != expected_host {
         return json_response(
             "421 Misdirected Request",
             br#"{"error":"invalid_host"}"#,
         );
     }
-    if method == "GET"
-        && let Some(public_response) = public_get_response(target)
+    if parsed.method == "GET"
+        && let Some(public_response) = public_get_response(parsed.target)
     {
         return public_response;
     }
-    match (method, target) {
+    match (parsed.method, parsed.target) {
         ("GET", "/api/session/candidate") => route_draft_read(
             request,
             DraftField::Candidate,
