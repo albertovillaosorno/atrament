@@ -281,6 +281,126 @@ fn completed_sample_replacement_is_exact_preconditioned_and_fail_closed() {
 }
 
 #[test]
+fn every_compact_replacement_case_matches_exact_precondition_oracle() {
+    type CompactSession = CalibrationSession<u8, u8, u8, u8, ()>;
+    type ReplacementError = CalibrationSampleReplacementError<u8, u8>;
+    let mut cases = 0_usize;
+    let mut saw = [false; 5];
+    for prompt_count in 0_u8..=6 {
+        for mask in 0_u16..(1_u16 << prompt_count) {
+            for target in 0_u8..=prompt_count {
+                for stale_expected in [false, true] {
+                    for different_replacement in [false, true] {
+                        let prompts = (0..prompt_count)
+                            .map(|identity| CalibrationPrompt {
+                                identity,
+                                kind: CalibrationPromptKind::Word,
+                                progress: if mask & (1_u16 << identity) == 0 {
+                                    CalibrationPromptProgress::Pending
+                                } else {
+                                    CalibrationPromptProgress::Completed {
+                                        sample: identity.saturating_add(40),
+                                    }
+                                },
+                                size: 12,
+                                speed: 3,
+                            })
+                            .collect::<Vec<_>>();
+                        let mut session = CompactSession {
+                            prompts,
+                            reference_geometry: (),
+                        };
+                        let mut expected_session = session.clone();
+                        let current_sample = target.saturating_add(40);
+                        let expected_sample = if stale_expected {
+                            target.saturating_add(180)
+                        } else {
+                            current_sample
+                        };
+                        let replacement_sample = if different_replacement {
+                            target.saturating_add(100)
+                        } else {
+                            current_sample
+                        };
+                        let expected = if target >= prompt_count {
+                            saw[0] = true;
+                            Err(
+                                ReplacementError::UnknownPrompt {
+                                    prompt: target,
+                                },
+                            )
+                        } else if mask & (1_u16 << target) == 0 {
+                            saw[1] = true;
+                            Err(
+                                ReplacementError::PromptPending {
+                                    prompt: target,
+                                },
+                            )
+                        } else if stale_expected {
+                            saw[2] = true;
+                            Err(
+                                ReplacementError::SampleMismatch {
+                                    actual: current_sample,
+                                    expected: expected_sample,
+                                    prompt: target,
+                                },
+                            )
+                        } else if different_replacement {
+                            saw[3] = true;
+                            let target_index = usize::from(target);
+                            let target_prompt =
+                                &mut expected_session.prompts[target_index];
+                            target_prompt.progress =
+                                CalibrationPromptProgress::Completed {
+                                    sample: replacement_sample,
+                                };
+                            Ok(CalibrationSampleReplacement::Applied)
+                        } else {
+                            saw[4] = true;
+                            Ok(CalibrationSampleReplacement::NoOp)
+                        };
+                        let actual = session.replace_completed_sample(
+                            &target,
+                            &expected_sample,
+                            replacement_sample,
+                        );
+                        assert_eq!(
+                            actual,
+                            expected,
+                            concat!(
+                                "outcome mismatch count={} mask={:#x} ",
+                                "target={} stale={} different={}",
+                            ),
+                            prompt_count,
+                            mask,
+                            target,
+                            stale_expected,
+                            different_replacement,
+                        );
+                        assert_eq!(
+                            session,
+                            expected_session,
+                            concat!(
+                                "state mismatch count={} mask={:#x} ",
+                                "target={} stale={} different={}",
+                            ),
+                            prompt_count,
+                            mask,
+                            target,
+                            stale_expected,
+                            different_replacement,
+                        );
+                        cases += 1;
+                    }
+                }
+            }
+        }
+    }
+    assert_eq!(cases, 3_076);
+    assert!(saw.into_iter().all(|seen| seen));
+}
+
+#[test]
 fn duplicate_prompt_identity_rejects_before_sample_replacement() {
     let mut session = Session {
         prompts: vec![

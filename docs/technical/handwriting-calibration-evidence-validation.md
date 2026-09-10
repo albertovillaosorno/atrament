@@ -122,8 +122,10 @@ identity. Unknown or pending prompts, duplicate prompt identities, and stale
 sample expectations reject without changing any prompt.
 
 An equal replacement is a no-op, while an applied replacement changes only that
-prompt's sample link. This does not classify a sample as weak or define a
-replacement workflow.
+prompt's sample link. An exhaustive 3,076-case compact oracle crosses every
+progress mask through six prompts with present/missing targets, current/stale
+expectations, and equal/different replacements. This does not classify a sample
+as weak or define a replacement workflow.
 
 The session domain does not decide how many prompts exist, which category mix is
 minimum, what wording is shown to a user, which speeds or sizes are selected, or

@@ -1134,7 +1134,9 @@ zero through eight prompts and cross-checks completion, next-pending position,
 and completed-prompt inspection against an independent bit-mask oracle. One
 exact-precondition edit can replace a completed prompt's sample link while
 preserving all unrelated prompt state; stale, pending, missing, ambiguous, and
-no-op cases cannot alter the session.
+no-op cases cannot alter the session. A second exhaustive 3,076-case compact
+oracle crosses prompt counts through six with every progress mask, target or
+missing target, current/stale expectation, and equal/different replacement.
 
 Minimum counts, wording, sufficiency, weak-sample classification and workflow
 policy, capture UI, persistence/history, and geometry semantics remain open.
