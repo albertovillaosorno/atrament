@@ -35,7 +35,7 @@
 use atrament_handwriting_calibration_session::{
     CalibrationPrompt, CalibrationPromptKind, CalibrationPromptProgress,
     CalibrationSession, CalibrationSessionError, calibration_session_complete,
-    next_pending_calibration_prompt_index, validate_calibration_session,
+    validate_calibration_session,
 };
 
 type Session =
@@ -96,7 +96,7 @@ fn completed_prompts_resume_at_first_pending_prompt_without_reordering() {
         reference_geometry: "caller-owned-reference-geometry",
     };
 
-    let next = next_pending_calibration_prompt_index(&session)
+    let next = session.next_pending_prompt_index()
         .expect("unique prompt identities")
         .expect("one prompt remains pending");
     assert_eq!(next, 1);
@@ -125,19 +125,19 @@ fn duplicate_prompt_identity_rejects_before_resume_or_completion() {
         reference_geometry: "reference",
     };
     assert_eq!(
-        validate_calibration_session(&session),
+        session.validate(),
         Err(CalibrationSessionError::DuplicatePromptIdentity {
             prompt: "duplicate",
         }),
     );
     assert_eq!(
-        calibration_session_complete(&session),
+        session.is_complete(),
         Err(CalibrationSessionError::DuplicatePromptIdentity {
             prompt: "duplicate",
         }),
     );
     assert_eq!(
-        next_pending_calibration_prompt_index(&session),
+        session.next_pending_prompt_index(),
         Err(CalibrationSessionError::DuplicatePromptIdentity {
             prompt: "duplicate",
         }),
@@ -154,7 +154,7 @@ fn completion_is_derived_only_from_caller_supplied_prompt_progress() {
         )],
         reference_geometry: "reference",
     };
-    assert_eq!(calibration_session_complete(&pending), Ok(false));
+    assert_eq!(pending.is_complete(), Ok(false));
 
     let complete = Session {
         prompts: vec![prompt(
@@ -166,6 +166,6 @@ fn completion_is_derived_only_from_caller_supplied_prompt_progress() {
         )],
         reference_geometry: "reference",
     };
-    assert_eq!(calibration_session_complete(&complete), Ok(true));
-    assert_eq!(next_pending_calibration_prompt_index(&complete), Ok(None));
+    assert_eq!(complete.is_complete(), Ok(true));
+    assert_eq!(complete.next_pending_prompt_index(), Ok(None));
 }

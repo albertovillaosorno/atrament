@@ -90,6 +90,10 @@ pub struct CalibrationPrompt<Identity, Speed, Size, SampleIdentity> {
     pub speed: Speed,
 }
 
+/// Prompts in one caller-supplied guided calibration session.
+pub type CalibrationPrompts<Identity, Speed, Size, SampleIdentity> =
+    Vec<CalibrationPrompt<Identity, Speed, Size, SampleIdentity>>;
+
 /// Caller-supplied guided calibration plan and resumable progress.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct CalibrationSession<
@@ -100,7 +104,7 @@ pub struct CalibrationSession<
     ReferenceGeometry,
 > {
     /// Prompts in the owning workflow's accepted guidance order.
-    pub prompts: Vec<CalibrationPrompt<Identity, Speed, Size, SampleIdentity>>,
+    pub prompts: CalibrationPrompts<Identity, Speed, Size, SampleIdentity>,
     /// Caller-owned known physical reference geometry for this session.
     pub reference_geometry: ReferenceGeometry,
 }
@@ -115,70 +119,66 @@ pub enum CalibrationSessionError<Identity> {
     },
 }
 
-/// Return whether every caller-supplied calibration prompt is complete.
-///
-/// # Errors
-///
-/// Returns duplicate prompt identity before deriving completion state.
-pub fn calibration_session_complete<Identity, Speed, Size, SampleIdentity, Ref>(
-    session: &CalibrationSession<Identity, Speed, Size, SampleIdentity, Ref>,
-) -> Result<bool, CalibrationSessionError<Identity>>
-where
-    Identity: Clone + Ord,
-{
-    validate_calibration_session(session)?;
-    Ok(session.prompts.iter().all(|prompt| {
-        matches!(prompt.progress, CalibrationPromptProgress::Completed { .. })
-    }))
-}
+/// Result of locating the next resumable calibration prompt.
+pub type CalibrationPromptIndexResult<Identity> =
+    Result<Option<usize>, CalibrationSessionError<Identity>>;
 
-/// Return the first pending prompt index in caller-supplied guidance order.
-///
-/// Completed prompts are skipped so persisted session state resumes at the next
-/// unfinished prompt without changing prompt order or copying prompt data.
-///
-/// # Errors
-///
-/// Returns duplicate prompt identity before selecting resumable work.
-pub fn next_pending_calibration_prompt_index<
-    Identity,
-    Speed,
-    Size,
-    SampleIdentity,
-    Ref,
->(
-    session: &CalibrationSession<Identity, Speed, Size, SampleIdentity, Ref>,
-) -> Result<Option<usize>, CalibrationSessionError<Identity>>
+impl<Identity, Speed, Size, SampleIdentity, ReferenceGeometry>
+    CalibrationSession<Identity, Speed, Size, SampleIdentity, ReferenceGeometry>
 where
     Identity: Clone + Ord,
 {
-    validate_calibration_session(session)?;
-    Ok(session.prompts.iter().position(|prompt| {
-        matches!(prompt.progress, CalibrationPromptProgress::Pending)
-    }))
-}
-
-/// Validate stable prompt identities before resuming a calibration session.
-///
-/// The owning workflow supplies prompt count, category mix, speeds, sizes, and
-/// reference geometry. This domain rejects only identity ambiguity.
-///
-/// # Errors
-///
-/// Returns the first duplicate prompt identity in plan order.
-pub fn validate_calibration_session<Identity, Speed, Size, SampleIdentity, Ref>(
-    session: &CalibrationSession<Identity, Speed, Size, SampleIdentity, Ref>,
-) -> Result<(), CalibrationSessionError<Identity>>
-where
-    Identity: Clone + Ord,
-{
-    let mut identities = BTreeSet::new();
-    for prompt in &session.prompts {
-        if !identities.insert(&prompt.identity) {
-            return Err(CalibrationSessionError::DuplicatePromptIdentity {
-                prompt: prompt.identity.clone(),
-            });
-        }
+    /// Return whether every caller-supplied calibration prompt is complete.
+    ///
+    /// # Errors
+    ///
+    /// Returns duplicate prompt identity before deriving completion state.
+    pub fn is_complete(
+        &self,
+    ) -> Result<bool, CalibrationSessionError<Identity>> {
+        self.validate()?;
+        Ok(self.prompts.iter().all(|prompt| {
+            matches!(
+                prompt.progress,
+                CalibrationPromptProgress::Completed { .. }
+            )
+        }))
     }
-    Ok(())
+
+    /// Return the first pending prompt index in caller-supplied guidance order.
+    ///
+    /// Completed prompts are skipped so persisted session state resumes at the
+    /// next unfinished prompt without changing prompt order or copying data.
+    ///
+    /// # Errors
+    ///
+    /// Returns duplicate prompt identity before selecting resumable work.
+    pub fn next_pending_prompt_index(
+        &self,
+    ) -> CalibrationPromptIndexResult<Identity> {
+        self.validate()?;
+        Ok(self.prompts.iter().position(|prompt| {
+            matches!(prompt.progress, CalibrationPromptProgress::Pending)
+        }))
+    }
+
+    /// Validate stable prompt identities before resuming this session.
+    ///
+    /// The owning workflow supplies prompt count, category mix, speeds, sizes,
+    /// and reference geometry. This domain rejects only identity ambiguity.
+    ///
+    /// # Errors
+    ///
+    /// Returns the first duplicate prompt identity in plan order.
+    pub fn validate(&self) -> Result<(), CalibrationSessionError<Identity>> {
+        let mut identities = BTreeSet::new();
+        for prompt in &self.prompts {
+            if !identities.insert(&prompt.identity) {
+                return Err(CalibrationSessionError::DuplicatePromptIdentity {
+                    prompt: prompt.identity.clone(),
+                });
+            }
+        }
+        Ok(())
+    }
 }
