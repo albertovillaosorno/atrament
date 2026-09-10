@@ -334,13 +334,26 @@ fn mixed_profile_failures_match_independent_precedence_oracle() {
     let mut seed = 0xd1b5_4a32_d192_ed03_u64;
     let mut valid = 0usize;
     let mut invalid = 0usize;
+    let mut seen_errors = [false; 9];
     for case in 0..CASES {
         let profile = generated_validation_profile(&mut seed, case);
         let expected = reference_profile_validation(profile);
-        if expected.is_ok() {
-            valid = valid.saturating_add(1);
-        } else {
+        if let Err(reason) = expected {
             invalid = invalid.saturating_add(1);
+            let error_index = match reason {
+                PageProfileError::BindingInsetExhaustsPrintableRegion => 0,
+                PageProfileError::CornerRoundnessExceedsPrintableRegion => 1,
+                PageProfileError::CornerRoundnessRequiresRoundedBorder => 2,
+                PageProfileError::PaperMarkRoundedJoinRadiusIsZero => 3,
+                PageProfileError::PatternSpacingIsZero => 4,
+                PageProfileError::PrintableRegionIsEmpty => 5,
+                PageProfileError::PrintableRegionOutsideSheet => 6,
+                PageProfileError::SheetDimensionIsZero => 7,
+                PageProfileError::TopClearanceExhaustsPrintableRegion => 8,
+            };
+            seen_errors[error_index] = true;
+        } else {
+            valid = valid.saturating_add(1);
         }
         assert_eq!(
             profile.validate().map(|_valid| ()),
@@ -357,6 +370,7 @@ fn mixed_profile_failures_match_independent_precedence_oracle() {
     }
     assert!(valid > 10_000);
     assert!(invalid > 50_000);
+    assert!(seen_errors.into_iter().all(|seen| seen));
 }
 
 #[test]
