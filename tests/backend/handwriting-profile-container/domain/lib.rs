@@ -771,6 +771,11 @@ fn generated_profile_path_corpus_pins_safe_path_admission() {
         r"x\y",
     ];
     let mut exercised = 0_usize;
+    let mut saw_asset = false;
+    let mut saw_section = false;
+    let mut saw_backslash = false;
+    let mut saw_empty_segment = false;
+    let mut saw_traversal = false;
     for (root, expected_kind) in [
         ("assets", ProfileEntryKind::Asset),
         ("sections", ProfileEntryKind::Section),
@@ -794,12 +799,38 @@ fn generated_profile_path_corpus_pins_safe_path_admission() {
                         });
                     first_segment_error.map_or(Ok(expected_kind), Err)
                 };
+                match expected {
+                    Ok(ProfileEntryKind::Asset) => saw_asset = true,
+                    Ok(ProfileEntryKind::Section) => saw_section = true,
+                    Err(ProfileEntryPathError::BackslashSeparator) => {
+                        saw_backslash = true;
+                    },
+                    Err(ProfileEntryPathError::EmptySegment) => {
+                        saw_empty_segment = true;
+                    },
+                    Err(ProfileEntryPathError::TraversalSegment) => {
+                        saw_traversal = true;
+                    },
+                    Err(
+                        ProfileEntryPathError::ManifestReserved
+                        | ProfileEntryPathError::UnsupportedRoot,
+                    ) => {
+                        panic!(
+                            "root-scoped Cartesian path has unexpected class",
+                        );
+                    },
+                }
                 assert_eq!(profile_entry_kind(&path), expected, "{path}");
                 exercised += 1;
             }
         }
     }
     assert_eq!(exercised, 162);
+    assert!(saw_asset);
+    assert!(saw_section);
+    assert!(saw_backslash);
+    assert!(saw_empty_segment);
+    assert!(saw_traversal);
 
     for path in [
         "assets",

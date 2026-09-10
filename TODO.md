@@ -1745,6 +1745,9 @@ backslash, Unicode, space-containing, and percent-like path segments. It pins
 validation precedence and exact admission without treating percent-like text as
 URI decoding. This is targeted boundary hardening only; full coverage-guided
 fuzzing of profiles and the other listed untrusted inputs remains open.
+The Cartesian corpus explicitly requires both admitted entry kinds plus
+backslash, empty-segment, and traversal failures; unsupported-root and reserved
+manifest paths remain pinned by dedicated cases.
 
 
 Archive inventory admission now adds a deterministic 4,096-case mutation corpus
