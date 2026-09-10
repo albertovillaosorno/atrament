@@ -35,6 +35,8 @@
 //! Exact-source structural analysis for editable mathematical content.
 
 // Keep command tables lexically sorted for reviewable vocabulary changes.
+use std::ops::Range;
+
 const NAMED_OPERATOR_COMMANDS: &[&str] = &[
     "\\Pr", "\\arccos", "\\arcsin", "\\arctan", "\\arg", "\\bigcap", "\\bigcup",
     "\\bigodot", "\\bigoplus", "\\bigotimes", "\\bigsqcup", "\\biguplus",
@@ -182,7 +184,7 @@ const NAMED_SYMBOL_COMMANDS: &[&str] = &[
     "\\vee", "\\veebar", "\\vert", "\\wedge", "\\wp", "\\wr", "\\xi", "\\zeta",
 ];
 
-const STRUCTURED_CONTROL_WORD_COMMANDS: &[(&str, SupportedCommand, usize)] = &[
+const STRUCTURED_CONTROL_WORD_COMMANDS: &[StructuredControlWordDefinition] = &[
     ("\\acute", SupportedCommand::Acute, 1),
     ("\\bar", SupportedCommand::Bar, 1),
     ("\\binom", SupportedCommand::Binomial, 2),
@@ -468,6 +470,14 @@ pub enum MathTokenKind {
     Subscript,
     /// Superscript marker.
     Superscript,
+}
+
+type StructuredControlWordDefinition = (&'static str, SupportedCommand, usize);
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct RootIndexBounds {
+    close: usize,
+    open: usize,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -872,12 +882,12 @@ fn scan_ascii_control_word_end(
 
 fn scan_named_command(
     source: &str,
-    start: usize,
-    end: usize,
+    span: Range<usize>,
     spellings: &[&str],
     supported: SupportedCommand,
 ) -> Option<ScannedCommand> {
-    let spelling = source.get(start..end)?;
+    let end = span.end;
+    let spelling = source.get(span)?;
     spellings
         .binary_search(&spelling)
         .is_ok()
@@ -975,8 +985,7 @@ fn scan_command(source: &str, start: usize) -> ScannedCommand {
     if let Some(end) = scan_ascii_control_word_end(source, after_slash) {
         if let Some(command) = scan_named_command(
             source,
-            start,
-            end,
+            start..end,
             NAMED_OPERATOR_COMMANDS,
             SupportedCommand::NamedOperator,
         ) {
@@ -984,8 +993,7 @@ fn scan_command(source: &str, start: usize) -> ScannedCommand {
         }
         if let Some(command) = scan_named_command(
             source,
-            start,
-            end,
+            start..end,
             NAMED_SYMBOL_COMMANDS,
             SupportedCommand::NamedSymbol,
         ) {
@@ -1232,17 +1240,15 @@ fn scan_supported_command(
         MathTokenKind::Command(supported),
     ));
     if supported == SupportedCommand::SquareRoot {
-        if let Some((open, close)) =
-            root_index_bounds(source, groups, command.end)?
-        {
+        if let Some(bounds) = root_index_bounds(source, groups, command.end)? {
             validate_required_groups(
                 source,
                 groups,
-                close.saturating_add(1),
+                bounds.close.saturating_add(1),
                 command.required_groups,
             )?;
-            state.pending_root_index_open = Some(open);
-            state.root_index_close_offsets.push(close);
+            state.pending_root_index_open = Some(bounds.open);
+            state.root_index_close_offsets.push(bounds.close);
         } else {
             validate_required_groups(
                 source,
@@ -1319,7 +1325,7 @@ fn root_index_bounds(
     source: &str,
     groups: &GroupIndex,
     command_end: usize,
-) -> Result<Option<(usize, usize)>, MathSyntaxError> {
+) -> Result<Option<RootIndexBounds>, MathSyntaxError> {
     let open = skip_ascii_whitespace(source, command_end);
     if source.as_bytes().get(open) != Some(&b'[') {
         return Ok(None);
@@ -1347,7 +1353,10 @@ fn root_index_bounds(
             continue;
         }
         if !escaped && byte == b']' {
-            return Ok(Some((open, cursor)));
+            return Ok(Some(RootIndexBounds {
+                close: cursor,
+                open,
+            }));
         }
         cursor = cursor.saturating_add(1);
     }
