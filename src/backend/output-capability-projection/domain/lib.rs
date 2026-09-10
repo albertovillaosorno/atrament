@@ -105,13 +105,16 @@ pub enum OutputCapability {
     Semantic(SemanticCapability),
 }
 
+/// Ordered projection entries for one capability review.
+pub type OutputCapabilityProjectionEntries<Choice, Provenance, SourceIdentity> =
+    Vec<OutputCapabilityProjectionEntry<Choice, Provenance, SourceIdentity>>;
+
 /// Complete ordered review for one requested output mode.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct OutputCapabilityProjection<Choice, Provenance, SourceIdentity> {
     /// Every source capability use in caller-supplied order.
-    pub entries: Vec<
-        OutputCapabilityProjectionEntry<Choice, Provenance, SourceIdentity>,
-    >,
+    pub entries:
+        OutputCapabilityProjectionEntries<Choice, Provenance, SourceIdentity>,
     /// Output mode under review.
     pub mode: OutputMode,
 }
@@ -176,6 +179,26 @@ pub struct OutputCapabilityRequest<Choice, Provenance, SourceIdentity> {
     /// Caller-owned semantic/source identity for the originating object.
     pub source_identity: SourceIdentity,
 }
+
+/// Ordered source capability requests for one generic review.
+pub type OutputCapabilityRequests<Choice, Provenance, SourceIdentity> =
+    Vec<OutputCapabilityRequest<Choice, Provenance, SourceIdentity>>;
+
+/// Live projection after typed conversion-choice review.
+pub type LiveOutputCapabilityProjection<Details, Provenance, SourceIdentity> =
+    OutputCapabilityProjection<
+        LiveConversionChoice<Details>,
+        Provenance,
+        SourceIdentity,
+    >;
+
+/// Ordered source requests carrying typed Live conversion choices.
+pub type LiveOutputCapabilityRequests<Details, Provenance, SourceIdentity> =
+    OutputCapabilityRequests<
+        LiveConversionChoice<Details>,
+        Provenance,
+        SourceIdentity,
+    >;
 
 /// Return the frozen matrix disposition for one wrapped capability.
 #[must_use]
@@ -276,7 +299,7 @@ pub const fn live_conversion_kind_admitted(
 #[must_use]
 pub fn review_output_capabilities<Choice, Provenance, SourceIdentity>(
     mode: OutputMode,
-    requests: Vec<OutputCapabilityRequest<Choice, Provenance, SourceIdentity>>,
+    requests: OutputCapabilityRequests<Choice, Provenance, SourceIdentity>,
 ) -> OutputCapabilityProjection<Choice, Provenance, SourceIdentity> {
     let entries = requests
         .into_iter()
@@ -315,18 +338,8 @@ pub fn review_output_capabilities<Choice, Provenance, SourceIdentity>(
 /// Review Live output and reject mismatched explicit conversion kinds.
 #[must_use]
 pub fn review_live_output_capabilities<Details, Provenance, SourceIdentity>(
-    requests: Vec<
-        OutputCapabilityRequest<
-            LiveConversionChoice<Details>,
-            Provenance,
-            SourceIdentity,
-        >,
-    >,
-) -> OutputCapabilityProjection<
-    LiveConversionChoice<Details>,
-    Provenance,
-    SourceIdentity,
-> {
+    requests: LiveOutputCapabilityRequests<Details, Provenance, SourceIdentity>,
+) -> LiveOutputCapabilityProjection<Details, Provenance, SourceIdentity> {
     let mut projection = review_output_capabilities(OutputMode::Live, requests);
     for entry in &mut projection.entries {
         if entry.status
