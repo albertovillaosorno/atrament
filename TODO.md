@@ -1753,6 +1753,9 @@ duplication of observed member names exercise duplicate detection, missing
 manifest and declared members, unsafe separators and traversal, undeclared
 members, Unicode, spaces, and percent-like names with exact first-error
 precedence.
+The observed-member corpus now also requires valid admission and every inventory
+outcome it owns: duplicate, invalid observed path, missing manifest, missing
+declared member, and undeclared observed member.
 
 
 Typed profile-manifest admission now adds another deterministic 4,096-case

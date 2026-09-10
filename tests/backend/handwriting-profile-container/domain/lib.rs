@@ -397,6 +397,12 @@ fn generated_archive_inventory_mutations_match_reference_oracle() {
     ];
     let mut seed = 0x5eed_a2c4_2026_u64;
     let mut seen_operations = [false; 4];
+    let mut saw_valid = false;
+    let mut saw_duplicate = false;
+    let mut saw_invalid_observed_path = false;
+    let mut saw_missing_manifest = false;
+    let mut saw_missing_declared = false;
+    let mut saw_undeclared_observed = false;
     for case in 0..CASES {
         let operation = next_inventory_selector(&mut seed) % 4;
         seen_operations[operation] = true;
@@ -427,6 +433,31 @@ fn generated_archive_inventory_mutations_match_reference_oracle() {
             .map(String::as_str)
             .collect::<Vec<_>>();
         let expected = reference_inventory(&value, &observed);
+        match &expected {
+            Ok(()) => saw_valid = true,
+            Err(
+                ProfileEntryInventoryError::DuplicateObservedEntryPath { .. },
+            ) => {
+                saw_duplicate = true;
+            },
+            Err(ProfileEntryInventoryError::InvalidManifest { .. }) => {
+                panic!("fixed valid manifest cannot fail inventory admission");
+            },
+            Err(
+                ProfileEntryInventoryError::InvalidObservedEntryPath { .. },
+            ) => {
+                saw_invalid_observed_path = true;
+            },
+            Err(ProfileEntryInventoryError::MissingDeclaredEntry { .. }) => {
+                saw_missing_declared = true;
+            },
+            Err(ProfileEntryInventoryError::MissingManifest) => {
+                saw_missing_manifest = true;
+            },
+            Err(ProfileEntryInventoryError::UndeclaredObservedEntry { .. }) => {
+                saw_undeclared_observed = true;
+            },
+        }
         assert_eq!(
             validate_profile_entry_inventory(
                 &value,
@@ -438,6 +469,12 @@ fn generated_archive_inventory_mutations_match_reference_oracle() {
         );
     }
     assert!(seen_operations.into_iter().all(|seen| seen));
+    assert!(saw_valid);
+    assert!(saw_duplicate);
+    assert!(saw_invalid_observed_path);
+    assert!(saw_missing_manifest);
+    assert!(saw_missing_declared);
+    assert!(saw_undeclared_observed);
 }
 
 
