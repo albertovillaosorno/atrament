@@ -4639,10 +4639,12 @@ fn application_edits_and_undoes_exact_grapheme_ranges() {
     let outcome = session
         .replace_text_grapheme_range(
             &provider,
-            base,
-            span,
-            GraphemeRange { count: 3, start: 2 },
-            "ñ",
+            application::TextGraphemeRangeEdit {
+                base,
+                range: GraphemeRange { count: 3, start: 2 },
+                replacement: "ñ",
+                target: span,
+            },
         )
         .expect("valid grapheme range");
     let TextEditOutcome::Applied { revision, .. } = outcome else {
@@ -4697,10 +4699,12 @@ fn invalid_grapheme_range_is_atomic_and_preserves_history() {
     assert_eq!(
         session.replace_text_grapheme_range(
             &provider,
-            base,
-            span,
-            GraphemeRange { count: 1, start: 3 },
-            "z",
+            application::TextGraphemeRangeEdit {
+                base,
+                range: GraphemeRange { count: 1, start: 3 },
+                replacement: "z",
+                target: span,
+            },
         ),
         Err(GraphemeRangeError::StartOutOfBounds {
             grapheme_count: 2,
@@ -4817,10 +4821,12 @@ fn grapheme_provider_invariant_failure_is_atomic_for_session_state() {
     assert_eq!(
         session.replace_text_grapheme_range(
             &UnderreportedAdvertisedBoundary,
-            base,
-            span,
-            GraphemeRange { count: 0, start: 1 },
-            "z",
+            application::TextGraphemeRangeEdit {
+                base,
+                range: GraphemeRange { count: 0, start: 1 },
+                replacement: "z",
+                target: span,
+            },
         ),
         Err(GraphemeRangeError::BoundaryAnchorMismatch {
             expected: "éx".len(),
@@ -4833,10 +4839,12 @@ fn grapheme_provider_invariant_failure_is_atomic_for_session_state() {
     assert_eq!(
         session.replace_text_grapheme_range(
             &MissingAdvertisedBoundary,
-            base,
-            span,
-            GraphemeRange { count: 1, start: 1 },
-            "z",
+            application::TextGraphemeRangeEdit {
+                base,
+                range: GraphemeRange { count: 1, start: 1 },
+                replacement: "z",
+                target: span,
+            },
         ),
         Err(GraphemeRangeError::BoundaryUnavailable { grapheme_index: 1 }),
     );
@@ -4845,10 +4853,12 @@ fn grapheme_provider_invariant_failure_is_atomic_for_session_state() {
     assert_eq!(
         session.replace_text_grapheme_range(
             &ShiftedFirstAdvertisedBoundary,
-            base,
-            span,
-            GraphemeRange { count: 1, start: 1 },
-            "z",
+            application::TextGraphemeRangeEdit {
+                base,
+                range: GraphemeRange { count: 1, start: 1 },
+                replacement: "z",
+                target: span,
+            },
         ),
         Err(GraphemeRangeError::BoundaryAnchorMismatch {
             expected: 0,
@@ -4861,10 +4871,12 @@ fn grapheme_provider_invariant_failure_is_atomic_for_session_state() {
     assert_eq!(
         session.replace_text_grapheme_range(
             &NonAdvancingAdvertisedBoundary,
-            base,
-            span,
-            GraphemeRange { count: 1, start: 1 },
-            "z",
+            application::TextGraphemeRangeEdit {
+                base,
+                range: GraphemeRange { count: 1, start: 1 },
+                replacement: "z",
+                target: span,
+            },
         ),
         Err(GraphemeRangeError::NonAdvancingBoundaries {
             end_byte: "éx".len(),
@@ -5043,10 +5055,12 @@ fn grapheme_range_edits_respect_redo_asset_byte_lifecycle() {
                 assert_eq!(
                     session.replace_text_grapheme_range(
                         &UnderreportedAdvertisedBoundary,
-                        undone,
-                        span,
-                        GraphemeRange { count: 0, start: 1 },
-                        "x",
+                        application::TextGraphemeRangeEdit {
+                            base: undone,
+                            range: GraphemeRange { count: 0, start: 1 },
+                            replacement: "x",
+                            target: span,
+                        },
                     ),
                     Err(GraphemeRangeError::BoundaryAnchorMismatch {
                         expected: "before".len(),
@@ -5061,10 +5075,12 @@ fn grapheme_range_edits_respect_redo_asset_byte_lifecycle() {
                 assert_eq!(
                     session.replace_text_grapheme_range(
                         &UnicodeGraphemeSegmentation,
-                        undone,
-                        span,
-                        GraphemeRange { count: 1, start: 0 },
-                        "b",
+                        application::TextGraphemeRangeEdit {
+                            base: undone,
+                            range: GraphemeRange { count: 1, start: 0 },
+                            replacement: "b",
+                            target: span,
+                        },
                     ),
                     Ok(TextEditOutcome::NoOp {
                         revision: undone,
@@ -5078,10 +5094,12 @@ fn grapheme_range_edits_respect_redo_asset_byte_lifecycle() {
                 let Ok(TextEditOutcome::Applied { revision, .. }) =
                     session.replace_text_grapheme_range(
                         &UnicodeGraphemeSegmentation,
-                        undone,
-                        span,
-                        GraphemeRange { count: 1, start: 0 },
-                        "B",
+                        application::TextGraphemeRangeEdit {
+                            base: undone,
+                            range: GraphemeRange { count: 1, start: 0 },
+                            replacement: "B",
+                            target: span,
+                        },
                     )
                 else {
                     panic!("grapheme branch edit must apply");

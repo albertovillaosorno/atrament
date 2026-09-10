@@ -97,6 +97,19 @@ use atrament_unicode_grapheme_edit::{
     GraphemeRange, GraphemeRangeError, replace_grapheme_range,
 };
 
+/// One exact grapheme-range text edit against an accepted semantic target.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct TextGraphemeRangeEdit<'edit> {
+    /// Accepted revision whose exact text value is the edit base.
+    pub base: RevisionIdentity,
+    /// Half-open range measured in Unicode extended grapheme clusters.
+    pub range: GraphemeRange,
+    /// Exact replacement text retained without Unicode normalization.
+    pub replacement: &'edit str,
+    /// Accepted inline-text identity edited by this request.
+    pub target: AcceptedIdentity,
+}
+
 /// Typed failure to retain or inspect process-owned raw asset bytes.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum AssetBytesError {
@@ -693,11 +706,14 @@ impl SessionApplication {
     pub fn replace_text_grapheme_range(
         &mut self,
         boundaries: &dyn GraphemeBoundaryProvider,
-        base: RevisionIdentity,
-        target: AcceptedIdentity,
-        range: GraphemeRange,
-        replacement: &str,
+        edit: TextGraphemeRangeEdit<'_>,
     ) -> Result<TextEditOutcome, GraphemeRangeError> {
+        let TextGraphemeRangeEdit {
+            base,
+            range,
+            replacement,
+            target,
+        } = edit;
         let material_outcome = self.command_target_material_for_family(
             base,
             target,
