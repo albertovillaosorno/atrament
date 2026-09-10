@@ -1808,6 +1808,9 @@ against an independent fail-closed oracle. Generated compatible, incompatible,
 and invalid payloads vary all six version dimensions, diagnostic namespace and
 completeness, item count, code, dimension, and expected version without enabling
 compatibility on malformed values.
+The generator explicitly fails if any declared dimension, metadata selector,
+diagnostic item-count shape, or compatible/incompatible/invalid result class is
+starved.
 
 
 Browser draft resource-limit classification now adds a deterministic 4,096-case

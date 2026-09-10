@@ -251,8 +251,13 @@ test("generated handshake payloads match fail-closed reference", () => {
     ];
     let state = 0x5eed_4a11;
     const seenResults = new Set();
+    const seenDimensions = new Set();
     const seenVersionModes = new Set();
     const seenExpectedModes = new Set();
+    const seenCompleteness = new Set();
+    const seenCodes = new Set();
+    const seenDiagnosticVersions = new Set();
+    const seenItemCounts = new Set();
     const seenOutcomes = new Set();
     for (let caseIndex = 0; caseIndex < 4_096; caseIndex += 1) {
         state = nextHandshakeMutation(state);
@@ -260,7 +265,9 @@ test("generated handshake payloads match fail-closed reference", () => {
         seenResults.add(resultIndex);
         const result = results[resultIndex];
         state = nextHandshakeMutation(state);
-        const dimension = dimensions[state % dimensions.length];
+        const dimensionIndex = state % dimensions.length;
+        seenDimensions.add(dimensionIndex);
+        const dimension = dimensions[dimensionIndex];
         state = nextHandshakeMutation(state);
         const versionsMode = state % 4;
         seenVersionModes.add(versionsMode);
@@ -268,9 +275,13 @@ test("generated handshake payloads match fail-closed reference", () => {
         const expectedMode = state % 3;
         seenExpectedModes.add(expectedMode);
         state = nextHandshakeMutation(state);
-        const completenessValue = completeness[state % completeness.length];
+        const completenessIndex = state % completeness.length;
+        seenCompleteness.add(completenessIndex);
+        const completenessValue = completeness[completenessIndex];
         state = nextHandshakeMutation(state);
-        const code = codes[state % codes.length];
+        const codeIndex = state % codes.length;
+        seenCodes.add(codeIndex);
+        const code = codes[codeIndex];
         const versions = versionsMode === 0
             ? { ...CURRENT_VERSIONS }
             : versionsMode === 1
@@ -283,15 +294,19 @@ test("generated handshake payloads match fail-closed reference", () => {
             : expectedMode === 1
                 ? "drift"
                 : null;
+        const diagnosticVersionMode = caseIndex % 7 === 0 ? 0 : 1;
+        seenDiagnosticVersions.add(diagnosticVersionMode);
+        const itemCount = caseIndex % 11 === 0 ? 0 : 1;
+        seenItemCounts.add(itemCount);
         const payload = {
             result,
             versions,
             diagnostics: {
-                version: caseIndex % 7 === 0
+                version: diagnosticVersionMode === 0
                     ? "atrament.diagnostic/0"
                     : "atrament.diagnostic/1",
                 completeness: completenessValue,
-                items: caseIndex % 11 === 0
+                items: itemCount === 0
                     ? []
                     : [{ code, dimension, expected }],
             },
@@ -305,8 +320,13 @@ test("generated handshake payloads match fail-closed reference", () => {
         );
     }
     assert.equal(seenResults.size, results.length);
+    assert.equal(seenDimensions.size, dimensions.length);
     assert.equal(seenVersionModes.size, 4);
     assert.equal(seenExpectedModes.size, 3);
+    assert.equal(seenCompleteness.size, completeness.length);
+    assert.equal(seenCodes.size, codes.length);
+    assert.equal(seenDiagnosticVersions.size, 2);
+    assert.equal(seenItemCounts.size, 2);
     assert.deepEqual(
         [...seenOutcomes].sort(),
         ["compatible", "incompatible", "invalid"],
