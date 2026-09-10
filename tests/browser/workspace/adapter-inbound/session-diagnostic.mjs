@@ -92,3 +92,98 @@ test("diagnostic set rejects invalid namespace, completeness, or items", () => {
         }
     }
 });
+
+function referenceDiagnosticSet(value) {
+    if (typeof value !== "object" || value === null || Array.isArray(value)) {
+        return null;
+    }
+    if (
+        value.version !== DIAGNOSTIC_VERSION
+        || !["complete", "incomplete"].includes(value.completeness)
+        || !Array.isArray(value.items)
+    ) {
+        return null;
+    }
+    for (const item of value.items) {
+        if (
+            typeof item !== "object"
+            || item === null
+            || Array.isArray(item)
+            || typeof item.code !== "string"
+            || item.code === ""
+        ) {
+            return null;
+        }
+    }
+    return {
+        completeness: value.completeness,
+        items: value.items,
+    };
+}
+
+function nextDiagnosticMutation(state) {
+    state ^= state << 13;
+    state ^= state >>> 17;
+    state ^= state << 5;
+    return state >>> 0;
+}
+
+test("generated diagnostic sets match fail-closed reference", () => {
+    const versions = [DIAGNOSTIC_VERSION, "atrament.diagnostic/0", "", null];
+    const completeness = ["complete", "incomplete", "unknown", "", null];
+    const itemShapes = [
+        { code: "atrament.example.condition" },
+        { code: "another.code", detail: 42 },
+        { code: "" },
+        { code: 7 },
+        {},
+        null,
+        [],
+        "text",
+    ];
+    const seenVersions = new Set();
+    const seenCompleteness = new Set();
+    const seenItemShapes = new Set();
+    const seenItemCounts = new Set();
+    let state = 0x5eed_d1a6;
+    for (let caseIndex = 0; caseIndex < 4_096; caseIndex += 1) {
+        state = nextDiagnosticMutation(state);
+        const versionIndex = state % versions.length;
+        seenVersions.add(versionIndex);
+        state = nextDiagnosticMutation(state);
+        const completenessIndex = state % completeness.length;
+        seenCompleteness.add(completenessIndex);
+        state = nextDiagnosticMutation(state);
+        const itemCount = state % 4;
+        seenItemCounts.add(itemCount);
+        const items = [];
+        for (let itemIndex = 0; itemIndex < itemCount; itemIndex += 1) {
+            state = nextDiagnosticMutation(state);
+            const shapeIndex = state % itemShapes.length;
+            seenItemShapes.add(shapeIndex);
+            const shape = itemShapes[shapeIndex];
+            items.push(
+                shape !== null
+                    && typeof shape === "object"
+                    && !Array.isArray(shape)
+                    ? { ...shape }
+                    : shape,
+            );
+        }
+        const payload = {
+            version: versions[versionIndex],
+            completeness: completeness[completenessIndex],
+            items,
+            ignored: caseIndex,
+        };
+        assert.deepEqual(
+            parseDiagnosticSet(payload),
+            referenceDiagnosticSet(payload),
+            `generated diagnostic case ${caseIndex}`,
+        );
+    }
+    assert.equal(seenVersions.size, versions.length);
+    assert.equal(seenCompleteness.size, completeness.length);
+    assert.equal(seenItemShapes.size, itemShapes.length);
+    assert.equal(seenItemCounts.size, 4);
+});

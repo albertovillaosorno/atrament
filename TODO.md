@@ -1797,6 +1797,13 @@ diagnostic versions and completeness, item counts, and stable codes must
 preserve the known resource-limit condition without accepting malformed
 metadata.
 
+
+Shared browser diagnostic-set admission now adds a deterministic 4,096-case
+reference corpus across namespace versions, completeness states, zero through
+three items, valid and invalid item/code shapes, and ignored opaque fields. The
+generator asserts every declared selector class is exercised while malformed
+metadata remains unadmitted.
+
 ### TODO - Complete visual regression coverage
 
 Compare semantic layout, vector topology, layer composition, final pixels,
