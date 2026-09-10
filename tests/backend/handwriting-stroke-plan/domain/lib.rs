@@ -142,6 +142,32 @@ fn empty_declared_stroke_rejects_at_exact_planner_index() {
 }
 
 #[test]
+fn first_empty_stroke_wins_when_multiple_strokes_are_empty() {
+    let plan = StrokePlan {
+        strokes: vec![
+            Stroke {
+                entry_condition: "entry-a",
+                exit_condition: "exit-a",
+                profile_choice: "choice-a",
+                samples: Vec::new(),
+                semantic_origin: "span-a",
+            },
+            Stroke {
+                entry_condition: "entry-b",
+                exit_condition: "exit-b",
+                profile_choice: "choice-b",
+                samples: Vec::new(),
+                semantic_origin: "span-b",
+            },
+        ],
+    };
+    assert_eq!(
+        validate_stroke_plan(&plan),
+        Err(StrokePlanError::EmptyStroke { stroke_index: 0 }),
+    );
+}
+
+#[test]
 fn empty_plan_is_valid_for_content_with_no_handwriting_projection() {
     let plan: StrokePlan<Stroke> = StrokePlan { strokes: Vec::new() };
     assert_eq!(validate_stroke_plan(&plan), Ok(()));
