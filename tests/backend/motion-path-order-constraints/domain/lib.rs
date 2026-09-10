@@ -157,6 +157,19 @@ fn constraints_must_reference_forward_relations_in_exact_source_plan() {
 }
 
 #[test]
+fn invalid_constraint_set_rejects_before_candidate_shape() {
+    let mut invalid = constraints();
+    invalid.constraints[0].later_operation = invalid.operation_count;
+    assert_eq!(
+        validate_candidate_operation_order(&invalid, &[0]),
+        Err(MotionOrderValidationError::ConstraintOperationOutOfRange {
+            constraint_index: 0,
+            operation_index: invalid.operation_count,
+        }),
+    );
+}
+
+#[test]
 fn impossible_operation_count_rejects_before_candidate_position_allocation() {
     let constraints = MotionOrderConstraintSet {
         constraints: Vec::new(),
