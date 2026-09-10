@@ -270,8 +270,10 @@ impl GraphemeBoundaryProvider for BrokenBoundaryProvider {
                 1 => Some(1),
                 _ => Some(source.len()),
             },
-            BrokenBoundaryMode::Missing => {
-                (grapheme_index != 1).then_some(source.len())
+            BrokenBoundaryMode::Missing => match grapheme_index {
+                0 => Some(0),
+                1 => None,
+                _ => Some(source.len()),
             },
             BrokenBoundaryMode::NonAdvancing => match grapheme_index {
                 0 => Some(0),
