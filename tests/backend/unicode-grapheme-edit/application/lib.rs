@@ -73,6 +73,53 @@ fn zero_length_ranges_insert_at_start_middle_and_end() {
     }
 }
 
+struct ChangingZeroCountAnchorProvider {
+    boundary_calls: Cell<usize>,
+}
+
+impl GraphemeBoundaryProvider for ChangingZeroCountAnchorProvider {
+    fn byte_offset(
+        &self,
+        source: &str,
+        grapheme_index: usize,
+    ) -> Option<usize> {
+        assert_eq!(grapheme_index, 0);
+        let calls = self.boundary_calls.get();
+        self.boundary_calls.set(calls.saturating_add(1));
+        if calls == 0 {
+            Some(0)
+        } else {
+            Some(source.len())
+        }
+    }
+
+    fn grapheme_count(&self, _source: &str) -> usize {
+        0
+    }
+}
+
+#[test]
+fn zero_grapheme_count_reuses_the_single_source_anchor() {
+    let provider = ChangingZeroCountAnchorProvider {
+        boundary_calls: Cell::new(0),
+    };
+    let source = "x";
+    assert_eq!(
+        replace_grapheme_range(
+            &provider,
+            source,
+            GraphemeRange { count: 0, start: 0 },
+            "!",
+        ),
+        Err(GraphemeRangeError::BoundaryAnchorMismatch {
+            expected: source.len(),
+            grapheme_index: 0,
+            observed: 0,
+        }),
+    );
+    assert_eq!(provider.boundary_calls.get(), 1);
+}
+
 struct ChangingInsertionBoundaryProvider {
     internal_calls: Cell<usize>,
 }

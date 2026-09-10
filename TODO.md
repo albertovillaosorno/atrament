@@ -803,7 +803,11 @@ not mutate accepted state. Source-anchor validation runs before caller range
 bounds, so an underreported provider count cannot masquerade as a user error.
 Zero-length insertion resolves an internal provider
 boundary once, so a changing repeated answer cannot turn insertion into byte
-replacement. Normalization policy, punctuation generation,
+replacement.
+
+A provider that reports zero graphemes also resolves boundary zero once, so
+changing answers cannot make nonempty authored text masquerade as an empty
+source. Normalization policy, punctuation generation,
 language-aware wrapping,
 cursor
 behavior, and browser, CLI, or MCP grapheme-range transport remain open.

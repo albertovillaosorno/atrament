@@ -170,7 +170,11 @@ fn provider_anchors(
             observed: first_byte,
         });
     }
-    let final_byte = provider_boundary(boundaries, source, total)?;
+    let final_byte = if total == 0 {
+        first_byte
+    } else {
+        provider_boundary(boundaries, source, total)?
+    };
     if final_byte != source.len() {
         return Err(GraphemeRangeError::BoundaryAnchorMismatch {
             expected: source.len(),
