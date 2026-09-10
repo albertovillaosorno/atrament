@@ -4307,23 +4307,22 @@ fn block_provenance_blocks_value(
                 }
             },
             BlockContent::List(list) => {
-                for item in &list.items {
-                    if let Some(reference) =
-                        block_provenance_blocks_value(&item.blocks, target)
-                    {
-                        return Some(reference);
-                    }
+                if let Some(reference) = list.items.iter().find_map(|item| {
+                    block_provenance_blocks_value(&item.blocks, target)
+                }) {
+                    return Some(reference);
                 }
             },
             BlockContent::Table(table) => {
-                for row in &table.rows {
-                    for cell in &row.cells {
-                        if let Some(reference) =
-                            block_provenance_blocks_value(&cell.blocks, target)
-                        {
-                            return Some(reference);
-                        }
-                    }
+                if let Some(reference) = table
+                    .rows
+                    .iter()
+                    .flat_map(|row| row.cells.iter())
+                    .find_map(|cell| {
+                        block_provenance_blocks_value(&cell.blocks, target)
+                    })
+                {
+                    return Some(reference);
                 }
             },
             BlockContent::Citation(_)
@@ -4394,28 +4393,15 @@ fn inline_span_content_value(
         BlockContent::Figure(figure) => {
             figure.caption.iter().find(|span| span.id == target)
         },
-        BlockContent::List(list) => {
-            for item in &list.items {
-                if let Some(span) =
-                    inline_span_blocks_value(&item.blocks, target)
-                {
-                    return Some(span);
-                }
-            }
-            None
-        },
-        BlockContent::Table(table) => {
-            for row in &table.rows {
-                for cell in &row.cells {
-                    if let Some(span) =
-                        inline_span_blocks_value(&cell.blocks, target)
-                    {
-                        return Some(span);
-                    }
-                }
-            }
-            None
-        },
+        BlockContent::List(list) => list
+            .items
+            .iter()
+            .find_map(|item| inline_span_blocks_value(&item.blocks, target)),
+        BlockContent::Table(table) => table
+            .rows
+            .iter()
+            .flat_map(|row| row.cells.iter())
+            .find_map(|cell| inline_span_blocks_value(&cell.blocks, target)),
         BlockContent::Mathematics(_)
         | BlockContent::Rule
         | BlockContent::Unresolved(_) => None,
@@ -4483,23 +4469,22 @@ fn list_ordering_blocks_value(
                 if list.id == target {
                     return Some(list.ordered);
                 }
-                for item in &list.items {
-                    if let Some(ordered) =
-                        list_ordering_blocks_value(&item.blocks, target)
-                    {
-                        return Some(ordered);
-                    }
+                if let Some(ordered) = list.items.iter().find_map(|item| {
+                    list_ordering_blocks_value(&item.blocks, target)
+                }) {
+                    return Some(ordered);
                 }
             },
             BlockContent::Table(table) => {
-                for row in &table.rows {
-                    for cell in &row.cells {
-                        if let Some(ordered) =
-                            list_ordering_blocks_value(&cell.blocks, target)
-                        {
-                            return Some(ordered);
-                        }
-                    }
+                if let Some(ordered) = table
+                    .rows
+                    .iter()
+                    .flat_map(|row| row.cells.iter())
+                    .find_map(|cell| {
+                        list_ordering_blocks_value(&cell.blocks, target)
+                    })
+                {
+                    return Some(ordered);
                 }
             },
             BlockContent::Citation(_)
@@ -4554,25 +4539,19 @@ fn replace_list_ordering_blocks(
                     list.ordered = ordered;
                     return true;
                 }
-                for item in &mut list.items {
-                    if replace_list_ordering_blocks(
-                        &mut item.blocks, target, ordered,
-                    ) {
-                        return true;
-                    }
+                if list.items.iter_mut().any(|item| {
+                    replace_list_ordering_blocks(
+                        &mut item.blocks,
+                        target,
+                        ordered,
+                    )
+                }) {
+                    return true;
                 }
             },
             BlockContent::Table(table) => {
-                for row in &mut table.rows {
-                    for cell in &mut row.cells {
-                        if replace_list_ordering_blocks(
-                            &mut cell.blocks,
-                            target,
-                            ordered,
-                        ) {
-                            return true;
-                        }
-                    }
+                if replace_list_ordering_table(table, target, ordered) {
+                    return true;
                 }
             },
             BlockContent::Citation(_)
@@ -4591,6 +4570,18 @@ fn replace_list_ordering_blocks(
         }
     }
     false
+}
+
+fn replace_list_ordering_table(
+    table: &mut Table<AcceptedIdentity>,
+    target: AcceptedIdentity,
+    ordered: bool,
+) -> bool {
+    table.rows.iter_mut().any(|row| {
+        row.cells.iter_mut().any(|cell| {
+            replace_list_ordering_blocks(&mut cell.blocks, target, ordered)
+        })
+    })
 }
 
 fn replace_list_ordering_value(
@@ -4623,23 +4614,22 @@ fn block_style_blocks_value(
                 }
             },
             BlockContent::List(list) => {
-                for item in &list.items {
-                    if let Some(style) =
-                        block_style_blocks_value(&item.blocks, target)
-                    {
-                        return Some(style);
-                    }
+                if let Some(style) = list.items.iter().find_map(|item| {
+                    block_style_blocks_value(&item.blocks, target)
+                }) {
+                    return Some(style);
                 }
             },
             BlockContent::Table(table) => {
-                for row in &table.rows {
-                    for cell in &row.cells {
-                        if let Some(style) =
-                            block_style_blocks_value(&cell.blocks, target)
-                        {
-                            return Some(style);
-                        }
-                    }
+                if let Some(style) = table
+                    .rows
+                    .iter()
+                    .flat_map(|row| row.cells.iter())
+                    .find_map(|cell| {
+                        block_style_blocks_value(&cell.blocks, target)
+                    })
+                {
+                    return Some(style);
                 }
             },
             BlockContent::Citation(_)
