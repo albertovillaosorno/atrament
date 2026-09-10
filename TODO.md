@@ -1211,9 +1211,14 @@ retains caller-owned typed units, distribution metadata, correlation groups,
 context rules, and the profile/document/page/line/word/character/stroke scale. A
 document seed plus stable semantic identity forms the typed replay key. A
 caller-produced sample can now be checked against the parameter's inclusive
-minimum/maximum envelope while retaining those exact replay inputs. This does
-not choose parameter vocabularies, distribution families, correlations, context
-semantics, random generators, fitting policy, or a sampling algorithm.
+minimum/maximum envelope while retaining those exact replay inputs. A compact
+1,099-case integer oracle exhausts all 343 minimum/central/maximum triples in
+`[-3, 3]` and all 756 sample checks over `[-4, 4]` for valid envelopes, reaching
+every parameter and sample validation outcome.
+
+This does not choose parameter vocabularies, distribution families,
+correlations, context semantics, random generators, fitting policy, or a
+sampling algorithm.
 
 ### TODO - Implement handwriting roles and sizes
 

@@ -35,7 +35,6 @@ use atrament_handwriting_variation::{
     VariationBound, VariationBoundBasis, VariationParameter,
     VariationParameterError, VariationReplayKey, VariationSample,
     VariationSampleError, VariationScale,
-
 };
 
 type Parameter =
@@ -182,4 +181,81 @@ fn sampled_value_retains_exact_replay_inputs_without_interpretation() {
     assert_eq!(sample.replay_key.document_seed, 9001);
     assert_eq!(sample.replay_key.semantic_identity, "glyph-é-17");
     assert_eq!(sample.value, 7);
+}
+
+#[test]
+fn every_compact_parameter_and_sample_value_matches_bounds_oracle() {
+    let mut parameter_cases = 0_u16;
+    let mut sample_cases = 0_u16;
+    let mut parameter_outcomes = [false; 4];
+    let mut sample_outcomes = [false; 3];
+
+    for minimum in -3_i32..=3 {
+        for central_tendency in -3_i32..=3 {
+            for maximum in -3_i32..=3 {
+                let parameter = parameter(minimum, central_tendency, maximum);
+                let expected_parameter = if minimum > maximum {
+                    parameter_outcomes[1] = true;
+                    Err(VariationParameterError::MinimumAboveMaximum)
+                } else if central_tendency < minimum {
+                    parameter_outcomes[2] = true;
+                    Err(VariationParameterError::CentralTendencyBelowMinimum)
+                } else if central_tendency > maximum {
+                    parameter_outcomes[3] = true;
+                    Err(VariationParameterError::CentralTendencyAboveMaximum)
+                } else {
+                    parameter_outcomes[0] = true;
+                    Ok(())
+                };
+                assert_eq!(
+                    parameter.validate(),
+                    expected_parameter,
+                    "parameter ({minimum}, {central_tendency}, {maximum})",
+                );
+                parameter_cases = parameter_cases.saturating_add(1);
+
+                if expected_parameter.is_err() {
+                    continue;
+                }
+                for sampled_value in -4_i32..=4 {
+                    let sample = VariationSample {
+                        replay_key: VariationReplayKey {
+                            document_seed: 17_u8,
+                            semantic_identity: 23_u8,
+                        },
+                        value: sampled_value,
+                    };
+                    let expected_sample = if sampled_value < minimum {
+                        sample_outcomes[1] = true;
+                        Err(VariationSampleError::BelowMinimum)
+                    } else if sampled_value > maximum {
+                        sample_outcomes[2] = true;
+                        Err(VariationSampleError::AboveMaximum)
+                    } else {
+                        sample_outcomes[0] = true;
+                        Ok(())
+                    };
+                    assert_eq!(
+                        parameter.validate_sample(&sample),
+                        expected_sample,
+                        concat!(
+                            "sample {} for parameter ({}, {}, {})",
+                        ),
+                        sampled_value,
+                        minimum,
+                        central_tendency,
+                        maximum,
+                    );
+                    assert_eq!(sample.replay_key.document_seed, 17);
+                    assert_eq!(sample.replay_key.semantic_identity, 23);
+                    sample_cases = sample_cases.saturating_add(1);
+                }
+            }
+        }
+    }
+
+    assert_eq!(parameter_cases, 343);
+    assert_eq!(sample_cases, 756);
+    assert!(parameter_outcomes.into_iter().all(|seen| seen));
+    assert!(sample_outcomes.into_iter().all(|seen| seen));
 }

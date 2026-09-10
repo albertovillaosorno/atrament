@@ -166,8 +166,11 @@ model, choose correlation semantics, or turn an authorized creative limit into
 an observation.
 
 `VariationReplayKey` retains the document seed plus stable semantic identity
-required by later deterministic sampling. Sampling itself remains outside the
-calibration and variation domains.
+required by later deterministic sampling. A compact integer oracle independently
+cross-checks all 343 minimum/central/maximum triples in `[-3, 3]` and all 756
+sample values in `[-4, 4]` for valid envelopes, reaching every typed parameter
+and sample validation outcome. Sampling itself remains outside the calibration
+and variation domains.
 
 ## Failure Modes
 
