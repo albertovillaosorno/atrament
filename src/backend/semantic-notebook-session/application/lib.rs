@@ -4759,25 +4759,17 @@ fn replace_block_style_blocks(
                 }
             },
             BlockContent::List(list) => {
-                for item in &mut list.items {
-                    if replace_block_style_blocks(
-                        &mut item.blocks, target, style,
-                    ) {
-                        return true;
-                    }
+                if replace_block_style_list_items(
+                    &mut list.items,
+                    target,
+                    style,
+                ) {
+                    return true;
                 }
             },
             BlockContent::Table(table) => {
-                for row in &mut table.rows {
-                    for cell in &mut row.cells {
-                        if replace_block_style_blocks(
-                            &mut cell.blocks,
-                            target,
-                            style,
-                        ) {
-                            return true;
-                        }
-                    }
+                if replace_block_style_table(table, target, style) {
+                    return true;
                 }
             },
             BlockContent::Citation(_)
@@ -4796,6 +4788,28 @@ fn replace_block_style_blocks(
         }
     }
     false
+}
+
+fn replace_block_style_list_items(
+    items: &mut [ListItem<AcceptedIdentity>],
+    target: AcceptedIdentity,
+    style: Option<AcceptedIdentity>,
+) -> bool {
+    items.iter_mut().any(|item| {
+        replace_block_style_blocks(&mut item.blocks, target, style)
+    })
+}
+
+fn replace_block_style_table(
+    table: &mut Table<AcceptedIdentity>,
+    target: AcceptedIdentity,
+    style: Option<AcceptedIdentity>,
+) -> bool {
+    table.rows.iter_mut().any(|row| {
+        row.cells.iter_mut().any(|cell| {
+            replace_block_style_blocks(&mut cell.blocks, target, style)
+        })
+    })
 }
 
 fn replace_block_style_value(
@@ -4848,27 +4862,17 @@ fn replace_inline_span_style_blocks(
                 }
             },
             BlockContent::List(list) => {
-                for item in &mut list.items {
-                    if replace_inline_span_style_blocks(
-                        &mut item.blocks,
-                        target,
-                        style,
-                    ) {
-                        return true;
-                    }
+                if replace_inline_span_style_list_items(
+                    &mut list.items,
+                    target,
+                    style,
+                ) {
+                    return true;
                 }
             },
             BlockContent::Table(table) => {
-                for row in &mut table.rows {
-                    for cell in &mut row.cells {
-                        if replace_inline_span_style_blocks(
-                            &mut cell.blocks,
-                            target,
-                            style,
-                        ) {
-                            return true;
-                        }
-                    }
+                if replace_inline_span_style_table(table, target, style) {
+                    return true;
                 }
             },
             BlockContent::Mathematics(_)
@@ -4877,6 +4881,28 @@ fn replace_inline_span_style_blocks(
         }
     }
     false
+}
+
+fn replace_inline_span_style_list_items(
+    items: &mut [ListItem<AcceptedIdentity>],
+    target: AcceptedIdentity,
+    style: Option<AcceptedIdentity>,
+) -> bool {
+    items.iter_mut().any(|item| {
+        replace_inline_span_style_blocks(&mut item.blocks, target, style)
+    })
+}
+
+fn replace_inline_span_style_table(
+    table: &mut Table<AcceptedIdentity>,
+    target: AcceptedIdentity,
+    style: Option<AcceptedIdentity>,
+) -> bool {
+    table.rows.iter_mut().any(|row| {
+        row.cells.iter_mut().any(|cell| {
+            replace_inline_span_style_blocks(&mut cell.blocks, target, style)
+        })
+    })
 }
 
 fn replace_inline_span_style_value(
@@ -4926,47 +4952,36 @@ fn replace_provenance_reference_blocks(
             | BlockContent::Footnote(spans)
             | BlockContent::Definition(spans)
             | BlockContent::Quotation(spans)
-        | BlockContent::SourceNote(spans)
+            | BlockContent::SourceNote(spans)
             | BlockContent::Heading(spans)
-        | BlockContent::MarginNote(spans)
+            | BlockContent::MarginNote(spans)
             | BlockContent::Paragraph(spans) => {
-                if let Some(span) =
-                    spans.iter_mut().find(|span| span.id == target)
-                {
-                    span.provenance = provenance;
+                if replace_inline_span_provenance(spans, target, provenance) {
                     return true;
                 }
             },
             BlockContent::Figure(figure) => {
-                if let Some(span) =
-                    figure.caption.iter_mut().find(|span| span.id == target)
-                {
-                    span.provenance = provenance;
+                let caption = &mut figure.caption;
+                if replace_inline_span_provenance(caption, target, provenance) {
                     return true;
                 }
             },
             BlockContent::List(list) => {
-                for item in &mut list.items {
-                    if replace_provenance_reference_blocks(
-                        &mut item.blocks,
-                        target,
-                        provenance,
-                    ) {
-                        return true;
-                    }
+                if replace_provenance_reference_list_items(
+                    &mut list.items,
+                    target,
+                    provenance,
+                ) {
+                    return true;
                 }
             },
             BlockContent::Table(table) => {
-                for row in &mut table.rows {
-                    for cell in &mut row.cells {
-                        if replace_provenance_reference_blocks(
-                            &mut cell.blocks,
-                            target,
-                            provenance,
-                        ) {
-                            return true;
-                        }
-                    }
+                if replace_provenance_reference_table(
+                    table,
+                    target,
+                    provenance,
+                ) {
+                    return true;
                 }
             },
             BlockContent::Mathematics(_)
@@ -4975,6 +4990,48 @@ fn replace_provenance_reference_blocks(
         }
     }
     false
+}
+
+fn replace_inline_span_provenance(
+    spans: &mut [InlineSpan<AcceptedIdentity>],
+    target: AcceptedIdentity,
+    provenance: Option<AcceptedIdentity>,
+) -> bool {
+    let Some(span) = spans.iter_mut().find(|span| span.id == target) else {
+        return false;
+    };
+    span.provenance = provenance;
+    true
+}
+
+fn replace_provenance_reference_list_items(
+    items: &mut [ListItem<AcceptedIdentity>],
+    target: AcceptedIdentity,
+    provenance: Option<AcceptedIdentity>,
+) -> bool {
+    items.iter_mut().any(|item| {
+        replace_provenance_reference_blocks(
+            &mut item.blocks,
+            target,
+            provenance,
+        )
+    })
+}
+
+fn replace_provenance_reference_table(
+    table: &mut Table<AcceptedIdentity>,
+    target: AcceptedIdentity,
+    provenance: Option<AcceptedIdentity>,
+) -> bool {
+    table.rows.iter_mut().any(|row| {
+        row.cells.iter_mut().any(|cell| {
+            replace_provenance_reference_blocks(
+                &mut cell.blocks,
+                target,
+                provenance,
+            )
+        })
+    })
 }
 
 fn replace_provenance_reference_value(
