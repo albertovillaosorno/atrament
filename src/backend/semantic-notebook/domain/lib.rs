@@ -700,6 +700,9 @@ enum SemanticPathFrame<'notebook, Identity> {
     },
 }
 
+type SemanticIdentityLocation<Identity> =
+    (SemanticIdentityDescriptor<Identity>, Option<Identity>);
+
 /// Resolve one identity's semantic kind and direct structural owner.
 ///
 /// This is a read-only semantic inspection primitive. It exposes no serialized
@@ -739,7 +742,7 @@ where
 fn semantic_identity_location<Identity>(
     notebook: &Notebook<Identity>,
     target: Identity,
-) -> Option<(SemanticIdentityDescriptor<Identity>, Option<Identity>)>
+) -> Option<SemanticIdentityLocation<Identity>>
 where
     Identity: Copy + Eq,
 {
@@ -752,42 +755,23 @@ where
             None,
         ));
     }
-    for asset in &notebook.assets {
-        if asset.id == target {
-            return Some((
-                descriptor(SemanticIdentityKind::Asset, notebook.id),
-                None,
-            ));
-        }
+    if let Some(kind) = semantic_root_owned_kind(notebook, target) {
+        return Some((descriptor(kind, notebook.id), None));
     }
-    for constraint in &notebook.constraints {
-        if constraint.id == target {
-            return Some((
-                descriptor(SemanticIdentityKind::Constraint, notebook.id),
-                None,
-            ));
-        }
-    }
-    for profile in &notebook.output_profiles {
-        if profile.id == target {
-            return Some((
-                descriptor(SemanticIdentityKind::OutputProfile, notebook.id),
-                None,
-            ));
-        }
-    }
-    for profile in &notebook.page_profiles {
-        if profile.id == target {
-            return Some((
-                descriptor(SemanticIdentityKind::PageProfile, notebook.id),
-                None,
-            ));
-        }
-    }
-    for page in &notebook.pages {
+    semantic_page_identity_location(&notebook.pages, target)
+}
+
+fn semantic_page_identity_location<Identity>(
+    pages: &[Page<Identity>],
+    target: Identity,
+) -> Option<SemanticIdentityLocation<Identity>>
+where
+    Identity: Copy + Eq,
+{
+    for page in pages {
         if page.id == target {
             return Some((
-                descriptor(SemanticIdentityKind::Page, notebook.id),
+                descriptor(SemanticIdentityKind::Page, page.id),
                 Some(page.id),
             ));
         }
@@ -805,23 +789,42 @@ where
             }
         }
     }
-    for provenance in &notebook.provenance {
-        if provenance.id == target {
-            return Some((
-                descriptor(SemanticIdentityKind::Provenance, notebook.id),
-                None,
-            ));
-        }
-    }
-    for style in &notebook.styles {
-        if style.id == target {
-            return Some((
-                descriptor(SemanticIdentityKind::Style, notebook.id),
-                None,
-            ));
-        }
-    }
     None
+}
+
+fn semantic_root_owned_kind<Identity>(
+    notebook: &Notebook<Identity>,
+    target: Identity,
+) -> Option<SemanticIdentityKind>
+where
+    Identity: Copy + Eq,
+{
+    notebook
+        .assets
+        .iter()
+        .map(|value| (value.id, SemanticIdentityKind::Asset))
+        .chain(
+            notebook
+                .constraints
+                .iter()
+                .map(|value| (value.id, SemanticIdentityKind::Constraint)),
+        )
+        .chain(notebook.output_profiles.iter().map(|value| {
+            (value.id, SemanticIdentityKind::OutputProfile)
+        }))
+        .chain(notebook.page_profiles.iter().map(|value| {
+            (value.id, SemanticIdentityKind::PageProfile)
+        }))
+        .chain(notebook.provenance.iter().map(|value| {
+            (value.id, SemanticIdentityKind::Provenance)
+        }))
+        .chain(
+            notebook
+                .styles
+                .iter()
+                .map(|value| (value.id, SemanticIdentityKind::Style)),
+        )
+        .find_map(|(identity, kind)| (identity == target).then_some(kind))
 }
 
 /// Resolve one identity and its complete structural owner path target-first.
