@@ -129,3 +129,84 @@ fn extra_observations_and_exact_artifact_identity_remain_caller_owned() {
         "historia: México — 1910 🇲🇽",
     );
 }
+
+#[test]
+fn every_subject_presence_mask_matches_first_missing_subject_oracle() {
+    let mut cases = 0_u8;
+    for subject_mask in 0_u8..64 {
+        let observations = SUBJECTS
+            .into_iter()
+            .enumerate()
+            .filter(|(index, _)| subject_mask & (1_u8 << index) != 0)
+            .map(|(_, subject)| observation(subject))
+            .collect::<Vec<_>>();
+        let expected = SUBJECTS
+            .into_iter()
+            .enumerate()
+            .find(|(index, _)| subject_mask & (1_u8 << index) == 0)
+            .map_or(Ok(()), |(_, subject)| {
+                Err(EducationalCoverageError::SubjectAbsent(subject))
+            });
+        assert_eq!(
+            validate_educational_coverage(&observations),
+            expected,
+            "subject presence mask {subject_mask:#08b}",
+        );
+        cases = cases.saturating_add(1);
+    }
+    assert_eq!(cases, 64);
+}
+
+#[test]
+fn every_property_mask_at_every_position_matches_evidence_precedence() {
+    let mut cases = 0_u8;
+    for observation_index in 0..SUBJECTS.len() {
+        for established_mask in 0_u8..8 {
+            let mut observations = SUBJECTS.map(observation);
+            let current = observations
+                .get_mut(observation_index)
+                .expect("six enumerated observations exist");
+            current.bilingual = if established_mask & 0b001 != 0 {
+                EducationalEvidenceStatus::Established
+            } else {
+                EducationalEvidenceStatus::NotEstablished
+            };
+            current.dense_organization = if established_mask & 0b010 != 0 {
+                EducationalEvidenceStatus::Established
+            } else {
+                EducationalEvidenceStatus::NotEstablished
+            };
+            current.readable_organization = if established_mask & 0b100 != 0 {
+                EducationalEvidenceStatus::Established
+            } else {
+                EducationalEvidenceStatus::NotEstablished
+            };
+            let expected = if established_mask & 0b001 == 0 {
+                Err(EducationalCoverageError::BilingualEvidenceMissing {
+                    observation_index,
+                })
+            } else if established_mask & 0b010 == 0 {
+                Err(EducationalCoverageError::DenseOrganizationEvidenceMissing {
+                    observation_index,
+                })
+            } else if established_mask & 0b100 == 0 {
+                Err(
+                    EducationalCoverageError::
+                        ReadableOrganizationEvidenceMissing {
+                            observation_index,
+                        },
+                )
+            } else {
+                Ok(())
+            };
+            assert_eq!(
+                validate_educational_coverage(&observations),
+                expected,
+                "observation {observation_index}, established mask \
+                 {established_mask:#05b}",
+            );
+            cases = cases.saturating_add(1);
+        }
+    }
+    assert_eq!(cases, 48);
+}

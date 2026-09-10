@@ -1523,6 +1523,9 @@ bilingual, dense-organization, and readable-organization evidence. Complete
 coverage requires at least one fully evidenced observation for mathematics,
 physics, chemistry, biology, history, and language while permitting additional
 subject observations and preserving their caller-owned artifact identities.
+A 64-case subject-presence oracle proves every subset rejects at the first
+missing subject, while 48 property-state cases cross every observation position
+with all bilingual/dense/readable evidence masks and pin property precedence.
 
 Actual cross-subject assignment fixtures, curriculum/source correctness,
 language selection, density/readability measurement and thresholds, page layout,
