@@ -34,8 +34,7 @@
 //
 use atrament_handwriting_calibration_session::{
     CalibrationPrompt, CalibrationPromptKind, CalibrationPromptProgress,
-    CalibrationSession, CalibrationSessionError, calibration_session_complete,
-    validate_calibration_session,
+    CalibrationSession, CalibrationSessionError,
 };
 
 type Session =

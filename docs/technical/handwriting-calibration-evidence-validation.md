@@ -104,9 +104,10 @@ speed and size, and either `Pending` progress or one completed sample identity.
 `CalibrationSession` preserves the caller-supplied prompt order and caller-owned
 known reference geometry.
 
-`validate_calibration_session` rejects duplicate prompt identities.
-`next_pending_calibration_prompt_index` returns the first pending prompt in the
-original guidance order, while `calibration_session_complete` reports whether
+`CalibrationSession::validate` rejects duplicate prompt identities.
+`CalibrationSession::next_pending_prompt_index` returns the first pending
+prompt in the original guidance order, while `CalibrationSession::is_complete`
+reports whether
 all supplied prompts are complete.
 
 The session domain does not decide how many prompts exist, which category mix is
