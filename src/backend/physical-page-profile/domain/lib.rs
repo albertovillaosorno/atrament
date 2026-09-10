@@ -232,6 +232,73 @@ pub struct SheetSize {
 }
 
 impl PageProfile {
+    fn binding_rect(
+        self,
+        top: Length,
+        height: Length,
+        binding_inset: Length,
+    ) -> Result<Rect, PageProfileError> {
+        match self.binding_edge {
+            BindingEdge::Left => {
+                let horizontal = checked_sum(
+                    self.printable_region.x,
+                    binding_inset,
+                    PageProfileError::BindingInsetExhaustsPrintableRegion,
+                )?;
+                let width = checked_difference(
+                    self.printable_region.width,
+                    binding_inset,
+                    PageProfileError::BindingInsetExhaustsPrintableRegion,
+                )?;
+                nonempty_binding_rect(horizontal, top, width, height)
+            },
+            BindingEdge::Right => {
+                let width = checked_difference(
+                    self.printable_region.width,
+                    binding_inset,
+                    PageProfileError::BindingInsetExhaustsPrintableRegion,
+                )?;
+                nonempty_binding_rect(
+                    self.printable_region.x,
+                    top,
+                    width,
+                    height,
+                )
+            },
+            BindingEdge::Top => {
+                let vertical = checked_sum(
+                    top,
+                    binding_inset,
+                    PageProfileError::BindingInsetExhaustsPrintableRegion,
+                )?;
+                let bound_height = checked_difference(
+                    height,
+                    binding_inset,
+                    PageProfileError::BindingInsetExhaustsPrintableRegion,
+                )?;
+                nonempty_binding_rect(
+                    self.printable_region.x,
+                    vertical,
+                    self.printable_region.width,
+                    bound_height,
+                )
+            },
+            BindingEdge::Bottom => {
+                let bound_height = checked_difference(
+                    height,
+                    binding_inset,
+                    PageProfileError::BindingInsetExhaustsPrintableRegion,
+                )?;
+                nonempty_binding_rect(
+                    self.printable_region.x,
+                    top,
+                    self.printable_region.width,
+                    bound_height,
+                )
+            },
+        }
+    }
+
     /// Return oriented physical sheet dimensions.
     ///
     /// # Errors
@@ -299,65 +366,7 @@ impl PageProfile {
             self.writing_inset,
             PageProfileError::BindingInsetExhaustsPrintableRegion,
         )?;
-        match self.binding_edge {
-            BindingEdge::Left => {
-                let x = checked_sum(
-                    self.printable_region.x,
-                    binding_inset,
-                    PageProfileError::BindingInsetExhaustsPrintableRegion,
-                )?;
-                let width = checked_difference(
-                    self.printable_region.width,
-                    binding_inset,
-                    PageProfileError::BindingInsetExhaustsPrintableRegion,
-                )?;
-                nonempty_binding_rect(x, top, width, height)
-            },
-            BindingEdge::Right => {
-                let width = checked_difference(
-                    self.printable_region.width,
-                    binding_inset,
-                    PageProfileError::BindingInsetExhaustsPrintableRegion,
-                )?;
-                nonempty_binding_rect(
-                    self.printable_region.x,
-                    top,
-                    width,
-                    height,
-                )
-            },
-            BindingEdge::Top => {
-                let additional_top = checked_sum(
-                    top,
-                    binding_inset,
-                    PageProfileError::BindingInsetExhaustsPrintableRegion,
-                )?;
-                let bound_height = checked_difference(
-                    height,
-                    binding_inset,
-                    PageProfileError::BindingInsetExhaustsPrintableRegion,
-                )?;
-                nonempty_binding_rect(
-                    self.printable_region.x,
-                    additional_top,
-                    self.printable_region.width,
-                    bound_height,
-                )
-            },
-            BindingEdge::Bottom => {
-                let bound_height = checked_difference(
-                    height,
-                    binding_inset,
-                    PageProfileError::BindingInsetExhaustsPrintableRegion,
-                )?;
-                nonempty_binding_rect(
-                    self.printable_region.x,
-                    top,
-                    self.printable_region.width,
-                    bound_height,
-                )
-            },
-        }
+        self.binding_rect(top, height, binding_inset)
     }
 }
 
@@ -385,15 +394,20 @@ fn checked_sum(
 }
 
 fn nonempty_binding_rect(
-    x: Length,
-    y: Length,
+    horizontal: Length,
+    vertical: Length,
     width: Length,
     height: Length,
 ) -> Result<Rect, PageProfileError> {
     if width == Length::ZERO || height == Length::ZERO {
         return Err(PageProfileError::BindingInsetExhaustsPrintableRegion);
     }
-    Ok(Rect { height, width, x, y })
+    Ok(Rect {
+        height,
+        width,
+        x: horizontal,
+        y: vertical,
+    })
 }
 
 fn validate_corner_roundness(
