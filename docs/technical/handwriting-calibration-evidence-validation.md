@@ -111,6 +111,17 @@ original guidance order for inspection without choosing replacement policy.
 prompt in that same order, while `CalibrationSession::is_complete` reports
 whether all supplied prompts are complete.
 
+`CalibrationSession::replace_completed_sample` is an exact-preconditioned
+in-memory edit for one completed prompt. The caller supplies the prompt
+identity,
+the exact sample identity it previously inspected, and a replacement sample
+identity. Unknown or pending prompts, duplicate prompt identities, and stale
+sample expectations reject without changing any prompt.
+
+An equal replacement is a no-op, while an applied replacement changes only that
+prompt's sample link. This does not classify a sample as weak or define a
+replacement workflow.
+
 The session domain does not decide how many prompts exist, which category mix is
 minimum, what wording is shown to a user, which speeds or sizes are selected, or
 how reference marks are represented geometrically.
@@ -164,8 +175,9 @@ Current checked-in regression evidence includes:
   conflict rejection, and explicit additional-sample requirements;
 - `tests/backend/handwriting-calibration-session/domain/lib.rs`, which pins all
   nine prompt categories, caller-owned plan order/reference geometry, completed
-  sample inspection, resume position, completion state, duplicate-prompt
-  rejection, and every compact progress mask through eight prompts; and
+  sample inspection and exact replacement, resume position, completion state,
+  duplicate-prompt rejection, and every compact progress mask through eight
+  prompts; and
 - `tests/backend/handwriting-variation/domain/lib.rs`, which pins bound
   evidence,
   envelope ordering, metadata preservation, variation scale, and deterministic
@@ -188,5 +200,5 @@ Still-open implementation work includes the minimum viable sample set, capture
 UI and persistence, photographic/scanner/digital input adapters, physical
 reference-mark geometry and transform fitting, handwriting extraction,
 confidence
-policy, weak-sample replacement workflow, held-out quality metrics, and the
-final calibration quality report.
+policy, weak-sample classification/workflow and persistence, held-out quality
+metrics, and the final calibration quality report.

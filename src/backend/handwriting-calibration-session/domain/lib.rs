@@ -17,7 +17,8 @@
 // - Allows:
 //   - Inputs: Caller-owned prompt plans, speed/size values, samples, and
 //     reference geometry.
-//   - Outputs: Prompt identity validation, completion state, and next work.
+//   - Outputs: Prompt validation, completion state, exact sample replacement,
+//     and next work.
 //   - Side effects: Process-local validation allocation only.
 // - Split-When:
 //   - Capture orchestration or reference geometry gains independent authority.
@@ -28,7 +29,7 @@
 //     policy.
 // - Description:
 //   - Preserves prompt order and completed sample links over caller-owned
-//     values.
+//     values, including exact-precondition sample replacement.
 // - Usage:
 //   - Resume the first pending prompt from a validated caller-supplied plan.
 // - Defaults:
@@ -119,6 +120,51 @@ pub enum CalibrationSessionError<Identity> {
     },
 }
 
+/// Result of replacing one completed prompt's exact current sample link.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum CalibrationSampleReplacement {
+    /// The replacement differs from the exact previously completed sample.
+    Applied,
+    /// The requested replacement already equals the completed sample.
+    NoOp,
+}
+
+/// Why one exact completed-sample replacement cannot be applied.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum CalibrationSampleReplacementError<Identity, SampleIdentity> {
+    /// The owning prompt is still pending and therefore has no sample to
+    /// replace.
+    PromptPending {
+        /// Exact caller-owned prompt identity.
+        prompt: Identity,
+    },
+    /// The completed prompt no longer has the sample the caller inspected.
+    SampleMismatch {
+        /// Actual current completed sample identity.
+        actual: SampleIdentity,
+        /// Exact sample identity the caller expected to replace.
+        expected: SampleIdentity,
+        /// Exact caller-owned prompt identity.
+        prompt: Identity,
+    },
+    /// The session cannot be edited because prompt identities are ambiguous.
+    Session {
+        /// Existing session validation failure.
+        reason: CalibrationSessionError<Identity>,
+    },
+    /// No prompt in the current plan owns the requested identity.
+    UnknownPrompt {
+        /// Missing caller-owned prompt identity.
+        prompt: Identity,
+    },
+}
+
+/// Exact completed-sample replacement result.
+pub type CalibrationSampleReplacementResult<Identity, SampleIdentity> = Result<
+    CalibrationSampleReplacement,
+    CalibrationSampleReplacementError<Identity, SampleIdentity>,
+>;
+
 /// Result of locating the next resumable calibration prompt.
 pub type CalibrationPromptIndexResult<Identity> =
     Result<Option<usize>, CalibrationSessionError<Identity>>;
@@ -128,6 +174,59 @@ impl<Identity, Speed, Size, SampleIdentity, ReferenceGeometry>
 where
     Identity: Clone + Ord,
 {
+    /// Replace the exact sample link of one completed prompt.
+    ///
+    /// This operation does not classify sample quality or choose replacement
+    /// policy. The caller must name both the prompt and exact sample it
+    /// previously inspected, so stale inspection cannot overwrite a newer link.
+    /// Unrelated prompt progress and metadata remain unchanged.
+    ///
+    /// # Errors
+    ///
+    /// Returns session identity ambiguity, an unknown or pending prompt, or an
+    /// exact sample mismatch without changing this session.
+    pub fn replace_completed_sample(
+        &mut self,
+        prompt_identity: &Identity,
+        expected_sample: &SampleIdentity,
+        replacement_sample: SampleIdentity,
+    ) -> CalibrationSampleReplacementResult<Identity, SampleIdentity>
+    where
+        SampleIdentity: Clone + Eq,
+    {
+        self.validate().map_err(|reason| {
+            CalibrationSampleReplacementError::Session { reason }
+        })?;
+        let Some(prompt) = self
+            .prompts
+            .iter_mut()
+            .find(|prompt| prompt.identity == *prompt_identity)
+        else {
+            return Err(CalibrationSampleReplacementError::UnknownPrompt {
+                prompt: prompt_identity.clone(),
+            });
+        };
+        let CalibrationPromptProgress::Completed { sample } =
+            &mut prompt.progress
+        else {
+            return Err(CalibrationSampleReplacementError::PromptPending {
+                prompt: prompt_identity.clone(),
+            });
+        };
+        if sample != expected_sample {
+            return Err(CalibrationSampleReplacementError::SampleMismatch {
+                actual: sample.clone(),
+                expected: expected_sample.clone(),
+                prompt: prompt_identity.clone(),
+            });
+        }
+        if sample == &replacement_sample {
+            return Ok(CalibrationSampleReplacement::NoOp);
+        }
+        *sample = replacement_sample;
+        Ok(CalibrationSampleReplacement::Applied)
+    }
+
     /// Return completed prompts in caller-supplied guidance order.
     ///
     /// The returned borrowed prompts preserve identity, category, speed, size,

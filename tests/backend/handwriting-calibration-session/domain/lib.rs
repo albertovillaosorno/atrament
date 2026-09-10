@@ -34,6 +34,7 @@
 //
 use atrament_handwriting_calibration_session::{
     CalibrationPrompt, CalibrationPromptKind, CalibrationPromptProgress,
+    CalibrationSampleReplacement, CalibrationSampleReplacementError,
     CalibrationSession, CalibrationSessionError,
 };
 
@@ -153,6 +154,163 @@ fn completed_prompt_projection_preserves_plan_order_and_sample_links() {
     );
     assert_eq!(completed[0].speed, 3);
     assert_eq!(completed[0].size, 12);
+}
+
+#[test]
+fn exact_completed_sample_replacement_changes_only_the_target_link() {
+    let mut session = Session {
+        prompts: vec![
+            prompt(
+                "character-a",
+                CalibrationPromptKind::IsolatedCharacter,
+                CalibrationPromptProgress::Completed {
+                    sample: "sample-character-a",
+                },
+            ),
+            prompt(
+                "join-ab",
+                CalibrationPromptKind::Join,
+                CalibrationPromptProgress::Pending,
+            ),
+            prompt(
+                "word-casa",
+                CalibrationPromptKind::Word,
+                CalibrationPromptProgress::Completed {
+                    sample: "sample-word-casa",
+                },
+            ),
+        ],
+        reference_geometry: "reference",
+    };
+    let before = session.clone();
+
+    assert_eq!(
+        session.replace_completed_sample(
+            &"character-a",
+            &"sample-character-a",
+            "sample-character-a-2",
+        ),
+        Ok(CalibrationSampleReplacement::Applied),
+    );
+    assert_eq!(session.prompts[0].identity, before.prompts[0].identity);
+    assert_eq!(session.prompts[0].kind, before.prompts[0].kind);
+    assert_eq!(session.prompts[0].speed, before.prompts[0].speed);
+    assert_eq!(session.prompts[0].size, before.prompts[0].size);
+    assert_eq!(session.prompts[1..], before.prompts[1..]);
+    assert_eq!(session.reference_geometry, before.reference_geometry);
+    assert_eq!(
+        session.prompts[0].progress,
+        CalibrationPromptProgress::Completed {
+            sample: "sample-character-a-2",
+        },
+    );
+}
+
+#[test]
+fn completed_sample_replacement_is_exact_preconditioned_and_fail_closed() {
+    let base = Session {
+        prompts: vec![
+            prompt(
+                "character-a",
+                CalibrationPromptKind::IsolatedCharacter,
+                CalibrationPromptProgress::Completed {
+                    sample: "sample-character-a",
+                },
+            ),
+            prompt(
+                "join-ab",
+                CalibrationPromptKind::Join,
+                CalibrationPromptProgress::Pending,
+            ),
+        ],
+        reference_geometry: "reference",
+    };
+
+    let mut no_op = base.clone();
+    assert_eq!(
+        no_op.replace_completed_sample(
+            &"character-a",
+            &"sample-character-a",
+            "sample-character-a",
+        ),
+        Ok(CalibrationSampleReplacement::NoOp),
+    );
+    assert_eq!(no_op, base);
+
+    let cases = [
+        (
+            "stale sample",
+            "character-a",
+            "sample-older",
+            Err(CalibrationSampleReplacementError::SampleMismatch {
+                actual: "sample-character-a",
+                expected: "sample-older",
+                prompt: "character-a",
+            }),
+        ),
+        (
+            "pending prompt",
+            "join-ab",
+            "sample-join-ab",
+            Err(CalibrationSampleReplacementError::PromptPending {
+                prompt: "join-ab",
+            }),
+        ),
+        (
+            "unknown prompt",
+            "missing",
+            "sample-missing",
+            Err(CalibrationSampleReplacementError::UnknownPrompt {
+                prompt: "missing",
+            }),
+        ),
+    ];
+    for (case, prompt, expected, outcome) in cases {
+        let mut session = base.clone();
+        assert_eq!(
+            session.replace_completed_sample(
+                &prompt,
+                &expected,
+                "replacement",
+            ),
+            outcome,
+            "{case}",
+        );
+        assert_eq!(session, base, "{case} must not mutate session");
+    }
+}
+
+#[test]
+fn duplicate_prompt_identity_rejects_before_sample_replacement() {
+    let mut session = Session {
+        prompts: vec![
+            prompt(
+                "duplicate",
+                CalibrationPromptKind::Word,
+                CalibrationPromptProgress::Completed { sample: "sample-a" },
+            ),
+            prompt(
+                "duplicate",
+                CalibrationPromptKind::Sentence,
+                CalibrationPromptProgress::Completed { sample: "sample-b" },
+            ),
+        ],
+        reference_geometry: "reference",
+    };
+    let before = session.clone();
+    assert_eq!(
+        session.replace_completed_sample(
+            &"duplicate",
+            &"sample-a",
+            "replacement",
+        ),
+        Err(CalibrationSampleReplacementError::Session {
+            reason: CalibrationSessionError::DuplicatePromptIdentity {
+                prompt: "duplicate",
+            },
+        }),
+    );
+    assert_eq!(session, before);
 }
 
 #[test]

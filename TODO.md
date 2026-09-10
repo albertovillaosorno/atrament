@@ -1126,9 +1126,13 @@ without losing sample links, speed, size, or category metadata.
 
 An exhaustive 511-state compact corpus covers every pending/completed mask from
 zero through eight prompts and cross-checks completion, next-pending position,
-and completed-prompt inspection against an independent bit-mask oracle. Minimum
-counts, wording, sufficiency, weak-sample replacement policy, capture UI, and
-geometry semantics remain open.
+and completed-prompt inspection against an independent bit-mask oracle. One
+exact-precondition edit can replace a completed prompt's sample link while
+preserving all unrelated prompt state; stale, pending, missing, ambiguous, and
+no-op cases cannot alter the session.
+
+Minimum counts, wording, sufficiency, weak-sample classification and workflow
+policy, capture UI, persistence/history, and geometry semantics remain open.
 
 ### TODO - Correct photographed calibration geometry
 
