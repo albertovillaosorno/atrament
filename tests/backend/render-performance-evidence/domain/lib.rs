@@ -165,7 +165,7 @@ fn missing_workload_scenario_is_reported_without_budgeting() {
     ];
     assert_eq!(
         validate_render_performance_coverage(&observations),
-        Err(RenderPerformanceCoverageError::MissingScenario(
+        Err(RenderPerformanceCoverageError::ScenarioAbsent(
             RenderPerformanceScenario::Zoom,
         )),
     );
@@ -201,7 +201,7 @@ fn scenario_coverage_does_not_substitute_for_final_quality_evidence() {
     ];
     assert_eq!(
         validate_render_performance_coverage(&observations),
-        Err(RenderPerformanceCoverageError::MissingFinalQuality),
+        Err(RenderPerformanceCoverageError::FinalQualityMissing),
     );
 }
 
@@ -232,6 +232,6 @@ fn scenario_coverage_does_not_substitute_for_preview_quality_evidence() {
     ];
     assert_eq!(
         validate_render_performance_coverage(&observations),
-        Err(RenderPerformanceCoverageError::MissingPreviewQuality),
+        Err(RenderPerformanceCoverageError::PreviewNotObserved),
     );
 }
