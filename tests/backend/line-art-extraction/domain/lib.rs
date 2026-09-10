@@ -138,3 +138,55 @@ fn exact_request_result_pair_is_valid_without_interpreting_controls() {
         Ok(()),
     );
 }
+
+#[test]
+fn every_control_and_source_drift_mask_matches_exact_pair_oracle() {
+    let mut cases = 0_u16;
+    let mut saw = [false; 3];
+    for control_mask in 0_u8..64 {
+        for source_drift in [false, true] {
+            let request = request();
+            let mut result = result();
+            if control_mask & 0b00_0001 != 0 {
+                result.controls.cleanup += 1;
+            }
+            if control_mask & 0b00_0010 != 0 {
+                result.controls.detail += 1;
+            }
+            if control_mask & 0b00_0100 != 0 {
+                result.controls.levels += 1;
+            }
+            if control_mask & 0b00_1000 != 0 {
+                result.controls.minimum_feature += 1;
+            }
+            if control_mask & 0b01_0000 != 0 {
+                result.controls.preview += 1;
+            }
+            if control_mask & 0b10_0000 != 0 {
+                result.controls.threshold += 1;
+            }
+            if source_drift {
+                result.source_identity = "photo-18";
+            }
+
+            let expected = if control_mask != 0 {
+                saw[0] = true;
+                Err(LineArtExtractionPairError::ControlsMismatch)
+            } else if source_drift {
+                saw[1] = true;
+                Err(LineArtExtractionPairError::SourceIdentityMismatch)
+            } else {
+                saw[2] = true;
+                Ok(())
+            };
+            assert_eq!(
+                validate_line_art_extraction_pair(&request, &result),
+                expected,
+                "control mask {control_mask:#08b}, source drift {source_drift}",
+            );
+            cases = cases.saturating_add(1);
+        }
+    }
+    assert_eq!(cases, 128);
+    assert!(saw.into_iter().all(|seen| seen));
+}

@@ -169,8 +169,8 @@ Current checked-in regression evidence includes:
 - `tests/backend/render-quality-profile/domain/lib.rs`, which pins preview/final
   role and shared-authority invariants;
 - `tests/backend/line-art-extraction/domain/lib.rs`, which pins source identity,
-  all six caller-owned extraction controls, transparent-black appearance, and
-  ordered vector paths;
+  all six caller-owned extraction controls, transparent-black appearance,
+  ordered vector paths, and the complete 128-case control/source drift oracle;
 - `tests/backend/digital-paper-note-plan/domain/lib.rs`, which pins fill, fold,
   stacking, soft-shadow intent, and caller-provided readable-contrast evidence;
 - `tests/backend/print-scan-measurement/domain/lib.rs`, which pins all eight
