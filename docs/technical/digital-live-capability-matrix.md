@@ -105,8 +105,10 @@ role; the original digital treatment remains part of the source document.
 title conversion: digital and live projections must retain the same semantic
 title identity and exact hierarchy value. The digital side structurally carries
 layering, outline, highlight, and motif inputs while the live treatment remains
-caller-owned one-pen intent. The domain validates a produced pair; it does not
-derive either treatment or interpret hierarchy semantics.
+caller-owned one-pen intent. A 256-case compact oracle crosses 64 hierarchy
+values with identity and hierarchy drift while varying mode-specific treatments.
+The domain validates a produced pair; it does not derive either treatment or
+interpret hierarchy semantics.
 
 ### Color
 

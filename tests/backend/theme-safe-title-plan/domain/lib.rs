@@ -108,3 +108,53 @@ fn mode_specific_treatment_may_differ_without_losing_shared_hierarchy() {
         assert_eq!(validate_theme_safe_title_plan(&plan), Ok(()));
     }
 }
+
+#[test]
+fn every_compact_title_drift_case_matches_identity_hierarchy_oracle() {
+    let mut cases = 0_u16;
+    let mut saw = [false; 3];
+    for hierarchy in 0_u8..=63 {
+        for identity_drift in [false, true] {
+            for hierarchy_drift in [false, true] {
+                let mut plan = plan();
+                plan.digital.hierarchy = hierarchy;
+                plan.live.hierarchy = if hierarchy_drift {
+                    hierarchy.wrapping_add(1)
+                } else {
+                    hierarchy
+                };
+                plan.live.title_identity = if identity_drift {
+                    "title-18"
+                } else {
+                    "title-17"
+                };
+                plan.digital.treatment.motif = hierarchy;
+                plan.live.treatment = if hierarchy % 2 == 0 {
+                    "one-pen-large"
+                } else {
+                    "one-pen-underlined"
+                };
+
+                let expected = if identity_drift {
+                    saw[0] = true;
+                    Err(ThemeSafeTitlePlanError::TitleIdentityMismatch)
+                } else if hierarchy_drift {
+                    saw[1] = true;
+                    Err(ThemeSafeTitlePlanError::HierarchyMismatch)
+                } else {
+                    saw[2] = true;
+                    Ok(())
+                };
+                assert_eq!(
+                    validate_theme_safe_title_plan(&plan),
+                    expected,
+                    "hierarchy {hierarchy}, identity drift {identity_drift}, \
+                     hierarchy drift {hierarchy_drift}",
+                );
+                cases = cases.saturating_add(1);
+            }
+        }
+    }
+    assert_eq!(cases, 256);
+    assert!(saw.into_iter().all(|seen| seen));
+}
