@@ -148,7 +148,10 @@ function referenceResourceLimit(value) {
 }
 
 function nextDraftMutation(state) {
-    return (Math.imul(state, 22_695_477) + 1) >>> 0;
+    state ^= state << 13;
+    state ^= state >>> 17;
+    state ^= state << 5;
+    return state >>> 0;
 }
 
 test("generated resource-limit payloads match fail-closed reference", () => {
@@ -165,17 +168,32 @@ test("generated resource-limit payloads match fail-closed reference", () => {
         null,
     ];
     let state = 0x5eed_d2af;
+    const seenErrors = new Set();
+    const seenVersions = new Set();
+    const seenCompleteness = new Set();
+    const seenCodes = new Set();
+    const seenItemModes = new Set();
+    const seenOutcomes = new Set();
     for (let caseIndex = 0; caseIndex < 4_096; caseIndex += 1) {
         state = nextDraftMutation(state);
-        const error = errors[state % errors.length];
+        const errorIndex = state % errors.length;
+        seenErrors.add(errorIndex);
+        const error = errors[errorIndex];
         state = nextDraftMutation(state);
-        const version = versions[state % versions.length];
+        const versionIndex = state % versions.length;
+        seenVersions.add(versionIndex);
+        const version = versions[versionIndex];
         state = nextDraftMutation(state);
-        const completenessValue = completeness[state % completeness.length];
+        const completenessIndex = state % completeness.length;
+        seenCompleteness.add(completenessIndex);
+        const completenessValue = completeness[completenessIndex];
         state = nextDraftMutation(state);
-        const code = codes[state % codes.length];
+        const codeIndex = state % codes.length;
+        seenCodes.add(codeIndex);
+        const code = codes[codeIndex];
         state = nextDraftMutation(state);
         const itemMode = state % 4;
+        seenItemModes.add(itemMode);
         const items = itemMode === 0
             ? [{ code }]
             : itemMode === 1
@@ -191,10 +209,18 @@ test("generated resource-limit payloads match fail-closed reference", () => {
                 items,
             },
         };
+        const expected = referenceResourceLimit(payload);
+        seenOutcomes.add(expected);
         assert.equal(
             isResourceLimit(payload),
-            referenceResourceLimit(payload),
+            expected,
             `generated resource-limit case ${caseIndex}`,
         );
     }
+    assert.equal(seenErrors.size, errors.length);
+    assert.equal(seenVersions.size, versions.length);
+    assert.equal(seenCompleteness.size, completeness.length);
+    assert.equal(seenCodes.size, codes.length);
+    assert.equal(seenItemModes.size, 4);
+    assert.deepEqual([...seenOutcomes].sort(), [false, true]);
 });

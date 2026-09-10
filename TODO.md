@@ -1767,6 +1767,11 @@ mutation operation, mutation/fragment-count bucket, and TeX fragment token is
 actually exercised, preventing a passing corpus from silently starving one of
 its advertised selector classes.
 
+The profile manifest/evidence and browser fragment/draft generators likewise
+assert their declared selector and result classes, so deterministic P8 coverage
+fails when a generator loses a promised branch even if its sampled assertions
+would otherwise remain green.
+
 A second 4,096-case corpus mutates only post-request-line bytes of one
 canonical
 authenticated Task replacement, so generated inputs cannot turn into private GET

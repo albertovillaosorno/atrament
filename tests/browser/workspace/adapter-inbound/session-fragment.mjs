@@ -86,13 +86,20 @@ test("generated fragment mutations match exact credential oracle", () => {
         "0", "a", "f", "A", "F", "&", "=", "%", "#", "é", "😀", "\0",
     ];
     let state = 0x5eed_2026;
+    const seenOperations = new Set();
+    const seenPositions = new Set();
+    const seenTokens = new Set();
     for (let caseIndex = 0; caseIndex < 4_096; caseIndex += 1) {
         state = nextMutationValue(state);
         const operation = state % 4;
+        seenOperations.add(operation);
         state = nextMutationValue(state);
         const position = state % (canonical.length + 1);
+        seenPositions.add(position);
         state = nextMutationValue(state);
-        const token = replacements[state % replacements.length];
+        const tokenIndex = state % replacements.length;
+        seenTokens.add(tokenIndex);
+        const token = replacements[tokenIndex];
         let fragment;
         if (operation === 0 && position < canonical.length) {
             fragment = canonical.slice(0, position)
@@ -123,4 +130,7 @@ test("generated fragment mutations match exact credential oracle", () => {
             `repeat generated fragment case ${caseIndex}`,
         );
     }
+    assert.equal(seenOperations.size, 4);
+    assert.equal(seenPositions.size, canonical.length + 1);
+    assert.equal(seenTokens.size, replacements.length);
 });

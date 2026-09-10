@@ -519,19 +519,28 @@ fn generated_manifest_values_match_reference_admission_oracle() {
     let media_types = ["application/json", "image/webp", "", "opaque/type"];
     let supported = ["stroke-vocabulary", "future-supported"];
     let mut seed = 0x5eed_4d41_2026_u64;
+    let mut seen_versions = [false; 4];
+    let mut seen_feature_sets = [false; 5];
+    let mut seen_entry_counts = [false; 5];
+    let mut seen_paths = [false; 11];
+    let mut seen_media_types = [false; 4];
     for case in 0..CASES {
         let version_index =
             next_inventory_value(&mut seed) as usize % versions.len();
+        seen_versions[version_index] = true;
         let feature_index =
             next_inventory_value(&mut seed) as usize % feature_sets.len();
-        let entry_count =
-            next_inventory_value(&mut seed) as usize % 5;
+        seen_feature_sets[feature_index] = true;
+        let entry_count = next_inventory_value(&mut seed) as usize % 5;
+        seen_entry_counts[entry_count] = true;
         let mut entries = Vec::with_capacity(entry_count);
         for entry_index in 0..entry_count {
             let path_index =
                 next_inventory_value(&mut seed) as usize % paths.len();
+            seen_paths[path_index] = true;
             let media_index =
                 next_inventory_value(&mut seed) as usize % media_types.len();
+            seen_media_types[media_index] = true;
             let selected_path = if entry_index > 0
                 && next_inventory_value(&mut seed).is_multiple_of(5)
             {
@@ -563,6 +572,11 @@ fn generated_manifest_values_match_reference_admission_oracle() {
             "generated manifest case {case}",
         );
     }
+    assert!(seen_versions.into_iter().all(|seen| seen));
+    assert!(seen_feature_sets.into_iter().all(|seen| seen));
+    assert!(seen_entry_counts.into_iter().all(|seen| seen));
+    assert!(seen_paths.into_iter().all(|seen| seen));
+    assert!(seen_media_types.into_iter().all(|seen| seen));
 }
 
 #[test]
@@ -932,6 +946,9 @@ fn entry_evidence_checks_length_before_digest() {
 fn generated_full_range_entry_evidence_matches_reference_precedence() {
     const CASES: usize = 4_096;
     let mut seed = 0x5eed_e17e_2026_u64;
+    let mut saw_length_mismatch = false;
+    let mut saw_digest_mismatch = false;
+    let mut saw_valid = false;
     for case in 0..CASES {
         let declared_length = next_inventory_value(&mut seed);
         let observed_length = if next_inventory_value(&mut seed) & 3 == 0 {
@@ -957,13 +974,16 @@ fn generated_full_range_entry_evidence_matches_reference_precedence() {
             digest: digest(observed_digest_byte),
         };
         let expected = if declared_length != observed_length {
+            saw_length_mismatch = true;
             Err(ProfileEntryVerificationError::ByteLengthMismatch {
                 declared: declared_length,
                 observed: observed_length,
             })
         } else if declared_digest_byte != observed_digest_byte {
+            saw_digest_mismatch = true;
             Err(ProfileEntryVerificationError::DigestMismatch)
         } else {
+            saw_valid = true;
             Ok(())
         };
         assert_eq!(
@@ -972,4 +992,7 @@ fn generated_full_range_entry_evidence_matches_reference_precedence() {
             "generated entry evidence case {case}",
         );
     }
+    assert!(saw_length_mismatch);
+    assert!(saw_digest_mismatch);
+    assert!(saw_valid);
 }
