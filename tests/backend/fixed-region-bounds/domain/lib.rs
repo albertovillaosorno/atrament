@@ -162,6 +162,18 @@ fn reference_bounds_full_range(
     Ok(violations)
 }
 
+
+fn boundary_mask(violations: &[BoundaryViolation]) -> usize {
+    violations.iter().fold(0usize, |mask, violation| {
+        mask | match violation.edge {
+            BoundaryEdge::Bottom => 1,
+            BoundaryEdge::Left => 2,
+            BoundaryEdge::Right => 4,
+            BoundaryEdge::Top => 8,
+        }
+    })
+}
+
 #[test]
 fn full_range_rectangles_match_u128_reference_oracle() {
     const CASES: usize = 200_000;
@@ -207,6 +219,7 @@ fn full_range_rectangles_match_u128_reference_oracle() {
 fn small_rectangles_match_reference_bounds_oracle() {
     const CASES: usize = 20_000;
     let mut seed = 0x5eed_b0ad_2026_u64;
+    let mut seen_boundary_masks = [false; 16];
     for case in 0..CASES {
         let writable = rect(
             next_bounds_value(&mut seed) % 21,
@@ -222,12 +235,15 @@ fn small_rectangles_match_reference_bounds_oracle() {
         );
         let actual = check_bounds(writable, object)
             .expect("small coordinates cannot overflow");
+        let expected = reference_bounds(writable, object);
+        seen_boundary_masks[boundary_mask(&expected)] = true;
         assert_eq!(
             actual.violations,
-            reference_bounds(writable, object),
+            expected,
             "bounds oracle mismatch in generated case {case}",
         );
     }
+    assert!(seen_boundary_masks.into_iter().all(|seen| seen));
 }
 
 #[test]

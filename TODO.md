@@ -616,6 +616,10 @@ first-journey 6 mm bottom overflow is exercised directly. A 20,000-case
 deterministic rectangle oracle independently verifies crossed-edge combinations,
 stable edge order, and exact overflow amounts.
 
+That pure bounds corpus and the accepted-layout diagnostic projection corpus now
+both assert all 16 possible four-edge violation masks are represented, including
+the no-overflow case.
+
 A second 200,000-case oracle uses `u128` reference arithmetic over full-range
 `u64` rectangles to verify writable and object coordinate-overflow precedence
 plus exact surviving edge amounts.

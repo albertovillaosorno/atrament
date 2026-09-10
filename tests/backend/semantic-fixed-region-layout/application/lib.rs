@@ -230,6 +230,20 @@ const fn diagnostic_boundary(edge: BoundaryEdge) -> PhysicalBoundaryEdge {
     }
 }
 
+
+fn boundary_mask(
+    violations: &[atrament_fixed_region_bounds::BoundaryViolation],
+) -> usize {
+    violations.iter().fold(0usize, |mask, violation| {
+        mask | match violation.edge {
+            BoundaryEdge::Bottom => 1,
+            BoundaryEdge::Left => 2,
+            BoundaryEdge::Right => 4,
+            BoundaryEdge::Top => 8,
+        }
+    })
+}
+
 #[test]
 fn accepted_fixed_layout_diagnostics_match_bounds_oracle() {
     const CASES: usize = 20_000;
@@ -248,6 +262,7 @@ fn accepted_fixed_layout_diagnostics_match_bounds_oracle() {
         .expect("fixture writable region");
     let accepted = session.current().expect("accepted revision");
     let mut seed = 0x5eed_f1ed_2026_u64;
+    let mut seen_boundary_masks = [false; 16];
 
     for case in 0..CASES {
         let rectangle = rect(
@@ -258,6 +273,7 @@ fn accepted_fixed_layout_diagnostics_match_bounds_oracle() {
         );
         let expected =
             check_bounds(writable, rectangle).expect("small generated bounds");
+        seen_boundary_masks[boundary_mask(&expected.violations)] = true;
         let actual = validate_fixed_placement(
             accepted,
             placement(revision, page, object, rectangle),
@@ -328,6 +344,7 @@ fn accepted_fixed_layout_diagnostics_match_bounds_oracle() {
             ]);
         }
     }
+    assert!(seen_boundary_masks.into_iter().all(|seen| seen));
 }
 
 #[test]
