@@ -15,9 +15,12 @@ finding.
 
 `src/backend/handwriting-variation-quality-evidence/domain/lib.rs` owns only
 report completeness and canonical detected-axis projection. The existing
-`handwriting-variation` domain continues to own parameter envelopes and replay
-inputs; the new evidence boundary deliberately does not depend on it because a
-future statistical harness may compare richer rendered or sampled evidence.
+`handwriting-variation` domain continues to own parameter envelopes, inclusive
+sample admission, exact replay inputs and replay consistency, and complete
+sample-set structural validation. This evidence boundary deliberately does not
+depend on it because a future statistical harness may compare richer rendered
+or sampled evidence without turning structural replay checks into artifact
+detectors.
 
 ## Contract
 
