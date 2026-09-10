@@ -764,11 +764,12 @@ where
     if let Some(kind) = semantic_root_owned_kind(notebook, target) {
         return Some((descriptor(kind, notebook.id), None));
     }
-    semantic_page_identity_location(&notebook.pages, target)
+    semantic_page_identity_location(&notebook.pages, notebook.id, target)
 }
 
 fn semantic_page_identity_location<Identity>(
     pages: &[Page<Identity>],
+    notebook: Identity,
     target: Identity,
 ) -> Option<SemanticIdentityLocation<Identity>>
 where
@@ -777,7 +778,7 @@ where
     for page in pages {
         if page.id == target {
             return Some((
-                descriptor(SemanticIdentityKind::Page, page.id),
+                descriptor(SemanticIdentityKind::Page, notebook),
                 Some(page.id),
             ));
         }
