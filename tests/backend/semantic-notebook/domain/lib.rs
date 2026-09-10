@@ -912,6 +912,58 @@ fn logical_table_validator_matches_naive_occupancy_oracle() {
     assert!(saw_row_width);
 }
 
+fn compact_grid_row_shapes() -> Vec<Vec<(u32, u32)>> {
+    let cells = [(1, 1), (1, 2), (2, 1), (2, 2)];
+    let mut shapes = vec![vec![]];
+    for first in cells {
+        shapes.push(vec![first]);
+    }
+    for first in cells {
+        for second in cells {
+            shapes.push(vec![first, second]);
+        }
+    }
+    shapes
+}
+
+#[test]
+fn compact_table_grids_exhaustively_match_naive_occupancy_oracle() {
+    const EXPECTED_CASES: usize = 9_724;
+    let shapes = compact_grid_row_shapes();
+    let mut cases = 0usize;
+    for row_count in 0..=3usize {
+        let combinations = shapes.len().pow(
+            u32::try_from(row_count).expect("small exhaustive row count"),
+        );
+        for mut combination in 0..combinations {
+            let mut next_identity = 1u32;
+            let mut rows = Vec::with_capacity(row_count);
+            for _ in 0..row_count {
+                let shape = &shapes[combination % shapes.len()];
+                combination /= shapes.len();
+                let mut cells = Vec::with_capacity(shape.len());
+                for &(columns, span_rows) in shape {
+                    cells.push(grid_cell(next_identity, columns, span_rows));
+                    next_identity = next_identity.saturating_add(1);
+                }
+                rows.push(grid_row(next_identity, cells));
+                next_identity = next_identity.saturating_add(1);
+            }
+            let table = Table {
+                id: next_identity,
+                rows,
+            };
+            assert_eq!(
+                table.validate_grid(),
+                grid_oracle_result(&table),
+                "compact table grid mismatch in exhaustive case {cases}",
+            );
+            cases = cases.saturating_add(1);
+        }
+    }
+    assert_eq!(cases, EXPECTED_CASES);
+}
+
 #[test]
 fn maximum_logical_colspan_stays_compact() {
     let maximum = NonZeroU32::MAX.get();

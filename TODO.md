@@ -795,8 +795,11 @@ spans, and candidate acceptance rejects horizontal conflicts, vertical overflow,
 or rows that leave logical columns uncovered before accepted identity
 allocation. A 20,000-case occupancy oracle now matches the validator's exact
 first typed failure and semantic owner, not only valid/invalid classification.
-Accepted promotion preserves valid spans exactly, and validation keeps logical
-coverage compact instead of allocating per spanned column.
+
+An exhaustive 9,724-case compact corpus additionally covers zero through three
+rows, zero through two cells per row, and every one- or two-row/column span
+combination. Accepted promotion preserves valid spans exactly, and validation
+keeps logical coverage compact instead of allocating per spanned column.
 
 The occupancy generator also asserts every row/cell-count bucket, every 1–3
 row/column span, valid grids, and all three typed grid failure classes are
