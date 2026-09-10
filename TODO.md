@@ -1785,6 +1785,13 @@ and invalid payloads vary all six version dimensions, diagnostic namespace and
 completeness, item count, code, dimension, and expected version without enabling
 compatibility on malformed values.
 
+
+Browser draft resource-limit classification now adds a deterministic 4,096-case
+corpus against an independent fail-closed oracle. Generated error kinds,
+diagnostic versions and completeness, item counts, and stable codes must
+preserve the known resource-limit condition without accepting malformed
+metadata.
+
 ### TODO - Complete visual regression coverage
 
 Compare semantic layout, vector topology, layer composition, final pixels,

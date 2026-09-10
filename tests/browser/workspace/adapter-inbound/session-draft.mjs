@@ -118,3 +118,83 @@ test("incomplete draft diagnostics still preserve known resource limit", () => {
         true,
     );
 });
+
+function referenceResourceLimit(value) {
+    if (
+        typeof value !== "object"
+        || value === null
+        || Array.isArray(value)
+        || value.error !== "resource_limit"
+    ) {
+        return false;
+    }
+    const diagnostics = value.diagnostics;
+    if (
+        typeof diagnostics !== "object"
+        || diagnostics === null
+        || Array.isArray(diagnostics)
+        || diagnostics.version !== "atrament.diagnostic/1"
+        || !["complete", "incomplete"].includes(diagnostics.completeness)
+        || !Array.isArray(diagnostics.items)
+        || diagnostics.items.length !== 1
+    ) {
+        return false;
+    }
+    const item = diagnostics.items[0];
+    return typeof item === "object"
+        && item !== null
+        && !Array.isArray(item)
+        && item.code === "atrament.session-draft.resource-limit";
+}
+
+function nextDraftMutation(state) {
+    return (Math.imul(state, 22_695_477) + 1) >>> 0;
+}
+
+test("generated resource-limit payloads match fail-closed reference", () => {
+    const errors = ["resource_limit", "invalid_request", "", null, 7];
+    const versions = [
+        "atrament.diagnostic/1", "atrament.diagnostic/0", "", null,
+    ];
+    const completeness = ["complete", "incomplete", "unknown", null];
+    const codes = [
+        "atrament.session-draft.resource-limit",
+        "atrament.handshake.version-mismatch",
+        "unknown",
+        "",
+        null,
+    ];
+    let state = 0x5eed_d2af;
+    for (let caseIndex = 0; caseIndex < 4_096; caseIndex += 1) {
+        state = nextDraftMutation(state);
+        const error = errors[state % errors.length];
+        state = nextDraftMutation(state);
+        const version = versions[state % versions.length];
+        state = nextDraftMutation(state);
+        const completenessValue = completeness[state % completeness.length];
+        state = nextDraftMutation(state);
+        const code = codes[state % codes.length];
+        state = nextDraftMutation(state);
+        const itemMode = state % 4;
+        const items = itemMode === 0
+            ? [{ code }]
+            : itemMode === 1
+                ? []
+                : itemMode === 2
+                    ? [{ code }, { code }]
+                    : [null];
+        const payload = {
+            error,
+            diagnostics: {
+                version,
+                completeness: completenessValue,
+                items,
+            },
+        };
+        assert.equal(
+            isResourceLimit(payload),
+            referenceResourceLimit(payload),
+            `generated resource-limit case ${caseIndex}`,
+        );
+    }
+});
