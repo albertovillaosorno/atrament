@@ -1114,13 +1114,24 @@ fn multi_unit_owner_admission_matches_reference_oracle() {
     let alphabet = [blocks[0], blocks[1], blocks[2], outsider];
     let accepted = session.current().expect("accepted revision");
     let mut seed = 0x5eed_0a11_2026_u64;
+    let mut seen_owner_counts = [false; 9];
+    let mut seen_owner_identities = [false; 4];
+    let mut seen_group_sizes = [false; 3];
+    let mut seen_policies = [false; 2];
+    let mut saw_empty_unit = false;
+    let mut saw_success = false;
+    let mut saw_incomplete = false;
+    let mut saw_sequence_mismatch = false;
+    let mut saw_foreign_owner = false;
 
     for case in 0..CASES {
         let owner_count = (next_owner_oracle_value(&mut seed) % 9) as usize;
+        seen_owner_counts[owner_count] = true;
         let owners = (0..owner_count)
             .map(|_| {
                 let generated = next_owner_oracle_value(&mut seed) as usize;
                 let index = generated % alphabet.len();
+                seen_owner_identities[index] = true;
                 alphabet[index]
             })
             .collect::<Vec<_>>();
@@ -1128,6 +1139,7 @@ fn multi_unit_owner_admission_matches_reference_oracle() {
         let mut offset = 0usize;
         while offset < owners.len() {
             if next_owner_oracle_value(&mut seed).is_multiple_of(5) {
+                saw_empty_unit = true;
                 units.push(MeasuredFlowUnit {
                     fragments: vec![],
                     policy: FlowUnitPolicy::Independent,
@@ -1138,6 +1150,7 @@ fn multi_unit_owner_admission_matches_reference_oracle() {
                 remaining,
                 (next_owner_oracle_value(&mut seed) % 3 + 1) as usize,
             );
+            seen_group_sizes[take - 1] = true;
             let fragments = owners[offset..offset + take]
                 .iter()
                 .map(|owner| MeasuredFragment {
@@ -1146,7 +1159,10 @@ fn multi_unit_owner_admission_matches_reference_oracle() {
                     width: Length::from_micrometres(1),
                 })
                 .collect();
-            let policy = if next_owner_oracle_value(&mut seed) & 1 == 0 {
+            let policy_index =
+                (next_owner_oracle_value(&mut seed) & 1) as usize;
+            seen_policies[policy_index] = true;
+            let policy = if policy_index == 0 {
                 FlowUnitPolicy::Independent
             } else {
                 FlowUnitPolicy::KeepTogetherWhenPossible
@@ -1171,12 +1187,36 @@ fn multi_unit_owner_admission_matches_reference_oracle() {
         );
         let actual = paginate_revision(accepted, &measured);
         match expected {
-            Ok(()) => assert!(actual.is_ok(), "generated case {case}"),
+            Ok(()) => {
+                saw_success = true;
+                assert!(actual.is_ok(), "generated case {case}");
+            },
             Err(reason) => {
+                match reason {
+                    SemanticPaginationError::MeasurementIncomplete { .. } => {
+                        saw_incomplete = true;
+                    },
+                    SemanticPaginationError::MeasurementBlockSequenceMismatch {
+                        ..
+                    } => saw_sequence_mismatch = true,
+                    SemanticPaginationError::MeasuredBlockNotInFlow { .. } => {
+                        saw_foreign_owner = true;
+                    },
+                    _ => panic!("unexpected reference outcome in case {case}"),
+                }
                 assert_eq!(actual, Err(reason), "generated case {case}");
             },
         }
     }
+    assert!(seen_owner_counts.into_iter().all(|seen| seen));
+    assert!(seen_owner_identities.into_iter().all(|seen| seen));
+    assert!(seen_group_sizes.into_iter().all(|seen| seen));
+    assert!(seen_policies.into_iter().all(|seen| seen));
+    assert!(saw_empty_unit);
+    assert!(saw_success);
+    assert!(saw_incomplete);
+    assert!(saw_sequence_mismatch);
+    assert!(saw_foreign_owner);
 }
 
 #[test]

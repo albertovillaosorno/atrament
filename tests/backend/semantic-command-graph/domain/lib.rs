@@ -803,8 +803,16 @@ fn reference_closed_selection(
 fn valid_dag_selection_apis_match_reference_oracle() {
     const CASES: usize = 20_000;
     let mut seed = 0x05ee_dda6_2026_u64;
+    let mut seen_node_counts = [false; 9];
+    let mut saw_duplicate_edge = false;
+    let mut saw_empty_selection = false;
+    let mut saw_full_selection = false;
+    let mut saw_partial_selection = false;
+    let mut saw_missing_requirements = false;
+    let mut saw_closed_selection = false;
     for case in 0..CASES {
         let node_count = (next_graph_oracle_value(&mut seed) % 9) as u32;
+        seen_node_counts[node_count as usize] = true;
         let mut nodes = Vec::with_capacity(node_count as usize);
         for id in 0..node_count {
             let mut dependencies = Vec::new();
@@ -813,6 +821,7 @@ fn valid_dag_selection_apis_match_reference_oracle() {
                     dependencies.push(dependency);
                     if next_graph_oracle_value(&mut seed).is_multiple_of(5) {
                         dependencies.push(dependency);
+                        saw_duplicate_edge = true;
                     }
                 }
             }
@@ -825,8 +834,20 @@ fn valid_dag_selection_apis_match_reference_oracle() {
                     .then_some(node.id)
             })
             .collect::<BTreeSet<_>>();
+        if selected.is_empty() {
+            saw_empty_selection = true;
+        } else if selected.len() == nodes.len() {
+            saw_full_selection = true;
+        } else {
+            saw_partial_selection = true;
+        }
         let (required, expected_missing) =
             reference_dependency_requirements(&nodes, &selected);
+        if expected_missing.is_empty() {
+            saw_closed_selection = true;
+        } else {
+            saw_missing_requirements = true;
+        }
         let expected_summary = DependencySelectionSummary {
             missing_dependency_edges: expected_missing.len(),
             required_commands: required.len(),
@@ -893,4 +914,11 @@ fn valid_dag_selection_apis_match_reference_oracle() {
             );
         }
     }
+    assert!(seen_node_counts.into_iter().all(|seen| seen));
+    assert!(saw_duplicate_edge);
+    assert!(saw_empty_selection);
+    assert!(saw_full_selection);
+    assert!(saw_partial_selection);
+    assert!(saw_missing_requirements);
+    assert!(saw_closed_selection);
 }

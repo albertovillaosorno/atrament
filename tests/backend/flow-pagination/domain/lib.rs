@@ -121,7 +121,7 @@ fn next_case_value(seed: &mut u64) -> u64 {
     *seed = seed
         .wrapping_mul(6_364_136_223_846_793_005)
         .wrapping_add(1_442_695_040_888_963_407);
-    *seed
+    *seed >> 32
 }
 
 fn reference_mixed_units(
@@ -209,8 +209,15 @@ fn reference_mixed_units(
 fn mixed_policy_pagination_matches_reference_oracle() {
     const CASES: usize = 10_000;
     let mut seed = 0x5eed_f10f_u64;
+    let mut seen_page_counts = [false; 4];
+    let mut seen_unit_counts = [false; 4];
+    let mut seen_policies = [false; 2];
+    let mut seen_fragment_counts = [false; 4];
+    let mut saw_success = false;
+    let mut saw_failure = false;
     for case in 0..CASES {
         let page_count = (next_case_value(&mut seed) % 4 + 1) as usize;
+        seen_page_counts[page_count - 1] = true;
         let mut pages = Vec::with_capacity(page_count);
         for index in 0..page_count {
             let width = next_case_value(&mut seed) % 6 + 1;
@@ -224,15 +231,19 @@ fn mixed_policy_pagination_matches_reference_oracle() {
         }
 
         let unit_count = (next_case_value(&mut seed) % 4 + 1) as usize;
+        seen_unit_counts[unit_count - 1] = true;
         let mut units = Vec::with_capacity(unit_count);
         let mut owner = 1u64;
         for _ in 0..unit_count {
-            let policy = if next_case_value(&mut seed) & 1 == 0 {
+            let policy_index = (next_case_value(&mut seed) & 1) as usize;
+            seen_policies[policy_index] = true;
+            let policy = if policy_index == 0 {
                 FlowUnitPolicy::Independent
             } else {
                 FlowUnitPolicy::KeepTogetherWhenPossible
             };
             let fragment_count = (next_case_value(&mut seed) % 4) as usize;
+            seen_fragment_counts[fragment_count] = true;
             let mut fragments = Vec::with_capacity(fragment_count);
             for _ in 0..fragment_count {
                 fragments.push(fragment(
@@ -247,8 +258,19 @@ fn mixed_policy_pagination_matches_reference_oracle() {
 
         let actual = paginate(&pages, &units).map(|plan| plan.placements);
         let expected = reference_mixed_units(&pages, &units);
+        if expected.is_ok() {
+            saw_success = true;
+        } else {
+            saw_failure = true;
+        }
         assert_eq!(actual, expected, "generated case {case}");
     }
+    assert!(seen_page_counts.into_iter().all(|seen| seen));
+    assert!(seen_unit_counts.into_iter().all(|seen| seen));
+    assert!(seen_policies.into_iter().all(|seen| seen));
+    assert!(seen_fragment_counts.into_iter().all(|seen| seen));
+    assert!(saw_success);
+    assert!(saw_failure);
 }
 
 #[test]

@@ -289,6 +289,8 @@ command-ID selections can report their complete transitive omitted dependency
 requirements without silently changing the caller's selection. A 20,000-case
 valid-DAG oracle cross-checks exact graph size, dependency closure, omitted-edge
 requirements, summaries, bounded reporting, and closed-selection results.
+It also asserts coverage of every generated node-count bucket, duplicate edges,
+empty/full/partial selections, and both closed and missing-requirement outcomes.
 
 Session-level selection analysis binds those requirements to capability behavior
 and the exact accepted base revision, but does not construct a replacement
@@ -556,6 +558,11 @@ cases, including nonzero current-page remainder and heterogeneous page skips.
 Another 20,341 owner-sequence cases cover complete, incomplete, repeated,
 reordered, and out-of-flow semantic measurements, including owner runs split
 across empty, independent, and keep-together measurement units.
+
+Generated pagination oracles now assert their page/unit counts, both policies,
+fragment and owner grouping, owner identities, and expected success/failure
+classes; the mixed-policy generator uses high LCG bits so low-bit cycling cannot
+collapse those advertised branches.
 
 Empty measured flows now avoid unused page-profile authority entirely. Nonempty
 semantic pagination indexes page profiles once per call while preserving
