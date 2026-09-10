@@ -495,6 +495,9 @@ case deterministic oracle verifies repeated-mark counts, first and last anchors,
 and full rule spans across dotted, ruled, and squared regions. A second 20,000-
 case oracle verifies signed ruler-sample span and error-bound classification.
 
+Those generated geometry oracles assert every paper pattern, every ruler result
+class, both sheet orientations, and all four binding edges are actually reached.
+
 Accepted page profiles own the maximum ruler-error envelope, rounded or sharp
 join treatment, and mark layer.
 

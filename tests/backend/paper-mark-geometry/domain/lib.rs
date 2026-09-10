@@ -130,6 +130,7 @@ fn assert_axis_series(
 fn repeated_marks_match_compact_series_reference_oracle() {
     const CASES: usize = 20_000;
     let mut seed = 0x5eed_6a1d_2026_u64;
+    let mut seen_patterns = [false; 3];
     for case in 0..CASES {
         let x = next_mark_value(&mut seed) % 1_000;
         let y = next_mark_value(&mut seed) % 1_000;
@@ -143,7 +144,9 @@ fn repeated_marks_match_compact_series_reference_oracle() {
             y: Length::from_micrometres(y),
         };
         let spacing_length = Length::from_micrometres(spacing);
-        match next_mark_value(&mut seed) % 3 {
+        let pattern_index = (next_mark_value(&mut seed) % 3) as usize;
+        seen_patterns[pattern_index] = true;
+        match pattern_index {
             0 => {
                 let PaperMarkGeometry::Dotted { horizontal, vertical } =
                     compile_nominal_marks(
@@ -206,12 +209,16 @@ fn repeated_marks_match_compact_series_reference_oracle() {
             },
         }
     }
+    assert!(seen_patterns.into_iter().all(|seen| seen));
 }
 
 #[test]
 fn ruler_samples_match_bounded_reference_oracle() {
     const CASES: usize = 20_000;
     let mut seed = 0x5eed_7a1e_2026_u64;
+    let mut saw_outside_span = false;
+    let mut saw_error_bound = false;
+    let mut saw_valid = false;
     for case in 0..CASES {
         let maximum = next_mark_value(&mut seed) % 501;
         let line_length = next_mark_value(&mut seed) % 1_001;
@@ -228,10 +235,13 @@ fn ruler_samples_match_bounded_reference_oracle() {
             maximum_ruler_error: Length::from_micrometres(maximum),
         };
         let expected = if along > line_length {
+            saw_outside_span = true;
             Err(RulerSampleError::OutsideSpan)
         } else if signed.unsigned_abs() > maximum {
+            saw_error_bound = true;
             Err(RulerSampleError::ErrorBoundExceeded)
         } else {
+            saw_valid = true;
             Ok(sample)
         };
         assert_eq!(
@@ -244,6 +254,9 @@ fn ruler_samples_match_bounded_reference_oracle() {
             "ruler oracle mismatch in generated case {case}",
         );
     }
+    assert!(saw_outside_span);
+    assert!(saw_error_bound);
+    assert!(saw_valid);
 }
 
 #[test]

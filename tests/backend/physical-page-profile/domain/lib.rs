@@ -363,14 +363,20 @@ fn mixed_profile_failures_match_independent_precedence_oracle() {
 fn valid_profiles_match_writable_region_reference_oracle() {
     const CASES: usize = 20_000;
     let mut seed = 0x5eed_9a6e_2026_u64;
+    let mut seen_binding_edges = [false; 4];
+    let mut seen_orientations = [false; 2];
     for case in 0..CASES {
-        let binding_edge = match next_profile_value(&mut seed) % 4 {
+        let binding_index = (next_profile_value(&mut seed) % 4) as usize;
+        seen_binding_edges[binding_index] = true;
+        let binding_edge = match binding_index {
             0 => BindingEdge::Bottom,
             1 => BindingEdge::Left,
             2 => BindingEdge::Right,
             _ => BindingEdge::Top,
         };
-        let orientation = if next_profile_value(&mut seed) & 1 == 0 {
+        let orientation_index = (next_profile_value(&mut seed) & 1) as usize;
+        seen_orientations[orientation_index] = true;
+        let orientation = if orientation_index == 0 {
             Orientation::Portrait
         } else {
             Orientation::Landscape
@@ -457,6 +463,8 @@ fn valid_profiles_match_writable_region_reference_oracle() {
             "generated case {case}",
         );
     }
+    assert!(seen_binding_edges.into_iter().all(|seen| seen));
+    assert!(seen_orientations.into_iter().all(|seen| seen));
 }
 
 #[test]
