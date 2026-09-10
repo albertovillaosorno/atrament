@@ -128,3 +128,13 @@ fn mismatches_remain_independent_and_canonically_ordered() {
         ]),
     );
 }
+
+#[test]
+fn every_mismatched_axis_is_returned_in_canonical_order() {
+    let mut evidence = complete_evidence();
+    for item in &mut evidence {
+        item.comparison = RenderRegressionComparison::Mismatch;
+    }
+    evidence.reverse();
+    assert_eq!(render_regression_mismatches(&evidence), Ok(AXES.to_vec()));
+}

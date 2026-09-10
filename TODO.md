@@ -1885,6 +1885,9 @@ one-duplicate-at-a-time matrices prove every axis independently participates in
 both completeness checks. Axis-specific comparators, pixel tolerances, golden
 artifact storage, renderer output, and visual acceptance policy remain open.
 
+Reversed all-mismatch evidence also proves every axis is surfaced in canonical
+mismatch order.
+
 ### TODO - Complete accessibility and keyboard operation
 
 Make both editors, page navigation, diagnostics, drag alternatives, prompt copy,
