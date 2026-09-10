@@ -240,6 +240,41 @@ pub enum CommandGraphError<Identity> {
     },
 }
 
+/// Result of validating one complete command graph.
+pub type CommandGraphValidationResult<Identity> =
+    Result<(), CommandGraphError<Identity>>;
+
+/// Complete omitted-dependency requirement report result.
+pub type DependencyRequirementsResult<Identity> = Result<
+    Vec<MissingDependencyRequirement<Identity>>,
+    DependencyRequirementsError<Identity>,
+>;
+
+/// Caller-bounded omitted-dependency requirement report result.
+pub type BoundedDependencyRequirementsResult<Identity> = Result<
+    Vec<MissingDependencyRequirement<Identity>>,
+    BoundedDependencyRequirementsError<Identity>,
+>;
+
+/// Dependency-selection summary result.
+pub type DependencySummaryResult<Identity> =
+    Result<DependencySelectionSummary, DependencySummaryError<Identity>>;
+
+/// Result of validating one dependency-closed selection.
+pub type DependencySelectionValidationResult<Identity> =
+    Result<(), DependencySelectionError<Identity>>;
+
+type CommandPositions<'graph, Identity> = BTreeMap<&'graph Identity, usize>;
+type CommandPositionsResult<'graph, Identity> =
+    Result<CommandPositions<'graph, Identity>, CommandGraphError<Identity>>;
+type ForwardDependencyResult<Identity> =
+    Result<Option<(Identity, Identity)>, CommandGraphError<Identity>>;
+type SelectionStateResult<'graph, Identity> = Result<
+    Option<DependencySelectionState<'graph, Identity>>,
+    DependencyRequirementsError<Identity>,
+>;
+
+
 struct DependencySelectionState<'graph, Identity> {
     positions: BTreeMap<&'graph Identity, usize>,
     required_positions: Vec<bool>,
@@ -315,7 +350,7 @@ where
 /// cycles.
 pub fn validate_command_graph<Node>(
     nodes: &[Node],
-) -> Result<(), CommandGraphError<Node::Identity>>
+) -> CommandGraphValidationResult<Node::Identity>
 where
     Node: CommandDependencyNode,
     Node::Identity: Clone,
@@ -323,9 +358,9 @@ where
     validated_command_positions(nodes).map(|_positions| ())
 }
 
-fn validated_command_positions<Node>(
+fn collect_command_positions<Node>(
     nodes: &[Node],
-) -> Result<BTreeMap<&Node::Identity, usize>, CommandGraphError<Node::Identity>>
+) -> CommandPositionsResult<'_, Node::Identity>
 where
     Node: CommandDependencyNode,
     Node::Identity: Clone,
@@ -338,7 +373,17 @@ where
             });
         }
     }
+    Ok(positions)
+}
 
+fn first_forward_dependency<Node>(
+    nodes: &[Node],
+    positions: &CommandPositions<'_, Node::Identity>,
+) -> ForwardDependencyResult<Node::Identity>
+where
+    Node: CommandDependencyNode,
+    Node::Identity: Clone,
+{
     let mut first_forward = None;
     for (position, node) in nodes.iter().enumerate() {
         for dependency in node.dependencies() {
@@ -359,10 +404,16 @@ where
             }
         }
     }
-    let Some((forward_command, forward_dependency)) = first_forward else {
-        return Ok(positions);
-    };
+    Ok(first_forward)
+}
 
+fn command_graph_has_cycle<Node>(
+    nodes: &[Node],
+    positions: &CommandPositions<'_, Node::Identity>,
+) -> bool
+where
+    Node: CommandDependencyNode,
+{
     let mut indegrees = vec![0usize; nodes.len()];
     let mut dependents = vec![Vec::new(); nodes.len()];
     for (position, node) in nodes.iter().enumerate() {
@@ -380,13 +431,11 @@ where
             }
         }
     }
-
-    let mut ready = VecDeque::new();
-    for (position, degree) in indegrees.iter().enumerate() {
-        if *degree == 0 {
-            ready.push_back(position);
-        }
-    }
+    let mut ready = indegrees
+        .iter()
+        .enumerate()
+        .filter_map(|(position, degree)| (*degree == 0).then_some(position))
+        .collect::<VecDeque<_>>();
     let mut processed = 0usize;
     while let Some(position) = ready.pop_front() {
         processed = processed.saturating_add(1);
@@ -403,22 +452,35 @@ where
             }
         }
     }
-    if processed != nodes.len() {
+    processed != nodes.len()
+}
+
+fn validated_command_positions<Node>(
+    nodes: &[Node],
+) -> CommandPositionsResult<'_, Node::Identity>
+where
+    Node: CommandDependencyNode,
+    Node::Identity: Clone,
+{
+    let positions = collect_command_positions(nodes)?;
+    let Some((command, dependency)) =
+        first_forward_dependency(nodes, &positions)?
+    else {
+        return Ok(positions);
+    };
+    if command_graph_has_cycle(nodes, &positions) {
         return Err(CommandGraphError::Cycle);
     }
     Err(CommandGraphError::DependencyAfterCommand {
-        command: forward_command,
-        dependency: forward_dependency,
+        command,
+        dependency,
     })
 }
 
 fn dependency_selection_state<'graph, Node>(
     nodes: &'graph [Node],
     selected: &BTreeSet<Node::Identity>,
-) -> Result<
-    Option<DependencySelectionState<'graph, Node::Identity>>,
-    DependencyRequirementsError<Node::Identity>,
->
+) -> SelectionStateResult<'graph, Node::Identity>
 where
     Node: CommandDependencyNode,
     Node::Identity: Clone,
@@ -566,10 +628,7 @@ pub fn dependency_selection_requirements_bounded<Node>(
     nodes: &[Node],
     selected: &BTreeSet<Node::Identity>,
     maximum_missing_edges: usize,
-) -> Result<
-    Vec<MissingDependencyRequirement<Node::Identity>>,
-    BoundedDependencyRequirementsError<Node::Identity>,
->
+) -> BoundedDependencyRequirementsResult<Node::Identity>
 where
     Node: CommandDependencyNode,
     Node::Identity: Clone,
@@ -612,7 +671,7 @@ where
 pub fn dependency_selection_summary<Node>(
     nodes: &[Node],
     selected: &BTreeSet<Node::Identity>,
-) -> Result<DependencySelectionSummary, DependencySummaryError<Node::Identity>>
+) -> DependencySummaryResult<Node::Identity>
 where
     Node: CommandDependencyNode,
     Node::Identity: Clone,
@@ -664,10 +723,7 @@ where
 pub fn dependency_selection_requirements<Node>(
     nodes: &[Node],
     selected: &BTreeSet<Node::Identity>,
-) -> Result<
-    Vec<MissingDependencyRequirement<Node::Identity>>,
-    DependencyRequirementsError<Node::Identity>,
->
+) -> DependencyRequirementsResult<Node::Identity>
 where
     Node: CommandDependencyNode,
     Node::Identity: Clone,
@@ -691,7 +747,7 @@ where
 pub fn validate_dependency_closed_selection<Node>(
     nodes: &[Node],
     selected: &BTreeSet<Node::Identity>,
-) -> Result<(), DependencySelectionError<Node::Identity>>
+) -> DependencySelectionValidationResult<Node::Identity>
 where
     Node: CommandDependencyNode,
     Node::Identity: Clone,
