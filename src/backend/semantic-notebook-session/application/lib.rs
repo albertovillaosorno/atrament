@@ -6418,8 +6418,21 @@ fn candidate_graph_blocks_frame<'candidate>(
     graph.register(block.id, CandidateReferenceKind::Semantic)?;
     graph.reference(block.provenance, CandidateReferenceKind::Provenance);
     graph.reference(block.style, CandidateReferenceKind::Style);
-    let child_depth = depth.saturating_add(1);
-    match &block.content {
+    candidate_graph_block_content(
+        &block.content,
+        depth.saturating_add(1),
+        graph,
+        stack,
+    )
+}
+
+fn candidate_graph_block_content<'candidate>(
+    content: &'candidate BlockContent<CandidateIdentity>,
+    child_depth: usize,
+    graph: &mut CandidateGraph,
+    stack: &mut Vec<CandidateGraphFrame<'candidate>>,
+) -> Result<(), CandidateGraphError> {
+    match content {
         BlockContent::Callout(children) | BlockContent::Freeform(children) => {
             if !children.is_empty() {
                 stack.push(CandidateGraphFrame::Blocks {
@@ -6436,12 +6449,8 @@ fn candidate_graph_blocks_frame<'candidate>(
         | BlockContent::SourceNote(spans)
         | BlockContent::Heading(spans)
         | BlockContent::MarginNote(spans)
-        | BlockContent::Paragraph(spans) => {
-            candidate_spans(spans, graph)?;
-        },
-        BlockContent::Figure(figure) => {
-            candidate_figure(figure, graph)?;
-        },
+        | BlockContent::Paragraph(spans) => candidate_spans(spans, graph)?,
+        BlockContent::Figure(figure) => candidate_figure(figure, graph)?,
         BlockContent::List(list) => {
             graph.register(list.id, CandidateReferenceKind::Semantic)?;
             if !list.items.is_empty() {
@@ -6452,19 +6461,7 @@ fn candidate_graph_blocks_frame<'candidate>(
             }
         },
         BlockContent::Mathematics(formula) => {
-            let analyzed =
-                analyze(&formula.source, formula.mode).map_err(|reason| {
-                    CandidateGraphError::InvalidMathematics {
-                        candidate: formula.id,
-                        reason,
-                    }
-                })?;
-            if !analyzed.is_supported() {
-                return Err(CandidateGraphError::UnsupportedMathematics {
-                    candidate: formula.id,
-                });
-            }
-            graph.register(formula.id, CandidateReferenceKind::Semantic)?;
+            candidate_formula(formula, graph)?;
         },
         BlockContent::Rule | BlockContent::Unresolved(_) => {},
         BlockContent::Table(table) => {
@@ -6570,6 +6567,24 @@ fn candidate_graph_table_rows_frame<'candidate>(
         });
     }
     Ok(())
+}
+
+fn candidate_formula(
+    formula: &Formula<CandidateIdentity>,
+    graph: &mut CandidateGraph,
+) -> Result<(), CandidateGraphError> {
+    let analyzed = analyze(&formula.source, formula.mode).map_err(|reason| {
+        CandidateGraphError::InvalidMathematics {
+            candidate: formula.id,
+            reason,
+        }
+    })?;
+    if !analyzed.is_supported() {
+        return Err(CandidateGraphError::UnsupportedMathematics {
+            candidate: formula.id,
+        });
+    }
+    graph.register(formula.id, CandidateReferenceKind::Semantic)
 }
 
 fn candidate_figure(
