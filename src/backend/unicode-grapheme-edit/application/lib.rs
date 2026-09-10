@@ -107,6 +107,20 @@ pub enum GraphemeRangeError {
     },
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct AnchoredBoundaries {
+    final_byte: usize,
+    first_byte: usize,
+    total: usize,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct ResolvedRange {
+    end: usize,
+    end_byte: usize,
+    start_byte: usize,
+}
+
 /// Replace one grapheme range while preserving all unaffected authored bytes.
 ///
 /// No Unicode normalization is performed. The replacement is copied exactly as
@@ -122,6 +136,31 @@ pub fn replace_grapheme_range(
     range: GraphemeRange,
     replacement: &str,
 ) -> Result<String, GraphemeRangeError> {
+    let anchors = provider_anchors(boundaries, source)?;
+    let resolved = resolve_range(boundaries, source, range, anchors)?;
+    let prefix = source.get(..resolved.start_byte).ok_or(
+        GraphemeRangeError::InvalidBoundary {
+            byte_offset: resolved.start_byte,
+            grapheme_index: range.start,
+        },
+    )?;
+    let suffix = source.get(resolved.end_byte..).ok_or(
+        GraphemeRangeError::InvalidBoundary {
+            byte_offset: resolved.end_byte,
+            grapheme_index: resolved.end,
+        },
+    )?;
+    let mut output = String::new();
+    output.push_str(prefix);
+    output.push_str(replacement);
+    output.push_str(suffix);
+    Ok(output)
+}
+
+fn provider_anchors(
+    boundaries: &dyn GraphemeBoundaryProvider,
+    source: &str,
+) -> Result<AnchoredBoundaries, GraphemeRangeError> {
     let total = boundaries.grapheme_count(source);
     let first_byte = provider_boundary(boundaries, source, 0)?;
     if first_byte != 0 {
@@ -139,9 +178,22 @@ pub fn replace_grapheme_range(
             observed: final_byte,
         });
     }
-    if range.start > total {
+    Ok(AnchoredBoundaries {
+        final_byte,
+        first_byte,
+        total,
+    })
+}
+
+fn resolve_range(
+    boundaries: &dyn GraphemeBoundaryProvider,
+    source: &str,
+    range: GraphemeRange,
+    anchors: AnchoredBoundaries,
+) -> Result<ResolvedRange, GraphemeRangeError> {
+    if range.start > anchors.total {
         return Err(GraphemeRangeError::StartOutOfBounds {
-            grapheme_count: total,
+            grapheme_count: anchors.total,
             start: range.start,
         });
     }
@@ -152,23 +204,23 @@ pub fn replace_grapheme_range(
             count: range.count,
             start: range.start,
         })?;
-    if end > total {
+    if end > anchors.total {
         return Err(GraphemeRangeError::EndOutOfBounds {
             end,
-            grapheme_count: total,
+            grapheme_count: anchors.total,
         });
     }
     let start_byte = if range.start == 0 {
-        first_byte
-    } else if range.start == total {
-        final_byte
+        anchors.first_byte
+    } else if range.start == anchors.total {
+        anchors.final_byte
     } else {
         provider_boundary(boundaries, source, range.start)?
     };
     let end_byte = if end == range.start {
         start_byte
-    } else if end == total {
-        final_byte
+    } else if end == anchors.total {
+        anchors.final_byte
     } else {
         provider_boundary(boundaries, source, end)?
     };
@@ -184,23 +236,11 @@ pub fn replace_grapheme_range(
             start_byte,
         });
     }
-    let prefix = source.get(..start_byte).ok_or(
-        GraphemeRangeError::InvalidBoundary {
-            byte_offset: start_byte,
-            grapheme_index: range.start,
-        },
-    )?;
-    let suffix = source.get(end_byte..).ok_or(
-        GraphemeRangeError::InvalidBoundary {
-            byte_offset: end_byte,
-            grapheme_index: end,
-        },
-    )?;
-    let mut output = String::new();
-    output.push_str(prefix);
-    output.push_str(replacement);
-    output.push_str(suffix);
-    Ok(output)
+    Ok(ResolvedRange {
+        end,
+        end_byte,
+        start_byte,
+    })
 }
 
 fn provider_boundary(
