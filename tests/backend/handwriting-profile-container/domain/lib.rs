@@ -524,6 +524,12 @@ fn generated_manifest_values_match_reference_admission_oracle() {
     let mut seen_entry_counts = [false; 5];
     let mut seen_paths = [false; 11];
     let mut seen_media_types = [false; 4];
+    let mut saw_valid = false;
+    let mut saw_duplicate_path = false;
+    let mut saw_empty_media_type = false;
+    let mut saw_invalid_path = false;
+    let mut saw_unsupported_version = false;
+    let mut saw_unsupported_feature = false;
     for case in 0..CASES {
         let version_index =
             next_inventory_value(&mut seed) as usize % versions.len();
@@ -566,6 +572,24 @@ fn generated_manifest_values_match_reference_admission_oracle() {
                 .collect(),
         };
         let expected = reference_manifest(&value, &supported);
+        match &expected {
+            Ok(()) => saw_valid = true,
+            Err(ProfileManifestError::DuplicateEntryPath { .. }) => {
+                saw_duplicate_path = true;
+            },
+            Err(ProfileManifestError::EmptyMediaType { .. }) => {
+                saw_empty_media_type = true;
+            },
+            Err(ProfileManifestError::InvalidEntryPath { .. }) => {
+                saw_invalid_path = true;
+            },
+            Err(ProfileManifestError::UnsupportedContainerVersion { .. }) => {
+                saw_unsupported_version = true;
+            },
+            Err(ProfileManifestError::UnsupportedRequiredFeature { .. }) => {
+                saw_unsupported_feature = true;
+            },
+        }
         assert_eq!(
             validate_profile_manifest(&value, &supported),
             expected,
@@ -577,6 +601,12 @@ fn generated_manifest_values_match_reference_admission_oracle() {
     assert!(seen_entry_counts.into_iter().all(|seen| seen));
     assert!(seen_paths.into_iter().all(|seen| seen));
     assert!(seen_media_types.into_iter().all(|seen| seen));
+    assert!(saw_valid);
+    assert!(saw_duplicate_path);
+    assert!(saw_empty_media_type);
+    assert!(saw_invalid_path);
+    assert!(saw_unsupported_version);
+    assert!(saw_unsupported_feature);
 }
 
 #[test]

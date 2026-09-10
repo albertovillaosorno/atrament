@@ -1760,6 +1760,9 @@ reference corpus. Generated values combine current/prior/future version strings,
 supported and unsupported required-feature sets, safe and unsafe entry paths,
 duplicate declarations, empty media types, Unicode, spaces, and percent-like
 names while preserving exact validation precedence.
+The corpus also requires valid admission and every typed manifest failure class
+to occur, so selector coverage cannot hide a precedence branch that is never
+observed.
 
 
 Canonical archive-encoding evidence now exhausts all 16 stored/compressed,
