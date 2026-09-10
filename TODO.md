@@ -272,12 +272,12 @@ supports read-only behavior-version drift checks. It deliberately advertises no
 command protocol, normalizer, command context, Validate, Apply, rebatching, or
 numeric command/context limits yet.
 
-Aggregate command behavior and typed-result behavior are version 91 after
-admitting the fixed AMS symbol aliases as exact source. Asset reference,
-Ordering
-and grouping, and Text content retain family behavior version 1; Provenance and
-Style role are version 2, Document constraint is version 3, and Structured
-content is version 79. The immediately previous aggregate version 90 rejects
+Aggregate command behavior and typed-result behavior are version 92 after
+admitting the LaTeX-base math sterling symbol as exact source. Asset reference,
+Ordering and grouping, and Text content retain family behavior version 1;
+Provenance and Style role are version 2, Document constraint is version 3, and
+Structured
+content is version 80. The immediately previous aggregate version 91 rejects
 instead of being reinterpreted.
 
 A version-bound single-target proposal combines capability, exact local
@@ -719,7 +719,8 @@ binary-operator symbols including the AMS boxed, circled, wedge, and product
 forms plus square/lattice forms, large
 n-ary operators including coproduct and logical joins/meets, card-suit and
 musical symbols, mathematical punctuation atoms, LaTeX-base paragraph, section,
-dollar, and variant large-triangle symbols, arrow and ellipsis symbols including
+dollar, math sterling, and variant large-triangle symbols, arrow and ellipsis
+symbols including
 AMS paired, loop, curve, tail, squiggle, and multimap arrows, harpoons, and
 mapped arrows, positive AMS relation and logic symbols, negated AMS arrows and
 order/equality, containment, divisibility, turnstile, and triangle relations,

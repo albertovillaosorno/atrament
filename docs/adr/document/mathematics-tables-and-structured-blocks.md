@@ -82,7 +82,8 @@ binary-operator symbols including the AMS boxed, circled, wedge, and product
 forms plus square/lattice forms, large
 n-ary operators including coproduct and logical joins/meets, card-suit and
 musical symbols, mathematical punctuation atoms, LaTeX-base paragraph, section,
-dollar, and variant large-triangle symbols, arrow and ellipsis symbols including
+dollar, math sterling, and variant large-triangle symbols, arrow and ellipsis
+symbols including
 AMS paired, loop, curve, tail, squiggle, and multimap arrows, harpoons, and
 mapped arrows, positive AMS relation and logic symbols, negated AMS arrows and
 order/equality, containment, divisibility, turnstile, and triangle relations,

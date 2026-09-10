@@ -720,7 +720,7 @@ fn named_symbol_vocabulary_is_supported_without_rewriting() {
         r"\mapsto",
         r"\mathdollar",
         r"\mathparagraph",
-        r"\mathsection", r"\measuredangle", r"\mho",
+        r"\mathsection", r"\mathsterling", r"\measuredangle", r"\mho",
         r"\mid", r"\models", r"\mp", r"\mu", r"\multimap", r"\nLeftarrow",
         r"\nLeftrightarrow", r"\nRightarrow", r"\nVDash", r"\nVdash", r"\nabla",
         r"\natural", r"\ncong", r"\ne", r"\nearrow", r"\neg", r"\neq",
@@ -815,7 +815,7 @@ fn named_symbol_vocabulary_is_supported_without_rewriting() {
 fn latex_base_ordinary_symbols_compose_without_rewriting() {
     let source = concat!(
         r"\varbigtriangleup A + \varbigtriangledown B; ",
-        r"\mathsection + \mathparagraph + \mathdollar",
+        r"\mathsection + \mathparagraph + \mathdollar + \mathsterling",
     );
     let analyzed = analyze(source, FormulaMode::Inline)
         .expect("LaTeX-base ordinary symbol expression");
@@ -830,7 +830,7 @@ fn latex_base_ordinary_symbols_compose_without_rewriting() {
                     == MathTokenKind::Command(SupportedCommand::NamedSymbol)
             })
             .count(),
-        5,
+        6,
     );
 }
 
