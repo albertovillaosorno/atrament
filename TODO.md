@@ -1738,6 +1738,13 @@ supported and unsupported required-feature sets, safe and unsafe entry paths,
 duplicate declarations, empty media types, Unicode, spaces, and percent-like
 names while preserving exact validation precedence.
 
+
+Canonical archive-encoding evidence now exhausts all 16 stored/compressed,
+platform-extra, ZIP64-required, and ZIP64-present combinations against an
+independent precedence model. Entry verification adds 4,096 full-range `u64`
+length and digest combinations, retaining byte-length mismatch precedence before
+digest comparison.
+
 The TeX-compatible mathematics boundary now also runs a deterministic generated
 4,096-source corpus in inline, display, and aligned modes. Generated mixtures
 cover supported and unsupported commands, malformed groups/environments,

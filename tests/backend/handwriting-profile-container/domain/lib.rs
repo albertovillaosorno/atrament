@@ -69,6 +69,61 @@ fn manifest(entries: Vec<ProfileManifestEntry>) -> ProfileManifest {
     }
 }
 
+
+fn reference_archive_encoding(
+    evidence: ProfileArchiveEncodingEvidence,
+) -> Result<(), ProfileArchiveEncodingError> {
+    if evidence.entry_encoding == ProfileArchiveEntryEncoding::Compressed {
+        return Err(ProfileArchiveEncodingError::CompressedEntry);
+    }
+    if evidence.platform_extras == ProfileArchivePlatformExtras::Present {
+        return Err(ProfileArchiveEncodingError::PlatformSpecificExtras);
+    }
+    match (evidence.zip64_requirement, evidence.zip64_use) {
+        (ProfileZip64Requirement::Required, ProfileZip64Use::Absent) => {
+            Err(ProfileArchiveEncodingError::MissingRequiredZip64)
+        },
+        (ProfileZip64Requirement::Ordinary, ProfileZip64Use::Present) => {
+            Err(ProfileArchiveEncodingError::UnexpectedZip64)
+        },
+        _ => Ok(()),
+    }
+}
+
+#[test]
+fn every_archive_encoding_state_matches_canonical_reference() {
+    for entry_encoding in [
+        ProfileArchiveEntryEncoding::Compressed,
+        ProfileArchiveEntryEncoding::Stored,
+    ] {
+        for platform_extras in [
+            ProfileArchivePlatformExtras::Absent,
+            ProfileArchivePlatformExtras::Present,
+        ] {
+            for zip64_requirement in [
+                ProfileZip64Requirement::Ordinary,
+                ProfileZip64Requirement::Required,
+            ] {
+                for zip64_use in [
+                    ProfileZip64Use::Absent,
+                    ProfileZip64Use::Present,
+                ] {
+                    let evidence = ProfileArchiveEncodingEvidence {
+                        entry_encoding,
+                        platform_extras,
+                        zip64_requirement,
+                        zip64_use,
+                    };
+                    assert_eq!(
+                        validate_profile_archive_encoding(evidence),
+                        reference_archive_encoding(evidence),
+                    );
+                }
+            }
+        }
+    }
+}
+
 #[test]
 fn canonical_archive_encoding_requires_stored_entries_and_no_platform_extras() {
     let ordinary = ProfileArchiveEncodingEvidence {
@@ -865,4 +920,51 @@ fn entry_evidence_checks_length_before_digest() {
         ),
         Ok(()),
     );
+}
+
+
+#[test]
+fn generated_full_range_entry_evidence_matches_reference_precedence() {
+    const CASES: usize = 4_096;
+    let mut seed = 0x5eed_e17e_2026_u64;
+    for case in 0..CASES {
+        let declared_length = next_inventory_value(&mut seed);
+        let observed_length = if next_inventory_value(&mut seed) & 3 == 0 {
+            declared_length
+        } else {
+            next_inventory_value(&mut seed)
+        };
+        let declared_digest_byte =
+            next_inventory_value(&mut seed).to_le_bytes()[0];
+        let observed_digest_byte = if next_inventory_value(&mut seed) & 3 == 0 {
+            declared_digest_byte
+        } else {
+            next_inventory_value(&mut seed).to_le_bytes()[0]
+        };
+        let mut declared = entry(
+            "assets/generated.bin",
+            "application/octet-stream",
+            declared_digest_byte,
+        );
+        declared.byte_length = declared_length;
+        let evidence = ProfileEntryEvidence {
+            byte_length: observed_length,
+            digest: digest(observed_digest_byte),
+        };
+        let expected = if declared_length != observed_length {
+            Err(ProfileEntryVerificationError::ByteLengthMismatch {
+                declared: declared_length,
+                observed: observed_length,
+            })
+        } else if declared_digest_byte != observed_digest_byte {
+            Err(ProfileEntryVerificationError::DigestMismatch)
+        } else {
+            Ok(())
+        };
+        assert_eq!(
+            verify_profile_entry(&declared, evidence),
+            expected,
+            "generated entry evidence case {case}",
+        );
+    }
 }
