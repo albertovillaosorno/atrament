@@ -78,6 +78,15 @@ pub struct TerminalMediaJob<JobIdentity, Intermediate> {
     pub outcome: MediaJobOutcome,
 }
 
+/// Terminal media-job shape carrying one owned waveform intermediate.
+pub type TerminalWaveformJob<
+    JobIdentity,
+    IntermediateIdentity,
+> = TerminalMediaJob<
+    JobIdentity,
+    OwnedWaveformIntermediate<IntermediateIdentity, JobIdentity>,
+>;
+
 /// Cleanup status that may be reported for one terminal media job.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum MediaJobCleanupStatus {
@@ -106,10 +115,7 @@ pub enum MediaJobLifecycleError<JobIdentity> {
 /// Returns `ForeignIntermediate` when retained cleanup evidence belongs to a
 /// different job identity.
 pub fn media_job_cleanup_status<JobIdentity, IntermediateIdentity>(
-    job: &TerminalMediaJob<
-        JobIdentity,
-        OwnedWaveformIntermediate<IntermediateIdentity, JobIdentity>,
-    >,
+    job: &TerminalWaveformJob<JobIdentity, IntermediateIdentity>,
 ) -> Result<MediaJobCleanupStatus, MediaJobLifecycleError<JobIdentity>>
 where
     JobIdentity: Clone + PartialEq,

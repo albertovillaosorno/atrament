@@ -45,7 +45,10 @@ use atrament_handwriting_glyph_coverage::{
 /// Caller-owned presentation evidence that must survive one diacritic reuse.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct DiacriticPresentation<
-    CollisionEvidence, LanguageForm, Placement, Scale,
+    CollisionEvidence,
+    LanguageForm,
+    Placement,
+    Scale,
 > {
     /// Caller-owned collision evidence or constraint state.
     pub collision_evidence: CollisionEvidence,
@@ -77,6 +80,21 @@ pub struct AdmittedDiacriticComposition<'profile, Intent, Rule> {
     pub profile_rule: &'profile Rule,
 }
 
+/// Result of admitting one profile-evidenced compositional reuse.
+pub type DiacriticCompositionAdmission<
+    'profile,
+    Grapheme,
+    Presentation,
+    Rule,
+> = Result<
+    AdmittedDiacriticComposition<
+        'profile,
+        DiacriticCompositionIntent<Grapheme, Presentation, Rule>,
+        Rule,
+    >,
+    DiacriticCompositionError,
+>;
+
 /// Why one requested diacritic composition cannot be admitted.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum DiacriticCompositionError {
@@ -104,17 +122,12 @@ pub fn admit_diacritic_composition<
     Rule,
 >(
     profile: &HandwritingCoverageProfile<
-        ProfileIdentity, Grapheme, Rule,
-    >,
-    intent: DiacriticCompositionIntent<Grapheme, Presentation, Rule>,
-) -> Result<
-    AdmittedDiacriticComposition<
-        '_,
-        DiacriticCompositionIntent<Grapheme, Presentation, Rule>,
+        ProfileIdentity,
+        Grapheme,
         Rule,
     >,
-    DiacriticCompositionError,
->
+    intent: DiacriticCompositionIntent<Grapheme, Presentation, Rule>,
+) -> DiacriticCompositionAdmission<'_, Grapheme, Presentation, Rule>
 where
     Grapheme: PartialEq,
     Rule: PartialEq,
@@ -135,6 +148,6 @@ where
         },
         HandwritingCoverage::Missing => {
             Err(DiacriticCompositionError::MissingCompositionalCoverage)
-        },
+        }
     }
 }
