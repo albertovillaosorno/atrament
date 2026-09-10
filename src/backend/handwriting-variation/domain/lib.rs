@@ -149,6 +149,22 @@ pub enum VariationSampleError {
     BelowMinimum,
 }
 
+/// Why a complete caller-produced sample set is not admissible.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum VariationSampleSetError {
+    /// The configured parameter envelope is invalid.
+    Parameter(VariationParameterError),
+    /// Exact replay inputs produced contradictory sampled values.
+    ReplayConflict(VariationReplayConsistencyError),
+    /// One sampled value falls outside the admitted parameter envelope.
+    Sample {
+        /// Bound failure for this sample.
+        error: VariationSampleError,
+        /// Zero-based observation index in caller order.
+        sample_index: usize,
+    },
+}
+
 impl<Value, Unit, Distribution, CorrelationGroup, ContextRule>
     VariationParameter<Value, Unit, Distribution, CorrelationGroup, ContextRule>
 where
@@ -229,4 +245,49 @@ where
         }
     }
     Ok(())
+}
+/// Validate one complete parameter-bound sample set without producing samples.
+///
+/// Validation order is parameter envelope, caller-order sample bounds, then
+/// replay consistency. This preserves the stronger configured-envelope failure
+/// before interpreting any sample as admissible replay evidence.
+///
+/// # Errors
+///
+/// Returns [`VariationSampleSetError`] for the first invalid parameter, sampled
+/// value, or exact-replay contradiction.
+pub fn validate_variation_sample_set<
+    Value,
+    Unit,
+    Distribution,
+    CorrelationGroup,
+    ContextRule,
+    ReplayKey,
+>(
+    parameter: &VariationParameter<
+        Value,
+        Unit,
+        Distribution,
+        CorrelationGroup,
+        ContextRule,
+    >,
+    samples: &[VariationSample<ReplayKey, Value>],
+) -> Result<(), VariationSampleSetError>
+where
+    ReplayKey: Eq,
+    Value: Eq + Ord,
+{
+    parameter
+        .validate()
+        .map_err(VariationSampleSetError::Parameter)?;
+    for (sample_index, sample) in samples.iter().enumerate() {
+        parameter
+            .validate_sample(sample)
+            .map_err(|error| VariationSampleSetError::Sample {
+                error,
+                sample_index,
+            })?;
+    }
+    validate_variation_replay_consistency(samples)
+        .map_err(VariationSampleSetError::ReplayConflict)
 }

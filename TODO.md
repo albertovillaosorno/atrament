@@ -1225,6 +1225,13 @@ minimum/central/maximum triples in `[-3, 3]` and all 756 sample checks over
 `[-4, 4]` for valid envelopes, reaching every parameter and sample validation
 outcome.
 
+A complete sample-set gate now composes those invariants in one deterministic
+order: parameter validity, caller-order sample bounds, then exact replay
+consistency. A 675-case compact oracle crosses all parameter triples in
+`[-1, 1]` with every two-sample value pair in `[-2, 2]` and reaches parameter,
+bound,
+replay-conflict, and accepted outcomes.
+
 This does not choose parameter vocabularies, distribution families,
 correlations, context semantics, random generators, fitting policy, or a
 sampling algorithm.

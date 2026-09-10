@@ -34,8 +34,9 @@
 use atrament_handwriting_variation::{
     VariationBound, VariationBoundBasis, VariationParameter,
     VariationParameterError, VariationReplayConsistencyError,
-    VariationReplayKey, VariationSample, VariationSampleError, VariationScale,
-    validate_variation_replay_consistency,
+    VariationReplayKey, VariationSample, VariationSampleError,
+    VariationSampleSetError, VariationScale,
+    validate_variation_replay_consistency, validate_variation_sample_set,
 };
 
 type Parameter =
@@ -401,4 +402,167 @@ fn compact_replay_sequences_match_independent_first_conflict_oracle() {
     assert_eq!(cases, 341);
     assert!(saw_consistent);
     assert!(saw_conflict);
+}
+#[test]
+fn complete_sample_set_checks_parameter_bounds_before_replay_consistency() {
+    let invalid_parameter = parameter(5, 4, 3);
+    let invalid_samples = vec![
+        VariationSample {
+            replay_key: 1_u8,
+            value: 2_i32,
+        },
+        VariationSample {
+            replay_key: 1_u8,
+            value: 3_i32,
+        },
+    ];
+    assert_eq!(
+        validate_variation_sample_set(&invalid_parameter, &invalid_samples),
+        Err(VariationSampleSetError::Parameter(
+            VariationParameterError::MinimumAboveMaximum,
+        )),
+    );
+
+    let valid_parameter = parameter(-2, 0, 2);
+    assert_eq!(
+        validate_variation_sample_set(&valid_parameter, &invalid_samples),
+        Err(VariationSampleSetError::Sample {
+            error: VariationSampleError::AboveMaximum,
+            sample_index: 1,
+        }),
+    );
+}
+
+#[test]
+fn complete_sample_set_reports_replay_only_after_all_values_are_in_bounds() {
+    let parameter = parameter(-2, 0, 2);
+    let samples = vec![
+        VariationSample {
+            replay_key: VariationReplayKey {
+                document_seed: 17_u8,
+                semantic_identity: 23_u8,
+            },
+            value: -1_i32,
+        },
+        VariationSample {
+            replay_key: VariationReplayKey {
+                document_seed: 17_u8,
+                semantic_identity: 23_u8,
+            },
+            value: 1_i32,
+        },
+    ];
+    assert_eq!(
+        validate_variation_sample_set(&parameter, &samples),
+        Err(VariationSampleSetError::ReplayConflict(
+            VariationReplayConsistencyError {
+                conflicting_index: 1,
+                first_index: 0,
+            },
+        )),
+    );
+}
+
+#[test]
+fn compact_sample_sets_match_parameter_sample_then_replay_precedence() {
+    let mut cases = 0_u16;
+    let mut outcomes = [false; 4];
+    for minimum in -1_i8..=1 {
+        for central in -1_i8..=1 {
+            for maximum in -1_i8..=1 {
+                let parameter = VariationParameter {
+                    central_tendency: central,
+                    context_rules: Vec::<u8>::new(),
+                    correlation_groups: Vec::<u8>::new(),
+                    distribution: (),
+                    maximum: VariationBound {
+                        basis: VariationBoundBasis::Authorized,
+                        value: maximum,
+                    },
+                    minimum: VariationBound {
+                        basis: VariationBoundBasis::Observed,
+                        value: minimum,
+                    },
+                    scale: VariationScale::Character,
+                    unit: (),
+                };
+                for first_value in -2_i8..=2 {
+                    for second_value in -2_i8..=2 {
+                        let samples = [
+                            VariationSample {
+                                replay_key: 7_u8,
+                                value: first_value,
+                            },
+                            VariationSample {
+                                replay_key: 7_u8,
+                                value: second_value,
+                            },
+                        ];
+                        let expected = match parameter.validate() {
+                            Err(error) => {
+                                outcomes[0] = true;
+                                Err(VariationSampleSetError::Parameter(error))
+                            }
+                            Ok(()) if first_value < minimum => {
+                                outcomes[1] = true;
+                                Err(VariationSampleSetError::Sample {
+                                    error: VariationSampleError::BelowMinimum,
+                                    sample_index: 0,
+                                })
+                            }
+                            Ok(()) if first_value > maximum => {
+                                outcomes[1] = true;
+                                Err(VariationSampleSetError::Sample {
+                                    error: VariationSampleError::AboveMaximum,
+                                    sample_index: 0,
+                                })
+                            }
+                            Ok(()) if second_value < minimum => {
+                                outcomes[1] = true;
+                                Err(VariationSampleSetError::Sample {
+                                    error: VariationSampleError::BelowMinimum,
+                                    sample_index: 1,
+                                })
+                            }
+                            Ok(()) if second_value > maximum => {
+                                outcomes[1] = true;
+                                Err(VariationSampleSetError::Sample {
+                                    error: VariationSampleError::AboveMaximum,
+                                    sample_index: 1,
+                                })
+                            }
+                            Ok(()) if first_value != second_value => {
+                                outcomes[2] = true;
+                                Err(VariationSampleSetError::ReplayConflict(
+                                    VariationReplayConsistencyError {
+                                        conflicting_index: 1,
+                                        first_index: 0,
+                                    },
+                                ))
+                            }
+                            Ok(()) => {
+                                outcomes[3] = true;
+                                Ok(())
+                            }
+                        };
+                        assert_eq!(
+                            validate_variation_sample_set(&parameter, &samples),
+                            expected,
+                            concat!(
+                                "({}, {}, {}); [{}, {}]",
+                            ),
+                            minimum,
+                            central,
+                            maximum,
+                            first_value,
+                            second_value,
+                        );
+                        cases = cases.saturating_add(1);
+                    }
+                }
+            }
+        }
+    }
+    assert_eq!(cases, 675);
+    assert!(outcomes.into_iter().all(|seen| seen));
 }
