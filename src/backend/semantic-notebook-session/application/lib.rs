@@ -1085,86 +1085,50 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
         target: AcceptedIdentity,
         replacement: FormulaReplacement,
     ) -> FormulaEditOutcome {
-        let FormulaReplacement { mode, source } = replacement;
-        let requested = EditableSemanticValue::Formula { mode, source };
-        let simulation = simulate_replacement(self, base, target, requested);
-        let (replacement_mode, replacement_source) = match simulation {
+        let FormulaReplacement {
+            mode: input_mode,
+            source: input_source,
+        } = replacement;
+        let edit_value = EditableSemanticValue::Formula {
+            mode: input_mode,
+            source: input_source,
+        };
+        let simulation = simulate_replacement(self, base, target, edit_value);
+        let validated_replacement = match simulation {
             DirectEditSimulationOutcome::Applicable {
                 requested:
                     EditableSemanticValue::Formula {
-                        mode: requested_mode,
-                        source: requested_source,
+                        mode: replacement_mode,
+                        source: replacement_source,
                     },
                 ..
-            } => (requested_mode, requested_source),
-            DirectEditSimulationOutcome::Applicable { .. }
+            } => FormulaReplacement {
+                mode: replacement_mode,
+                source: replacement_source,
+            },
+            outcome @ (DirectEditSimulationOutcome::Applicable { .. }
             | DirectEditSimulationOutcome::InvalidAssetReference { .. }
+            | DirectEditSimulationOutcome::InvalidMathematics { .. }
+            | DirectEditSimulationOutcome::InvalidPageProfile { .. }
             | DirectEditSimulationOutcome::InvalidPageProfileReference { .. }
             | DirectEditSimulationOutcome::InvalidProvenanceReference { .. }
             | DirectEditSimulationOutcome::InvalidStyleReference { .. }
-            | DirectEditSimulationOutcome::InvalidPageProfile { .. }
             | DirectEditSimulationOutcome::InvalidTableGrid { .. }
+            | DirectEditSimulationOutcome::NoAcceptedRevision
+            | DirectEditSimulationOutcome::NoOp { .. }
+            | DirectEditSimulationOutcome::StaleBase { .. }
             | DirectEditSimulationOutcome::TargetNotEditableValue { .. }
-            | DirectEditSimulationOutcome::ValueFamilyMismatch { .. } => {
-                return FormulaEditOutcome::TargetNotFormula {
-                    revision: base,
-                    target,
-                };
-            },
-            DirectEditSimulationOutcome::InvalidMathematics {
-                reason,
-                revision,
-                target: simulated_target,
-            } => {
-                return FormulaEditOutcome::InvalidMathematics {
-                    reason,
-                    revision,
-                    target: simulated_target,
-                };
-            },
-            DirectEditSimulationOutcome::NoAcceptedRevision => {
-                return FormulaEditOutcome::NoAcceptedRevision;
-            },
-            DirectEditSimulationOutcome::NoOp {
-                revision,
-                target: simulated_target,
-                ..
-            } => {
-                return FormulaEditOutcome::NoOp {
-                    revision,
-                    target: simulated_target,
-                };
-            },
-            DirectEditSimulationOutcome::StaleBase { current } => {
-                return FormulaEditOutcome::StaleBase { current };
-            },
-            DirectEditSimulationOutcome::TargetNotFound {
-                revision,
-                target: missing_target,
-            } => {
-                return FormulaEditOutcome::TargetNotFound {
-                    revision,
-                    target: missing_target,
-                };
-            },
-            DirectEditSimulationOutcome::UnsupportedMathematics {
-                revision,
-                target: simulated_target,
-            } => {
-                return FormulaEditOutcome::UnsupportedMathematics {
-                    revision,
-                    target: simulated_target,
-                };
+            | DirectEditSimulationOutcome::TargetNotFound { .. }
+            | DirectEditSimulationOutcome::UnsupportedMathematics { .. }
+            | DirectEditSimulationOutcome::ValueFamilyMismatch { .. }) => {
+                return formula_edit_outcome(base, target, &outcome);
             },
         };
         commit_formula_replacement(
             self,
             base,
             target,
-            FormulaReplacement {
-                mode: replacement_mode,
-                source: replacement_source,
-            },
+            validated_replacement,
         )
     }
 
@@ -5177,6 +5141,63 @@ fn apply_direct_edit_changes(
         }
     }
     Ok(())
+}
+
+const fn formula_edit_outcome(
+    base: atrament_semantic_notebook::RevisionIdentity,
+    target: AcceptedIdentity,
+    outcome: &DirectEditSimulationOutcome,
+) -> FormulaEditOutcome {
+    match outcome {
+        DirectEditSimulationOutcome::Applicable { .. }
+        | DirectEditSimulationOutcome::InvalidAssetReference { .. }
+        | DirectEditSimulationOutcome::InvalidPageProfileReference { .. }
+        | DirectEditSimulationOutcome::InvalidProvenanceReference { .. }
+        | DirectEditSimulationOutcome::InvalidStyleReference { .. }
+        | DirectEditSimulationOutcome::InvalidPageProfile { .. }
+        | DirectEditSimulationOutcome::InvalidTableGrid { .. }
+        | DirectEditSimulationOutcome::TargetNotEditableValue { .. }
+        | DirectEditSimulationOutcome::ValueFamilyMismatch { .. } => {
+            FormulaEditOutcome::TargetNotFormula { revision: base, target }
+        },
+        DirectEditSimulationOutcome::InvalidMathematics {
+            reason,
+            revision,
+            target: simulated_target,
+        } => FormulaEditOutcome::InvalidMathematics {
+            reason: *reason,
+            revision: *revision,
+            target: *simulated_target,
+        },
+        DirectEditSimulationOutcome::NoAcceptedRevision => {
+            FormulaEditOutcome::NoAcceptedRevision
+        },
+        DirectEditSimulationOutcome::NoOp {
+            revision,
+            target: simulated_target,
+            ..
+        } => FormulaEditOutcome::NoOp {
+            revision: *revision,
+            target: *simulated_target,
+        },
+        DirectEditSimulationOutcome::StaleBase { current } => {
+            FormulaEditOutcome::StaleBase { current: *current }
+        },
+        DirectEditSimulationOutcome::TargetNotFound {
+            revision,
+            target: simulated_target,
+        } => FormulaEditOutcome::TargetNotFound {
+            revision: *revision,
+            target: *simulated_target,
+        },
+        DirectEditSimulationOutcome::UnsupportedMathematics {
+            revision,
+            target: simulated_target,
+        } => FormulaEditOutcome::UnsupportedMathematics {
+            revision: *revision,
+            target: *simulated_target,
+        },
+    }
 }
 
 fn simulate_replacement(
