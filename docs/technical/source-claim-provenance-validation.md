@@ -100,5 +100,10 @@ provenance, source, and metadata retention; unknown and mismatched identities;
 non-cited and missing-link rejection; duplicate inventory/link rejection; and
 multiple distinct sources for one cited claim.
 
+A 32-case compact oracle crosses all four semantic provenance kinds with link
+presence, source presence, and provenance-identity match state. It independently
+pins missing-link, provenance-mismatch, unknown-source, non-cited-link, and
+success behavior without assigning meaning to source metadata.
+
 The test suite uses caller-owned scalar identities and opaque metadata so the
 result does not depend on a particular source schema or citation renderer.

@@ -1502,8 +1502,11 @@ claims,
 unknown sources, mismatched provenance records, non-cited claims, duplicate
 claims/sources, or duplicate exact claim/source relationships reject with typed
 structural errors. Multiple distinct sources for one cited claim remain valid.
-Source retrieval, source-quality policy, citation parsing/formatting, and review
-UI remain separate.
+
+A 32-case compact oracle crosses all four semantic provenance kinds with link
+presence, source presence, and provenance-identity match state to pin the same
+failure precedence. Source retrieval, source-quality policy, citation
+parsing/formatting, and review UI remain separate.
 
 The task remains open for richer source/citation linkage semantics, provenance
 diagnostics, citation UI, and any source-authority model beyond existing

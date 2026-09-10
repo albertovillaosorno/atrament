@@ -164,3 +164,89 @@ fn one_cited_claim_may_link_to_multiple_distinct_sources() {
     });
     assert_eq!(validate_citation_review_linkage(&review), Ok(()));
 }
+
+#[test]
+fn compact_provenance_link_state_space_matches_structural_oracle() {
+    let kinds = [
+        ProvenanceKind::Cited,
+        ProvenanceKind::Derived,
+        ProvenanceKind::Supplied,
+        ProvenanceKind::Unresolved,
+    ];
+    let mut cases = 0_u8;
+    let mut saw = [false; 5];
+    for kind in kinds {
+        for link_present in [false, true] {
+            for source_present in [false, true] {
+                for provenance_matches in [false, true] {
+                    let review = CitationReviewLinkage {
+                        claims: vec![ClaimProvenance {
+                            claim_identity: 1,
+                            kind,
+                            provenance_identity: 11,
+                        }],
+                        links: link_present
+                            .then(|| CitationClaimLink {
+                                claim_identity: 1,
+                                provenance_identity: if provenance_matches {
+                                    11
+                                } else {
+                                    99
+                                },
+                                source_identity: 21,
+                            })
+                            .into_iter()
+                            .collect(),
+                        sources: source_present
+                            .then(|| CitationSource {
+                                metadata: "source-21",
+                                source_identity: 21,
+                            })
+                            .into_iter()
+                            .collect(),
+                    };
+                    let expected = if !link_present {
+                        if kind == ProvenanceKind::Cited {
+                            saw[0] = true;
+                            Err(
+                                CitationReviewLinkageError::
+                                    MissingCitationLink { claim: 1 },
+                            )
+                        } else {
+                            saw[1] = true;
+                            Ok(())
+                        }
+                    } else if !provenance_matches {
+                        saw[2] = true;
+                        Err(
+                            CitationReviewLinkageError::
+                                ProvenanceIdentityMismatch { claim: 1 },
+                        )
+                    } else if !source_present {
+                        saw[3] = true;
+                        Err(CitationReviewLinkageError::UnknownSource {
+                            source: 21,
+                        })
+                    } else if kind != ProvenanceKind::Cited {
+                        saw[4] = true;
+                        Err(CitationReviewLinkageError::NonCitedClaimLink {
+                            claim: 1,
+                        })
+                    } else {
+                        Ok(())
+                    };
+                    assert_eq!(
+                        validate_citation_review_linkage(&review),
+                        expected,
+                        "kind {kind:?}, link {link_present}, source \
+                         {source_present}, provenance match \
+                         {provenance_matches}",
+                    );
+                    cases = cases.saturating_add(1);
+                }
+            }
+        }
+    }
+    assert_eq!(cases, 32);
+    assert!(saw.into_iter().all(|seen| seen));
+}
