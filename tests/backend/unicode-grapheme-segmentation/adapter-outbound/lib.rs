@@ -43,3 +43,32 @@ fn adapter_reports_extended_grapheme_boundaries_without_normalization() {
     assert_eq!(provider.byte_offset(source, 3), Some(source.len()));
     assert_eq!(provider.byte_offset(source, 4), None);
 }
+
+#[test]
+fn adapter_boundaries_match_constructed_extended_grapheme_corpus() {
+    let provider = UnicodeGraphemeSegmentation;
+    let cases: &[&[&str]] = &[
+        &["e\u{301}", "ñ", "Z"],
+        &["👩‍🔬", "👍🏽", "!"],
+        &["🇲🇽", "🇺🇸"],
+        &["\r\n", "A"],
+    ];
+    for clusters in cases {
+        let source = clusters.concat();
+        assert_eq!(provider.grapheme_count(&source), clusters.len());
+        let mut expected_offset = 0usize;
+        assert_eq!(provider.byte_offset(&source, 0), Some(expected_offset));
+        for (index, cluster) in clusters.iter().enumerate() {
+            expected_offset = expected_offset
+                .checked_add(cluster.len())
+                .expect("small fixture boundary must be representable");
+            assert_eq!(
+                provider.byte_offset(&source, index + 1),
+                Some(expected_offset),
+                "constructed cluster boundary {index}",
+            );
+        }
+        assert_eq!(expected_offset, source.len());
+        assert_eq!(provider.byte_offset(&source, clusters.len() + 1), None);
+    }
+}
