@@ -78,7 +78,7 @@ use atrament_semantic_notebook_port::{
     DirectEditImpactSeed, DirectEditProposal, DirectEditProposalOutcome,
     DirectEditSemanticChange, DirectEditSimulationOutcome,
     EditableSemanticValue, EditableSemanticValueKind,
-    EditableValuePreconditionOutcome, FormulaEditOutcome,
+    EditableValuePreconditionOutcome, FormulaEditOutcome, FormulaReplacement,
     HistoryAvailability, HistoryAvailabilityOutcome, HistoryDirection,
     HistoryTraversalOutcome, IdentityAncestryCompleteness,
     IdentityAncestryEntry, IdentityAncestryInspectOutcome,
@@ -469,10 +469,10 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
                 };
             },
         };
-        let material = *material;
-        let Some(actual) = material.editable_value else {
+        let prepared = *material;
+        let Some(actual) = prepared.editable_value else {
             return EditableValuePreconditionOutcome::TargetNotEditableValue {
-                kind: material.descriptor.kind,
+                kind: prepared.descriptor.kind,
                 revision,
                 target,
             };
@@ -1053,9 +1053,9 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
         &mut self,
         base: atrament_semantic_notebook::RevisionIdentity,
         target: AcceptedIdentity,
-        mode: FormulaMode,
-        source: String,
+        replacement: FormulaReplacement,
     ) -> FormulaEditOutcome {
+        let FormulaReplacement { mode, source } = replacement;
         let simulation = self.simulate_direct_edit(
             base,
             target,

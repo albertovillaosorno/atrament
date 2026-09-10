@@ -72,7 +72,8 @@ use atrament_semantic_notebook_port::{
     DirectEditProposal, DirectEditProposalOutcome, DirectEditSemanticChange,
     DirectEditSimulationOutcome, EditableSemanticValue,
     EditableSemanticValueKind, EditableValuePreconditionOutcome,
-    FormulaEditOutcome, HistoryAvailability, HistoryAvailabilityOutcome,
+    FormulaEditOutcome, FormulaReplacement, HistoryAvailability,
+    HistoryAvailabilityOutcome,
     HistoryDirection, HistoryTraversalOutcome, IdentityAncestryCompleteness,
     IdentityAncestryEntry, IdentityAncestryInspectOutcome,
     IdentityInspectOutcome, IdentityKindInspectOutcome,
@@ -934,7 +935,12 @@ fn aligned_environment_tex_is_admitted_and_directly_editable() {
         r"f'(x) &= 3x^2\end{aligned}",
     );
     let outcome = session.replace_formula(
-        revision, formula, FormulaMode::Display, edited_source.to_owned(),
+        revision,
+        formula,
+        FormulaReplacement {
+            mode: FormulaMode::Display,
+            source: edited_source.to_owned(),
+        },
     );
     let FormulaEditOutcome::Applied {
         base,
@@ -985,8 +991,10 @@ fn indexed_square_root_tex_is_admitted_and_directly_editable() {
     let outcome = session.replace_formula(
         revision,
         formula,
-        FormulaMode::Inline,
-        edited_source.to_owned(),
+        FormulaReplacement {
+            mode: FormulaMode::Inline,
+            source: edited_source.to_owned(),
+        },
     );
     let FormulaEditOutcome::Applied {
         base,
@@ -1037,8 +1045,10 @@ fn braced_matrix_tex_is_admitted_and_directly_editable() {
     let outcome = session.replace_formula(
         revision,
         formula,
-        FormulaMode::Display,
-        edited_source.to_owned(),
+        FormulaReplacement {
+            mode: FormulaMode::Display,
+            source: edited_source.to_owned(),
+        },
     );
     let FormulaEditOutcome::Applied {
         base,
@@ -1091,8 +1101,10 @@ fn bracketed_matrix_tex_is_admitted_and_directly_editable() {
     let outcome = session.replace_formula(
         revision,
         formula,
-        FormulaMode::Display,
-        edited_source.to_owned(),
+        FormulaReplacement {
+            mode: FormulaMode::Display,
+            source: edited_source.to_owned(),
+        },
     );
     let FormulaEditOutcome::Applied {
         base,
@@ -1141,7 +1153,12 @@ fn parenthesized_matrix_tex_is_admitted_and_directly_editable() {
 
     let edited_source = r"B=\begin{pmatrix}a & b \\ c & d\end{pmatrix}";
     let outcome = session.replace_formula(
-        revision, formula, FormulaMode::Display, edited_source.to_owned(),
+        revision,
+        formula,
+        FormulaReplacement {
+            mode: FormulaMode::Display,
+            source: edited_source.to_owned(),
+        },
     );
     let FormulaEditOutcome::Applied {
         base,
@@ -1194,8 +1211,10 @@ fn double_vertical_matrix_tex_is_admitted_and_directly_editable() {
     let outcome = session.replace_formula(
         revision,
         formula,
-        FormulaMode::Display,
-        edited_source.to_owned(),
+        FormulaReplacement {
+            mode: FormulaMode::Display,
+            source: edited_source.to_owned(),
+        },
     );
     let FormulaEditOutcome::Applied {
         base,
@@ -1248,8 +1267,10 @@ fn vertical_matrix_tex_is_admitted_and_directly_editable() {
     let outcome = session.replace_formula(
         revision,
         formula,
-        FormulaMode::Display,
-        edited_source.to_owned(),
+        FormulaReplacement {
+            mode: FormulaMode::Display,
+            source: edited_source.to_owned(),
+        },
     );
     let FormulaEditOutcome::Applied {
         base,
@@ -1302,8 +1323,10 @@ fn small_matrix_tex_is_admitted_and_directly_editable() {
     let outcome = session.replace_formula(
         revision,
         formula,
-        FormulaMode::Inline,
-        edited_source.to_owned(),
+        FormulaReplacement {
+            mode: FormulaMode::Inline,
+            source: edited_source.to_owned(),
+        },
     );
     let FormulaEditOutcome::Applied {
         base,
@@ -1358,7 +1381,12 @@ fn split_tex_is_admitted_and_directly_editable() {
         r"g'(x) &= 3x^2\end{split}",
     );
     let outcome = session.replace_formula(
-        revision, formula, FormulaMode::Display, edited_source.to_owned(),
+        revision,
+        formula,
+        FormulaReplacement {
+            mode: FormulaMode::Display,
+            source: edited_source.to_owned(),
+        },
     );
     let FormulaEditOutcome::Applied {
         base,
@@ -1411,7 +1439,12 @@ fn gathered_tex_is_admitted_and_directly_editable() {
         r"c+d \\ e+f\end{gathered}",
     );
     let outcome = session.replace_formula(
-        revision, formula, FormulaMode::Display, edited_source.to_owned(),
+        revision,
+        formula,
+        FormulaReplacement {
+            mode: FormulaMode::Display,
+            source: edited_source.to_owned(),
+        },
     );
     let FormulaEditOutcome::Applied {
         base,
@@ -1464,7 +1497,12 @@ fn cases_tex_is_admitted_and_directly_editable() {
         r"x^2 & x\ne 0\end{cases}",
     );
     let outcome = session.replace_formula(
-        revision, formula, FormulaMode::Display, edited_source.to_owned(),
+        revision,
+        formula,
+        FormulaReplacement {
+            mode: FormulaMode::Display,
+            source: edited_source.to_owned(),
+        },
     );
     let FormulaEditOutcome::Applied {
         base,
@@ -1511,7 +1549,12 @@ fn substack_tex_is_admitted_and_directly_editable() {
 
     let edited_source = r"\prod_{\substack{i>0\\j>0}} x_{ij}";
     let outcome = session.replace_formula(
-        revision, formula, FormulaMode::Inline, edited_source.to_owned(),
+        revision,
+        formula,
+        FormulaReplacement {
+            mode: FormulaMode::Inline,
+            source: edited_source.to_owned(),
+        },
     );
     let FormulaEditOutcome::Applied {
         base,
@@ -1560,8 +1603,10 @@ fn text_mathematics_is_admitted_and_directly_editable() {
     } = session.replace_formula(
         revision,
         formula,
-        FormulaMode::Display,
-        edited_source.to_owned(),
+        FormulaReplacement {
+            mode: FormulaMode::Display,
+            source: edited_source.to_owned(),
+        },
     ) else {
         panic!("text-bearing mathematics edit must apply");
     };
@@ -1603,8 +1648,10 @@ fn escaped_tex_specials_are_admitted_and_directly_editable() {
     let outcome = session.replace_formula(
         revision,
         formula,
-        FormulaMode::Display,
-        edited_source.to_owned(),
+        FormulaReplacement {
+            mode: FormulaMode::Display,
+            source: edited_source.to_owned(),
+        },
     );
     let FormulaEditOutcome::Applied {
         base,
@@ -1651,8 +1698,10 @@ fn named_tex_symbols_are_admitted_and_directly_editable() {
     let outcome = session.replace_formula(
         revision,
         formula,
-        FormulaMode::Display,
-        edited_source.to_owned(),
+        FormulaReplacement {
+            mode: FormulaMode::Display,
+            source: edited_source.to_owned(),
+        },
     );
     let FormulaEditOutcome::Applied {
         base,
@@ -1702,8 +1751,10 @@ fn named_tex_operators_are_admitted_and_directly_editable() {
     let outcome = session.replace_formula(
         revision,
         formula,
-        FormulaMode::Display,
-        edited_source.to_owned(),
+        FormulaReplacement {
+            mode: FormulaMode::Display,
+            source: edited_source.to_owned(),
+        },
     );
     let FormulaEditOutcome::Applied {
         base,
@@ -1777,8 +1828,10 @@ fn expanded_tex_vocabulary_is_admitted_and_directly_editable() {
     let outcome = session.replace_formula(
         revision,
         formula,
-        FormulaMode::Display,
-        edited_source.to_owned(),
+        FormulaReplacement {
+            mode: FormulaMode::Display,
+            source: edited_source.to_owned(),
+        },
     );
     let FormulaEditOutcome::Applied {
         base,
@@ -1827,8 +1880,10 @@ fn calculus_tex_is_admitted_and_directly_editable() {
     let outcome = session.replace_formula(
         revision,
         formula,
-        FormulaMode::Display,
-        edited_source.to_owned(),
+        FormulaReplacement {
+            mode: FormulaMode::Display,
+            source: edited_source.to_owned(),
+        },
     );
     let FormulaEditOutcome::Applied {
         base,
@@ -1875,7 +1930,12 @@ fn styled_fraction_tex_is_admitted_and_directly_editable() {
 
     let edited_source = r"y = \tfrac{x+1}{2}";
     let outcome = session.replace_formula(
-        revision, formula, FormulaMode::Display, edited_source.to_owned(),
+        revision,
+        formula,
+        FormulaReplacement {
+            mode: FormulaMode::Display,
+            source: edited_source.to_owned(),
+        },
     );
     let FormulaEditOutcome::Applied {
         base,
@@ -1923,8 +1983,10 @@ fn stacked_relation_tex_is_admitted_and_directly_editable() {
     let outcome = session.replace_formula(
         revision,
         formula,
-        FormulaMode::Inline,
-        edited_source.to_owned(),
+        FormulaReplacement {
+            mode: FormulaMode::Inline,
+            source: edited_source.to_owned(),
+        },
     );
     let FormulaEditOutcome::Applied {
         base,
@@ -1971,7 +2033,12 @@ fn stacked_annotation_tex_is_admitted_and_directly_editable() {
 
     let edited_source = r"\underset{n\to\infty}{\lim} a_n";
     let outcome = session.replace_formula(
-        revision, formula, FormulaMode::Display, edited_source.to_owned(),
+        revision,
+        formula,
+        FormulaReplacement {
+            mode: FormulaMode::Display,
+            source: edited_source.to_owned(),
+        },
     );
     let FormulaEditOutcome::Applied {
         base,
@@ -2018,7 +2085,12 @@ fn boxed_and_brace_tex_is_admitted_and_directly_editable() {
 
     let edited_source = r"\underbrace{x+y}_{pair} + \boxed{z}";
     let outcome = session.replace_formula(
-        revision, formula, FormulaMode::Display, edited_source.to_owned(),
+        revision,
+        formula,
+        FormulaReplacement {
+            mode: FormulaMode::Display,
+            source: edited_source.to_owned(),
+        },
     );
     let FormulaEditOutcome::Applied {
         base,
@@ -2067,8 +2139,10 @@ fn directional_over_arrow_tex_is_admitted_and_directly_editable() {
     let outcome = session.replace_formula(
         revision,
         formula,
-        FormulaMode::Inline,
-        edited_source.to_owned(),
+        FormulaReplacement {
+            mode: FormulaMode::Inline,
+            source: edited_source.to_owned(),
+        },
     );
     let FormulaEditOutcome::Applied {
         base,
@@ -2117,8 +2191,10 @@ fn decorated_tex_is_admitted_and_directly_editable() {
     let outcome = session.replace_formula(
         revision,
         formula,
-        FormulaMode::Display,
-        edited_source.to_owned(),
+        FormulaReplacement {
+            mode: FormulaMode::Display,
+            source: edited_source.to_owned(),
+        },
     );
     let FormulaEditOutcome::Applied {
         base,
@@ -2167,8 +2243,10 @@ fn set_and_logic_tex_is_admitted_and_directly_editable() {
     let outcome = session.replace_formula(
         revision,
         formula,
-        FormulaMode::Display,
-        edited_source.to_owned(),
+        FormulaReplacement {
+            mode: FormulaMode::Display,
+            source: edited_source.to_owned(),
+        },
     );
     let FormulaEditOutcome::Applied {
         base,
@@ -2216,8 +2294,10 @@ fn styled_binomial_tex_is_admitted_and_directly_editable() {
     let outcome = session.replace_formula(
         revision,
         formula,
-        FormulaMode::Inline,
-        edited_source.to_owned(),
+        FormulaReplacement {
+            mode: FormulaMode::Inline,
+            source: edited_source.to_owned(),
+        },
     );
     let FormulaEditOutcome::Applied {
         base,
@@ -2264,8 +2344,10 @@ fn binomial_tex_is_admitted_and_directly_editable() {
     let outcome = session.replace_formula(
         revision,
         formula,
-        FormulaMode::Display,
-        edited_source.to_owned(),
+        FormulaReplacement {
+            mode: FormulaMode::Display,
+            source: edited_source.to_owned(),
+        },
     );
     let FormulaEditOutcome::Applied {
         base,
@@ -2315,7 +2397,12 @@ fn ellipsis_tex_is_admitted_and_directly_editable() {
 
     let edited_source = r"a_1, \ldots, a_n; b_1, \dots, b_n";
     let outcome = session.replace_formula(
-        revision, formula, FormulaMode::Display, edited_source.to_owned(),
+        revision,
+        formula,
+        FormulaReplacement {
+            mode: FormulaMode::Display,
+            source: edited_source.to_owned(),
+        },
     );
     let FormulaEditOutcome::Applied {
         base,
@@ -2362,7 +2449,12 @@ fn arrow_tex_is_admitted_and_directly_editable() {
 
     let edited_source = r"x \mapsto y; p \nearrow q; a \hookrightarrow b";
     let outcome = session.replace_formula(
-        revision, formula, FormulaMode::Display, edited_source.to_owned(),
+        revision,
+        formula,
+        FormulaReplacement {
+            mode: FormulaMode::Display,
+            source: edited_source.to_owned(),
+        },
     );
     let FormulaEditOutcome::Applied {
         base,
@@ -2412,7 +2504,12 @@ fn named_delimiter_tex_is_admitted_and_directly_editable() {
         r"\Vert v \Vert",
     );
     let outcome = session.replace_formula(
-        revision, formula, FormulaMode::Display, edited_source.to_owned(),
+        revision,
+        formula,
+        FormulaReplacement {
+            mode: FormulaMode::Display,
+            source: edited_source.to_owned(),
+        },
     );
     let FormulaEditOutcome::Applied {
         base,
@@ -2461,8 +2558,10 @@ fn binary_operator_tex_is_admitted_and_directly_editable() {
     let outcome = session.replace_formula(
         revision,
         formula,
-        FormulaMode::Display,
-        edited_source.to_owned(),
+        FormulaReplacement {
+            mode: FormulaMode::Display,
+            source: edited_source.to_owned(),
+        },
     );
     let FormulaEditOutcome::Applied {
         base,
@@ -2509,7 +2608,12 @@ fn variant_greek_tex_is_admitted_and_directly_editable() {
 
     let edited_source = r"\varrho + \varsigma + \varpi";
     let outcome = session.replace_formula(
-        revision, formula, FormulaMode::Inline, edited_source.to_owned(),
+        revision,
+        formula,
+        FormulaReplacement {
+            mode: FormulaMode::Inline,
+            source: edited_source.to_owned(),
+        },
     );
     let FormulaEditOutcome::Applied {
         base,
@@ -2556,7 +2660,12 @@ fn relation_and_logic_tex_is_admitted_and_directly_editable() {
 
     let edited_source = r"x \propto y, u \parallel v, P \lor \neg Q";
     let outcome = session.replace_formula(
-        revision, formula, FormulaMode::Display, edited_source.to_owned(),
+        revision,
+        formula,
+        FormulaReplacement {
+            mode: FormulaMode::Display,
+            source: edited_source.to_owned(),
+        },
     );
     let FormulaEditOutcome::Applied {
         base,
@@ -2605,8 +2714,10 @@ fn standard_greek_tex_is_admitted_and_directly_editable() {
     let outcome = session.replace_formula(
         revision,
         formula,
-        FormulaMode::Display,
-        edited_source.to_owned(),
+        FormulaReplacement {
+            mode: FormulaMode::Display,
+            source: edited_source.to_owned(),
+        },
     );
     let FormulaEditOutcome::Applied {
         base,
@@ -2655,8 +2766,10 @@ fn common_tex_accents_are_admitted_and_directly_editable() {
     let outcome = session.replace_formula(
         revision,
         formula,
-        FormulaMode::Display,
-        edited_source.to_owned(),
+        FormulaReplacement {
+            mode: FormulaMode::Display,
+            source: edited_source.to_owned(),
+        },
     );
     let FormulaEditOutcome::Applied {
         base,
@@ -2704,8 +2817,10 @@ fn extended_accent_tex_is_admitted_and_directly_editable() {
     let outcome = session.replace_formula(
         revision,
         formula,
-        FormulaMode::Inline,
-        edited_source.to_owned(),
+        FormulaReplacement {
+            mode: FormulaMode::Inline,
+            source: edited_source.to_owned(),
+        },
     );
     let FormulaEditOutcome::Applied {
         base,
@@ -2753,8 +2868,10 @@ fn wide_accent_tex_is_admitted_and_directly_editable() {
     let outcome = session.replace_formula(
         revision,
         formula,
-        FormulaMode::Inline,
-        edited_source.to_owned(),
+        FormulaReplacement {
+            mode: FormulaMode::Inline,
+            source: edited_source.to_owned(),
+        },
     );
     let FormulaEditOutcome::Applied {
         base,
@@ -2806,8 +2923,10 @@ fn grouped_math_alphabets_are_admitted_and_directly_editable() {
     let outcome = session.replace_formula(
         revision,
         formula,
-        FormulaMode::Display,
-        edited_source.to_owned(),
+        FormulaReplacement {
+            mode: FormulaMode::Display,
+            source: edited_source.to_owned(),
+        },
     );
     let FormulaEditOutcome::Applied {
         base,
@@ -2856,8 +2975,10 @@ fn custom_operator_tex_is_admitted_and_directly_editable() {
     let outcome = session.replace_formula(
         revision,
         formula,
-        FormulaMode::Display,
-        edited_source.to_owned(),
+        FormulaReplacement {
+            mode: FormulaMode::Display,
+            source: edited_source.to_owned(),
+        },
     );
     let FormulaEditOutcome::Applied {
         base,
@@ -13025,8 +13146,10 @@ fn direct_edit_simulation_matches_formula_domain_rejections() {
         session.replace_formula(
             revision,
             formula,
-            FormulaMode::Display,
-            String::from(r"\frac{1}"),
+            FormulaReplacement {
+                mode: FormulaMode::Display,
+                source: String::from(r"\frac{1}"),
+            },
         ),
         FormulaEditOutcome::InvalidMathematics {
             reason,
@@ -13050,8 +13173,10 @@ fn direct_edit_simulation_matches_formula_domain_rejections() {
         session.replace_formula(
             revision,
             formula,
-            FormulaMode::Display,
-            String::from(r"x + \mystery{y}"),
+            FormulaReplacement {
+                mode: FormulaMode::Display,
+                source: String::from(r"x + \mystery{y}"),
+            },
         ),
         FormulaEditOutcome::UnsupportedMathematics {
             revision,
@@ -13197,8 +13322,10 @@ fn direct_formula_edit_preserves_formula_identity_and_commits_one_revision() {
     let outcome = session.replace_formula(
         revision,
         formula,
-        FormulaMode::Aligned,
-        source.to_owned(),
+        FormulaReplacement {
+            mode: FormulaMode::Aligned,
+            source: source.to_owned(),
+        },
     );
     let FormulaEditOutcome::Applied {
         base,
@@ -13234,8 +13361,10 @@ fn direct_formula_edit_same_value_is_noop_without_revision_churn() {
         session.replace_formula(
             revision,
             formula,
-            FormulaMode::Display,
-            String::from("E = mc^2"),
+            FormulaReplacement {
+                mode: FormulaMode::Display,
+                source: String::from("E = mc^2"),
+            },
         ),
         FormulaEditOutcome::NoOp {
             revision,
@@ -13262,8 +13391,10 @@ fn direct_formula_edit_rejects_invalid_and_unsupported_without_mutation() {
         session.replace_formula(
             revision,
             formula,
-            FormulaMode::Display,
-            String::from(r"\frac{1}"),
+            FormulaReplacement {
+                mode: FormulaMode::Display,
+                source: String::from(r"\frac{1}"),
+            },
         ),
         FormulaEditOutcome::InvalidMathematics {
             reason: MathSyntaxError {
@@ -13279,8 +13410,10 @@ fn direct_formula_edit_rejects_invalid_and_unsupported_without_mutation() {
         session.replace_formula(
             revision,
             formula,
-            FormulaMode::Display,
-            String::from(r"\mystery{x}"),
+            FormulaReplacement {
+                mode: FormulaMode::Display,
+                source: String::from(r"\mystery{x}"),
+            },
         ),
         FormulaEditOutcome::UnsupportedMathematics {
             revision,
@@ -13308,8 +13441,10 @@ fn direct_formula_edit_stale_nonformula_and_absent_targets_are_no_effect() {
         .replace_formula(
             revision,
             formula,
-            FormulaMode::Display,
-            String::from("E = mc^3"),
+            FormulaReplacement {
+                mode: FormulaMode::Display,
+                source: String::from("E = mc^3"),
+            },
         )
     else {
         panic!("first formula edit must apply");
@@ -13319,8 +13454,10 @@ fn direct_formula_edit_stale_nonformula_and_absent_targets_are_no_effect() {
         session.replace_formula(
             revision,
             formula,
-            FormulaMode::Display,
-            String::from("E = mc^4"),
+            FormulaReplacement {
+                mode: FormulaMode::Display,
+                source: String::from("E = mc^4"),
+            },
         ),
         FormulaEditOutcome::StaleBase { current: edited },
     );
@@ -13328,8 +13465,10 @@ fn direct_formula_edit_stale_nonformula_and_absent_targets_are_no_effect() {
         session.replace_formula(
             edited,
             page,
-            FormulaMode::Display,
-            String::from("x = 1"),
+            FormulaReplacement {
+                mode: FormulaMode::Display,
+                source: String::from("x = 1"),
+            },
         ),
         FormulaEditOutcome::TargetNotFormula {
             revision: edited,
@@ -13348,8 +13487,10 @@ fn direct_formula_edit_stale_nonformula_and_absent_targets_are_no_effect() {
         session.replace_formula(
             current,
             formula,
-            FormulaMode::Display,
-            String::from("x = 1"),
+            FormulaReplacement {
+                mode: FormulaMode::Display,
+                source: String::from("x = 1"),
+            },
         ),
         FormulaEditOutcome::TargetNotFound {
             revision: current,
@@ -13375,8 +13516,10 @@ fn direct_formula_edit_without_accepted_revision_is_typed_no_effect() {
         empty.replace_formula(
             revision,
             accepted,
-            FormulaMode::Display,
-            String::from("x = 2"),
+            FormulaReplacement {
+                mode: FormulaMode::Display,
+                source: String::from("x = 2"),
+            },
         ),
         FormulaEditOutcome::NoAcceptedRevision,
     );
@@ -13532,8 +13675,10 @@ fn direct_formula_edit_reaches_nested_structures_across_revisions() {
             .replace_formula(
                 revision,
                 target,
-                FormulaMode::Display,
-                source.to_owned(),
+                FormulaReplacement {
+                    mode: FormulaMode::Display,
+                    source: source.to_owned(),
+                },
             )
         else {
             panic!("nested formula edit must apply");

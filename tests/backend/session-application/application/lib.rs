@@ -81,6 +81,7 @@ use atrament_semantic_notebook_port::{
     DirectEditSemanticChange,
     DirectEditProposalOutcome, DirectEditSimulationOutcome,
     EditableSemanticValue, EditableValuePreconditionOutcome, FormulaEditOutcome,
+    FormulaReplacement,
     HistoryAvailability, HistoryAvailabilityOutcome, HistoryDirection,
     HistoryTraversalOutcome,
     IdentityAncestryCompleteness, IdentityAncestryEntry,
@@ -2538,8 +2539,10 @@ fn application_routes_all_direct_edit_no_effects_through_owned_authority() {
         session.replace_formula(
             revision,
             notebook,
-            FormulaMode::Display,
-            String::from("x"),
+            FormulaReplacement {
+                mode: FormulaMode::Display,
+                source: String::from("x"),
+            },
         ),
         FormulaEditOutcome::TargetNotFormula {
             revision,
@@ -3797,8 +3800,10 @@ fn invalid_direct_replacements_preserve_redo_asset_bytes() {
                 session.replace_formula(
                     undone,
                     formula,
-                    FormulaMode::Display,
-                    String::from(r"\frac{1}"),
+                    FormulaReplacement {
+                        mode: FormulaMode::Display,
+                        source: String::from(r"\frac{1}"),
+                    },
                 ),
                 FormulaEditOutcome::InvalidMathematics {
                     revision,
@@ -3920,8 +3925,10 @@ fn every_direct_replacement_noop_preserves_redo_asset_bytes() {
                 session.replace_formula(
                     undone,
                     formula,
-                    FormulaMode::Inline,
-                    String::from("x"),
+                    FormulaReplacement {
+                        mode: FormulaMode::Inline,
+                        source: String::from("x"),
+                    },
                 ),
                 FormulaEditOutcome::NoOp {
                     revision: undone,
@@ -4044,8 +4051,10 @@ fn every_direct_replacement_family_prunes_discarded_redo_asset_bytes() {
                     session.replace_formula(
                         undone,
                         formula,
-                        FormulaMode::Display,
-                        String::from("x + 1"),
+                        FormulaReplacement {
+                            mode: FormulaMode::Display,
+                            source: String::from("x + 1"),
+                        },
                     )
                 else {
                     panic!("formula replacement must apply");

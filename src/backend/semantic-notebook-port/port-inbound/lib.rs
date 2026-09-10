@@ -152,6 +152,15 @@ pub enum CandidateReferenceKind {
     Style,
 }
 
+/// Complete replacement content for one mathematical source edit.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct FormulaReplacement {
+    /// Semantic mathematical presentation family.
+    pub mode: FormulaMode,
+    /// Exact authored source to validate and retain.
+    pub source: String,
+}
+
 /// Result of one direct accepted mathematical source replacement.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum FormulaEditOutcome {
@@ -1902,8 +1911,7 @@ pub trait SemanticNotebookSession {
         &mut self,
         base: RevisionIdentity,
         target: AcceptedIdentity,
-        mode: FormulaMode,
-        source: String,
+        replacement: FormulaReplacement,
     ) -> FormulaEditOutcome;
 
     /// Replace one physical page profile against an exact base revision.

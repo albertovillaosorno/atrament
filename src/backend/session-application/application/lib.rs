@@ -62,7 +62,7 @@ use atrament_semantic_fixed_region_layout::{
     validate_fixed_placement,
 };
 use atrament_semantic_notebook::{
-    AcceptedIdentity, AcceptedRevision, CandidateIdentity, FormulaMode,
+    AcceptedIdentity, AcceptedRevision, CandidateIdentity,
     Notebook, PhysicalPageProfile, RevisionIdentity, SemanticIdentityKind,
     TableCellSpan, TableRowRole,
 };
@@ -79,6 +79,7 @@ use atrament_semantic_notebook_port::{
     DirectEditChangePreviewOutcome,
     DirectEditProposal, DirectEditProposalOutcome, DirectEditSimulationOutcome,
     EditableSemanticValue, EditableValuePreconditionOutcome, FormulaEditOutcome,
+    FormulaReplacement,
     HistoryAvailabilityOutcome, HistoryDirection, HistoryTraversalOutcome,
     IdentityAncestryInspectOutcome, IdentityInspectOutcome,
     IdentityKindInspectOutcome, IdentityPrecondition,
@@ -624,11 +625,10 @@ impl SessionApplication {
         &mut self,
         base: RevisionIdentity,
         target: AcceptedIdentity,
-        mode: FormulaMode,
-        source: String,
+        replacement: FormulaReplacement,
     ) -> FormulaEditOutcome {
         self.mutate_semantic(|semantic| {
-            semantic.replace_formula(base, target, mode, source)
+            semantic.replace_formula(base, target, replacement)
         })
     }
 
