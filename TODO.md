@@ -1517,6 +1517,17 @@ revision-owned provenance records.
 Exercise bilingual mathematics, physics, chemistry, biology, history, and
 language assignments with dense but readable page organization.
 
+Current executable evidence now names all six required subject families and
+requires every admitted exercise observation to carry caller-established
+bilingual, dense-organization, and readable-organization evidence. Complete
+coverage requires at least one fully evidenced observation for mathematics,
+physics, chemistry, biology, history, and language while permitting additional
+subject observations and preserving their caller-owned artifact identities.
+
+Actual cross-subject assignment fixtures, curriculum/source correctness,
+language selection, density/readability measurement and thresholds, page layout,
+rendering, and pedagogical quality policy remain open.
+
 ### TODO - Freeze the semantic command-batch envelope
 
 Version the batch, base notebook revision, command-context identity, readable
