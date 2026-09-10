@@ -159,6 +159,18 @@ pub enum CalibrationSampleReplacementError<Identity, SampleIdentity> {
     },
 }
 
+/// Borrowed completed-prompt inspection result.
+pub type CalibrationCompletedPromptsResult<
+    'session,
+    Identity,
+    Speed,
+    Size,
+    SampleIdentity,
+> = Result<
+    Vec<&'session CalibrationPrompt<Identity, Speed, Size, SampleIdentity>>,
+    CalibrationSessionError<Identity>,
+>;
+
 /// Exact completed-sample replacement result.
 pub type CalibrationSampleReplacementResult<Identity, SampleIdentity> = Result<
     CalibrationSampleReplacement,
@@ -174,6 +186,71 @@ impl<Identity, Speed, Size, SampleIdentity, ReferenceGeometry>
 where
     Identity: Clone + Ord,
 {
+    /// Return completed prompts in caller-supplied guidance order.
+    ///
+    /// The returned borrowed prompts preserve identity, category, speed, size,
+    /// and sample links for read-only inspection. This domain does not decide
+    /// whether a completed sample is weak or choose replacement policy.
+    ///
+    /// # Errors
+    ///
+    /// Returns duplicate prompt identity before projecting completed work.
+    pub fn completed_prompts(
+        &self,
+    ) -> CalibrationCompletedPromptsResult<
+        '_,
+        Identity,
+        Speed,
+        Size,
+        SampleIdentity,
+    > {
+        self.validate()?;
+        Ok(self
+            .prompts
+            .iter()
+            .filter(|prompt| {
+                matches!(
+                    prompt.progress,
+                    CalibrationPromptProgress::Completed { .. }
+                )
+            })
+            .collect())
+    }
+
+    /// Return whether every caller-supplied calibration prompt is complete.
+    ///
+    /// # Errors
+    ///
+    /// Returns duplicate prompt identity before deriving completion state.
+    pub fn is_complete(
+        &self,
+    ) -> Result<bool, CalibrationSessionError<Identity>> {
+        self.validate()?;
+        Ok(self.prompts.iter().all(|prompt| {
+            matches!(
+                prompt.progress,
+                CalibrationPromptProgress::Completed { .. }
+            )
+        }))
+    }
+
+    /// Return the first pending prompt index in caller-supplied guidance order.
+    ///
+    /// Completed prompts are skipped so persisted session state resumes at the
+    /// next unfinished prompt without changing prompt order or copying data.
+    ///
+    /// # Errors
+    ///
+    /// Returns duplicate prompt identity before selecting resumable work.
+    pub fn next_pending_prompt_index(
+        &self,
+    ) -> CalibrationPromptIndexResult<Identity> {
+        self.validate()?;
+        Ok(self.prompts.iter().position(|prompt| {
+            matches!(prompt.progress, CalibrationPromptProgress::Pending)
+        }))
+    }
+
     /// Replace the exact sample link of one completed prompt.
     ///
     /// This operation does not classify sample quality or choose replacement
@@ -225,68 +302,6 @@ where
         }
         *sample = replacement_sample;
         Ok(CalibrationSampleReplacement::Applied)
-    }
-
-    /// Return completed prompts in caller-supplied guidance order.
-    ///
-    /// The returned borrowed prompts preserve identity, category, speed, size,
-    /// and sample links for read-only inspection. This domain does not decide
-    /// whether a completed sample is weak or authorize replacement.
-    ///
-    /// # Errors
-    ///
-    /// Returns duplicate prompt identity before projecting completed work.
-    pub fn completed_prompts(
-        &self,
-    ) -> Result<
-        Vec<&CalibrationPrompt<Identity, Speed, Size, SampleIdentity>>,
-        CalibrationSessionError<Identity>,
-    > {
-        self.validate()?;
-        Ok(self
-            .prompts
-            .iter()
-            .filter(|prompt| {
-                matches!(
-                    prompt.progress,
-                    CalibrationPromptProgress::Completed { .. }
-                )
-            })
-            .collect())
-    }
-
-    /// Return whether every caller-supplied calibration prompt is complete.
-    ///
-    /// # Errors
-    ///
-    /// Returns duplicate prompt identity before deriving completion state.
-    pub fn is_complete(
-        &self,
-    ) -> Result<bool, CalibrationSessionError<Identity>> {
-        self.validate()?;
-        Ok(self.prompts.iter().all(|prompt| {
-            matches!(
-                prompt.progress,
-                CalibrationPromptProgress::Completed { .. }
-            )
-        }))
-    }
-
-    /// Return the first pending prompt index in caller-supplied guidance order.
-    ///
-    /// Completed prompts are skipped so persisted session state resumes at the
-    /// next unfinished prompt without changing prompt order or copying data.
-    ///
-    /// # Errors
-    ///
-    /// Returns duplicate prompt identity before selecting resumable work.
-    pub fn next_pending_prompt_index(
-        &self,
-    ) -> CalibrationPromptIndexResult<Identity> {
-        self.validate()?;
-        Ok(self.prompts.iter().position(|prompt| {
-            matches!(prompt.progress, CalibrationPromptProgress::Pending)
-        }))
     }
 
     /// Validate stable prompt identities before resuming this session.
