@@ -998,77 +998,17 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
         requested: EditableSemanticValue,
     ) -> DirectEditChangePreviewOutcome {
         let requested_family = direct_edit_family(&requested);
+        let notebook = self.current.as_ref().map(|current| &current.notebook);
         let simulation = simulate_direct_edit_material_in_notebook(
-            self.current.as_ref().map(|current| &current.notebook),
+            notebook,
             self.command_target_material_for_family(
-                revision, target, requested_family,
+                revision,
+                target,
+                requested_family,
             ),
             requested,
         );
-        match (simulation.before, simulation.outcome) {
-            (
-                Some(before),
-                DirectEditSimulationOutcome::Applicable {
-                    family,
-                    requested: simulated_requested,
-                    revision: simulated_revision,
-                    target: simulated_target,
-                },
-            ) => {
-                let change = DirectEditSemanticChange {
-                    after: simulated_requested,
-                    before,
-                    family,
-                    target: simulated_target,
-                };
-                let Some(current) = self.current.as_ref() else {
-                    return DirectEditChangePreviewOutcome::Rejected {
-                        outcome: Box::new(
-                            DirectEditSimulationOutcome::NoAcceptedRevision,
-                        ),
-                    };
-                };
-                let families_by_target = BTreeMap::from([(
-                    change.target,
-                    BTreeSet::from([change.family]),
-                )]);
-                let request = DirectEditBatchIndexRequest {
-                    families_by_target: &families_by_target,
-                    material_count: 1,
-                };
-                let index = direct_edit_material_index(
-                    &current.notebook,
-                    request,
-                    simulated_revision,
-                );
-                let impact_seeds = direct_edit_impact_seeds_indexed(
-                    &current.notebook,
-                    index.impacts,
-                    from_ref(&change),
-                );
-                DirectEditChangePreviewOutcome::Predicted {
-                    changes: vec![change],
-                    effect: DirectEditEffectClass::Mutation,
-                    impact_seeds,
-                    revision: simulated_revision,
-                }
-            },
-            (
-                _,
-                DirectEditSimulationOutcome::NoOp {
-                    revision: simulated_revision,
-                    ..
-                },
-            ) => DirectEditChangePreviewOutcome::Predicted {
-                changes: Vec::new(),
-                effect: DirectEditEffectClass::NoOp,
-                impact_seeds: Vec::new(),
-                revision: simulated_revision,
-            },
-            (_, outcome) => DirectEditChangePreviewOutcome::Rejected {
-                outcome: Box::new(outcome),
-            },
-        }
+        direct_edit_change_preview(notebook, simulation)
     }
 
     fn replace_formula(
@@ -2475,6 +2415,76 @@ fn check_command_target_preconditions_material(
         }
     }
     CommandTargetPreconditionOutcome::Satisfied { material }
+}
+
+fn direct_edit_change_preview(
+    notebook: Option<&Notebook<AcceptedIdentity>>,
+    simulation: DirectEditSimulation,
+) -> DirectEditChangePreviewOutcome {
+    match (simulation.before, simulation.outcome) {
+        (
+            Some(before),
+            DirectEditSimulationOutcome::Applicable {
+                family,
+                requested,
+                revision,
+                target,
+            },
+        ) => direct_edit_mutation_preview(
+            notebook,
+            DirectEditSemanticChange {
+                after: requested,
+                before,
+                family,
+                target,
+            },
+            revision,
+        ),
+        (
+            _,
+            DirectEditSimulationOutcome::NoOp { revision, .. },
+        ) => DirectEditChangePreviewOutcome::Predicted {
+            changes: Vec::new(),
+            effect: DirectEditEffectClass::NoOp,
+            impact_seeds: Vec::new(),
+            revision,
+        },
+        (_, outcome) => DirectEditChangePreviewOutcome::Rejected {
+            outcome: Box::new(outcome),
+        },
+    }
+}
+
+fn direct_edit_mutation_preview(
+    notebook: Option<&Notebook<AcceptedIdentity>>,
+    change: DirectEditSemanticChange,
+    revision: atrament_semantic_notebook::RevisionIdentity,
+) -> DirectEditChangePreviewOutcome {
+    let Some(current_notebook) = notebook else {
+        return DirectEditChangePreviewOutcome::Rejected {
+            outcome: Box::new(DirectEditSimulationOutcome::NoAcceptedRevision),
+        };
+    };
+    let families_by_target = BTreeMap::from([(
+        change.target,
+        BTreeSet::from([change.family]),
+    )]);
+    let request = DirectEditBatchIndexRequest {
+        families_by_target: &families_by_target,
+        material_count: 1,
+    };
+    let index = direct_edit_material_index(current_notebook, request, revision);
+    let impact_seeds = direct_edit_impact_seeds_indexed(
+        current_notebook,
+        index.impacts,
+        from_ref(&change),
+    );
+    DirectEditChangePreviewOutcome::Predicted {
+        changes: vec![change],
+        effect: DirectEditEffectClass::Mutation,
+        impact_seeds,
+        revision,
+    }
 }
 
 fn direct_edit_material_index(
