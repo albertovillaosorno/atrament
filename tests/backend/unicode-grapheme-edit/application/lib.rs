@@ -53,6 +53,20 @@ fn combining_mark_and_emoji_sequences_are_edited_as_single_graphemes() {
 }
 
 #[test]
+fn empty_source_accepts_zero_grapheme_insertion() {
+    let provider = UnicodeGraphemeSegmentation;
+    assert_eq!(
+        replace_grapheme_range(
+            &provider,
+            "",
+            GraphemeRange { count: 0, start: 0 },
+            "ñ",
+        ),
+        Ok(String::from("ñ")),
+    );
+}
+
+#[test]
 fn zero_length_ranges_insert_at_start_middle_and_end() {
     let provider = UnicodeGraphemeSegmentation;
     let source = "aé";
