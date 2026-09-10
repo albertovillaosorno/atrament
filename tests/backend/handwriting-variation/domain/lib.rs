@@ -34,8 +34,8 @@
 use atrament_handwriting_variation::{
     VariationBound, VariationBoundBasis, VariationParameter,
     VariationParameterError, VariationReplayKey, VariationSample,
-    VariationSampleError, VariationScale, validate_variation_parameter,
-    validate_variation_sample,
+    VariationSampleError, VariationScale,
+
 };
 
 type Parameter =
@@ -63,7 +63,7 @@ fn parameter(minimum: i32, central_tendency: i32, maximum: i32) -> Parameter {
 #[test]
 fn parameter_retains_independent_bound_basis_and_generic_model_metadata() {
     let value = parameter(-10, 0, 15);
-    assert_eq!(validate_variation_parameter(&value), Ok(()));
+    assert_eq!(value.validate(), Ok(()));
     assert_eq!(value.minimum.basis, VariationBoundBasis::Observed);
     assert_eq!(value.maximum.basis, VariationBoundBasis::Authorized);
     assert_eq!(value.distribution, "caller-owned-distribution-family");
@@ -75,11 +75,11 @@ fn parameter_retains_independent_bound_basis_and_generic_model_metadata() {
 #[test]
 fn central_tendency_must_stay_inside_the_admitted_bounds() {
     assert_eq!(
-        validate_variation_parameter(&parameter(-10, -11, 15)),
+        parameter(-10, -11, 15).validate(),
         Err(VariationParameterError::CentralTendencyBelowMinimum),
     );
     assert_eq!(
-        validate_variation_parameter(&parameter(-10, 16, 15)),
+        parameter(-10, 16, 15).validate(),
         Err(VariationParameterError::CentralTendencyAboveMaximum),
     );
 }
@@ -87,7 +87,7 @@ fn central_tendency_must_stay_inside_the_admitted_bounds() {
 #[test]
 fn minimum_must_not_exceed_maximum() {
     assert_eq!(
-        validate_variation_parameter(&parameter(16, 16, 15)),
+        parameter(16, 16, 15).validate(),
         Err(VariationParameterError::MinimumAboveMaximum),
     );
 }
@@ -137,7 +137,7 @@ fn sampled_values_are_checked_against_inclusive_parameter_bounds() {
             },
             value: sampled_value,
         };
-        assert_eq!(validate_variation_sample(&parameter, &sample), Ok(()));
+        assert_eq!(parameter.validate_sample(&sample), Ok(()));
     }
 }
 
@@ -159,11 +159,11 @@ fn sampled_value_outside_parameter_bounds_rejects_explicitly() {
         value: 16,
     };
     assert_eq!(
-        validate_variation_sample(&parameter, &below),
+        parameter.validate_sample(&below),
         Err(VariationSampleError::BelowMinimum),
     );
     assert_eq!(
-        validate_variation_sample(&parameter, &above),
+        parameter.validate_sample(&above),
         Err(VariationSampleError::AboveMaximum),
     );
 }
@@ -178,7 +178,7 @@ fn sampled_value_retains_exact_replay_inputs_without_interpretation() {
         },
         value: 7,
     };
-    assert_eq!(validate_variation_sample(&parameter, &sample), Ok(()));
+    assert_eq!(parameter.validate_sample(&sample), Ok(()));
     assert_eq!(sample.replay_key.document_seed, 9001);
     assert_eq!(sample.replay_key.semantic_identity, "glyph-é-17");
     assert_eq!(sample.value, 7);

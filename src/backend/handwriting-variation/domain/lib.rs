@@ -140,76 +140,48 @@ pub enum VariationSampleError {
     BelowMinimum,
 }
 
-/// Validate one complete variable-parameter envelope before any sampling.
-///
-/// # Errors
-///
-/// Returns a typed failure when the minimum exceeds the maximum or the central
-/// tendency falls outside the admitted envelope.
-pub fn validate_variation_parameter<
-    Value,
-    Unit,
-    Distribution,
-    CorrelationGroup,
-    ContextRule,
->(
-    parameter: &VariationParameter<
-        Value,
-        Unit,
-        Distribution,
-        CorrelationGroup,
-        ContextRule,
-    >,
-) -> Result<(), VariationParameterError>
+impl<Value, Unit, Distribution, CorrelationGroup, ContextRule>
+    VariationParameter<Value, Unit, Distribution, CorrelationGroup, ContextRule>
 where
     Value: Ord,
 {
-    if parameter.minimum.value > parameter.maximum.value {
-        return Err(VariationParameterError::MinimumAboveMaximum);
+    /// Validate this complete variable-parameter envelope before any sampling.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed failure when the minimum exceeds the maximum or the
+    /// central tendency falls outside the admitted envelope.
+    pub fn validate(&self) -> Result<(), VariationParameterError> {
+        if self.minimum.value > self.maximum.value {
+            return Err(VariationParameterError::MinimumAboveMaximum);
+        }
+        if self.central_tendency < self.minimum.value {
+            return Err(VariationParameterError::CentralTendencyBelowMinimum);
+        }
+        if self.central_tendency > self.maximum.value {
+            return Err(VariationParameterError::CentralTendencyAboveMaximum);
+        }
+        Ok(())
     }
-    if parameter.central_tendency < parameter.minimum.value {
-        return Err(VariationParameterError::CentralTendencyBelowMinimum);
-    }
-    if parameter.central_tendency > parameter.maximum.value {
-        return Err(VariationParameterError::CentralTendencyAboveMaximum);
-    }
-    Ok(())
-}
 
-/// Validate one sampled value against an already configured variation envelope.
-///
-/// This function does not produce the sample or interpret its replay key. It
-/// only proves that the caller-produced value stays inside the configured
-/// inclusive bounds.
-///
-/// # Errors
-///
-/// Returns a typed failure when the sampled value lies outside the envelope.
-pub fn validate_variation_sample<
-    Value,
-    Unit,
-    Distribution,
-    CorrelationGroup,
-    ContextRule,
-    ReplayKey,
->(
-    parameter: &VariationParameter<
-        Value,
-        Unit,
-        Distribution,
-        CorrelationGroup,
-        ContextRule,
-    >,
-    sample: &VariationSample<ReplayKey, Value>,
-) -> Result<(), VariationSampleError>
-where
-    Value: Ord,
-{
-    if sample.value < parameter.minimum.value {
-        return Err(VariationSampleError::BelowMinimum);
+    /// Validate one caller-produced sample against this configured envelope.
+    ///
+    /// This method does not produce the sample or interpret its replay key.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed failure when the sampled value lies outside the
+    /// inclusive envelope.
+    pub fn validate_sample<ReplayKey>(
+        &self,
+        sample: &VariationSample<ReplayKey, Value>,
+    ) -> Result<(), VariationSampleError> {
+        if sample.value < self.minimum.value {
+            return Err(VariationSampleError::BelowMinimum);
+        }
+        if sample.value > self.maximum.value {
+            return Err(VariationSampleError::AboveMaximum);
+        }
+        Ok(())
     }
-    if sample.value > parameter.maximum.value {
-        return Err(VariationSampleError::AboveMaximum);
-    }
-    Ok(())
 }
