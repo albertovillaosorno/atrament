@@ -4059,6 +4059,56 @@ fn validate_single_table_cell_span(
     }
 }
 
+fn invalid_prepared_direct_edit_value(
+    requested: &EditableSemanticValue,
+    revision: atrament_semantic_notebook::RevisionIdentity,
+    target: AcceptedIdentity,
+) -> Option<DirectEditSimulationOutcome> {
+    match requested {
+        EditableSemanticValue::Formula { mode, source } => {
+            let analyzed = match analyze(source, *mode) {
+                Ok(analyzed) => analyzed,
+                Err(reason) => {
+                    return Some(
+                        DirectEditSimulationOutcome::InvalidMathematics {
+                            reason,
+                            revision,
+                            target,
+                        },
+                    );
+                },
+            };
+            if analyzed.is_supported() {
+                None
+            } else {
+                Some(DirectEditSimulationOutcome::UnsupportedMathematics {
+                    revision,
+                    target,
+                })
+            }
+        },
+        EditableSemanticValue::PageProfile(profile) => {
+            profile.validate().err().map(|reason| {
+                DirectEditSimulationOutcome::InvalidPageProfile {
+                    reason,
+                    revision,
+                    target,
+                }
+            })
+        },
+        EditableSemanticValue::AssetReference(_)
+        | EditableSemanticValue::ConstraintKind(_)
+        | EditableSemanticValue::ListOrdering(_)
+        | EditableSemanticValue::PageProfileReference(_)
+        | EditableSemanticValue::ProvenanceReference(_)
+        | EditableSemanticValue::StyleReference(_)
+        | EditableSemanticValue::Provenance { .. }
+        | EditableSemanticValue::TableCellSpan(_)
+        | EditableSemanticValue::TableRowRole(_)
+        | EditableSemanticValue::Text(_) => None,
+    }
+}
+
 fn simulate_prepared_direct_edit(
     material: CommandTargetMaterial,
     requested: EditableSemanticValue,
@@ -4088,55 +4138,15 @@ fn simulate_prepared_direct_edit(
             },
         };
     }
-    match &requested {
-        EditableSemanticValue::Formula { mode, source } => {
-            let analyzed = match analyze(source, *mode) {
-                Ok(analyzed) => analyzed,
-                Err(reason) => {
-                    return DirectEditSimulation {
-                        before: Some(actual),
-                        outcome:
-                            DirectEditSimulationOutcome::InvalidMathematics {
-                                reason,
-                                revision,
-                                target,
-                            },
-                    };
-                },
-            };
-            if !analyzed.is_supported() {
-                return DirectEditSimulation {
-                    before: Some(actual),
-                    outcome:
-                        DirectEditSimulationOutcome::UnsupportedMathematics {
-                            revision,
-                            target,
-                        },
-                };
-            }
-        },
-        EditableSemanticValue::PageProfile(profile) => {
-            if let Err(reason) = profile.validate() {
-                return DirectEditSimulation {
-                    before: Some(actual),
-                    outcome: DirectEditSimulationOutcome::InvalidPageProfile {
-                        reason,
-                        revision,
-                        target,
-                    },
-                };
-            }
-        },
-        EditableSemanticValue::AssetReference(_)
-        | EditableSemanticValue::ConstraintKind(_)
-        | EditableSemanticValue::ListOrdering(_)
-        | EditableSemanticValue::PageProfileReference(_)
-        | EditableSemanticValue::ProvenanceReference(_)
-        | EditableSemanticValue::StyleReference(_)
-        | EditableSemanticValue::Provenance { .. }
-        | EditableSemanticValue::TableCellSpan(_)
-        | EditableSemanticValue::TableRowRole(_)
-        | EditableSemanticValue::Text(_) => {},
+    if let Some(outcome) = invalid_prepared_direct_edit_value(
+        &requested,
+        revision,
+        target,
+    ) {
+        return DirectEditSimulation {
+            before: Some(actual),
+            outcome,
+        };
     }
     let family = direct_edit_family(&requested);
     if actual == requested {
