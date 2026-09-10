@@ -54,6 +54,10 @@ pub struct MotionPlanSimulationStep<'trace, LimitEvidence, Operation> {
     pub operation_index: usize,
 }
 
+/// Ordered borrowed steps for one exact dry-run plan.
+pub type MotionPlanSimulationSteps<'trace, LimitEvidence, Operation> =
+    Vec<MotionPlanSimulationStep<'trace, LimitEvidence, Operation>>;
+
 /// Complete inspectable offline trace retaining the validated dry-run package.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MotionPlanSimulationTrace<'trace, Calibration, LimitEvidence, Plan>
@@ -65,8 +69,15 @@ where
     pub dry_run: &'trace MotionPlanDryRun<Calibration, LimitEvidence, Plan>,
     /// Ordered operation inspection trace.
     pub steps:
-        Vec<MotionPlanSimulationStep<'trace, LimitEvidence, Plan::Operation>>,
+        MotionPlanSimulationSteps<'trace, LimitEvidence, Plan::Operation>,
 }
+
+/// Result of building one validated offline simulation trace.
+pub type MotionPlanSimulationResult<'trace, Calibration, LimitEvidence, Plan> =
+    Result<
+        MotionPlanSimulationTrace<'trace, Calibration, LimitEvidence, Plan>,
+        DryRunValidationError,
+    >;
 
 /// Build an offline simulation trace only from a completely valid dry run.
 ///
@@ -76,10 +87,7 @@ where
 /// when limit evidence is incomplete, unknown, or violated.
 pub fn build_motion_plan_simulation_trace<Calibration, LimitEvidence, Plan>(
     dry_run: &MotionPlanDryRun<Calibration, LimitEvidence, Plan>,
-) -> Result<
-    MotionPlanSimulationTrace<'_, Calibration, LimitEvidence, Plan>,
-    DryRunValidationError,
->
+) -> MotionPlanSimulationResult<'_, Calibration, LimitEvidence, Plan>
 where
     Calibration: DryRunCalibration,
     Plan: DryRunPlan,
@@ -95,8 +103,8 @@ where
             MotionPlanSimulationStep {
                 kind: operation.dry_run_kind(),
                 limit_evaluation,
-                operation_index,
                 operation,
+                operation_index,
             }
         })
         .collect();
