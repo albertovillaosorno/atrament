@@ -5739,34 +5739,17 @@ fn table_containing_cell_content_value(
         BlockContent::Callout(blocks) | BlockContent::Freeform(blocks) => {
             table_containing_cell_blocks_value(blocks, target)
         },
-        BlockContent::List(list) => {
-            for item in &list.items {
-                if let Some(table) =
-                    table_containing_cell_blocks_value(&item.blocks, target)
-                {
-                    return Some(table);
-                }
-            }
-            None
-        },
+        BlockContent::List(list) => list.items.iter().find_map(|item| {
+            table_containing_cell_blocks_value(&item.blocks, target)
+        }),
         BlockContent::Table(table) => {
-            if table
-                .rows
-                .iter()
-                .any(|row| row.cells.iter().any(|cell| cell.id == target))
-            {
+            let cells = || table.rows.iter().flat_map(|row| row.cells.iter());
+            if cells().any(|cell| cell.id == target) {
                 return Some(table);
             }
-            for row in &table.rows {
-                for cell in &row.cells {
-                    if let Some(nested) =
-                        table_containing_cell_blocks_value(&cell.blocks, target)
-                    {
-                        return Some(nested);
-                    }
-                }
-            }
-            None
+            cells().find_map(|cell| {
+                table_containing_cell_blocks_value(&cell.blocks, target)
+            })
         },
         BlockContent::Citation(_)
         | BlockContent::Date(_)
@@ -5995,34 +5978,19 @@ fn table_cell_span_content_value(
         BlockContent::Callout(blocks) | BlockContent::Freeform(blocks) => {
             table_cell_span_blocks_value(blocks, target)
         },
-        BlockContent::List(list) => {
-            for item in &list.items {
-                if let Some(span) =
-                    table_cell_span_blocks_value(&item.blocks, target)
-                {
-                    return Some(span);
-                }
-            }
-            None
-        },
+        BlockContent::List(list) => list.items.iter().find_map(|item| {
+            table_cell_span_blocks_value(&item.blocks, target)
+        }),
         BlockContent::Table(table) => {
-            for row in &table.rows {
-                for cell in &row.cells {
-                    if cell.id == target {
-                        return Some(cell.span);
-                    }
-                }
-            }
-            for row in &table.rows {
-                for cell in &row.cells {
-                    if let Some(span) =
+            let cells = || table.rows.iter().flat_map(|row| row.cells.iter());
+            cells()
+                .find(|cell| cell.id == target)
+                .map(|cell| cell.span)
+                .or_else(|| {
+                    cells().find_map(|cell| {
                         table_cell_span_blocks_value(&cell.blocks, target)
-                    {
-                        return Some(span);
-                    }
-                }
-            }
-            None
+                    })
+                })
         },
         BlockContent::Citation(_)
         | BlockContent::Date(_)
@@ -6082,22 +6050,7 @@ fn replace_table_row_role_content(
             replace_table_row_role_blocks(&mut item.blocks, target, role)
         }),
         BlockContent::Table(table) => {
-            for row in &mut table.rows {
-                if row.id == target {
-                    row.role = role;
-                    return true;
-                }
-                for cell in &mut row.cells {
-                    if replace_table_row_role_blocks(
-                        &mut cell.blocks,
-                        target,
-                        role,
-                    ) {
-                        return true;
-                    }
-                }
-            }
-            false
+            replace_table_row_role_table(table, target, role)
         },
         BlockContent::Citation(_)
         | BlockContent::Date(_)
@@ -6113,6 +6066,25 @@ fn replace_table_row_role_content(
         | BlockContent::Rule
         | BlockContent::Unresolved(_) => false,
     }
+}
+
+fn replace_table_row_role_table(
+    table: &mut Table<AcceptedIdentity>,
+    target: AcceptedIdentity,
+    role: TableRowRole,
+) -> bool {
+    for row in &mut table.rows {
+        if row.id == target {
+            row.role = role;
+            return true;
+        }
+        if row.cells.iter_mut().any(|cell| {
+            replace_table_row_role_blocks(&mut cell.blocks, target, role)
+        }) {
+            return true;
+        }
+    }
+    false
 }
 
 fn replace_table_row_role_value(
@@ -6151,30 +6123,11 @@ fn table_row_role_content_value(
         BlockContent::Callout(blocks) | BlockContent::Freeform(blocks) => {
             table_row_role_blocks_value(blocks, target)
         },
-        BlockContent::List(list) => {
-            for item in &list.items {
-                if let Some(role) =
-                    table_row_role_blocks_value(&item.blocks, target)
-                {
-                    return Some(role);
-                }
-            }
-            None
-        },
+        BlockContent::List(list) => list.items.iter().find_map(|item| {
+            table_row_role_blocks_value(&item.blocks, target)
+        }),
         BlockContent::Table(table) => {
-            for row in &table.rows {
-                if row.id == target {
-                    return Some(row.role);
-                }
-                for cell in &row.cells {
-                    if let Some(role) =
-                        table_row_role_blocks_value(&cell.blocks, target)
-                    {
-                        return Some(role);
-                    }
-                }
-            }
-            None
+            table_row_role_table_value(table, target)
         },
         BlockContent::Citation(_)
         | BlockContent::Date(_)
@@ -6190,6 +6143,23 @@ fn table_row_role_content_value(
         | BlockContent::Rule
         | BlockContent::Unresolved(_) => None,
     }
+}
+
+fn table_row_role_table_value(
+    table: &Table<AcceptedIdentity>,
+    target: AcceptedIdentity,
+) -> Option<TableRowRole> {
+    for row in &table.rows {
+        if row.id == target {
+            return Some(row.role);
+        }
+        if let Some(role) = row.cells.iter().find_map(|cell| {
+            table_row_role_blocks_value(&cell.blocks, target)
+        }) {
+            return Some(role);
+        }
+    }
+    None
 }
 
 fn table_row_role_value(
@@ -6244,27 +6214,17 @@ fn replace_text_content(
         BlockContent::Figure(figure) => {
             replace_text_spans(&mut figure.caption, target, value)
         },
-        BlockContent::List(list) => {
-            for item in &mut list.items {
-                if replace_text_blocks(&mut item.blocks, target, value) {
-                    return true;
-                }
-            }
-            false
-        },
+        BlockContent::List(list) => list.items.iter_mut().any(|item| {
+            replace_text_blocks(&mut item.blocks, target, value)
+        }),
         BlockContent::Mathematics(_)
         | BlockContent::Rule
         | BlockContent::Unresolved(_) => false,
-        BlockContent::Table(table) => {
-            for row in &mut table.rows {
-                for cell in &mut row.cells {
-                    if replace_text_blocks(&mut cell.blocks, target, value) {
-                        return true;
-                    }
-                }
-            }
-            false
-        },
+        BlockContent::Table(table) => table
+            .rows
+            .iter_mut()
+            .flat_map(|row| row.cells.iter_mut())
+            .any(|cell| replace_text_blocks(&mut cell.blocks, target, value)),
     }
 }
 
@@ -6333,28 +6293,18 @@ fn text_content_value(
         BlockContent::Figure(figure) => {
             text_spans_value(&figure.caption, target)
         },
-        BlockContent::List(list) => {
-            for item in &list.items {
-                if let Some(value) = text_blocks_value(&item.blocks, target) {
-                    return Some(value);
-                }
-            }
-            None
-        },
+        BlockContent::List(list) => list
+            .items
+            .iter()
+            .find_map(|item| text_blocks_value(&item.blocks, target)),
         BlockContent::Mathematics(_)
         | BlockContent::Rule
         | BlockContent::Unresolved(_) => None,
-        BlockContent::Table(table) => {
-            for row in &table.rows {
-                for cell in &row.cells {
-                    if let Some(value) = text_blocks_value(&cell.blocks, target)
-                    {
-                        return Some(value);
-                    }
-                }
-            }
-            None
-        },
+        BlockContent::Table(table) => table
+            .rows
+            .iter()
+            .flat_map(|row| row.cells.iter())
+            .find_map(|cell| text_blocks_value(&cell.blocks, target)),
     }
 }
 
@@ -6385,26 +6335,29 @@ fn text_value(
 fn discard_candidate_notebook(notebook: Notebook<CandidateIdentity>) {
     let Notebook { pages, .. } = notebook;
     let mut pending = Vec::new();
-    for page in pages {
-        for flow in page.flows {
-            pending.extend(flow.blocks);
-        }
-    }
+    pending.extend(
+        pages
+            .into_iter()
+            .flat_map(|page| page.flows)
+            .flat_map(|flow| flow.blocks),
+    );
     while let Some(block) = pending.pop() {
         match block.content {
             BlockContent::Callout(children)
             | BlockContent::Freeform(children) => pending.extend(children),
             BlockContent::List(list) => {
-                for item in list.items {
-                    pending.extend(item.blocks);
-                }
+                pending.extend(
+                    list.items.into_iter().flat_map(|item| item.blocks),
+                );
             },
             BlockContent::Table(table) => {
-                for row in table.rows {
-                    for cell in row.cells {
-                        pending.extend(cell.blocks);
-                    }
-                }
+                pending.extend(
+                    table
+                        .rows
+                        .into_iter()
+                        .flat_map(|row| row.cells)
+                        .flat_map(|cell| cell.blocks),
+                );
             },
             BlockContent::Citation(_)
             | BlockContent::Date(_)
