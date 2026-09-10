@@ -150,6 +150,12 @@ impl DirectEditBatchIndexRequest<'_> {
 }
 
 #[derive(Clone, Copy)]
+struct DirectEditBatchFlowContext {
+    flow: AcceptedIdentity,
+    page: AcceptedIdentity,
+}
+
+#[derive(Clone, Copy)]
 struct DirectEditBatchBlockContext {
     block: AcceptedIdentity,
     flow: AcceptedIdentity,
@@ -165,29 +171,70 @@ struct DirectEditBatchTableContext<'notebook> {
 }
 
 #[derive(Clone, Copy)]
+struct DirectEditBatchTableCellContext<'notebook> {
+    row: AcceptedIdentity,
+    table: DirectEditBatchTableContext<'notebook>,
+}
+
+#[derive(Clone, Copy)]
 enum DirectEditBatchIndexFrame<'notebook> {
     Blocks {
         blocks: &'notebook [Block<AcceptedIdentity>],
-        flow: AcceptedIdentity,
-        page: AcceptedIdentity,
+        context: DirectEditBatchFlowContext,
     },
     ListItems {
-        flow: AcceptedIdentity,
+        context: DirectEditBatchFlowContext,
         items: &'notebook [ListItem<AcceptedIdentity>],
-        page: AcceptedIdentity,
     },
     TableCells {
         cells: &'notebook [TableCell<AcceptedIdentity>],
-        context: DirectEditBatchTableContext<'notebook>,
-        row: AcceptedIdentity,
+        context: DirectEditBatchTableCellContext<'notebook>,
     },
     TableRows {
-        block: AcceptedIdentity,
-        flow: AcceptedIdentity,
-        page: AcceptedIdentity,
+        context: DirectEditBatchTableContext<'notebook>,
         rows: &'notebook [TableRow<AcceptedIdentity>],
-        table: &'notebook Table<AcceptedIdentity>,
     },
+}
+
+struct DirectEditMaterialSeed {
+    descriptor: SemanticIdentityDescriptor<AcceptedIdentity>,
+    editable_value: EditableSemanticValue,
+    impact: DirectEditImpactScope,
+    target: AcceptedIdentity,
+}
+
+struct DirectEditBatchIndexState<'request> {
+    index: DirectEditBatchIndex,
+    request: DirectEditBatchIndexRequest<'request>,
+    revision: atrament_semantic_notebook::RevisionIdentity,
+}
+
+impl DirectEditBatchIndexState<'_> {
+    fn insert(&mut self, seed: DirectEditMaterialSeed) {
+        let DirectEditMaterialSeed {
+            descriptor,
+            editable_value,
+            impact,
+            target,
+        } = seed;
+        let family = direct_edit_family(&editable_value);
+        let key = (target, family);
+        let _previous_impact = self.index.impacts.insert(key, impact);
+        let _previous_material = self.index.materials.insert(
+            key,
+            CommandTargetMaterial {
+                descriptor,
+                direct_edit_family: Some(family),
+                editable_value: Some(editable_value),
+                revision: self.revision,
+                target,
+            },
+        );
+    }
+
+    fn is_complete(&self) -> bool {
+        self.request.is_complete(&self.index)
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -2497,77 +2544,88 @@ fn direct_edit_material_index(
     request: DirectEditBatchIndexRequest<'_>,
     revision: atrament_semantic_notebook::RevisionIdentity,
 ) -> DirectEditBatchIndex {
-    let mut index = DirectEditBatchIndex::default();
-    index_direct_edit_constraints(
-        notebook,
+    let mut state = DirectEditBatchIndexState {
+        index: DirectEditBatchIndex::default(),
         request,
         revision,
-        &mut index,
-    );
-    if request.is_complete(&index) {
-        return index;
+    };
+    index_direct_edit_constraints(notebook, &mut state);
+    if state.is_complete() {
+        return state.index;
     }
-    index_direct_edit_page_profiles(notebook, request, revision, &mut index);
-    if request.is_complete(&index) {
-        return index;
+    index_direct_edit_page_profiles(notebook, &mut state);
+    if state.is_complete() {
+        return state.index;
     }
-    index_direct_edit_pages(notebook, request, revision, &mut index);
-    if request.is_complete(&index) {
-        return index;
+    index_direct_edit_pages(notebook, &mut state);
+    if state.is_complete() {
+        return state.index;
     }
     for provenance in &notebook.provenance {
-        if !request.contains_family(
+        if !state.request.contains_family(
             provenance.id,
             SemanticCommandFamily::Provenance,
         ) {
             continue;
         }
-        insert_direct_edit_material(
-            &mut index,
-            provenance.id,
-            SemanticIdentityDescriptor {
+        state.insert(DirectEditMaterialSeed {
+            descriptor: SemanticIdentityDescriptor {
                 kind: SemanticIdentityKind::Provenance,
                 owner: Some(notebook.id),
             },
-            editable_provenance_value(provenance),
-            DirectEditImpactScope::Notebook { notebook: notebook.id },
-            revision,
-        );
+            editable_value: editable_provenance_value(provenance),
+            impact: DirectEditImpactScope::Notebook { notebook: notebook.id },
+            target: provenance.id,
+        });
     }
-    if request.is_complete(&index) {
-        return index;
+    if state.is_complete() {
+        return state.index;
     }
+    index_direct_edit_flows(notebook, &mut state);
+    state.index
+}
+
+fn index_direct_edit_flows(
+    notebook: &Notebook<AcceptedIdentity>,
+    state: &mut DirectEditBatchIndexState<'_>,
+) {
     let mut stack = Vec::new();
-    'pages: for page in &notebook.pages {
+    for page in &notebook.pages {
         for flow in &page.flows {
-            if !flow.blocks.is_empty() {
-                stack.push(DirectEditBatchIndexFrame::Blocks {
-                    blocks: &flow.blocks,
-                    flow: flow.id,
-                    page: page.id,
-                });
-            }
-            while let Some(frame) = stack.pop() {
-                index_direct_edit_frame(
-                    frame, &mut index, request, revision, &mut stack,
-                );
-                if request.is_complete(&index) {
-                    break 'pages;
-                }
+            if index_direct_edit_flow(flow, page.id, state, &mut stack) {
+                return;
             }
         }
     }
-    index
+}
+
+fn index_direct_edit_flow<'notebook>(
+    flow: &'notebook Flow<AcceptedIdentity>,
+    page: AcceptedIdentity,
+    state: &mut DirectEditBatchIndexState<'_>,
+    stack: &mut Vec<DirectEditBatchIndexFrame<'notebook>>,
+) -> bool {
+    if !flow.blocks.is_empty() {
+        stack.push(DirectEditBatchIndexFrame::Blocks {
+            blocks: &flow.blocks,
+            context: DirectEditBatchFlowContext { flow: flow.id, page },
+        });
+    }
+    while let Some(frame) = stack.pop() {
+        index_direct_edit_frame(frame, state, stack);
+        if state.is_complete() {
+            return true;
+        }
+    }
+    false
 }
 
 fn index_direct_edit_page_profiles(
     notebook: &Notebook<AcceptedIdentity>,
-    request: DirectEditBatchIndexRequest<'_>,
-    revision: atrament_semantic_notebook::RevisionIdentity,
-    index: &mut DirectEditBatchIndex,
+    state: &mut DirectEditBatchIndexState<'_>,
 ) {
     let has_targeted_profile = notebook.page_profiles.iter().any(|profile| {
-        request.contains_family(
+        state.request.contains_family(
             profile.id,
             SemanticCommandFamily::DocumentConstraint,
         )
@@ -2578,7 +2636,7 @@ fn index_direct_edit_page_profiles(
     let mut profile_pages =
         BTreeMap::<AcceptedIdentity, Vec<AcceptedIdentity>>::new();
     for page in &notebook.pages {
-        if request.contains_family(
+        if state.request.contains_family(
             page.paper_profile,
             SemanticCommandFamily::DocumentConstraint,
         ) {
@@ -2589,7 +2647,7 @@ fn index_direct_edit_page_profiles(
         }
     }
     for profile in &notebook.page_profiles {
-        if !request.contains_family(
+        if !state.request.contains_family(
             profile.id,
             SemanticCommandFamily::DocumentConstraint,
         ) {
@@ -2601,114 +2659,87 @@ fn index_direct_edit_page_profiles(
         } else {
             DirectEditImpactScope::Pages { pages }
         };
-        insert_direct_edit_material(
-            index,
-            profile.id,
-            SemanticIdentityDescriptor {
+        state.insert(DirectEditMaterialSeed {
+            descriptor: SemanticIdentityDescriptor {
                 kind: SemanticIdentityKind::PageProfile,
                 owner: Some(notebook.id),
             },
-            EditableSemanticValue::PageProfile(profile.geometry),
+            editable_value: EditableSemanticValue::PageProfile(
+                profile.geometry,
+            ),
             impact,
-            revision,
-        );
+            target: profile.id,
+        });
     }
 }
 
 fn index_direct_edit_pages(
     notebook: &Notebook<AcceptedIdentity>,
-    request: DirectEditBatchIndexRequest<'_>,
-    revision: atrament_semantic_notebook::RevisionIdentity,
-    index: &mut DirectEditBatchIndex,
+    state: &mut DirectEditBatchIndexState<'_>,
 ) {
     for page in &notebook.pages {
-        if !request.contains_family(
+        if !state.request.contains_family(
             page.id,
             SemanticCommandFamily::DocumentConstraint,
         ) {
             continue;
         }
-        insert_direct_edit_material(
-            index,
-            page.id,
-            SemanticIdentityDescriptor {
+        state.insert(DirectEditMaterialSeed {
+            descriptor: SemanticIdentityDescriptor {
                 kind: SemanticIdentityKind::Page,
                 owner: Some(notebook.id),
             },
-            EditableSemanticValue::PageProfileReference(page.paper_profile),
-            DirectEditImpactScope::Pages { pages: vec![page.id] },
-            revision,
-        );
+            editable_value: EditableSemanticValue::PageProfileReference(
+                page.paper_profile,
+            ),
+            impact: DirectEditImpactScope::Pages { pages: vec![page.id] },
+            target: page.id,
+        });
     }
 }
 
 fn index_direct_edit_constraints(
     notebook: &Notebook<AcceptedIdentity>,
-    request: DirectEditBatchIndexRequest<'_>,
-    revision: atrament_semantic_notebook::RevisionIdentity,
-    index: &mut DirectEditBatchIndex,
+    state: &mut DirectEditBatchIndexState<'_>,
 ) {
     for constraint in &notebook.constraints {
-        if !request.contains_family(
+        if !state.request.contains_family(
             constraint.id,
             SemanticCommandFamily::DocumentConstraint,
         ) {
             continue;
         }
-        insert_direct_edit_material(
-            index,
-            constraint.id,
-            SemanticIdentityDescriptor {
+        state.insert(DirectEditMaterialSeed {
+            descriptor: SemanticIdentityDescriptor {
                 kind: SemanticIdentityKind::Constraint,
                 owner: Some(notebook.id),
             },
-            EditableSemanticValue::ConstraintKind(constraint.kind),
-            DirectEditImpactScope::Notebook { notebook: notebook.id },
-            revision,
-        );
+            editable_value: EditableSemanticValue::ConstraintKind(
+                constraint.kind,
+            ),
+            impact: DirectEditImpactScope::Notebook { notebook: notebook.id },
+            target: constraint.id,
+        });
     }
 }
 
 fn index_direct_edit_frame<'notebook>(
     frame: DirectEditBatchIndexFrame<'notebook>,
-    index: &mut DirectEditBatchIndex,
-    request: DirectEditBatchIndexRequest<'_>,
-    revision: atrament_semantic_notebook::RevisionIdentity,
+    state: &mut DirectEditBatchIndexState<'_>,
     stack: &mut Vec<DirectEditBatchIndexFrame<'notebook>>,
 ) {
     match frame {
-        DirectEditBatchIndexFrame::Blocks { blocks, flow, page } => {
-            index_direct_edit_blocks_frame(
-                blocks, flow, page, index, request, revision, stack,
-            );
+        DirectEditBatchIndexFrame::Blocks { blocks, context } => {
+            index_direct_edit_blocks_frame(blocks, context, state, stack);
         },
-        DirectEditBatchIndexFrame::ListItems { flow, items, page } => {
-            index_direct_edit_list_items_frame(items, flow, page, stack);
+        DirectEditBatchIndexFrame::ListItems { context, items } => {
+            index_direct_edit_list_items_frame(items, context, stack);
         },
-        DirectEditBatchIndexFrame::TableCells {
-            cells,
-            context,
-            row,
-        } => {
-            index_direct_edit_table_cells_frame(
-                cells, context, row, index, request, revision, stack,
-            );
+        DirectEditBatchIndexFrame::TableCells { cells, context } => {
+            index_direct_edit_table_cells_frame(cells, context, state, stack);
         },
-        DirectEditBatchIndexFrame::TableRows {
-            block,
-            flow,
-            page,
-            rows,
-            table,
-        } => {
-            index_direct_edit_table_rows_frame(
-                rows,
-                DirectEditBatchTableContext { block, flow, page, table },
-                index,
-                request,
-                revision,
-                stack,
-            );
+        DirectEditBatchIndexFrame::TableRows { context, rows } => {
+            index_direct_edit_table_rows_frame(rows, context, state, stack);
         },
     }
 }
@@ -2739,11 +2770,8 @@ const fn direct_edit_block_kind(
 
 fn index_direct_edit_blocks_frame<'notebook>(
     current: &'notebook [Block<AcceptedIdentity>],
-    flow: AcceptedIdentity,
-    page: AcceptedIdentity,
-    index: &mut DirectEditBatchIndex,
-    request: DirectEditBatchIndexRequest<'_>,
-    revision: atrament_semantic_notebook::RevisionIdentity,
+    flow_context: DirectEditBatchFlowContext,
+    state: &mut DirectEditBatchIndexState<'_>,
     stack: &mut Vec<DirectEditBatchIndexFrame<'notebook>>,
 ) {
     let Some((block, remaining)) = current.split_first() else {
@@ -2752,23 +2780,36 @@ fn index_direct_edit_blocks_frame<'notebook>(
     if !remaining.is_empty() {
         stack.push(DirectEditBatchIndexFrame::Blocks {
             blocks: remaining,
-            flow,
-            page,
+            context: flow_context,
         });
     }
-    index_direct_edit_block_materials(
-        block, flow, page, index, request, revision,
-    );
-    if request.is_complete(index) {
+    let DirectEditBatchFlowContext { flow, page } = flow_context;
+    let block_context = DirectEditBatchBlockContext {
+        block: block.id,
+        flow,
+        page,
+    };
+    index_direct_edit_block_materials(block, block_context, state);
+    if state.is_complete() {
         return;
     }
+    index_direct_edit_block_content(block, block_context, state, stack);
+}
+
+fn index_direct_edit_block_content<'notebook>(
+    block: &'notebook Block<AcceptedIdentity>,
+    context: DirectEditBatchBlockContext,
+    state: &mut DirectEditBatchIndexState<'_>,
+    stack: &mut Vec<DirectEditBatchIndexFrame<'notebook>>,
+) {
+    let DirectEditBatchBlockContext { flow, page, .. } = context;
+    let flow_context = DirectEditBatchFlowContext { flow, page };
     match &block.content {
         BlockContent::Callout(children) | BlockContent::Freeform(children) => {
             if !children.is_empty() {
                 stack.push(DirectEditBatchIndexFrame::Blocks {
                     blocks: children,
-                    flow,
-                    page,
+                    context: flow_context,
                 });
             }
         },
@@ -2780,57 +2821,28 @@ fn index_direct_edit_blocks_frame<'notebook>(
         | BlockContent::SourceNote(spans)
         | BlockContent::Heading(spans)
         | BlockContent::MarginNote(spans)
-        | BlockContent::Paragraph(spans) => index_direct_edit_block_spans(
-            spans, block.id, flow, page, index, request, revision,
-        ),
-        BlockContent::Figure(figure) => index_direct_edit_figure(
-            figure, block.id, flow, page, index, request, revision,
-        ),
-        BlockContent::List(list) => index_direct_edit_list(
-            list,
-            DirectEditBatchBlockContext {
-                block: block.id,
-                flow,
-                page,
-            },
-            index,
-            request,
-            revision,
-            stack,
-        ),
+        | BlockContent::Paragraph(spans) => {
+            index_direct_edit_block_spans(spans, context, state);
+        },
+        BlockContent::Figure(figure) => {
+            index_direct_edit_figure(figure, context, state);
+        },
+        BlockContent::List(list) => {
+            index_direct_edit_list(list, context, state, stack);
+        },
         BlockContent::Mathematics(formula) => {
-            if request.contains_family(
-                formula.id,
-                SemanticCommandFamily::StructuredContent,
-            ) {
-                insert_direct_edit_material(
-                    index,
-                    formula.id,
-                    SemanticIdentityDescriptor {
-                        kind: SemanticIdentityKind::Formula,
-                        owner: Some(block.id),
-                    },
-                    EditableSemanticValue::Formula {
-                        mode: formula.mode,
-                        source: formula.source.clone(),
-                    },
-                    DirectEditImpactScope::BlockFlow {
-                        block: block.id,
-                        flow,
-                        page,
-                    },
-                    revision,
-                );
-            }
+            index_direct_edit_formula(formula, context, state);
         },
         BlockContent::Table(table) => {
             if !table.rows.is_empty() {
                 stack.push(DirectEditBatchIndexFrame::TableRows {
-                    block: block.id,
-                    flow,
-                    page,
+                    context: DirectEditBatchTableContext {
+                        block: block.id,
+                        flow,
+                        page,
+                        table,
+                    },
                     rows: &table.rows,
-                    table,
                 });
             }
         },
@@ -2840,149 +2852,148 @@ fn index_direct_edit_blocks_frame<'notebook>(
 
 fn index_direct_edit_block_spans(
     spans: &[InlineSpan<AcceptedIdentity>],
-    block: AcceptedIdentity,
-    flow: AcceptedIdentity,
-    page: AcceptedIdentity,
-    index: &mut DirectEditBatchIndex,
-    request: DirectEditBatchIndexRequest<'_>,
-    revision: atrament_semantic_notebook::RevisionIdentity,
+    context: DirectEditBatchBlockContext,
+    state: &mut DirectEditBatchIndexState<'_>,
 ) {
-    index_direct_edit_spans(
-        index,
-        spans,
-        request,
-        block,
-        DirectEditBatchBlockContext { block, flow, page },
-        revision,
-    );
+    index_direct_edit_spans(spans, context.block, context, state);
 }
 
 fn index_direct_edit_block_materials(
     block: &Block<AcceptedIdentity>,
-    flow: AcceptedIdentity,
-    page: AcceptedIdentity,
-    index: &mut DirectEditBatchIndex,
-    request: DirectEditBatchIndexRequest<'_>,
-    revision: atrament_semantic_notebook::RevisionIdentity,
+    context: DirectEditBatchBlockContext,
+    state: &mut DirectEditBatchIndexState<'_>,
 ) {
-    if !request.contains_target(block.id) {
+    if !state.request.contains_target(block.id) {
         return;
     }
+    let DirectEditBatchBlockContext { flow, page, .. } = context;
     let descriptor = SemanticIdentityDescriptor {
         kind: SemanticIdentityKind::Block(direct_edit_block_kind(
             &block.content,
         )),
         owner: Some(flow),
     };
-    if request.contains_family(block.id, SemanticCommandFamily::StyleRole) {
-        insert_direct_edit_material(
-            index,
-            block.id,
+    if state
+        .request
+        .contains_family(block.id, SemanticCommandFamily::StyleRole)
+    {
+        state.insert(DirectEditMaterialSeed {
             descriptor,
-            EditableSemanticValue::StyleReference(block.style),
-            DirectEditImpactScope::BlockFlow {
+            editable_value: EditableSemanticValue::StyleReference(block.style),
+            impact: DirectEditImpactScope::BlockFlow {
                 block: block.id,
                 flow,
                 page,
             },
-            revision,
-        );
+            target: block.id,
+        });
     }
-    if request.contains_family(block.id, SemanticCommandFamily::Provenance) {
-        insert_direct_edit_material(
-            index,
-            block.id,
+    if state
+        .request
+        .contains_family(block.id, SemanticCommandFamily::Provenance)
+    {
+        state.insert(DirectEditMaterialSeed {
             descriptor,
-            EditableSemanticValue::ProvenanceReference(block.provenance),
-            DirectEditImpactScope::BlockFlow {
+            editable_value: EditableSemanticValue::ProvenanceReference(
+                block.provenance,
+            ),
+            impact: DirectEditImpactScope::BlockFlow {
                 block: block.id,
                 flow,
                 page,
             },
-            revision,
-        );
+            target: block.id,
+        });
     }
 }
 
 fn index_direct_edit_list<'notebook>(
     list: &'notebook List<AcceptedIdentity>,
     context: DirectEditBatchBlockContext,
-    index: &mut DirectEditBatchIndex,
-    request: DirectEditBatchIndexRequest<'_>,
-    revision: atrament_semantic_notebook::RevisionIdentity,
+    state: &mut DirectEditBatchIndexState<'_>,
     stack: &mut Vec<DirectEditBatchIndexFrame<'notebook>>,
 ) {
     let DirectEditBatchBlockContext { block, flow, page } = context;
-    if request.contains_family(
+    if state.request.contains_family(
         list.id,
         SemanticCommandFamily::OrderingAndGrouping,
     ) {
-        insert_direct_edit_material(
-            index,
-            list.id,
-            SemanticIdentityDescriptor {
+        state.insert(DirectEditMaterialSeed {
+            descriptor: SemanticIdentityDescriptor {
                 kind: SemanticIdentityKind::List,
                 owner: Some(block),
             },
-            EditableSemanticValue::ListOrdering(list.ordered),
-            DirectEditImpactScope::BlockFlow { block, flow, page },
-            revision,
-        );
-        if request.is_complete(index) {
+            editable_value: EditableSemanticValue::ListOrdering(list.ordered),
+            impact: DirectEditImpactScope::BlockFlow { block, flow, page },
+            target: list.id,
+        });
+        if state.is_complete() {
             return;
         }
     }
     if !list.items.is_empty() {
         stack.push(DirectEditBatchIndexFrame::ListItems {
-            flow,
+            context: DirectEditBatchFlowContext { flow, page },
             items: &list.items,
-            page,
         });
     }
 }
 
+fn index_direct_edit_formula(
+    formula: &Formula<AcceptedIdentity>,
+    context: DirectEditBatchBlockContext,
+    state: &mut DirectEditBatchIndexState<'_>,
+) {
+    if !state.request.contains_family(
+        formula.id,
+        SemanticCommandFamily::StructuredContent,
+    ) {
+        return;
+    }
+    let DirectEditBatchBlockContext { block, flow, page } = context;
+    state.insert(DirectEditMaterialSeed {
+        descriptor: SemanticIdentityDescriptor {
+            kind: SemanticIdentityKind::Formula,
+            owner: Some(block),
+        },
+        editable_value: EditableSemanticValue::Formula {
+            mode: formula.mode,
+            source: formula.source.clone(),
+        },
+        impact: DirectEditImpactScope::BlockFlow { block, flow, page },
+        target: formula.id,
+    });
+}
+
 fn index_direct_edit_figure(
     figure: &Figure<AcceptedIdentity>,
-    block: AcceptedIdentity,
-    flow: AcceptedIdentity,
-    page: AcceptedIdentity,
-    index: &mut DirectEditBatchIndex,
-    request: DirectEditBatchIndexRequest<'_>,
-    revision: atrament_semantic_notebook::RevisionIdentity,
+    context: DirectEditBatchBlockContext,
+    state: &mut DirectEditBatchIndexState<'_>,
 ) {
-    if request.contains_family(
+    let DirectEditBatchBlockContext { block, flow, page } = context;
+    if state.request.contains_family(
         figure.id,
         SemanticCommandFamily::AssetReference,
     ) {
-        insert_direct_edit_material(
-            index,
-            figure.id,
-            SemanticIdentityDescriptor {
+        state.insert(DirectEditMaterialSeed {
+            descriptor: SemanticIdentityDescriptor {
                 kind: SemanticIdentityKind::Figure,
                 owner: Some(block),
             },
-            EditableSemanticValue::AssetReference(figure.asset),
-            DirectEditImpactScope::BlockFlow { block, flow, page },
-            revision,
-        );
-        if request.is_complete(index) {
+            editable_value: EditableSemanticValue::AssetReference(figure.asset),
+            impact: DirectEditImpactScope::BlockFlow { block, flow, page },
+            target: figure.id,
+        });
+        if state.is_complete() {
             return;
         }
     }
-    index_direct_edit_spans(
-        index,
-        &figure.caption,
-        request,
-        figure.id,
-        DirectEditBatchBlockContext { block, flow, page },
-        revision,
-    );
+    index_direct_edit_spans(&figure.caption, figure.id, context, state);
 }
 
 fn index_direct_edit_list_items_frame<'notebook>(
     current: &'notebook [ListItem<AcceptedIdentity>],
-    flow: AcceptedIdentity,
-    page: AcceptedIdentity,
+    context: DirectEditBatchFlowContext,
     stack: &mut Vec<DirectEditBatchIndexFrame<'notebook>>,
 ) {
     let Some((item, remaining)) = current.split_first() else {
@@ -2990,27 +3001,22 @@ fn index_direct_edit_list_items_frame<'notebook>(
     };
     if !remaining.is_empty() {
         stack.push(DirectEditBatchIndexFrame::ListItems {
-            flow,
+            context,
             items: remaining,
-            page,
         });
     }
     if !item.blocks.is_empty() {
         stack.push(DirectEditBatchIndexFrame::Blocks {
             blocks: &item.blocks,
-            flow,
-            page,
+            context,
         });
     }
 }
 
 fn index_direct_edit_table_cells_frame<'notebook>(
     current: &'notebook [TableCell<AcceptedIdentity>],
-    context: DirectEditBatchTableContext<'notebook>,
-    row: AcceptedIdentity,
-    index: &mut DirectEditBatchIndex,
-    request: DirectEditBatchIndexRequest<'_>,
-    revision: atrament_semantic_notebook::RevisionIdentity,
+    context: DirectEditBatchTableCellContext<'notebook>,
+    state: &mut DirectEditBatchIndexState<'_>,
     stack: &mut Vec<DirectEditBatchIndexFrame<'notebook>>,
 ) {
     let Some((cell, remaining)) = current.split_first() else {
@@ -3020,43 +3026,45 @@ fn index_direct_edit_table_cells_frame<'notebook>(
         stack.push(DirectEditBatchIndexFrame::TableCells {
             cells: remaining,
             context,
-            row,
         });
     }
-    if request.contains_family(
+    let DirectEditBatchTableCellContext { row, table } = context;
+    if state.request.contains_family(
         cell.id,
         SemanticCommandFamily::StructuredContent,
     ) {
-        insert_direct_edit_material(
-            index,
-            cell.id,
-            SemanticIdentityDescriptor {
+        state.insert(DirectEditMaterialSeed {
+            descriptor: SemanticIdentityDescriptor {
                 kind: SemanticIdentityKind::TableCell,
                 owner: Some(row),
             },
-            EditableSemanticValue::TableCellSpan(cell.span),
-            DirectEditImpactScope::BlockFlow {
-                block: context.block,
-                flow: context.flow,
-                page: context.page,
+            editable_value: EditableSemanticValue::TableCellSpan(cell.span),
+            impact: DirectEditImpactScope::BlockFlow {
+                block: table.block,
+                flow: table.flow,
+                page: table.page,
             },
-            revision,
-        );
-        let table_id = context.table.id;
-        let _previous_table = index.table_by_cell.insert(cell.id, table_id);
-        let _overlay = index
+            target: cell.id,
+        });
+        let table_id = table.table.id;
+        let _previous_table =
+            state.index.table_by_cell.insert(cell.id, table_id);
+        let _overlay = state
+            .index
             .table_overlays
             .entry(table_id)
-            .or_insert_with(|| context.table.clone());
-        if request.is_complete(index) {
+            .or_insert_with(|| table.table.clone());
+        if state.is_complete() {
             return;
         }
     }
     if !cell.blocks.is_empty() {
         stack.push(DirectEditBatchIndexFrame::Blocks {
             blocks: &cell.blocks,
-            flow: context.flow,
-            page: context.page,
+            context: DirectEditBatchFlowContext {
+                flow: table.flow,
+                page: table.page,
+            },
         });
     }
 }
@@ -3064,142 +3072,106 @@ fn index_direct_edit_table_cells_frame<'notebook>(
 fn index_direct_edit_table_rows_frame<'notebook>(
     current: &'notebook [TableRow<AcceptedIdentity>],
     context: DirectEditBatchTableContext<'notebook>,
-    index: &mut DirectEditBatchIndex,
-    request: DirectEditBatchIndexRequest<'_>,
-    revision: atrament_semantic_notebook::RevisionIdentity,
+    state: &mut DirectEditBatchIndexState<'_>,
     stack: &mut Vec<DirectEditBatchIndexFrame<'notebook>>,
 ) {
-    let DirectEditBatchTableContext { block, flow, page, table } = context;
     let Some((row, remaining)) = current.split_first() else {
         return;
     };
     if !remaining.is_empty() {
         stack.push(DirectEditBatchIndexFrame::TableRows {
-            block,
-            flow,
-            page,
+            context,
             rows: remaining,
-            table,
         });
     }
-    if request.contains_family(
+    if state.request.contains_family(
         row.id,
         SemanticCommandFamily::StructuredContent,
     ) {
-        insert_direct_edit_material(
-            index,
-            row.id,
-            SemanticIdentityDescriptor {
+        state.insert(DirectEditMaterialSeed {
+            descriptor: SemanticIdentityDescriptor {
                 kind: SemanticIdentityKind::TableRow,
-                owner: Some(table.id),
+                owner: Some(context.table.id),
             },
-            EditableSemanticValue::TableRowRole(row.role),
-            DirectEditImpactScope::BlockFlow { block, flow, page },
-            revision,
-        );
-        if request.is_complete(index) {
+            editable_value: EditableSemanticValue::TableRowRole(row.role),
+            impact: DirectEditImpactScope::BlockFlow {
+                block: context.block,
+                flow: context.flow,
+                page: context.page,
+            },
+            target: row.id,
+        });
+        if state.is_complete() {
             return;
         }
     }
     if !row.cells.is_empty() {
         stack.push(DirectEditBatchIndexFrame::TableCells {
             cells: &row.cells,
-            context,
-            row: row.id,
+            context: DirectEditBatchTableCellContext {
+                row: row.id,
+                table: context,
+            },
         });
     }
 }
 
 fn index_direct_edit_spans(
-    index: &mut DirectEditBatchIndex,
     spans: &[InlineSpan<AcceptedIdentity>],
-    request: DirectEditBatchIndexRequest<'_>,
     owner: AcceptedIdentity,
     context: DirectEditBatchBlockContext,
-    revision: atrament_semantic_notebook::RevisionIdentity,
+    state: &mut DirectEditBatchIndexState<'_>,
 ) {
     let DirectEditBatchBlockContext { block, flow, page } = context;
     for span in spans {
-        if !request.contains_target(span.id) {
+        if !state.request.contains_target(span.id) {
             continue;
         }
         let descriptor = SemanticIdentityDescriptor {
             kind: SemanticIdentityKind::InlineSpan,
             owner: Some(owner),
         };
-        if request.contains_family(
+        if state.request.contains_family(
             span.id,
             SemanticCommandFamily::TextContent,
         ) {
-            insert_direct_edit_material(
-                index,
-                span.id,
+            state.insert(DirectEditMaterialSeed {
                 descriptor,
-                EditableSemanticValue::Text(span.text.clone()),
-                DirectEditImpactScope::Flow { flow, page },
-                revision,
-            );
+                editable_value: EditableSemanticValue::Text(span.text.clone()),
+                impact: DirectEditImpactScope::Flow { flow, page },
+                target: span.id,
+            });
         }
-        if request.contains_family(
+        if state.request.contains_family(
             span.id,
             SemanticCommandFamily::StyleRole,
         ) {
-            insert_direct_edit_material(
-                index,
-                span.id,
+            state.insert(DirectEditMaterialSeed {
                 descriptor,
-                EditableSemanticValue::StyleReference(span.style),
-                DirectEditImpactScope::BlockFlow {
-                    block,
-                    flow,
-                    page,
-                },
-                revision,
-            );
+                editable_value: EditableSemanticValue::StyleReference(
+                    span.style,
+                ),
+                impact: DirectEditImpactScope::BlockFlow { block, flow, page },
+                target: span.id,
+            });
         }
-        if request.contains_family(
+        if state.request.contains_family(
             span.id,
             SemanticCommandFamily::Provenance,
         ) {
-            insert_direct_edit_material(
-                index,
-                span.id,
+            state.insert(DirectEditMaterialSeed {
                 descriptor,
-                EditableSemanticValue::ProvenanceReference(span.provenance),
-                DirectEditImpactScope::BlockFlow {
-                    block,
-                    flow,
-                    page,
-                },
-                revision,
-            );
+                editable_value: EditableSemanticValue::ProvenanceReference(
+                    span.provenance,
+                ),
+                impact: DirectEditImpactScope::BlockFlow { block, flow, page },
+                target: span.id,
+            });
         }
-        if request.is_complete(index) {
+        if state.is_complete() {
             break;
         }
     }
-}
-
-fn insert_direct_edit_material(
-    index: &mut DirectEditBatchIndex,
-    target: AcceptedIdentity,
-    descriptor: SemanticIdentityDescriptor<AcceptedIdentity>,
-    editable_value: EditableSemanticValue,
-    impact: DirectEditImpactScope,
-    revision: atrament_semantic_notebook::RevisionIdentity,
-) {
-    let family = direct_edit_family(&editable_value);
-    let key = (target, family);
-    let direct_edit_family = Some(family);
-    let _previous_impact = index.impacts.insert(key, impact);
-    let _previous_material =
-        index.materials.insert(key, CommandTargetMaterial {
-            descriptor,
-            direct_edit_family,
-            editable_value: Some(editable_value),
-            revision,
-            target,
-        });
 }
 
 fn simulate_direct_edit_batch_after_base<CommandIdentity>(
