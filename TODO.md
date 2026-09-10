@@ -1731,6 +1731,13 @@ manifest and declared members, unsafe separators and traversal, undeclared
 members, Unicode, spaces, and percent-like names with exact first-error
 precedence.
 
+
+Typed profile-manifest admission now adds another deterministic 4,096-case
+reference corpus. Generated values combine current/prior/future version strings,
+supported and unsupported required-feature sets, safe and unsafe entry paths,
+duplicate declarations, empty media types, Unicode, spaces, and percent-like
+names while preserving exact validation precedence.
+
 The TeX-compatible mathematics boundary now also runs a deterministic generated
 4,096-source corpus in inline, display, and aligned modes. Generated mixtures
 cover supported and unsupported commands, malformed groups/environments,

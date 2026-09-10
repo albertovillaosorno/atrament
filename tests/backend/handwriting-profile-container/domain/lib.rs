@@ -380,6 +380,131 @@ fn generated_archive_inventory_mutations_match_reference_oracle() {
     }
 }
 
+
+fn reference_manifest_path_error(path: &str) -> Option<ProfileEntryPathError> {
+    if path == PROFILE_MANIFEST_PATH {
+        return Some(ProfileEntryPathError::ManifestReserved);
+    }
+    reference_inventory_path_error(path)
+}
+
+fn reference_manifest(
+    value: &ProfileManifest,
+    supported: &[&str],
+) -> Result<(), ProfileManifestError> {
+    if value.container_version != PROFILE_CONTAINER_VERSION {
+        return Err(ProfileManifestError::UnsupportedContainerVersion {
+            observed: value.container_version.clone(),
+        });
+    }
+    for feature in &value.required_features {
+        if !supported.contains(&feature.as_str()) {
+            return Err(ProfileManifestError::UnsupportedRequiredFeature {
+                feature: feature.clone(),
+            });
+        }
+    }
+    let mut paths = Vec::new();
+    for item in &value.entries {
+        if let Some(reason) = reference_manifest_path_error(&item.path) {
+            return Err(ProfileManifestError::InvalidEntryPath {
+                path: item.path.clone(),
+                reason,
+            });
+        }
+        if item.media_type.is_empty() {
+            return Err(ProfileManifestError::EmptyMediaType {
+                path: item.path.clone(),
+            });
+        }
+        if paths.iter().any(|path| *path == item.path.as_str()) {
+            return Err(ProfileManifestError::DuplicateEntryPath {
+                path: item.path.clone(),
+            });
+        }
+        paths.push(item.path.as_str());
+    }
+    Ok(())
+}
+
+#[test]
+fn generated_manifest_values_match_reference_admission_oracle() {
+    const CASES: usize = 4_096;
+    let versions = [
+        PROFILE_CONTAINER_VERSION,
+        "atrament.profile/0",
+        "atrament.profile/2",
+        "",
+    ];
+    let feature_sets: &[&[&str]] = &[
+        &["stroke-vocabulary"],
+        &["future-supported"],
+        &["stroke-vocabulary", "future-supported"],
+        &["future-required"],
+        &["stroke-vocabulary", "future-required"],
+    ];
+    let paths = [
+        "sections/strokes.json",
+        "assets/sample.webp",
+        "sections/identity.json",
+        "assets/é.bin",
+        "sections/%2e%2e/value.json",
+        PROFILE_MANIFEST_PATH,
+        "sections/../value.json",
+        r"assets\sample.webp",
+        "sections//value.json",
+        "other/value.bin",
+        "",
+    ];
+    let media_types = ["application/json", "image/webp", "", "opaque/type"];
+    let supported = ["stroke-vocabulary", "future-supported"];
+    let mut seed = 0x5eed_4d41_2026_u64;
+    for case in 0..CASES {
+        let version_index =
+            next_inventory_value(&mut seed) as usize % versions.len();
+        let feature_index =
+            next_inventory_value(&mut seed) as usize % feature_sets.len();
+        let entry_count =
+            next_inventory_value(&mut seed) as usize % 5;
+        let mut entries = Vec::with_capacity(entry_count);
+        for entry_index in 0..entry_count {
+            let path_index =
+                next_inventory_value(&mut seed) as usize % paths.len();
+            let media_index =
+                next_inventory_value(&mut seed) as usize % media_types.len();
+            let selected_path = if entry_index > 0
+                && next_inventory_value(&mut seed).is_multiple_of(5)
+            {
+                entries[0].path.as_str()
+            } else {
+                paths[path_index]
+            };
+            entries.push(entry(
+                selected_path,
+                media_types[media_index],
+                u8::try_from(entry_index + 1)
+                    .expect("generated entry count stays small"),
+            ));
+        }
+        let value = ProfileManifest {
+            container_version: String::from(versions[version_index]),
+            entries,
+            optional_features: vec![String::from("future-optional")],
+            profile_identity: String::from("writer-generated"),
+            required_features: feature_sets[feature_index]
+                .iter()
+                .map(|feature| String::from(*feature))
+                .collect(),
+        };
+        let expected = reference_manifest(&value, &supported);
+        assert_eq!(
+            validate_profile_manifest(&value, &supported),
+            expected,
+            "generated manifest case {case}",
+        );
+    }
+}
+
 #[test]
 fn manifest_admits_sections_assets_and_preserves_optional_features() {
     let value = manifest(vec![
