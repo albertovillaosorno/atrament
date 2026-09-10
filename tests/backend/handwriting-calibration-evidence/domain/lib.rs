@@ -366,3 +366,132 @@ fn repeated_held_out_measurements_and_empty_known_failures_remain_valid() {
     );
     assert_eq!(report.measurements.len(), 7);
 }
+
+#[test]
+fn every_quality_dimension_subset_matches_completeness_oracle() {
+    use HeldOutQualityDimension::{
+        Geometry, Joins, PerceptualFidelity, Punctuation, Rhythm, Spacing,
+    };
+    let dimensions = [
+        Geometry,
+        Rhythm,
+        Joins,
+        Spacing,
+        Punctuation,
+        PerceptualFidelity,
+    ];
+    let samples = [CalibrationSample {
+        identity: 0_u8,
+        role: CalibrationSampleRole::HeldOut,
+    }];
+    let mut cases = 0_u8;
+    for mask in 0_u8..64 {
+        let report = HeldOutQualityReport::<u8, u8, (), ()> {
+            known_failures: Vec::new(),
+            measurements: dimensions
+                .iter()
+                .enumerate()
+                .filter_map(|(index, dimension)| {
+                    (mask & (1_u8 << index) != 0).then_some(
+                        HeldOutQualityMeasurement {
+                            dimension: *dimension,
+                            evidence: (),
+                            sample: 0,
+                            value: index as u8,
+                        },
+                    )
+                })
+                .collect(),
+        };
+        let expected = dimensions
+            .iter()
+            .enumerate()
+            .find(|(index, _)| mask & (1_u8 << index) == 0)
+            .map_or(Ok(()), |(_, dimension)| {
+                Err(HeldOutQualityReportError::MissingDimension {
+                    dimension: *dimension,
+                })
+            });
+        assert_eq!(
+            validate_held_out_quality_report(&samples, &report),
+            expected,
+            "dimension subset mask {mask:#08b}",
+        );
+        cases = cases.saturating_add(1);
+    }
+    assert_eq!(cases, 64);
+}
+
+#[test]
+fn every_compact_measurement_role_sequence_matches_first_failure_oracle() {
+    use HeldOutQualityDimension::{
+        Geometry, Joins, PerceptualFidelity, Punctuation, Rhythm, Spacing,
+    };
+    let dimensions = [
+        Geometry,
+        Rhythm,
+        Joins,
+        Spacing,
+        Punctuation,
+        PerceptualFidelity,
+    ];
+    let samples = [
+        CalibrationSample {
+            identity: 0_u8,
+            role: CalibrationSampleRole::HeldOut,
+        },
+        CalibrationSample {
+            identity: 1_u8,
+            role: CalibrationSampleRole::Training,
+        },
+    ];
+    let mut cases = 0_u16;
+    let mut saw = [false; 3];
+    for encoded in 0_u16..729 {
+        let mut state = encoded;
+        let mut references = [0_u8; 6];
+        for reference in &mut references {
+            *reference = (state % 3) as u8;
+            state /= 3;
+        }
+        let report = HeldOutQualityReport::<u8, u8, (), ()> {
+            known_failures: Vec::new(),
+            measurements: dimensions
+                .iter()
+                .zip(references)
+                .enumerate()
+                .map(|(index, (dimension, sample))| {
+                    HeldOutQualityMeasurement {
+                        dimension: *dimension,
+                        evidence: (),
+                        sample,
+                        value: index as u8,
+                    }
+                })
+                .collect(),
+        };
+        let expected = match references.iter().find(|sample| **sample != 0) {
+            None => {
+                saw[0] = true;
+                Ok(())
+            },
+            Some(1) => {
+                saw[1] = true;
+                Err(HeldOutQualityReportError::TrainingSample { sample: 1 })
+            },
+            Some(2) => {
+                saw[2] = true;
+                Err(HeldOutQualityReportError::UnknownSample { sample: 2 })
+            },
+            Some(_) => unreachable!("base-3 selector is bounded"),
+        };
+        assert_eq!(
+            validate_held_out_quality_report(&samples, &report),
+            expected,
+            "measurement role sequence {encoded}",
+        );
+        cases = cases.saturating_add(1);
+    }
+    assert_eq!(cases, 729);
+    assert!(saw.into_iter().all(|seen| seen));
+}

@@ -1243,8 +1243,12 @@ first rejects conflicting calibration sample roles, then rejects measurements
 that reference training or unknown samples in report order, and finally requires
 all six quality dimensions. Repeated held-out measurements and an empty known-
 failure list remain valid because aggregation and failure discovery are not
-inferred here. Metric units, thresholds, scoring, statistical/perceptual models,
-sample sufficiency, quality-report generation, and pass/fail policy remain open.
+inferred here. A 793-case compact oracle exhausts all 64 required-dimension
+subsets plus all 729 six-measurement held-out/training/unknown sample-reference
+sequences and pins first invalid-reference precedence.
+
+Metric units, thresholds, scoring, statistical/perceptual models, sample
+sufficiency, quality-report generation, and pass/fail policy remain open.
 
 ## P5 — Deterministic CPU rendering and digital output
 

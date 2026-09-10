@@ -104,6 +104,11 @@ known failures may be empty because aggregation, failure discovery, sample
 sufficiency, report generation, and pass/fail policy remain outside this pure
 evidence boundary.
 
+A compact oracle exhausts all 64 required-dimension subsets and all 729 possible
+six-measurement reference sequences over held-out, training, and unknown sample
+classes. The latter independently derives the first invalid sample in report
+order, so a later failure cannot hide an earlier training or unknown reference.
+
 ### Guided calibration plans are caller supplied and resumable
 
 `CalibrationPromptKind` centralizes the nine accepted prompt categories:
