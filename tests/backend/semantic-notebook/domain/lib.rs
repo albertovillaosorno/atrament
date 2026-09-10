@@ -192,7 +192,20 @@ fn path_rule_block(next: &mut u32, targets: &mut Vec<u32>) -> Block<u32> {
     }
 }
 
-fn generated_path_notebook(seed: &mut u64) -> (Notebook<u32>, Vec<u32>) {
+
+#[derive(Clone, Copy, Debug, Default)]
+struct GeneratedPathShape {
+    callout_freeform_positions: [bool; 3],
+    depth: usize,
+    kinds: [bool; 4],
+    list_ordered_states: [bool; 2],
+    list_slots: [bool; 2],
+    table_slots: [bool; 2],
+}
+
+fn generated_path_notebook(
+    seed: &mut u64,
+) -> (Notebook<u32>, Vec<u32>, GeneratedPathShape) {
     let mut next = 1u32;
     let mut targets = Vec::new();
     let notebook = allocate_path_identity(&mut next, &mut targets);
@@ -214,14 +227,23 @@ fn generated_path_notebook(seed: &mut u64) -> (Notebook<u32>, Vec<u32>) {
         style: None,
     };
     let depth = (next_grid_seed(seed) % 8).saturating_add(1);
+    let mut shape = GeneratedPathShape {
+        depth: usize::try_from(depth).expect("small generated depth"),
+        ..GeneratedPathShape::default()
+    };
     for _ in 0..depth {
         let wrapper = allocate_path_identity(&mut next, &mut targets);
         let kind = next_grid_seed(seed) % 4;
+        shape.kinds[usize::try_from(kind).expect("small wrapper kind")] = true;
         block = match kind {
             0 | 1 => {
                 let before = path_rule_block(&mut next, &mut targets);
                 let after = path_rule_block(&mut next, &mut targets);
-                let children = match next_grid_seed(seed) % 3 {
+                let position = next_grid_seed(seed) % 3;
+                shape.callout_freeform_positions
+                    [usize::try_from(position).expect("small child position")] =
+                    true;
+                let children = match position {
                     0 => vec![block, before, after],
                     1 => vec![before, block, after],
                     _ => vec![before, after, block],
@@ -246,12 +268,15 @@ fn generated_path_notebook(seed: &mut u64) -> (Notebook<u32>, Vec<u32>) {
                     allocate_path_identity(&mut next, &mut targets);
                 let first_rule = path_rule_block(&mut next, &mut targets);
                 let second_rule = path_rule_block(&mut next, &mut targets);
-                let (first_blocks, second_blocks) =
-                    if next_grid_seed(seed) & 1 == 0 {
-                        (vec![first_rule], vec![second_rule, block])
-                    } else {
-                        (vec![first_rule, block], vec![second_rule])
-                    };
+                let slot = (next_grid_seed(seed) & 1) as usize;
+                shape.list_slots[slot] = true;
+                let (first_blocks, second_blocks) = if slot == 0 {
+                    (vec![first_rule], vec![second_rule, block])
+                } else {
+                    (vec![first_rule, block], vec![second_rule])
+                };
+                let ordered_index = (next_grid_seed(seed) & 1) as usize;
+                shape.list_ordered_states[ordered_index] = true;
                 Block {
                     content: BlockContent::List(List {
                         id: list,
@@ -265,7 +290,7 @@ fn generated_path_notebook(seed: &mut u64) -> (Notebook<u32>, Vec<u32>) {
                                 id: second_item,
                             },
                         ],
-                        ordered: next_grid_seed(seed) & 1 == 0,
+                        ordered: ordered_index == 0,
                     }),
                     extensions: vec![],
                     id: wrapper,
@@ -284,12 +309,13 @@ fn generated_path_notebook(seed: &mut u64) -> (Notebook<u32>, Vec<u32>) {
                     allocate_path_identity(&mut next, &mut targets);
                 let first_rule = path_rule_block(&mut next, &mut targets);
                 let second_rule = path_rule_block(&mut next, &mut targets);
-                let (first_blocks, second_blocks) =
-                    if next_grid_seed(seed) & 1 == 0 {
-                        (vec![first_rule], vec![second_rule, block])
-                    } else {
-                        (vec![first_rule, block], vec![second_rule])
-                    };
+                let slot = (next_grid_seed(seed) & 1) as usize;
+                shape.table_slots[slot] = true;
+                let (first_blocks, second_blocks) = if slot == 0 {
+                    (vec![first_rule], vec![second_rule, block])
+                } else {
+                    (vec![first_rule, block], vec![second_rule])
+                };
                 Block {
                     content: BlockContent::Table(Table {
                         id: table,
@@ -345,6 +371,7 @@ fn generated_path_notebook(seed: &mut u64) -> (Notebook<u32>, Vec<u32>) {
             styles: vec![],
         },
         targets,
+        shape,
     )
 }
 
@@ -747,8 +774,40 @@ fn semantic_identity_path_matches_descriptor_chain_across_nested_families() {
 #[test]
 fn semantic_identity_path_matches_descriptor_walk_on_generated_trees() {
     let mut seed = 0x9e37_79b9_7f4a_7c15;
+    let mut seen_depths = [false; 8];
+    let mut seen_kinds = [false; 4];
+    let mut seen_callout_freeform_positions = [false; 3];
+    let mut seen_list_slots = [false; 2];
+    let mut seen_list_ordered_states = [false; 2];
+    let mut seen_table_slots = [false; 2];
     for case in 0..5_000u32 {
-        let (notebook, targets) = generated_path_notebook(&mut seed);
+        let (notebook, targets, shape) = generated_path_notebook(&mut seed);
+        seen_depths[shape.depth - 1] = true;
+        for (seen, present) in seen_kinds.iter_mut().zip(shape.kinds) {
+            *seen |= present;
+        }
+        for (seen, present) in seen_callout_freeform_positions
+            .iter_mut()
+            .zip(shape.callout_freeform_positions)
+        {
+            *seen |= present;
+        }
+        for (seen, present) in
+            seen_list_slots.iter_mut().zip(shape.list_slots)
+        {
+            *seen |= present;
+        }
+        for (seen, present) in seen_list_ordered_states
+            .iter_mut()
+            .zip(shape.list_ordered_states)
+        {
+            *seen |= present;
+        }
+        for (seen, present) in
+            seen_table_slots.iter_mut().zip(shape.table_slots)
+        {
+            *seen |= present;
+        }
         for target in targets {
             let path = semantic_identity_path(&notebook, target)
                 .expect("generated target must have semantic path");
@@ -780,23 +839,45 @@ fn semantic_identity_path_matches_descriptor_walk_on_generated_trees() {
             );
         }
     }
+    assert!(seen_depths.into_iter().all(|seen| seen));
+    assert!(seen_kinds.into_iter().all(|seen| seen));
+    assert!(
+        seen_callout_freeform_positions
+            .into_iter()
+            .all(|seen| seen)
+    );
+    assert!(seen_list_slots.into_iter().all(|seen| seen));
+    assert!(seen_list_ordered_states.into_iter().all(|seen| seen));
+    assert!(seen_table_slots.into_iter().all(|seen| seen));
 }
 
 #[test]
 fn logical_table_validator_matches_naive_occupancy_oracle() {
     let mut seed = 0x5eed_1234_9876_abcd;
+    let mut seen_row_counts = [false; 4];
+    let mut seen_cell_counts = [false; 4];
+    let mut seen_column_spans = [false; 3];
+    let mut seen_row_spans = [false; 3];
+    let mut saw_valid = false;
+    let mut saw_column_span = false;
+    let mut saw_row_span = false;
+    let mut saw_row_width = false;
     for case in 0..20_000u32 {
         let row_count = usize::try_from((next_grid_seed(&mut seed) % 4) + 1)
             .expect("small row count");
+        seen_row_counts[row_count - 1] = true;
         let mut rows = Vec::with_capacity(row_count);
         let mut identity = case.saturating_mul(100).saturating_add(1);
         for _ in 0..row_count {
             let cell_count = usize::try_from(next_grid_seed(&mut seed) % 4)
                 .expect("small cell count");
+            seen_cell_counts[cell_count] = true;
             let mut cells = Vec::with_capacity(cell_count);
             for _ in 0..cell_count {
                 let columns = (next_grid_seed(&mut seed) % 3) + 1;
                 let span_rows = (next_grid_seed(&mut seed) % 3) + 1;
+                seen_column_spans[(columns - 1) as usize] = true;
+                seen_row_spans[(span_rows - 1) as usize] = true;
                 cells.push(grid_cell(identity, columns, span_rows));
                 identity = identity.saturating_add(1);
             }
@@ -808,12 +889,27 @@ fn logical_table_validator_matches_naive_occupancy_oracle() {
             identity = identity.saturating_add(1);
         }
         let table = Table { id: identity, rows };
+        let expected = grid_oracle_result(&table);
+        match expected {
+            Ok(()) => saw_valid = true,
+            Err(TableGridError::ColumnSpan { .. }) => saw_column_span = true,
+            Err(TableGridError::RowSpan { .. }) => saw_row_span = true,
+            Err(TableGridError::RowWidth { .. }) => saw_row_width = true,
+        }
         assert_eq!(
             table.validate_grid(),
-            grid_oracle_result(&table),
+            expected,
             "typed occupancy oracle mismatch in generated case {case}",
         );
     }
+    assert!(seen_row_counts.into_iter().all(|seen| seen));
+    assert!(seen_cell_counts.into_iter().all(|seen| seen));
+    assert!(seen_column_spans.into_iter().all(|seen| seen));
+    assert!(seen_row_spans.into_iter().all(|seen| seen));
+    assert!(saw_valid);
+    assert!(saw_column_span);
+    assert!(saw_row_span);
+    assert!(saw_row_width);
 }
 
 #[test]

@@ -773,6 +773,10 @@ first typed failure and semantic owner, not only valid/invalid classification.
 Accepted promotion preserves valid spans exactly, and validation keeps logical
 coverage compact instead of allocating per spanned column.
 
+The occupancy generator also asserts every row/cell-count bucket, every 1–3
+row/column span, valid grids, and all three typed grid failure classes are
+actually reached.
+
 An exact-base direct cell-span edit reuses that complete table-grid invariant. A
 valid edit preserves cell identity and child blocks, creates one accepted
 revision, and enters Undo history; a structurally invalid replacement is a typed
