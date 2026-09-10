@@ -1,0 +1,9 @@
+identity:
+  id: function:digital-paper-note-plan
+  name: digital-paper-note-plan
+  path: src/backend/digital-paper-note-plan
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: domain

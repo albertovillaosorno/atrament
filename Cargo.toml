@@ -5,6 +5,7 @@ members = [
     "src/backend/device-coordinate-calibration",
     "src/backend/device-neutral-motion-plan",
     "src/backend/diagnostic",
+    "src/backend/digital-paper-note-plan",
     "src/backend/export-layout-preflight",
     "src/backend/fixed-region-bounds",
     "src/backend/flow-pagination",

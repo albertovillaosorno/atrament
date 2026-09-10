@@ -167,6 +167,11 @@ Current checked-in regression evidence includes:
   seed, quality, and version input retention;
 - `tests/backend/render-quality-profile/domain/lib.rs`, which pins preview/final
   role and shared-authority invariants;
+- `tests/backend/line-art-extraction/domain/lib.rs`, which pins source identity,
+  all six caller-owned extraction controls, transparent-black appearance, and
+  ordered vector paths;
+- `tests/backend/digital-paper-note-plan/domain/lib.rs`, which pins fill, fold,
+  stacking, soft-shadow intent, and caller-provided readable-contrast evidence;
 - `tests/backend/print-scan-measurement/domain/lib.rs`, which pins the four
   required physical observation families and their provenance; and
 - `tests/backend/render-regression-evidence/domain/lib.rs`, which pins complete,

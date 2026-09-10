@@ -1366,6 +1366,18 @@ acceptance diagnostics, preview rendering, and final rendering remain open.
 Render loose note fills, folds, stacking, and soft shadows as digital-only
 objects with readable contrast and explicit live incompatibility.
 
+Current executable evidence now freezes one digital loose-paper-note plan with
+caller-owned fill, fold, stack order, and soft-shadow intent plus
+caller-computed
+readable-contrast evidence. Structural validation requires that readability
+evidence without choosing a contrast metric or threshold. The existing output
+capability matrix separately keeps loose paper notes, folds, paper shadows,
+simulated shadows, and textured fills accepted only for Digital and rejected for
+Live.
+
+Contrast measurement, concrete style/geometry values, note layout, occlusion,
+shadow rendering, raster composition, and digital preview/export remain open.
+
 ### TODO - Implement theme-safe decorative titles
 
 Support layered lettering, outlines, highlights, and motifs in digital mode and

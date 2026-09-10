@@ -16,6 +16,9 @@ depends_on = []
 [component.atrament_diagnostic]
 depends_on = []
 
+[component.atrament_digital_paper_note_plan]
+depends_on = []
+
 [component.atrament_export_layout_preflight]
 depends_on = ["atrament_diagnostic", "atrament_semantic_notebook"]
 
