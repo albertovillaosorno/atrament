@@ -74,7 +74,10 @@ model-policy decisions.
 
 Every `CalibrationSample` carries a stable caller-owned identity and either the
 `Training` or `HeldOut` role. `validate_calibration_sample_roles` rejects the
-first identity that appears in both roles.
+first identity that appears in both roles. An exhaustive 5,461-case compact
+oracle covers every declaration sequence through six samples over two identities
+and both roles, including repeated same-role declarations and both possible
+conflict owners.
 
 Repeated declarations with the same role are not rejected here because the
 accepted ADR freezes only cross-role separation. Deduplication, sample

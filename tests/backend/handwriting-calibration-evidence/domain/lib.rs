@@ -144,3 +144,63 @@ fn first_role_conflict_follows_sample_order_not_identity_order() {
         }),
     );
 }
+
+fn reference_sample_role_validation(
+    samples: &[CalibrationSample<u8>],
+) -> Result<(), CalibrationSampleRoleError<u8>> {
+    let mut roles = [None; 2];
+    for sample in samples {
+        let slot = &mut roles[usize::from(sample.identity)];
+        if let Some(existing) = slot {
+            if *existing != sample.role {
+                return Err(CalibrationSampleRoleError::ConflictingRole {
+                    sample: sample.identity,
+                });
+            }
+        } else {
+            *slot = Some(sample.role);
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn every_compact_sample_role_sequence_matches_separation_oracle() {
+    let mut cases = 0_usize;
+    let mut saw_valid = false;
+    let mut saw_conflict = [false; 2];
+    for length in 0_u32..=6 {
+        for encoded in 0_usize..4_usize.pow(length) {
+            let mut value = encoded;
+            let mut samples = Vec::with_capacity(length as usize);
+            for _ in 0..length {
+                let symbol = value % 4;
+                value /= 4;
+                let identity = u8::try_from(symbol / 2)
+                    .expect("compact identity fits u8");
+                let role = if symbol % 2 == 0 {
+                    CalibrationSampleRole::Training
+                } else {
+                    CalibrationSampleRole::HeldOut
+                };
+                samples.push(CalibrationSample { identity, role });
+            }
+            let expected = reference_sample_role_validation(&samples);
+            match expected {
+                Ok(()) => saw_valid = true,
+                Err(CalibrationSampleRoleError::ConflictingRole { sample }) => {
+                    saw_conflict[usize::from(sample)] = true;
+                },
+            }
+            assert_eq!(
+                validate_calibration_sample_roles(&samples),
+                expected,
+                "role mismatch at length {length} encoding {encoded:#x}",
+            );
+            cases += 1;
+        }
+    }
+    assert_eq!(cases, 5_461);
+    assert!(saw_valid);
+    assert!(saw_conflict.into_iter().all(|seen| seen));
+}

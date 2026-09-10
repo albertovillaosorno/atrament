@@ -1113,9 +1113,14 @@ provenance. Parameter evidence retains caller-owned source region, units,
 confidence, and accepted correction history; observed evidence remains distinct
 from inferred extremes. Training and held-out sample identities cannot cross
 roles, and an underdetermined required behavior explicitly requests another
-sample. This does not choose a minimum sample set, confidence scale, unit
-vocabulary, source-region syntax, capture geometry, extraction algorithm, or
-calibration workflow.
+sample.
+
+A 5,461-case exhaustive compact oracle covers every declaration sequence through
+six samples over two identities and both roles. Repeated same-role declarations
+remain valid while the first cross-role reuse rejects in declaration order. This
+does not choose a minimum sample set, confidence scale, unit vocabulary,
+source-region syntax, capture geometry, extraction algorithm, or calibration
+workflow.
 
 Guided-session evidence now also preserves a caller-supplied ordered prompt plan
 across resumptions, rejects duplicate prompt identities, derives completion from
