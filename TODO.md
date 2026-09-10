@@ -1144,6 +1144,9 @@ instead of silently switching to accent reuse. Unicode decomposition, rule
 applicability, placement/scale geometry, collision evaluation, language-form
 selection, stroke planning, rendering, and fallback remain open.
 
+Exact coverage remains the first classification even when the supplied
+compositional rule is also undeclared.
+
 ### TODO - Implement continuous contextual stroke planning
 
 Select, connect, deform, space, and lift strokes from neighboring graphemes,

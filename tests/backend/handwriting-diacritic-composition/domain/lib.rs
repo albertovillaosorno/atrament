@@ -109,3 +109,14 @@ fn missing_or_undeclared_composition_rejects_without_fallback() {
         Err(DiacriticCompositionError::MissingCompositionalCoverage),
     );
 }
+
+#[test]
+fn exact_coverage_precedes_undeclared_composition_rule() {
+    assert_eq!(
+        admit_diacritic_composition(
+            &profile(),
+            intent("á", "generic-accent-reuse"),
+        ),
+        Err(DiacriticCompositionError::ExactCoverage),
+    );
+}
