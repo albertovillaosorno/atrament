@@ -83,6 +83,12 @@ pub enum BoundsError {
     WritableCoordinateOverflow,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct RectangleEnd {
+    bottom: Length,
+    right: Length,
+}
+
 /// Measure every writable edge crossed by one explicit placed rectangle.
 ///
 /// This function does not repair placement or choose a remediation. A caller
@@ -98,14 +104,14 @@ pub fn check_bounds(
     writable: Rect,
     object: Rect,
 ) -> Result<BoundsReport, BoundsError> {
-    let (writable_right, writable_bottom) =
+    let writable_end =
         rectangle_end(writable, BoundsError::WritableCoordinateOverflow)?;
-    let (object_right, object_bottom) =
+    let object_end =
         rectangle_end(object, BoundsError::ObjectCoordinateOverflow)?;
     let mut violations = Vec::new();
-    if object_bottom > writable_bottom {
+    if object_end.bottom > writable_end.bottom {
         violations.push(BoundaryViolation {
-            amount: difference(object_bottom, writable_bottom),
+            amount: difference(object_end.bottom, writable_end.bottom),
             edge: BoundaryEdge::Bottom,
         });
     }
@@ -115,9 +121,9 @@ pub fn check_bounds(
             edge: BoundaryEdge::Left,
         });
     }
-    if object_right > writable_right {
+    if object_end.right > writable_end.right {
         violations.push(BoundaryViolation {
-            amount: difference(object_right, writable_right),
+            amount: difference(object_end.right, writable_end.right),
             edge: BoundaryEdge::Right,
         });
     }
@@ -139,7 +145,7 @@ const fn difference(greater: Length, lesser: Length) -> Length {
 const fn rectangle_end(
     rectangle: Rect,
     error: BoundsError,
-) -> Result<(Length, Length), BoundsError> {
+) -> Result<RectangleEnd, BoundsError> {
     let Some(right) = rectangle
         .x
         .micrometres()
@@ -154,8 +160,8 @@ const fn rectangle_end(
     else {
         return Err(error);
     };
-    Ok((
-        Length::from_micrometres(right),
-        Length::from_micrometres(bottom),
-    ))
+    Ok(RectangleEnd {
+        bottom: Length::from_micrometres(bottom),
+        right: Length::from_micrometres(right),
+    })
 }
