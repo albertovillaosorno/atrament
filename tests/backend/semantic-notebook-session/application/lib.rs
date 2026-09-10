@@ -7867,7 +7867,7 @@ fn command_capability_snapshot_is_deterministic_and_does_not_overclaim() {
     assert!(snapshot.admitted_applications.is_empty());
     assert!(snapshot.protocol_versions.is_empty());
     assert_eq!(snapshot.normalization_version, None);
-    assert_eq!(snapshot.resource_limits, CommandResourceLimits {
+    assert_eq!(*snapshot.resource_limits, CommandResourceLimits {
         commands_per_batch: None,
         dependency_edges: None,
         envelope_bytes: None,

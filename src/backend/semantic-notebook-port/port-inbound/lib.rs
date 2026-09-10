@@ -1281,7 +1281,7 @@ pub struct SemanticCommandCapabilitySnapshot {
     /// Admitted serialized command protocol behavior versions.
     pub protocol_versions: &'static [CommandBehaviorVersion],
     /// Command-mode resource limits bound to admitted protocol operations.
-    pub resource_limits: CommandResourceLimits,
+    pub resource_limits: &'static CommandResourceLimits,
     /// Version of typed local command-target result behavior.
     pub typed_result_version: CommandBehaviorVersion,
 }
@@ -1315,7 +1315,7 @@ pub enum CommandFamilyAdmissionOutcome {
     /// Requested family is currently executable for this exact target.
     Admitted {
         /// Complete local precondition material for the admitted target.
-        material: CommandTargetMaterial,
+        material: Box<CommandTargetMaterial>,
     },
     /// Requested family is not currently executable for this exact target.
     FamilyNotExecutable {
@@ -1457,7 +1457,7 @@ pub enum CommandTargetMaterialOutcome {
     /// Target material was derived completely from the named revision.
     Prepared {
         /// Complete local material for the requested target.
-        material: CommandTargetMaterial,
+        material: Box<CommandTargetMaterial>,
     },
     /// Caller names an accepted revision that is no longer current.
     StaleBase {

@@ -439,7 +439,7 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
                 };
             },
         };
-        check_command_target_preconditions_material(material, &preconditions)
+        check_command_target_preconditions_material(*material, &preconditions)
     }
 
     fn check_editable_value_precondition(
@@ -469,6 +469,7 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
                 };
             },
         };
+        let material = *material;
         let Some(actual) = material.editable_value else {
             return EditableValuePreconditionOutcome::TargetNotEditableValue {
                 kind: material.descriptor.kind,
@@ -575,19 +576,21 @@ impl SemanticNotebookSession for SemanticNotebookSessionService {
                 family: SemanticCommandFamily::TextContent,
             },
         ];
+
+        const RESOURCE_LIMITS: CommandResourceLimits = CommandResourceLimits {
+            commands_per_batch: None,
+            dependency_edges: None,
+            envelope_bytes: None,
+            readable_context_bytes: None,
+            writable_targets: None,
+        };
         SemanticCommandCapabilitySnapshot {
             admitted_applications: &[],
             behavior_version: VERSION,
             family_capabilities: &FAMILY_CAPABILITIES,
             normalization_version: None,
             protocol_versions: &[],
-            resource_limits: CommandResourceLimits {
-                commands_per_batch: None,
-                dependency_edges: None,
-                envelope_bytes: None,
-                readable_context_bytes: None,
-                writable_targets: None,
-            },
+            resource_limits: &RESOURCE_LIMITS,
             typed_result_version: VERSION,
         }
     }
@@ -2333,7 +2336,7 @@ fn command_target_material_from_notebook(
 ) -> CommandTargetMaterialOutcome {
     if let Some(provenance) = provenance_value(notebook, target) {
         return CommandTargetMaterialOutcome::Prepared {
-            material: CommandTargetMaterial {
+            material: Box::new(CommandTargetMaterial {
                 descriptor: SemanticIdentityDescriptor {
                     kind: SemanticIdentityKind::Provenance,
                     owner: Some(notebook.id),
@@ -2342,7 +2345,7 @@ fn command_target_material_from_notebook(
                 editable_value: Some(editable_provenance_value(provenance)),
                 revision,
                 target,
-            },
+            }),
         };
     }
     let Some(descriptor) = semantic_identity_descriptor(notebook, target)
@@ -2356,13 +2359,13 @@ fn command_target_material_from_notebook(
         editable_semantic_value(notebook, target, descriptor.kind);
     let direct_edit_family = editable_value.as_ref().map(direct_edit_family);
     CommandTargetMaterialOutcome::Prepared {
-        material: CommandTargetMaterial {
+        material: Box::new(CommandTargetMaterial {
             direct_edit_family,
             descriptor,
             editable_value,
             revision,
             target,
-        },
+        }),
     }
 }
 
@@ -2389,13 +2392,13 @@ fn command_target_material_for_family_from_notebook(
     });
     let direct_edit_family = editable_value.as_ref().map(direct_edit_family);
     CommandTargetMaterialOutcome::Prepared {
-        material: CommandTargetMaterial {
+        material: Box::new(CommandTargetMaterial {
             descriptor,
             direct_edit_family,
             editable_value,
             revision,
             target,
-        },
+        }),
     }
 }
 
@@ -3571,7 +3574,7 @@ fn batch_command_target_material<CommandIdentity>(
         notebook, revision, target, family,
     ) {
         CommandTargetMaterialOutcome::Prepared { material } => {
-            Ok((material, true))
+            Ok((*material, true))
         },
         CommandTargetMaterialOutcome::TargetNotFound {
             revision: missing_revision,
@@ -3846,7 +3849,7 @@ fn simulate_direct_edit_material(
             }
         },
         CommandTargetMaterialOutcome::Prepared { material: prepared } => {
-            simulate_prepared_direct_edit(prepared, requested)
+            simulate_prepared_direct_edit(*prepared, requested)
         },
         CommandTargetMaterialOutcome::StaleBase { current } => {
             DirectEditSimulation {
