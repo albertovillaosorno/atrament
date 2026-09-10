@@ -2070,31 +2070,18 @@ fn formula_content_value(
         BlockContent::Callout(blocks) | BlockContent::Freeform(blocks) => {
             formula_blocks_value(blocks, target)
         },
-        BlockContent::List(list) => {
-            for item in &list.items {
-                if let Some(formula) =
-                    formula_blocks_value(&item.blocks, target)
-                {
-                    return Some(formula);
-                }
-            }
-            None
-        },
+        BlockContent::List(list) => list
+            .items
+            .iter()
+            .find_map(|item| formula_blocks_value(&item.blocks, target)),
         BlockContent::Mathematics(formula) if formula.id == target => {
             Some(formula)
         },
-        BlockContent::Table(table) => {
-            for row in &table.rows {
-                for cell in &row.cells {
-                    if let Some(formula) =
-                        formula_blocks_value(&cell.blocks, target)
-                    {
-                        return Some(formula);
-                    }
-                }
-            }
-            None
-        },
+        BlockContent::Table(table) => table
+            .rows
+            .iter()
+            .flat_map(|row| row.cells.iter())
+            .find_map(|cell| formula_blocks_value(&cell.blocks, target)),
         BlockContent::Citation(_)
         | BlockContent::Date(_)
         | BlockContent::Footnote(_)
@@ -4991,23 +4978,22 @@ fn figure_blocks_value(
                 return Some(figure);
             },
             BlockContent::List(list) => {
-                for item in &list.items {
-                    if let Some(figure) =
-                        figure_blocks_value(&item.blocks, target)
-                    {
-                        return Some(figure);
-                    }
+                if let Some(figure) = list.items.iter().find_map(|item| {
+                    figure_blocks_value(&item.blocks, target)
+                }) {
+                    return Some(figure);
                 }
             },
             BlockContent::Table(table) => {
-                for row in &table.rows {
-                    for cell in &row.cells {
-                        if let Some(figure) =
-                            figure_blocks_value(&cell.blocks, target)
-                        {
-                            return Some(figure);
-                        }
-                    }
+                if let Some(figure) = table
+                    .rows
+                    .iter()
+                    .flat_map(|row| row.cells.iter())
+                    .find_map(|cell| {
+                        figure_blocks_value(&cell.blocks, target)
+                    })
+                {
+                    return Some(figure);
                 }
             },
             BlockContent::Citation(_)
@@ -5060,27 +5046,26 @@ fn replace_figure_asset_blocks(
                 return true;
             },
             BlockContent::List(list) => {
-                for item in &mut list.items {
-                    if replace_figure_asset_blocks(
-                        &mut item.blocks,
-                        target,
-                        asset,
-                    ) {
-                        return true;
-                    }
+                if list.items.iter_mut().any(|item| {
+                    replace_figure_asset_blocks(&mut item.blocks, target, asset)
+                }) {
+                    return true;
                 }
             },
             BlockContent::Table(table) => {
-                for row in &mut table.rows {
-                    for cell in &mut row.cells {
-                        if replace_figure_asset_blocks(
+                let changed = table
+                    .rows
+                    .iter_mut()
+                    .flat_map(|row| row.cells.iter_mut())
+                    .any(|cell| {
+                        replace_figure_asset_blocks(
                             &mut cell.blocks,
                             target,
                             asset,
-                        ) {
-                            return true;
-                        }
-                    }
+                        )
+                    });
+                if changed {
+                    return true;
                 }
             },
             BlockContent::Citation(_)
@@ -5174,15 +5159,9 @@ fn replace_formula_content(
         BlockContent::Callout(blocks) | BlockContent::Freeform(blocks) => {
             replace_formula_blocks(blocks, target, replacement)
         },
-        BlockContent::List(list) => {
-            for item in &mut list.items {
-                if replace_formula_blocks(&mut item.blocks, target, replacement)
-                {
-                    return true;
-                }
-            }
-            false
-        },
+        BlockContent::List(list) => list.items.iter_mut().any(|item| {
+            replace_formula_blocks(&mut item.blocks, target, replacement)
+        }),
         BlockContent::Mathematics(formula) if formula.id == target => {
             let Some((mode, source)) = replacement.take() else {
                 return false;
@@ -5191,20 +5170,13 @@ fn replace_formula_content(
             formula.source = source;
             true
         },
-        BlockContent::Table(table) => {
-            for row in &mut table.rows {
-                for cell in &mut row.cells {
-                    if replace_formula_blocks(
-                        &mut cell.blocks,
-                        target,
-                        replacement,
-                    ) {
-                        return true;
-                    }
-                }
-            }
-            false
-        },
+        BlockContent::Table(table) => table
+            .rows
+            .iter_mut()
+            .flat_map(|row| row.cells.iter_mut())
+            .any(|cell| {
+                replace_formula_blocks(&mut cell.blocks, target, replacement)
+            }),
         BlockContent::Citation(_)
         | BlockContent::Date(_)
         | BlockContent::Footnote(_)
