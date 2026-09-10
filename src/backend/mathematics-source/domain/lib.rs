@@ -145,7 +145,7 @@ const NAMED_SYMBOL_COMMANDS: &[&str] = &[
     "\\ominus", "\\oplus",
     "\\oslash", "\\otimes", "\\owns",
     "\\parallel", "\\partial", "\\perp", "\\phi", "\\pi", "\\pitchfork", "\\pm",
-    "\\prec",
+    "\\pounds", "\\prec",
     "\\precapprox", "\\preccurlyeq",
     "\\preceq", "\\precnapprox", "\\precneqq", "\\precnsim", "\\precsim",
     "\\prime", "\\propto", "\\psi", "\\rVert",

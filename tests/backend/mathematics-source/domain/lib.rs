@@ -158,6 +158,7 @@ fn generated_tex_corpus_is_deterministic_and_source_safe() {
         r"\gggtr",
         r"\llless",
         r"\mathsterling",
+        r"\pounds",
         r"\restriction",
         r"\sqrt",
         r"\sqrt[",
@@ -750,7 +751,8 @@ fn named_symbol_vocabulary_is_supported_without_rewriting() {
         r"\nu", r"\nvDash", r"\nvdash", r"\nwarrow", r"\odot", r"\omega",
         r"\ominus", r"\oplus",
         r"\oslash", r"\otimes", r"\owns", r"\parallel",
-        r"\partial", r"\perp", r"\phi", r"\pi", r"\pitchfork", r"\pm", r"\prec",
+        r"\partial", r"\perp", r"\phi", r"\pi", r"\pitchfork", r"\pm",
+        r"\pounds", r"\prec",
         r"\precapprox", r"\preccurlyeq", r"\preceq", r"\precnapprox",
         r"\precneqq", r"\precnsim", r"\precsim",
         r"\prime", r"\propto", r"\psi", r"\rVert", r"\rangle", r"\rbrace",
@@ -830,7 +832,8 @@ fn named_symbol_vocabulary_is_supported_without_rewriting() {
 fn latex_base_ordinary_symbols_compose_without_rewriting() {
     let source = concat!(
         r"\varbigtriangleup A + \varbigtriangledown B; ",
-        r"\mathsection + \mathparagraph + \mathdollar + \mathsterling",
+        r"\mathsection + \mathparagraph + \mathdollar + \mathsterling + ",
+        r"\pounds",
     );
     let analyzed = analyze(source, FormulaMode::Inline)
         .expect("LaTeX-base ordinary symbol expression");
@@ -845,7 +848,7 @@ fn latex_base_ordinary_symbols_compose_without_rewriting() {
                     == MathTokenKind::Command(SupportedCommand::NamedSymbol)
             })
             .count(),
-        6,
+        7,
     );
 }
 
