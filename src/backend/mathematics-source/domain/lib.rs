@@ -502,6 +502,14 @@ struct GroupIndex {
     pairs: Vec<(usize, usize)>,
 }
 
+struct ScanContext<'scan> {
+    groups: &'scan GroupIndex,
+    mode: FormulaMode,
+    source: &'scan str,
+    tokens: &'scan mut Vec<MathToken>,
+    unsupported: &'scan mut Vec<UnsupportedConstruct>,
+}
+
 struct ScanState {
     environment_stack: Vec<StructuredEnvironmentScope>,
     group_depth: usize,
@@ -750,34 +758,38 @@ pub fn analyze(
     };
     let mut tokens = Vec::new();
     let mut unsupported = Vec::new();
-    while state.index < source.len() {
-        let Some(tail) = source.get(state.index..) else {
-            return Err(error(state.index, MathSyntaxErrorKind::UnclosedGroup));
-        };
-        let Some(character) = tail.chars().next() else {
-            break;
-        };
-        let is_root_index_marker =
-            state.pending_root_index_open == Some(state.index)
-                || state.root_index_close_offsets.last().copied()
-                    == Some(state.index);
-        if !is_structural(character) && !is_root_index_marker {
-            state.index = state.index.saturating_add(character.len_utf8());
-            continue;
-        }
-        push_literal(&mut tokens, state.literal_start, state.index);
-        scan_structural(
-            source,
+    {
+        let mut context = ScanContext {
+            groups: &group_index,
             mode,
-            character,
-            &group_index,
-            &mut state,
-            &mut tokens,
-            &mut unsupported,
-        )?;
-        state.literal_start = state.index;
+            source,
+            tokens: &mut tokens,
+            unsupported: &mut unsupported,
+        };
+        while state.index < source.len() {
+            let Some(tail) = source.get(state.index..) else {
+                return Err(error(
+                    state.index,
+                    MathSyntaxErrorKind::UnclosedGroup,
+                ));
+            };
+            let Some(character) = tail.chars().next() else {
+                break;
+            };
+            let is_root_index_marker =
+                state.pending_root_index_open == Some(state.index)
+                    || state.root_index_close_offsets.last().copied()
+                        == Some(state.index);
+            if !is_structural(character) && !is_root_index_marker {
+                state.index = state.index.saturating_add(character.len_utf8());
+                continue;
+            }
+            push_literal(context.tokens, state.literal_start, state.index);
+            scan_structural(&mut context, character, &mut state)?;
+            state.literal_start = state.index;
+        }
+        push_literal(context.tokens, state.literal_start, source.len());
     }
-    push_literal(&mut tokens, state.literal_start, source.len());
     validate_final_state(source.len(), &state)?;
     debug_assert!(
         token_coverage(&tokens) == source.len(),
@@ -1028,58 +1040,63 @@ fn scan_command(source: &str, start: usize) -> ScannedCommand {
 }
 
 fn scan_structural(
-    source: &str,
-    mode: FormulaMode,
+    context: &mut ScanContext<'_>,
     character: char,
-    groups: &GroupIndex,
     state: &mut ScanState,
-    tokens: &mut Vec<MathToken>,
-    unsupported: &mut Vec<UnsupportedConstruct>,
 ) -> Result<(), MathSyntaxError> {
     let width = character.len_utf8();
     match character {
         '&' | '^' | '_' if state.text_group_depth.is_some() => {
-            scan_marker(state, tokens, width, MathTokenKind::Literal);
+            scan_marker(state, context.tokens, width, MathTokenKind::Literal);
             Ok(())
         },
-        '&' => scan_alignment(mode, state, tokens, width),
+        '&' => scan_alignment(
+            context.mode,
+            state,
+            context.tokens,
+            width,
+        ),
         '^' => {
-            scan_marker(state, tokens, width, MathTokenKind::Superscript);
+            scan_marker(
+                state,
+                context.tokens,
+                width,
+                MathTokenKind::Superscript,
+            );
             Ok(())
         },
         '_' => {
-            scan_marker(state, tokens, width, MathTokenKind::Subscript);
+            scan_marker(state, context.tokens, width, MathTokenKind::Subscript);
             Ok(())
         },
         '[' if state.pending_root_index_open == Some(state.index) => {
             state.pending_root_index_open = None;
-            scan_marker(state, tokens, width, MathTokenKind::RootIndexOpen);
+            scan_marker(
+                state,
+                context.tokens,
+                width,
+                MathTokenKind::RootIndexOpen,
+            );
             Ok(())
         },
         ']' if state.root_index_close_offsets.last().copied()
             == Some(state.index) =>
         {
             let _: Option<usize> = state.root_index_close_offsets.pop();
-            scan_marker(state, tokens, width, MathTokenKind::RootIndexClose);
+            scan_marker(
+                state,
+                context.tokens,
+                width,
+                MathTokenKind::RootIndexClose,
+            );
             Ok(())
         },
         '{' => {
-            state.group_depth = state.group_depth.saturating_add(1);
-            if state.pending_substack_group {
-                state.substack_group_depths.push(state.group_depth);
-                state.pending_substack_group = false;
-            }
-            if state.pending_text_group {
-                if state.text_group_depth.is_none() {
-                    state.text_group_depth = Some(state.group_depth);
-                }
-                state.pending_text_group = false;
-            }
-            scan_marker(state, tokens, width, MathTokenKind::GroupOpen);
+            scan_group_open(state, context.tokens, width);
             Ok(())
         },
-        '}' => scan_group_close(state, tokens, width),
-        '\\' => scan_slash(source, groups, mode, state, tokens, unsupported),
+        '}' => scan_group_close(state, context.tokens, width),
+        '\\' => scan_slash(context, state),
         _ => {
             state.index = state.index.saturating_add(width);
             Ok(())
@@ -1112,6 +1129,25 @@ fn scan_alignment(
     }
     scan_marker(state, tokens, width, MathTokenKind::AlignmentPoint);
     Ok(())
+}
+
+fn scan_group_open(
+    state: &mut ScanState,
+    tokens: &mut Vec<MathToken>,
+    width: usize,
+) {
+    state.group_depth = state.group_depth.saturating_add(1);
+    if state.pending_substack_group {
+        state.substack_group_depths.push(state.group_depth);
+        state.pending_substack_group = false;
+    }
+    if state.pending_text_group {
+        if state.text_group_depth.is_none() {
+            state.text_group_depth = Some(state.group_depth);
+        }
+        state.pending_text_group = false;
+    }
+    scan_marker(state, tokens, width, MathTokenKind::GroupOpen);
 }
 
 fn scan_group_close(
@@ -1163,24 +1199,20 @@ fn scan_marker(
 }
 
 fn scan_slash(
-    source: &str,
-    groups: &GroupIndex,
-    mode: FormulaMode,
+    context: &mut ScanContext<'_>,
     state: &mut ScanState,
-    tokens: &mut Vec<MathToken>,
-    unsupported: &mut Vec<UnsupportedConstruct>,
 ) -> Result<(), MathSyntaxError> {
-    let command = scan_command(source, state.index);
+    let command = scan_command(context.source, state.index);
     match command.kind {
         ScannedCommandKind::RowBreak => {
             if state.text_group_depth.is_some() {
-                tokens.push(token(
+                context.tokens.push(token(
                     state.index,
                     command.end,
                     MathTokenKind::Literal,
                 ));
             } else {
-                if mode != FormulaMode::Aligned
+                if context.mode != FormulaMode::Aligned
                     && state.environment_stack.is_empty()
                     && state.substack_group_depths.is_empty()
                 {
@@ -1189,7 +1221,7 @@ fn scan_slash(
                         MathSyntaxErrorKind::AlignmentOutsideStructure,
                     ));
                 }
-                tokens.push(token(
+                context.tokens.push(token(
                     state.index,
                     command.end,
                     MathTokenKind::RowBreak,
@@ -1198,18 +1230,21 @@ fn scan_slash(
         },
         ScannedCommandKind::Supported(supported) => {
             scan_supported_command(
-                source, groups, state, tokens, command, supported,
+                context,
+                state,
+                command,
+                supported,
             )?;
         },
         ScannedCommandKind::Unsupported => {
-            tokens.push(token(
+            context.tokens.push(token(
                 state.index,
                 command.end,
                 MathTokenKind::Literal,
             ));
-            unsupported.push(UnsupportedConstruct {
+            context.unsupported.push(UnsupportedConstruct {
                 end: command.end,
-                name: source
+                name: context.source
                     .get(state.index..command.end)
                     .unwrap_or_default()
                     .to_owned(),
@@ -1222,26 +1257,28 @@ fn scan_slash(
 }
 
 fn scan_supported_command(
-    source: &str,
-    groups: &GroupIndex,
+    context: &mut ScanContext<'_>,
     state: &mut ScanState,
-    tokens: &mut Vec<MathToken>,
     command: ScannedCommand,
     supported: SupportedCommand,
 ) -> Result<(), MathSyntaxError> {
     if let Some(environment) = ending_environment(supported) {
         close_environment(state, environment)?;
     }
-    tokens.push(token(
+    context.tokens.push(token(
         state.index,
         command.end,
         MathTokenKind::Command(supported),
     ));
     if supported == SupportedCommand::SquareRoot {
-        if let Some(bounds) = root_index_bounds(source, groups, command.end)? {
+        if let Some(bounds) = root_index_bounds(
+            context.source,
+            context.groups,
+            command.end,
+        )? {
             validate_required_groups(
-                source,
-                groups,
+                context.source,
+                context.groups,
                 bounds.close.saturating_add(1),
                 command.required_groups,
             )?;
@@ -1249,16 +1286,16 @@ fn scan_supported_command(
             state.root_index_close_offsets.push(bounds.close);
         } else {
             validate_required_groups(
-                source,
-                groups,
+                context.source,
+                context.groups,
                 command.end,
                 command.required_groups,
             )?;
         }
     } else {
         validate_required_groups(
-            source,
-            groups,
+            context.source,
+            context.groups,
             command.end,
             command.required_groups,
         )?;
