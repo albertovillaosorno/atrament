@@ -1512,9 +1512,11 @@ presence, source presence, and provenance-identity match state to pin the same
 failure precedence. Source retrieval, source-quality policy, citation
 parsing/formatting, and review UI remain separate.
 
-The task remains open for richer source/citation linkage semantics, provenance
-diagnostics, citation UI, and any source-authority model beyond existing
-revision-owned provenance records.
+The task remains open for source retrieval/admission, a concrete source-metadata
+schema, source-quality and claim-sufficiency policy, provenance diagnostics,
+citation parsing/formatting and review UI, candidate-response integration, and
+cross-adapter projection. Those owners must consume the existing revision-owned
+provenance and citation linkage rather than inventing parallel source status.
 
 ### TODO - Prove complex educational coverage
 
