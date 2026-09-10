@@ -92,6 +92,27 @@ pub struct PlannedStroke<
     pub semantic_origin: SemanticOrigin,
 }
 
+/// Minimal stroke inspection required by structural plan validation.
+pub trait StrokePlanEntry {
+    /// Whether this declared stroke contains no ordered samples.
+    fn samples_are_empty(&self) -> bool;
+}
+
+impl<SemanticOrigin, ProfileChoice, EntryCondition, ExitCondition, Sample>
+    StrokePlanEntry
+    for PlannedStroke<
+        SemanticOrigin,
+        ProfileChoice,
+        EntryCondition,
+        ExitCondition,
+        Sample,
+    >
+{
+    fn samples_are_empty(&self) -> bool {
+        self.samples.is_empty()
+    }
+}
+
 /// Complete inspectable handwriting stroke authority in planner order.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct StrokePlan<Stroke> {
@@ -119,25 +140,14 @@ pub enum StrokePlanError {
 /// # Errors
 ///
 /// Returns the first empty declared stroke in planner order.
-pub fn validate_stroke_plan<
-    SemanticOrigin,
-    ProfileChoice,
-    EntryCondition,
-    ExitCondition,
-    Sample,
->(
-    plan: &StrokePlan<
-        PlannedStroke<
-            SemanticOrigin,
-            ProfileChoice,
-            EntryCondition,
-            ExitCondition,
-            Sample,
-        >,
-    >,
-) -> Result<(), StrokePlanError> {
+pub fn validate_stroke_plan<Stroke>(
+    plan: &StrokePlan<Stroke>,
+) -> Result<(), StrokePlanError>
+where
+    Stroke: StrokePlanEntry,
+{
     for (stroke_index, stroke) in plan.strokes.iter().enumerate() {
-        if stroke.samples.is_empty() {
+        if stroke.samples_are_empty() {
             return Err(StrokePlanError::EmptyStroke { stroke_index });
         }
     }
