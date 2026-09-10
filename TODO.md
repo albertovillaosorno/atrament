@@ -1236,6 +1236,17 @@ role policy, glyph behavior, and semantic document-style mappings remain open.
 Detect frozen contours, identical word rhythms, mechanical baselines, local
 white noise, and configurations that leave the calibrated writer's envelope.
 
+Current executable evidence now freezes seven independent variation-quality
+axes spanning those five artifact risks plus the accepted ADR's correlation
+retention and extreme-legibility checks. One caller-computed finding is required
+per axis. Duplicate or omitted axes reject structurally, while detected
+artifacts remain evidence and are reported in canonical axis order. All 128
+combinations
+of not-detected/detected findings are covered without depending on input order.
+
+Statistical detectors, thresholds, perceptual metrics, correlation models,
+legibility criteria, sampling, rendering, and release policy remain open.
+
 ### TODO - Validate against held-out writing
 
 Measure geometry, rhythm, joins, spacing, punctuation, and perceptual fidelity

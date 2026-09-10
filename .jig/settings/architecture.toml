@@ -55,6 +55,9 @@ depends_on = []
 [component.atrament_handwriting_variation]
 depends_on = []
 
+[component.atrament_handwriting_variation_quality_evidence]
+depends_on = []
+
 [component.atrament_image_placement_intent]
 depends_on = []
 

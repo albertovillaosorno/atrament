@@ -1,0 +1,9 @@
+identity:
+  id: function:handwriting-variation-quality-evidence
+  name: handwriting-variation-quality-evidence
+  path: src/backend/handwriting-variation-quality-evidence
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: domain

@@ -88,6 +88,10 @@ name = "atrament_handwriting_variation"
 version = "0.1.0"
 
 [[package]]
+name = "atrament_handwriting_variation_quality_evidence"
+version = "0.1.0"
+
+[[package]]
 name = "atrament_image_placement_intent"
 version = "0.1.0"
 

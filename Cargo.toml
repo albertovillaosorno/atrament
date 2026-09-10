@@ -18,6 +18,7 @@ members = [
     "src/backend/handwriting-stroke-plan",
     "src/backend/handwriting-stroke-vocabulary",
     "src/backend/handwriting-variation",
+    "src/backend/handwriting-variation-quality-evidence",
     "src/backend/image-placement-intent",
     "src/backend/line-art-extraction",
     "src/backend/media-job-lifecycle",
