@@ -273,9 +273,46 @@ fn mixed_policy_pagination_matches_reference_oracle() {
     assert!(saw_failure);
 }
 
+#[derive(Default)]
+struct PaginationOutcomeCoverage {
+    saw_no_fit: bool,
+    saw_no_page: bool,
+    saw_success: bool,
+}
+
+impl PaginationOutcomeCoverage {
+    fn observe(
+        &mut self,
+        result: &Result<
+            Vec<PlacedFragment<u64, u64>>,
+            PaginationError<u64, u64>,
+        >,
+    ) {
+        match result {
+            Ok(_) => self.saw_success = true,
+            Err(PaginationError::FragmentDoesNotFitAnyPage { .. }) => {
+                self.saw_no_fit = true;
+            },
+            Err(PaginationError::NoPageAvailable { .. }) => {
+                self.saw_no_page = true;
+            },
+            Err(PaginationError::InvalidPageRegion { .. }) => {
+                panic!("Cartesian fixtures only construct valid page regions");
+            },
+        }
+    }
+
+    fn assert_complete(self) {
+        assert!(self.saw_success);
+        assert!(self.saw_no_fit);
+        assert!(self.saw_no_page);
+    }
+}
+
 #[test]
 fn independent_pagination_matches_reference_oracle() {
     let mut cases = 0usize;
+    let mut outcomes = PaginationOutcomeCoverage::default();
     for first_width in 1..=2 {
         for first_height in 1..=2 {
             for second_width in 1..=2 {
@@ -310,6 +347,7 @@ fn independent_pagination_matches_reference_oracle() {
                                         &pages,
                                         &fragments,
                                     );
+                                    outcomes.observe(&expected);
                                     assert_eq!(actual, expected);
                                     cases += 1;
                                 }
@@ -321,6 +359,7 @@ fn independent_pagination_matches_reference_oracle() {
         }
     }
     assert_eq!(cases, 1_296);
+    outcomes.assert_complete();
 }
 
 #[derive(Clone, Copy)]
@@ -425,6 +464,7 @@ fn reference_keep_together_fresh(
 #[test]
 fn keep_together_pagination_matches_fresh_page_reference_oracle() {
     let mut cases = 0usize;
+    let mut outcomes = PaginationOutcomeCoverage::default();
     for first_width in 1..=2 {
         for first_height in 1..=2 {
             for second_width in 1..=2 {
@@ -467,6 +507,7 @@ fn keep_together_pagination_matches_fresh_page_reference_oracle() {
                                                     &pages,
                                                     &fragments,
                                                 );
+                                            outcomes.observe(&expected);
                                             assert_eq!(actual, expected);
                                             cases += 1;
                                         }
@@ -480,6 +521,7 @@ fn keep_together_pagination_matches_fresh_page_reference_oracle() {
         }
     }
     assert_eq!(cases, 5_184);
+    outcomes.assert_complete();
 }
 
 fn reference_prefix_then_keep(
@@ -552,6 +594,7 @@ fn reference_prefix_then_keep(
 fn keep_together_remainder_matches_reference_oracle() {
     let keep_together = FlowUnitPolicy::KeepTogetherWhenPossible;
     let mut cases = 0usize;
+    let mut outcomes = PaginationOutcomeCoverage::default();
     for first_width in 1..=2 {
         for first_height in 1..=2 {
             for second_width in 1..=2 {
@@ -604,6 +647,7 @@ fn keep_together_remainder_matches_reference_oracle() {
                                                     prefix,
                                                     &group,
                                                 );
+                                            outcomes.observe(&expected);
                                             assert_eq!(actual, expected);
                                             cases += 1;
                                         }
@@ -617,6 +661,7 @@ fn keep_together_remainder_matches_reference_oracle() {
         }
     }
     assert_eq!(cases, 1_024);
+    outcomes.assert_complete();
 }
 
 #[test]

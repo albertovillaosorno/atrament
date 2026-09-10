@@ -565,6 +565,10 @@ Another 20,341 owner-sequence cases cover complete, incomplete, repeated,
 reordered, and out-of-flow semantic measurements, including owner runs split
 across empty, independent, and keep-together measurement units.
 
+The three exhaustive Cartesian placement oracles also require valid plans plus
+both no-fit and no-page placement failures, while their page rectangles remain
+valid by construction.
+
 Generated pagination oracles now assert their page/unit counts, both policies,
 fragment and owner grouping, owner identities, and expected success/failure
 classes; the mixed-policy generator uses high LCG bits so low-bit cycling cannot
