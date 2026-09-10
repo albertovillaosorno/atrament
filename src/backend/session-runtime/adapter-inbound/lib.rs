@@ -95,6 +95,13 @@ struct ParsedRequestTarget<'request> {
     target: &'request str,
 }
 
+struct RouteContext<'context> {
+    expected_host: &'context str,
+    expected_origin: &'context str,
+    expected_secret: &'context str,
+    handshake: &'context dyn SessionHandshake,
+}
+
 /// A listener bound to one operating-system-assigned IPv4 loopback endpoint.
 #[derive(Debug)]
 pub struct Runtime {
@@ -155,6 +162,12 @@ impl Runtime {
         handshake: &dyn SessionHandshake,
         draft: &mut dyn SessionDraft,
     ) {
+        let context = RouteContext {
+            expected_host: &self.expected_host,
+            expected_origin: &self.origin,
+            expected_secret,
+            handshake,
+        };
         for incoming in self.listener.incoming() {
             let Ok(mut connection) = incoming else {
                 break;
@@ -162,14 +175,7 @@ impl Runtime {
             if configure_connection_deadline(&connection).is_err() {
                 continue;
             }
-            drop(serve_connection(
-                &mut connection,
-                &self.expected_host,
-                &self.origin,
-                expected_secret,
-                handshake,
-                draft,
-            ));
+            drop(serve_connection(&mut connection, &context, draft));
         }
     }
 }
@@ -740,16 +746,25 @@ fn request_origin_is_admitted(request: &[u8], expected_origin: &str) -> bool {
     request_has_exact_origin(request, expected_origin)
 }
 
+fn draft_field_for_target(target: &str) -> Option<DraftField> {
+    match target {
+        "/api/session/candidate" => Some(DraftField::Candidate),
+        "/api/session/source" => Some(DraftField::Source),
+        "/api/session/task" => Some(DraftField::Task),
+        _ => None,
+    }
+}
+
 fn route_draft_read(
     request: &[u8],
     field: DraftField,
-    expected_origin: &str,
-    expected_secret: &str,
+    context: &RouteContext<'_>,
     draft: &dyn SessionDraft,
 ) -> Vec<u8> {
     let credential_valid =
-        request_has_session_credential(request, expected_secret);
-    let origin_valid = request_origin_is_admitted(request, expected_origin);
+        request_has_session_credential(request, context.expected_secret);
+    let origin_valid =
+        request_origin_is_admitted(request, context.expected_origin);
     if !credential_valid || !origin_valid {
         return json_response(
             "401 Unauthorized",
@@ -786,13 +801,13 @@ fn draft_resource_limit_response(diagnostics: &DiagnosticSet) -> Vec<u8> {
 fn route_draft_replace(
     request: &[u8],
     field: DraftField,
-    expected_origin: &str,
-    expected_secret: &str,
+    context: &RouteContext<'_>,
     draft: &mut dyn SessionDraft,
 ) -> Vec<u8> {
     let credential_valid =
-        request_has_session_credential(request, expected_secret);
-    let origin_valid = request_has_exact_origin(request, expected_origin);
+        request_has_session_credential(request, context.expected_secret);
+    let origin_valid =
+        request_has_exact_origin(request, context.expected_origin);
     if !credential_valid || !origin_valid {
         return json_response(
             "401 Unauthorized",
@@ -961,13 +976,27 @@ pub fn route_request(
     handshake: &dyn SessionHandshake,
     draft: &mut dyn SessionDraft,
 ) -> Vec<u8> {
+    let context = RouteContext {
+        expected_host,
+        expected_origin,
+        expected_secret,
+        handshake,
+    };
+    route_request_with_context(request, &context, draft)
+}
+
+fn route_request_with_context(
+    request: &[u8],
+    context: &RouteContext<'_>,
+    draft: &mut dyn SessionDraft,
+) -> Vec<u8> {
     let Some(parsed) = request_method_host_and_target(request) else {
         return json_response(
             "400 Bad Request",
             br#"{"error":"invalid_request"}"#,
         );
     };
-    if parsed.host != expected_host {
+    if parsed.host != context.expected_host {
         return json_response(
             "421 Misdirected Request",
             br#"{"error":"invalid_host"}"#,
@@ -978,54 +1007,22 @@ pub fn route_request(
     {
         return public_response;
     }
+    if let Some(field) = draft_field_for_target(parsed.target) {
+        return match parsed.method {
+            "GET" => route_draft_read(request, field, context, draft),
+            "POST" => route_draft_replace(request, field, context, draft),
+            _ => json_response(
+                "400 Bad Request",
+                br#"{"error":"invalid_request"}"#,
+            ),
+        };
+    }
     match (parsed.method, parsed.target) {
-        ("GET", "/api/session/candidate") => route_draft_read(
-            request,
-            DraftField::Candidate,
-            expected_origin,
-            expected_secret,
-            draft,
-        ),
-        ("GET", "/api/session/source") => route_draft_read(
-            request,
-            DraftField::Source,
-            expected_origin,
-            expected_secret,
-            draft,
-        ),
-        ("GET", "/api/session/task") => route_draft_read(
-            request,
-            DraftField::Task,
-            expected_origin,
-            expected_secret,
-            draft,
-        ),
         ("POST", "/api/handshake") => route_handshake(
             request,
-            expected_origin,
-            expected_secret,
-            handshake,
-        ),
-        ("POST", "/api/session/candidate") => route_draft_replace(
-            request,
-            DraftField::Candidate,
-            expected_origin,
-            expected_secret,
-            draft,
-        ),
-        ("POST", "/api/session/source") => route_draft_replace(
-            request,
-            DraftField::Source,
-            expected_origin,
-            expected_secret,
-            draft,
-        ),
-        ("POST", "/api/session/task") => route_draft_replace(
-            request,
-            DraftField::Task,
-            expected_origin,
-            expected_secret,
-            draft,
+            context.expected_origin,
+            context.expected_secret,
+            context.handshake,
         ),
         ("POST", _) | ("GET", "/api/handshake") => {
             json_response("400 Bad Request", br#"{"error":"invalid_request"}"#)
@@ -1041,10 +1038,7 @@ pub fn route_request(
 
 fn serve_connection(
     stream: &mut TcpStream,
-    expected_host: &str,
-    expected_origin: &str,
-    expected_secret: &str,
-    handshake: &dyn SessionHandshake,
+    context: &RouteContext<'_>,
     draft: &mut dyn SessionDraft,
 ) -> io::Result<()> {
     let request = match read_request(stream) {
@@ -1075,13 +1069,6 @@ fn serve_connection(
         },
         Err(error) => return Err(error),
     };
-    let response = route_request(
-        &request,
-        expected_host,
-        expected_origin,
-        expected_secret,
-        handshake,
-        draft,
-    );
+    let response = route_request_with_context(&request, context, draft);
     write_response(stream, &response)
 }
