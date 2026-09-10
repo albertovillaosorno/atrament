@@ -229,3 +229,41 @@ fn scenario_coverage_does_not_substitute_for_preview_quality_evidence() {
         Err(RenderPerformanceCoverageError::PreviewNotObserved),
     );
 }
+
+#[test]
+fn every_complete_scenario_quality_mask_matches_role_coverage_oracle() {
+    let mut cases = 0_u8;
+    let mut saw = [false; 3];
+    for final_mask in 0_u8..64 {
+        let observations = SCENARIOS
+            .into_iter()
+            .enumerate()
+            .map(|(index, scenario)| {
+                let quality_mode = if final_mask & (1_u8 << index) == 0 {
+                    RenderQualityMode::Preview
+                } else {
+                    RenderQualityMode::Final
+                };
+                observation(scenario, quality_mode)
+            })
+            .collect::<Vec<_>>();
+        let expected = if final_mask == 0 {
+            saw[0] = true;
+            Err(RenderPerformanceCoverageError::FinalQualityMissing)
+        } else if final_mask == 0b11_1111 {
+            saw[1] = true;
+            Err(RenderPerformanceCoverageError::PreviewNotObserved)
+        } else {
+            saw[2] = true;
+            Ok(())
+        };
+        assert_eq!(
+            validate_render_performance_coverage(&observations),
+            expected,
+            "final-quality assignment mask {final_mask:#08b}",
+        );
+        cases = cases.saturating_add(1);
+    }
+    assert_eq!(cases, 64);
+    assert!(saw.into_iter().all(|seen| seen));
+}

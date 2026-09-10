@@ -168,6 +168,9 @@ Current checked-in regression evidence includes:
   seed, quality, and version input retention;
 - `tests/backend/render-quality-profile/domain/lib.rs`, which pins preview/final
   role and shared-authority invariants;
+- `tests/backend/render-performance-evidence/domain/lib.rs`, which pins all six
+  CPU workload scenarios plus all 64 complete-scenario Preview/Final role
+  assignments without introducing performance budgets;
 - `tests/backend/line-art-extraction/domain/lib.rs`, which pins source identity,
   all six caller-owned extraction controls, transparent-black appearance,
   ordered vector paths, and the complete 128-case control/source drift oracle;

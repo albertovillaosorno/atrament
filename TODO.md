@@ -1454,7 +1454,9 @@ tiers,
 benchmark execution, render scheduling, and pass/fail policy remain open.
 
 A leave-one-scenario-out matrix proves each workload is independently required
-before quality-role completeness can pass.
+before quality-role completeness can pass. A second 64-case oracle exhausts
+every Preview/Final assignment over a complete six-scenario set and proves only
+the all-Preview and all-Final assignments fail role completeness.
 
 ## P6 — LLM, CLI, MCP, and media intake
 
