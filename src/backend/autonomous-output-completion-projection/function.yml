@@ -1,0 +1,9 @@
+identity:
+  id: function:autonomous-output-completion-projection
+  name: autonomous-output-completion-projection
+  path: src/backend/autonomous-output-completion-projection
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: application

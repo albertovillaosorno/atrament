@@ -53,6 +53,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "atrament_autonomous_output_completion_projection"
+version = "0.1.0"
+dependencies = [
+ "atrament_autonomous_completion_admission",
+ "atrament_derived_output_result",
+]
+
+[[package]]
 name = "atrament_autonomous_output_intent"
 version = "0.1.0"
 

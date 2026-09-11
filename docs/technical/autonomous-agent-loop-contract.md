@@ -222,6 +222,11 @@ A failed or cancelled output operation follows its owning typed result and
 lifecycle semantics; the edit loop does not mutate notebook content merely to
 make an unrelated output failure disappear.
 
+An application-level completion projection now marks only successful Render/Plan
+projection, committed Export, or recovered prior Export as complete requested
+output. Applicable rejection, conflict, cancellation, failure, and stale results
+remain incomplete; invalid operation/result pairs remain unclassified.
+
 A partial output-remediation classifier now materializes only five frozen
 branches: stale revision reinspection, explicit overwrite choice, Export retry
 correction, a new explicit Export after external target drift, and idempotent
