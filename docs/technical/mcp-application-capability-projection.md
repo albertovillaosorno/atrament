@@ -63,6 +63,12 @@ batch instead of probing unsupported mutations.
 The capability snapshot is not MCP authentication and does not widen writable
 scope merely because an agent can read it.
 
+The shared MCP command-admission projection now maps only Command context,
+Validate, and Apply to the semantic-command application capability vocabulary.
+Their admission is always exact membership in the supplied backend capability
+snapshot; the other five generic MCP classes have no semantic-command admission
+result. This does not make an absent capability executable.
+
 An agent may request broader context when the admitted application contract
 allows it. The core determines the returned semantic representation rather than
 exposing internal storage objects or DOM state.

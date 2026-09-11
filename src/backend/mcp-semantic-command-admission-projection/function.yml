@@ -1,0 +1,9 @@
+identity:
+  id: function:mcp-semantic-command-admission-projection
+  name: mcp-semantic-command-admission-projection
+  path: src/backend/mcp-semantic-command-admission-projection
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: application

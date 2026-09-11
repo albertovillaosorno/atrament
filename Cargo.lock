@@ -166,6 +166,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "atrament_mcp_semantic_command_admission_projection"
+version = "0.1.0"
+dependencies = [
+ "atrament_mcp_capability_effect",
+ "atrament_semantic_command_context",
+ "atrament_semantic_notebook_port",
+]
+
+[[package]]
 name = "atrament_media_job_lifecycle"
 version = "0.1.0"
 

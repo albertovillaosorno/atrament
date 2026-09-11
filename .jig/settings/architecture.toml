@@ -109,6 +109,9 @@ depends_on = ["atrament_derived_output_result", "atrament_mcp_capability_effect"
 [component.atrament_mcp_operation_lifecycle_projection]
 depends_on = ["atrament_application_operation_lifecycle", "atrament_mcp_capability_effect"]
 
+[component.atrament_mcp_semantic_command_admission_projection]
+depends_on = ["atrament_mcp_capability_effect", "atrament_semantic_command_context", "atrament_semantic_notebook_port"]
+
 [component.atrament_pdf_composition_plan]
 depends_on = []
 

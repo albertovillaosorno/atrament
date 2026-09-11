@@ -1870,6 +1870,12 @@ only for Render, Plan, and Export and preserves the result-class applicability
 check for all 11 frozen outcomes. The other five capability classes receive no
 output-result disposition, and no output execution is implied.
 
+MCP Command context, Validate, and Apply now have a separate read-only
+projection
+onto semantic-command application admission. Exact backend snapshot membership
+remains authoritative across all four command application bits; MCP vocabulary
+alone never turns an omitted operation into an admitted one.
+
 ### TODO - Package self-contained agent instructions
 
 Allow a user to provide the repository or release bundle to an agent and have
