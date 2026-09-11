@@ -153,3 +153,88 @@ fn admitted_fallback_retains_exact_caller_owned_style_identity() {
         }),
     );
 }
+#[test]
+fn all_27_coverage_and_fallback_states_match_independent_admission_oracle() {
+    let declared_rule = "profile-rule";
+    let mut cases = 0_u8;
+    let mut saw_profile = false;
+    let mut saw_fallback = false;
+    let mut saw_missing_without_fallback = false;
+    let mut saw_incomplete_fallback = false;
+    for coverage_index in 0_u8..3 {
+        for fallback_index in 0_u8..9 {
+            let coverage = match coverage_index {
+                0 => HandwritingCoverage::Exact,
+                1 => HandwritingCoverage::Compositional {
+                    rule: &declared_rule,
+                },
+                _ => HandwritingCoverage::Missing,
+            };
+            let evidence = (fallback_index != 0).then(|| {
+                let bits = fallback_index - 1;
+                fallback(
+                    if bits & 1 == 0 {
+                        FallbackStyleDeclaration::Undeclared
+                    } else {
+                        FallbackStyleDeclaration::Declared
+                    },
+                    if bits & 2 == 0 {
+                        FallbackStyleVisibility::NotEstablished
+                    } else {
+                        FallbackStyleVisibility::Visible
+                    },
+                    if bits & 4 == 0 {
+                        FallbackUserAcceptance::NotAccepted
+                    } else {
+                        FallbackUserAcceptance::Accepted
+                    },
+                )
+            });
+            let expected = if coverage_index != 2 {
+                saw_profile = true;
+                Ok(HandwritingCoverageAdmission::ProfileCoverage)
+            } else if evidence.is_none() {
+                saw_missing_without_fallback = true;
+                Err(
+                    HandwritingFallbackAdmissionError::
+                        MissingCoverageWithoutFallback,
+                )
+            } else {
+                let supplied = evidence
+                    .as_ref()
+                    .expect("nonzero fallback state supplies evidence");
+                if supplied.declaration == FallbackStyleDeclaration::Declared
+                    && supplied.visibility == FallbackStyleVisibility::Visible
+                    && supplied.user_acceptance
+                        == FallbackUserAcceptance::Accepted
+                {
+                    saw_fallback = true;
+                    Ok(HandwritingCoverageAdmission::VisibleAcceptedFallback {
+                        style_identity: &supplied.style_identity,
+                    })
+                } else {
+                    saw_incomplete_fallback = true;
+                    Err(
+                        HandwritingFallbackAdmissionError::
+                            RequirementsNotEstablished {
+                                declaration: supplied.declaration,
+                                user_acceptance: supplied.user_acceptance,
+                                visibility: supplied.visibility,
+                            },
+                    )
+                }
+            };
+            assert_eq!(
+                admit_handwriting_fallback(coverage, evidence.as_ref()),
+                expected,
+                "coverage {coverage_index}, fallback {fallback_index}",
+            );
+            cases = cases.saturating_add(1);
+        }
+    }
+    assert_eq!(cases, 27);
+    assert!(saw_profile);
+    assert!(saw_fallback);
+    assert!(saw_missing_without_fallback);
+    assert!(saw_incomplete_fallback);
+}

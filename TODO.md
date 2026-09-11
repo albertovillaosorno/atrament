@@ -882,8 +882,11 @@ A separate fallback-admission boundary now keeps missing handwriting coverage
 blocked unless caller evidence identifies one declared fallback style, proves
 its use remains visible, and records explicit user acceptance. It never chooses
 a style or treats Exact/Compositional profile coverage as needing fallback. All
-eight declaration/visibility/acceptance combinations are covered independently;
-style selection, consent UI, semantic locations, diagnostics, and rendering
+eight declaration/visibility/acceptance combinations are covered independently.
+A separate 27-state oracle crosses Exact/Compositional/Missing with absent and
+all eight fallback evidence states.
+
+Style selection, consent UI, semantic locations, diagnostics, and rendering
 remain open.
 
 ## P3 — The dual human and LLM editor
