@@ -238,10 +238,9 @@ output. Applicable rejection, conflict, cancellation, failure, and stale results
 remain incomplete; invalid operation/result pairs remain unclassified.
 
 A separate progress projection now counts a successful projection or fresh
-Export
-as progress only when it belongs to the caller's explicit goal. Recovered Export
-completion remains idempotent-replay recovery rather than new progress, and host
-policy or untrusted semantic content cannot manufacture goal progress.
+Export as progress only when it belongs to the caller's explicit goal. Recovered
+Export completion remains idempotent-replay recovery rather than new progress,
+and host policy or untrusted semantic content cannot manufacture goal progress.
 
 A partial output-remediation classifier now materializes only five frozen
 branches: stale revision reinspection, explicit overwrite choice, Export retry
