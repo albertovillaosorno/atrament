@@ -16,7 +16,7 @@
 // - Allows:
 //   - Inputs: Caller-owned values, units, distribution/correlation/context
 //     data,
-//     seeds, and stable semantic identities.
+//     parameter identities, seeds, and stable semantic identities.
 //   - Outputs: Typed bound validation and replay-key values.
 //   - Side effects: None beyond process-local validation.
 // - Split-When:
@@ -78,6 +78,7 @@ pub enum VariationScale {
 /// One complete caller-owned variable-parameter envelope.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct VariationParameter<
+    ParameterIdentity,
     Value,
     Unit,
     Distribution,
@@ -96,6 +97,8 @@ pub struct VariationParameter<
     pub maximum: VariationBound<Value>,
     /// Minimum admitted value and its evidence basis.
     pub minimum: VariationBound<Value>,
+    /// Stable caller-owned identity for this variable parameter.
+    pub parameter_identity: ParameterIdentity,
     /// Scale at which this parameter operates.
     pub scale: VariationScale,
     /// Caller-owned typed unit identity.
@@ -122,11 +125,13 @@ pub struct VariationReplayConsistencyError {
     pub first_index: usize,
 }
 
-/// Deterministic replay inputs required by accepted variation sampling.
+/// Deterministic replay inputs for one variable parameter and semantic target.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct VariationReplayKey<Seed, SemanticIdentity> {
+pub struct VariationReplayKey<ParameterIdentity, Seed, SemanticIdentity> {
     /// Caller-owned accepted document variation seed.
     pub document_seed: Seed,
+    /// Stable variable-parameter identity scoped by this replay key.
+    pub parameter_identity: ParameterIdentity,
     /// Stable semantic identity that scopes deterministic variation.
     pub semantic_identity: SemanticIdentity,
 }
@@ -154,6 +159,11 @@ pub enum VariationSampleError {
 pub enum VariationSampleSetError {
     /// The configured parameter envelope is invalid.
     Parameter(VariationParameterError),
+    /// One sample belongs to a different variable parameter.
+    ParameterIdentityMismatch {
+        /// Zero-based observation index in caller order.
+        sample_index: usize,
+    },
     /// Exact replay inputs produced contradictory sampled values.
     ReplayConflict(VariationReplayConsistencyError),
     /// One sampled value falls outside the admitted parameter envelope.
@@ -165,8 +175,22 @@ pub enum VariationSampleSetError {
     },
 }
 
-impl<Value, Unit, Distribution, CorrelationGroup, ContextRule>
-    VariationParameter<Value, Unit, Distribution, CorrelationGroup, ContextRule>
+impl<
+    ParameterIdentity,
+    Value,
+    Unit,
+    Distribution,
+    CorrelationGroup,
+    ContextRule,
+>
+    VariationParameter<
+        ParameterIdentity,
+        Value,
+        Unit,
+        Distribution,
+        CorrelationGroup,
+        ContextRule,
+    >
 where
     Value: Ord,
 {
@@ -248,38 +272,57 @@ where
 }
 /// Validate one complete parameter-bound sample set without producing samples.
 ///
-/// Validation order is parameter envelope, caller-order sample bounds, then
-/// replay consistency. This preserves the stronger configured-envelope failure
-/// before interpreting any sample as admissible replay evidence.
+/// Validation order is parameter envelope, caller-order parameter identity,
+/// caller-order sample bounds, then replay consistency. This prevents a sample
+/// from being interpreted against the wrong variable parameter envelope.
 ///
 /// # Errors
 ///
 /// Returns [`VariationSampleSetError`] for the first invalid parameter, sampled
 /// value, or exact-replay contradiction.
 pub fn validate_variation_sample_set<
+    ParameterIdentity,
     Value,
     Unit,
     Distribution,
     CorrelationGroup,
     ContextRule,
-    ReplayKey,
+    Seed,
+    SemanticIdentity,
 >(
     parameter: &VariationParameter<
+        ParameterIdentity,
         Value,
         Unit,
         Distribution,
         CorrelationGroup,
         ContextRule,
     >,
-    samples: &[VariationSample<ReplayKey, Value>],
+    samples: &[
+        VariationSample<
+            VariationReplayKey<ParameterIdentity, Seed, SemanticIdentity>,
+            Value,
+        >
+    ],
 ) -> Result<(), VariationSampleSetError>
 where
-    ReplayKey: Eq,
+    ParameterIdentity: Eq,
+    Seed: Eq,
+    SemanticIdentity: Eq,
     Value: Eq + Ord,
 {
     parameter
         .validate()
         .map_err(VariationSampleSetError::Parameter)?;
+    for (sample_index, sample) in samples.iter().enumerate() {
+        if sample.replay_key.parameter_identity
+            != parameter.parameter_identity
+        {
+            return Err(VariationSampleSetError::ParameterIdentityMismatch {
+                sample_index,
+            });
+        }
+    }
     for (sample_index, sample) in samples.iter().enumerate() {
         parameter
             .validate_sample(sample)

@@ -39,8 +39,14 @@ use atrament_handwriting_variation::{
     validate_variation_replay_consistency, validate_variation_sample_set,
 };
 
-type Parameter =
-    VariationParameter<i32, &'static str, &'static str, u8, &'static str>;
+type Parameter = VariationParameter<
+    &'static str,
+    i32,
+    &'static str,
+    &'static str,
+    u8,
+    &'static str,
+>;
 
 fn parameter(minimum: i32, central_tendency: i32, maximum: i32) -> Parameter {
     VariationParameter {
@@ -56,6 +62,7 @@ fn parameter(minimum: i32, central_tendency: i32, maximum: i32) -> Parameter {
             basis: VariationBoundBasis::Observed,
             value: minimum,
         },
+        parameter_identity: "slant",
         scale: VariationScale::Line,
         unit: "caller-owned-unit",
     }
@@ -66,6 +73,7 @@ fn parameter_retains_independent_bound_basis_and_generic_model_metadata() {
     let value = parameter(-10, 0, 15);
     assert_eq!(value.validate(), Ok(()));
     assert_eq!(value.minimum.basis, VariationBoundBasis::Observed);
+    assert_eq!(value.parameter_identity, "slant");
     assert_eq!(value.maximum.basis, VariationBoundBasis::Authorized);
     assert_eq!(value.distribution, "caller-owned-distribution-family");
     assert_eq!(value.correlation_groups, [7]);
@@ -108,23 +116,32 @@ fn accepted_scales_cover_profile_through_stroke_scope() {
 }
 
 #[test]
-fn replay_key_retains_document_seed_and_stable_semantic_identity() {
+fn replay_key_retains_parameter_seed_and_semantic_identity() {
     let first = VariationReplayKey {
         document_seed: 41_u64,
+        parameter_identity: "slant",
         semantic_identity: "block-7",
     };
     let same = first.clone();
     let different_seed = VariationReplayKey {
         document_seed: 42_u64,
+        parameter_identity: "slant",
         semantic_identity: "block-7",
     };
     let different_identity = VariationReplayKey {
         document_seed: 41_u64,
+        parameter_identity: "slant",
         semantic_identity: "block-8",
+    };
+    let different_parameter = VariationReplayKey {
+        document_seed: 41_u64,
+        parameter_identity: "spacing",
+        semantic_identity: "block-7",
     };
     assert_eq!(first, same);
     assert_ne!(first, different_seed);
     assert_ne!(first, different_identity);
+    assert_ne!(first, different_parameter);
 }
 
 #[test]
@@ -134,6 +151,7 @@ fn sampled_values_are_checked_against_inclusive_parameter_bounds() {
         let sample = VariationSample {
             replay_key: VariationReplayKey {
                 document_seed: 41_u64,
+                parameter_identity: "slant",
                 semantic_identity: "block-7",
             },
             value: sampled_value,
@@ -148,6 +166,7 @@ fn sampled_value_outside_parameter_bounds_rejects_explicitly() {
     let below = VariationSample {
         replay_key: VariationReplayKey {
             document_seed: 41_u64,
+            parameter_identity: "slant",
             semantic_identity: "block-7",
         },
         value: -11,
@@ -155,6 +174,7 @@ fn sampled_value_outside_parameter_bounds_rejects_explicitly() {
     let above = VariationSample {
         replay_key: VariationReplayKey {
             document_seed: 41_u64,
+            parameter_identity: "slant",
             semantic_identity: "block-7",
         },
         value: 16,
@@ -175,12 +195,14 @@ fn sampled_value_retains_exact_replay_inputs_without_interpretation() {
     let sample = VariationSample {
         replay_key: VariationReplayKey {
             document_seed: 9001_u64,
+            parameter_identity: "slant",
             semantic_identity: "glyph-é-17",
         },
         value: 7,
     };
     assert_eq!(parameter.validate_sample(&sample), Ok(()));
     assert_eq!(sample.replay_key.document_seed, 9001);
+    assert_eq!(sample.replay_key.parameter_identity, "slant");
     assert_eq!(sample.replay_key.semantic_identity, "glyph-é-17");
     assert_eq!(sample.value, 7);
 }
@@ -223,6 +245,7 @@ fn every_compact_parameter_and_sample_value_matches_bounds_oracle() {
                     let sample = VariationSample {
                         replay_key: VariationReplayKey {
                             document_seed: 17_u8,
+                            parameter_identity: "slant",
                             semantic_identity: 23_u8,
                         },
                         value: sampled_value,
@@ -268,6 +291,7 @@ fn repeated_replay_key_requires_the_exact_same_sampled_value() {
         VariationSample {
             replay_key: VariationReplayKey {
                 document_seed: 41_u64,
+                parameter_identity: "slant",
                 semantic_identity: "glyph-a",
             },
             value: 7_i32,
@@ -275,6 +299,7 @@ fn repeated_replay_key_requires_the_exact_same_sampled_value() {
         VariationSample {
             replay_key: VariationReplayKey {
                 document_seed: 41_u64,
+                parameter_identity: "slant",
                 semantic_identity: "glyph-a",
             },
             value: 7_i32,
@@ -284,11 +309,12 @@ fn repeated_replay_key_requires_the_exact_same_sampled_value() {
 }
 
 #[test]
-fn replay_key_requires_both_document_seed_and_semantic_identity_to_match() {
+fn replay_key_distinguishes_parameter_seed_and_semantic_identity() {
     let samples = vec![
         VariationSample {
             replay_key: VariationReplayKey {
                 document_seed: 41_u64,
+                parameter_identity: "slant",
                 semantic_identity: "glyph-a",
             },
             value: 1_i32,
@@ -296,6 +322,7 @@ fn replay_key_requires_both_document_seed_and_semantic_identity_to_match() {
         VariationSample {
             replay_key: VariationReplayKey {
                 document_seed: 42_u64,
+                parameter_identity: "slant",
                 semantic_identity: "glyph-a",
             },
             value: 2_i32,
@@ -303,6 +330,7 @@ fn replay_key_requires_both_document_seed_and_semantic_identity_to_match() {
         VariationSample {
             replay_key: VariationReplayKey {
                 document_seed: 41_u64,
+                parameter_identity: "slant",
                 semantic_identity: "glyph-b",
             },
             value: 3_i32,
@@ -315,10 +343,12 @@ fn replay_key_requires_both_document_seed_and_semantic_identity_to_match() {
 fn replay_conflict_reports_first_later_observation_and_earliest_prior_match() {
     let key_a = VariationReplayKey {
         document_seed: 41_u8,
+        parameter_identity: "slant",
         semantic_identity: "glyph-a",
     };
     let key_b = VariationReplayKey {
         document_seed: 41_u8,
+        parameter_identity: "slant",
         semantic_identity: "glyph-b",
     };
     let samples = vec![
@@ -364,6 +394,7 @@ fn compact_replay_sequences_match_independent_first_conflict_oracle() {
                 samples.push(VariationSample {
                     replay_key: VariationReplayKey {
                         document_seed: 17_u8,
+                        parameter_identity: "slant",
                         semantic_identity: (symbol / 2) as u8,
                     },
                     value: (symbol % 2) as u8,
@@ -404,15 +435,65 @@ fn compact_replay_sequences_match_independent_first_conflict_oracle() {
     assert!(saw_conflict);
 }
 #[test]
+fn different_parameter_identities_do_not_collide_in_replay_consistency() {
+    let samples = vec![
+        VariationSample {
+            replay_key: VariationReplayKey {
+                document_seed: 41_u8,
+                parameter_identity: "slant",
+                semantic_identity: "glyph-a",
+            },
+            value: 1_i32,
+        },
+        VariationSample {
+            replay_key: VariationReplayKey {
+                document_seed: 41_u8,
+                parameter_identity: "spacing",
+                semantic_identity: "glyph-a",
+            },
+            value: 2_i32,
+        },
+    ];
+    assert_eq!(validate_variation_replay_consistency(&samples), Ok(()));
+}
+
+#[test]
+fn complete_sample_set_rejects_a_different_parameter_identity_first() {
+    let parameter = parameter(-10, 0, 15);
+    let samples = vec![VariationSample {
+        replay_key: VariationReplayKey {
+            document_seed: 41_u8,
+            parameter_identity: "spacing",
+            semantic_identity: "glyph-a",
+        },
+        value: 100_i32,
+    }];
+    assert_eq!(
+        validate_variation_sample_set(&parameter, &samples),
+        Err(VariationSampleSetError::ParameterIdentityMismatch {
+            sample_index: 0,
+        }),
+    );
+}
+
+#[test]
 fn complete_sample_set_checks_parameter_bounds_before_replay_consistency() {
     let invalid_parameter = parameter(5, 4, 3);
     let invalid_samples = vec![
         VariationSample {
-            replay_key: 1_u8,
+            replay_key: VariationReplayKey {
+                document_seed: 1_u8,
+                parameter_identity: "slant",
+                semantic_identity: 1_u8,
+            },
             value: 2_i32,
         },
         VariationSample {
-            replay_key: 1_u8,
+            replay_key: VariationReplayKey {
+                document_seed: 1_u8,
+                parameter_identity: "slant",
+                semantic_identity: 1_u8,
+            },
             value: 3_i32,
         },
     ];
@@ -440,6 +521,7 @@ fn complete_sample_set_reports_replay_only_after_all_values_are_in_bounds() {
         VariationSample {
             replay_key: VariationReplayKey {
                 document_seed: 17_u8,
+                parameter_identity: "slant",
                 semantic_identity: 23_u8,
             },
             value: -1_i32,
@@ -447,6 +529,7 @@ fn complete_sample_set_reports_replay_only_after_all_values_are_in_bounds() {
         VariationSample {
             replay_key: VariationReplayKey {
                 document_seed: 17_u8,
+                parameter_identity: "slant",
                 semantic_identity: 23_u8,
             },
             value: 1_i32,
@@ -464,9 +547,9 @@ fn complete_sample_set_reports_replay_only_after_all_values_are_in_bounds() {
 }
 
 #[test]
-fn compact_sample_sets_match_parameter_sample_then_replay_precedence() {
+fn compact_sample_sets_match_identity_bounds_and_replay_precedence() {
     let mut cases = 0_u16;
-    let mut outcomes = [false; 4];
+    let mut outcomes = [false; 5];
     for minimum in -1_i8..=1 {
         for central in -1_i8..=1 {
             for maximum in -1_i8..=1 {
@@ -483,86 +566,137 @@ fn compact_sample_sets_match_parameter_sample_then_replay_precedence() {
                         basis: VariationBoundBasis::Observed,
                         value: minimum,
                     },
+                    parameter_identity: 5_u8,
                     scale: VariationScale::Character,
                     unit: (),
                 };
-                for first_value in -2_i8..=2 {
-                    for second_value in -2_i8..=2 {
-                        let samples = [
-                            VariationSample {
-                                replay_key: 7_u8,
-                                value: first_value,
-                            },
-                            VariationSample {
-                                replay_key: 7_u8,
-                                value: second_value,
-                            },
-                        ];
-                        let expected = match parameter.validate() {
-                            Err(error) => {
-                                outcomes[0] = true;
-                                Err(VariationSampleSetError::Parameter(error))
-                            }
-                            Ok(()) if first_value < minimum => {
-                                outcomes[1] = true;
-                                Err(VariationSampleSetError::Sample {
-                                    error: VariationSampleError::BelowMinimum,
-                                    sample_index: 0,
-                                })
-                            }
-                            Ok(()) if first_value > maximum => {
-                                outcomes[1] = true;
-                                Err(VariationSampleSetError::Sample {
-                                    error: VariationSampleError::AboveMaximum,
-                                    sample_index: 0,
-                                })
-                            }
-                            Ok(()) if second_value < minimum => {
-                                outcomes[1] = true;
-                                Err(VariationSampleSetError::Sample {
-                                    error: VariationSampleError::BelowMinimum,
-                                    sample_index: 1,
-                                })
-                            }
-                            Ok(()) if second_value > maximum => {
-                                outcomes[1] = true;
-                                Err(VariationSampleSetError::Sample {
-                                    error: VariationSampleError::AboveMaximum,
-                                    sample_index: 1,
-                                })
-                            }
-                            Ok(()) if first_value != second_value => {
-                                outcomes[2] = true;
-                                Err(VariationSampleSetError::ReplayConflict(
-                                    VariationReplayConsistencyError {
-                                        conflicting_index: 1,
-                                        first_index: 0,
+                for first_identity_matches in [false, true] {
+                    for second_identity_matches in [false, true] {
+                        let first_parameter_identity =
+                            if first_identity_matches { 5_u8 } else { 6_u8 };
+                        let second_parameter_identity =
+                            if second_identity_matches { 5_u8 } else { 6_u8 };
+                        for first_value in -2_i8..=2 {
+                            for second_value in -2_i8..=2 {
+                                let samples = [
+                                    VariationSample {
+                                        replay_key: VariationReplayKey {
+                                            document_seed: 7_u8,
+                                            parameter_identity:
+                                                first_parameter_identity,
+                                            semantic_identity: 9_u8,
+                                        },
+                                        value: first_value,
                                     },
-                                ))
-                            }
-                            Ok(()) => {
-                                outcomes[3] = true;
-                                Ok(())
-                            }
-                        };
-                        assert_eq!(
-                            validate_variation_sample_set(&parameter, &samples),
-                            expected,
-                            concat!(
-                                "({}, {}, {}); [{}, {}]",
-                            ),
-                            minimum,
-                            central,
-                            maximum,
-                            first_value,
-                            second_value,
-                        );
-                        cases = cases.saturating_add(1);
+                                    VariationSample {
+                                        replay_key: VariationReplayKey {
+                                            document_seed: 7_u8,
+                                            parameter_identity:
+                                                second_parameter_identity,
+                                            semantic_identity: 9_u8,
+                                        },
+                                        value: second_value,
+                                    },
+                                ];
+                                let expected = match parameter.validate() {
+                                    Err(error) => {
+                                        outcomes[0] = true;
+                                        Err(VariationSampleSetError::Parameter(
+                                            error,
+                                        ))
+                                    }
+                                    Ok(()) if !first_identity_matches => {
+                                        outcomes[1] = true;
+                                        Err(
+                                            VariationSampleSetError::
+                                                ParameterIdentityMismatch {
+                                                    sample_index: 0,
+                                                },
+                                        )
+                                    }
+                                    Ok(()) if !second_identity_matches => {
+                                        outcomes[1] = true;
+                                        Err(
+                                            VariationSampleSetError::
+                                                ParameterIdentityMismatch {
+                                                    sample_index: 1,
+                                                },
+                                        )
+                                    }
+                                    Ok(()) if first_value < minimum => {
+                                        outcomes[2] = true;
+                                        Err(VariationSampleSetError::Sample {
+                                            error: VariationSampleError::
+                                                BelowMinimum,
+                                            sample_index: 0,
+                                        })
+                                    }
+                                    Ok(()) if first_value > maximum => {
+                                        outcomes[2] = true;
+                                        Err(VariationSampleSetError::Sample {
+                                            error: VariationSampleError::
+                                                AboveMaximum,
+                                            sample_index: 0,
+                                        })
+                                    }
+                                    Ok(()) if second_value < minimum => {
+                                        outcomes[2] = true;
+                                        Err(VariationSampleSetError::Sample {
+                                            error: VariationSampleError::
+                                                BelowMinimum,
+                                            sample_index: 1,
+                                        })
+                                    }
+                                    Ok(()) if second_value > maximum => {
+                                        outcomes[2] = true;
+                                        Err(VariationSampleSetError::Sample {
+                                            error: VariationSampleError::
+                                                AboveMaximum,
+                                            sample_index: 1,
+                                        })
+                                    }
+                                    Ok(()) if first_value != second_value => {
+                                        outcomes[3] = true;
+                                        let conflict =
+                                            VariationReplayConsistencyError {
+                                                conflicting_index: 1,
+                                                first_index: 0,
+                                            };
+                                        Err(
+                                            VariationSampleSetError::
+                                                ReplayConflict(conflict),
+                                        )
+                                    }
+                                    Ok(()) => {
+                                        outcomes[4] = true;
+                                        Ok(())
+                                    }
+                            };
+                            assert_eq!(
+                                validate_variation_sample_set(
+                                    &parameter,
+                                    &samples,
+                                ),
+                                expected,
+                                concat!(
+                                    "({}, {}, {}); ids {}/{}; [{}, {}]",
+                                ),
+                                minimum,
+                                central,
+                                maximum,
+                                first_identity_matches,
+                                second_identity_matches,
+                                first_value,
+                                second_value,
+                            );
+                            cases = cases.saturating_add(1);
+                        }
                     }
                 }
             }
         }
     }
-    assert_eq!(cases, 675);
+    }
+    assert_eq!(cases, 2_700);
     assert!(outcomes.into_iter().all(|seen| seen));
 }

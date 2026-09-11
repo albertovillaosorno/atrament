@@ -1209,16 +1209,18 @@ Current executable evidence now preserves independently observed or authorized
 minimum and maximum bounds, validates central tendency inside the envelope, and
 retains caller-owned typed units, distribution metadata, correlation groups,
 context rules, and the profile/document/page/line/word/character/stroke scale. A
-document seed plus stable semantic identity forms the typed replay key. A
-caller-produced sample can now be checked against the parameter's inclusive
+caller-owned parameter identity plus document seed and stable semantic
+identity forms the typed replay key. A caller-produced sample can now be checked
+against the parameter's inclusive
 minimum/maximum envelope while retaining those exact replay inputs. Repeated
 caller-produced observations carrying the same exact replay key must also carry
 the same sampled value; the first disagreement reports both observation indices
 without choosing how the sample was generated.
 
 A compact 341-case replay oracle exhausts every sequence through length four
-over two keys and two values. Separate fixtures prove that changing only the
-document seed or only the semantic identity yields a distinct replay key.
+over two semantic keys and two values. Separate fixtures prove that changing
+only the parameter identity, document seed, or semantic identity yields a
+distinct replay key.
 
 A separate 1,099-case integer oracle exhausts all 343
 minimum/central/maximum triples in `[-3, 3]` and all 756 sample checks over
@@ -1226,11 +1228,12 @@ minimum/central/maximum triples in `[-3, 3]` and all 756 sample checks over
 outcome.
 
 A complete sample-set gate now composes those invariants in one deterministic
-order: parameter validity, caller-order sample bounds, then exact replay
-consistency. A 675-case compact oracle crosses all parameter triples in
-`[-1, 1]` with every two-sample value pair in `[-2, 2]` and reaches parameter,
-bound,
-replay-conflict, and accepted outcomes.
+order: parameter validity, caller-order parameter identity, caller-order sample
+bounds, then exact replay consistency. A 2,700-case compact oracle crosses all
+parameter triples in `[-1, 1]`, both match/mismatch states for each sample's
+parameter identity, and every two-sample value pair in `[-2, 2]`. It reaches
+parameter, identity, bound, replay-conflict, and accepted outcomes while pinning
+the first identity mismatch in caller order.
 
 This does not choose parameter vocabularies, distribution families,
 correlations, context semantics, random generators, fitting policy, or a

@@ -154,25 +154,27 @@ how reference marks are represented geometrically.
 
 ### Bounded variation remains downstream evidence
 
-`VariationParameter` retains a minimum, central tendency, maximum, caller-owned
-units, distribution metadata, correlation groups, context rules, and one
-explicit variation scale. Each minimum or maximum bound is marked `Observed` or
-`Authorized`.
+`VariationParameter` retains a caller-owned parameter identity plus minimum,
+central tendency, maximum, units, distribution metadata, correlation groups,
+context rules, and one explicit variation scale. Each minimum or maximum bound
+is marked `Observed` or `Authorized`.
 
 `VariationParameter::validate` only enforces ordering of the caller-owned bounds
 and central tendency. Individual caller-produced samples validate against the
 inclusive envelope without choosing how they were generated.
 
-`VariationReplayKey` retains the document seed plus stable semantic identity
-required by deterministic sampling. Repeated observations with the same exact
-replay key must retain the same sampled value. A replay disagreement identifies
-the first conflicting observation and its earliest contradictory predecessor;
-changing either seed or semantic identity produces a distinct replay key.
+`VariationReplayKey` retains the caller-owned parameter identity, document
+seed, and stable semantic identity required by deterministic sampling. Repeated
+observations with the same exact replay key must retain the same sampled value.
+A replay disagreement identifies the first conflicting observation and its
+earliest contradictory predecessor. Changing parameter identity, seed, or
+semantic identity produces a distinct replay key.
 
 `validate_variation_sample_set` composes the structural checks in deterministic
-order: parameter validity, caller-order sample bounds, then replay consistency.
-Compact evidence covers 341 replay sequences and 675 complete two-sample sets in
-addition to the existing 1,099 parameter/bound cases.
+order: parameter validity, caller-order parameter identity, caller-order sample
+bounds, then replay consistency. Compact evidence covers 341 replay sequences
+and 2,700 complete two-sample sets in addition to the existing 1,099
+parameter/bound cases.
 
 The variation domain still does not infer a distribution, fit a statistical
 model, choose correlation semantics or an RNG, interpret context rules, or turn
