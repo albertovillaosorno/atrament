@@ -94,6 +94,13 @@ Read-only admission is therefore distinguishable from revision mutation or
 persistent Export authority. A future implementation can narrow effect classes
 without defining a second semantic command model.
 
+
+The backend now exposes a transport-neutral exact-membership check for this
+effect-class authorization axis. It maps each generic MCP capability to its
+frozen declared effect and admits it only when that exact effect appears in the
+caller-supplied admitted set. This check does not authenticate a caller, prove a
+capability is packaged/live, or waive any capability-specific validation.
+
 ### Capability-specific checks remain mandatory
 
 MCP admission only allows a caller to reach an application capability. It does

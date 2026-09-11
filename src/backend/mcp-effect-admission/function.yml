@@ -1,0 +1,9 @@
+identity:
+  id: function:mcp-effect-admission
+  name: mcp-effect-admission
+  path: src/backend/mcp-effect-admission
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: domain

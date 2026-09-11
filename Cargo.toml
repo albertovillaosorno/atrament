@@ -35,6 +35,7 @@ members = [
     "src/backend/mathematics-source",
     "src/backend/mcp-capability-effect",
     "src/backend/mcp-derived-output-result-projection",
+    "src/backend/mcp-effect-admission",
     "src/backend/mcp-history-result-projection",
     "src/backend/mcp-operation-lifecycle-projection",
     "src/backend/mcp-semantic-command-admission-projection",

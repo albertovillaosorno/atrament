@@ -158,6 +158,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "atrament_mcp_effect_admission"
+version = "0.1.0"
+dependencies = [
+ "atrament_mcp_capability_effect",
+]
+
+[[package]]
 name = "atrament_mcp_history_result_projection"
 version = "0.1.0"
 dependencies = [

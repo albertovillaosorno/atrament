@@ -1849,6 +1849,12 @@ capabilities grants physical-device authority; connect, home, arm, start, pause,
 resume, cancel, and safe-stop remain outside this MCP application layer.
 
 
+A separate dependency-light MCP effect-admission domain now applies exact
+membership over the seven frozen application effect classes. It authorizes only
+that axis; session identity, transport, packaged/live capability presence, and
+all capability-specific revision/scope/path/retry/output checks remain open.
+
+
 The shared application-operation-lifecycle domain now freezes the six
 first-release operation classes and maps Apply, history traversal, Export, and
 the three read-only operations to their authoritative effect boundaries. It does
