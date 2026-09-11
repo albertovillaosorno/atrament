@@ -1,0 +1,9 @@
+identity:
+  id: function:english-spanish-corpus-evidence
+  name: english-spanish-corpus-evidence
+  path: src/backend/english-spanish-corpus-evidence
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: domain

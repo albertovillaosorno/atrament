@@ -22,6 +22,9 @@ depends_on = []
 [component.atrament_digital_paper_note_plan]
 depends_on = []
 
+[component.atrament_english_spanish_corpus_evidence]
+depends_on = []
+
 [component.atrament_educational_coverage_evidence]
 depends_on = []
 

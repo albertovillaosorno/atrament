@@ -38,6 +38,10 @@ name = "atrament_educational_coverage_evidence"
 version = "0.1.0"
 
 [[package]]
+name = "atrament_english_spanish_corpus_evidence"
+version = "0.1.0"
+
+[[package]]
 name = "atrament_export_layout_preflight"
 version = "0.1.0"
 dependencies = [

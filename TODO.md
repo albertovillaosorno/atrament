@@ -873,10 +873,17 @@ exact grapheme value without Unicode normalization or deduplication. All 64
 six-query missing masks prove that covered and missing occurrences preserve
 exact caller order and duplicate positions.
 
-Rule applicability, required English/Spanish corpus enumeration, semantic
-locations, diagnostics, measurement, rendering, and portable section schema
-remain open. Glyph validation must not infer support from an installed font,
-renderer behavior, or successful text acceptance.
+Rule applicability, the concrete required English/Spanish grapheme inventory and
+corpus contents, semantic locations, diagnostics, measurement, rendering, and
+portable section schema remain open. Glyph validation must not infer support
+from an installed font, renderer behavior, or successful text acceptance.
+
+A separate corpus-evidence boundary now freezes the ADR verification checklist:
+English prose, Spanish prose, names, quotations, questions, exclamations, en and
+em dashes, combining marks, normalized equivalents, and mixed mathematics. It
+requires caller-owned evidence for all eleven scenarios, permits extra evidence,
+and exhausts all 2,048 scenario-presence masks. It does not enumerate required
+graphemes or claim render/measure/wrap/edit/serialize/CLI/MCP verification.
 
 A separate fallback-admission boundary now keeps missing handwriting coverage
 blocked unless caller evidence identifies one declared fallback style, proves
