@@ -914,3 +914,174 @@ fn capability_behavior_admission_detects_stale_context_version() {
         },
     );
 }
+
+#[test]
+fn all_64_envelope_preflight_axis_masks_match_independent_oracle() {
+    static APPLICATIONS: [CommandApplicationCapability; 1] = [
+        CommandApplicationCapability::Validate,
+    ];
+    static PROTOCOLS: [CommandBehaviorVersion; 1] = [CommandBehaviorVersion(7)];
+    let identities = IdentityAllocator::new();
+    let notebook = identities.allocate_accepted().expect("notebook identity");
+    let target = identities.allocate_accepted().expect("target identity");
+    let base = identities.allocate_revision().expect("base revision");
+    let mut cases = 0_u8;
+    for mask in 0_u8..64 {
+        let behavior_matches = mask & 0b00_0001 != 0;
+        let application_admitted = mask & 0b00_0010 != 0;
+        let protocol_admitted = mask & 0b00_0100 != 0;
+        let family_admitted = mask & 0b00_1000 != 0;
+        let target_admitted = mask & 0b01_0000 != 0;
+        let command_limit_admitted = mask & 0b10_0000 != 0;
+        let mut snapshot = protocol_snapshot(if protocol_admitted {
+            &PROTOCOLS
+        } else {
+            &[]
+        });
+        snapshot.behavior_version = if behavior_matches {
+            CommandBehaviorVersion(94)
+        } else {
+            CommandBehaviorVersion(95)
+        };
+        snapshot.admitted_applications = if application_admitted {
+            &APPLICATIONS
+        } else {
+            &[]
+        };
+        let context = SemanticCommandContext {
+            admitted_families: if family_admitted {
+                vec![SemanticCommandFamily::TextContent]
+            } else {
+                Vec::new()
+            },
+            base,
+            behavior_version: CommandBehaviorVersion(94),
+            context_identity: String::from("context-oracle"),
+            insertion_anchors: Vec::<String>::new(),
+            local_preconditions: Vec::<String>::new(),
+            notebook,
+            readable_context: (),
+            relevant_constraints: Vec::new(),
+            requested_intent: (),
+            resource_limits: CommandResourceLimits {
+                commands_per_batch: Some(if command_limit_admitted {
+                    1
+                } else {
+                    0
+                }),
+                dependency_edges: None,
+                envelope_bytes: None,
+                readable_context_bytes: None,
+                writable_targets: None,
+            },
+            writable_targets: if target_admitted {
+                vec![target]
+            } else {
+                Vec::new()
+            },
+        };
+        let envelope = SemanticCommandBatchEnvelope {
+            binding: SemanticCommandContextBinding {
+                base,
+                behavior_version: CommandBehaviorVersion(94),
+                context_identity: String::from("context-oracle"),
+                notebook,
+            },
+            commands: vec![command(
+                3,
+                SemanticCommandFamily::TextContent,
+                target,
+            )],
+            protocol_version: CommandBehaviorVersion(7),
+            retry_identity: String::from("retry-oracle"),
+        };
+        let admission = semantic_command_envelope_admission(
+            &snapshot,
+            CommandApplicationCapability::Validate,
+            &context,
+            &envelope,
+        );
+        assert_eq!(
+            admission.capability,
+            if behavior_matches {
+                CommandCapabilityCompatibilityOutcome::Compatible { snapshot }
+            } else {
+                CommandCapabilityCompatibilityOutcome::Mismatch {
+                    current: CommandBehaviorVersion(95),
+                    expected: CommandBehaviorVersion(94),
+                }
+            },
+            "capability mismatch for mask {mask:#08b}",
+        );
+        assert_eq!(
+            admission.application,
+            if application_admitted {
+                SemanticCommandApplicationAdmission::Admitted {
+                    capability: CommandApplicationCapability::Validate,
+                }
+            } else {
+                SemanticCommandApplicationAdmission::Unsupported {
+                    requested: CommandApplicationCapability::Validate,
+                }
+            },
+            "application mismatch for mask {mask:#08b}",
+        );
+        assert_eq!(
+            admission.protocol,
+            if protocol_admitted {
+                SemanticCommandProtocolAdmission::Admitted {
+                    version: CommandBehaviorVersion(7),
+                }
+            } else {
+                SemanticCommandProtocolAdmission::Unsupported {
+                    requested: CommandBehaviorVersion(7),
+                }
+            },
+            "protocol mismatch for mask {mask:#08b}",
+        );
+        assert_eq!(
+            admission.context.binding,
+            SemanticCommandContextBindingAdmission {
+                base: SemanticCommandContextMatch::Matched,
+                behavior: SemanticCommandContextMatch::Matched,
+                context: SemanticCommandContextMatch::Matched,
+                notebook: SemanticCommandContextMatch::Matched,
+            },
+            "binding mismatch for mask {mask:#08b}",
+        );
+        assert_eq!(
+            admission.context.commands,
+            vec![SemanticCommandEnvelopeCommandAdmission {
+                command: &3,
+                family_admitted,
+                location_admitted: target_admitted,
+            }],
+            "scope mismatch for mask {mask:#08b}",
+        );
+        assert_eq!(
+            admission.resources.commands_per_batch,
+            if command_limit_admitted {
+                SemanticCommandResourceLimitAdmission::Within {
+                    actual: 1,
+                    limit: 1,
+                }
+            } else {
+                SemanticCommandResourceLimitAdmission::Exceeded {
+                    actual: 1,
+                    limit: 0,
+                }
+            },
+            "resource mismatch for mask {mask:#08b}",
+        );
+        assert_eq!(
+            admission.resources.dependency_edges,
+            SemanticCommandResourceLimitAdmission::Unspecified,
+        );
+        assert_eq!(
+            admission.resources.writable_targets,
+            SemanticCommandResourceLimitAdmission::Unspecified,
+        );
+        cases = cases.saturating_add(1);
+    }
+    assert_eq!(cases, 64);
+}

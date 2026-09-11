@@ -1667,7 +1667,10 @@ against the context, requested application and protocol membership, exact
 batch-to-context binding, ordered family/target scope, and count-based resource
 admission. Simultaneous failures remain independently inspectable. Dependency
 graph validation, normalization, retry equality, and mutation stay outside this
-preflight.
+preflight. A 64-case mask oracle crosses snapshot behavior, application and
+protocol membership, family and target scope, and command-count admission to
+prove those preflight axes remain independent; the existing 16-state context
+binding and 27-state resource oracles cover their own internal combinations.
 
 Actual protocol-version implementation/admission, context identity computation,
 context construction/completeness policy, normalization and normalized batch
