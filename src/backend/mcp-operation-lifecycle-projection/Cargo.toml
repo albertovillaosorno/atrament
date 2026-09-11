@@ -1,0 +1,16 @@
+[package]
+name = "atrament_mcp_operation_lifecycle_projection"
+version = "0.1.0"
+edition = "2024"
+publish = false
+license = "MIT"
+
+[dependencies]
+atrament_application_operation_lifecycle = { path = "../application-operation-lifecycle" }
+atrament_mcp_capability_effect = { path = "../mcp-capability-effect" }
+
+[lib]
+path = "domain/lib.rs"
+
+[lints]
+workspace = true

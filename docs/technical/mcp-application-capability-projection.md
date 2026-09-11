@@ -235,6 +235,12 @@ what is implemented rather than making an agent probe lifecycle behavior.
 A transport cancellation is not an application rollback result. Mutating
 unknown outcomes still use the owning same-retry recovery contract.
 
+A transport-neutral crosswalk now maps Apply, Export, History traversal, Plan,
+Render, and Validate onto the six shared application operation lifecycle
+classes and their effect boundaries. Inspect and Command context intentionally
+have no lifecycle operation mapping. This does not admit progress, cancellation,
+or any MCP tool.
+
 ### Derived and output result projection
 
 Implemented Render, Plan, and Export MCP capabilities project the frozen

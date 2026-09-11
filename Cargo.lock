@@ -150,6 +150,14 @@ name = "atrament_mcp_capability_effect"
 version = "0.1.0"
 
 [[package]]
+name = "atrament_mcp_operation_lifecycle_projection"
+version = "0.1.0"
+dependencies = [
+ "atrament_application_operation_lifecycle",
+ "atrament_mcp_capability_effect",
+]
+
+[[package]]
 name = "atrament_media_job_lifecycle"
 version = "0.1.0"
 

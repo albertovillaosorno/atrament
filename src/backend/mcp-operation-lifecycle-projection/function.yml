@@ -1,0 +1,9 @@
+identity:
+  id: function:mcp-operation-lifecycle-projection
+  name: mcp-operation-lifecycle-projection
+  path: src/backend/mcp-operation-lifecycle-projection
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: domain

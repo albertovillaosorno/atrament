@@ -1859,6 +1859,11 @@ progress versus non-progress, same-retry recovery, bounded automation budgets,
 and the separation between semantic completion, explicit output, and physical
 authority. Concrete MCP tools and backend execution remain open.
 
+A shared MCP/lifecycle projection now maps the six operational MCP capability
+classes to the frozen application operation lifecycle and leaves Inspect and
+Command context outside that lifecycle. It does not imply those capabilities
+are packaged, admitted, running, cancellable, or exposed as tools.
+
 ### TODO - Package self-contained agent instructions
 
 Allow a user to provide the repository or release bundle to an agent and have
