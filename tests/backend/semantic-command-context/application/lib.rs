@@ -24,15 +24,17 @@
 // - Summary:
 //   - Proves readable context cannot silently widen semantic write scope.
 // - Description:
-//   - Covers target, anchor, family, and caller-owned context payload behavior.
+//   - Covers capability, target, anchor, family, and context payload behavior.
 // - Usage:
 //   - Compile against the command-context application and inbound port.
 // - Defaults:
-//   - Missing family or location authority remains independently unadmitted.
+//   - Missing capability, family, or location authority stays unadmitted.
 //
 use atrament_semantic_command_context::{
+    semantic_command_application_admission,
     semantic_command_context_binding_admission,
     semantic_command_envelope_context_admission,
+    semantic_command_family_behavior_admission,
     semantic_command_protocol_admission, semantic_command_resource_admission,
     semantic_command_scope_admission,
 };
@@ -41,12 +43,13 @@ use atrament_semantic_notebook_port::{
     CommandApplicationCapability, CommandBehaviorVersion,
     CommandFamilyCapability, CommandResourceLimits, CommandTargetPreconditions,
     DirectEditBatchCommand, EditableSemanticValue, IdentityOwnerExpectation,
-    IdentityPrecondition, SemanticCommandBatchEnvelope,
-    SemanticCommandCapabilitySnapshot, SemanticCommandContext,
+    IdentityPrecondition, SemanticCommandApplicationAdmission,
+    SemanticCommandBatchEnvelope, SemanticCommandCapabilitySnapshot,
+    SemanticCommandContext,
     SemanticCommandContextBinding, SemanticCommandContextBindingAdmission,
     SemanticCommandContextMatch, SemanticCommandEnvelopeCommandAdmission,
     SemanticCommandEnvelopeContextAdmission, SemanticCommandFamily,
-    SemanticCommandProtocolAdmission,
+    SemanticCommandFamilyBehaviorAdmission, SemanticCommandProtocolAdmission,
     SemanticCommandResourceAdmission, SemanticCommandResourceLimitAdmission,
     SemanticCommandScopeAdmission, SemanticCommandScopeLocation,
 };
@@ -591,4 +594,94 @@ fn empty_protocol_snapshot_rejects_every_requested_version() {
             },
         );
     }
+}
+
+#[test]
+fn application_capability_admission_is_exact_snapshot_membership() {
+    static APPLICATIONS: [CommandApplicationCapability; 2] = [
+        CommandApplicationCapability::CommandContext,
+        CommandApplicationCapability::Validate,
+    ];
+    let mut snapshot = protocol_snapshot(&[]);
+    snapshot.admitted_applications = &APPLICATIONS;
+    for capability in APPLICATIONS {
+        assert_eq!(
+            semantic_command_application_admission(&snapshot, capability),
+            SemanticCommandApplicationAdmission::Admitted { capability },
+        );
+    }
+    for requested in [
+        CommandApplicationCapability::Apply,
+        CommandApplicationCapability::SelectiveRebatching,
+    ] {
+        assert_eq!(
+            semantic_command_application_admission(&snapshot, requested),
+            SemanticCommandApplicationAdmission::Unsupported { requested },
+        );
+    }
+}
+
+#[test]
+fn empty_application_snapshot_rejects_every_operation() {
+    let snapshot = protocol_snapshot(&[]);
+    for requested in [
+        CommandApplicationCapability::Apply,
+        CommandApplicationCapability::CommandContext,
+        CommandApplicationCapability::SelectiveRebatching,
+        CommandApplicationCapability::Validate,
+    ] {
+        assert_eq!(
+            semantic_command_application_admission(&snapshot, requested),
+            SemanticCommandApplicationAdmission::Unsupported { requested },
+        );
+    }
+}
+
+#[test]
+fn family_behavior_admission_distinguishes_exact_drift_and_absence() {
+    static FAMILIES: [CommandFamilyCapability; 2] = [
+        CommandFamilyCapability {
+            behavior_version: CommandBehaviorVersion(1),
+            family: SemanticCommandFamily::TextContent,
+        },
+        CommandFamilyCapability {
+            behavior_version: CommandBehaviorVersion(2),
+            family: SemanticCommandFamily::StyleRole,
+        },
+    ];
+    let mut snapshot = protocol_snapshot(&[]);
+    snapshot.family_capabilities = &FAMILIES;
+    assert_eq!(
+        semantic_command_family_behavior_admission(
+            &snapshot,
+            SemanticCommandFamily::TextContent,
+            CommandBehaviorVersion(1),
+        ),
+        SemanticCommandFamilyBehaviorAdmission::Admitted {
+            behavior_version: CommandBehaviorVersion(1),
+            family: SemanticCommandFamily::TextContent,
+        },
+    );
+    assert_eq!(
+        semantic_command_family_behavior_admission(
+            &snapshot,
+            SemanticCommandFamily::StyleRole,
+            CommandBehaviorVersion(1),
+        ),
+        SemanticCommandFamilyBehaviorAdmission::BehaviorMismatch {
+            current: CommandBehaviorVersion(2),
+            expected: CommandBehaviorVersion(1),
+            family: SemanticCommandFamily::StyleRole,
+        },
+    );
+    assert_eq!(
+        semantic_command_family_behavior_admission(
+            &snapshot,
+            SemanticCommandFamily::Provenance,
+            CommandBehaviorVersion(2),
+        ),
+        SemanticCommandFamilyBehaviorAdmission::UnsupportedFamily {
+            requested: SemanticCommandFamily::Provenance,
+        },
+    );
 }

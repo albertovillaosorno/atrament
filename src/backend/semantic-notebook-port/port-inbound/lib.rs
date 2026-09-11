@@ -1233,6 +1233,21 @@ pub enum CommandApplicationCapability {
     Validate,
 }
 
+/// Exact application-capability membership in one capability snapshot.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum SemanticCommandApplicationAdmission {
+    /// Requested application operation is explicitly advertised.
+    Admitted {
+        /// Exact admitted application capability.
+        capability: CommandApplicationCapability,
+    },
+    /// Requested application operation is absent from the snapshot.
+    Unsupported {
+        /// Exact unsupported application capability requested by the caller.
+        requested: CommandApplicationCapability,
+    },
+}
+
 /// Result of checking one previously bound command capability behavior version.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum CommandCapabilityCompatibilityOutcome {
@@ -1258,6 +1273,32 @@ pub struct CommandFamilyCapability {
     pub behavior_version: CommandBehaviorVersion,
     /// Semantic mutation family with at least one executable direct target.
     pub family: SemanticCommandFamily,
+}
+
+/// Exact family-behavior compatibility in one capability snapshot.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum SemanticCommandFamilyBehaviorAdmission {
+    /// Requested family and behavior version are both explicitly advertised.
+    Admitted {
+        /// Exact admitted family behavior version.
+        behavior_version: CommandBehaviorVersion,
+        /// Exact admitted semantic command family.
+        family: SemanticCommandFamily,
+    },
+    /// Family is advertised, but with a different behavior version.
+    BehaviorMismatch {
+        /// Current backend-owned behavior version for this family.
+        current: CommandBehaviorVersion,
+        /// Caller-expected behavior version.
+        expected: CommandBehaviorVersion,
+        /// Semantic family whose behavior changed.
+        family: SemanticCommandFamily,
+    },
+    /// Requested semantic family is absent from the capability snapshot.
+    UnsupportedFamily {
+        /// Exact unsupported semantic command family.
+        requested: SemanticCommandFamily,
+    },
 }
 
 /// Exact protocol-version membership against one capability snapshot.

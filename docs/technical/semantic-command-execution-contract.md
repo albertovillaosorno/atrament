@@ -495,6 +495,11 @@ independently from notebook revision changes. Separately, parsed protocol tokens
 can be checked by exact membership in the snapshot's advertised protocol set;
 an empty set rejects every token and never guesses a downgrade.
 
+Application operations use the same exact-membership rule, while family
+compatibility checks the advertised family behavior version and distinguishes
+version drift from an absent family. None of those read-only checks populate an
+omitted capability.
+
 A separate single-target direct-edit simulator classifies twelve established
 editable value shapes as applicable, no-op, domain-invalid, unavailable, or
 value-family mismatched without mutation. Asset, page-profile, provenance, and

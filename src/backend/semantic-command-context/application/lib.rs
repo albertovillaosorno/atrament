@@ -16,7 +16,7 @@
 //     batches, mutate notebooks, choose scope, or implement retry behavior.
 // - Allows:
 //   - Inputs: One declared command context plus requested family and location.
-//   - Outputs: Independent context, scope, and count-resource admission facts.
+//   - Outputs: Independent capability, context, scope, and resource facts.
 //   - Side effects: None.
 // - Split-When:
 //   - Context construction or protocol compatibility gains executable
@@ -26,24 +26,25 @@
 // - Summary:
 //   - Prevents readable semantic context from silently widening write scope.
 // - Description:
-//   - Checks backend-declared authority and count-based resource limits.
+//   - Checks backend-declared capability, authority, and count limits.
 // - Usage:
 //   - Evaluate parsed command use before semantic simulation or accepted Apply.
 // - Defaults:
-//   - Missing family or location authority remains independently unadmitted.
+//   - Missing capability, family, or location authority stays unadmitted.
 //
 
 //! Read-only semantic command-context scope admission.
 
 use atrament_semantic_notebook_port::{
-    SemanticCommandBatchEnvelope, SemanticCommandCapabilitySnapshot,
-    SemanticCommandContext, SemanticCommandContextBinding,
-    SemanticCommandContextBindingAdmission, SemanticCommandContextMatch,
-    SemanticCommandEnvelopeCommandAdmission,
+    CommandApplicationCapability, CommandBehaviorVersion,
+    SemanticCommandApplicationAdmission, SemanticCommandBatchEnvelope,
+    SemanticCommandCapabilitySnapshot, SemanticCommandContext,
+    SemanticCommandContextBinding, SemanticCommandContextBindingAdmission,
+    SemanticCommandContextMatch, SemanticCommandEnvelopeCommandAdmission,
     SemanticCommandEnvelopeContextAdmission, SemanticCommandFamily,
-    SemanticCommandProtocolAdmission, SemanticCommandResourceAdmission,
-    SemanticCommandResourceLimitAdmission, SemanticCommandScopeAdmission,
-    SemanticCommandScopeLocation,
+    SemanticCommandFamilyBehaviorAdmission, SemanticCommandProtocolAdmission,
+    SemanticCommandResourceAdmission, SemanticCommandResourceLimitAdmission,
+    SemanticCommandScopeAdmission, SemanticCommandScopeLocation,
 };
 
 
@@ -151,6 +152,57 @@ where
 
 
 
+/// Check exact application-capability membership in one snapshot.
+///
+/// This is a read-only discovery check. It does not make an application
+/// operation executable when the snapshot omits it.
+#[must_use]
+pub fn semantic_command_application_admission(
+    snapshot: &SemanticCommandCapabilitySnapshot,
+    requested: CommandApplicationCapability,
+) -> SemanticCommandApplicationAdmission {
+    if snapshot.admitted_applications.contains(&requested) {
+        SemanticCommandApplicationAdmission::Admitted {
+            capability: requested,
+        }
+    } else {
+        SemanticCommandApplicationAdmission::Unsupported { requested }
+    }
+}
+
+/// Check one semantic family's exact advertised behavior version.
+///
+/// Family discovery and family behavior compatibility remain separate from
+/// target-specific executable admission and from serialized protocol support.
+#[must_use]
+pub fn semantic_command_family_behavior_admission(
+    snapshot: &SemanticCommandCapabilitySnapshot,
+    family: SemanticCommandFamily,
+    expected: CommandBehaviorVersion,
+) -> SemanticCommandFamilyBehaviorAdmission {
+    let Some(capability) = snapshot
+        .family_capabilities
+        .iter()
+        .find(|capability| capability.family == family)
+    else {
+        return SemanticCommandFamilyBehaviorAdmission::UnsupportedFamily {
+            requested: family,
+        };
+    };
+    if capability.behavior_version == expected {
+        SemanticCommandFamilyBehaviorAdmission::Admitted {
+            behavior_version: expected,
+            family,
+        }
+    } else {
+        SemanticCommandFamilyBehaviorAdmission::BehaviorMismatch {
+            current: capability.behavior_version,
+            expected,
+            family,
+        }
+    }
+}
+
 /// Check exact protocol-version membership in one capability snapshot.
 ///
 /// The check never guesses a downgrade or treats the capability behavior
@@ -159,7 +211,7 @@ where
 #[must_use]
 pub fn semantic_command_protocol_admission(
     snapshot: &SemanticCommandCapabilitySnapshot,
-    requested: atrament_semantic_notebook_port::CommandBehaviorVersion,
+    requested: CommandBehaviorVersion,
 ) -> SemanticCommandProtocolAdmission {
     if snapshot.protocol_versions.contains(&requested) {
         SemanticCommandProtocolAdmission::Admitted { version: requested }

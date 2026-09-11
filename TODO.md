@@ -1655,6 +1655,12 @@ snapshot without guessing a downgrade or conflating capability behavior with a
 wire protocol version. The production snapshot still advertises no protocol
 versions, so every serialized protocol token remains unsupported today.
 
+Application-operation membership and family behavior compatibility can likewise
+be checked exactly against one snapshot. Missing application operations reject
+without becoming executable, while family checks distinguish an absent family
+from behavior-version drift. These read-only checks do not widen target-specific
+family admission or populate the production snapshot's empty application list.
+
 Actual protocol-version implementation/admission, context identity computation,
 context construction/completeness policy, normalization and normalized batch
 identity, retry equality/recovery, receipt normalization, concrete
