@@ -1835,6 +1835,13 @@ schemas, concrete stdio/loopback mechanism, and backend implementation remain
 open.
 
 
+The dependency-free `mcp-capability-effect` domain now freezes the eight generic
+application capability classes and their declared effect classes without naming
+MCP tools or implementing adapter admission, transport, schemas, receipts, or
+execution. Undo and Redo remain grouped as History traversal at this vocabulary
+layer.
+
+
 The shared application-operation-lifecycle domain now freezes the six
 first-release operation classes and maps Apply, history traversal, Export, and
 the three read-only operations to their authoritative effect boundaries. It does

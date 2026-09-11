@@ -17,6 +17,13 @@ The contract defines capability effects, ordering, receipts, scope, and parity.
 It does not freeze MCP tool names, transport configuration, authentication
 mechanism, JSON field names, or a Rust MCP framework.
 
+
+The backend now exposes the eight generic application capability classes named
+by this contract and their declared effect classes as dependency-free
+transport-neutral vocabulary. Undo and Redo remain one History traversal class
+here because this layer does not freeze concrete MCP tool names. This vocabulary
+does not make any MCP capability discoverable or executable.
+
 MCP is one inbound adapter to the same application services used by direct, CLI,
 and browser-assisted workflows. Its admission boundary follows the frozen local
 MCP session-admission contract and remains separate from browser credentials.

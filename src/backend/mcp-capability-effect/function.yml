@@ -1,0 +1,9 @@
+identity:
+  id: function:mcp-capability-effect
+  name: mcp-capability-effect
+  path: src/backend/mcp-capability-effect
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: domain
