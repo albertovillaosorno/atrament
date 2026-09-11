@@ -38,11 +38,19 @@
 use atrament_semantic_notebook_port::{
     SemanticCommandBatchEnvelope, SemanticCommandContext,
     SemanticCommandContextBinding, SemanticCommandContextBindingAdmission,
-    SemanticCommandEnvelopeCommandAdmission,
+    SemanticCommandContextMatch, SemanticCommandEnvelopeCommandAdmission,
     SemanticCommandEnvelopeContextAdmission, SemanticCommandFamily,
     SemanticCommandScopeAdmission, SemanticCommandScopeLocation,
 };
 
+
+const fn match_state(matches: bool) -> SemanticCommandContextMatch {
+    if matches {
+        SemanticCommandContextMatch::Matched
+    } else {
+        SemanticCommandContextMatch::Mismatched
+    }
+}
 
 /// Check whether returned batch authority still names this exact command
 /// context.
@@ -70,10 +78,14 @@ where
     ContextIdentity: PartialEq,
 {
     SemanticCommandContextBindingAdmission {
-        base_matches: binding.base == context.base,
-        behavior_matches: binding.behavior_version == context.behavior_version,
-        context_matches: binding.context_identity == context.context_identity,
-        notebook_matches: binding.notebook == context.notebook,
+        base: match_state(binding.base == context.base),
+        behavior: match_state(
+            binding.behavior_version == context.behavior_version,
+        ),
+        context: match_state(
+            binding.context_identity == context.context_identity,
+        ),
+        notebook: match_state(binding.notebook == context.notebook),
     }
 }
 

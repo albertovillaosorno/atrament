@@ -41,10 +41,18 @@ use atrament_semantic_notebook_port::{
     DirectEditBatchCommand, EditableSemanticValue, IdentityOwnerExpectation,
     IdentityPrecondition, SemanticCommandBatchEnvelope, SemanticCommandContext,
     SemanticCommandContextBinding, SemanticCommandContextBindingAdmission,
-    SemanticCommandEnvelopeCommandAdmission,
+    SemanticCommandContextMatch, SemanticCommandEnvelopeCommandAdmission,
     SemanticCommandEnvelopeContextAdmission, SemanticCommandFamily,
     SemanticCommandScopeAdmission, SemanticCommandScopeLocation,
 };
+
+const fn expected_match(matches: bool) -> SemanticCommandContextMatch {
+    if matches {
+        SemanticCommandContextMatch::Matched
+    } else {
+        SemanticCommandContextMatch::Mismatched
+    }
+}
 
 fn unbounded_limits() -> CommandResourceLimits {
     CommandResourceLimits {
@@ -287,10 +295,10 @@ fn all_16_context_binding_match_states_remain_independent() {
         assert_eq!(
             semantic_command_context_binding_admission(&context, &binding),
             SemanticCommandContextBindingAdmission {
-                base_matches,
-                behavior_matches,
-                context_matches,
-                notebook_matches,
+                base: expected_match(base_matches),
+                behavior: expected_match(behavior_matches),
+                context: expected_match(context_matches),
+                notebook: expected_match(notebook_matches),
             },
             "binding match mask {mask:#06b}",
         );
@@ -398,10 +406,10 @@ fn envelope_context_review_preserves_order_and_all_scope_fact_combinations() {
         admission,
         SemanticCommandEnvelopeContextAdmission {
             binding: SemanticCommandContextBindingAdmission {
-                base_matches: true,
-                behavior_matches: true,
-                context_matches: true,
-                notebook_matches: true,
+                base: SemanticCommandContextMatch::Matched,
+                behavior: SemanticCommandContextMatch::Matched,
+                context: SemanticCommandContextMatch::Matched,
+                notebook: SemanticCommandContextMatch::Matched,
             },
             commands: vec![
                 SemanticCommandEnvelopeCommandAdmission {

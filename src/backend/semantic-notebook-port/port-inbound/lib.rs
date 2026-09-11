@@ -1363,17 +1363,26 @@ pub struct SemanticCommandContextBinding<ContextIdentity> {
     pub notebook: AcceptedIdentity,
 }
 
+/// Equality state for one batch-to-context authority dimension.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum SemanticCommandContextMatch {
+    /// Batch authority differs from the backend-owned context.
+    Mismatched,
+    /// Batch authority matches the backend-owned context exactly.
+    Matched,
+}
+
 /// Independent equality facts for one batch-to-context authority binding.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct SemanticCommandContextBindingAdmission {
-    /// Whether the returned batch names the context's exact base revision.
-    pub base_matches: bool,
-    /// Whether the returned batch names the context's behavior identity.
-    pub behavior_matches: bool,
-    /// Whether the returned batch names the exact command-context identity.
-    pub context_matches: bool,
-    /// Whether the returned batch names the context's accepted notebook.
-    pub notebook_matches: bool,
+    /// Equality state for the accepted base revision.
+    pub base: SemanticCommandContextMatch,
+    /// Equality state for the capability behavior identity.
+    pub behavior: SemanticCommandContextMatch,
+    /// Equality state for the command-context identity.
+    pub context: SemanticCommandContextMatch,
+    /// Equality state for the accepted notebook identity.
+    pub notebook: SemanticCommandContextMatch,
 }
 
 /// One target or insertion anchor referenced by a semantic command.
