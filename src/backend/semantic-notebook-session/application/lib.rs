@@ -419,13 +419,29 @@ impl CandidateGraph {
     }
 }
 
+/// Process-local accepted semantic notebook authority for one active session.
+#[derive(Default)]
+pub struct SemanticNotebookSessionService {
+    current: Option<AcceptedRevision>,
+    identities: IdentityAllocator,
+    redo_notebooks: Vec<Notebook<AcceptedIdentity>>,
+    undo_notebooks: Vec<Notebook<AcceptedIdentity>>,
+}
+
+impl fmt::Debug for SemanticNotebookSessionService {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("SemanticNotebookSessionService")
+            .finish_non_exhaustive()
+    }
+}
+
 /// Project one internal Apply foundation outcome into frozen result taxonomy.
 ///
 /// Returns `None` only for internal states whose final command result class is
 /// still intentionally unresolved. `None` never means unknown transport
 /// outcome.
 #[must_use]
-pub fn classify_direct_edit_batch_apply_result<CommandIdentity>(
+pub const fn classify_direct_edit_batch_apply_result<CommandIdentity>(
     outcome: &DirectEditBatchApplyOutcome<CommandIdentity>,
 ) -> Option<SemanticCommandResultClass> {
     match outcome {
@@ -463,7 +479,7 @@ pub fn classify_direct_edit_batch_apply_result<CommandIdentity>(
 /// whether its predicted semantic effect is mutation or no-op. Missing accepted
 /// state remains unclassified until the final application contract owns it.
 #[must_use]
-pub fn classify_direct_edit_batch_simulation_result<CommandIdentity>(
+pub const fn classify_direct_edit_batch_simulation_result<CommandIdentity>(
     outcome: &DirectEditBatchSimulationOutcome<CommandIdentity>,
 ) -> Option<SemanticCommandResultClass> {
     match outcome {
@@ -486,22 +502,6 @@ pub fn classify_direct_edit_batch_simulation_result<CommandIdentity>(
         DirectEditBatchSimulationOutcome::StaleBase { .. } => {
             Some(SemanticCommandResultClass::StaleBase)
         },
-    }
-}
-
-/// Process-local accepted semantic notebook authority for one active session.
-#[derive(Default)]
-pub struct SemanticNotebookSessionService {
-    current: Option<AcceptedRevision>,
-    identities: IdentityAllocator,
-    redo_notebooks: Vec<Notebook<AcceptedIdentity>>,
-    undo_notebooks: Vec<Notebook<AcceptedIdentity>>,
-}
-
-impl fmt::Debug for SemanticNotebookSessionService {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("SemanticNotebookSessionService")
-            .finish_non_exhaustive()
     }
 }
 

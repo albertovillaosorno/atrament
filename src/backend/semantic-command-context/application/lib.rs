@@ -394,7 +394,7 @@ where
     }
 }
 
-fn resource_limit_rejected(
+const fn resource_limit_rejected(
     admission: SemanticCommandResourceLimitAdmission,
 ) -> bool {
     matches!(
