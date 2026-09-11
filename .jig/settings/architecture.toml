@@ -103,6 +103,9 @@ depends_on = []
 [component.atrament_english_spanish_corpus_fixture]
 depends_on = ["atrament_english_spanish_corpus_evidence", "atrament_english_spanish_grapheme_inventory"]
 
+[component.atrament_english_spanish_diacritic_rule]
+depends_on = []
+
 [component.atrament_english_spanish_grapheme_inventory]
 depends_on = []
 

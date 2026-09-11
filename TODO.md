@@ -895,8 +895,14 @@ exact caller order and duplicate positions.
 The frozen 114-entry bilingual text inventory now drives that same report in
 cross-component regression evidence. An empty profile returns all 114 exact
 requirements in order, while a profile declaring all 114 exact graphemes returns
-no missing entries. The fixture supplies no compositional matches, so rule
-applicability remains outside this coverage boundary.
+no missing entries.
+
+A language-owned rule matcher now recognizes exactly the 14 decomposed Spanish
+requirements: ten acute forms, two diaereses, and two tildes. Non-decomposed
+requirements and deterministic near misses receive no language rule. A profile
+with the other 100 requirements declared exactly plus those three rules covers
+all 114 with no missing result; arbitrary profile-specific rule semantics remain
+outside this baseline authority.
 
 A separate language-owned inventory now freezes 114 visible textual grapheme
 requirements before profile coverage: 52 ASCII Latin letters, 14 precomposed
@@ -910,9 +916,10 @@ distinct requirements rather than being normalized into one another.
 The inventory deliberately excludes whitespace/layout separators and
 mathematical symbols. Whitespace remains text measurement/layout behavior; the
 language ADR delegates mathematical glyph requirements to the separately
-admitted mathematical symbol authority. Rule applicability, that concrete
-mathematical grapheme inventory, semantic locations, diagnostics, measurement,
-rendering, and portable section schema remain open.
+admitted mathematical symbol authority. Arbitrary profile-specific
+compositional rules, that concrete mathematical grapheme inventory, semantic
+locations, diagnostics, measurement, rendering, and portable section schema
+remain open.
 Glyph validation must not infer support from an installed font, renderer
 behavior, or successful text acceptance.
 

@@ -1,0 +1,9 @@
+identity:
+  id: function:english-spanish-diacritic-rule
+  name: english-spanish-diacritic-rule
+  path: src/backend/english-spanish-diacritic-rule
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: domain

@@ -214,6 +214,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "atrament_english_spanish_diacritic_rule"
+version = "0.1.0"
+
+[[package]]
 name = "atrament_english_spanish_grapheme_inventory"
 version = "0.1.0"
 

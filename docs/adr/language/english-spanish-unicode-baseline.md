@@ -75,8 +75,13 @@ boundaries.
 
 The generic handwriting-coverage report also consumes the complete 114-entry
 inventory. An empty profile reports every requirement in exact order, while a
-profile declaring all 114 exact graphemes reports none; compositional rule
-applicability remains a separate open authority.
+profile declaring all 114 exact graphemes reports none.
+
+A language-owned rule matcher maps exactly the 14 decomposed Spanish
+requirements
+to acute, tilde, or diaeresis composition without normalizing their source. A
+profile declaring the other 100 requirements exactly plus those three rules has
+complete coverage; arbitrary profile-specific composition remains separate.
 
 A checked-in corpus fixture now supplies exact UTF-8 content for every required
 verification scenario plus a 114-token sweep that must equal the visible-text
