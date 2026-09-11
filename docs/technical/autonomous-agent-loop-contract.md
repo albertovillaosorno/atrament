@@ -301,6 +301,11 @@ terminal class only when already-qualified semantic satisfaction is present and
 any explicitly requested output is complete. Goals with no requested output do
 not acquire an artificial output requirement.
 
+The completion boundary now also aggregates already-qualified requested-output
+items: no items maps to no requested output, any incomplete item keeps the
+aggregate incomplete, and only all-complete requested items map to complete.
+Receipt and output-identity construction remain outside this aggregation.
+
 ### Session boundary
 
 Autonomous loop state is disposable with the active application/agent session

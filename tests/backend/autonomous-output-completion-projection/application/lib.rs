@@ -30,7 +30,7 @@
 //   - Only successful projection/export/replay results count complete.
 //
 use atrament_autonomous_completion_admission::
-    AutonomousRequestedOutputCompletion as OutputCompletion;
+    AutonomousRequestedOutputItemCompletion as OutputItemCompletion;
 use atrament_autonomous_output_completion_projection::
     autonomous_requested_output_completion;
 use atrament_derived_output_result::{
@@ -83,7 +83,7 @@ fn applies(
 fn expected(
     operation: DerivedOutputOperation,
     result: DerivedOutputResultClass,
-) -> Option<OutputCompletion> {
+) -> Option<OutputItemCompletion> {
     if !applies(operation, result) {
         return None;
     }
@@ -91,7 +91,7 @@ fn expected(
         DerivedOutputResultClass::CompletedProjection
         | DerivedOutputResultClass::Exported
         | DerivedOutputResultClass::IdempotentExportReplay => {
-            Some(OutputCompletion::Complete)
+            Some(OutputItemCompletion::Complete)
         },
         DerivedOutputResultClass::CancelledBeforeResultOrEffect
         | DerivedOutputResultClass::CapabilityOrValidationRejection
@@ -101,7 +101,7 @@ fn expected(
         | DerivedOutputResultClass::ExternalTargetDriftConflict
         | DerivedOutputResultClass::InternalFailureKnownNoEffect
         | DerivedOutputResultClass::StaleOrUnavailableRevision => {
-            Some(OutputCompletion::Incomplete)
+            Some(OutputItemCompletion::Incomplete)
         },
     }
 }
@@ -118,7 +118,7 @@ fn all_33_output_result_pairs_match_completion_projection() {
                 expected
             );
             combinations += 1;
-            if expected == Some(OutputCompletion::Complete) {
+            if expected == Some(OutputItemCompletion::Complete) {
                 complete += 1;
             }
         }

@@ -31,8 +31,10 @@
 //   - Only satisfied semantic state with complete or absent output completes.
 //
 use atrament_autonomous_completion_admission::{
-    AutonomousRequestedOutputCompletion, AutonomousSemanticGoalCompletion,
+    AutonomousRequestedOutputCompletion,
+    AutonomousRequestedOutputItemCompletion, AutonomousSemanticGoalCompletion,
     autonomous_completion_terminal_outcome,
+    autonomous_requested_outputs_completion,
 };
 use atrament_autonomous_goal_outcome::AutonomousGoalTerminalClass;
 
@@ -78,4 +80,36 @@ fn all_six_completion_combinations_match_frozen_conjunction() {
     }
     assert_eq!(combinations, 6);
     assert_eq!(completions, 2);
+}
+
+#[test]
+fn requested_output_aggregation_requires_every_requested_item_complete() {
+    use AutonomousRequestedOutputItemCompletion::{Complete, Incomplete};
+
+    assert_eq!(
+        autonomous_requested_outputs_completion(&[]),
+        AutonomousRequestedOutputCompletion::NotRequested
+    );
+
+    let mut cases = 1_usize;
+    for first in [Complete, Incomplete] {
+        for second in [Complete, Incomplete] {
+            for third in [Complete, Incomplete] {
+                for fourth in [Complete, Incomplete] {
+                    let outputs = [first, second, third, fourth];
+                    let expected = if outputs.contains(&Incomplete) {
+                        AutonomousRequestedOutputCompletion::Incomplete
+                    } else {
+                        AutonomousRequestedOutputCompletion::Complete
+                    };
+                    assert_eq!(
+                        autonomous_requested_outputs_completion(&outputs),
+                        expected
+                    );
+                    cases += 1;
+                }
+            }
+        }
+    }
+    assert_eq!(cases, 17);
 }

@@ -38,6 +38,15 @@
 
 use atrament_autonomous_goal_outcome::AutonomousGoalTerminalClass;
 
+/// Completion state of one explicitly requested output operation.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub enum AutonomousRequestedOutputItemCompletion {
+    /// This requested output completed successfully.
+    Complete,
+    /// This requested output remains incomplete.
+    Incomplete,
+}
+
 /// Completion state of outputs explicitly required by the admitted goal.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum AutonomousRequestedOutputCompletion {
@@ -47,6 +56,26 @@ pub enum AutonomousRequestedOutputCompletion {
     Incomplete,
     /// The admitted goal requested no output operation.
     NotRequested,
+}
+
+/// Aggregate already-qualified requested output items for goal completion.
+///
+/// An empty slice means the goal requested no output. Any incomplete requested
+/// item keeps the aggregate incomplete; otherwise every requested item is
+/// complete.
+#[must_use]
+pub fn autonomous_requested_outputs_completion(
+    outputs: &[AutonomousRequestedOutputItemCompletion],
+) -> AutonomousRequestedOutputCompletion {
+    if outputs.is_empty() {
+        AutonomousRequestedOutputCompletion::NotRequested
+    } else if outputs.contains(
+        &AutonomousRequestedOutputItemCompletion::Incomplete,
+    ) {
+        AutonomousRequestedOutputCompletion::Incomplete
+    } else {
+        AutonomousRequestedOutputCompletion::Complete
+    }
 }
 
 /// Satisfaction state of the semantic portion of the admitted goal.

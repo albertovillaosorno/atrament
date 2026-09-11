@@ -35,7 +35,7 @@
 //! Frozen derived/output result projection into requested-output completion.
 
 use atrament_autonomous_completion_admission::
-    AutonomousRequestedOutputCompletion as OutputCompletion;
+    AutonomousRequestedOutputItemCompletion as OutputItemCompletion;
 use atrament_derived_output_result::{
     DerivedOutputOperation, DerivedOutputResultClass,
     derived_output_result_applies_to,
@@ -46,7 +46,7 @@ use atrament_derived_output_result::{
 pub const fn autonomous_requested_output_completion(
     operation: DerivedOutputOperation,
     result: DerivedOutputResultClass,
-) -> Option<OutputCompletion> {
+) -> Option<OutputItemCompletion> {
     if !derived_output_result_applies_to(operation, result) {
         return None;
     }
@@ -54,7 +54,7 @@ pub const fn autonomous_requested_output_completion(
         DerivedOutputResultClass::CompletedProjection
         | DerivedOutputResultClass::Exported
         | DerivedOutputResultClass::IdempotentExportReplay => {
-            Some(OutputCompletion::Complete)
+            Some(OutputItemCompletion::Complete)
         },
         DerivedOutputResultClass::CancelledBeforeResultOrEffect
         | DerivedOutputResultClass::CapabilityOrValidationRejection
@@ -64,7 +64,7 @@ pub const fn autonomous_requested_output_completion(
         | DerivedOutputResultClass::ExternalTargetDriftConflict
         | DerivedOutputResultClass::InternalFailureKnownNoEffect
         | DerivedOutputResultClass::StaleOrUnavailableRevision => {
-            Some(OutputCompletion::Incomplete)
+            Some(OutputItemCompletion::Incomplete)
         },
     }
 }

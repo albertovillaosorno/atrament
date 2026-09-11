@@ -1922,7 +1922,9 @@ completion receipts remain open coordinator work.
 
 Autonomous completion admission now requires qualified semantic satisfaction
 and complete explicitly requested output work before producing the successful
-terminal class. Revision comparison, output-result aggregation, identities, and
+terminal class. It also aggregates already-qualified requested-output items so
+empty means not requested, any incomplete item blocks completion, and only
+all-complete items satisfy the aggregate. Revision comparison, identities, and
 completion receipt construction remain open coordinator work.
 
 Satisfied-No-op projection now maps No-op to successful completion only when the
@@ -1936,8 +1938,8 @@ open coordinator work.
 
 Derived-output completion projection now classifies all 33 operation/result
 pairs so only successful projection, Export commit, or recovered Export can
-satisfy a requested output. Output aggregation and receipt construction remain
-open.
+satisfy one requested output. The completion boundary aggregates those qualified
+items; receipt and output-identity construction remain open.
 
 Requested-output progress projection now crosses all 99 operation/result/intent
 combinations. Only caller-requested successful projection or fresh Export counts
