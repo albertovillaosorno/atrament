@@ -52,10 +52,10 @@ pub enum FallbackStyleDeclaration {
 /// Whether the fallback will remain visible rather than silently substituted.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum FallbackStyleVisibility {
-    /// Caller evidence establishes that fallback use remains visible.
-    Visible,
     /// Caller evidence does not establish visible fallback presentation.
     NotEstablished,
+    /// Caller evidence establishes that fallback use remains visible.
+    Visible,
 }
 
 /// Whether the user explicitly accepted this declared fallback style.
@@ -103,6 +103,8 @@ pub enum HandwritingCoverageAdmission<
 /// Why missing profile coverage cannot proceed through fallback admission.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum HandwritingFallbackAdmissionError {
+    /// Profile coverage is missing and no fallback evidence was supplied.
+    MissingCoverageWithoutFallback,
     /// A fallback was supplied but one or more required facts are absent.
     RequirementsNotEstablished {
         /// Exact declaration state supplied by the caller.
@@ -112,8 +114,6 @@ pub enum HandwritingFallbackAdmissionError {
         /// Exact visibility state supplied by the caller.
         visibility: FallbackStyleVisibility,
     },
-    /// Profile coverage is missing and no fallback evidence was supplied.
-    MissingCoverageWithoutFallback,
 }
 
 /// Admit existing profile coverage or one explicitly reviewed fallback style.
@@ -143,24 +143,24 @@ pub fn admit_handwriting_fallback<
     if !matches!(coverage, HandwritingCoverage::Missing) {
         return Ok(HandwritingCoverageAdmission::ProfileCoverage { coverage });
     }
-    let Some(fallback) = fallback else {
+    let Some(fallback_evidence) = fallback else {
         return Err(
             HandwritingFallbackAdmissionError::MissingCoverageWithoutFallback,
         );
     };
-    if fallback.declaration != FallbackStyleDeclaration::Declared
-        || fallback.visibility != FallbackStyleVisibility::Visible
-        || fallback.user_acceptance != FallbackUserAcceptance::Accepted
+    if fallback_evidence.declaration != FallbackStyleDeclaration::Declared
+        || fallback_evidence.visibility != FallbackStyleVisibility::Visible
+        || fallback_evidence.user_acceptance != FallbackUserAcceptance::Accepted
     {
         return Err(
             HandwritingFallbackAdmissionError::RequirementsNotEstablished {
-                declaration: fallback.declaration,
-                user_acceptance: fallback.user_acceptance,
-                visibility: fallback.visibility,
+                declaration: fallback_evidence.declaration,
+                user_acceptance: fallback_evidence.user_acceptance,
+                visibility: fallback_evidence.visibility,
             },
         );
     }
     Ok(HandwritingCoverageAdmission::VisibleAcceptedFallback {
-        style_identity: &fallback.style_identity,
+        style_identity: &fallback_evidence.style_identity,
     })
 }

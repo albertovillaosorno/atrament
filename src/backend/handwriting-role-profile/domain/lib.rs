@@ -111,14 +111,14 @@ pub fn handwriting_role_presentation<ProfileIdentity, Size, Style>(
         if presentation.role != role {
             continue;
         }
-        if let Some(first_index) = first {
+        if let Some((first_index, _)) = first {
             return Err(HandwritingRoleLookupError {
                 duplicate_index: index,
                 first_index,
                 role,
             });
         }
-        first = Some(index);
+        first = Some((index, presentation));
     }
-    Ok(first.map(|index| &profile.roles[index]))
+    Ok(first.map(|(_, presentation)| presentation))
 }
