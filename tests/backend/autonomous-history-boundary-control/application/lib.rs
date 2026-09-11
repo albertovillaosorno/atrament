@@ -29,11 +29,15 @@
 // - Defaults:
 //   - Non-boundary outcomes establish no direction-specific stop.
 //
-use atrament_autonomous_history_boundary_control::
-    autonomous_history_boundary_stop_direction;
+use atrament_autonomous_history_boundary_control::{
+    AutonomousHistoryDirectionControl,
+    autonomous_history_boundary_stop_direction,
+    autonomous_history_direction_control,
+};
 use atrament_semantic_notebook::{IdentityAllocator, IdentityExhausted};
 use atrament_semantic_notebook_port::{
-    HistoryDirection, HistoryTraversalOutcome,
+    HistoryAvailability, HistoryAvailabilityOutcome, HistoryDirection,
+    HistoryTraversalOutcome,
 };
 
 #[test]
@@ -86,4 +90,51 @@ fn current_history_outcomes_preserve_exact_boundary_direction_only() {
             expected
         );
     }
+}
+
+#[test]
+fn all_ten_read_only_availability_cases_preserve_boundary_and_absence() {
+    let identities = IdentityAllocator::new();
+    let revision = identities.allocate_revision().expect("revision identity");
+    let mut cases = 0_usize;
+    for can_redo in [false, true] {
+        for can_undo in [false, true] {
+            let availability = HistoryAvailabilityOutcome::Available(
+                HistoryAvailability {
+                    can_redo,
+                    can_undo,
+                    revision,
+                },
+            );
+            for direction in [HistoryDirection::Redo, HistoryDirection::Undo] {
+                let admitted = match direction {
+                    HistoryDirection::Redo => can_redo,
+                    HistoryDirection::Undo => can_undo,
+                };
+                let expected = if admitted {
+                    AutonomousHistoryDirectionControl::Admitted
+                } else {
+                    AutonomousHistoryDirectionControl::Boundary
+                };
+                assert_eq!(
+                    autonomous_history_direction_control(
+                        &availability, direction
+                    ),
+                    expected
+                );
+                cases += 1;
+            }
+        }
+    }
+    for direction in [HistoryDirection::Redo, HistoryDirection::Undo] {
+        assert_eq!(
+            autonomous_history_direction_control(
+                &HistoryAvailabilityOutcome::NoAcceptedRevision,
+                direction
+            ),
+            AutonomousHistoryDirectionControl::NoAcceptedRevision
+        );
+        cases += 1;
+    }
+    assert_eq!(cases, 10);
 }

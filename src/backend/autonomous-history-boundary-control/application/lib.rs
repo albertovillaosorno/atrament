@@ -34,8 +34,44 @@
 //! Direction-aware local stop control for semantic history boundaries.
 
 use atrament_semantic_notebook_port::{
-    HistoryDirection, HistoryTraversalOutcome,
+    HistoryAvailabilityOutcome, HistoryDirection, HistoryTraversalOutcome,
 };
+
+
+/// Read-only autonomous control for one requested history direction.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum AutonomousHistoryDirectionControl {
+    /// One traversal in the requested direction is currently admitted.
+    Admitted,
+    /// The requested direction is at its current history boundary.
+    Boundary,
+    /// No accepted semantic revision exists to inspect or traverse.
+    NoAcceptedRevision,
+}
+
+/// Classify one requested direction from read-only history availability.
+#[must_use]
+pub const fn autonomous_history_direction_control(
+    availability: &HistoryAvailabilityOutcome,
+    direction: HistoryDirection,
+) -> AutonomousHistoryDirectionControl {
+    match availability {
+        HistoryAvailabilityOutcome::Available(state) => {
+            let admitted = match direction {
+                HistoryDirection::Redo => state.can_redo,
+                HistoryDirection::Undo => state.can_undo,
+            };
+            if admitted {
+                AutonomousHistoryDirectionControl::Admitted
+            } else {
+                AutonomousHistoryDirectionControl::Boundary
+            }
+        },
+        HistoryAvailabilityOutcome::NoAcceptedRevision => {
+            AutonomousHistoryDirectionControl::NoAcceptedRevision
+        },
+    }
+}
 
 /// Return the exact history direction that must stop blind retry at a boundary.
 #[must_use]
