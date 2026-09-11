@@ -1,6 +1,9 @@
 domain = "architecture"
 schema_version = 1
 
+[component.atrament_application_operation_lifecycle]
+depends_on = []
+
 [component.atrament_browser_launch]
 depends_on = []
 

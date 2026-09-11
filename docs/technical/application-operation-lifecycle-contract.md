@@ -22,6 +22,13 @@ It does not require an asynchronous API, polling protocol, background worker,
 job database, final progress units, wire fields, thread model, or MCP task
 mechanism. A capability may remain a blocking call when that is sufficient.
 
+
+The backend now exposes the six frozen operation classes and their four owning
+effect boundaries as transport-neutral vocabulary. This does not admit
+cancellation, define progress, assign operation identities, create workers, or
+implement retry/recovery; it only preserves which completion or commit boundary
+remains authoritative for each operation.
+
 ## Contract
 
 ### Capability-owned lifecycle

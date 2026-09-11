@@ -1,0 +1,9 @@
+identity:
+  id: function:application-operation-lifecycle
+  name: application-operation-lifecycle
+  path: src/backend/application-operation-lifecycle
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: domain

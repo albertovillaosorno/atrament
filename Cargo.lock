@@ -3,6 +3,10 @@
 version = 4
 
 [[package]]
+name = "atrament_application_operation_lifecycle"
+version = "0.1.0"
+
+[[package]]
 name = "atrament_browser_launch"
 version = "0.1.0"
 

@@ -1825,6 +1825,12 @@ recovery, no internal-file authority, and browser/CLI/MCP parity targets. Tool
 schemas, concrete stdio/loopback mechanism, and backend implementation remain
 open.
 
+
+The shared application-operation-lifecycle domain now freezes the six
+first-release operation classes and maps Apply, history traversal, Export, and
+the three read-only operations to their authoritative effect boundaries. It does
+not implement cancellation, progress, operation identity, scheduling, or retry.
+
 Current design evidence freezes autonomous-agent loop stop conditions, typed
 progress versus non-progress, same-retry recovery, bounded automation budgets,
 and the separation between semantic completion, explicit output, and physical
