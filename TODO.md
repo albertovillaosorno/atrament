@@ -1890,9 +1890,9 @@ progress conditions from four explicit non-progress conditions without
 inspecting raw state or model prose. Stateful revision/diagnostic comparison
 and loop orchestration remain open application work.
 
-Application-capability progress projection now treats only an exact same-
-capability Unsupported-to-Admitted transition as new admitted authority. It does
-not infer goal requirement, blocker resolution, or terminal unavailability.
+Application-capability progress projection now treats a transition from
+Unsupported to Admitted as new authority only for the exact same capability. It
+does not infer goal requirement, blocker resolution, or terminal unavailability.
 
 Repeated-input progress projection now recognizes unchanged qualified revision,
 blocking evidence, and bounded intent with no new admission as frozen
