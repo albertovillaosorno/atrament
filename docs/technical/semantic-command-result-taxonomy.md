@@ -26,6 +26,14 @@ variant names are internal API vocabulary rather than final wire names or
 transport status mappings. Unknown transport outcome remains deliberately absent
 from that enum.
 
+The semantic-command-result application also exposes a transport-neutral
+commit disposition. Applied means the current call committed one new accepted
+revision; Idempotent replay means the current call recovered a prior completed
+Apply without applying again; all
+other core classes mean the current call created no new accepted revision. The
+replay disposition does not infer whether the recovered prior result was Applied
+or No-op.
+
 The current internal direct-edit simulation and Apply foundations expose a
 partial projection into this taxonomy only where the meaning is unambiguous.
 Missing accepted state, candidate replay failure, and revision-identity

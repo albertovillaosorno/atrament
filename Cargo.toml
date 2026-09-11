@@ -52,6 +52,7 @@ members = [
     "src/backend/runtime-bootstrap",
     "src/backend/semantic-command-context",
     "src/backend/semantic-command-graph",
+    "src/backend/semantic-command-result",
     "src/backend/semantic-flow-pagination",
     "src/backend/semantic-fixed-region-layout",
     "src/backend/semantic-notebook",

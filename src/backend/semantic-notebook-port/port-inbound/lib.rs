@@ -90,6 +90,17 @@ pub enum SemanticCommandResultClass {
     WritableScopeViolation,
 }
 
+/// Commit disposition known from one completed core result class.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum SemanticCommandCommitDisposition {
+    /// This call atomically committed one new accepted revision.
+    CommittedThisCall,
+    /// This call is known not to have created a new accepted revision.
+    KnownNoNewCommit,
+    /// This call recovered a prior completed Apply without applying again.
+    RecoveredPriorCompletion,
+}
+
 /// Result of one explicit candidate acceptance request.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum AcceptanceOutcome {

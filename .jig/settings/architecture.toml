@@ -139,6 +139,9 @@ depends_on = ["atrament_semantic_notebook_port"]
 [component.atrament_semantic_command_graph]
 depends_on = []
 
+[component.atrament_semantic_command_result]
+depends_on = ["atrament_semantic_notebook_port"]
+
 [component.atrament_semantic_flow_pagination]
 depends_on = ["atrament_flow_pagination", "atrament_semantic_notebook"]
 

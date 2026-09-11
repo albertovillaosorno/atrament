@@ -1,0 +1,9 @@
+identity:
+  id: function:semantic-command-result
+  name: semantic-command-result
+  path: src/backend/semantic-command-result
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: application

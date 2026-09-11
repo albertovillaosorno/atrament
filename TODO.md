@@ -1690,6 +1690,14 @@ transport statuses. `Unknown transport outcome` is intentionally absent because
 the frozen contract defines it as caller state when no valid core response was
 received, not as an application result.
 
+The semantic-command-result application now exposes each core result class's
+frozen commit disposition. Applied is the sole class that guarantees a new
+accepted revision from the current call.
+Idempotent replay reports recovery of an earlier completed Apply without
+applying again, and every other core class guarantees no new commit from the
+current call. Replay deliberately does not guess whether the recovered earlier
+result was a mutation or no-op.
+
 The internal direct-edit simulation and Apply foundations now project only their
 unambiguous outcomes into that taxonomy. Simulation prediction maps to
 Successful validation; Apply mutation/no-op and shared capability, graph,
