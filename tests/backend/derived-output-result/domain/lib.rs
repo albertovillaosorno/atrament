@@ -31,7 +31,8 @@
 //   - Unknown transport outcome is absent because it is caller state.
 //
 use atrament_derived_output_result::{
-    DerivedOutputOperation, DerivedOutputResultClass,
+    DerivedOutputEffectDisposition, DerivedOutputOperation,
+    DerivedOutputResultClass, derived_output_effect_disposition,
     derived_output_result_applies_to,
 };
 
@@ -103,4 +104,32 @@ fn all_33_operation_result_pairs_match_independent_oracle() {
         }
     }
     assert_eq!(cases, 33);
+}
+
+#[test]
+fn all_11_result_classes_have_exact_effect_disposition() {
+    for result in ALL_RESULT_CLASSES {
+        let expected = match result {
+            DerivedOutputResultClass::CompletedProjection => {
+                DerivedOutputEffectDisposition::CompletedReadOnlyProjection
+            },
+            DerivedOutputResultClass::Exported => {
+                DerivedOutputEffectDisposition::CommittedFileThisCall
+            },
+            DerivedOutputResultClass::IdempotentExportReplay => {
+                DerivedOutputEffectDisposition::RecoveredPriorFileCommit
+            },
+            DerivedOutputResultClass::CancelledBeforeResultOrEffect
+            | DerivedOutputResultClass::CapabilityOrValidationRejection
+            | DerivedOutputResultClass::ExportOverwriteConflict
+            | DerivedOutputResultClass::ExportPathRejection
+            | DerivedOutputResultClass::ExportRetryConflict
+            | DerivedOutputResultClass::ExternalTargetDriftConflict
+            | DerivedOutputResultClass::InternalFailureKnownNoEffect
+            | DerivedOutputResultClass::StaleOrUnavailableRevision => {
+                DerivedOutputEffectDisposition::KnownNoNewEffect
+            },
+        };
+        assert_eq!(derived_output_effect_disposition(result), expected);
+    }
 }

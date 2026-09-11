@@ -111,6 +111,10 @@ Export.
 It remains vocabulary only: no output operation, receipt normalization, retry
 recovery, path handling, or file effect is implemented by that domain.
 
+Its effect disposition separately distinguishes current-call read-only
+projection, current-call file commit, recovered prior file commit, and known no
+new effect without claiming any receipt or retry-store implementation.
+
 ### TODO - Prove session destruction and temporary cleanup
 
 Close, refresh, cancel, crash, and restart fixtures must show that ephemeral

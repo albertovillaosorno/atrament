@@ -27,6 +27,12 @@ any of those operations executable, choose result precedence, define receipts,
 or create filesystem or hardware effects. Unknown transport outcome remains
 caller state and is intentionally absent from the core enum.
 
+The same domain exposes an effect disposition without inventing receipt fields:
+Completed projection means a read-only projection completed in this call,
+Exported means this call crossed file commit, Idempotent export replay means a
+prior file commit was recovered without another write, and every rejection or
+conflict class guarantees no new effect from the current call.
+
 ## Contract
 
 ### Result and diagnostic separation

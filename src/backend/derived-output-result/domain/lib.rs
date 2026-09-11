@@ -71,6 +71,20 @@ pub enum DerivedOutputResultClass {
     StaleOrUnavailableRevision,
 }
 
+/// Effect disposition guaranteed by one completed derived/output result.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum DerivedOutputEffectDisposition {
+    /// The current call completed one read-only Render or Plan projection.
+    CompletedReadOnlyProjection,
+    /// The current Export crossed its file-commit boundary exactly once.
+    CommittedFileThisCall,
+    /// The current call is known to have created no new projection or file
+    /// effect.
+    KnownNoNewEffect,
+    /// Same-retry recovery proved one earlier Export file commit.
+    RecoveredPriorFileCommit,
+}
+
 /// Check whether one frozen result class belongs to an operation.
 ///
 /// This is vocabulary applicability only. It does not determine which result an
@@ -96,6 +110,39 @@ pub const fn derived_output_result_applies_to(
         | DerivedOutputResultClass::ExternalTargetDriftConflict
         | DerivedOutputResultClass::IdempotentExportReplay => {
             matches!(operation, DerivedOutputOperation::Export)
+        },
+    }
+}
+
+/// Classify only the effect guaranteed by one completed result class.
+///
+/// Idempotent Export replay reports recovery of a prior file commit, not
+/// another
+/// commit by the current call. Conflict and rejection classes imply no new
+/// projection or file effect from the current call.
+#[must_use]
+pub const fn derived_output_effect_disposition(
+    result: DerivedOutputResultClass,
+) -> DerivedOutputEffectDisposition {
+    match result {
+        DerivedOutputResultClass::CompletedProjection => {
+            DerivedOutputEffectDisposition::CompletedReadOnlyProjection
+        },
+        DerivedOutputResultClass::Exported => {
+            DerivedOutputEffectDisposition::CommittedFileThisCall
+        },
+        DerivedOutputResultClass::IdempotentExportReplay => {
+            DerivedOutputEffectDisposition::RecoveredPriorFileCommit
+        },
+        DerivedOutputResultClass::CancelledBeforeResultOrEffect
+        | DerivedOutputResultClass::CapabilityOrValidationRejection
+        | DerivedOutputResultClass::ExportOverwriteConflict
+        | DerivedOutputResultClass::ExportPathRejection
+        | DerivedOutputResultClass::ExportRetryConflict
+        | DerivedOutputResultClass::ExternalTargetDriftConflict
+        | DerivedOutputResultClass::InternalFailureKnownNoEffect
+        | DerivedOutputResultClass::StaleOrUnavailableRevision => {
+            DerivedOutputEffectDisposition::KnownNoNewEffect
         },
     }
 }
