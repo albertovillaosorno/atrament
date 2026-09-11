@@ -1677,6 +1677,12 @@ dependency and proves preflight preserves both ordered commands while counting
 the explicit edge; dependency-graph rejection remains solely graph-validator
 work.
 
+A transport-neutral core result taxonomy now names the 15 frozen application
+classes required across Validate and Apply without assigning final wire names or
+transport statuses. `Unknown transport outcome` is intentionally absent because
+the frozen contract defines it as caller state when no valid core response was
+received, not as an application result.
+
 Actual protocol-version implementation/admission, context identity computation,
 context construction/completeness policy, normalization and normalized batch
 identity, retry equality/recovery, receipt normalization, concrete

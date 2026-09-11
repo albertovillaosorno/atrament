@@ -48,6 +48,45 @@ use atrament_semantic_notebook::{
     TableGridError, TableRowRole,
 };
 
+/// Transport-neutral semantic result class for completed command application.
+///
+/// These are core application semantics, not final wire enum names or transport
+/// status codes. Unknown transport outcome is intentionally absent because a
+/// missing transport response is caller state rather than a core result.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub enum SemanticCommandResultClass {
+    /// One valid non-no-op batch committed atomically.
+    Applied,
+    /// Cancellation took effect before the atomic commit point.
+    CancelledBeforeCommit,
+    /// Returned batch authority does not match its required command context.
+    CommandContextMismatch,
+    /// Command dependency structure is invalid for the admitted protocol.
+    DependencyGraphRejection,
+    /// Same retry identity and normalized batch recovered prior success.
+    IdempotentReplay,
+    /// Core failure is known not to have crossed the commit point.
+    InternalFailureKnownNoCommit,
+    /// Valid complete batch produces no semantic state change.
+    NoOp,
+    /// One backend-owned admitted resource limit was exceeded.
+    ResourceLimitRejection,
+    /// Retry identity was reused with different normalized semantic content.
+    RetryConflict,
+    /// Structurally admitted batch failed semantic command validation.
+    SemanticValidationRejection,
+    /// Named base revision is no longer the current accepted revision.
+    StaleBase,
+    /// Complete batch validated successfully without accepted mutation.
+    SuccessfulValidation,
+    /// Admitted command workflow cannot safely express the requested edit.
+    UnrepresentableOrUnresolved,
+    /// Protocol, command family, or application capability is unsupported.
+    UnsupportedProtocolOrCapability,
+    /// Returned batch attempts to mutate outside admitted writable scope.
+    WritableScopeViolation,
+}
+
 /// Maximum admitted block-containment depth for one candidate acceptance.
 pub const CANDIDATE_BLOCK_NESTING_LIMIT: usize = 256;
 

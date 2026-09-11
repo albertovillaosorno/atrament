@@ -20,6 +20,12 @@ or the complete diagnostic envelope.
 Transport failure and application result are deliberately separate. A missing
 transport response does not invent an application rejection result.
 
+The inbound semantic application port now exposes these 15 core semantic result
+classes as a transport-neutral enum for compile-time application contracts. Its
+variant names are internal API vocabulary rather than final wire names or
+transport status mappings. Unknown transport outcome remains deliberately absent
+from that enum.
+
 ## Contract
 
 ### Result envelope principles
