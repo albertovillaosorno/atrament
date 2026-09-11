@@ -16170,7 +16170,7 @@ fn direct_edit_foundation_result_projection_is_partial_and_explicit() {
                 revision,
                 target,
             },
-            None,
+            Some(SemanticCommandResultClass::InternalFailureKnownNoCommit),
         ),
         (
             DirectEditBatchApplyOutcome::CapabilityMismatch {
@@ -16190,7 +16190,7 @@ fn direct_edit_foundation_result_projection_is_partial_and_explicit() {
                 sequence:
                     atrament_semantic_notebook::IdentityExhausted::Revision,
             },
-            None,
+            Some(SemanticCommandResultClass::InternalFailureKnownNoCommit),
         ),
         (DirectEditBatchApplyOutcome::NoAcceptedRevision, None),
         (

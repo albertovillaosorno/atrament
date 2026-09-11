@@ -1717,9 +1717,10 @@ impl SemanticNotebookSessionService {
 
 /// Project one internal Apply foundation outcome into frozen result taxonomy.
 ///
-/// Returns `None` only for internal states whose final command result class is
-/// still intentionally unresolved. `None` never means unknown transport
-/// outcome.
+/// Candidate replay and revision-allocation failures are known to occur before
+/// accepted commit and therefore map to Internal failure with known no-commit.
+/// `None` remains reserved for missing accepted state, whose final class is not
+/// yet frozen; it never means unknown transport outcome.
 #[must_use]
 pub const fn classify_direct_edit_batch_apply_result<CommandIdentity>(
     outcome: &DirectEditBatchApplyOutcome<CommandIdentity>,
@@ -1729,8 +1730,10 @@ pub const fn classify_direct_edit_batch_apply_result<CommandIdentity>(
             Some(SemanticCommandResultClass::Applied)
         },
         DirectEditBatchApplyOutcome::CandidateReplayFailed { .. }
-        | DirectEditBatchApplyOutcome::IdentityExhausted { .. }
-        | DirectEditBatchApplyOutcome::NoAcceptedRevision => None,
+        | DirectEditBatchApplyOutcome::IdentityExhausted { .. } => {
+            Some(SemanticCommandResultClass::InternalFailureKnownNoCommit)
+        },
+        DirectEditBatchApplyOutcome::NoAcceptedRevision => None,
         DirectEditBatchApplyOutcome::CapabilityMismatch { .. } => Some(
             SemanticCommandResultClass::UnsupportedProtocolOrCapability,
         ),

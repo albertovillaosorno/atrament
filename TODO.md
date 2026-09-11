@@ -1701,10 +1701,11 @@ result was a mutation or no-op.
 The internal direct-edit simulation and Apply foundations now project only their
 unambiguous outcomes into that taxonomy. Simulation prediction maps to
 Successful validation; Apply mutation/no-op and shared capability, graph,
-resource, semantic,
-and stale-base failures map directly. Missing accepted state, candidate replay
-failure, and revision-identity exhaustion remain explicitly unclassified rather
-than being assigned invented final result semantics.
+resource, semantic, and stale-base failures map directly. Candidate replay
+failure mutates only an isolated clone, while revision allocation fails before
+the commit point; both therefore map to Internal failure with known no-commit.
+Missing accepted state remains explicitly unclassified rather than being
+assigned invented final result semantics.
 
 Actual protocol-version implementation/admission, context identity computation,
 context construction/completeness policy, normalization and normalized batch
