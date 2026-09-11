@@ -53,3 +53,21 @@ The corpus must cover English and Spanish prose, names, quotations, questions,
 exclamations, en and em dashes, combining marks, normalized equivalents, and
 mixed mathematics. Every required grapheme must render, measure, wrap, edit,
 serialize, and round-trip through CLI and MCP.
+
+### Implementation evidence
+
+The backend now owns one dependency-free visible-text grapheme inventory for the
+first English/Spanish handwriting baseline. It freezes all 52 ASCII Latin
+letters, the 14 precomposed Spanish diacritic letters `ÁÉÍÑÓÚÜáéíñóúü`, their
+14 exact decomposed Unicode equivalents, all ten decimal numerals, and 24 core
+prose punctuation forms covering sentence punctuation, Spanish opening
+punctuation, straight and curly quotation/apostrophe forms, guillemets,
+ellipsis, en/em dash, hyphen, parentheses, and square brackets.
+
+The inventory preserves precomposed and decomposed spellings as distinct exact
+graphemes; it does not implement the normalization policy still required by this
+ADR. Whitespace/layout separators remain measurement and layout authority rather
+than handwriting glyph declarations. Mathematical symbols also remain outside
+this inventory because their admitted set is owned by the mathematics authority.
+Concrete corpus contents and cross-surface render, measure, wrap, edit,
+serialize, CLI, and MCP verification remain open.

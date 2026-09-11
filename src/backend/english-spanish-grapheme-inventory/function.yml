@@ -1,0 +1,9 @@
+identity:
+  id: function:english-spanish-grapheme-inventory
+  name: english-spanish-grapheme-inventory
+  path: src/backend/english-spanish-grapheme-inventory
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: domain

@@ -887,10 +887,23 @@ exact grapheme value without Unicode normalization or deduplication. All 64
 six-query missing masks prove that covered and missing occurrences preserve
 exact caller order and duplicate positions.
 
-Rule applicability, the concrete required English/Spanish grapheme inventory and
-corpus contents, semantic locations, diagnostics, measurement, rendering, and
-portable section schema remain open. Glyph validation must not infer support
-from an installed font, renderer behavior, or successful text acceptance.
+A separate language-owned inventory now freezes 114 visible textual grapheme
+requirements before profile coverage: 52 ASCII Latin letters, 14 precomposed
+Spanish diacritic letters, their 14 exact decomposed Unicode equivalents, 10
+numerals, and 24 core prose punctuation forms. The punctuation set includes
+ordinary sentence punctuation, Spanish opening punctuation, straight and curly
+quotation/apostrophe forms, guillemets, ellipsis, en/em dash, hyphen,
+parentheses, and square brackets. Precomposed and decomposed spellings remain
+distinct requirements rather than being normalized into one another.
+
+The inventory deliberately excludes whitespace/layout separators and
+mathematical symbols. Whitespace remains text measurement/layout behavior; the
+language ADR delegates mathematical glyph requirements to the separately
+admitted mathematical symbol authority. Rule applicability, that concrete
+mathematical grapheme inventory, corpus contents, semantic locations,
+diagnostics, measurement, rendering, and portable section schema remain open.
+Glyph validation must not infer support from an installed font, renderer
+behavior, or successful text acceptance.
 
 A separate corpus-evidence boundary now freezes the ADR verification checklist:
 English prose, Spanish prose, names, quotations, questions, exclamations, en and
