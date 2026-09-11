@@ -854,6 +854,11 @@ uses pinned Unicode extended-grapheme segmentation behind an outbound port;
 atomic whole-text edit authority, and Undo restores the exact authored bytes.
 Invalid ranges reject before revision or history mutation.
 
+The frozen 114-entry English/Spanish visible-text inventory now runs through the
+same pinned segmentation adapter. Every entry reports exactly one extended
+grapheme cluster, boundary zero at byte zero, boundary one at the exact UTF-8
+length, and no second cluster boundary, including every decomposed diacritic.
+
 Missing, invalid, non-advancing, reversed, or inconsistent source-anchor
 boundaries from an injected segmentation provider remain typed failures and do
 not mutate accepted state. Source-anchor validation runs before caller range

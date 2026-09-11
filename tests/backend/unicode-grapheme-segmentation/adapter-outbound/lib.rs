@@ -9,11 +9,13 @@
 //
 // Boundary-Contract:
 // - Owns:
-//   - Regression evidence for pinned Unicode extended-grapheme segmentation.
+//   - Regression evidence for pinned Unicode extended-grapheme segmentation
+//     across constructed cases and the frozen bilingual text inventory.
 // - Must-Not:
 //   - Normalize text, mutate notebooks, or infer language-specific boundaries.
 // - Allows:
-//   - Inputs: Deterministic combining-mark and emoji-ZWJ source text.
+//   - Inputs: Deterministic combining-mark, emoji-ZWJ, and required bilingual
+//     text graphemes.
 //   - Outputs: Exact grapheme counts and UTF-8 boundary offsets.
 //   - Side effects: None.
 // - Split-When:
@@ -23,12 +25,14 @@
 // - Summary:
 //   - Proves the external adapter reports extended grapheme boundaries.
 // - Description:
-//   - Covers decomposed accents, emoji ZWJ clusters, and end boundaries.
+//   - Covers decomposed accents, emoji ZWJ clusters, end boundaries, and every
+//     required English/Spanish visible-text grapheme.
 // - Usage:
 //   - Compile directly against the segmentation adapter and outbound port.
 // - Defaults:
 //   - Source normalization remains unchanged.
 //
+use atrament_english_spanish_grapheme_inventory::REQUIRED_TEXT_GRAPHEMES;
 use atrament_unicode_grapheme_boundary_port::GraphemeBoundaryProvider;
 use atrament_unicode_grapheme_segmentation::UnicodeGraphemeSegmentation;
 
@@ -71,4 +75,23 @@ fn adapter_boundaries_match_constructed_extended_grapheme_corpus() {
         assert_eq!(expected_offset, source.len());
         assert_eq!(provider.byte_offset(&source, clusters.len() + 1), None);
     }
+}
+
+#[test]
+fn adapter_treats_every_required_bilingual_text_entry_as_one_grapheme() {
+    let provider = UnicodeGraphemeSegmentation;
+    let mut cases = 0_usize;
+    for (index, required) in REQUIRED_TEXT_GRAPHEMES.iter().enumerate() {
+        let source = required.grapheme;
+        assert_eq!(
+            provider.grapheme_count(source),
+            1,
+            "required inventory index {index}",
+        );
+        assert_eq!(provider.byte_offset(source, 0), Some(0));
+        assert_eq!(provider.byte_offset(source, 1), Some(source.len()));
+        assert_eq!(provider.byte_offset(source, 2), None);
+        cases = cases.saturating_add(1);
+    }
+    assert_eq!(cases, 114);
 }

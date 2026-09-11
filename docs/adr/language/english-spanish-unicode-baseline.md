@@ -69,6 +69,9 @@ graphemes; it does not implement the normalization policy still required by this
 ADR. Whitespace/layout separators remain measurement and layout authority rather
 than handwriting glyph declarations. Mathematical symbols also remain outside
 this inventory because their admitted set is owned by the mathematics authority.
+The pinned Unicode segmentation adapter reports all 114 visible-text
+requirements as exactly one extended grapheme with exact UTF-8 start/end
+boundaries.
 
 A checked-in corpus fixture now supplies exact UTF-8 content for every required
 verification scenario plus a 114-token sweep that must equal the visible-text
