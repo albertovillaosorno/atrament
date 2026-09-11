@@ -1,0 +1,9 @@
+identity:
+  id: function:autonomous-history-guidance
+  name: autonomous-history-guidance
+  path: src/backend/autonomous-history-guidance
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: application

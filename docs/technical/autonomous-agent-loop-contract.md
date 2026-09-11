@@ -78,6 +78,14 @@ justifies a different semantic intent.
 Repeated No-op for the same bounded intent is a stop condition rather than a
 self-improvement signal.
 
+
+History-result guidance is also transport-neutral: a committed traversal
+continues from its reported revision, idempotent replay recovers prior
+completion
+without another traversal, a history boundary stops blind retry in that
+direction, and stale history returns to inspection. Cancellation and known
+no-commit failure remain workflow-policy decisions.
+
 ### Stale and context drift
 
 Stale base and Command-context mismatch return the loop to capability-aware

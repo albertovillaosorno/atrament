@@ -1,0 +1,15 @@
+[package]
+name = "atrament_autonomous_history_guidance"
+version = "0.1.0"
+edition = "2024"
+publish = false
+license = "MIT"
+
+[dependencies]
+atrament_semantic_history_result = { path = "../semantic-history-result" }
+
+[lib]
+path = "application/lib.rs"
+
+[lints]
+workspace = true

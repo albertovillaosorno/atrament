@@ -1876,6 +1876,12 @@ next-step branches that the frozen contracts define exactly. Successful
 validation, pre-commit cancellation, and internal known-no-commit failure remain
 unclassified rather than receiving invented retry or escalation policy.
 
+
+History automation now separately classifies Traversed, Idempotent replay,
+History boundary, and Stale current revision into their frozen continuation,
+recovery, stop, or reinspection guidance. Cancellation and known-no-commit
+failure remain intentionally unclassified.
+
 A shared MCP/lifecycle projection now maps the six operational MCP capability
 classes to the frozen application operation lifecycle and leaves Inspect and
 Command context outside that lifecycle. It does not imply those capabilities

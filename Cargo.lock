@@ -7,6 +7,13 @@ name = "atrament_application_operation_lifecycle"
 version = "0.1.0"
 
 [[package]]
+name = "atrament_autonomous_history_guidance"
+version = "0.1.0"
+dependencies = [
+ "atrament_semantic_history_result",
+]
+
+[[package]]
 name = "atrament_autonomous_semantic_command_guidance"
 version = "0.1.0"
 dependencies = [
