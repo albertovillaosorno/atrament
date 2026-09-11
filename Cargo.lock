@@ -44,6 +44,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "atrament_autonomous_session_boundary"
+version = "0.1.0"
+
+[[package]]
 name = "atrament_browser_launch"
 version = "0.1.0"
 

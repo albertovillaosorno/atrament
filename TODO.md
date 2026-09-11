@@ -1892,6 +1892,12 @@ stopping for unresolved evidence, exhausted budget, stable blocking failure, or
 unavailable capability. Detecting those terminal conditions and constructing
 completion receipts remain open coordinator work.
 
+
+Autonomous session-boundary evidence now invalidates prior command context,
+retry/recovery state, and session admission while keeping explicit external
+caller workflow state outside Atrament ownership. Fresh-session bootstrap starts
+from capability discovery and Inspect; reconnection/reattachment remains open.
+
 A partial autonomous semantic-result classifier now encodes the twelve
 next-step branches that the frozen contracts define exactly. Successful
 validation, pre-commit cancellation, and internal known-no-commit failure remain

@@ -257,6 +257,12 @@ credential cache merely to resume autonomous edits after process restart.
 A fresh Atrament session begins again from release/capability discovery and
 Inspect rather than assuming prior retry or command contexts remain valid.
 
+
+A transport-neutral session-boundary vocabulary now marks command context,
+retry/recovery state, and session admission as invalidated with the session.
+Explicit external caller workflow state remains outside Atrament ownership, and
+a fresh session starts from capability discovery followed by Inspect.
+
 ## Failure Modes
 
 The contract fails if an agent retries No-op or a stable blocking result

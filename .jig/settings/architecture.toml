@@ -25,6 +25,9 @@ depends_on = ["atrament_semantic_history_result"]
 [component.atrament_autonomous_semantic_command_guidance]
 depends_on = ["atrament_semantic_notebook_port"]
 
+[component.atrament_autonomous_session_boundary]
+depends_on = []
+
 [component.atrament_browser_launch]
 depends_on = []
 

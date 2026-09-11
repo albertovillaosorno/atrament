@@ -1,0 +1,9 @@
+identity:
+  id: function:autonomous-session-boundary
+  name: autonomous-session-boundary
+  path: src/backend/autonomous-session-boundary
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: domain

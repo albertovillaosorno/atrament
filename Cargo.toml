@@ -7,6 +7,7 @@ members = [
     "src/backend/autonomous-derived-output-guidance",
     "src/backend/autonomous-history-guidance",
     "src/backend/autonomous-semantic-command-guidance",
+    "src/backend/autonomous-session-boundary",
     "src/backend/application-operation-lifecycle",
     "src/backend/browser-launch",
     "src/backend/citation-review-linkage",
