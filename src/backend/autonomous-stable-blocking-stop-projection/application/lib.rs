@@ -36,24 +36,24 @@
 
 use atrament_autonomous_goal_outcome::AutonomousGoalTerminalClass;
 use atrament_autonomous_progress_evidence::
-    AutonomousProgressEvidenceClass as Evidence;
+    AutonomousProgressEvidenceClass as ProgressEvidence;
 
 /// Return the frozen terminal outcome for qualified stable-blocking evidence.
 #[must_use]
 pub const fn autonomous_stable_blocking_terminal_outcome(
-    evidence: Evidence,
+    evidence: ProgressEvidence,
 ) -> Option<AutonomousGoalTerminalClass> {
     match evidence {
-        Evidence::StableBlockingDiagnosticRepeated => {
+        ProgressEvidence::StableBlockingDiagnosticRepeated => {
             Some(AutonomousGoalTerminalClass::StoppedStableBlockingFailure)
         },
-        Evidence::AcceptedApplyRevisionChange
-        | Evidence::AcceptedHistoryRevisionChange
-        | Evidence::BlockingDiagnosticResolved
-        | Evidence::ExplicitRequestedOutputCompleted
-        | Evidence::IdempotentReplayRecovery
-        | Evidence::NewAdmittedAuthorityOrContext
-        | Evidence::RepeatedNoOpSameIntent => None,
-        Evidence::RepeatedSameInputsWithoutNewAdmission => None,
+        ProgressEvidence::AcceptedApplyRevisionChange
+        | ProgressEvidence::AcceptedHistoryRevisionChange
+        | ProgressEvidence::BlockingDiagnosticResolved
+        | ProgressEvidence::ExplicitRequestedOutputCompleted
+        | ProgressEvidence::IdempotentReplayRecovery
+        | ProgressEvidence::NewAdmittedAuthorityOrContext
+        | ProgressEvidence::RepeatedNoOpSameIntent
+        | ProgressEvidence::RepeatedSameInputsWithoutNewAdmission => None,
     }
 }
