@@ -16,6 +16,9 @@ depends_on = []
 [component.atrament_device_neutral_motion_plan]
 depends_on = []
 
+[component.atrament_derived_output_result]
+depends_on = []
+
 [component.atrament_diagnostic]
 depends_on = []
 

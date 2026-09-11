@@ -1,0 +1,9 @@
+identity:
+  id: function:derived-output-result
+  name: derived-output-result
+  path: src/backend/derived-output-result
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: domain

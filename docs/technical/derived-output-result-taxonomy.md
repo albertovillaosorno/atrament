@@ -21,6 +21,12 @@ It does not freeze final enum names, numeric codes, HTTP statuses, MCP error
 framing, output format errors, diagnostic codes, or filesystem-specific error
 values.
 
+The backend now exposes the 11 frozen core classes as transport-neutral
+vocabulary plus their exact Render/Plan/Export applicability. This does not make
+any of those operations executable, choose result precedence, define receipts,
+or create filesystem or hardware effects. Unknown transport outcome remains
+caller state and is intentionally absent from the core enum.
+
 ## Contract
 
 ### Result and diagnostic separation

@@ -104,6 +104,13 @@ but no renderer or serializer result value whose admitted bytes a file adapter
 can commit. Filesystem writes must not guess that missing artifact-ownership
 boundary.
 
+
+The shared derived/output result domain now freezes all 11 first-release core
+result classes and their operation applicability across Render, Plan, and
+Export.
+It remains vocabulary only: no output operation, receipt normalization, retry
+recovery, path handling, or file effect is implemented by that domain.
+
 ### TODO - Prove session destruction and temporary cleanup
 
 Close, refresh, cancel, crash, and restart fixtures must show that ephemeral
