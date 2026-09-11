@@ -864,9 +864,14 @@ Current executable evidence now gives one handwriting profile explicit exact
 grapheme declarations and compositional-rule identities. Coverage classification
 admits an exact grapheme first, otherwise accepts only caller-supplied rule
 evidence that names a rule declared by the same profile; absent or undeclared
-rule evidence remains `Missing`. A caller-ordered report now returns every
-missing query with its original index and exact grapheme value without Unicode
-normalization or deduplication.
+rule evidence remains `Missing`. A 12-case compact oracle exhausts exact
+presence, declared-rule presence, and absent/declared/undeclared matched-rule
+states across Exact, Compositional, and Missing outcomes.
+
+A caller-ordered report returns every missing query with its original index and
+exact grapheme value without Unicode normalization or deduplication. All 64
+six-query missing masks prove that covered and missing occurrences preserve
+exact caller order and duplicate positions.
 
 Rule applicability, required English/Spanish corpus enumeration, fallback-style
 admission, semantic locations, diagnostics, measurement, rendering, and portable
