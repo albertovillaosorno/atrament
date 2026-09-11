@@ -1650,11 +1650,16 @@ Envelope/readable-context bytes, structured depth, and family payload sizes
 still
 need their owning representations before they can be measured here.
 
-Protocol-version admission, context identity computation, context
-construction/completeness policy, normalization and normalized batch identity,
-retry equality/recovery, receipt normalization, concrete insertion-command
-payload behavior and accepted-ID mapping, and serialized compatibility remain
-open.
+Protocol-token membership can now be checked exactly against one capability
+snapshot without guessing a downgrade or conflating capability behavior with a
+wire protocol version. The production snapshot still advertises no protocol
+versions, so every serialized protocol token remains unsupported today.
+
+Actual protocol-version implementation/admission, context identity computation,
+context construction/completeness policy, normalization and normalized batch
+identity, retry equality/recovery, receipt normalization, concrete
+insertion-command payload behavior and accepted-ID mapping, and serialized
+compatibility remain open.
 The exhaustive three-node dependency-mask oracle requires valid, self, missing,
 cyclic, and forward-dependency outcomes to occur. Duplicate identities remain a
 separate fixture because that Cartesian graph uses fixed-unique command IDs.

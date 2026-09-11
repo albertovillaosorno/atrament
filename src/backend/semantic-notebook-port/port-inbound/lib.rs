@@ -1260,6 +1260,21 @@ pub struct CommandFamilyCapability {
     pub family: SemanticCommandFamily,
 }
 
+/// Exact protocol-version membership against one capability snapshot.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum SemanticCommandProtocolAdmission {
+    /// Requested protocol version is explicitly advertised by the snapshot.
+    Admitted {
+        /// Exact admitted protocol version.
+        version: CommandBehaviorVersion,
+    },
+    /// Requested protocol version is absent from the snapshot.
+    Unsupported {
+        /// Exact unsupported protocol version requested by the caller.
+        requested: CommandBehaviorVersion,
+    },
+}
+
 /// Command-mode limits published when their owning capability is admitted.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct CommandResourceLimits {

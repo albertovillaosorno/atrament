@@ -33,16 +33,20 @@
 use atrament_semantic_command_context::{
     semantic_command_context_binding_admission,
     semantic_command_envelope_context_admission,
-    semantic_command_resource_admission, semantic_command_scope_admission,
+    semantic_command_protocol_admission, semantic_command_resource_admission,
+    semantic_command_scope_admission,
 };
 use atrament_semantic_notebook::IdentityAllocator;
 use atrament_semantic_notebook_port::{
-    CommandBehaviorVersion, CommandResourceLimits, CommandTargetPreconditions,
+    CommandApplicationCapability, CommandBehaviorVersion,
+    CommandFamilyCapability, CommandResourceLimits, CommandTargetPreconditions,
     DirectEditBatchCommand, EditableSemanticValue, IdentityOwnerExpectation,
-    IdentityPrecondition, SemanticCommandBatchEnvelope, SemanticCommandContext,
+    IdentityPrecondition, SemanticCommandBatchEnvelope,
+    SemanticCommandCapabilitySnapshot, SemanticCommandContext,
     SemanticCommandContextBinding, SemanticCommandContextBindingAdmission,
     SemanticCommandContextMatch, SemanticCommandEnvelopeCommandAdmission,
     SemanticCommandEnvelopeContextAdmission, SemanticCommandFamily,
+    SemanticCommandProtocolAdmission,
     SemanticCommandResourceAdmission, SemanticCommandResourceLimitAdmission,
     SemanticCommandScopeAdmission, SemanticCommandScopeLocation,
 };
@@ -520,4 +524,71 @@ fn all_27_count_resource_limit_states_are_independent() {
         }
     }
     assert_eq!(cases, 27);
+}
+
+static TEST_PROTOCOL_LIMITS: CommandResourceLimits = CommandResourceLimits {
+    commands_per_batch: None,
+    dependency_edges: None,
+    envelope_bytes: None,
+    readable_context_bytes: None,
+    writable_targets: None,
+};
+
+fn protocol_snapshot(
+    versions: &'static [CommandBehaviorVersion],
+) -> SemanticCommandCapabilitySnapshot {
+    SemanticCommandCapabilitySnapshot {
+        admitted_applications: &[] as &[CommandApplicationCapability],
+        behavior_version: CommandBehaviorVersion(94),
+        family_capabilities: &[] as &[CommandFamilyCapability],
+        normalization_version: None,
+        protocol_versions: versions,
+        resource_limits: &TEST_PROTOCOL_LIMITS,
+        typed_result_version: CommandBehaviorVersion(94),
+    }
+}
+
+#[test]
+fn protocol_admission_is_exact_membership_without_downgrade_guessing() {
+    static VERSIONS: [CommandBehaviorVersion; 2] = [
+        CommandBehaviorVersion(7),
+        CommandBehaviorVersion(9),
+    ];
+    let snapshot = protocol_snapshot(&VERSIONS);
+    assert_eq!(
+        semantic_command_protocol_admission(
+            &snapshot,
+            CommandBehaviorVersion(7),
+        ),
+        SemanticCommandProtocolAdmission::Admitted {
+            version: CommandBehaviorVersion(7),
+        },
+    );
+    for requested in [6_u32, 8, 10] {
+        assert_eq!(
+            semantic_command_protocol_admission(
+                &snapshot,
+                CommandBehaviorVersion(requested),
+            ),
+            SemanticCommandProtocolAdmission::Unsupported {
+                requested: CommandBehaviorVersion(requested),
+            },
+        );
+    }
+}
+
+#[test]
+fn empty_protocol_snapshot_rejects_every_requested_version() {
+    let snapshot = protocol_snapshot(&[]);
+    for requested in [0_u32, 1, 7, u32::MAX] {
+        assert_eq!(
+            semantic_command_protocol_admission(
+                &snapshot,
+                CommandBehaviorVersion(requested),
+            ),
+            SemanticCommandProtocolAdmission::Unsupported {
+                requested: CommandBehaviorVersion(requested),
+            },
+        );
+    }
 }

@@ -491,7 +491,9 @@ Because no serialized command protocol is implemented, the snapshot advertises
 no protocol or normalization version, no command-context, Validate, Apply, or
 selective-rebatch capability, and no guessed command/context numeric limits. A
 read-only compatibility check rejects an older capability behavior version
-independently from notebook revision changes.
+independently from notebook revision changes. Separately, parsed protocol tokens
+can be checked by exact membership in the snapshot's advertised protocol set;
+an empty set rejects every token and never guesses a downgrade.
 
 A separate single-target direct-edit simulator classifies twelve established
 editable value shapes as applicable, no-op, domain-invalid, unavailable, or

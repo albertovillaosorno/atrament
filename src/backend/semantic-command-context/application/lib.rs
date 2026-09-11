@@ -36,12 +36,14 @@
 //! Read-only semantic command-context scope admission.
 
 use atrament_semantic_notebook_port::{
-    SemanticCommandBatchEnvelope, SemanticCommandContext,
-    SemanticCommandContextBinding, SemanticCommandContextBindingAdmission,
-    SemanticCommandContextMatch, SemanticCommandEnvelopeCommandAdmission,
+    SemanticCommandBatchEnvelope, SemanticCommandCapabilitySnapshot,
+    SemanticCommandContext, SemanticCommandContextBinding,
+    SemanticCommandContextBindingAdmission, SemanticCommandContextMatch,
+    SemanticCommandEnvelopeCommandAdmission,
     SemanticCommandEnvelopeContextAdmission, SemanticCommandFamily,
-    SemanticCommandResourceAdmission, SemanticCommandResourceLimitAdmission,
-    SemanticCommandScopeAdmission, SemanticCommandScopeLocation,
+    SemanticCommandProtocolAdmission, SemanticCommandResourceAdmission,
+    SemanticCommandResourceLimitAdmission, SemanticCommandScopeAdmission,
+    SemanticCommandScopeLocation,
 };
 
 
@@ -147,6 +149,24 @@ where
     SemanticCommandEnvelopeContextAdmission { binding, commands }
 }
 
+
+
+/// Check exact protocol-version membership in one capability snapshot.
+///
+/// The check never guesses a downgrade or treats the capability behavior
+/// version as a command protocol version. An empty advertised protocol set
+/// therefore rejects every requested protocol token.
+#[must_use]
+pub fn semantic_command_protocol_admission(
+    snapshot: &SemanticCommandCapabilitySnapshot,
+    requested: atrament_semantic_notebook_port::CommandBehaviorVersion,
+) -> SemanticCommandProtocolAdmission {
+    if snapshot.protocol_versions.contains(&requested) {
+        SemanticCommandProtocolAdmission::Admitted { version: requested }
+    } else {
+        SemanticCommandProtocolAdmission::Unsupported { requested }
+    }
+}
 
 const fn count_limit_admission(
     actual: usize,
