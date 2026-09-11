@@ -85,18 +85,15 @@ pub struct AutonomousBudgetAdmission {
     pub resource: AutonomousBudgetExhaustion,
 }
 
-const fn exhaustion(
+fn exhaustion(
     exhausted_budgets: &[AutonomousBudgetClass],
     budget: AutonomousBudgetClass,
 ) -> AutonomousBudgetExhaustion {
-    let mut index = 0_usize;
-    while index < exhausted_budgets.len() {
-        if exhausted_budgets[index] as u8 == budget as u8 {
-            return AutonomousBudgetExhaustion::Exhausted;
-        }
-        index += 1;
+    if exhausted_budgets.contains(&budget) {
+        AutonomousBudgetExhaustion::Exhausted
+    } else {
+        AutonomousBudgetExhaustion::NotExhausted
     }
-    AutonomousBudgetExhaustion::NotExhausted
 }
 
 /// Project all five budget exhaustion facts plus the budget-only mutation gate.
@@ -106,7 +103,7 @@ const fn exhaustion(
 /// with
 /// their owning boundaries.
 #[must_use]
-pub const fn autonomous_budget_admission(
+pub fn autonomous_budget_admission(
     exhausted_budgets: &[AutonomousBudgetClass],
 ) -> AutonomousBudgetAdmission {
     let attempt = exhaustion(exhausted_budgets, AutonomousBudgetClass::Attempt);
