@@ -1903,6 +1903,10 @@ History-result progress projection now maps Traversed directly to accepted
 revision progress and Idempotent replay to replay-recovery non-progress.
 Boundary and stale handling remain separate from progress evidence.
 
+History-boundary control now preserves the exact Undo or Redo direction from a
+typed Boundary outcome and stops blind retry only in that direction. Stateful
+scheduling and terminal-goal decisions remain open coordinator work.
+
 Stable-blocking stop projection now maps only qualified repeated blocking
 diagnostic evidence to the frozen stable-blocking terminal outcome. Stateful
 diagnostic comparison and all other stop/completion composition remain open.

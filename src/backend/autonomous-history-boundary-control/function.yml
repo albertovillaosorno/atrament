@@ -1,0 +1,9 @@
+identity:
+  id: function:autonomous-history-boundary-control
+  name: autonomous-history-boundary-control
+  path: src/backend/autonomous-history-boundary-control
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: application

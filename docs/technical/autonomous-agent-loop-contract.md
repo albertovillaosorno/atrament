@@ -105,6 +105,10 @@ completion without another traversal, a history boundary stops blind retry in
 that direction, and stale history returns to inspection. Cancellation and known
 no-commit failure remain workflow-policy decisions.
 
+A direction-aware history-boundary control now projects the current typed
+Boundary outcome to the exact Undo or Redo direction that must stop blind retry.
+It does not stop the opposite direction or manufacture a terminal goal result.
+
 ### Stale and context drift
 
 Stale base and Command-context mismatch return the loop to capability-aware
