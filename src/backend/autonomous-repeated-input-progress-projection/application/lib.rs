@@ -57,14 +57,19 @@ pub struct AutonomousIterationInputs<BlockingEvidence, Intent, Revision> {
 /// construct blocking-evidence fingerprints.
 #[must_use]
 pub fn autonomous_repeated_input_progress_evidence<
-    BlockingEvidence: PartialEq,
-    Intent: PartialEq,
-    Revision: PartialEq,
+    BlockingEvidence,
+    Intent,
+    Revision,
 >(
     previous: &AutonomousIterationInputs<BlockingEvidence, Intent, Revision>,
     current: &AutonomousIterationInputs<BlockingEvidence, Intent, Revision>,
     new_admission: bool,
-) -> Option<AutonomousProgressEvidenceClass> {
+) -> Option<AutonomousProgressEvidenceClass>
+where
+    BlockingEvidence: PartialEq,
+    Intent: PartialEq,
+    Revision: PartialEq,
+{
     if !new_admission && previous == current {
         Some(
             AutonomousProgressEvidenceClass::
