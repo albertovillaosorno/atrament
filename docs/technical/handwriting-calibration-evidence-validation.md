@@ -152,7 +152,6 @@ The session domain does not decide how many prompts exist, which category mix is
 minimum, what wording is shown to a user, which speeds or sizes are selected, or
 how reference marks are represented geometrically.
 
-
 `handwriting-capture-geometry-evidence` now freezes only the structural report
 boundary for photographed calibration. One stable capture identity carries one
 observation each for reference marks, perspective, lens distortion, physical
@@ -208,9 +207,9 @@ The present calibration domains fail structurally when:
 - a variation central tendency falls below the minimum; or
 - a variation central tendency exceeds the maximum.
 
-Other important calibration failures are not executable yet because the owning
-capture, geometry, extraction, or quality authorities do not exist. These
-include interpreting unreadable images, incorrect reference marks, camera
+Other important calibration failures are not executable yet because their
+measurement, correction, extraction, or quality-policy owners do not exist.
+These include interpreting unreadable images, incorrect reference marks, camera
 distortion that cannot be corrected, insufficient resolution, unsupported
 capture metadata, failed character/stroke extraction, low-confidence
 measurements, and a held-out quality score below an accepted threshold.
