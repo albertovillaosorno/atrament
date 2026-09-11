@@ -33,6 +33,11 @@ Exported means this call crossed file commit, Idempotent export replay means a
 prior file commit was recovered without another write, and every rejection or
 conflict class guarantees no new effect from the current call.
 
+A combined operation/result projection now returns an effect disposition only
+when that result class applies to the named operation. This keeps Export-only
+file outcomes from being projected as Render/Plan results and prevents
+`CompletedProjection` from being interpreted as an Export outcome.
+
 ## Contract
 
 ### Result and diagnostic separation

@@ -146,3 +146,21 @@ pub const fn derived_output_effect_disposition(
         },
     }
 }
+
+/// Project the effect disposition only when the result belongs to the named
+/// operation.
+///
+/// Returning `None` prevents an adapter from treating an Export-only result as
+/// a Render or Plan result, or `CompletedProjection` as an Export outcome. This
+/// remains vocabulary validation only and performs no output operation.
+#[must_use]
+pub const fn derived_output_effect_disposition_for_operation(
+    operation: DerivedOutputOperation,
+    result: DerivedOutputResultClass,
+) -> Option<DerivedOutputEffectDisposition> {
+    if derived_output_result_applies_to(operation, result) {
+        Some(derived_output_effect_disposition(result))
+    } else {
+        None
+    }
+}

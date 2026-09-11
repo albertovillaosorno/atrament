@@ -33,6 +33,7 @@
 use atrament_derived_output_result::{
     DerivedOutputEffectDisposition, DerivedOutputOperation,
     DerivedOutputResultClass, derived_output_effect_disposition,
+    derived_output_effect_disposition_for_operation,
     derived_output_result_applies_to,
 };
 
@@ -132,4 +133,25 @@ fn all_11_result_classes_have_exact_effect_disposition() {
         };
         assert_eq!(derived_output_effect_disposition(result), expected);
     }
+}
+
+#[test]
+fn all_33_operation_result_pairs_project_effect_only_when_applicable() {
+    let mut cases = 0_usize;
+    for operation in ALL_OPERATIONS {
+        for result in ALL_RESULT_CLASSES {
+            let expected = reference_applies(operation, result)
+                .then(|| derived_output_effect_disposition(result));
+            assert_eq!(
+                derived_output_effect_disposition_for_operation(
+                    operation,
+                    result,
+                ),
+                expected,
+                "operation={operation:?} result={result:?}",
+            );
+            cases += 1;
+        }
+    }
+    assert_eq!(cases, 33);
 }
