@@ -6,8 +6,10 @@ publish = false
 license = "MIT"
 
 [dependencies]
-atrament_application_operation_lifecycle = { path = "../application-operation-lifecycle" }
 atrament_mcp_capability_effect = { path = "../mcp-capability-effect" }
+
+[dependencies.atrament_application_operation_lifecycle]
+path = "../application-operation-lifecycle"
 
 [lib]
 path = "domain/lib.rs"
