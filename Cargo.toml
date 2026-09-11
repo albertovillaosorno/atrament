@@ -10,6 +10,7 @@ members = [
     "src/backend/autonomous-physical-boundary",
     "src/backend/autonomous-progress-evidence",
     "src/backend/autonomous-refresh-completion-projection",
+    "src/backend/autonomous-repeated-input-progress-projection",
     "src/backend/autonomous-repeated-no-op-control",
     "src/backend/autonomous-goal-outcome",
     "src/backend/autonomous-derived-output-guidance",

@@ -1,0 +1,9 @@
+identity:
+  id: function:autonomous-repeated-input-progress-projection
+  name: autonomous-repeated-input-progress-projection
+  path: src/backend/autonomous-repeated-input-progress-projection
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: application

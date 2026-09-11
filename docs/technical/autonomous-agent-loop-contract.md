@@ -188,6 +188,12 @@ A stable blocking diagnostic tied to the same authoritative inputs is not new
 progress when another iteration returns the same condition without accepted
 state or evidence change.
 
+A stateful repeated-input projection now compares owner-qualified revision,
+blocking-evidence, and bounded-intent fingerprints plus an explicit
+new-admission
+fact. Only exact repetition of all three inputs with no new admission produces
+the frozen repeated-same-inputs non-progress evidence.
+
 
 An application-level stop projection now maps only the already-qualified
 repeated stable-blocking evidence class to the frozen stable-blocking terminal

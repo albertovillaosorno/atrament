@@ -1894,6 +1894,10 @@ Application-capability progress projection now treats only an exact same-
 capability Unsupported-to-Admitted transition as new admitted authority. It does
 not infer goal requirement, blocker resolution, or terminal unavailability.
 
+Repeated-input progress projection now recognizes unchanged qualified revision,
+blocking evidence, and bounded intent with no new admission as frozen
+non-progress. Fingerprint construction and owning loop policy remain open.
+
 Repeated-No-op control now maps only qualified repeated No-op for the same
 bounded intent to a local requirement to stop equivalent mutation attempts. It
 does not choose a terminal goal class or grant continuation on other evidence.
