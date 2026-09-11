@@ -101,7 +101,6 @@ frozen declared effect and admits it only when that exact effect appears in the
 caller-supplied admitted set. This check does not authenticate a caller, prove a
 capability is packaged/live, or waive any capability-specific validation.
 
-
 For MCP Command context, Validate, and Apply, the application projection can now
 retain effect authorization and exact semantic-command snapshot membership as
 separate facts in one read-only result. Neither fact is treated as a substitute
