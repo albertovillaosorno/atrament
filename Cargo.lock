@@ -335,6 +335,7 @@ dependencies = [
  "atrament_media_job_session",
  "atrament_semantic_fixed_region_layout",
  "atrament_semantic_flow_pagination",
+ "atrament_semantic_history_result",
  "atrament_semantic_notebook",
  "atrament_semantic_notebook_port",
  "atrament_semantic_notebook_session",

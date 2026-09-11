@@ -61,6 +61,7 @@ use atrament_semantic_fixed_region_layout::{
     AcceptedFixedPlacement, FixedRegionLayoutError, FixedRegionLayoutResult,
     validate_fixed_placement,
 };
+use atrament_semantic_history_result::semantic_history_direction_is_available;
 use atrament_semantic_notebook::{
     AcceptedIdentity, AcceptedRevision, CandidateIdentity,
     Notebook, PhysicalPageProfile, RevisionIdentity, SemanticIdentityKind,
@@ -611,10 +612,9 @@ impl SessionApplication {
     }
 
     fn redo_is_available(&self) -> bool {
-        matches!(
-            self.semantic.history_availability(),
-            HistoryAvailabilityOutcome::Available(availability)
-                if availability.can_redo
+        semantic_history_direction_is_available(
+            &self.semantic.history_availability(),
+            HistoryDirection::Redo,
         )
     }
 

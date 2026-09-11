@@ -10,6 +10,7 @@ atrament_export_layout_preflight = { path = "../export-layout-preflight" }
 atrament_media_job_session = { path = "../media-job-session" }
 atrament_semantic_flow_pagination = { path = "../semantic-flow-pagination" }
 atrament_semantic_fixed_region_layout = { path = "../semantic-fixed-region-layout" }
+atrament_semantic_history_result = { path = "../semantic-history-result" }
 atrament_semantic_notebook = { path = "../semantic-notebook" }
 atrament_semantic_notebook_port = { path = "../semantic-notebook-port" }
 atrament_semantic_notebook_session = { path = "../semantic-notebook-session" }

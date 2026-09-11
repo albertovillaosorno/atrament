@@ -33,10 +33,12 @@
 use atrament_semantic_history_result::{
     SemanticHistoryCommitDisposition, SemanticHistoryResultClass,
     classify_history_traversal_result, semantic_history_commit_disposition,
+    semantic_history_direction_is_available,
 };
 use atrament_semantic_notebook::{IdentityAllocator, IdentityExhausted};
 use atrament_semantic_notebook_port::{
-    HistoryDirection, HistoryTraversalOutcome,
+    HistoryAvailability, HistoryAvailabilityOutcome, HistoryDirection,
+    HistoryTraversalOutcome,
 };
 
 const ALL_RESULT_CLASSES: [SemanticHistoryResultClass; 6] = [
@@ -114,4 +116,42 @@ fn current_traversal_outcomes_project_only_unambiguous_classes() {
 #[test]
 fn frozen_taxonomy_contains_exactly_six_core_result_classes() {
     assert_eq!(ALL_RESULT_CLASSES.len(), 6);
+}
+
+#[test]
+fn all_direction_availability_states_match_exact_backend_facts() {
+    let identities = IdentityAllocator::new();
+    let revision = identities.allocate_revision().expect("revision identity");
+    let mut cases = 0_usize;
+    for can_redo in [false, true] {
+        for can_undo in [false, true] {
+            let availability = HistoryAvailabilityOutcome::Available(
+                HistoryAvailability {
+                    can_redo,
+                    can_undo,
+                    revision,
+                },
+            );
+            for direction in [HistoryDirection::Redo, HistoryDirection::Undo] {
+                let expected = match direction {
+                    HistoryDirection::Redo => can_redo,
+                    HistoryDirection::Undo => can_undo,
+                };
+                assert_eq!(
+                    semantic_history_direction_is_available(
+                        &availability,
+                        direction,
+                    ),
+                    expected,
+                );
+                cases += 1;
+            }
+        }
+    }
+    let empty = HistoryAvailabilityOutcome::NoAcceptedRevision;
+    for direction in [HistoryDirection::Redo, HistoryDirection::Undo] {
+        assert!(!semantic_history_direction_is_available(&empty, direction));
+        cases += 1;
+    }
+    assert_eq!(cases, 10);
 }

@@ -1008,6 +1008,9 @@ classes and their commit dispositions independently from traversal execution.
 Current Traversed, Boundary, StaleBase, and revision-allocation exhaustion
 outcomes project only to their unambiguous frozen meanings; missing accepted
 state remains unclassified. Retry replay and cancellation are not implemented.
+Read-only direction availability is now centralized over the existing
+`HistoryAvailabilityOutcome`, and `SessionApplication` uses it for Redo-aware
+asset-byte pruning instead of reinterpreting `can_redo` independently.
 
 Bounded history storage is also blocked on policy rather than mechanics. The
 frozen history contract explicitly leaves depth limits and storage structure

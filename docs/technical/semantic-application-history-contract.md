@@ -166,6 +166,11 @@ Missing accepted state remains unclassified, while Idempotent replay and
 Cancelled before commit remain vocabulary only until retry and cancellation
 execution exist.
 
+A shared read-only helper also projects the exact `can_undo` or `can_redo` fact
+for a requested direction; missing accepted state admits neither direction.
+`SessionApplication` uses that same projection when deciding whether discarded
+Redo state can make retained asset bytes unreachable.
+
 ### Retry and lost receipts
 
 Undo and redo are mutating application capabilities and therefore use their own

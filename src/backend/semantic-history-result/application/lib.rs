@@ -33,7 +33,9 @@
 
 //! Application semantics for frozen semantic history result classes.
 
-use atrament_semantic_notebook_port::HistoryTraversalOutcome;
+use atrament_semantic_notebook_port::{
+    HistoryAvailabilityOutcome, HistoryDirection, HistoryTraversalOutcome,
+};
 
 /// Frozen application-level result classes for accepted history traversal.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -81,6 +83,24 @@ pub const fn semantic_history_commit_disposition(
         SemanticHistoryResultClass::Traversed => {
             SemanticHistoryCommitDisposition::CommittedThisCall
         },
+    }
+}
+
+/// Read one direction's currently admitted history availability.
+///
+/// Missing accepted state admits neither direction. This is read-only
+/// interpretation of backend-owned availability, not a traversal attempt.
+#[must_use]
+pub const fn semantic_history_direction_is_available(
+    availability: &HistoryAvailabilityOutcome,
+    direction: HistoryDirection,
+) -> bool {
+    match availability {
+        HistoryAvailabilityOutcome::Available(state) => match direction {
+            HistoryDirection::Redo => state.can_redo,
+            HistoryDirection::Undo => state.can_undo,
+        },
+        HistoryAvailabilityOutcome::NoAcceptedRevision => false,
     }
 }
 
