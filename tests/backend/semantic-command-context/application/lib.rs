@@ -127,7 +127,7 @@ fn readable_only_identity_never_becomes_writable_scope() {
         semantic_command_scope_admission(
             &context,
             SemanticCommandFamily::TextContent,
-            SemanticCommandScopeLocation::Existing(readable),
+            &SemanticCommandScopeLocation::Existing(readable),
         ),
         SemanticCommandScopeAdmission {
             family_admitted: true,
@@ -188,7 +188,7 @@ fn family_and_location_admission_are_independent_for_targets_and_anchors() {
         let admission = semantic_command_scope_admission(
             &context,
             family,
-            location,
+            &location,
         );
         assert_eq!(
             admission,
@@ -233,7 +233,7 @@ fn family_and_location_admission_are_independent_for_targets_and_anchors() {
             semantic_command_scope_admission(
                 &context,
                 family,
-                SemanticCommandScopeLocation::Insertion(location),
+                &SemanticCommandScopeLocation::Insertion(location),
             ),
             SemanticCommandScopeAdmission {
                 family_admitted,

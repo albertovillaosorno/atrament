@@ -134,7 +134,7 @@ where
             let scope = semantic_command_scope_admission(
                 context,
                 command.preconditions.requested_family,
-                SemanticCommandScopeLocation::Existing(command.target),
+                &SemanticCommandScopeLocation::Existing(command.target),
             );
             SemanticCommandEnvelopeCommandAdmission {
                 command: &command.id,
@@ -169,7 +169,7 @@ pub fn semantic_command_scope_admission<
         ReadableContext,
     >,
     family: SemanticCommandFamily,
-    location: SemanticCommandScopeLocation<'_, InsertionAnchor>,
+    location: &SemanticCommandScopeLocation<'_, InsertionAnchor>,
 ) -> SemanticCommandScopeAdmission
 where
     InsertionAnchor: PartialEq,
