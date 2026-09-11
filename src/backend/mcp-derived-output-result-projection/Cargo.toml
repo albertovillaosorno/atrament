@@ -1,0 +1,16 @@
+[package]
+name = "atrament_mcp_derived_output_result_projection"
+version = "0.1.0"
+edition = "2024"
+publish = false
+license = "MIT"
+
+[dependencies]
+atrament_derived_output_result = { path = "../derived-output-result" }
+atrament_mcp_capability_effect = { path = "../mcp-capability-effect" }
+
+[lib]
+path = "domain/lib.rs"
+
+[lints]
+workspace = true

@@ -1864,6 +1864,12 @@ classes to the frozen application operation lifecycle and leaves Inspect and
 Command context outside that lifecycle. It does not imply those capabilities
 are packaged, admitted, running, cancellable, or exposed as tools.
 
+
+A separate MCP/output-result projection now admits derived/output result meaning
+only for Render, Plan, and Export and preserves the result-class applicability
+check for all 11 frozen outcomes. The other five capability classes receive no
+output-result disposition, and no output execution is implied.
+
 ### TODO - Package self-contained agent instructions
 
 Allow a user to provide the repository or release bundle to an agent and have

@@ -251,6 +251,13 @@ An MCP agent does not parse file-system prose to distinguish Exported from path,
 overwrite, retry, or target-drift conflict, and it does not treat a Render or
 Plan diagnostic as the operation result itself.
 
+
+A shared projection now maps only Render, Plan, and Export into the
+`derived-output-result` operation vocabulary. Its operation-aware effect helper
+returns no disposition for the other five MCP capability classes or for a result
+class incompatible with the selected output operation. No output execution,
+receipt, retry store, or MCP tool is added by this projection.
+
 ### Result-class projection
 
 MCP exposes the semantic application result class frozen by the command result

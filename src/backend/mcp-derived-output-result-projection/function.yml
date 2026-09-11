@@ -1,0 +1,9 @@
+identity:
+  id: function:mcp-derived-output-result-projection
+  name: mcp-derived-output-result-projection
+  path: src/backend/mcp-derived-output-result-projection
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: domain
