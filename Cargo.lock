@@ -11,6 +11,14 @@ name = "atrament_autonomous_budget_admission"
 version = "0.1.0"
 
 [[package]]
+name = "atrament_autonomous_budget_stop_projection"
+version = "0.1.0"
+dependencies = [
+ "atrament_autonomous_budget_admission",
+ "atrament_autonomous_goal_outcome",
+]
+
+[[package]]
 name = "atrament_autonomous_derived_output_guidance"
 version = "0.1.0"
 dependencies = [

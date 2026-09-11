@@ -1875,6 +1875,12 @@ further mutation on this axis when any caller/backend-supplied exhaustion
 fact is present. Numeric limits, budget accounting, scheduling, and overall
 mutation authority remain outside this domain.
 
+
+Budget-stop projection now maps exhausted-budget admission to the frozen
+terminal stop class and returns no terminal outcome when the budget axis does
+not require a stop. Merging it with other stop/completion conditions remains
+coordinator work.
+
 Autonomous output intent now distinguishes caller-explicit goals, independently
 admitted host policy, and untrusted semantic content. Caller goals can establish
 Render, Plan, or Export intent; host policy is an alternate source only for

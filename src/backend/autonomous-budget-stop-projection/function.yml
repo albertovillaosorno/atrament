@@ -1,0 +1,9 @@
+identity:
+  id: function:autonomous-budget-stop-projection
+  name: autonomous-budget-stop-projection
+  path: src/backend/autonomous-budget-stop-projection
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: application

@@ -182,6 +182,10 @@ requires a budget-only mutation stop whenever any supplied axis is exhausted,
 without freezing numeric thresholds or granting mutation when no budget stops
 it.
 
+The application-level budget-stop projection maps that stop disposition to the
+frozen Stopped exhausted budget terminal class. A non-exhausted budget axis does
+not manufacture completion or any other terminal outcome.
+
 ### Persistent output intent
 
 An autonomous edit goal does not acquire Export authority from model-generated
