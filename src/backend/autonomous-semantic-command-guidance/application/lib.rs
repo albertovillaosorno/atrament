@@ -40,12 +40,12 @@ use atrament_semantic_notebook_port::SemanticCommandResultClass;
 pub enum AutonomousSemanticCommandGuidance {
     /// Negotiate or obtain a compatible protocol/application capability.
     CompatibilityNegotiation,
+    /// Continue from the revision reported by the completed operation.
+    ContinueFromReportedRevision,
     /// Correct command content/dependencies or obtain a different context.
     CorrectRequestOrContext,
     /// Correct retry-identity bookkeeping or stop this attempted workflow.
     CorrectRetryBookkeepingOrStop,
-    /// Continue from the revision reported by the completed operation.
-    ContinueFromReportedRevision,
     /// Inspect current authority and obtain fresh command context as required.
     FreshInspectionOrContext,
     /// Use an admitted smaller or intentionally alternate workflow.
