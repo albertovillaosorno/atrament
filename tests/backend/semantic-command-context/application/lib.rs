@@ -30,10 +30,14 @@
 // - Defaults:
 //   - Missing family or location authority remains independently unadmitted.
 //
-use atrament_semantic_command_context::semantic_command_scope_admission;
+use atrament_semantic_command_context::{
+    semantic_command_context_binding_admission,
+    semantic_command_scope_admission,
+};
 use atrament_semantic_notebook::IdentityAllocator;
 use atrament_semantic_notebook_port::{
     CommandBehaviorVersion, CommandResourceLimits, SemanticCommandContext,
+    SemanticCommandContextBinding, SemanticCommandContextBindingAdmission,
     SemanticCommandFamily, SemanticCommandScopeAdmission,
     SemanticCommandScopeLocation,
 };
@@ -225,4 +229,68 @@ fn family_and_location_admission_are_independent_for_targets_and_anchors() {
             },
         );
     }
+}
+
+#[test]
+fn all_16_context_binding_match_states_remain_independent() {
+    let identities = IdentityAllocator::new();
+    let notebook = identities.allocate_accepted().expect("notebook identity");
+    let other_notebook = identities
+        .allocate_accepted()
+        .expect("other notebook identity");
+    let base = identities.allocate_revision().expect("base revision");
+    let other_base = identities
+        .allocate_revision()
+        .expect("other base revision");
+    let context = SemanticCommandContext {
+        admitted_families: Vec::new(),
+        base,
+        behavior_version: CommandBehaviorVersion(94),
+        context_identity: String::from("context-current"),
+        insertion_anchors: Vec::<u8>::new(),
+        local_preconditions: Vec::<u8>::new(),
+        notebook,
+        readable_context: (),
+        relevant_constraints: Vec::new(),
+        requested_intent: (),
+        resource_limits: unbounded_limits(),
+        writable_targets: Vec::new(),
+    };
+    let mut cases = 0_u8;
+    for mask in 0_u8..16 {
+        let base_matches = mask & 0b0001 != 0;
+        let behavior_matches = mask & 0b0010 != 0;
+        let context_matches = mask & 0b0100 != 0;
+        let notebook_matches = mask & 0b1000 != 0;
+        let binding = SemanticCommandContextBinding {
+            base: if base_matches { base } else { other_base },
+            behavior_version: if behavior_matches {
+                CommandBehaviorVersion(94)
+            } else {
+                CommandBehaviorVersion(93)
+            },
+            context_identity: if context_matches {
+                String::from("context-current")
+            } else {
+                String::from("context-other")
+            },
+            notebook: if notebook_matches {
+                notebook
+            } else {
+                other_notebook
+            },
+        };
+        assert_eq!(
+            semantic_command_context_binding_admission(&context, &binding),
+            SemanticCommandContextBindingAdmission {
+                base_matches,
+                behavior_matches,
+                context_matches,
+                notebook_matches,
+            },
+            "binding match mask {mask:#06b}",
+        );
+        cases = cases.saturating_add(1);
+    }
+    assert_eq!(cases, 16);
 }

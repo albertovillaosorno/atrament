@@ -36,9 +36,44 @@
 //! Read-only semantic command-context scope admission.
 
 use atrament_semantic_notebook_port::{
-    SemanticCommandContext, SemanticCommandFamily,
+    SemanticCommandContext, SemanticCommandContextBinding,
+    SemanticCommandContextBindingAdmission, SemanticCommandFamily,
     SemanticCommandScopeAdmission, SemanticCommandScopeLocation,
 };
+
+
+/// Check whether returned batch authority still names this exact command
+/// context.
+///
+/// Each equality fact remains independent so a later typed result mapper can
+/// preserve the actual mismatch instead of relying on an invented precedence.
+#[must_use]
+pub fn semantic_command_context_binding_admission<
+    ContextIdentity,
+    InsertionAnchor,
+    Intent,
+    PreconditionMaterial,
+    ReadableContext,
+>(
+    context: &SemanticCommandContext<
+        ContextIdentity,
+        InsertionAnchor,
+        Intent,
+        PreconditionMaterial,
+        ReadableContext,
+    >,
+    binding: &SemanticCommandContextBinding<ContextIdentity>,
+) -> SemanticCommandContextBindingAdmission
+where
+    ContextIdentity: PartialEq,
+{
+    SemanticCommandContextBindingAdmission {
+        base_matches: binding.base == context.base,
+        behavior_matches: binding.behavior_version == context.behavior_version,
+        context_matches: binding.context_identity == context.context_identity,
+        notebook_matches: binding.notebook == context.notebook,
+    }
+}
 
 /// Check bounded command scope without widening readable context into
 /// authority.

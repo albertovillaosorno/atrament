@@ -1311,6 +1311,32 @@ pub struct SemanticCommandContext<
     pub writable_targets: Vec<AcceptedIdentity>,
 }
 
+/// Batch-supplied authority binding back to one backend command context.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SemanticCommandContextBinding<ContextIdentity> {
+    /// Accepted base revision named by the returned batch.
+    pub base: RevisionIdentity,
+    /// Capability behavior identity named by the returned batch.
+    pub behavior_version: CommandBehaviorVersion,
+    /// Command-context identity named by the returned batch.
+    pub context_identity: ContextIdentity,
+    /// Accepted notebook identity named by the returned batch.
+    pub notebook: AcceptedIdentity,
+}
+
+/// Independent equality facts for one batch-to-context authority binding.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct SemanticCommandContextBindingAdmission {
+    /// Whether the returned batch names the context's exact base revision.
+    pub base_matches: bool,
+    /// Whether the returned batch names the context's behavior identity.
+    pub behavior_matches: bool,
+    /// Whether the returned batch names the exact command-context identity.
+    pub context_matches: bool,
+    /// Whether the returned batch names the context's accepted notebook.
+    pub notebook_matches: bool,
+}
+
 /// One target or insertion anchor referenced by a semantic command.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum SemanticCommandScopeLocation<'context, InsertionAnchor> {

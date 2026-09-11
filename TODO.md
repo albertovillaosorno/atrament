@@ -1625,7 +1625,9 @@ identity, readable context, explicit writable targets and insertion anchors,
 admitted families, relevant constraints, local precondition material, edit
 intent, and resource limits. A separate application boundary checks family and
 location admission independently, so readable-only identities never become
-writable by echoing them.
+writable by echoing them. Returned batch authority can also be checked against
+that context's notebook, base revision, behavior identity, and context identity
+without accepting partial matches as equivalent context.
 
 Context identity computation, context construction/completeness policy, the
 versioned batch envelope, normalization, retry identity, receipt normalization,
