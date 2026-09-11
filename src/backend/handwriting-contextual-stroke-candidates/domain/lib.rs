@@ -73,6 +73,36 @@ pub struct ContextualStrokeCandidateIdentityError {
     pub first_index: usize,
 }
 
+/// Caller-owned neighboring context consumed by later stroke planning.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct StrokePlanningContext<
+    LineGeometry,
+    NeighboringGraphemes,
+    SemanticRole,
+    WordPosition,
+    WritingStyle,
+> {
+    /// Caller-owned line geometry relevant to spacing and deformation.
+    pub line_geometry: LineGeometry,
+    /// Caller-owned neighboring grapheme context.
+    pub neighboring_graphemes: NeighboringGraphemes,
+    /// Caller-owned semantic handwriting role.
+    pub semantic_role: SemanticRole,
+    /// Caller-owned position within the surrounding word.
+    pub word_position: WordPosition,
+    /// Caller-owned calibrated handwriting style or profile state.
+    pub writing_style: WritingStyle,
+}
+
+/// Complete transport-neutral input to a later contextual stroke planner.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ContextualStrokePlanningInput<Candidate, Context> {
+    /// Caller-supplied candidates in their source order.
+    pub candidates: Vec<Candidate>,
+    /// Neighbor, word, line, role, and calibrated-style planning context.
+    pub context: Context,
+}
+
 /// Detect identity collisions without selecting or ranking any candidate.
 ///
 /// Candidate order and payloads remain unchanged. Callers that require stable
@@ -122,34 +152,4 @@ where
         }
     }
     Ok(())
-}
-
-/// Caller-owned neighboring context consumed by later stroke planning.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct StrokePlanningContext<
-    LineGeometry,
-    NeighboringGraphemes,
-    SemanticRole,
-    WordPosition,
-    WritingStyle,
-> {
-    /// Caller-owned line geometry relevant to spacing and deformation.
-    pub line_geometry: LineGeometry,
-    /// Caller-owned neighboring grapheme context.
-    pub neighboring_graphemes: NeighboringGraphemes,
-    /// Caller-owned semantic handwriting role.
-    pub semantic_role: SemanticRole,
-    /// Caller-owned position within the surrounding word.
-    pub word_position: WordPosition,
-    /// Caller-owned calibrated handwriting style or profile state.
-    pub writing_style: WritingStyle,
-}
-
-/// Complete transport-neutral input to a later contextual stroke planner.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct ContextualStrokePlanningInput<Candidate, Context> {
-    /// Caller-supplied candidates in their source order.
-    pub candidates: Vec<Candidate>,
-    /// Neighbor, word, line, role, and calibrated-style planning context.
-    pub context: Context,
 }
