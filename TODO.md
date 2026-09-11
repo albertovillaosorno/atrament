@@ -1883,6 +1883,13 @@ admitted host policy, and untrusted semantic content. Caller goals can establish
 Render, Plan, or Export intent; host policy is an alternate source only for
 persistent Export, and edited/model-provided content grants none.
 
+
+Autonomous progress evidence now distinguishes five frozen authoritative
+progress
+conditions from four explicit non-progress conditions without inspecting raw
+state or model prose. Stateful revision/diagnostic comparison and loop
+orchestration remain open application work.
+
 A partial autonomous semantic-result classifier now encodes the twelve
 next-step branches that the frozen contracts define exactly. Successful
 validation, pre-commit cancellation, and internal known-no-commit failure remain

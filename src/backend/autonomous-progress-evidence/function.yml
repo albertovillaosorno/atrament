@@ -1,0 +1,9 @@
+identity:
+  id: function:autonomous-progress-evidence
+  name: autonomous-progress-evidence
+  path: src/backend/autonomous-progress-evidence
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: domain

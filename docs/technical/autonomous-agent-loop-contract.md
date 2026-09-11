@@ -65,6 +65,13 @@ Progress can include:
 Repeating the same accepted revision, same blocking evidence, and same semantic
 intent without a new admitted input is non-progress.
 
+
+A transport-neutral progress-evidence vocabulary now classifies the five frozen
+positive evidence conditions above and four explicit non-progress conditions:
+idempotent replay recovery, repeated No-op for the same intent, unchanged
+revision/evidence/intent without new admitted input, and a stable repeated
+blocking diagnostic. It classifies only already-qualified evidence conditions.
+
 ### No-op handling
 
 No-op is success-equivalent only when the requested semantic state is already

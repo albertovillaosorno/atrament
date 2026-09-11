@@ -10,6 +10,9 @@ depends_on = []
 [component.atrament_autonomous_output_intent]
 depends_on = []
 
+[component.atrament_autonomous_progress_evidence]
+depends_on = []
+
 [component.atrament_autonomous_derived_output_guidance]
 depends_on = ["atrament_derived_output_result"]
 
