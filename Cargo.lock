@@ -44,6 +44,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "atrament_autonomous_history_progress_projection"
+version = "0.1.0"
+dependencies = [
+ "atrament_autonomous_progress_evidence",
+ "atrament_semantic_history_result",
+]
+
+[[package]]
 name = "atrament_autonomous_no_op_completion_projection"
 version = "0.1.0"
 dependencies = [

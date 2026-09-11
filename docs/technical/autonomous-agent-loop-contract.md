@@ -76,6 +76,11 @@ progress directly from Applied and replay-recovery evidence directly from
 Idempotent replay. Other result classes remain unclassified until their owning
 state comparison qualifies additional progress or non-progress evidence.
 
+An application-level history-result projection now derives accepted-revision
+progress directly from Traversed and replay-recovery evidence directly from
+Idempotent replay. Boundary, stale, cancellation, and known-no-commit results
+remain unclassified until owning workflow evidence qualifies another branch.
+
 ### No-op handling
 
 No-op is success-equivalent only when the requested semantic state is already

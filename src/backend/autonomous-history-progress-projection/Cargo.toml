@@ -1,0 +1,18 @@
+[package]
+name = "atrament_autonomous_history_progress_projection"
+version = "0.1.0"
+edition = "2024"
+publish = false
+license = "MIT"
+
+[lib]
+path = "application/lib.rs"
+
+[dependencies.atrament_autonomous_progress_evidence]
+path = "../autonomous-progress-evidence"
+
+[dependencies.atrament_semantic_history_result]
+path = "../semantic-history-result"
+
+[lints]
+workspace = true

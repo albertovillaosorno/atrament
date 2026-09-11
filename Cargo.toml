@@ -10,6 +10,7 @@ members = [
     "src/backend/autonomous-goal-outcome",
     "src/backend/autonomous-derived-output-guidance",
     "src/backend/autonomous-history-guidance",
+    "src/backend/autonomous-history-progress-projection",
     "src/backend/autonomous-no-op-completion-projection",
     "src/backend/autonomous-semantic-command-guidance",
     "src/backend/autonomous-semantic-progress-projection",

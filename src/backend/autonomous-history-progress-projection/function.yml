@@ -1,0 +1,9 @@
+identity:
+  id: function:autonomous-history-progress-projection
+  name: autonomous-history-progress-projection
+  path: src/backend/autonomous-history-progress-projection
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: application

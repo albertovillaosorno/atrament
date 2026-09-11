@@ -34,6 +34,9 @@ depends_on = []
 [component.atrament_autonomous_history_guidance]
 depends_on = ["atrament_semantic_history_result"]
 
+[component.atrament_autonomous_history_progress_projection]
+depends_on = ["atrament_autonomous_progress_evidence", "atrament_semantic_history_result"]
+
 [component.atrament_autonomous_no_op_completion_projection]
 depends_on = ["atrament_autonomous_completion_admission", "atrament_autonomous_goal_outcome", "atrament_semantic_notebook_port"]
 

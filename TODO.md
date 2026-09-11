@@ -1895,6 +1895,10 @@ revision progress and Idempotent replay to replay-recovery non-progress. No-op
 repetition, stale-state comparison, and diagnostic progress still require
 stateful evidence.
 
+History-result progress projection now maps Traversed directly to accepted
+revision progress and Idempotent replay to replay-recovery non-progress.
+Boundary and stale handling remain separate from progress evidence.
+
 Stable-blocking stop projection now maps only qualified repeated blocking
 diagnostic evidence to the frozen stable-blocking terminal outcome. Stateful
 diagnostic comparison and all other stop/completion composition remain open.
