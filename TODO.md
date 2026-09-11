@@ -1907,9 +1907,8 @@ History-boundary control now preserves the exact Undo or Redo direction from a
 typed Boundary outcome and stops blind retry only in that direction. Stateful
 scheduling and terminal-goal decisions remain open coordinator work.
 Read-only history availability now projects each requested direction as
-admitted,
-boundary, or no accepted revision before mutation. This does not implement
-scheduling, traversal, retry, or terminal-goal policy.
+admitted, boundary, or no accepted revision before mutation. This does not
+implement scheduling, traversal, retry, or terminal-goal policy.
 
 Stable-blocking stop projection now maps only qualified repeated blocking
 diagnostic evidence to the frozen stable-blocking terminal outcome. Stateful
