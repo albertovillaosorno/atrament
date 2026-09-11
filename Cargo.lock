@@ -90,6 +90,15 @@ name = "atrament_autonomous_progress_evidence"
 version = "0.1.0"
 
 [[package]]
+name = "atrament_autonomous_refresh_completion_projection"
+version = "0.1.0"
+dependencies = [
+ "atrament_autonomous_completion_admission",
+ "atrament_autonomous_goal_outcome",
+ "atrament_semantic_notebook_port",
+]
+
+[[package]]
 name = "atrament_autonomous_semantic_command_guidance"
 version = "0.1.0"
 dependencies = [

@@ -1917,6 +1917,11 @@ Satisfied-No-op projection now maps No-op to successful completion only when the
 separate completion-admission gate already proves semantic and requested-output
 satisfaction. Stateful equivalence and satisfaction detection remain open.
 
+Refreshed-state completion projection now allows Stale base or Command-context
+mismatch to complete only after independently qualified fresh semantic/output
+evidence already satisfies the goal. Refresh and satisfaction detection remain
+open coordinator work.
+
 Derived-output completion projection now classifies all 33 operation/result
 pairs so only successful projection, Export commit, or recovered Export can
 satisfy a requested output. Output aggregation and receipt construction remain

@@ -1,0 +1,21 @@
+[package]
+name = "atrament_autonomous_refresh_completion_projection"
+version = "0.1.0"
+edition = "2024"
+publish = false
+license = "MIT"
+
+[lib]
+path = "application/lib.rs"
+
+[dependencies.atrament_autonomous_completion_admission]
+path = "../autonomous-completion-admission"
+
+[dependencies.atrament_autonomous_goal_outcome]
+path = "../autonomous-goal-outcome"
+
+[dependencies.atrament_semantic_notebook_port]
+path = "../semantic-notebook-port"
+
+[lints]
+workspace = true

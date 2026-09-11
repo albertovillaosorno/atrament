@@ -1,0 +1,9 @@
+identity:
+  id: function:autonomous-refresh-completion-projection
+  name: autonomous-refresh-completion-projection
+  path: src/backend/autonomous-refresh-completion-projection
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: application

@@ -28,6 +28,9 @@ depends_on = []
 [component.atrament_autonomous_progress_evidence]
 depends_on = []
 
+[component.atrament_autonomous_refresh_completion_projection]
+depends_on = ["atrament_autonomous_completion_admission", "atrament_autonomous_goal_outcome", "atrament_semantic_notebook_port"]
+
 [component.atrament_autonomous_derived_output_guidance]
 depends_on = ["atrament_derived_output_result"]
 

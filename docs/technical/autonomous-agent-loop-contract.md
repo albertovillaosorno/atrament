@@ -112,6 +112,11 @@ new accepted state.
 If the desired state is already satisfied, the loop stops rather than applying
 a historical edit simply because it was previously planned.
 
+An application-level refreshed-state completion projection now admits successful
+completion for Stale base or Command-context mismatch only when independently
+qualified fresh semantic/output evidence already satisfies the bounded goal. It
+does not perform inspection, context acquisition, or silent rebasing.
+
 ### Retry recovery is not a new edit
 
 Unknown transport outcome uses the same normalized request and same retry
