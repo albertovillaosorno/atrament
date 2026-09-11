@@ -1,5 +1,6 @@
 [workspace]
 members = [
+    "src/backend/autonomous-semantic-command-guidance",
     "src/backend/application-operation-lifecycle",
     "src/backend/browser-launch",
     "src/backend/citation-review-linkage",

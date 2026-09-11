@@ -121,6 +121,13 @@ address the reported class, such as:
 The returned model cannot grant itself broader scope, capability, paths, or
 physical authority as its own remediation.
 
+
+A transport-neutral partial guidance classifier now materializes the result
+branches whose next-step class is frozen by these rules. It maps twelve semantic
+command result classes and deliberately leaves Successful validation, Cancelled
+before commit, and Internal failure with known no-commit unclassified because
+their next action still depends on owning workflow policy.
+
 ### Unrepresentable or unresolved intent
 
 When the application or model-facing response reports that an intent cannot be

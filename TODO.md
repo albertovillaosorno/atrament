@@ -1870,6 +1870,12 @@ progress versus non-progress, same-retry recovery, bounded automation budgets,
 and the separation between semantic completion, explicit output, and physical
 authority. Concrete MCP tools and backend execution remain open.
 
+
+A partial autonomous semantic-result classifier now encodes the twelve
+next-step branches that the frozen contracts define exactly. Successful
+validation, pre-commit cancellation, and internal known-no-commit failure remain
+unclassified rather than receiving invented retry or escalation policy.
+
 A shared MCP/lifecycle projection now maps the six operational MCP capability
 classes to the frozen application operation lifecycle and leaves Inspect and
 Command context outside that lifecycle. It does not imply those capabilities

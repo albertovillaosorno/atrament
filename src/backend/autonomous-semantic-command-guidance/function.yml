@@ -1,0 +1,9 @@
+identity:
+  id: function:autonomous-semantic-command-guidance
+  name: autonomous-semantic-command-guidance
+  path: src/backend/autonomous-semantic-command-guidance
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: application
