@@ -1,0 +1,9 @@
+identity:
+  id: function:autonomous-goal-outcome
+  name: autonomous-goal-outcome
+  path: src/backend/autonomous-goal-outcome
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: domain

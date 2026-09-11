@@ -16,6 +16,9 @@ depends_on = []
 [component.atrament_autonomous_derived_output_guidance]
 depends_on = ["atrament_derived_output_result"]
 
+[component.atrament_autonomous_goal_outcome]
+depends_on = []
+
 [component.atrament_autonomous_history_guidance]
 depends_on = ["atrament_semantic_history_result"]
 

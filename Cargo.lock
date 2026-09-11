@@ -18,6 +18,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "atrament_autonomous_goal_outcome"
+version = "0.1.0"
+
+[[package]]
 name = "atrament_autonomous_history_guidance"
 version = "0.1.0"
 dependencies = [

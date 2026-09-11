@@ -1886,6 +1886,12 @@ inspecting raw state or model prose. Stateful revision/diagnostic comparison and
 loop
 orchestration remain open application work.
 
+
+Autonomous terminal outcomes now distinguish successful goal completion from
+stopping for unresolved evidence, exhausted budget, stable blocking failure, or
+unavailable capability. Detecting those terminal conditions and constructing
+completion receipts remain open coordinator work.
+
 A partial autonomous semantic-result classifier now encodes the twelve
 next-step branches that the frozen contracts define exactly. Successful
 validation, pre-commit cancellation, and internal known-no-commit failure remain

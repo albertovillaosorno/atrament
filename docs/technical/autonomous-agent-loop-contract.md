@@ -240,6 +240,11 @@ external model conversation as application state.
 Stopping because of unresolved evidence, exhausted budget, stable blocking
 failure, or unavailable capability is distinct from successful completion.
 
+
+A transport-neutral terminal-outcome vocabulary now preserves one successful
+completion class separately from the four frozen stop classes above. It does not
+decide when the goal is satisfied or when a stop condition has been reached.
+
 ### Session boundary
 
 Autonomous loop state is disposable with the active application/agent session
