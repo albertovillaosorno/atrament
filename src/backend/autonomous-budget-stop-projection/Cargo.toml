@@ -8,9 +8,11 @@ license = "MIT"
 [lib]
 path = "application/lib.rs"
 
-[dependencies]
-atrament_autonomous_budget_admission = { path = "../autonomous-budget-admission" }
-atrament_autonomous_goal_outcome = { path = "../autonomous-goal-outcome" }
+[dependencies.atrament_autonomous_budget_admission]
+path = "../autonomous-budget-admission"
+
+[dependencies.atrament_autonomous_goal_outcome]
+path = "../autonomous-goal-outcome"
 
 [lints]
 workspace = true
