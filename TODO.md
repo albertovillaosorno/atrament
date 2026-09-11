@@ -1683,6 +1683,14 @@ transport statuses. `Unknown transport outcome` is intentionally absent because
 the frozen contract defines it as caller state when no valid core response was
 received, not as an application result.
 
+The internal direct-edit simulation and Apply foundations now project only their
+unambiguous outcomes into that taxonomy. Simulation prediction maps to
+Successful validation; Apply mutation/no-op and shared capability, graph,
+resource, semantic,
+and stale-base failures map directly. Missing accepted state, candidate replay
+failure, and revision-identity exhaustion remain explicitly unclassified rather
+than being assigned invented final result semantics.
+
 Actual protocol-version implementation/admission, context identity computation,
 context construction/completeness policy, normalization and normalized batch
 identity, retry equality/recovery, receipt normalization, concrete

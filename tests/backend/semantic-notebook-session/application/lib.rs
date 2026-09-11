@@ -79,10 +79,14 @@ use atrament_semantic_notebook_port::{
     IdentityInspectOutcome, IdentityKindInspectOutcome,
     IdentityOwnerExpectation, IdentityPrecondition,
     IdentityPreconditionOutcome, PageProfileEditOutcome, SemanticCommandFamily,
-    SemanticNotebookHistory, SemanticNotebookSession,
+    SemanticCommandResultClass, SemanticNotebookHistory,
+    SemanticNotebookSession,
     TableCellSpanEditOutcome, TableRowRoleEditOutcome, TextEditOutcome,
 };
-use atrament_semantic_notebook_session::SemanticNotebookSessionService;
+use atrament_semantic_notebook_session::{
+    SemanticNotebookSessionService, classify_direct_edit_batch_apply_result,
+    classify_direct_edit_batch_simulation_result,
+};
 
 const CURRENT_COMMAND_BEHAVIOR_VERSION: CommandBehaviorVersion =
     CommandBehaviorVersion(94);
@@ -16078,4 +16082,155 @@ fn direct_page_profile_edit_without_accepted_revision_is_typed_no_effect() {
         PageProfileEditOutcome::NoAcceptedRevision,
     );
     assert!(session.current().is_none());
+}
+
+#[test]
+fn direct_edit_foundation_result_projection_is_partial_and_explicit() {
+    let identities = IdentityAllocator::new();
+    let target = identities.allocate_accepted().expect("target identity");
+    let revision = identities.allocate_revision().expect("revision identity");
+    let simulation_cases = [
+        (
+            DirectEditBatchSimulationOutcome::<u32>::CapabilityMismatch {
+                current: CommandBehaviorVersion(2),
+                expected: CommandBehaviorVersion(1),
+            },
+            Some(SemanticCommandResultClass::UnsupportedProtocolOrCapability),
+        ),
+        (
+            DirectEditBatchSimulationOutcome::DependencyGraphRejected {
+                reason: CommandGraphError::DuplicateIdentity { command: 1 },
+            },
+            Some(SemanticCommandResultClass::DependencyGraphRejection),
+        ),
+        (
+            DirectEditBatchSimulationOutcome::NoAcceptedRevision,
+            None,
+        ),
+        (
+            DirectEditBatchSimulationOutcome::Predicted {
+                changes: Vec::new(),
+                commands: Vec::new(),
+                effect: DirectEditEffectClass::NoOp,
+                impact_seeds: Vec::new(),
+                revision,
+            },
+            Some(SemanticCommandResultClass::SuccessfulValidation),
+        ),
+        (
+            DirectEditBatchSimulationOutcome::Rejected {
+                command: 2,
+                evaluated: Vec::new(),
+                not_evaluated: Vec::new(),
+                reason: Box::new(
+                    DirectEditBatchCommandRejection::
+                        MissingPriorTargetDependency {
+                        dependency: 1,
+                        target,
+                    },
+                ),
+                revision,
+            },
+            Some(SemanticCommandResultClass::SemanticValidationRejection),
+        ),
+        (
+            DirectEditBatchSimulationOutcome::ResourceRejected {
+                reason: CommandGraphLimitError::CommandCountExceeded {
+                    actual: 2,
+                    limit: 1,
+                },
+            },
+            Some(SemanticCommandResultClass::ResourceLimitRejection),
+        ),
+        (
+            DirectEditBatchSimulationOutcome::StaleBase { current: revision },
+            Some(SemanticCommandResultClass::StaleBase),
+        ),
+    ];
+    for (outcome, expected) in &simulation_cases {
+        assert_eq!(
+            classify_direct_edit_batch_simulation_result(outcome),
+            *expected,
+        );
+    }
+
+    let apply_cases = [
+        (
+            DirectEditBatchApplyOutcome::<u32>::Applied {
+                base: revision,
+                changes: Vec::new(),
+                commands: Vec::new(),
+                impact_seeds: Vec::new(),
+                revision,
+            },
+            Some(SemanticCommandResultClass::Applied),
+        ),
+        (
+            DirectEditBatchApplyOutcome::CandidateReplayFailed {
+                revision,
+                target,
+            },
+            None,
+        ),
+        (
+            DirectEditBatchApplyOutcome::CapabilityMismatch {
+                current: CommandBehaviorVersion(2),
+                expected: CommandBehaviorVersion(1),
+            },
+            Some(SemanticCommandResultClass::UnsupportedProtocolOrCapability),
+        ),
+        (
+            DirectEditBatchApplyOutcome::DependencyGraphRejected {
+                reason: CommandGraphError::DuplicateIdentity { command: 1 },
+            },
+            Some(SemanticCommandResultClass::DependencyGraphRejection),
+        ),
+        (
+            DirectEditBatchApplyOutcome::IdentityExhausted {
+                sequence:
+                    atrament_semantic_notebook::IdentityExhausted::Revision,
+            },
+            None,
+        ),
+        (DirectEditBatchApplyOutcome::NoAcceptedRevision, None),
+        (
+            DirectEditBatchApplyOutcome::NoOp {
+                commands: Vec::new(),
+                revision,
+            },
+            Some(SemanticCommandResultClass::NoOp),
+        ),
+        (
+            DirectEditBatchApplyOutcome::Rejected {
+                command: 2,
+                evaluated: Vec::new(),
+                not_evaluated: Vec::new(),
+                reason: Box::new(
+                    DirectEditBatchCommandRejection::
+                        MissingPriorTargetDependency {
+                        dependency: 1,
+                        target,
+                    },
+                ),
+                revision,
+            },
+            Some(SemanticCommandResultClass::SemanticValidationRejection),
+        ),
+        (
+            DirectEditBatchApplyOutcome::ResourceRejected {
+                reason: CommandGraphLimitError::CommandCountExceeded {
+                    actual: 2,
+                    limit: 1,
+                },
+            },
+            Some(SemanticCommandResultClass::ResourceLimitRejection),
+        ),
+        (
+            DirectEditBatchApplyOutcome::StaleBase { current: revision },
+            Some(SemanticCommandResultClass::StaleBase),
+        ),
+    ];
+    for (outcome, expected) in &apply_cases {
+        assert_eq!(classify_direct_edit_batch_apply_result(outcome), *expected);
+    }
 }

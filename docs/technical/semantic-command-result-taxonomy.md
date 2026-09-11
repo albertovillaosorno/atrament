@@ -26,6 +26,12 @@ variant names are internal API vocabulary rather than final wire names or
 transport status mappings. Unknown transport outcome remains deliberately absent
 from that enum.
 
+The current internal direct-edit simulation and Apply foundations expose a
+partial projection into this taxonomy only where the meaning is unambiguous.
+Missing accepted state, candidate replay failure, and revision-identity
+exhaustion deliberately remain unclassified until the final application result
+contract assigns them semantics; that absence is not transport-unknown state.
+
 ## Contract
 
 ### Result envelope principles

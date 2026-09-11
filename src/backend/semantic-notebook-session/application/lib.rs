@@ -86,7 +86,8 @@ use atrament_semantic_notebook_port::{
     IdentityOwnerExpectation, IdentityPrecondition,
     IdentityPreconditionOutcome, PageProfileEditOutcome,
     SemanticCommandCapabilitySnapshot, SemanticCommandFamily,
-    SemanticNotebookHistory, SemanticNotebookSession,
+    SemanticCommandResultClass, SemanticNotebookHistory,
+    SemanticNotebookSession,
     TableCellSpanEditOutcome, TableRowRoleEditOutcome, TextEditOutcome,
 };
 
@@ -415,6 +416,76 @@ impl CandidateGraph {
         }
         self.owners.push(identity);
         Ok(())
+    }
+}
+
+/// Project one internal Apply foundation outcome into frozen result taxonomy.
+///
+/// Returns `None` only for internal states whose final command result class is
+/// still intentionally unresolved. `None` never means unknown transport
+/// outcome.
+#[must_use]
+pub fn classify_direct_edit_batch_apply_result<CommandIdentity>(
+    outcome: &DirectEditBatchApplyOutcome<CommandIdentity>,
+) -> Option<SemanticCommandResultClass> {
+    match outcome {
+        DirectEditBatchApplyOutcome::Applied { .. } => {
+            Some(SemanticCommandResultClass::Applied)
+        },
+        DirectEditBatchApplyOutcome::CandidateReplayFailed { .. }
+        | DirectEditBatchApplyOutcome::IdentityExhausted { .. }
+        | DirectEditBatchApplyOutcome::NoAcceptedRevision => None,
+        DirectEditBatchApplyOutcome::CapabilityMismatch { .. } => Some(
+            SemanticCommandResultClass::UnsupportedProtocolOrCapability,
+        ),
+        DirectEditBatchApplyOutcome::DependencyGraphRejected { .. } => {
+            Some(SemanticCommandResultClass::DependencyGraphRejection)
+        },
+        DirectEditBatchApplyOutcome::NoOp { .. } => {
+            Some(SemanticCommandResultClass::NoOp)
+        },
+        DirectEditBatchApplyOutcome::Rejected { .. } => {
+            Some(SemanticCommandResultClass::SemanticValidationRejection)
+        },
+        DirectEditBatchApplyOutcome::ResourceRejected { .. } => {
+            Some(SemanticCommandResultClass::ResourceLimitRejection)
+        },
+        DirectEditBatchApplyOutcome::StaleBase { .. } => {
+            Some(SemanticCommandResultClass::StaleBase)
+        },
+    }
+}
+
+/// Project one internal simulation foundation outcome into frozen result
+/// taxonomy.
+///
+/// A successful prediction is classified as Successful validation regardless of
+/// whether its predicted semantic effect is mutation or no-op. Missing accepted
+/// state remains unclassified until the final application contract owns it.
+#[must_use]
+pub fn classify_direct_edit_batch_simulation_result<CommandIdentity>(
+    outcome: &DirectEditBatchSimulationOutcome<CommandIdentity>,
+) -> Option<SemanticCommandResultClass> {
+    match outcome {
+        DirectEditBatchSimulationOutcome::CapabilityMismatch { .. } => Some(
+            SemanticCommandResultClass::UnsupportedProtocolOrCapability,
+        ),
+        DirectEditBatchSimulationOutcome::DependencyGraphRejected { .. } => {
+            Some(SemanticCommandResultClass::DependencyGraphRejection)
+        },
+        DirectEditBatchSimulationOutcome::NoAcceptedRevision => None,
+        DirectEditBatchSimulationOutcome::Predicted { .. } => {
+            Some(SemanticCommandResultClass::SuccessfulValidation)
+        },
+        DirectEditBatchSimulationOutcome::Rejected { .. } => {
+            Some(SemanticCommandResultClass::SemanticValidationRejection)
+        },
+        DirectEditBatchSimulationOutcome::ResourceRejected { .. } => {
+            Some(SemanticCommandResultClass::ResourceLimitRejection)
+        },
+        DirectEditBatchSimulationOutcome::StaleBase { .. } => {
+            Some(SemanticCommandResultClass::StaleBase)
+        },
     }
 }
 
