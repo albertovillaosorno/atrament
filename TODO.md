@@ -900,8 +900,8 @@ The inventory deliberately excludes whitespace/layout separators and
 mathematical symbols. Whitespace remains text measurement/layout behavior; the
 language ADR delegates mathematical glyph requirements to the separately
 admitted mathematical symbol authority. Rule applicability, that concrete
-mathematical grapheme inventory, corpus contents, semantic locations,
-diagnostics, measurement, rendering, and portable section schema remain open.
+mathematical grapheme inventory, semantic locations, diagnostics, measurement,
+rendering, and portable section schema remain open.
 Glyph validation must not infer support from an installed font, renderer
 behavior, or successful text acceptance.
 
@@ -909,8 +909,15 @@ A separate corpus-evidence boundary now freezes the ADR verification checklist:
 English prose, Spanish prose, names, quotations, questions, exclamations, en and
 em dashes, combining marks, normalized equivalents, and mixed mathematics. It
 requires caller-owned evidence for all eleven scenarios, permits extra evidence,
-and exhausts all 2,048 scenario-presence masks. It does not enumerate required
-graphemes or claim render/measure/wrap/edit/serialize/CLI/MCP verification.
+and exhausts all 2,048 scenario-presence masks.
+
+A checked-in corpus fixture now authors exact UTF-8 text for all eleven
+scenarios and a whitespace-delimited sweep whose 114 tokens must match the
+frozen textual grapheme inventory in exact order. The fixture keeps
+precomposed/decomposed pairs
+visible together and retains mixed mathematical source as uninterpreted text.
+It does not claim normalization, render/measure/wrap/edit/serialize behavior, or
+CLI/MCP round-trip verification.
 
 A separate fallback-admission boundary now keeps missing handwriting coverage
 blocked unless caller evidence identifies one declared fallback style, proves

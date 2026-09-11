@@ -1,0 +1,9 @@
+identity:
+  id: function:english-spanish-corpus-fixture
+  name: english-spanish-corpus-fixture
+  path: src/backend/english-spanish-corpus-fixture
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: domain

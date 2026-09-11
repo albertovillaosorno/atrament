@@ -33,6 +33,7 @@ members = [
     "src/backend/diagnostic",
     "src/backend/digital-paper-note-plan",
     "src/backend/english-spanish-corpus-evidence",
+    "src/backend/english-spanish-corpus-fixture",
     "src/backend/english-spanish-grapheme-inventory",
     "src/backend/educational-coverage-evidence",
     "src/backend/export-layout-preflight",
