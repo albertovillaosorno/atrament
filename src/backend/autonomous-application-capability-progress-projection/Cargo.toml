@@ -1,0 +1,18 @@
+[package]
+name = "atrament_autonomous_application_capability_progress_projection"
+version = "0.1.0"
+edition = "2024"
+publish = false
+license = "MIT"
+
+[lib]
+path = "application/lib.rs"
+
+[dependencies.atrament_autonomous_progress_evidence]
+path = "../autonomous-progress-evidence"
+
+[dependencies.atrament_semantic_notebook_port]
+path = "../semantic-notebook-port"
+
+[lints]
+workspace = true

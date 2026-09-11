@@ -4,6 +4,9 @@ schema_version = 1
 [component.atrament_application_operation_lifecycle]
 depends_on = []
 
+[component.atrament_autonomous_application_capability_progress_projection]
+depends_on = ["atrament_autonomous_progress_evidence", "atrament_semantic_notebook_port"]
+
 [component.atrament_autonomous_budget_admission]
 depends_on = []
 

@@ -202,6 +202,12 @@ The loop can continue after a diagnostic changes materially because of an
 accepted edit or newly admitted evidence. It does not churn on cosmetic wording
 or presentation order.
 
+An application-capability progress projection now compares two already-qualified
+discovery facts. Only Unsupported to Admitted for the exact same application
+capability becomes new-admitted-authority progress; identity drift and all other
+transitions produce no progress evidence on this axis. It does not decide goal
+requirement or terminal capability unavailability.
+
 ### Budgets
 
 An automated host or backend admission can impose bounded attempt, elapsed-time,

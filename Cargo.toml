@@ -1,5 +1,6 @@
 [workspace]
 members = [
+    "src/backend/autonomous-application-capability-progress-projection",
     "src/backend/autonomous-budget-admission",
     "src/backend/autonomous-budget-stop-projection",
     "src/backend/autonomous-completion-admission",

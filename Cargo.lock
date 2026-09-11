@@ -7,6 +7,14 @@ name = "atrament_application_operation_lifecycle"
 version = "0.1.0"
 
 [[package]]
+name = "atrament_autonomous_application_capability_progress_projection"
+version = "0.1.0"
+dependencies = [
+ "atrament_autonomous_progress_evidence",
+ "atrament_semantic_notebook_port",
+]
+
+[[package]]
 name = "atrament_autonomous_budget_admission"
 version = "0.1.0"
 

@@ -1,0 +1,9 @@
+identity:
+  id: function:autonomous-application-capability-progress-projection
+  name: autonomous-application-capability-progress-projection
+  path: src/backend/autonomous-application-capability-progress-projection
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: application

@@ -1890,6 +1890,10 @@ progress conditions from four explicit non-progress conditions without
 inspecting raw state or model prose. Stateful revision/diagnostic comparison
 and loop orchestration remain open application work.
 
+Application-capability progress projection now treats only an exact same-
+capability Unsupported-to-Admitted transition as new admitted authority. It does
+not infer goal requirement, blocker resolution, or terminal unavailability.
+
 Repeated-No-op control now maps only qualified repeated No-op for the same
 bounded intent to a local requirement to stop equivalent mutation attempts. It
 does not choose a terminal goal class or grant continuation on other evidence.
