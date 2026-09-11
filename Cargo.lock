@@ -186,6 +186,7 @@ name = "atrament_mcp_semantic_command_admission_projection"
 version = "0.1.0"
 dependencies = [
  "atrament_mcp_capability_effect",
+ "atrament_mcp_effect_admission",
  "atrament_semantic_command_context",
  "atrament_semantic_notebook_port",
 ]

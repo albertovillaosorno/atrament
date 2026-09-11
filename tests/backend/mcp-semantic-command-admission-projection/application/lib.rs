@@ -29,8 +29,12 @@
 // - Defaults:
 //   - Unmapped MCP classes have no semantic-command admission result.
 //
-use atrament_mcp_capability_effect::McpApplicationCapabilityClass;
+use atrament_mcp_capability_effect::{
+    McpApplicationCapabilityClass, McpApplicationEffectClass,
+};
+use atrament_mcp_effect_admission::McpEffectAdmission;
 use atrament_mcp_semantic_command_admission_projection::{
+    McpSemanticCommandAdmissionFacts, mcp_semantic_command_admission_facts,
     mcp_semantic_command_application_admission,
     mcp_semantic_command_application_capability,
 };
@@ -57,6 +61,45 @@ const COMMAND_CAPABILITIES: [CommandApplicationCapability; 4] = [
     CommandApplicationCapability::SelectiveRebatching,
     CommandApplicationCapability::Validate,
 ];
+
+const MCP_EFFECTS: [McpApplicationEffectClass; 7] = [
+    McpApplicationEffectClass::AcceptedHistoryMutation,
+    McpApplicationEffectClass::AcceptedRevisionMutation,
+    McpApplicationEffectClass::DerivedComputation,
+    McpApplicationEffectClass::DerivedDeviceNeutralComputation,
+    McpApplicationEffectClass::ExplicitPersistentSideEffect,
+    McpApplicationEffectClass::ReadOnly,
+    McpApplicationEffectClass::ReadOnlyCandidateSimulation,
+];
+
+fn expected_effect(
+    capability: McpApplicationCapabilityClass,
+) -> McpApplicationEffectClass {
+    match capability {
+        McpApplicationCapabilityClass::Apply => {
+            McpApplicationEffectClass::AcceptedRevisionMutation
+        },
+        McpApplicationCapabilityClass::CommandContext
+        | McpApplicationCapabilityClass::Inspect => {
+            McpApplicationEffectClass::ReadOnly
+        },
+        McpApplicationCapabilityClass::Export => {
+            McpApplicationEffectClass::ExplicitPersistentSideEffect
+        },
+        McpApplicationCapabilityClass::HistoryTraversal => {
+            McpApplicationEffectClass::AcceptedHistoryMutation
+        },
+        McpApplicationCapabilityClass::Plan => {
+            McpApplicationEffectClass::DerivedDeviceNeutralComputation
+        },
+        McpApplicationCapabilityClass::Render => {
+            McpApplicationEffectClass::DerivedComputation
+        },
+        McpApplicationCapabilityClass::Validate => {
+            McpApplicationEffectClass::ReadOnlyCandidateSimulation
+        },
+    }
+}
 
 fn expected_mapping(
     capability: McpApplicationCapabilityClass,
@@ -143,4 +186,66 @@ fn all_128_snapshot_masks_and_mcp_capabilities_match_membership_oracle() {
         }
     }
     assert_eq!(cases, 128);
+}
+
+#[test]
+fn all_16384_effect_snapshot_and_capability_states_preserve_both_facts() {
+    let mut cases = 0_usize;
+    for effect_mask in 0_u8..128 {
+        let admitted_effects: Vec<_> = MCP_EFFECTS
+            .into_iter()
+            .enumerate()
+            .filter_map(|(index, effect)| {
+                (effect_mask & (1_u8 << index) != 0).then_some(effect)
+            })
+            .collect();
+        for application_mask in 0_u8..16 {
+            let applications: Vec<_> = COMMAND_CAPABILITIES
+                .into_iter()
+                .enumerate()
+                .filter_map(|(index, application)| {
+                    (application_mask & (1_u8 << index) != 0)
+                        .then_some(application)
+                })
+                .collect();
+            let applications: &'static [CommandApplicationCapability] =
+                Box::leak(applications.into_boxed_slice());
+            let snapshot = snapshot(applications);
+            for capability in MCP_CAPABILITIES {
+                let expected = expected_mapping(capability).map(|requested| {
+                    let application = if applications.contains(&requested) {
+                        SemanticCommandApplicationAdmission::Admitted {
+                            capability: requested,
+                        }
+                    } else {
+                        SemanticCommandApplicationAdmission::Unsupported {
+                            requested,
+                        }
+                    };
+                    let effect = expected_effect(capability);
+                    let effect = if admitted_effects.contains(&effect) {
+                        McpEffectAdmission::Admitted { capability, effect }
+                    } else {
+                        McpEffectAdmission::NotAdmitted { capability, effect }
+                    };
+                    McpSemanticCommandAdmissionFacts {
+                        application,
+                        effect,
+                    }
+                });
+                assert_eq!(
+                    mcp_semantic_command_admission_facts(
+                        &admitted_effects,
+                        &snapshot,
+                        capability,
+                    ),
+                    expected,
+                    "effect={effect_mask:#09b} app={application_mask:#06b} \
+                     capability={capability:?}",
+                );
+                cases += 1;
+            }
+        }
+    }
+    assert_eq!(cases, 16_384);
 }

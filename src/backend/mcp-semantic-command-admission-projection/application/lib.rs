@@ -37,7 +37,10 @@
 
 //! Read-only MCP projection onto semantic-command capability admission.
 
-use atrament_mcp_capability_effect::McpApplicationCapabilityClass;
+use atrament_mcp_capability_effect::{
+    McpApplicationCapabilityClass, McpApplicationEffectClass,
+};
+use atrament_mcp_effect_admission::{McpEffectAdmission, mcp_effect_admission};
 use atrament_semantic_command_context::semantic_command_application_admission;
 use atrament_semantic_notebook_port::{
     CommandApplicationCapability, SemanticCommandApplicationAdmission,
@@ -78,5 +81,39 @@ pub fn mcp_semantic_command_application_admission(
 ) -> Option<SemanticCommandApplicationAdmission> {
     mcp_semantic_command_application_capability(capability).map(|requested| {
         semantic_command_application_admission(snapshot, requested)
+    })
+}
+
+/// Independent MCP authorization and semantic-command snapshot facts.
+///
+/// Keeping both facts prevents effect authorization from fabricating live
+/// command capability, and prevents snapshot discovery from bypassing session
+/// effect restrictions.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct McpSemanticCommandAdmissionFacts {
+    /// Exact command application membership in the backend-owned snapshot.
+    pub application: SemanticCommandApplicationAdmission,
+    /// Exact generic MCP effect-class authorization for the same capability.
+    pub effect: McpEffectAdmission,
+}
+
+/// Compose independent effect and command-snapshot admission facts.
+///
+/// Only CommandContext, Validate, and Apply map into semantic-command
+/// application capability. This helper does not choose rejection precedence,
+/// authenticate a caller, create context, normalize protocol data, or execute.
+#[must_use]
+pub fn mcp_semantic_command_admission_facts(
+    admitted_effects: &[McpApplicationEffectClass],
+    snapshot: &SemanticCommandCapabilitySnapshot,
+    capability: McpApplicationCapabilityClass,
+) -> Option<McpSemanticCommandAdmissionFacts> {
+    let application = mcp_semantic_command_application_admission(
+        snapshot,
+        capability,
+    )?;
+    Some(McpSemanticCommandAdmissionFacts {
+        application,
+        effect: mcp_effect_admission(admitted_effects, capability),
     })
 }

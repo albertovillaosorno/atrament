@@ -1855,6 +1855,13 @@ that axis; session identity, transport, packaged/live capability presence, and
 all capability-specific revision/scope/path/retry/output checks remain open.
 
 
+For MCP Command context, Validate, and Apply, a composed read-only projection
+now
+retains that effect authorization beside exact semantic-command snapshot
+membership without collapsing either axis. It still does not authenticate a
+session, choose rejection precedence, normalize commands, or execute work.
+
+
 The shared application-operation-lifecycle domain now freezes the six
 first-release operation classes and maps Apply, history traversal, Export, and
 the three read-only operations to their authoritative effect boundaries. It does

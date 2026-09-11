@@ -7,6 +7,7 @@ license = "MIT"
 
 [dependencies]
 atrament_mcp_capability_effect = { path = "../mcp-capability-effect" }
+atrament_mcp_effect_admission = { path = "../mcp-effect-admission" }
 atrament_semantic_command_context = { path = "../semantic-command-context" }
 atrament_semantic_notebook_port = { path = "../semantic-notebook-port" }
 
