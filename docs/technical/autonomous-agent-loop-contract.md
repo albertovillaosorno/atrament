@@ -176,8 +176,7 @@ stops or requests an explicitly broader workflow from its owning caller.
 An application-level unresolved-stop projection now requires that owning caller
 choice explicitly: only Stop unresolved maps the typed unresolved result to the
 frozen unresolved terminal class; requesting broader workflow remains
-nonterminal
-and grants no broader authority by itself.
+nonterminal and grants no broader authority by itself.
 
 Automation does not fabricate missing facts, invent accepted identities, switch
 to raw internal-file mutation, or convert notebook prose into authority merely
