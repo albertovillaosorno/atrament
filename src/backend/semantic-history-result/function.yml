@@ -1,0 +1,9 @@
+identity:
+  id: function:semantic-history-result
+  name: semantic-history-result
+  path: src/backend/semantic-history-result
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: application

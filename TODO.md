@@ -104,7 +104,6 @@ but no renderer or serializer result value whose admitted bytes a file adapter
 can commit. Filesystem writes must not guess that missing artifact-ownership
 boundary.
 
-
 The shared derived/output result domain now freezes all 11 first-release core
 result classes and their operation applicability across Render, Plan, and
 Export.
@@ -1002,6 +1001,13 @@ Repeating a completed traversal against its old exact base now returns stale and
 cannot advance history twice. That is a duplicate-effect safety property, not
 lost-receipt recovery: the history protocol still owns no retry-identity type,
 and base plus direction cannot distinguish a retry from a genuinely new caller.
+
+
+The semantic-history-result application now freezes the six history result
+classes and their commit dispositions independently from traversal execution.
+Current Traversed, Boundary, StaleBase, and revision-allocation exhaustion
+outcomes project only to their unambiguous frozen meanings; missing accepted
+state remains unclassified. Retry replay and cancellation are not implemented.
 
 Bounded history storage is also blocked on policy rather than mechanics. The
 frozen history contract explicitly leaves depth limits and storage structure

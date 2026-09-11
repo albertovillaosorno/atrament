@@ -295,6 +295,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "atrament_semantic_history_result"
+version = "0.1.0"
+dependencies = [
+ "atrament_semantic_notebook_port",
+]
+
+[[package]]
 name = "atrament_semantic_notebook"
 version = "0.1.0"
 dependencies = [

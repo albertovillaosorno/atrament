@@ -57,6 +57,7 @@ members = [
     "src/backend/semantic-command-result",
     "src/backend/semantic-flow-pagination",
     "src/backend/semantic-fixed-region-layout",
+    "src/backend/semantic-history-result",
     "src/backend/semantic-notebook",
     "src/backend/semantic-notebook-port",
     "src/backend/semantic-notebook-session",

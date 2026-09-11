@@ -158,6 +158,14 @@ admitted so an agent need not probe mutation merely to discover availability.
 Final wire enum names may differ, but browser, CLI, and MCP adapters preserve
 these application meanings.
 
+The backend now exposes those six frozen semantic history result classes as
+transport-neutral application vocabulary with their commit dispositions. The
+current in-memory traversal can project Traversed, History boundary, Stale
+current revision, and revision-allocation failure as known no-commit failure.
+Missing accepted state remains unclassified, while Idempotent replay and
+Cancelled before commit remain vocabulary only until retry and cancellation
+execution exist.
+
 ### Retry and lost receipts
 
 Undo and redo are mutating application capabilities and therefore use their own
