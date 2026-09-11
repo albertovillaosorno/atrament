@@ -140,6 +140,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "atrament_autonomous_unresolved_stop_projection"
+version = "0.1.0"
+dependencies = [
+ "atrament_autonomous_goal_outcome",
+ "atrament_semantic_notebook_port",
+]
+
+[[package]]
 name = "atrament_browser_launch"
 version = "0.1.0"
 

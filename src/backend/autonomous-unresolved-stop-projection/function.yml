@@ -1,0 +1,9 @@
+identity:
+  id: function:autonomous-unresolved-stop-projection
+  name: autonomous-unresolved-stop-projection
+  path: src/backend/autonomous-unresolved-stop-projection
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: application

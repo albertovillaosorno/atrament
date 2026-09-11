@@ -20,6 +20,7 @@ members = [
     "src/backend/autonomous-semantic-progress-projection",
     "src/backend/autonomous-session-boundary",
     "src/backend/autonomous-stable-blocking-stop-projection",
+    "src/backend/autonomous-unresolved-stop-projection",
     "src/backend/application-operation-lifecycle",
     "src/backend/browser-launch",
     "src/backend/citation-review-linkage",
