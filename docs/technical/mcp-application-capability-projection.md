@@ -125,6 +125,12 @@ requiring agents to match prose.
 They are not semantic command families and cannot be embedded inside an edit
 batch to obscure history traversal.
 
+A shared read-only MCP history projection now exposes the six frozen history
+result dispositions and exact `can_undo`/`can_redo` facts only through the
+History traversal capability class. Every other generic MCP class receives no
+history result or directional-availability projection. This adds no traversal,
+retry, cancellation, or MCP tool execution.
+
 #### Render
 
 Effect class: derived computation.

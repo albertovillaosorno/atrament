@@ -1,0 +1,17 @@
+[package]
+name = "atrament_mcp_history_result_projection"
+version = "0.1.0"
+edition = "2024"
+publish = false
+license = "MIT"
+
+[dependencies]
+atrament_mcp_capability_effect = { path = "../mcp-capability-effect" }
+atrament_semantic_history_result = { path = "../semantic-history-result" }
+atrament_semantic_notebook_port = { path = "../semantic-notebook-port" }
+
+[lib]
+path = "application/lib.rs"
+
+[lints]
+workspace = true

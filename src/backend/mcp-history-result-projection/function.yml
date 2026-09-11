@@ -1,0 +1,9 @@
+identity:
+  id: function:mcp-history-result-projection
+  name: mcp-history-result-projection
+  path: src/backend/mcp-history-result-projection
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: application

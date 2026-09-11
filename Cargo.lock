@@ -158,6 +158,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "atrament_mcp_history_result_projection"
+version = "0.1.0"
+dependencies = [
+ "atrament_mcp_capability_effect",
+ "atrament_semantic_history_result",
+ "atrament_semantic_notebook_port",
+]
+
+[[package]]
 name = "atrament_mcp_operation_lifecycle_projection"
 version = "0.1.0"
 dependencies = [

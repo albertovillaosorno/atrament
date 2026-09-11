@@ -1876,6 +1876,11 @@ onto semantic-command application admission. Exact backend snapshot membership
 remains authoritative across all four command application bits; MCP vocabulary
 alone never turns an omitted operation into an admitted one.
 
+MCP History traversal now has a separate read-only projection for all six frozen
+history result dispositions and backend-owned Undo/Redo availability. The other
+seven MCP capability classes receive no history projection, and retry,
+cancellation, traversal execution, and concrete MCP tooling remain open.
+
 ### TODO - Package self-contained agent instructions
 
 Allow a user to provide the repository or release bundle to an agent and have
