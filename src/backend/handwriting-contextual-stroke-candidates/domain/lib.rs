@@ -64,6 +64,66 @@ pub struct ContextualStrokeCandidate<
     pub stroke_payload: StrokePayload,
 }
 
+/// Why contextual candidate identities cannot be addressed unambiguously.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ContextualStrokeCandidateIdentityError {
+    /// Later candidate carrying an already-seen identity.
+    pub duplicate_index: usize,
+    /// Earliest prior candidate carrying that same identity.
+    pub first_index: usize,
+}
+
+/// Detect identity collisions without selecting or ranking any candidate.
+///
+/// Candidate order and payloads remain unchanged. Callers that require stable
+/// candidate addressing can invoke this before planning.
+///
+/// # Errors
+///
+/// Returns the first duplicate in caller order paired with its earliest prior
+/// occurrence.
+pub fn validate_contextual_stroke_candidate_identities<
+    CandidateIdentity,
+    CharacterIntent,
+    EntryCondition,
+    ExitCondition,
+    ProfileChoice,
+    SemanticOrigin,
+    StrokePayload,
+>(
+    candidates: &[
+        ContextualStrokeCandidate<
+            CandidateIdentity,
+            CharacterIntent,
+            EntryCondition,
+            ExitCondition,
+            ProfileChoice,
+            SemanticOrigin,
+            StrokePayload,
+        >
+    ],
+) -> Result<(), ContextualStrokeCandidateIdentityError>
+where
+    CandidateIdentity: Eq,
+{
+    for (duplicate_index, candidate) in candidates.iter().enumerate() {
+        if let Some((first_index, _)) = candidates
+            .iter()
+            .take(duplicate_index)
+            .enumerate()
+            .find(|(_, prior)| {
+                prior.candidate_identity == candidate.candidate_identity
+            })
+        {
+            return Err(ContextualStrokeCandidateIdentityError {
+                duplicate_index,
+                first_index,
+            });
+        }
+    }
+    Ok(())
+}
+
 /// Caller-owned neighboring context consumed by later stroke planning.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct StrokePlanningContext<

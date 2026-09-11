@@ -1201,6 +1201,13 @@ origin, profile choice, and entry/exit conditions. One complete planning input
 also retains neighboring graphemes, word position, line geometry, semantic role,
 and calibrated writing style while preserving caller candidate order.
 
+
+A pure identity-collision check can now reject the first repeated candidate
+identity and report its earliest prior owner without selecting, ranking, or
+rewriting candidates. A 31-case compact oracle exhausts every two-identity
+sequence through length four; applying that check remains an explicit planner
+boundary decision rather than an implicit constructor side effect.
+
 The inspectable output plan keeps ordered samples with caller-owned position,
 tangent, curvature, width or pressure proxy, velocity, and explicit contact
 state; each declared stroke retains semantic origin, profile choice, and

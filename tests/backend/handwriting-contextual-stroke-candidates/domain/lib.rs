@@ -31,8 +31,9 @@
 //   - No candidate is preferred implicitly.
 //
 use atrament_handwriting_contextual_stroke_candidates::{
-    ContextualStrokeCandidate, ContextualStrokePlanningInput,
-    StrokePlanningContext,
+    ContextualStrokeCandidate, ContextualStrokeCandidateIdentityError,
+    ContextualStrokePlanningInput, StrokePlanningContext,
+    validate_contextual_stroke_candidate_identities,
 };
 
 type Candidate = ContextualStrokeCandidate<
@@ -115,4 +116,77 @@ fn empty_candidate_collection_has_no_implicit_fallback_candidate() {
         context: context(),
     };
     assert!(input.candidates.is_empty());
+}
+#[test]
+fn distinct_candidate_identities_are_addressable_without_ranking() {
+    let candidates = [candidate(2, "variant-b"), candidate(1, "variant-a")];
+    assert_eq!(
+        validate_contextual_stroke_candidate_identities(&candidates),
+        Ok(()),
+    );
+}
+
+#[test]
+fn duplicate_candidate_identity_reports_earliest_prior_owner() {
+    let candidates = [
+        candidate(7, "variant-a"),
+        candidate(3, "variant-b"),
+        candidate(7, "variant-c"),
+    ];
+    assert_eq!(
+        validate_contextual_stroke_candidate_identities(&candidates),
+        Err(ContextualStrokeCandidateIdentityError {
+            duplicate_index: 2,
+            first_index: 0,
+        }),
+    );
+}
+
+#[test]
+fn all_31_two_identity_sequences_match_first_duplicate_oracle() {
+    let mut cases = 0_u8;
+    let mut saw_unique = false;
+    let mut saw_duplicate = false;
+    for length in 0_u32..=4 {
+        for encoded in 0_u32..2_u32.pow(length) {
+            let mut state = encoded;
+            let mut identities = Vec::new();
+            let mut candidates = Vec::new();
+            for index in 0..length {
+                let identity = (state % 2) as u16;
+                state /= 2;
+                identities.push(identity);
+                candidates.push(candidate(
+                    identity,
+                    if index % 2 == 0 { "variant-a" } else { "variant-b" },
+                ));
+            }
+            let mut expected = Ok(());
+            'outer: for duplicate_index in 0..identities.len() {
+                for first_index in 0..duplicate_index {
+                    if identities[first_index] == identities[duplicate_index] {
+                        expected = Err(ContextualStrokeCandidateIdentityError {
+                            duplicate_index,
+                            first_index,
+                        });
+                        break 'outer;
+                    }
+                }
+            }
+            if expected.is_ok() {
+                saw_unique = true;
+            } else {
+                saw_duplicate = true;
+            }
+            assert_eq!(
+                validate_contextual_stroke_candidate_identities(&candidates),
+                expected,
+                "length {length}, encoded {encoded}",
+            );
+            cases = cases.saturating_add(1);
+        }
+    }
+    assert_eq!(cases, 31);
+    assert!(saw_unique);
+    assert!(saw_duplicate);
 }
