@@ -1,0 +1,9 @@
+identity:
+  id: function:autonomous-physical-boundary
+  name: autonomous-physical-boundary
+  path: src/backend/autonomous-physical-boundary
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: domain

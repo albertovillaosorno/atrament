@@ -1904,6 +1904,11 @@ retry/recovery state, and session admission while keeping explicit external
 caller workflow state outside Atrament ownership. Fresh-session bootstrap starts
 from capability discovery and Inspect; reconnection/reattachment remains open.
 
+
+Generic autonomous physical-boundary evidence now proves that no sequence of
+successful Apply, Render, Export, or Plan steps accumulates authority for the
+eight frozen hardware actions. Physical admission and execution remain separate.
+
 A partial autonomous semantic-result classifier now encodes the twelve
 next-step branches that the frozen contracts define exactly. Successful
 validation, pre-commit cancellation, and internal known-no-commit failure remain

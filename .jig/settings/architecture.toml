@@ -13,6 +13,9 @@ depends_on = ["atrament_autonomous_budget_admission", "atrament_autonomous_goal_
 [component.atrament_autonomous_output_intent]
 depends_on = []
 
+[component.atrament_autonomous_physical_boundary]
+depends_on = []
+
 [component.atrament_autonomous_progress_evidence]
 depends_on = []
 

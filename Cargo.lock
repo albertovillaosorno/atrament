@@ -41,6 +41,10 @@ name = "atrament_autonomous_output_intent"
 version = "0.1.0"
 
 [[package]]
+name = "atrament_autonomous_physical_boundary"
+version = "0.1.0"
+
+[[package]]
 name = "atrament_autonomous_progress_evidence"
 version = "0.1.0"
 

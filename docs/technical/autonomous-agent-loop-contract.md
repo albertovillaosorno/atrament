@@ -232,6 +232,12 @@ No number of successful Apply, Render, Export, or Plan iterations accumulates
 implicit permission to connect, home, arm, start, pause, resume, cancel, or
 safe-stop hardware.
 
+
+A transport-neutral physical-boundary domain now preserves that no-accumulation
+rule across generic workflow history. Empty, repeated, or mixed successful
+semantic/output steps still grant no connect, home, arm, start, pause, resume,
+cancel, or safe-stop authority.
+
 ### Completion
 
 A loop reports completion when the caller's admitted goal is satisfied by the
