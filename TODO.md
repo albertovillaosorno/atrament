@@ -1661,6 +1661,14 @@ without becoming executable, while family checks distinguish an absent family
 from behavior-version drift. These read-only checks do not widen target-specific
 family admission or populate the production snapshot's empty application list.
 
+A transport-neutral envelope preflight now composes the currently representable
+facts without choosing one rejection precedence: current snapshot behavior
+against the context, requested application and protocol membership, exact
+batch-to-context binding, ordered family/target scope, and count-based resource
+admission. Simultaneous failures remain independently inspectable. Dependency
+graph validation, normalization, retry equality, and mutation stay outside this
+preflight.
+
 Actual protocol-version implementation/admission, context identity computation,
 context construction/completeness policy, normalization and normalized batch
 identity, retry equality/recovery, receipt normalization, concrete

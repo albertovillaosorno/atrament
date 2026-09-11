@@ -32,7 +32,9 @@
 //
 use atrament_semantic_command_context::{
     semantic_command_application_admission,
+    semantic_command_capability_behavior_admission,
     semantic_command_context_binding_admission,
+    semantic_command_envelope_admission,
     semantic_command_envelope_context_admission,
     semantic_command_family_behavior_admission,
     semantic_command_protocol_admission, semantic_command_resource_admission,
@@ -41,13 +43,15 @@ use atrament_semantic_command_context::{
 use atrament_semantic_notebook::IdentityAllocator;
 use atrament_semantic_notebook_port::{
     CommandApplicationCapability, CommandBehaviorVersion,
-    CommandFamilyCapability, CommandResourceLimits, CommandTargetPreconditions,
+    CommandCapabilityCompatibilityOutcome, CommandFamilyCapability,
+    CommandResourceLimits, CommandTargetPreconditions,
     DirectEditBatchCommand, EditableSemanticValue, IdentityOwnerExpectation,
     IdentityPrecondition, SemanticCommandApplicationAdmission,
     SemanticCommandBatchEnvelope, SemanticCommandCapabilitySnapshot,
     SemanticCommandContext,
     SemanticCommandContextBinding, SemanticCommandContextBindingAdmission,
-    SemanticCommandContextMatch, SemanticCommandEnvelopeCommandAdmission,
+    SemanticCommandContextMatch, SemanticCommandEnvelopeAdmission,
+    SemanticCommandEnvelopeCommandAdmission,
     SemanticCommandEnvelopeContextAdmission, SemanticCommandFamily,
     SemanticCommandFamilyBehaviorAdmission, SemanticCommandProtocolAdmission,
     SemanticCommandResourceAdmission, SemanticCommandResourceLimitAdmission,
@@ -682,6 +686,231 @@ fn family_behavior_admission_distinguishes_exact_drift_and_absence() {
         ),
         SemanticCommandFamilyBehaviorAdmission::UnsupportedFamily {
             requested: SemanticCommandFamily::Provenance,
+        },
+    );
+}
+
+#[test]
+fn envelope_preflight_composes_all_current_admission_facts() {
+    static APPLICATIONS: [CommandApplicationCapability; 1] = [
+        CommandApplicationCapability::Validate,
+    ];
+    static PROTOCOLS: [CommandBehaviorVersion; 1] = [CommandBehaviorVersion(7)];
+    let identities = IdentityAllocator::new();
+    let notebook = identities.allocate_accepted().expect("notebook identity");
+    let target = identities.allocate_accepted().expect("target identity");
+    let base = identities.allocate_revision().expect("base revision");
+    let mut snapshot = protocol_snapshot(&PROTOCOLS);
+    snapshot.admitted_applications = &APPLICATIONS;
+    let context = SemanticCommandContext {
+        admitted_families: vec![SemanticCommandFamily::TextContent],
+        base,
+        behavior_version: CommandBehaviorVersion(94),
+        context_identity: String::from("context-preflight"),
+        insertion_anchors: Vec::<String>::new(),
+        local_preconditions: Vec::<String>::new(),
+        notebook,
+        readable_context: (),
+        relevant_constraints: Vec::new(),
+        requested_intent: (),
+        resource_limits: CommandResourceLimits {
+            commands_per_batch: Some(1),
+            dependency_edges: Some(0),
+            envelope_bytes: None,
+            readable_context_bytes: None,
+            writable_targets: Some(1),
+        },
+        writable_targets: vec![target],
+    };
+    let envelope = SemanticCommandBatchEnvelope {
+        binding: SemanticCommandContextBinding {
+            base,
+            behavior_version: CommandBehaviorVersion(94),
+            context_identity: String::from("context-preflight"),
+            notebook,
+        },
+        commands: vec![command(
+            1,
+            SemanticCommandFamily::TextContent,
+            target,
+        )],
+        protocol_version: CommandBehaviorVersion(7),
+        retry_identity: String::from("retry-preflight"),
+    };
+    assert_eq!(
+        semantic_command_envelope_admission(
+            &snapshot,
+            CommandApplicationCapability::Validate,
+            &context,
+            &envelope,
+        ),
+        SemanticCommandEnvelopeAdmission {
+            application: SemanticCommandApplicationAdmission::Admitted {
+                capability: CommandApplicationCapability::Validate,
+            },
+            capability: CommandCapabilityCompatibilityOutcome::Compatible {
+                snapshot,
+            },
+            context: semantic_command_envelope_context_admission(
+                &context,
+                &envelope,
+            ),
+            protocol: SemanticCommandProtocolAdmission::Admitted {
+                version: CommandBehaviorVersion(7),
+            },
+            resources: SemanticCommandResourceAdmission {
+                commands_per_batch:
+                    SemanticCommandResourceLimitAdmission::Within {
+                        actual: 1,
+                        limit: 1,
+                    },
+                dependency_edges:
+                    SemanticCommandResourceLimitAdmission::Within {
+                        actual: 0,
+                        limit: 0,
+                    },
+                writable_targets:
+                    SemanticCommandResourceLimitAdmission::Within {
+                        actual: 1,
+                        limit: 1,
+                    },
+            },
+        },
+    );
+}
+
+#[test]
+fn envelope_preflight_preserves_simultaneous_independent_failures() {
+    let identities = IdentityAllocator::new();
+    let notebook = identities.allocate_accepted().expect("notebook identity");
+    let other_notebook = identities
+        .allocate_accepted()
+        .expect("other notebook identity");
+    let target = identities.allocate_accepted().expect("target identity");
+    let other_target = identities.allocate_accepted().expect("other target");
+    let base = identities.allocate_revision().expect("base revision");
+    let other_base = identities
+        .allocate_revision()
+        .expect("other base revision");
+    let mut snapshot = protocol_snapshot(&[]);
+    snapshot.behavior_version = CommandBehaviorVersion(95);
+    let context = SemanticCommandContext {
+        admitted_families: vec![SemanticCommandFamily::TextContent],
+        base,
+        behavior_version: CommandBehaviorVersion(94),
+        context_identity: String::from("context-current"),
+        insertion_anchors: Vec::<String>::new(),
+        local_preconditions: Vec::<String>::new(),
+        notebook,
+        readable_context: (),
+        relevant_constraints: Vec::new(),
+        requested_intent: (),
+        resource_limits: CommandResourceLimits {
+            commands_per_batch: Some(0),
+            dependency_edges: Some(0),
+            envelope_bytes: None,
+            readable_context_bytes: None,
+            writable_targets: Some(0),
+        },
+        writable_targets: vec![target],
+    };
+    let envelope = SemanticCommandBatchEnvelope {
+        binding: SemanticCommandContextBinding {
+            base: other_base,
+            behavior_version: CommandBehaviorVersion(93),
+            context_identity: String::from("context-stale"),
+            notebook: other_notebook,
+        },
+        commands: vec![command(
+            9,
+            SemanticCommandFamily::StyleRole,
+            other_target,
+        )],
+        protocol_version: CommandBehaviorVersion(7),
+        retry_identity: String::from("retry-stale"),
+    };
+    let admission = semantic_command_envelope_admission(
+        &snapshot,
+        CommandApplicationCapability::Validate,
+        &context,
+        &envelope,
+    );
+    assert_eq!(
+        admission.capability,
+        CommandCapabilityCompatibilityOutcome::Mismatch {
+            current: CommandBehaviorVersion(95),
+            expected: CommandBehaviorVersion(94),
+        },
+    );
+    assert_eq!(
+        admission.application,
+        SemanticCommandApplicationAdmission::Unsupported {
+            requested: CommandApplicationCapability::Validate,
+        },
+    );
+    assert_eq!(
+        admission.protocol,
+        SemanticCommandProtocolAdmission::Unsupported {
+            requested: CommandBehaviorVersion(7),
+        },
+    );
+    assert_eq!(
+        admission.context.binding,
+        SemanticCommandContextBindingAdmission {
+            base: SemanticCommandContextMatch::Mismatched,
+            behavior: SemanticCommandContextMatch::Mismatched,
+            context: SemanticCommandContextMatch::Mismatched,
+            notebook: SemanticCommandContextMatch::Mismatched,
+        },
+    );
+    assert_eq!(
+        admission.context.commands,
+        vec![SemanticCommandEnvelopeCommandAdmission {
+            command: &9,
+            family_admitted: false,
+            location_admitted: false,
+        }],
+    );
+    assert_eq!(
+        admission.resources,
+        SemanticCommandResourceAdmission {
+            commands_per_batch:
+                SemanticCommandResourceLimitAdmission::Exceeded {
+                    actual: 1,
+                    limit: 0,
+                },
+            dependency_edges: SemanticCommandResourceLimitAdmission::Within {
+                actual: 0,
+                limit: 0,
+            },
+            writable_targets:
+                SemanticCommandResourceLimitAdmission::Exceeded {
+                    actual: 1,
+                    limit: 0,
+                },
+        },
+    );
+}
+
+#[test]
+fn capability_behavior_admission_detects_stale_context_version() {
+    let mut snapshot = protocol_snapshot(&[]);
+    snapshot.behavior_version = CommandBehaviorVersion(95);
+    assert_eq!(
+        semantic_command_capability_behavior_admission(
+            &snapshot,
+            CommandBehaviorVersion(95),
+        ),
+        CommandCapabilityCompatibilityOutcome::Compatible { snapshot },
+    );
+    assert_eq!(
+        semantic_command_capability_behavior_admission(
+            &snapshot,
+            CommandBehaviorVersion(94),
+        ),
+        CommandCapabilityCompatibilityOutcome::Mismatch {
+            current: CommandBehaviorVersion(95),
+            expected: CommandBehaviorVersion(94),
         },
     );
 }

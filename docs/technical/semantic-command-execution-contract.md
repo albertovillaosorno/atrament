@@ -500,6 +500,13 @@ compatibility checks the advertised family behavior version and distinguishes
 version drift from an absent family. None of those read-only checks populate an
 omitted capability.
 
+The command-context boundary can compose these discovery facts with the current
+snapshot-to-context behavior comparison, exact batch-to-context binding,
+per-command family/target scope, and count-based resource facts. The composed
+preflight preserves simultaneous failures independently; it does not choose the
+final result-class precedence, validate dependency graphs, normalize a batch,
+compare retry identity, or mutate accepted state.
+
 A separate single-target direct-edit simulator classifies twelve established
 editable value shapes as applicable, no-op, domain-invalid, unavailable, or
 value-family mismatched without mutation. Asset, page-profile, provenance, and

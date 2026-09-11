@@ -1429,6 +1429,22 @@ pub struct SemanticCommandEnvelopeCommandAdmission<'command, CommandIdentity> {
     pub location_admitted: bool,
 }
 
+/// Independent preflight facts for one parsed semantic command envelope.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SemanticCommandEnvelopeAdmission<'command, CommandIdentity> {
+    /// Requested application operation against snapshot discovery.
+    pub application: SemanticCommandApplicationAdmission,
+    /// Command context behavior against the current capability snapshot.
+    pub capability: CommandCapabilityCompatibilityOutcome,
+    /// Exact context binding and ordered per-command scope facts.
+    pub context:
+        SemanticCommandEnvelopeContextAdmission<'command, CommandIdentity>,
+    /// Parsed protocol token against snapshot protocol discovery.
+    pub protocol: SemanticCommandProtocolAdmission,
+    /// Count-based resource facts available from current typed structures.
+    pub resources: SemanticCommandResourceAdmission,
+}
+
 /// Context-only review of one parsed semantic command envelope.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SemanticCommandEnvelopeContextAdmission<'command, CommandIdentity> {

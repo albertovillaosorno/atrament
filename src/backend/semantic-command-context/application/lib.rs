@@ -37,10 +37,12 @@
 
 use atrament_semantic_notebook_port::{
     CommandApplicationCapability, CommandBehaviorVersion,
-    SemanticCommandApplicationAdmission, SemanticCommandBatchEnvelope,
+    CommandCapabilityCompatibilityOutcome, SemanticCommandApplicationAdmission,
+    SemanticCommandBatchEnvelope,
     SemanticCommandCapabilitySnapshot, SemanticCommandContext,
     SemanticCommandContextBinding, SemanticCommandContextBindingAdmission,
-    SemanticCommandContextMatch, SemanticCommandEnvelopeCommandAdmission,
+    SemanticCommandContextMatch, SemanticCommandEnvelopeAdmission,
+    SemanticCommandEnvelopeCommandAdmission,
     SemanticCommandEnvelopeContextAdmission, SemanticCommandFamily,
     SemanticCommandFamilyBehaviorAdmission, SemanticCommandProtocolAdmission,
     SemanticCommandResourceAdmission, SemanticCommandResourceLimitAdmission,
@@ -151,6 +153,24 @@ where
 }
 
 
+
+/// Check one context-bound capability behavior against a current snapshot.
+#[must_use]
+pub fn semantic_command_capability_behavior_admission(
+    snapshot: &SemanticCommandCapabilitySnapshot,
+    expected: CommandBehaviorVersion,
+) -> CommandCapabilityCompatibilityOutcome {
+    if snapshot.behavior_version == expected {
+        CommandCapabilityCompatibilityOutcome::Compatible {
+            snapshot: *snapshot,
+        }
+    } else {
+        CommandCapabilityCompatibilityOutcome::Mismatch {
+            current: snapshot.behavior_version,
+            expected,
+        }
+    }
+}
 
 /// Check exact application-capability membership in one snapshot.
 ///
@@ -313,6 +333,61 @@ pub fn semantic_command_resource_admission<
         commands_per_batch,
         dependency_edges,
         writable_targets,
+    }
+}
+
+/// Compose currently available read-only envelope preflight facts.
+///
+/// Capability behavior, requested application, protocol token, context binding,
+/// command scope, and count-based resource limits remain independent evidence.
+/// This function does not choose rejection precedence, validate the dependency
+/// graph, normalize the batch, compare retry identity, or mutate accepted
+/// state.
+#[must_use]
+pub fn semantic_command_envelope_admission<
+    'command,
+    CommandIdentity,
+    ContextIdentity,
+    InsertionAnchor,
+    Intent,
+    PreconditionMaterial,
+    ReadableContext,
+    RetryIdentity,
+>(
+    snapshot: &SemanticCommandCapabilitySnapshot,
+    application: CommandApplicationCapability,
+    context: &SemanticCommandContext<
+        ContextIdentity,
+        InsertionAnchor,
+        Intent,
+        PreconditionMaterial,
+        ReadableContext,
+    >,
+    envelope: &'command SemanticCommandBatchEnvelope<
+        CommandIdentity,
+        ContextIdentity,
+        RetryIdentity,
+    >,
+) -> SemanticCommandEnvelopeAdmission<'command, CommandIdentity>
+where
+    ContextIdentity: PartialEq,
+    InsertionAnchor: PartialEq,
+{
+    SemanticCommandEnvelopeAdmission {
+        application: semantic_command_application_admission(
+            snapshot,
+            application,
+        ),
+        capability: semantic_command_capability_behavior_admission(
+            snapshot,
+            context.behavior_version,
+        ),
+        context: semantic_command_envelope_context_admission(context, envelope),
+        protocol: semantic_command_protocol_admission(
+            snapshot,
+            envelope.protocol_version,
+        ),
+        resources: semantic_command_resource_admission(context, envelope),
     }
 }
 
