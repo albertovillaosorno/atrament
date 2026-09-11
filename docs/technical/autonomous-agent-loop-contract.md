@@ -171,6 +171,13 @@ Exhausting an automation budget stops further autonomous mutation. It does not
 weaken validation, auto-accept a partial result, widen scope, or authorize file
 or physical side effects.
 
+
+A transport-neutral budget admission boundary now retains independent exhaustion
+facts for attempt, elapsed-time, model-call, output, and resource budgets. It
+requires a budget-only mutation stop whenever any supplied axis is exhausted,
+without freezing numeric thresholds or granting mutation when no budget stops
+it.
+
 ### Persistent output intent
 
 An autonomous edit goal does not acquire Export authority from model-generated

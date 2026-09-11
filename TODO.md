@@ -1870,6 +1870,13 @@ progress versus non-progress, same-retry recovery, bounded automation budgets,
 and the separation between semantic completion, explicit output, and physical
 authority. Concrete MCP tools and backend execution remain open.
 
+
+Autonomous budget admission now preserves all five frozen budget axes and stops
+further mutation on this axis when any caller/backend-supplied exhaustion fact
+is
+present. Numeric limits, budget accounting, scheduling, and overall mutation
+authority remain outside this domain.
+
 A partial autonomous semantic-result classifier now encodes the twelve
 next-step branches that the frozen contracts define exactly. Successful
 validation, pre-commit cancellation, and internal known-no-commit failure remain

@@ -1,0 +1,9 @@
+identity:
+  id: function:autonomous-budget-admission
+  name: autonomous-budget-admission
+  path: src/backend/autonomous-budget-admission
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: domain

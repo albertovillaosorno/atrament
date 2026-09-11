@@ -7,6 +7,10 @@ name = "atrament_application_operation_lifecycle"
 version = "0.1.0"
 
 [[package]]
+name = "atrament_autonomous_budget_admission"
+version = "0.1.0"
+
+[[package]]
 name = "atrament_autonomous_derived_output_guidance"
 version = "0.1.0"
 dependencies = [
