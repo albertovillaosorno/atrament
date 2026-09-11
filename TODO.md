@@ -892,6 +892,12 @@ exact grapheme value without Unicode normalization or deduplication. All 64
 six-query missing masks prove that covered and missing occurrences preserve
 exact caller order and duplicate positions.
 
+The frozen 114-entry bilingual text inventory now drives that same report in
+cross-component regression evidence. An empty profile returns all 114 exact
+requirements in order, while a profile declaring all 114 exact graphemes returns
+no missing entries. The fixture supplies no compositional matches, so rule
+applicability remains outside this coverage boundary.
+
 A separate language-owned inventory now freezes 114 visible textual grapheme
 requirements before profile coverage: 52 ASCII Latin letters, 14 precomposed
 Spanish diacritic letters, their 14 exact decomposed Unicode equivalents, 10

@@ -73,6 +73,11 @@ The pinned Unicode segmentation adapter reports all 114 visible-text
 requirements as exactly one extended grapheme with exact UTF-8 start/end
 boundaries.
 
+The generic handwriting-coverage report also consumes the complete 114-entry
+inventory. An empty profile reports every requirement in exact order, while a
+profile declaring all 114 exact graphemes reports none; compositional rule
+applicability remains a separate open authority.
+
 A checked-in corpus fixture now supplies exact UTF-8 content for every required
 verification scenario plus a 114-token sweep that must equal the visible-text
 grapheme inventory in exact order. Its normalized-equivalent fixture keeps both

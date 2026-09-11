@@ -9,12 +9,14 @@
 //
 // Boundary-Contract:
 // - Owns:
-//   - Regression evidence for explicit handwriting-profile glyph coverage.
+//   - Regression evidence for explicit handwriting-profile glyph coverage,
+//     including the frozen bilingual visible-text inventory.
 // - Must-Not:
 //   - Normalize Unicode, evaluate composition semantics, choose fallback style,
 //     render glyphs, or define profile wire schema.
 // - Allows:
-//   - Inputs: Deterministic profile, grapheme, and rule fixtures.
+//   - Inputs: Deterministic profile, grapheme, rule, and bilingual inventory
+//     fixtures.
 //   - Outputs: Assertions over exact, compositional, and missing coverage.
 //   - Side effects: Process-local test allocation only.
 // - Split-When:
@@ -24,13 +26,16 @@
 // - Summary:
 //   - Proves unsupported graphemes cannot become implicit renderer fallback.
 // - Description:
-//   - Covers exact precedence, admitted rules, undeclared rules, and missing
-//     coverage.
+//   - Covers exact precedence, admitted rules, undeclared rules, missing
+//     coverage, and complete required bilingual query enumeration.
 // - Usage:
 //   - Compile directly against the handwriting-glyph-coverage domain.
 // - Defaults:
 //   - Missing coverage has no implicit fallback.
 //
+use atrament_english_spanish_grapheme_inventory::{
+    REQUIRED_TEXT_GRAPHEMES,
+};
 use atrament_handwriting_glyph_coverage::{
     HandwritingCoverage, HandwritingCoverageProfile, HandwritingCoverageQuery,
     MissingHandwritingCoverage, classify_handwriting_coverage,
@@ -273,4 +278,41 @@ fn all_64_six_query_missing_masks_preserve_exact_occurrences_and_order() {
         cases = cases.saturating_add(1);
     }
     assert_eq!(cases, 64);
+}
+
+#[test]
+fn required_bilingual_inventory_is_never_omitted_from_missing_report() {
+    let required = REQUIRED_TEXT_GRAPHEMES
+        .iter()
+        .map(|entry| entry.grapheme)
+        .collect::<Vec<_>>();
+    let queries = required
+        .iter()
+        .map(|grapheme| HandwritingCoverageQuery {
+            grapheme,
+            matched_compositional_rule: None::<&&str>,
+        })
+        .collect::<Vec<_>>();
+    let empty_profile = HandwritingCoverageProfile {
+        compositional_rules: Vec::<&str>::new(),
+        exact_graphemes: Vec::<&str>::new(),
+        profile_identity: "empty-bilingual-profile",
+    };
+    let missing = missing_handwriting_coverage(&empty_profile, &queries);
+    assert_eq!(missing.len(), REQUIRED_TEXT_GRAPHEMES.len());
+    for (index, missing) in missing.iter().enumerate() {
+        assert_eq!(missing.query_index, index);
+        assert_eq!(*missing.grapheme, required[index]);
+    }
+
+    let complete_profile = HandwritingCoverageProfile {
+        compositional_rules: Vec::<&str>::new(),
+        exact_graphemes: required.clone(),
+        profile_identity: "complete-bilingual-profile",
+    };
+    let complete_missing = missing_handwriting_coverage(
+        &complete_profile,
+        &queries,
+    );
+    assert!(complete_missing.is_empty());
 }
