@@ -1366,10 +1366,10 @@ pub struct SemanticCommandContextBinding<ContextIdentity> {
 /// Equality state for one batch-to-context authority dimension.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum SemanticCommandContextMatch {
-    /// Batch authority differs from the backend-owned context.
-    Mismatched,
     /// Batch authority matches the backend-owned context exactly.
     Matched,
+    /// Batch authority differs from the backend-owned context.
+    Mismatched,
 }
 
 /// Independent equality facts for one batch-to-context authority binding.
