@@ -1840,6 +1840,9 @@ application capability classes and their declared effect classes without naming
 MCP tools or implementing adapter admission, transport, schemas, receipts, or
 execution. Undo and Redo remain grouped as History traversal at this vocabulary
 layer.
+The same vocabulary also reports that none of those generic application
+capabilities grants physical-device authority; connect, home, arm, start, pause,
+resume, cancel, and safe-stop remain outside this MCP application layer.
 
 
 The shared application-operation-lifecycle domain now freezes the six

@@ -215,6 +215,12 @@ authority.
 A future physical MCP projection requires an explicit separate capability and
 operator-safety contract. A device-neutral Plan receipt is not a device token.
 
+
+The shared MCP capability vocabulary now exposes this separation directly: every
+generic Inspect, context, Validate, Apply, history, Render, Export, and Plan
+class reports no physical-device authority. This is a static safety fact, not an
+implemented MCP admission or physical-control mechanism.
+
 ### Session shutdown
 
 Orderly Atrament shutdown stops accepting new MCP application operations and

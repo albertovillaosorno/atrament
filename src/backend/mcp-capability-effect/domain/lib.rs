@@ -103,3 +103,16 @@ pub const fn mcp_application_capability_effect(
         },
     }
 }
+
+/// Report whether a generic MCP application capability grants physical-device
+/// authority.
+///
+/// The frozen local MCP contract keeps connect, home, arm, start, pause,
+/// resume, cancel, and safe-stop behind a separate future physical capability.
+/// Therefore every generic application capability returns `false` here.
+#[must_use]
+pub const fn mcp_application_capability_grants_physical_authority(
+    _capability: McpApplicationCapabilityClass,
+) -> bool {
+    false
+}

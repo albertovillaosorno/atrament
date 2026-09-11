@@ -32,6 +32,7 @@
 use atrament_mcp_capability_effect::{
     McpApplicationCapabilityClass, McpApplicationEffectClass,
     mcp_application_capability_effect,
+    mcp_application_capability_grants_physical_authority,
 };
 
 #[test]
@@ -73,5 +74,24 @@ fn all_eight_capability_effect_classes_match_frozen_contract() {
     assert_eq!(cases.len(), 8);
     for (capability, expected) in cases {
         assert_eq!(mcp_application_capability_effect(capability), expected);
+    }
+}
+
+#[test]
+fn no_generic_mcp_application_capability_grants_physical_authority() {
+    let capabilities = [
+        McpApplicationCapabilityClass::Apply,
+        McpApplicationCapabilityClass::CommandContext,
+        McpApplicationCapabilityClass::Export,
+        McpApplicationCapabilityClass::HistoryTraversal,
+        McpApplicationCapabilityClass::Inspect,
+        McpApplicationCapabilityClass::Plan,
+        McpApplicationCapabilityClass::Render,
+        McpApplicationCapabilityClass::Validate,
+    ];
+    for capability in capabilities {
+        assert!(!mcp_application_capability_grants_physical_authority(
+            capability,
+        ));
     }
 }
