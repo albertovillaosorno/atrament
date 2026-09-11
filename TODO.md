@@ -1293,8 +1293,12 @@ margin, and annotation roles without pretending they are unrelated writers.
 Current executable evidence now centralizes those eight handwriting roles and
 stores the profile identity once around caller-supplied role presentations. Role
 entries therefore carry size/style metadata but cannot independently claim a
-different writer identity. Size units, role defaults, style vocabulary, missing
-role policy, glyph behavior, and semantic document-style mappings remain open.
+different writer identity. A read-only role lookup returns `None` for a missing
+role and refuses an ambiguous duplicate claim instead of silently choosing one;
+a 31-case two-role oracle covers zero through four supplied presentations.
+
+Size units, role defaults, style vocabulary, global duplicate/missing-role
+policy, glyph behavior, and semantic document-style mappings remain open.
 
 ### TODO - Prevent repeated-glyph and repeated-line artifacts
 

@@ -78,3 +78,47 @@ pub struct HandwritingRoleProfile<ProfileIdentity, Size, Style> {
     /// value.
     pub roles: Vec<HandwritingRolePresentation<Size, Style>>,
 }
+
+/// Why one role cannot be projected to a single presentation safely.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct HandwritingRoleLookupError {
+    /// Later presentation carrying the same requested role.
+    pub duplicate_index: usize,
+    /// Earliest presentation carrying the requested role.
+    pub first_index: usize,
+    /// Requested role with more than one presentation.
+    pub role: HandwritingRole,
+}
+
+/// Return one unambiguous presentation for a requested handwriting role.
+///
+/// A missing role returns `None` and does not synthesize a default. Duplicate
+/// role claims reject instead of silently choosing caller order. This lookup
+/// does not make duplicate or missing roles globally invalid profile state.
+///
+/// # Errors
+///
+/// Returns the first duplicate for the requested role and its earliest owner.
+pub fn handwriting_role_presentation<ProfileIdentity, Size, Style>(
+    profile: &HandwritingRoleProfile<ProfileIdentity, Size, Style>,
+    role: HandwritingRole,
+) -> Result<
+    Option<&HandwritingRolePresentation<Size, Style>>,
+    HandwritingRoleLookupError,
+> {
+    let mut first = None;
+    for (index, presentation) in profile.roles.iter().enumerate() {
+        if presentation.role != role {
+            continue;
+        }
+        if let Some(first_index) = first {
+            return Err(HandwritingRoleLookupError {
+                duplicate_index: index,
+                first_index,
+                role,
+            });
+        }
+        first = Some(index);
+    }
+    Ok(first.map(|index| &profile.roles[index]))
+}
