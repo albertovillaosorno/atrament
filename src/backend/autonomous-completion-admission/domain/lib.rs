@@ -58,6 +58,15 @@ pub enum AutonomousRequestedOutputCompletion {
     NotRequested,
 }
 
+/// Satisfaction state of the semantic portion of the admitted goal.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub enum AutonomousSemanticGoalCompletion {
+    /// Current accepted semantic state satisfies the admitted goal.
+    Satisfied,
+    /// Current accepted semantic state does not satisfy the admitted goal.
+    Unsatisfied,
+}
+
 /// Aggregate already-qualified requested output items for goal completion.
 ///
 /// An empty slice means the goal requested no output. Any incomplete requested
@@ -76,15 +85,6 @@ pub fn autonomous_requested_outputs_completion(
     } else {
         AutonomousRequestedOutputCompletion::Complete
     }
-}
-
-/// Satisfaction state of the semantic portion of the admitted goal.
-#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
-pub enum AutonomousSemanticGoalCompletion {
-    /// Current accepted semantic state satisfies the admitted goal.
-    Satisfied,
-    /// Current accepted semantic state does not satisfy the admitted goal.
-    Unsatisfied,
 }
 
 /// Return successful completion only when all frozen completion axes permit it.
