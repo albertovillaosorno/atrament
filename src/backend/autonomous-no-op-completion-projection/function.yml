@@ -1,0 +1,9 @@
+identity:
+  id: function:autonomous-no-op-completion-projection
+  name: autonomous-no-op-completion-projection
+  path: src/backend/autonomous-no-op-completion-projection
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: application

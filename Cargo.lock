@@ -44,6 +44,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "atrament_autonomous_no_op_completion_projection"
+version = "0.1.0"
+dependencies = [
+ "atrament_autonomous_completion_admission",
+ "atrament_autonomous_goal_outcome",
+ "atrament_semantic_notebook_port",
+]
+
+[[package]]
 name = "atrament_autonomous_output_intent"
 version = "0.1.0"
 

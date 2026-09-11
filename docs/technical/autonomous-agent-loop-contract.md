@@ -301,6 +301,10 @@ A satisfied-intent fixture applies one edit, then receives No-op for an
 equivalent requested state. The loop stops successfully instead of issuing
 unbounded rewrites.
 
+The application-level satisfied-No-op projection now materializes that final
+step only when independently qualified semantic/output completion evidence also
+admits completion. No-op by itself remains insufficient.
+
 A stale fixture advances the accepted revision externally between planning and
 Apply. The agent receives Stale base, inspects again, and stops if the new
 revision already satisfies the original intent.

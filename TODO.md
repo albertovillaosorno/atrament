@@ -1905,6 +1905,10 @@ and complete explicitly requested output work before producing the successful
 terminal class. Revision comparison, output-result aggregation, identities, and
 completion receipt construction remain open coordinator work.
 
+Satisfied-No-op projection now maps No-op to successful completion only when the
+separate completion-admission gate already proves semantic and requested-output
+satisfaction. Stateful equivalence and satisfaction detection remain open.
+
 Autonomous session-boundary evidence now invalidates prior command context,
 retry/recovery state, and session admission while keeping explicit external
 caller workflow state outside Atrament ownership. Fresh-session bootstrap starts
