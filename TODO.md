@@ -1922,6 +1922,11 @@ pairs so only successful projection, Export commit, or recovered Export can
 satisfy a requested output. Output aggregation and receipt construction remain
 open.
 
+Requested-output progress projection now crosses all 99 operation/result/intent
+combinations. Only caller-requested successful projection or fresh Export counts
+as new progress; recovered Export is replay-recovery non-progress, and host
+policy does not become caller-goal progress.
+
 Autonomous session-boundary evidence now invalidates prior command context,
 retry/recovery state, and session admission while keeping explicit external
 caller workflow state outside Atrament ownership. Fresh-session bootstrap starts

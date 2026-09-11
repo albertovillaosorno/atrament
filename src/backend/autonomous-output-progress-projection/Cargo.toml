@@ -1,0 +1,21 @@
+[package]
+name = "atrament_autonomous_output_progress_projection"
+version = "0.1.0"
+edition = "2024"
+publish = false
+license = "MIT"
+
+[lib]
+path = "application/lib.rs"
+
+[dependencies.atrament_autonomous_output_intent]
+path = "../autonomous-output-intent"
+
+[dependencies.atrament_autonomous_progress_evidence]
+path = "../autonomous-progress-evidence"
+
+[dependencies.atrament_derived_output_result]
+path = "../derived-output-result"
+
+[lints]
+workspace = true

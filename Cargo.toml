@@ -4,6 +4,7 @@ members = [
     "src/backend/autonomous-budget-stop-projection",
     "src/backend/autonomous-completion-admission",
     "src/backend/autonomous-output-intent",
+    "src/backend/autonomous-output-progress-projection",
     "src/backend/autonomous-output-completion-projection",
     "src/backend/autonomous-physical-boundary",
     "src/backend/autonomous-progress-evidence",

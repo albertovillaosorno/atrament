@@ -1,0 +1,9 @@
+identity:
+  id: function:autonomous-output-progress-projection
+  name: autonomous-output-progress-projection
+  path: src/backend/autonomous-output-progress-projection
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: application

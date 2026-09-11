@@ -73,6 +73,15 @@ name = "atrament_autonomous_output_intent"
 version = "0.1.0"
 
 [[package]]
+name = "atrament_autonomous_output_progress_projection"
+version = "0.1.0"
+dependencies = [
+ "atrament_autonomous_output_intent",
+ "atrament_autonomous_progress_evidence",
+ "atrament_derived_output_result",
+]
+
+[[package]]
 name = "atrament_autonomous_physical_boundary"
 version = "0.1.0"
 
