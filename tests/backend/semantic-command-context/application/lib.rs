@@ -32,14 +32,18 @@
 //
 use atrament_semantic_command_context::{
     semantic_command_context_binding_admission,
+    semantic_command_envelope_context_admission,
     semantic_command_scope_admission,
 };
 use atrament_semantic_notebook::IdentityAllocator;
 use atrament_semantic_notebook_port::{
-    CommandBehaviorVersion, CommandResourceLimits, SemanticCommandContext,
+    CommandBehaviorVersion, CommandResourceLimits, CommandTargetPreconditions,
+    DirectEditBatchCommand, EditableSemanticValue, IdentityOwnerExpectation,
+    IdentityPrecondition, SemanticCommandBatchEnvelope, SemanticCommandContext,
     SemanticCommandContextBinding, SemanticCommandContextBindingAdmission,
-    SemanticCommandFamily, SemanticCommandScopeAdmission,
-    SemanticCommandScopeLocation,
+    SemanticCommandEnvelopeCommandAdmission,
+    SemanticCommandEnvelopeContextAdmission, SemanticCommandFamily,
+    SemanticCommandScopeAdmission, SemanticCommandScopeLocation,
 };
 
 fn unbounded_limits() -> CommandResourceLimits {
@@ -293,4 +297,134 @@ fn all_16_context_binding_match_states_remain_independent() {
         cases = cases.saturating_add(1);
     }
     assert_eq!(cases, 16);
+}
+
+fn command(
+    id: u8,
+    family: SemanticCommandFamily,
+    target: atrament_semantic_notebook::AcceptedIdentity,
+) -> DirectEditBatchCommand<u8> {
+    let requested = match family {
+        SemanticCommandFamily::StyleRole => {
+            EditableSemanticValue::StyleReference(None)
+        },
+        _ => EditableSemanticValue::Text(format!("requested-{id}")),
+    };
+    DirectEditBatchCommand {
+        dependencies: Vec::new(),
+        id,
+        preconditions: CommandTargetPreconditions {
+            expected_value: None,
+            identity: IdentityPrecondition {
+                expected_kind: None,
+                expected_owner: IdentityOwnerExpectation::Any,
+            },
+            requested_family: family,
+        },
+        requested,
+        target,
+    }
+}
+
+#[test]
+fn parsed_envelope_retains_protocol_retry_binding_and_command_order() {
+    let identities = IdentityAllocator::new();
+    let notebook = identities.allocate_accepted().expect("notebook identity");
+    let target = identities.allocate_accepted().expect("target identity");
+    let base = identities.allocate_revision().expect("base revision");
+    let envelope = SemanticCommandBatchEnvelope {
+        binding: SemanticCommandContextBinding {
+            base,
+            behavior_version: CommandBehaviorVersion(94),
+            context_identity: String::from("context-17"),
+            notebook,
+        },
+        commands: vec![
+            command(3, SemanticCommandFamily::TextContent, target),
+            command(1, SemanticCommandFamily::StyleRole, target),
+        ],
+        protocol_version: CommandBehaviorVersion(7),
+        retry_identity: String::from("retry-owned-9"),
+    };
+    assert_eq!(envelope.protocol_version, CommandBehaviorVersion(7));
+    assert_eq!(envelope.retry_identity, "retry-owned-9");
+    assert_eq!(envelope.commands[0].id, 3);
+    assert_eq!(envelope.commands[1].id, 1);
+    assert_eq!(envelope.binding.context_identity, "context-17");
+}
+
+#[test]
+fn envelope_context_review_preserves_order_and_all_scope_fact_combinations() {
+    let identities = IdentityAllocator::new();
+    let notebook = identities.allocate_accepted().expect("notebook identity");
+    let writable = identities.allocate_accepted().expect("writable identity");
+    let other = identities.allocate_accepted().expect("other identity");
+    let base = identities.allocate_revision().expect("base revision");
+    let context = SemanticCommandContext {
+        admitted_families: vec![SemanticCommandFamily::TextContent],
+        base,
+        behavior_version: CommandBehaviorVersion(94),
+        context_identity: String::from("context-current"),
+        insertion_anchors: Vec::<String>::new(),
+        local_preconditions: Vec::<String>::new(),
+        notebook,
+        readable_context: vec![other],
+        relevant_constraints: Vec::new(),
+        requested_intent: String::from("bounded edit"),
+        resource_limits: unbounded_limits(),
+        writable_targets: vec![writable],
+    };
+    let envelope = SemanticCommandBatchEnvelope {
+        binding: SemanticCommandContextBinding {
+            base,
+            behavior_version: CommandBehaviorVersion(94),
+            context_identity: String::from("context-current"),
+            notebook,
+        },
+        commands: vec![
+            command(9, SemanticCommandFamily::TextContent, writable),
+            command(7, SemanticCommandFamily::StyleRole, writable),
+            command(5, SemanticCommandFamily::TextContent, other),
+            command(3, SemanticCommandFamily::StyleRole, other),
+        ],
+        protocol_version: CommandBehaviorVersion(7),
+        retry_identity: String::from("retry-1"),
+    };
+    let admission = semantic_command_envelope_context_admission(
+        &context,
+        &envelope,
+    );
+    assert_eq!(
+        admission,
+        SemanticCommandEnvelopeContextAdmission {
+            binding: SemanticCommandContextBindingAdmission {
+                base_matches: true,
+                behavior_matches: true,
+                context_matches: true,
+                notebook_matches: true,
+            },
+            commands: vec![
+                SemanticCommandEnvelopeCommandAdmission {
+                    command: &9,
+                    family_admitted: true,
+                    location_admitted: true,
+                },
+                SemanticCommandEnvelopeCommandAdmission {
+                    command: &7,
+                    family_admitted: false,
+                    location_admitted: true,
+                },
+                SemanticCommandEnvelopeCommandAdmission {
+                    command: &5,
+                    family_admitted: true,
+                    location_admitted: false,
+                },
+                SemanticCommandEnvelopeCommandAdmission {
+                    command: &3,
+                    family_admitted: false,
+                    location_admitted: false,
+                },
+            ],
+        },
+    );
 }

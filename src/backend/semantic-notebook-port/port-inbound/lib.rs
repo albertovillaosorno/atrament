@@ -1311,6 +1311,45 @@ pub struct SemanticCommandContext<
     pub writable_targets: Vec<AcceptedIdentity>,
 }
 
+/// Parsed transport-neutral semantic command batch before normalization.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SemanticCommandBatchEnvelope<
+    CommandIdentity,
+    ContextIdentity,
+    RetryIdentity,
+> {
+    /// Exact backend command-context authority named by this batch.
+    pub binding: SemanticCommandContextBinding<ContextIdentity>,
+    /// Ordered semantic command sequence; order remains significant.
+    pub commands: Vec<DirectEditBatchCommand<CommandIdentity>>,
+    /// Parsed command protocol version token; admission remains external.
+    pub protocol_version: CommandBehaviorVersion,
+    /// Apply retry identity scoped to this semantic command request.
+    pub retry_identity: RetryIdentity,
+}
+
+/// Scope result for one ordered command while reviewing a parsed envelope.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct SemanticCommandEnvelopeCommandAdmission<'command, CommandIdentity> {
+    /// Borrowed caller-owned command identity in original batch order.
+    pub command: &'command CommandIdentity,
+    /// Whether the command context admits this command's requested family.
+    pub family_admitted: bool,
+    /// Whether the command context admits this command's existing target.
+    pub location_admitted: bool,
+}
+
+/// Context-only review of one parsed semantic command envelope.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SemanticCommandEnvelopeContextAdmission<'command, CommandIdentity> {
+    /// Exact context-binding comparison facts.
+    pub binding: SemanticCommandContextBindingAdmission,
+    /// Ordered per-command family and target scope facts.
+    pub commands: Vec<
+        SemanticCommandEnvelopeCommandAdmission<'command, CommandIdentity>,
+    >,
+}
+
 /// Batch-supplied authority binding back to one backend command context.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SemanticCommandContextBinding<ContextIdentity> {

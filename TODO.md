@@ -1627,11 +1627,17 @@ intent, and resource limits. A separate application boundary checks family and
 location admission independently, so readable-only identities never become
 writable by echoing them. Returned batch authority can also be checked against
 that context's notebook, base revision, behavior identity, and context identity
-without accepting partial matches as equivalent context.
+without accepting partial matches as equivalent context. A parsed
+transport-neutral batch envelope now retains its protocol-version token, retry
+identity, exact context binding, and ordered direct-edit commands; context
+review
+preserves command identities while checking every existing target and requested
+family against that same bounded context.
 
-Context identity computation, context construction/completeness policy, the
-versioned batch envelope, normalization, retry identity, receipt normalization,
-and serialized compatibility remain open.
+Protocol-version admission, context identity computation, context
+construction/completeness policy, normalization and normalized batch identity,
+retry equality/recovery, receipt normalization, insertion-command envelope
+behavior, and serialized compatibility remain open.
 The exhaustive three-node dependency-mask oracle requires valid, self, missing,
 cyclic, and forward-dependency outcomes to occur. Duplicate identities remain a
 separate fixture because that Cartesian graph uses fixed-unique command IDs.

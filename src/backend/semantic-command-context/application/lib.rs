@@ -36,8 +36,10 @@
 //! Read-only semantic command-context scope admission.
 
 use atrament_semantic_notebook_port::{
-    SemanticCommandContext, SemanticCommandContextBinding,
-    SemanticCommandContextBindingAdmission, SemanticCommandFamily,
+    SemanticCommandBatchEnvelope, SemanticCommandContext,
+    SemanticCommandContextBinding, SemanticCommandContextBindingAdmission,
+    SemanticCommandEnvelopeCommandAdmission,
+    SemanticCommandEnvelopeContextAdmission, SemanticCommandFamily,
     SemanticCommandScopeAdmission, SemanticCommandScopeLocation,
 };
 
@@ -73,6 +75,63 @@ where
         context_matches: binding.context_identity == context.context_identity,
         notebook_matches: binding.notebook == context.notebook,
     }
+}
+
+
+/// Review one parsed envelope against one backend-owned command context.
+///
+/// This checks only context binding plus per-command family and existing-target
+/// scope. Protocol-version admission, command semantics, normalization, batch
+/// identity, retry equality, and Apply remain separate authorities.
+#[must_use]
+pub fn semantic_command_envelope_context_admission<
+    'command,
+    CommandIdentity,
+    ContextIdentity,
+    InsertionAnchor,
+    Intent,
+    PreconditionMaterial,
+    ReadableContext,
+    RetryIdentity,
+>(
+    context: &SemanticCommandContext<
+        ContextIdentity,
+        InsertionAnchor,
+        Intent,
+        PreconditionMaterial,
+        ReadableContext,
+    >,
+    envelope: &'command SemanticCommandBatchEnvelope<
+        CommandIdentity,
+        ContextIdentity,
+        RetryIdentity,
+    >,
+) -> SemanticCommandEnvelopeContextAdmission<'command, CommandIdentity>
+where
+    ContextIdentity: PartialEq,
+    InsertionAnchor: PartialEq,
+{
+    let binding = semantic_command_context_binding_admission(
+        context,
+        &envelope.binding,
+    );
+    let commands = envelope
+        .commands
+        .iter()
+        .map(|command| {
+            let scope = semantic_command_scope_admission(
+                context,
+                command.preconditions.requested_family,
+                SemanticCommandScopeLocation::Existing(command.target),
+            );
+            SemanticCommandEnvelopeCommandAdmission {
+                command: &command.id,
+                family_admitted: scope.family_admitted,
+                location_admitted: scope.location_admitted,
+            }
+        })
+        .collect();
+    SemanticCommandEnvelopeContextAdmission { binding, commands }
 }
 
 /// Check bounded command scope without widening readable context into
