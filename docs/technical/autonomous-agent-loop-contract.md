@@ -65,7 +65,6 @@ Progress can include:
 Repeating the same accepted revision, same blocking evidence, and same semantic
 intent without a new admitted input is non-progress.
 
-
 A transport-neutral progress-evidence vocabulary now classifies the five frozen
 positive evidence conditions above and four explicit non-progress conditions:
 idempotent replay recovery, repeated No-op for the same intent, unchanged
@@ -88,8 +87,7 @@ self-improvement signal.
 History-result guidance is also transport-neutral: a committed traversal
 continues from its reported revision, idempotent replay recovers prior
 completion without another traversal, a history boundary stops blind retry in
-that
-direction, and stale history returns to inspection. Cancellation and known
+that direction, and stale history returns to inspection. Cancellation and known
 no-commit failure remain workflow-policy decisions.
 
 ### Stale and context drift
@@ -178,7 +176,6 @@ Exhausting an automation budget stops further autonomous mutation. It does not
 weaken validation, auto-accept a partial result, widen scope, or authorize file
 or physical side effects.
 
-
 A transport-neutral budget admission boundary now retains independent exhaustion
 facts for attempt, elapsed-time, model-call, output, and resource budgets. It
 requires a budget-only mutation stop whenever any supplied axis is exhausted,
@@ -197,11 +194,10 @@ and overwrite policy and still uses the frozen Export validation boundary. It
 does not copy a path from notebook prose into file authority merely because it
 looks operational.
 
-
 A transport-neutral output-intent boundary now records that caller-explicit
-goals
-can establish Render, Plan, or Export intent, while an independently admitted
-host policy can establish persistent Export intent only. Model-generated or
+goals can establish Render, Plan, or Export intent, while an independently
+admitted host policy can establish persistent Export intent only.
+Model-generated or
 notebook-provided semantic content establishes no output intent on this axis.
 
 ### Output chaining

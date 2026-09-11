@@ -1870,24 +1870,20 @@ progress versus non-progress, same-retry recovery, bounded automation budgets,
 and the separation between semantic completion, explicit output, and physical
 authority. Concrete MCP tools and backend execution remain open.
 
-
 Autonomous budget admission now preserves all five frozen budget axes and stops
-further mutation on this axis when any caller/backend-supplied exhaustion fact
-is
-present. Numeric limits, budget accounting, scheduling, and overall mutation
-authority remain outside this domain.
-
+further mutation on this axis when any caller/backend-supplied exhaustion
+fact is present. Numeric limits, budget accounting, scheduling, and overall
+mutation authority remain outside this domain.
 
 Autonomous output intent now distinguishes caller-explicit goals, independently
 admitted host policy, and untrusted semantic content. Caller goals can establish
 Render, Plan, or Export intent; host policy is an alternate source only for
 persistent Export, and edited/model-provided content grants none.
 
-
 Autonomous progress evidence now distinguishes five frozen authoritative
-progress
-conditions from four explicit non-progress conditions without inspecting raw
-state or model prose. Stateful revision/diagnostic comparison and loop
+progress conditions from four explicit non-progress conditions without
+inspecting raw state or model prose. Stateful revision/diagnostic comparison and
+loop
 orchestration remain open application work.
 
 A partial autonomous semantic-result classifier now encodes the twelve
@@ -1906,8 +1902,7 @@ Derived/output automation now separately classifies five explicit remediation
 branches for stale revision, overwrite conflict, Export retry conflict, external
 target drift, and idempotent Export recovery. Output successes and outcomes
 whose next action depends on diagnostics, cancellation intent, or caller
-authority
-remain unclassified.
+authority remain unclassified.
 
 A shared MCP/lifecycle projection now maps the six operational MCP capability
 classes to the frozen application operation lifecycle and leaves Inspect and
