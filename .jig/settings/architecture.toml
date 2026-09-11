@@ -40,6 +40,9 @@ depends_on = []
 [component.atrament_handwriting_calibration_session]
 depends_on = []
 
+[component.atrament_handwriting_capture_geometry_evidence]
+depends_on = []
+
 [component.atrament_handwriting_contextual_stroke_candidates]
 depends_on = []
 

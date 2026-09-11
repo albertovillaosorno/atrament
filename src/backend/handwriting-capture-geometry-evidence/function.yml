@@ -1,0 +1,9 @@
+identity:
+  id: function:handwriting-capture-geometry-evidence
+  name: handwriting-capture-geometry-evidence
+  path: src/backend/handwriting-capture-geometry-evidence
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: domain

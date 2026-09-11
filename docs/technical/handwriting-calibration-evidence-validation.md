@@ -152,6 +152,15 @@ The session domain does not decide how many prompts exist, which category mix is
 minimum, what wording is shown to a user, which speeds or sizes are selected, or
 how reference marks are represented geometrically.
 
+
+`handwriting-capture-geometry-evidence` now freezes only the structural report
+boundary for photographed calibration. One stable capture identity carries one
+observation each for reference marks, perspective, lens distortion, physical
+scale, grid registration, baseline reference, and capture quality. Duplicate
+axes reject in report order; missing axes reject in that canonical requirement
+order. The evidence values remain caller-owned and are not interpreted as a
+geometry or quality pass.
+
 ### Bounded variation remains downstream evidence
 
 `VariationParameter` retains a caller-owned parameter identity plus minimum,
@@ -194,16 +203,17 @@ The present calibration domains fail structurally when:
 - a held-out report measurement names a training or unknown sample;
 - a held-out report omits any required quality dimension;
 - one guided plan repeats a stable prompt identity;
+- photographed geometry evidence duplicates or omits a required axis;
 - a variation minimum exceeds its maximum;
 - a variation central tendency falls below the minimum; or
 - a variation central tendency exceeds the maximum.
 
 Other important calibration failures are not executable yet because the owning
 capture, geometry, extraction, or quality authorities do not exist. These
-include unreadable images, incorrect reference marks, camera distortion that
-cannot be corrected, insufficient resolution, unsupported capture metadata,
-failed character/stroke extraction, low-confidence measurements, and a held-out
-quality score below an accepted threshold.
+include interpreting unreadable images, incorrect reference marks, camera
+distortion that cannot be corrected, insufficient resolution, unsupported
+capture metadata, failed character/stroke extraction, low-confidence
+measurements, and a held-out quality score below an accepted threshold.
 
 The current domains must not convert those future failures into guessed values.
 In particular, they must not silently label an inference as observed, reuse a
@@ -223,7 +233,10 @@ Current checked-in regression evidence includes:
   nine prompt categories, caller-owned plan order/reference geometry, completed
   sample inspection and exact replacement, resume position, completion state,
   duplicate-prompt rejection, and every compact progress mask through eight
-  prompts; and
+  prompts;
+- `tests/backend/handwriting-capture-geometry-evidence/domain/lib.rs`, which
+  pins all seven capture-geometry families, duplicate precedence, and all 128
+  presence masks without interpreting evidence values; and
 - `tests/backend/handwriting-variation/domain/lib.rs`, which pins bound
   evidence, envelope ordering, metadata preservation, variation scale, sample
   bounds, exact replay consistency, and complete sample-set validation without
@@ -243,7 +256,8 @@ Before extending calibration, preserve these boundaries:
    their actual failures.
 
 Still-open implementation work includes the minimum viable sample set, capture
-UI and persistence, photographic/scanner/digital input adapters, physical
-reference-mark geometry and transform fitting, handwriting extraction,
+UI and persistence, photographic/scanner/digital input adapters, reference-mark
+detection and transform fitting, image/distortion correction, handwriting
+extraction,
 confidence policy, weak-sample classification/workflow and persistence,
 held-out metric/scoring algorithms, and quality-report generation policy.

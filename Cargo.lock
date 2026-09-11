@@ -68,6 +68,10 @@ name = "atrament_handwriting_calibration_session"
 version = "0.1.0"
 
 [[package]]
+name = "atrament_handwriting_capture_geometry_evidence"
+version = "0.1.0"
+
+[[package]]
 name = "atrament_handwriting_contextual_stroke_candidates"
 version = "0.1.0"
 

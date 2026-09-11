@@ -1151,6 +1151,14 @@ policy, capture UI, persistence/history, and geometry semantics remain open.
 Detect reference marks, perspective, lens distortion, scale, grid, baseline,
 and capture quality before treating any observed stroke as evidence.
 
+Current executable evidence now requires one caller-produced observation for
+each of those seven photographed-capture geometry families and binds the report
+to one stable capture identity. Duplicate families reject in report order and
+missing families reject in canonical requirement order; a 128-mask compact
+oracle exhausts every presence subset. Detection, image decoding, transform
+fitting, distortion correction, units/tolerances, capture-quality scoring,
+geometry acceptance, and handwriting extraction remain open.
+
 ### TODO - Extract the personal stroke vocabulary
 
 Derive centerlines, contours, entry and exit conditions, pen lifts, ligatures,

@@ -13,6 +13,7 @@ members = [
     "src/backend/flow-pagination",
     "src/backend/handwriting-calibration-evidence",
     "src/backend/handwriting-calibration-session",
+    "src/backend/handwriting-capture-geometry-evidence",
     "src/backend/handwriting-contextual-stroke-candidates",
     "src/backend/handwriting-diacritic-composition",
     "src/backend/handwriting-glyph-coverage",
