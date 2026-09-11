@@ -33,9 +33,11 @@
 //
 use atrament_handwriting_variation::{
     VariationBound, VariationBoundBasis, VariationParameter,
-    VariationParameterError, VariationReplayConsistencyError,
+    VariationParameterError, VariationParameterIdentityError,
+    VariationReplayConsistencyError,
     VariationReplayKey, VariationSample, VariationSampleError,
     VariationSampleSetError, VariationScale,
+    validate_variation_parameter_identities,
     validate_variation_replay_consistency, validate_variation_sample_set,
 };
 
@@ -699,4 +701,95 @@ fn compact_sample_sets_match_identity_bounds_and_replay_precedence() {
     }
     assert_eq!(cases, 2_700);
     assert!(outcomes.into_iter().all(|seen| seen));
+}
+#[test]
+fn distinct_parameter_identities_are_admitted_without_interpretation() {
+    let mut slant = parameter(-10, 0, 15);
+    slant.parameter_identity = "slant";
+    let mut spacing = parameter(-10, 0, 15);
+    spacing.parameter_identity = "spacing";
+    assert_eq!(
+        validate_variation_parameter_identities(&[slant, spacing]),
+        Ok(()),
+    );
+}
+
+#[test]
+fn duplicate_parameter_identity_reports_earliest_prior_owner() {
+    let mut first = parameter(-10, 0, 15);
+    first.parameter_identity = "slant";
+    let mut other = parameter(-10, 0, 15);
+    other.parameter_identity = "spacing";
+    let mut duplicate = parameter(-10, 0, 15);
+    duplicate.parameter_identity = "slant";
+    assert_eq!(
+        validate_variation_parameter_identities(&[first, other, duplicate]),
+        Err(VariationParameterIdentityError {
+            duplicate_index: 2,
+            first_index: 0,
+        }),
+    );
+}
+
+#[test]
+fn compact_parameter_identity_sequences_match_first_duplicate_oracle() {
+    let mut cases = 0_u8;
+    let mut saw_valid = false;
+    let mut saw_duplicate = false;
+    for length in 0_u32..=4 {
+        for encoded in 0_u32..2_u32.pow(length) {
+            let mut state = encoded;
+            let mut parameters = Vec::new();
+            let mut identities = Vec::new();
+            for _ in 0..length {
+                let identity = (state % 2) as u8;
+                state /= 2;
+                identities.push(identity);
+                let parameter = VariationParameter {
+                    central_tendency: 0_i8,
+                    context_rules: Vec::<u8>::new(),
+                    correlation_groups: Vec::<u8>::new(),
+                    distribution: (),
+                    maximum: VariationBound {
+                        basis: VariationBoundBasis::Authorized,
+                        value: 1_i8,
+                    },
+                    minimum: VariationBound {
+                        basis: VariationBoundBasis::Observed,
+                        value: -1_i8,
+                    },
+                    parameter_identity: identity,
+                    scale: VariationScale::Character,
+                    unit: (),
+                };
+                parameters.push(parameter);
+            }
+            let mut expected = Ok(());
+            'outer: for duplicate_index in 0..identities.len() {
+                for first_index in 0..duplicate_index {
+                    if identities[first_index] == identities[duplicate_index] {
+                        expected = Err(VariationParameterIdentityError {
+                            duplicate_index,
+                            first_index,
+                        });
+                        break 'outer;
+                    }
+                }
+            }
+            if expected.is_ok() {
+                saw_valid = true;
+            } else {
+                saw_duplicate = true;
+            }
+            assert_eq!(
+                validate_variation_parameter_identities(&parameters),
+                expected,
+                "length {length}, encoded {encoded}",
+            );
+            cases = cases.saturating_add(1);
+        }
+    }
+    assert_eq!(cases, 31);
+    assert!(saw_valid);
+    assert!(saw_duplicate);
 }

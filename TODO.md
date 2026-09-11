@@ -1222,6 +1222,11 @@ over two semantic keys and two values. Separate fixtures prove that changing
 only the parameter identity, document seed, or semantic identity yields a
 distinct replay key.
 
+Parameter identities are also required to be unique within a supplied parameter
+collection. The first duplicate reports both its caller-order index and the
+earliest prior owner; a 31-case compact oracle exhausts every two-identity
+sequence through length four without assigning meaning to either identity.
+
 A separate 1,099-case integer oracle exhausts all 343
 minimum/central/maximum triples in `[-3, 3]` and all 756 sample checks over
 `[-4, 4]` for valid envelopes, reaching every parameter and sample validation

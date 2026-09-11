@@ -170,6 +170,11 @@ A replay disagreement identifies the first conflicting observation and its
 earliest contradictory predecessor. Changing parameter identity, seed, or
 semantic identity produces a distinct replay key.
 
+
+Caller-owned parameter identities must also be unique within one parameter
+collection. Duplicate detection is structural only: it reports the first later
+claim and earliest prior owner without defining a parameter vocabulary.
+
 `validate_variation_sample_set` composes the structural checks in deterministic
 order: parameter validity, caller-order parameter identity, caller-order sample
 bounds, then replay consistency. Compact evidence covers 341 replay sequences

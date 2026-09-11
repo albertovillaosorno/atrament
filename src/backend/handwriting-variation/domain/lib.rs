@@ -105,6 +105,15 @@ pub struct VariationParameter<
     pub unit: Unit,
 }
 
+/// Why one parameter identity is ambiguous inside a parameter set.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct VariationParameterIdentityError {
+    /// Later parameter carrying an already-seen identity.
+    pub duplicate_index: usize,
+    /// Earliest prior parameter carrying that same identity.
+    pub first_index: usize,
+}
+
 /// Why a bounded handwriting-variation parameter is invalid.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum VariationParameterError {
@@ -333,4 +342,52 @@ where
     }
     validate_variation_replay_consistency(samples)
         .map_err(VariationSampleSetError::ReplayConflict)
+}
+/// Require unique caller-owned identities across one parameter collection.
+///
+/// This does not choose or interpret a parameter vocabulary. It only prevents
+/// two envelopes from claiming the same replay identity.
+///
+/// # Errors
+///
+/// Returns the first duplicate in caller order paired with its earliest prior
+/// occurrence.
+pub fn validate_variation_parameter_identities<
+    ParameterIdentity,
+    Value,
+    Unit,
+    Distribution,
+    CorrelationGroup,
+    ContextRule,
+>(
+    parameters: &[
+        VariationParameter<
+            ParameterIdentity,
+            Value,
+            Unit,
+            Distribution,
+            CorrelationGroup,
+            ContextRule,
+        >
+    ],
+) -> Result<(), VariationParameterIdentityError>
+where
+    ParameterIdentity: Eq,
+{
+    for (duplicate_index, parameter) in parameters.iter().enumerate() {
+        if let Some((first_index, _)) = parameters
+            .iter()
+            .take(duplicate_index)
+            .enumerate()
+            .find(|(_, prior)| {
+                prior.parameter_identity == parameter.parameter_identity
+            })
+        {
+            return Err(VariationParameterIdentityError {
+                duplicate_index,
+                first_index,
+            });
+        }
+    }
+    Ok(())
 }
