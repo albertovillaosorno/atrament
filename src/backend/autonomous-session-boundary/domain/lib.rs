@@ -34,6 +34,12 @@
 
 //! Autonomous state ownership and bootstrap semantics across session restart.
 
+/// Fresh-session bootstrap steps frozen by the autonomous-loop contract.
+pub const AUTONOMOUS_FRESH_SESSION_STEPS: [AutonomousFreshSessionStep; 2] = [
+    AutonomousFreshSessionStep::CapabilityDiscovery,
+    AutonomousFreshSessionStep::Inspect,
+];
+
 /// State class relevant to one autonomous session boundary.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum AutonomousSessionStateClass {
@@ -50,10 +56,10 @@ pub enum AutonomousSessionStateClass {
 /// Ownership disposition when the active Atrament session ends.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum AutonomousSessionEndDisposition {
-    /// This state is outside Atrament's session-state ownership.
-    OutsideAtramentSessionOwnership,
     /// This Atrament-owned state is invalid after session end.
     InvalidatedWithSession,
+    /// This state is outside Atrament's session-state ownership.
+    OutsideAtramentSessionOwnership,
 }
 
 /// Required bootstrap class for a fresh Atrament autonomous session.
@@ -64,12 +70,6 @@ pub enum AutonomousFreshSessionStep {
     /// Inspect accepted state again before deriving new command context.
     Inspect,
 }
-
-/// Fresh-session bootstrap steps frozen by the autonomous-loop contract.
-pub const AUTONOMOUS_FRESH_SESSION_STEPS: [AutonomousFreshSessionStep; 2] = [
-    AutonomousFreshSessionStep::CapabilityDiscovery,
-    AutonomousFreshSessionStep::Inspect,
-];
 
 /// Project one state class into its session-end ownership disposition.
 #[must_use]
