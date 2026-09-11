@@ -7,6 +7,9 @@ depends_on = []
 [component.atrament_autonomous_budget_admission]
 depends_on = []
 
+[component.atrament_autonomous_output_intent]
+depends_on = []
+
 [component.atrament_autonomous_derived_output_guidance]
 depends_on = ["atrament_derived_output_result"]
 

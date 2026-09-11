@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "src/backend/autonomous-budget-admission",
+    "src/backend/autonomous-output-intent",
     "src/backend/autonomous-derived-output-guidance",
     "src/backend/autonomous-history-guidance",
     "src/backend/autonomous-semantic-command-guidance",

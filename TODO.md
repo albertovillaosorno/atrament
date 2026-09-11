@@ -1877,6 +1877,12 @@ is
 present. Numeric limits, budget accounting, scheduling, and overall mutation
 authority remain outside this domain.
 
+
+Autonomous output intent now distinguishes caller-explicit goals, independently
+admitted host policy, and untrusted semantic content. Caller goals can establish
+Render, Plan, or Export intent; host policy is an alternate source only for
+persistent Export, and edited/model-provided content grants none.
+
 A partial autonomous semantic-result classifier now encodes the twelve
 next-step branches that the frozen contracts define exactly. Successful
 validation, pre-commit cancellation, and internal known-no-commit failure remain

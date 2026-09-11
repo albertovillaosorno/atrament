@@ -1,0 +1,9 @@
+identity:
+  id: function:autonomous-output-intent
+  name: autonomous-output-intent
+  path: src/backend/autonomous-output-intent
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: domain

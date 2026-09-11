@@ -190,6 +190,13 @@ and overwrite policy and still uses the frozen Export validation boundary. It
 does not copy a path from notebook prose into file authority merely because it
 looks operational.
 
+
+A transport-neutral output-intent boundary now records that caller-explicit
+goals
+can establish Render, Plan, or Export intent, while an independently admitted
+host policy can establish persistent Export intent only. Model-generated or
+notebook-provided semantic content establishes no output intent on this axis.
+
 ### Output chaining
 
 After the desired accepted semantic state is reached, Render, Export, or Plan
