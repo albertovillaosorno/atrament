@@ -1890,6 +1890,11 @@ progress conditions from four explicit non-progress conditions without
 inspecting raw state or model prose. Stateful revision/diagnostic comparison
 and loop orchestration remain open application work.
 
+Semantic-result progress projection now maps Applied directly to accepted
+revision progress and Idempotent replay to replay-recovery non-progress. No-op
+repetition,
+stale-state comparison, and diagnostic progress still require stateful evidence.
+
 
 Stable-blocking stop projection now maps only qualified repeated blocking
 diagnostic evidence to the frozen stable-blocking terminal outcome. Stateful

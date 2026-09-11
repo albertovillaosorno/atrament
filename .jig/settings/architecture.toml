@@ -40,6 +40,9 @@ depends_on = ["atrament_autonomous_completion_admission", "atrament_autonomous_g
 [component.atrament_autonomous_semantic_command_guidance]
 depends_on = ["atrament_semantic_notebook_port"]
 
+[component.atrament_autonomous_semantic_progress_projection]
+depends_on = ["atrament_autonomous_progress_evidence", "atrament_semantic_notebook_port"]
+
 [component.atrament_autonomous_session_boundary]
 depends_on = []
 

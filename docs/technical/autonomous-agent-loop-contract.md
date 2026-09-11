@@ -71,6 +71,11 @@ idempotent replay recovery, repeated No-op for the same intent, unchanged
 revision/evidence/intent without new admitted input, and a stable repeated
 blocking diagnostic. It classifies only already-qualified evidence conditions.
 
+An application-level semantic-result projection now derives accepted-revision
+progress directly from Applied and replay-recovery evidence directly from
+Idempotent replay. Other result classes remain unclassified until their owning
+state comparison qualifies additional progress or non-progress evidence.
+
 ### No-op handling
 
 No-op is success-equivalent only when the requested semantic state is already

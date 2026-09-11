@@ -12,6 +12,7 @@ members = [
     "src/backend/autonomous-history-guidance",
     "src/backend/autonomous-no-op-completion-projection",
     "src/backend/autonomous-semantic-command-guidance",
+    "src/backend/autonomous-semantic-progress-projection",
     "src/backend/autonomous-session-boundary",
     "src/backend/autonomous-stable-blocking-stop-projection",
     "src/backend/application-operation-lifecycle",

@@ -1,0 +1,9 @@
+identity:
+  id: function:autonomous-semantic-progress-projection
+  name: autonomous-semantic-progress-projection
+  path: src/backend/autonomous-semantic-progress-projection
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: application
