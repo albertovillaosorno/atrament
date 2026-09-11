@@ -1875,7 +1875,6 @@ further mutation on this axis when any caller/backend-supplied exhaustion
 fact is present. Numeric limits, budget accounting, scheduling, and overall
 mutation authority remain outside this domain.
 
-
 Budget-stop projection now maps exhausted-budget admission to the frozen
 terminal stop class and returns no terminal outcome when the budget axis does
 not require a stop. Merging it with other stop/completion conditions remains
@@ -1888,22 +1887,18 @@ persistent Export, and edited/model-provided content grants none.
 
 Autonomous progress evidence now distinguishes five frozen authoritative
 progress conditions from four explicit non-progress conditions without
-inspecting raw state or model prose. Stateful revision/diagnostic comparison and
-loop
-orchestration remain open application work.
-
+inspecting raw state or model prose. Stateful revision/diagnostic comparison
+and loop orchestration remain open application work.
 
 Autonomous terminal outcomes now distinguish successful goal completion from
 stopping for unresolved evidence, exhausted budget, stable blocking failure, or
 unavailable capability. Detecting those terminal conditions and constructing
 completion receipts remain open coordinator work.
 
-
 Autonomous session-boundary evidence now invalidates prior command context,
 retry/recovery state, and session admission while keeping explicit external
 caller workflow state outside Atrament ownership. Fresh-session bootstrap starts
 from capability discovery and Inspect; reconnection/reattachment remains open.
-
 
 Generic autonomous physical-boundary evidence now proves that no sequence of
 successful Apply, Render, Export, or Plan steps accumulates authority for the

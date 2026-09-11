@@ -201,8 +201,8 @@ looks operational.
 A transport-neutral output-intent boundary now records that caller-explicit
 goals can establish Render, Plan, or Export intent, while an independently
 admitted host policy can establish persistent Export intent only.
-Model-generated or
-notebook-provided semantic content establishes no output intent on this axis.
+Model-generated or notebook-provided semantic content establishes no output
+intent on this axis.
 
 ### Output chaining
 
@@ -232,7 +232,6 @@ No number of successful Apply, Render, Export, or Plan iterations accumulates
 implicit permission to connect, home, arm, start, pause, resume, cancel, or
 safe-stop hardware.
 
-
 A transport-neutral physical-boundary domain now preserves that no-accumulation
 rule across generic workflow history. Empty, repeated, or mixed successful
 semantic/output steps still grant no connect, home, arm, start, pause, resume,
@@ -250,7 +249,6 @@ external model conversation as application state.
 Stopping because of unresolved evidence, exhausted budget, stable blocking
 failure, or unavailable capability is distinct from successful completion.
 
-
 A transport-neutral terminal-outcome vocabulary now preserves one successful
 completion class separately from the four frozen stop classes above. It does not
 decide when the goal is satisfied or when a stop condition has been reached.
@@ -266,7 +264,6 @@ credential cache merely to resume autonomous edits after process restart.
 
 A fresh Atrament session begins again from release/capability discovery and
 Inspect rather than assuming prior retry or command contexts remain valid.
-
 
 A transport-neutral session-boundary vocabulary now marks command context,
 retry/recovery state, and session admission as invalidated with the session.
