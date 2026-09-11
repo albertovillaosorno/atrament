@@ -53,14 +53,14 @@ pub enum DerivedOutputResultClass {
     CapabilityOrValidationRejection,
     /// Render or Plan produced one complete read-only projection.
     CompletedProjection,
-    /// One explicit Export crossed its admitted file-commit boundary.
-    Exported,
     /// Existing target conflicts with explicit overwrite disposition.
     ExportOverwriteConflict,
     /// Explicit Export target violates the owning path boundary.
     ExportPathRejection,
     /// Export retry identity was reused with different normalized intent.
     ExportRetryConflict,
+    /// One explicit Export crossed its admitted file-commit boundary.
+    Exported,
     /// Same-retry recovery observed externally changed target state.
     ExternalTargetDriftConflict,
     /// Same normalized Export retry recovered prior committed output.
@@ -74,10 +74,10 @@ pub enum DerivedOutputResultClass {
 /// Effect disposition guaranteed by one completed derived/output result.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum DerivedOutputEffectDisposition {
-    /// The current call completed one read-only Render or Plan projection.
-    CompletedReadOnlyProjection,
     /// The current Export crossed its file-commit boundary exactly once.
     CommittedFileThisCall,
+    /// The current call completed one read-only Render or Plan projection.
+    CompletedReadOnlyProjection,
     /// The current call is known to have created no new projection or file
     /// effect.
     KnownNoNewEffect,
