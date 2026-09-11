@@ -71,6 +71,77 @@ where
     }
 }
 
+/// One batch-local handle declared by a producing command.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct BatchLocalHandleDeclaration<CommandIdentity, Handle> {
+    /// Command that produces the candidate object named by this handle.
+    pub command: CommandIdentity,
+    /// Batch-local candidate handle whose representation remains external.
+    pub handle: Handle,
+}
+
+/// One later command reference to a batch-local candidate handle.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct BatchLocalHandleReference<CommandIdentity, Handle> {
+    /// Command that consumes the candidate object named by this handle.
+    pub command: CommandIdentity,
+    /// Batch-local candidate handle whose representation remains external.
+    pub handle: Handle,
+}
+
+/// Typed structural failure for batch-local candidate handles.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum BatchLocalHandleError<CommandIdentity, Handle> {
+    /// A handle declaration names no command in the complete batch graph.
+    DeclarationCommandMissing {
+        /// Missing producing command identity.
+        command: CommandIdentity,
+        /// Handle whose producer is absent.
+        handle: Handle,
+    },
+    /// More than one producing command declares the same batch-local handle.
+    DuplicateHandle {
+        /// First command that declared this handle.
+        first_command: CommandIdentity,
+        /// Duplicated batch-local handle.
+        handle: Handle,
+        /// Later command that attempted to redeclare this handle.
+        second_command: CommandIdentity,
+    },
+    /// The complete command graph is invalid before handles are considered.
+    Graph {
+        /// Typed command dependency graph failure.
+        reason: CommandGraphError<CommandIdentity>,
+    },
+    /// A handle reference names no consuming command in the complete graph.
+    ReferenceCommandMissing {
+        /// Missing consuming command identity.
+        command: CommandIdentity,
+        /// Handle referenced by the absent command.
+        handle: Handle,
+    },
+    /// Consumer omits the required explicit dependency on the producer.
+    RequiredDependencyMissing {
+        /// Consuming command identity.
+        command: CommandIdentity,
+        /// Referenced batch-local handle.
+        handle: Handle,
+        /// Producing command that must be an explicit dependency.
+        producer: CommandIdentity,
+    },
+    /// A command references a batch-local handle with no declaration.
+    UndeclaredHandle {
+        /// Consuming command identity.
+        command: CommandIdentity,
+        /// Undeclared batch-local handle.
+        handle: Handle,
+    },
+}
+
+/// Result of validating batch-local handle ownership and references.
+pub type BatchLocalHandleValidationResult<CommandIdentity, Handle> =
+    Result<(), BatchLocalHandleError<CommandIdentity, Handle>>;
+
 /// Caller-supplied coarse resource bounds for one command graph.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct CommandGraphLimits {
@@ -279,6 +350,85 @@ struct DependencySelectionState<'graph, Identity> {
     positions: BTreeMap<&'graph Identity, usize>,
     required_positions: Vec<bool>,
     selected_positions: Vec<bool>,
+}
+
+/// Validate batch-local handle ownership and explicit producer dependencies.
+///
+/// The complete command graph is validated first. Handle declarations are then
+/// checked in caller order for known producers and uniqueness, followed by
+/// references in caller order for known consumers, declared handles, and an
+/// explicit dependency on the producing command. Inputs are never reordered.
+///
+/// This function does not decide which command families may declare handles,
+/// allocate accepted semantic identities, or choose serialized handle syntax.
+/// Those remain responsibilities of the admitted command protocol and Apply.
+///
+/// # Errors
+///
+/// Returns the complete graph failure or the first declaration/reference
+/// structural failure in the caller-provided order described above.
+pub fn validate_batch_local_handles<Node, Handle>(
+    nodes: &[Node],
+    declarations: &[
+        BatchLocalHandleDeclaration<Node::Identity, Handle>
+    ],
+    references: &[BatchLocalHandleReference<Node::Identity, Handle>],
+) -> BatchLocalHandleValidationResult<Node::Identity, Handle>
+where
+    Node: CommandDependencyNode,
+    Node::Identity: Clone,
+    Handle: Clone + Ord,
+{
+    let positions = validated_command_positions(nodes)
+        .map_err(|reason| BatchLocalHandleError::Graph { reason })?;
+    let mut producers = BTreeMap::<&Handle, &Node::Identity>::new();
+    for declaration in declarations {
+        if !positions.contains_key(&declaration.command) {
+            return Err(BatchLocalHandleError::DeclarationCommandMissing {
+                command: declaration.command.clone(),
+                handle: declaration.handle.clone(),
+            });
+        }
+        if let Some(first_command) =
+            producers.insert(&declaration.handle, &declaration.command)
+        {
+            return Err(BatchLocalHandleError::DuplicateHandle {
+                first_command: first_command.clone(),
+                handle: declaration.handle.clone(),
+                second_command: declaration.command.clone(),
+            });
+        }
+    }
+    for reference in references {
+        let Some(command_position) =
+            positions.get(&reference.command).copied()
+        else {
+            return Err(BatchLocalHandleError::ReferenceCommandMissing {
+                command: reference.command.clone(),
+                handle: reference.handle.clone(),
+            });
+        };
+        let Some(producer) = producers.get(&reference.handle).copied() else {
+            return Err(BatchLocalHandleError::UndeclaredHandle {
+                command: reference.command.clone(),
+                handle: reference.handle.clone(),
+            });
+        };
+        let Some(command) = nodes.get(command_position) else {
+            return Err(BatchLocalHandleError::ReferenceCommandMissing {
+                command: reference.command.clone(),
+                handle: reference.handle.clone(),
+            });
+        };
+        if !command.dependencies().contains(producer) {
+            return Err(BatchLocalHandleError::RequiredDependencyMissing {
+                command: reference.command.clone(),
+                handle: reference.handle.clone(),
+                producer: producer.clone(),
+            });
+        }
+    }
+    Ok(())
 }
 
 /// Measure exact coarse command and dependency-edge counts.

@@ -1634,10 +1634,18 @@ review
 preserves command identities while checking every existing target and requested
 family against that same bounded context.
 
+Batch-local insertion-handle structure now also has transport-neutral graph
+evidence: one unique declared handle maps to one producing command, a consumer
+must name a declared handle and carry an explicit dependency on that producer,
+and missing producer/consumer commands reject before any accepted mutation. The
+validator does not decide which command family may produce a handle or allocate
+accepted identities.
+
 Protocol-version admission, context identity computation, context
 construction/completeness policy, normalization and normalized batch identity,
-retry equality/recovery, receipt normalization, insertion-command envelope
-behavior, and serialized compatibility remain open.
+retry equality/recovery, receipt normalization, concrete insertion-command
+payload behavior and accepted-ID mapping, and serialized compatibility remain
+open.
 The exhaustive three-node dependency-mask oracle requires valid, self, missing,
 cyclic, and forward-dependency outcomes to occur. Duplicate identities remain a
 separate fixture because that Cartesian graph uses fixed-unique command IDs.

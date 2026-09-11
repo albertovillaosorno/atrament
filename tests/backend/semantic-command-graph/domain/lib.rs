@@ -34,15 +34,17 @@ use std::collections::BTreeSet;
 use std::sync::atomic::{AtomicUsize, Ordering as AtomicOrdering};
 
 use atrament_semantic_command_graph::{
-    BoundedDependencyRequirementsError, CommandDependencyNode,
-    CommandGraphError, CommandGraphLimitError, CommandGraphLimits,
+    BatchLocalHandleDeclaration, BatchLocalHandleError,
+    BatchLocalHandleReference, BoundedDependencyRequirementsError,
+    CommandDependencyNode, CommandGraphError, CommandGraphLimitError,
+    CommandGraphLimits,
     CommandGraphSize, CommandNode, DependencyRequirementsError,
     DependencySelectionError, DependencySelectionSummary,
     DependencySummaryError, MissingDependencyRequirement, command_graph_size,
     dependency_selection_requirements,
     dependency_selection_requirements_bounded, dependency_selection_summary,
-    validate_command_graph, validate_command_graph_limits,
-    validate_dependency_closed_selection,
+    validate_batch_local_handles, validate_command_graph,
+    validate_command_graph_limits, validate_dependency_closed_selection,
 };
 
 fn node(id: u32, dependencies: &[u32]) -> CommandNode<u32> {
@@ -117,6 +119,160 @@ fn cycles_reject_without_reordering_input() {
         Err(CommandGraphError::Cycle)
     );
     assert_eq!(nodes, before);
+}
+
+#[test]
+fn batch_local_handle_requires_declared_unique_producer_and_dependency() {
+    let nodes = [node(1, &[]), node(2, &[1])];
+    let declarations = [BatchLocalHandleDeclaration {
+        command: 1,
+        handle: "new-block",
+    }];
+    let references = [BatchLocalHandleReference {
+        command: 2,
+        handle: "new-block",
+    }];
+    assert_eq!(
+        validate_batch_local_handles(&nodes, &declarations, &references),
+        Ok(()),
+    );
+}
+
+#[test]
+fn batch_local_handle_missing_commands_are_typed() {
+    let nodes = [node(1, &[]), node(2, &[1])];
+    assert_eq!(
+        validate_batch_local_handles(
+            &nodes,
+            &[BatchLocalHandleDeclaration {
+                command: 9,
+                handle: "new-block",
+            }],
+            &[],
+        ),
+        Err(BatchLocalHandleError::DeclarationCommandMissing {
+            command: 9,
+            handle: "new-block",
+        }),
+    );
+    assert_eq!(
+        validate_batch_local_handles(
+            &nodes,
+            &[BatchLocalHandleDeclaration {
+                command: 1,
+                handle: "new-block",
+            }],
+            &[BatchLocalHandleReference {
+                command: 9,
+                handle: "new-block",
+            }],
+        ),
+        Err(BatchLocalHandleError::ReferenceCommandMissing {
+            command: 9,
+            handle: "new-block",
+        }),
+    );
+}
+
+#[test]
+fn invalid_graph_precedes_batch_local_handle_checks() {
+    let nodes = [node(1, &[2]), node(2, &[])];
+    assert_eq!(
+        validate_batch_local_handles(
+            &nodes,
+            &[BatchLocalHandleDeclaration {
+                command: 9,
+                handle: "missing-producer",
+            }],
+            &[],
+        ),
+        Err(BatchLocalHandleError::Graph {
+            reason: CommandGraphError::DependencyAfterCommand {
+                command: 1,
+                dependency: 2,
+            },
+        }),
+    );
+}
+
+fn expected_handle_case(
+    declared: bool,
+    duplicate: bool,
+    referenced: bool,
+    dependent: bool,
+) -> Result<(), BatchLocalHandleError<u32, u8>> {
+    if declared && duplicate {
+        return Err(BatchLocalHandleError::DuplicateHandle {
+            first_command: 1,
+            handle: 7_u8,
+            second_command: 1,
+        });
+    }
+    if referenced && !declared {
+        return Err(BatchLocalHandleError::UndeclaredHandle {
+            command: 2,
+            handle: 7_u8,
+        });
+    }
+    if referenced && !dependent {
+        return Err(BatchLocalHandleError::RequiredDependencyMissing {
+            command: 2,
+            handle: 7_u8,
+            producer: 1,
+        });
+    }
+    Ok(())
+}
+
+#[test]
+fn all_16_handle_declaration_reference_dependency_states_match_oracle() {
+    let mut cases = 0_u8;
+    for mask in 0_u8..16 {
+        let declared = mask & 0b0001 != 0;
+        let duplicate = mask & 0b0010 != 0;
+        let referenced = mask & 0b0100 != 0;
+        let dependent = mask & 0b1000 != 0;
+        let nodes = [
+            node(1, &[]),
+            node(2, if dependent { &[1] } else { &[] }),
+        ];
+        let mut declarations = Vec::new();
+        if declared {
+            declarations.push(BatchLocalHandleDeclaration {
+                command: 1,
+                handle: 7_u8,
+            });
+            if duplicate {
+                declarations.push(BatchLocalHandleDeclaration {
+                    command: 1,
+                    handle: 7_u8,
+                });
+            }
+        }
+        let references = referenced
+            .then_some(BatchLocalHandleReference {
+                command: 2,
+                handle: 7_u8,
+            })
+            .into_iter()
+            .collect::<Vec<_>>();
+        assert_eq!(
+            validate_batch_local_handles(
+                &nodes,
+                &declarations,
+                &references,
+            ),
+            expected_handle_case(
+                declared,
+                duplicate,
+                referenced,
+                dependent,
+            ),
+            "handle-state mask {mask:#06b}",
+        );
+        cases = cases.saturating_add(1);
+    }
+    assert_eq!(cases, 16);
 }
 
 #[test]

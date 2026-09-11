@@ -203,6 +203,19 @@ existing dependency references, no direct self-dependency, acyclicity, and no
 acyclic dependency on a later command in the ordered sequence. The validator is
 generic over caller-owned identity representation and never reorders commands.
 
+Batch-local handle validation now extends that same transport-neutral graph
+boundary. Declarations name one existing producing command and one unique
+handle;
+references name one existing consuming command, one declared handle, and require
+an explicit dependency on that handle's producer. The validator checks the full
+command graph first, preserves declaration/reference order, and does not infer a
+missing dependency from command position.
+
+It deliberately does not decide which semantic command family may produce a
+handle, define insertion payload shape, allocate an accepted semantic identity,
+or emit the eventual handle-to-identity Apply receipt mapping. Those require the
+future admitted insertion-command and protocol boundaries.
+
 The graph layer checks dependency closure for interactive command-ID selections.
 A selected command with an omitted dependency rejects explicitly; the validator
 does not add that dependency on the caller's behalf. It also measures exact
