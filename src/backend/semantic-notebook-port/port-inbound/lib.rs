@@ -1276,6 +1276,59 @@ pub struct CommandResourceLimits {
     pub writable_targets: Option<usize>,
 }
 
+/// Backend-owned command context for one bounded semantic edit intent.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SemanticCommandContext<
+    ContextIdentity,
+    InsertionAnchor,
+    Intent,
+    PreconditionMaterial,
+    ReadableContext,
+> {
+    /// Semantic command families admitted for this bounded context.
+    pub admitted_families: Vec<SemanticCommandFamily>,
+    /// Immutable accepted base revision represented by this context.
+    pub base: RevisionIdentity,
+    /// Capability behavior identity used to interpret this context.
+    pub behavior_version: CommandBehaviorVersion,
+    /// Reproducible caller-visible command-context identity.
+    pub context_identity: ContextIdentity,
+    /// Explicit insertion anchors writable by returned semantic commands.
+    pub insertion_anchors: Vec<InsertionAnchor>,
+    /// Caller-owned local precondition material required for this edit.
+    pub local_preconditions: Vec<PreconditionMaterial>,
+    /// Accepted notebook identity represented by the base revision.
+    pub notebook: AcceptedIdentity,
+    /// Backend-selected semantic context available for read-only reasoning.
+    pub readable_context: ReadableContext,
+    /// Accepted constraint identities relevant to this bounded edit.
+    pub relevant_constraints: Vec<AcceptedIdentity>,
+    /// Backend-admitted edit intent from which this context was derived.
+    pub requested_intent: Intent,
+    /// Resource limits bound to this command context.
+    pub resource_limits: CommandResourceLimits,
+    /// Existing accepted semantic identities writable by returned commands.
+    pub writable_targets: Vec<AcceptedIdentity>,
+}
+
+/// One target or insertion anchor referenced by a semantic command.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum SemanticCommandScopeLocation<'context, InsertionAnchor> {
+    /// Existing accepted semantic identity targeted for mutation.
+    Existing(AcceptedIdentity),
+    /// Explicit context-owned insertion anchor.
+    Insertion(&'context InsertionAnchor),
+}
+
+/// Independent scope facts for one family/location pair.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct SemanticCommandScopeAdmission {
+    /// Whether this context admits the requested semantic command family.
+    pub family_admitted: bool,
+    /// Whether this context admits the requested target or insertion anchor.
+    pub location_admitted: bool,
+}
+
 /// Read-only versioned semantic command capability discovery snapshot.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct SemanticCommandCapabilitySnapshot {

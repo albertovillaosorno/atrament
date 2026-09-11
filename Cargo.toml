@@ -50,6 +50,7 @@ members = [
     "src/backend/render-regression-evidence",
     "src/backend/render-quality-profile",
     "src/backend/runtime-bootstrap",
+    "src/backend/semantic-command-context",
     "src/backend/semantic-command-graph",
     "src/backend/semantic-flow-pagination",
     "src/backend/semantic-fixed-region-layout",

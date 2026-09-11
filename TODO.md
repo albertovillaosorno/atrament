@@ -1617,9 +1617,19 @@ semantics.
 Current design evidence freezes those semantics, revision-owned command
 families, acceptance fixtures, semantic normalization, command ordering,
 dependency validity, retry-safe batch-local insertion handles, and backend-owned
-resource limits without choosing final wire field names or JSON Schema. The task
-remains open until the backend-owned envelope and compatibility rules are
-implemented and versioned.
+resource limits without choosing final wire field names or JSON Schema.
+
+The inbound semantic application contract now also carries one backend-owned
+command context with behavior identity, notebook/base revision, context
+identity, readable context, explicit writable targets and insertion anchors,
+admitted families, relevant constraints, local precondition material, edit
+intent, and resource limits. A separate application boundary checks family and
+location admission independently, so readable-only identities never become
+writable by echoing them.
+
+Context identity computation, context construction/completeness policy, the
+versioned batch envelope, normalization, retry identity, receipt normalization,
+and serialized compatibility remain open.
 The exhaustive three-node dependency-mask oracle requires valid, self, missing,
 cyclic, and forward-dependency outcomes to occur. Duplicate identities remain a
 separate fixture because that Cartesian graph uses fixed-unique command IDs.

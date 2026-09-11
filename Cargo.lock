@@ -251,6 +251,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "atrament_semantic_command_context"
+version = "0.1.0"
+dependencies = [
+ "atrament_semantic_notebook_port",
+]
+
+[[package]]
 name = "atrament_semantic_command_graph"
 version = "0.1.0"
 

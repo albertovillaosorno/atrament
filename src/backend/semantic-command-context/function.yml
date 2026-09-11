@@ -1,0 +1,9 @@
+identity:
+  id: function:semantic-command-context
+  name: semantic-command-context
+  path: src/backend/semantic-command-context
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: application
