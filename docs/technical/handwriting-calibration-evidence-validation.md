@@ -235,8 +235,9 @@ Current checked-in regression evidence includes:
   duplicate-prompt rejection, and every compact progress mask through eight
   prompts;
 - `tests/backend/handwriting-capture-geometry-evidence/domain/lib.rs`, which
-  pins all seven capture-geometry families, duplicate precedence, and all 128
-  presence masks without interpreting evidence values; and
+  pins all seven capture-geometry families, all 128 presence masks, and 2,801
+  short axis sequences for duplicate-before-missing precedence without
+  interpreting evidence values; and
 - `tests/backend/handwriting-variation/domain/lib.rs`, which pins bound
   evidence, envelope ordering, metadata preservation, variation scale, sample
   bounds, exact replay consistency, and complete sample-set validation without

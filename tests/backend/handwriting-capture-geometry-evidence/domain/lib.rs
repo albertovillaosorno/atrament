@@ -166,3 +166,70 @@ fn all_128_presence_masks_match_independent_first_missing_axis_oracle() {
     assert!(saw_complete);
     assert!(saw_each_missing.into_iter().all(|seen| seen));
 }
+#[test]
+fn all_2801_short_axis_sequences_match_duplicate_then_missing_oracle() {
+    let mut cases = 0_u32;
+    let mut saw_duplicate = false;
+    let mut saw_missing = false;
+    for length in 0_u32..=4 {
+        for encoded in 0_u32..7_u32.pow(length) {
+            let mut state = encoded;
+            let mut sequence = Vec::new();
+            for _ in 0..length {
+                let axis = AXES[(state % 7) as usize];
+                state /= 7;
+                sequence.push(axis);
+            }
+            let report = PhotographedCalibrationGeometryEvidence {
+                capture_identity: 17_u8,
+                observations: sequence
+                    .iter()
+                    .copied()
+                    .enumerate()
+                    .map(|(index, axis)| {
+                        PhotographedCalibrationGeometryObservation {
+                            axis,
+                            evidence: index as u8,
+                        }
+                    })
+                    .collect(),
+            };
+            let mut expected = None;
+            'duplicate: for duplicate_index in 0..sequence.len() {
+                for prior in sequence.iter().take(duplicate_index) {
+                    if *prior == sequence[duplicate_index] {
+                        expected = Some(
+                            PhotographedCalibrationGeometryEvidenceError::
+                                DuplicateAxis {
+                                    axis: sequence[duplicate_index],
+                                },
+                        );
+                        saw_duplicate = true;
+                        break 'duplicate;
+                    }
+                }
+            }
+            if expected.is_none() {
+                let missing = AXES
+                    .into_iter()
+                    .find(|axis| !sequence.contains(axis))
+                    .expect("a sequence of at most four cannot cover seven");
+                expected = Some(
+                    PhotographedCalibrationGeometryEvidenceError::MissingAxis {
+                        axis: missing,
+                    },
+                );
+                saw_missing = true;
+            }
+            assert_eq!(
+                validate_photographed_calibration_geometry_evidence(&report),
+                Err(expected.expect("short sequence always has an error")),
+                "length {length}, encoded {encoded}",
+            );
+            cases = cases.saturating_add(1);
+        }
+    }
+    assert_eq!(cases, 2_801);
+    assert!(saw_duplicate);
+    assert!(saw_missing);
+}
