@@ -56,7 +56,10 @@ pub const fn autonomous_unresolved_terminal_outcome(
             SemanticCommandResultClass::UnrepresentableOrUnresolved,
             AutonomousUnresolvedResolution::StopUnresolved,
         ) => Some(AutonomousGoalTerminalClass::StoppedUnresolvedEvidence),
-        (_, AutonomousUnresolvedResolution::RequestBroaderWorkflow)
-        | (_, AutonomousUnresolvedResolution::StopUnresolved) => None,
+        (
+            _,
+            AutonomousUnresolvedResolution::RequestBroaderWorkflow
+            | AutonomousUnresolvedResolution::StopUnresolved,
+        ) => None,
     }
 }
