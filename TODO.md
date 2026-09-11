@@ -1900,6 +1900,11 @@ stopping for unresolved evidence, exhausted budget, stable blocking failure, or
 unavailable capability. Detecting those terminal conditions and constructing
 completion receipts remain open coordinator work.
 
+Autonomous completion admission now requires qualified semantic satisfaction
+and complete explicitly requested output work before producing the successful
+terminal class. Revision comparison, output-result aggregation, identities, and
+completion receipt construction remain open coordinator work.
+
 Autonomous session-boundary evidence now invalidates prior command context,
 retry/recovery state, and session admission while keeping explicit external
 caller workflow state outside Atrament ownership. Fresh-session bootstrap starts

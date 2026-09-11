@@ -19,6 +19,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "atrament_autonomous_completion_admission"
+version = "0.1.0"
+dependencies = [
+ "atrament_autonomous_goal_outcome",
+]
+
+[[package]]
 name = "atrament_autonomous_derived_output_guidance"
 version = "0.1.0"
 dependencies = [

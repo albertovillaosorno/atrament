@@ -1,0 +1,9 @@
+identity:
+  id: function:autonomous-completion-admission
+  name: autonomous-completion-admission
+  path: src/backend/autonomous-completion-admission
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: domain

@@ -10,6 +10,9 @@ depends_on = []
 [component.atrament_autonomous_budget_stop_projection]
 depends_on = ["atrament_autonomous_budget_admission", "atrament_autonomous_goal_outcome"]
 
+[component.atrament_autonomous_completion_admission]
+depends_on = ["atrament_autonomous_goal_outcome"]
+
 [component.atrament_autonomous_output_intent]
 depends_on = []
 

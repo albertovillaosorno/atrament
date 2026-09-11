@@ -259,6 +259,11 @@ A transport-neutral terminal-outcome vocabulary now preserves one successful
 completion class separately from the four frozen stop classes above. It does not
 decide when the goal is satisfied or when a stop condition has been reached.
 
+A transport-neutral completion-admission boundary now emits that successful
+terminal class only when already-qualified semantic satisfaction is present and
+any explicitly requested output is complete. Goals with no requested output do
+not acquire an artificial output requirement.
+
 ### Session boundary
 
 Autonomous loop state is disposable with the active application/agent session
