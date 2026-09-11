@@ -45,7 +45,8 @@ use atrament_semantic_notebook_port::{
     HistoryAvailabilityOutcome, HistoryDirection,
 };
 
-/// Project one history result only through the MCP HistoryTraversal capability.
+/// Project one history result only through the MCP `HistoryTraversal`
+/// capability.
 #[must_use]
 pub const fn mcp_history_commit_disposition(
     capability: McpApplicationCapabilityClass,
@@ -65,7 +66,7 @@ pub const fn mcp_history_commit_disposition(
     }
 }
 
-/// Read one Undo/Redo availability fact through HistoryTraversal only.
+/// Read one Undo/Redo availability fact through `HistoryTraversal` only.
 ///
 /// This exposes backend-owned read-only availability. It does not attempt a
 /// traversal, reserve history position, or make retry/cancellation executable.

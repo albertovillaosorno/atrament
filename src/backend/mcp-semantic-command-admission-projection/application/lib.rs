@@ -47,6 +47,19 @@ use atrament_semantic_notebook_port::{
     SemanticCommandCapabilitySnapshot,
 };
 
+/// Independent MCP authorization and semantic-command snapshot facts.
+///
+/// Keeping both facts prevents effect authorization from fabricating live
+/// command capability, and prevents snapshot discovery from bypassing session
+/// effect restrictions.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct McpSemanticCommandAdmissionFacts {
+    /// Exact command application membership in the backend-owned snapshot.
+    pub application: SemanticCommandApplicationAdmission,
+    /// Exact generic MCP effect-class authorization for the same capability.
+    pub effect: McpEffectAdmission,
+}
+
 /// Return the semantic-command application capability for one MCP capability.
 #[must_use]
 pub const fn mcp_semantic_command_application_capability(
@@ -84,22 +97,9 @@ pub fn mcp_semantic_command_application_admission(
     })
 }
 
-/// Independent MCP authorization and semantic-command snapshot facts.
-///
-/// Keeping both facts prevents effect authorization from fabricating live
-/// command capability, and prevents snapshot discovery from bypassing session
-/// effect restrictions.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct McpSemanticCommandAdmissionFacts {
-    /// Exact command application membership in the backend-owned snapshot.
-    pub application: SemanticCommandApplicationAdmission,
-    /// Exact generic MCP effect-class authorization for the same capability.
-    pub effect: McpEffectAdmission,
-}
-
 /// Compose independent effect and command-snapshot admission facts.
 ///
-/// Only CommandContext, Validate, and Apply map into semantic-command
+/// Only `CommandContext`, Validate, and Apply map into semantic-command
 /// application capability. This helper does not choose rejection precedence,
 /// authenticate a caller, create context, normalize protocol data, or execute.
 #[must_use]
