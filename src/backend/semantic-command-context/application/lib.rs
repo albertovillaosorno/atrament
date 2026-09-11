@@ -177,7 +177,7 @@ where
     let family_admitted = context.admitted_families.contains(&family);
     let location_admitted = match location {
         SemanticCommandScopeLocation::Existing(target) => {
-            context.writable_targets.contains(&target)
+            context.writable_targets.contains(target)
         },
         SemanticCommandScopeLocation::Insertion(anchor) => {
             context.insertion_anchors.contains(anchor)
