@@ -41,21 +41,21 @@ pub enum AutonomousGoalTerminalClass {
     Completed,
     /// Automation stopped because an admitted budget was exhausted.
     StoppedExhaustedBudget,
+    /// Automation stopped on a stable blocking failure without new progress.
+    StoppedStableBlockingFailure,
     /// Automation stopped on an unavailable required capability.
     StoppedUnavailableCapability,
     /// Automation stopped on unresolved evidence or intent.
     StoppedUnresolvedEvidence,
-    /// Automation stopped on a stable blocking failure without new progress.
-    StoppedStableBlockingFailure,
 }
 
 /// Completion meaning of one already-established terminal class.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum AutonomousGoalTerminalDisposition {
-    /// The terminal state is successful completion of the admitted goal.
-    SuccessfulCompletion,
     /// The loop stopped without establishing successful completion.
     StoppedWithoutCompletion,
+    /// The terminal state is successful completion of the admitted goal.
+    SuccessfulCompletion,
 }
 
 /// Project a terminal class into successful-completion versus stopped meaning.
