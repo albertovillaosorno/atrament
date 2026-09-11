@@ -99,6 +99,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "atrament_autonomous_repeated_no_op_control"
+version = "0.1.0"
+dependencies = [
+ "atrament_autonomous_progress_evidence",
+]
+
+[[package]]
 name = "atrament_autonomous_semantic_command_guidance"
 version = "0.1.0"
 dependencies = [

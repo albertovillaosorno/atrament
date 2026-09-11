@@ -1,0 +1,9 @@
+identity:
+  id: function:autonomous-repeated-no-op-control
+  name: autonomous-repeated-no-op-control
+  path: src/backend/autonomous-repeated-no-op-control
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: application

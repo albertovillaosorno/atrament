@@ -94,6 +94,11 @@ justifies a different semantic intent.
 Repeated No-op for the same bounded intent is a stop condition rather than a
 self-improvement signal.
 
+An application-level repeated-No-op control now exposes that condition as a
+local requirement to stop equivalent mutation attempts. It does not manufacture
+a terminal goal reason, successful completion, or permission to continue when
+this specific stop axis is absent.
+
 History-result guidance is also transport-neutral: a committed traversal
 continues from its reported revision, idempotent replay recovers prior
 completion without another traversal, a history boundary stops blind retry in

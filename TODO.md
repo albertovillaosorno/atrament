@@ -1890,6 +1890,10 @@ progress conditions from four explicit non-progress conditions without
 inspecting raw state or model prose. Stateful revision/diagnostic comparison
 and loop orchestration remain open application work.
 
+Repeated-No-op control now maps only qualified repeated No-op for the same
+bounded intent to a local requirement to stop equivalent mutation attempts. It
+does not choose a terminal goal class or grant continuation on other evidence.
+
 Semantic-result progress projection now maps Applied directly to accepted
 revision progress and Idempotent replay to replay-recovery non-progress. No-op
 repetition, stale-state comparison, and diagnostic progress still require

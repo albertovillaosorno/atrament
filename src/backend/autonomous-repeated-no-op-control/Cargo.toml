@@ -1,0 +1,15 @@
+[package]
+name = "atrament_autonomous_repeated_no_op_control"
+version = "0.1.0"
+edition = "2024"
+publish = false
+license = "MIT"
+
+[lib]
+path = "application/lib.rs"
+
+[dependencies.atrament_autonomous_progress_evidence]
+path = "../autonomous-progress-evidence"
+
+[lints]
+workspace = true
