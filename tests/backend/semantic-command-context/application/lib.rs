@@ -1085,3 +1085,82 @@ fn all_64_envelope_preflight_axis_masks_match_independent_oracle() {
     }
     assert_eq!(cases, 64);
 }
+
+#[test]
+fn envelope_preflight_preserves_invalid_graph_for_graph_validator() {
+    static APPLICATIONS: [CommandApplicationCapability; 1] = [
+        CommandApplicationCapability::Validate,
+    ];
+    static PROTOCOLS: [CommandBehaviorVersion; 1] = [CommandBehaviorVersion(7)];
+    let identities = IdentityAllocator::new();
+    let notebook = identities.allocate_accepted().expect("notebook identity");
+    let target = identities.allocate_accepted().expect("target identity");
+    let base = identities.allocate_revision().expect("base revision");
+    let mut snapshot = protocol_snapshot(&PROTOCOLS);
+    snapshot.admitted_applications = &APPLICATIONS;
+    let context = SemanticCommandContext {
+        admitted_families: vec![SemanticCommandFamily::TextContent],
+        base,
+        behavior_version: CommandBehaviorVersion(94),
+        context_identity: String::from("context-graph-separation"),
+        insertion_anchors: Vec::<String>::new(),
+        local_preconditions: Vec::<String>::new(),
+        notebook,
+        readable_context: (),
+        relevant_constraints: Vec::new(),
+        requested_intent: (),
+        resource_limits: CommandResourceLimits {
+            commands_per_batch: Some(2),
+            dependency_edges: Some(1),
+            envelope_bytes: None,
+            readable_context_bytes: None,
+            writable_targets: Some(1),
+        },
+        writable_targets: vec![target],
+    };
+    let mut first = command(5, SemanticCommandFamily::TextContent, target);
+    first.dependencies = vec![99];
+    let envelope = SemanticCommandBatchEnvelope {
+        binding: SemanticCommandContextBinding {
+            base,
+            behavior_version: CommandBehaviorVersion(94),
+            context_identity: String::from("context-graph-separation"),
+            notebook,
+        },
+        commands: vec![
+            first,
+            command(5, SemanticCommandFamily::TextContent, target),
+        ],
+        protocol_version: CommandBehaviorVersion(7),
+        retry_identity: String::from("retry-graph-separation"),
+    };
+    let admission = semantic_command_envelope_admission(
+        &snapshot,
+        CommandApplicationCapability::Validate,
+        &context,
+        &envelope,
+    );
+    assert_eq!(admission.context.commands.len(), 2);
+    assert_eq!(admission.context.commands[0].command, &5);
+    assert_eq!(admission.context.commands[1].command, &5);
+    assert!(admission.context.commands.iter().all(|command| {
+        command.family_admitted && command.location_admitted
+    }));
+    assert_eq!(
+        admission.resources,
+        SemanticCommandResourceAdmission {
+            commands_per_batch: SemanticCommandResourceLimitAdmission::Within {
+                actual: 2,
+                limit: 2,
+            },
+            dependency_edges: SemanticCommandResourceLimitAdmission::Within {
+                actual: 1,
+                limit: 1,
+            },
+            writable_targets: SemanticCommandResourceLimitAdmission::Within {
+                actual: 1,
+                limit: 1,
+            },
+        },
+    );
+}

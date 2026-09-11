@@ -507,7 +507,10 @@ preflight preserves simultaneous failures independently; it does not choose the
 final result-class precedence, validate dependency graphs, normalize a batch,
 compare retry identity, or mutate accepted state. A 64-case cross-axis oracle
 proves snapshot behavior, application/protocol membership, family/target scope,
-and command-count admission remain independent at this boundary.
+and command-count admission remain independent at this boundary. Invalid graph
+shape is intentionally not repaired here: a fixture preserves duplicate command
+identities and a missing dependency for the separate graph validator while
+preflight reports only the facts it owns.
 
 A separate single-target direct-edit simulator classifies twelve established
 editable value shapes as applicable, no-op, domain-invalid, unavailable, or

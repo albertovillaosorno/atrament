@@ -1672,6 +1672,11 @@ protocol membership, family and target scope, and command-count admission to
 prove those preflight axes remain independent; the existing 16-state context
 binding and 27-state resource oracles cover their own internal combinations.
 
+A separate fixture supplies duplicate command identities plus a missing
+dependency and proves preflight preserves both ordered commands while counting
+the explicit edge; dependency-graph rejection remains solely graph-validator
+work.
+
 Actual protocol-version implementation/admission, context identity computation,
 context construction/completeness policy, normalization and normalized batch
 identity, retry equality/recovery, receipt normalization, concrete
