@@ -1892,9 +1892,8 @@ and loop orchestration remain open application work.
 
 Semantic-result progress projection now maps Applied directly to accepted
 revision progress and Idempotent replay to replay-recovery non-progress. No-op
-repetition,
-stale-state comparison, and diagnostic progress still require stateful evidence.
-
+repetition, stale-state comparison, and diagnostic progress still require
+stateful evidence.
 
 Stable-blocking stop projection now maps only qualified repeated blocking
 diagnostic evidence to the frozen stable-blocking terminal outcome. Stateful
@@ -1915,9 +1914,9 @@ separate completion-admission gate already proves semantic and requested-output
 satisfaction. Stateful equivalence and satisfaction detection remain open.
 
 Derived-output completion projection now classifies all 33 operation/result
-pairs
-so only successful projection, Export commit, or recovered Export can satisfy a
-requested output. Output aggregation and receipt construction remain open.
+pairs so only successful projection, Export commit, or recovered Export can
+satisfy a requested output. Output aggregation and receipt construction remain
+open.
 
 Autonomous session-boundary evidence now invalidates prior command context,
 retry/recovery state, and session admission while keeping explicit external
