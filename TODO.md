@@ -1874,6 +1874,8 @@ A partial autonomous semantic-result classifier now encodes the twelve
 next-step branches that the frozen contracts define exactly. Successful
 validation, pre-commit cancellation, and internal known-no-commit failure remain
 unclassified rather than receiving invented retry or escalation policy.
+No-op guidance now requires inspecting accepted state and deciding whether the
+bounded intent is already satisfied; it no longer shares Applied continuation.
 
 History automation now separately classifies Traversed, Idempotent replay,
 History boundary, and Stale current revision into their frozen continuation,

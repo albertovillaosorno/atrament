@@ -48,6 +48,9 @@ pub enum AutonomousSemanticCommandGuidance {
     CorrectRetryBookkeepingOrStop,
     /// Inspect current authority and obtain fresh command context as required.
     FreshInspectionOrContext,
+    /// Inspect accepted state and decide whether the bounded intent is
+    /// satisfied.
+    InspectGoalSatisfaction,
     /// Use an admitted smaller or intentionally alternate workflow.
     SmallerOrAlternateWorkflow,
     /// Stop unresolved or ask the owning caller for an explicitly broader flow.
@@ -68,11 +71,11 @@ pub const fn autonomous_semantic_command_guidance(
 ) -> Option<AutonomousSemanticCommandGuidance> {
     match result {
         SemanticCommandResultClass::Applied
-        | SemanticCommandResultClass::IdempotentReplay
-        | SemanticCommandResultClass::NoOp => {
-            Some(
-                AutonomousSemanticCommandGuidance::ContinueFromReportedRevision,
-            )
+        | SemanticCommandResultClass::IdempotentReplay => Some(
+            AutonomousSemanticCommandGuidance::ContinueFromReportedRevision,
+        ),
+        SemanticCommandResultClass::NoOp => {
+            Some(AutonomousSemanticCommandGuidance::InspectGoalSatisfaction)
         },
         SemanticCommandResultClass::CommandContextMismatch
         | SemanticCommandResultClass::StaleBase => {

@@ -60,11 +60,11 @@ fn expected(
 ) -> Option<AutonomousSemanticCommandGuidance> {
     match result {
         SemanticCommandResultClass::Applied
-        | SemanticCommandResultClass::IdempotentReplay
-        | SemanticCommandResultClass::NoOp => {
-            Some(
-                AutonomousSemanticCommandGuidance::ContinueFromReportedRevision,
-            )
+        | SemanticCommandResultClass::IdempotentReplay => Some(
+            AutonomousSemanticCommandGuidance::ContinueFromReportedRevision,
+        ),
+        SemanticCommandResultClass::NoOp => {
+            Some(AutonomousSemanticCommandGuidance::InspectGoalSatisfaction)
         },
         SemanticCommandResultClass::CommandContextMismatch
         | SemanticCommandResultClass::StaleBase => {
