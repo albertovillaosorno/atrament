@@ -1,0 +1,15 @@
+[package]
+name = "atrament_autonomous_derived_output_guidance"
+version = "0.1.0"
+edition = "2024"
+publish = false
+license = "MIT"
+
+[dependencies]
+atrament_derived_output_result = { path = "../derived-output-result" }
+
+[lib]
+path = "application/lib.rs"
+
+[lints]
+workspace = true

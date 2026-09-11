@@ -1,0 +1,9 @@
+identity:
+  id: function:autonomous-derived-output-guidance
+  name: autonomous-derived-output-guidance
+  path: src/backend/autonomous-derived-output-guidance
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: application

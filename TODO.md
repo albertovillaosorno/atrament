@@ -1882,6 +1882,14 @@ History boundary, and Stale current revision into their frozen continuation,
 recovery, stop, or reinspection guidance. Cancellation and known-no-commit
 failure remain intentionally unclassified.
 
+
+Derived/output automation now separately classifies five explicit remediation
+branches for stale revision, overwrite conflict, Export retry conflict, external
+target drift, and idempotent Export recovery. Output successes and outcomes
+whose
+next action depends on diagnostics, cancellation intent, or caller authority
+remain unclassified.
+
 A shared MCP/lifecycle projection now maps the six operational MCP capability
 classes to the frozen application operation lifecycle and leaves Inspect and
 Command context outside that lifecycle. It does not imply those capabilities

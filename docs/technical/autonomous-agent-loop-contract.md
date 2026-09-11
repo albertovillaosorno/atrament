@@ -197,6 +197,13 @@ A failed or cancelled output operation follows its owning typed result and
 lifecycle semantics; the edit loop does not mutate notebook content merely to
 make an unrelated output failure disappear.
 
+
+A partial output-remediation classifier now materializes only five frozen
+branches: stale revision reinspection, explicit overwrite choice, Export retry
+correction, a new explicit Export after external target drift, and idempotent
+Export recovery. Success, cancellation, path/validation rejection, and internal
+known-no-effect outcomes retain caller- or diagnostic-dependent next steps.
+
 ### Physical-device boundary
 
 Generic autonomous semantic editing stops at device-neutral Plan for physical
