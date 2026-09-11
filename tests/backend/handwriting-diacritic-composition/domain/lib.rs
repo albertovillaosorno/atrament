@@ -74,6 +74,7 @@ fn declared_compositional_coverage_admits_and_retains_presentation() {
         intent("a\u{301}", "latin-base-plus-acute"),
     )
     .expect("declared composition must admit");
+    assert_eq!(*admitted.profile_identity, "writer-profile-7");
     assert_eq!(*admitted.profile_rule, "latin-base-plus-acute");
     assert_eq!(admitted.intent.target_grapheme, "a\u{301}");
     assert_eq!(admitted.intent.presentation.placement, "above-base-anchor");
@@ -86,6 +87,19 @@ fn declared_compositional_coverage_admits_and_retains_presentation() {
         admitted.intent.presentation.language_form,
         "spanish-acute",
     );
+}
+
+#[test]
+fn same_rule_from_another_profile_retains_the_other_profile_identity() {
+    let mut other_profile = profile();
+    other_profile.profile_identity = "writer-profile-8";
+    let admitted = admit_diacritic_composition(
+        &other_profile,
+        intent("a\u{301}", "latin-base-plus-acute"),
+    )
+    .expect("declared composition must admit");
+    assert_eq!(*admitted.profile_identity, "writer-profile-8");
+    assert_eq!(*admitted.profile_rule, "latin-base-plus-acute");
 }
 
 #[test]

@@ -73,9 +73,16 @@ pub struct DiacriticCompositionIntent<Grapheme, Presentation, Rule> {
 
 /// Admitted composition retaining both request evidence and profile rule proof.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct AdmittedDiacriticComposition<'profile, Intent, Rule> {
+pub struct AdmittedDiacriticComposition<
+    'profile,
+    Intent,
+    ProfileIdentity,
+    Rule,
+> {
     /// Complete caller-owned composition intent.
     pub intent: Intent,
+    /// Exact identity of the handwriting profile that admitted this reuse.
+    pub profile_identity: &'profile ProfileIdentity,
     /// Exact rule declaration from the admitting handwriting profile.
     pub profile_rule: &'profile Rule,
 }
@@ -85,11 +92,13 @@ pub type DiacriticCompositionAdmission<
     'profile,
     Grapheme,
     Presentation,
+    ProfileIdentity,
     Rule,
 > = Result<
     AdmittedDiacriticComposition<
         'profile,
         DiacriticCompositionIntent<Grapheme, Presentation, Rule>,
+        ProfileIdentity,
         Rule,
     >,
     DiacriticCompositionError,
@@ -127,7 +136,13 @@ pub fn admit_diacritic_composition<
         Rule,
     >,
     intent: DiacriticCompositionIntent<Grapheme, Presentation, Rule>,
-) -> DiacriticCompositionAdmission<'_, Grapheme, Presentation, Rule>
+) -> DiacriticCompositionAdmission<
+    '_,
+    Grapheme,
+    Presentation,
+    ProfileIdentity,
+    Rule,
+>
 where
     Grapheme: PartialEq,
     Rule: PartialEq,
@@ -140,6 +155,7 @@ where
         HandwritingCoverage::Compositional { rule } => {
             Ok(AdmittedDiacriticComposition {
                 intent,
+                profile_identity: &profile.profile_identity,
                 profile_rule: rule,
             })
         },

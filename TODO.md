@@ -1165,9 +1165,10 @@ placement, scale, collision, and language-specific forms.
 
 Current executable evidence now admits one compositional diacritic intent only
 when the exact handwriting profile classifies its externally matched rule as
-`Compositional`. The admitted value retains the profile-declared rule together
-with caller-owned placement, scale, collision evidence, and language-specific
-form. Exact-covered graphemes and missing or undeclared composition rules reject
+`Compositional`. The admitted value retains the exact admitting profile
+identity and profile-declared rule together with caller-owned placement, scale,
+collision evidence, and language-specific form. Exact-covered graphemes and
+missing or undeclared composition rules reject
 instead of silently switching to accent reuse. Unicode decomposition, rule
 applicability, placement/scale geometry, collision evaluation, language-form
 selection, stroke planning, rendering, and fallback remain open.
