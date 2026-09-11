@@ -83,6 +83,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "atrament_handwriting_fallback_admission"
+version = "0.1.0"
+dependencies = [
+ "atrament_handwriting_glyph_coverage",
+]
+
+[[package]]
 name = "atrament_handwriting_glyph_coverage"
 version = "0.1.0"
 

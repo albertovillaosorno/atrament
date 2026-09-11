@@ -16,6 +16,7 @@ members = [
     "src/backend/handwriting-capture-geometry-evidence",
     "src/backend/handwriting-contextual-stroke-candidates",
     "src/backend/handwriting-diacritic-composition",
+    "src/backend/handwriting-fallback-admission",
     "src/backend/handwriting-glyph-coverage",
     "src/backend/handwriting-profile-container",
     "src/backend/handwriting-role-profile",

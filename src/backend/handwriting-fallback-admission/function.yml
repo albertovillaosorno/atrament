@@ -1,0 +1,9 @@
+identity:
+  id: function:handwriting-fallback-admission
+  name: handwriting-fallback-admission
+  path: src/backend/handwriting-fallback-admission
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: domain

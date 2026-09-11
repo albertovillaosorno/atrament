@@ -49,6 +49,9 @@ depends_on = []
 [component.atrament_handwriting_diacritic_composition]
 depends_on = ["atrament_handwriting_glyph_coverage"]
 
+[component.atrament_handwriting_fallback_admission]
+depends_on = ["atrament_handwriting_glyph_coverage"]
+
 [component.atrament_handwriting_glyph_coverage]
 depends_on = []
 

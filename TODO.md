@@ -873,10 +873,18 @@ exact grapheme value without Unicode normalization or deduplication. All 64
 six-query missing masks prove that covered and missing occurrences preserve
 exact caller order and duplicate positions.
 
-Rule applicability, required English/Spanish corpus enumeration, fallback-style
-admission, semantic locations, diagnostics, measurement, rendering, and portable
-section schema remain open. Glyph validation must not infer support from an
-installed font, renderer behavior, or successful text acceptance.
+Rule applicability, required English/Spanish corpus enumeration, semantic
+locations, diagnostics, measurement, rendering, and portable section schema
+remain open. Glyph validation must not infer support from an installed font,
+renderer behavior, or successful text acceptance.
+
+A separate fallback-admission boundary now keeps missing handwriting coverage
+blocked unless caller evidence identifies one declared fallback style, proves
+its use remains visible, and records explicit user acceptance. It never chooses
+a style or treats Exact/Compositional profile coverage as needing fallback. All
+eight declaration/visibility/acceptance combinations are covered independently;
+style selection, consent UI, semantic locations, diagnostics, and rendering
+remain open.
 
 ## P3 — The dual human and LLM editor
 
