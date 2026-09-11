@@ -170,9 +170,9 @@ pub fn semantic_command_protocol_admission(
 
 const fn count_limit_admission(
     actual: usize,
-    limit: Option<usize>,
+    configured_limit: Option<usize>,
 ) -> SemanticCommandResourceLimitAdmission {
-    let Some(limit) = limit else {
+    let Some(limit) = configured_limit else {
         return SemanticCommandResourceLimitAdmission::Unspecified;
     };
     if actual > limit {
@@ -186,9 +186,9 @@ fn dependency_edge_limit_admission<CommandIdentity>(
     commands: &[atrament_semantic_notebook_port::DirectEditBatchCommand<
         CommandIdentity,
     >],
-    limit: Option<usize>,
+    configured_limit: Option<usize>,
 ) -> SemanticCommandResourceLimitAdmission {
-    let Some(limit) = limit else {
+    let Some(limit) = configured_limit else {
         return SemanticCommandResourceLimitAdmission::Unspecified;
     };
     let mut actual = 0usize;
