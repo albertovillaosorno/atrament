@@ -1641,6 +1641,15 @@ and missing producer/consumer commands reject before any accepted mutation. The
 validator does not decide which command family may produce a handle or allocate
 accepted identities.
 
+Command-context resource admission now enforces every count that current typed
+structures can measure without serialization: ordered commands, explicit
+dependency edges, and the combined writable target plus insertion-anchor count.
+Each axis is checked independently against its optional context-owned limit, and
+an absent limit remains unspecified rather than becoming a frontend default.
+Envelope/readable-context bytes, structured depth, and family payload sizes
+still
+need their owning representations before they can be measured here.
+
 Protocol-version admission, context identity computation, context
 construction/completeness policy, normalization and normalized batch identity,
 retry equality/recovery, receipt normalization, concrete insertion-command

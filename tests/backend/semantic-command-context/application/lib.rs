@@ -33,7 +33,7 @@
 use atrament_semantic_command_context::{
     semantic_command_context_binding_admission,
     semantic_command_envelope_context_admission,
-    semantic_command_scope_admission,
+    semantic_command_resource_admission, semantic_command_scope_admission,
 };
 use atrament_semantic_notebook::IdentityAllocator;
 use atrament_semantic_notebook_port::{
@@ -43,6 +43,7 @@ use atrament_semantic_notebook_port::{
     SemanticCommandContextBinding, SemanticCommandContextBindingAdmission,
     SemanticCommandContextMatch, SemanticCommandEnvelopeCommandAdmission,
     SemanticCommandEnvelopeContextAdmission, SemanticCommandFamily,
+    SemanticCommandResourceAdmission, SemanticCommandResourceLimitAdmission,
     SemanticCommandScopeAdmission, SemanticCommandScopeLocation,
 };
 
@@ -435,4 +436,88 @@ fn envelope_context_review_preserves_order_and_all_scope_fact_combinations() {
             ],
         },
     );
+}
+
+const fn expected_limit(
+    actual: usize,
+    limit: Option<usize>,
+) -> SemanticCommandResourceLimitAdmission {
+    match limit {
+        None => SemanticCommandResourceLimitAdmission::Unspecified,
+        Some(limit) if actual > limit => {
+            SemanticCommandResourceLimitAdmission::Exceeded { actual, limit }
+        },
+        Some(limit) => {
+            SemanticCommandResourceLimitAdmission::Within { actual, limit }
+        },
+    }
+}
+
+#[test]
+fn all_27_count_resource_limit_states_are_independent() {
+    let identities = IdentityAllocator::new();
+    let notebook = identities.allocate_accepted().expect("notebook identity");
+    let writable = identities.allocate_accepted().expect("writable identity");
+    let base = identities.allocate_revision().expect("base revision");
+    let mut cases = 0_u8;
+    for command_limit in [None, Some(2), Some(1)] {
+        for edge_limit in [None, Some(1), Some(0)] {
+            for writable_limit in [None, Some(2), Some(1)] {
+                let context = SemanticCommandContext {
+                    admitted_families: vec![SemanticCommandFamily::TextContent],
+                    base,
+                    behavior_version: CommandBehaviorVersion(94),
+                    context_identity: String::from("context-resource"),
+                    insertion_anchors: vec![String::from("after-body")],
+                    local_preconditions: Vec::<String>::new(),
+                    notebook,
+                    readable_context: (),
+                    relevant_constraints: Vec::new(),
+                    requested_intent: (),
+                    resource_limits: CommandResourceLimits {
+                        commands_per_batch: command_limit,
+                        dependency_edges: edge_limit,
+                        envelope_bytes: None,
+                        readable_context_bytes: None,
+                        writable_targets: writable_limit,
+                    },
+                    writable_targets: vec![writable],
+                };
+                let mut second = command(
+                    2,
+                    SemanticCommandFamily::TextContent,
+                    writable,
+                );
+                second.dependencies = vec![1];
+                let envelope = SemanticCommandBatchEnvelope {
+                    binding: SemanticCommandContextBinding {
+                        base,
+                        behavior_version: CommandBehaviorVersion(94),
+                        context_identity: String::from("context-resource"),
+                        notebook,
+                    },
+                    commands: vec![
+                        command(
+                            1,
+                            SemanticCommandFamily::TextContent,
+                            writable,
+                        ),
+                        second,
+                    ],
+                    protocol_version: CommandBehaviorVersion(7),
+                    retry_identity: String::from("retry-resource"),
+                };
+                assert_eq!(
+                    semantic_command_resource_admission(&context, &envelope),
+                    SemanticCommandResourceAdmission {
+                        commands_per_batch: expected_limit(2, command_limit),
+                        dependency_edges: expected_limit(1, edge_limit),
+                        writable_targets: expected_limit(2, writable_limit),
+                    },
+                );
+                cases = cases.saturating_add(1);
+            }
+        }
+    }
+    assert_eq!(cases, 27);
 }

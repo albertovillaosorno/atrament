@@ -1276,6 +1276,40 @@ pub struct CommandResourceLimits {
     pub writable_targets: Option<usize>,
 }
 
+/// Admission state for one backend-owned command resource bound.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum SemanticCommandResourceLimitAdmission {
+    /// Exact measured count exceeds the context-bound limit.
+    Exceeded {
+        /// Exact measured count.
+        actual: usize,
+        /// Maximum count admitted by the command context.
+        limit: usize,
+    },
+    /// Exact count could not be represented as `usize`.
+    Overflow,
+    /// This context does not bind this count-based limit.
+    Unspecified,
+    /// Exact measured count is at or below the context-bound limit.
+    Within {
+        /// Exact measured count.
+        actual: usize,
+        /// Maximum count admitted by the command context.
+        limit: usize,
+    },
+}
+
+/// Independent count-based resource admissions for one parsed command batch.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct SemanticCommandResourceAdmission {
+    /// Ordered command count against the context-bound batch limit.
+    pub commands_per_batch: SemanticCommandResourceLimitAdmission,
+    /// Explicit dependency-edge count against its context-bound limit.
+    pub dependency_edges: SemanticCommandResourceLimitAdmission,
+    /// Writable targets plus insertion anchors against their shared limit.
+    pub writable_targets: SemanticCommandResourceLimitAdmission,
+}
+
 /// Backend-owned command context for one bounded semantic edit intent.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SemanticCommandContext<

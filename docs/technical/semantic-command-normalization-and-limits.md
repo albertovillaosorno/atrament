@@ -228,6 +228,14 @@ counts commands and explicit dependency edges directly from the proposal, so
 resource-only inspection needs neither command-ID ordering nor graph-node view
 allocation.
 
+The command-context application boundary also checks the count-based limits that
+its current typed structures can measure: ordered command count, explicit
+dependency-edge count, and writable targets plus insertion anchors as one shared
+scope count. Each check uses the optional backend-owned limit carried by the
+context and never supplies a browser default. Serialized envelope bytes,
+readable-context bytes, structured depth, and family-specific payload bounds are
+not claimed by this count-only evidence.
+
 Ordered direct-edit simulation can enforce those same caller-supplied bounds
 before dependency-graph and semantic evaluation. Repeated explicit dependency
 edges remain structurally admissible but each still consumes one edge of the

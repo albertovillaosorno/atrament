@@ -16,7 +16,7 @@
 //     batches, mutate notebooks, choose scope, or implement retry behavior.
 // - Allows:
 //   - Inputs: One declared command context plus requested family and location.
-//   - Outputs: Independent family and location admission facts.
+//   - Outputs: Independent context, scope, and count-resource admission facts.
 //   - Side effects: None.
 // - Split-When:
 //   - Context construction or protocol compatibility gains executable
@@ -26,7 +26,7 @@
 // - Summary:
 //   - Prevents readable semantic context from silently widening write scope.
 // - Description:
-//   - Checks only backend-declared writable targets, anchors, and families.
+//   - Checks backend-declared authority and count-based resource limits.
 // - Usage:
 //   - Evaluate parsed command use before semantic simulation or accepted Apply.
 // - Defaults:
@@ -40,6 +40,7 @@ use atrament_semantic_notebook_port::{
     SemanticCommandContextBinding, SemanticCommandContextBindingAdmission,
     SemanticCommandContextMatch, SemanticCommandEnvelopeCommandAdmission,
     SemanticCommandEnvelopeContextAdmission, SemanticCommandFamily,
+    SemanticCommandResourceAdmission, SemanticCommandResourceLimitAdmission,
     SemanticCommandScopeAdmission, SemanticCommandScopeLocation,
 };
 
@@ -144,6 +145,103 @@ where
         })
         .collect();
     SemanticCommandEnvelopeContextAdmission { binding, commands }
+}
+
+
+const fn count_limit_admission(
+    actual: usize,
+    limit: Option<usize>,
+) -> SemanticCommandResourceLimitAdmission {
+    let Some(limit) = limit else {
+        return SemanticCommandResourceLimitAdmission::Unspecified;
+    };
+    if actual > limit {
+        SemanticCommandResourceLimitAdmission::Exceeded { actual, limit }
+    } else {
+        SemanticCommandResourceLimitAdmission::Within { actual, limit }
+    }
+}
+
+fn dependency_edge_limit_admission<CommandIdentity>(
+    commands: &[atrament_semantic_notebook_port::DirectEditBatchCommand<
+        CommandIdentity,
+    >],
+    limit: Option<usize>,
+) -> SemanticCommandResourceLimitAdmission {
+    let Some(limit) = limit else {
+        return SemanticCommandResourceLimitAdmission::Unspecified;
+    };
+    let mut actual = 0usize;
+    for command in commands {
+        let Some(next) = actual.checked_add(command.dependencies.len()) else {
+            return SemanticCommandResourceLimitAdmission::Overflow;
+        };
+        actual = next;
+    }
+    count_limit_admission(actual, Some(limit))
+}
+
+/// Check count-based envelope and writable-scope limits bound by one context.
+///
+/// This covers only counts represented exactly by current transport-neutral
+/// types. Serialized envelope bytes, readable-context bytes, structured depth,
+/// and family-specific payload sizes remain outside this admission until their
+/// owning representation is defined.
+#[must_use]
+pub fn semantic_command_resource_admission<
+    CommandIdentity,
+    ContextIdentity,
+    InsertionAnchor,
+    Intent,
+    PreconditionMaterial,
+    ReadableContext,
+    RetryIdentity,
+>(
+    context: &SemanticCommandContext<
+        ContextIdentity,
+        InsertionAnchor,
+        Intent,
+        PreconditionMaterial,
+        ReadableContext,
+    >,
+    envelope: &SemanticCommandBatchEnvelope<
+        CommandIdentity,
+        ContextIdentity,
+        RetryIdentity,
+    >,
+) -> SemanticCommandResourceAdmission {
+    let commands_per_batch = count_limit_admission(
+        envelope.commands.len(),
+        context.resource_limits.commands_per_batch,
+    );
+    let dependency_edges = dependency_edge_limit_admission(
+        &envelope.commands,
+        context.resource_limits.dependency_edges,
+    );
+    let writable_targets =
+        match context.resource_limits.writable_targets {
+            None => SemanticCommandResourceLimitAdmission::Unspecified,
+            Some(limit) => {
+                let Some(actual) = context
+                    .writable_targets
+                    .len()
+                    .checked_add(context.insertion_anchors.len())
+                else {
+                    return SemanticCommandResourceAdmission {
+                        commands_per_batch,
+                        dependency_edges,
+                        writable_targets:
+                            SemanticCommandResourceLimitAdmission::Overflow,
+                    };
+                };
+                count_limit_admission(actual, Some(limit))
+            },
+        };
+    SemanticCommandResourceAdmission {
+        commands_per_batch,
+        dependency_edges,
+        writable_targets,
+    }
 }
 
 /// Check bounded command scope without widening readable context into
