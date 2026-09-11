@@ -1890,6 +1890,11 @@ progress conditions from four explicit non-progress conditions without
 inspecting raw state or model prose. Stateful revision/diagnostic comparison
 and loop orchestration remain open application work.
 
+
+Stable-blocking stop projection now maps only qualified repeated blocking
+diagnostic evidence to the frozen stable-blocking terminal outcome. Stateful
+diagnostic comparison and all other stop/completion composition remain open.
+
 Autonomous terminal outcomes now distinguish successful goal completion from
 stopping for unresolved evidence, exhausted budget, stable blocking failure, or
 unavailable capability. Detecting those terminal conditions and constructing

@@ -1,0 +1,9 @@
+identity:
+  id: function:autonomous-stable-blocking-stop-projection
+  name: autonomous-stable-blocking-stop-projection
+  path: src/backend/autonomous-stable-blocking-stop-projection
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: application

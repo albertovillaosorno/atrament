@@ -60,6 +60,14 @@ name = "atrament_autonomous_session_boundary"
 version = "0.1.0"
 
 [[package]]
+name = "atrament_autonomous_stable_blocking_stop_projection"
+version = "0.1.0"
+dependencies = [
+ "atrament_autonomous_goal_outcome",
+ "atrament_autonomous_progress_evidence",
+]
+
+[[package]]
 name = "atrament_browser_launch"
 version = "0.1.0"
 

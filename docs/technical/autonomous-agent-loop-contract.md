@@ -155,6 +155,12 @@ A stable blocking diagnostic tied to the same authoritative inputs is not new
 progress when another iteration returns the same condition without accepted
 state or evidence change.
 
+
+An application-level stop projection now maps only the already-qualified
+repeated stable-blocking evidence class to the frozen stable-blocking terminal
+stop. Replay, repeated No-op, and generic unchanged-input evidence do not become
+terminal on this projection alone.
+
 An agent uses typed diagnostic code, semantic location, blocking disposition,
 and evidence to recognize this condition rather than comparing only localized
 message text.
