@@ -1870,24 +1870,21 @@ progress versus non-progress, same-retry recovery, bounded automation budgets,
 and the separation between semantic completion, explicit output, and physical
 authority. Concrete MCP tools and backend execution remain open.
 
-
 A partial autonomous semantic-result classifier now encodes the twelve
 next-step branches that the frozen contracts define exactly. Successful
 validation, pre-commit cancellation, and internal known-no-commit failure remain
 unclassified rather than receiving invented retry or escalation policy.
-
 
 History automation now separately classifies Traversed, Idempotent replay,
 History boundary, and Stale current revision into their frozen continuation,
 recovery, stop, or reinspection guidance. Cancellation and known-no-commit
 failure remain intentionally unclassified.
 
-
 Derived/output automation now separately classifies five explicit remediation
 branches for stale revision, overwrite conflict, Export retry conflict, external
 target drift, and idempotent Export recovery. Output successes and outcomes
-whose
-next action depends on diagnostics, cancellation intent, or caller authority
+whose next action depends on diagnostics, cancellation intent, or caller
+authority
 remain unclassified.
 
 A shared MCP/lifecycle projection now maps the six operational MCP capability

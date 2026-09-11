@@ -78,11 +78,10 @@ justifies a different semantic intent.
 Repeated No-op for the same bounded intent is a stop condition rather than a
 self-improvement signal.
 
-
 History-result guidance is also transport-neutral: a committed traversal
 continues from its reported revision, idempotent replay recovers prior
-completion
-without another traversal, a history boundary stops blind retry in that
+completion without another traversal, a history boundary stops blind retry in
+that
 direction, and stale history returns to inspection. Cancellation and known
 no-commit failure remain workflow-policy decisions.
 
@@ -128,7 +127,6 @@ address the reported class, such as:
 
 The returned model cannot grant itself broader scope, capability, paths, or
 physical authority as its own remediation.
-
 
 A transport-neutral partial guidance classifier now materializes the result
 branches whose next-step class is frozen by these rules. It maps twelve semantic
@@ -196,7 +194,6 @@ and overwrite intent, and Plan remains device-neutral.
 A failed or cancelled output operation follows its owning typed result and
 lifecycle semantics; the edit loop does not mutate notebook content merely to
 make an unrelated output failure disappear.
-
 
 A partial output-remediation classifier now materializes only five frozen
 branches: stale revision reinspection, explicit overwrite choice, Export retry
