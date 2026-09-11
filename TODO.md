@@ -887,9 +887,10 @@ graphemes or claim render/measure/wrap/edit/serialize/CLI/MCP verification.
 
 A separate fallback-admission boundary now keeps missing handwriting coverage
 blocked unless caller evidence identifies one declared fallback style, proves
-its use remains visible, and records explicit user acceptance. It never chooses
-a style or treats Exact/Compositional profile coverage as needing fallback. All
-eight declaration/visibility/acceptance combinations are covered independently.
+its use remains visible, and records explicit user acceptance. Exact and
+Compositional admission retain the original profile coverage, including the
+profile-declared rule reference, without requiring fallback. All eight
+declaration/visibility/acceptance combinations are covered independently.
 A separate 27-state oracle crosses Exact/Compositional/Missing with absent and
 all eight fallback evidence states.
 

@@ -82,9 +82,17 @@ pub struct HandwritingFallbackEvidence<StyleIdentity> {
 
 /// Handwriting projection admission after profile coverage and fallback review.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum HandwritingCoverageAdmission<'evidence, StyleIdentity> {
+pub enum HandwritingCoverageAdmission<
+    'coverage,
+    'evidence,
+    Rule,
+    StyleIdentity,
+> {
     /// Exact or compositional profile coverage is already sufficient.
-    ProfileCoverage,
+    ProfileCoverage {
+        /// Original exact/compositional coverage, including any declared rule.
+        coverage: HandwritingCoverage<'coverage, Rule>,
+    },
     /// Missing profile coverage is replaced only by explicit fallback evidence.
     VisibleAcceptedFallback {
         /// Exact caller-owned fallback style identity that was admitted.
@@ -120,15 +128,20 @@ pub enum HandwritingFallbackAdmissionError {
 /// Returns [`HandwritingFallbackAdmissionError`] when missing coverage has no
 /// fallback or when supplied fallback evidence does not establish all three
 /// accepted requirements.
-pub fn admit_handwriting_fallback<'evidence, Rule, StyleIdentity>(
-    coverage: HandwritingCoverage<'_, Rule>,
+pub fn admit_handwriting_fallback<
+    'coverage,
+    'evidence,
+    Rule,
+    StyleIdentity,
+>(
+    coverage: HandwritingCoverage<'coverage, Rule>,
     fallback: Option<&'evidence HandwritingFallbackEvidence<StyleIdentity>>,
 ) -> Result<
-    HandwritingCoverageAdmission<'evidence, StyleIdentity>,
+    HandwritingCoverageAdmission<'coverage, 'evidence, Rule, StyleIdentity>,
     HandwritingFallbackAdmissionError,
 > {
     if !matches!(coverage, HandwritingCoverage::Missing) {
-        return Ok(HandwritingCoverageAdmission::ProfileCoverage);
+        return Ok(HandwritingCoverageAdmission::ProfileCoverage { coverage });
     }
     let Some(fallback) = fallback else {
         return Err(

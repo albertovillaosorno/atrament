@@ -61,9 +61,21 @@ fn profile_coverage_never_requires_or_selects_fallback() {
     ] {
         assert_eq!(
             admit_handwriting_fallback::<_, &str>(coverage, None),
-            Ok(HandwritingCoverageAdmission::ProfileCoverage),
+            Ok(HandwritingCoverageAdmission::ProfileCoverage { coverage }),
         );
     }
+}
+
+#[test]
+fn compositional_profile_admission_retains_exact_declared_rule_reference() {
+    let declared_rule = String::from("profile-rule-owned");
+    let coverage = HandwritingCoverage::Compositional {
+        rule: &declared_rule,
+    };
+    assert_eq!(
+        admit_handwriting_fallback::<_, &str>(coverage.clone(), None),
+        Ok(HandwritingCoverageAdmission::ProfileCoverage { coverage }),
+    );
 }
 
 #[test]
@@ -192,7 +204,7 @@ fn all_27_coverage_and_fallback_states_match_independent_admission_oracle() {
             });
             let expected = if coverage_index != 2 {
                 saw_profile = true;
-                Ok(HandwritingCoverageAdmission::ProfileCoverage)
+                Ok(HandwritingCoverageAdmission::ProfileCoverage { coverage })
             } else if evidence.is_none() {
                 saw_missing_without_fallback = true;
                 Err(
