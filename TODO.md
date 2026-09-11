@@ -1677,6 +1677,13 @@ dependency and proves preflight preserves both ordered commands while counting
 the explicit edge; dependency-graph rejection remains solely graph-validator
 work.
 
+Preflight failures can now also be projected into frozen result-class facts
+without collapsing them to one batch result: unsupported application,
+capability, protocol, or family authority; command-context mismatch, writable
+scope escape, and measured resource rejection remain independently visible.
+Command identities and order are retained, so later precedence policy need not
+reconstruct evidence.
+
 A transport-neutral core result taxonomy now names the 15 frozen application
 classes required across Validate and Apply without assigning final wire names or
 transport statuses. `Unknown transport outcome` is intentionally absent because

@@ -36,6 +36,7 @@ use atrament_semantic_command_context::{
     semantic_command_context_binding_admission,
     semantic_command_envelope_admission,
     semantic_command_envelope_context_admission,
+    semantic_command_envelope_result_class_facts,
     semantic_command_family_behavior_admission,
     semantic_command_protocol_admission, semantic_command_resource_admission,
     semantic_command_scope_admission,
@@ -52,10 +53,13 @@ use atrament_semantic_notebook_port::{
     SemanticCommandContextBinding, SemanticCommandContextBindingAdmission,
     SemanticCommandContextMatch, SemanticCommandEnvelopeAdmission,
     SemanticCommandEnvelopeCommandAdmission,
-    SemanticCommandEnvelopeContextAdmission, SemanticCommandFamily,
+    SemanticCommandEnvelopeCommandResultClassFacts,
+    SemanticCommandEnvelopeContextAdmission,
+    SemanticCommandEnvelopeResultClassFacts, SemanticCommandFamily,
     SemanticCommandFamilyBehaviorAdmission, SemanticCommandProtocolAdmission,
     SemanticCommandResourceAdmission, SemanticCommandResourceLimitAdmission,
-    SemanticCommandScopeAdmission, SemanticCommandScopeLocation,
+    SemanticCommandResultClass, SemanticCommandScopeAdmission,
+    SemanticCommandScopeLocation,
 };
 
 const fn expected_match(matches: bool) -> SemanticCommandContextMatch {
@@ -1001,6 +1005,50 @@ fn all_64_envelope_preflight_axis_masks_match_independent_oracle() {
             &context,
             &envelope,
         );
+        let result_facts =
+            semantic_command_envelope_result_class_facts(&admission);
+        assert_eq!(
+            result_facts.application,
+            (!application_admitted).then_some(
+                SemanticCommandResultClass::UnsupportedProtocolOrCapability,
+            ),
+            "application result class mismatch for mask {mask:#08b}",
+        );
+        assert_eq!(
+            result_facts.capability,
+            (!behavior_matches).then_some(
+                SemanticCommandResultClass::UnsupportedProtocolOrCapability,
+            ),
+            "capability result class mismatch for mask {mask:#08b}",
+        );
+        assert_eq!(result_facts.context, None);
+        assert_eq!(
+            result_facts.protocol,
+            (!protocol_admitted).then_some(
+                SemanticCommandResultClass::UnsupportedProtocolOrCapability,
+            ),
+            "protocol result class mismatch for mask {mask:#08b}",
+        );
+        assert_eq!(
+            result_facts.resources,
+            (!command_limit_admitted).then_some(
+                SemanticCommandResultClass::ResourceLimitRejection,
+            ),
+            "resource result class mismatch for mask {mask:#08b}",
+        );
+        assert_eq!(
+            result_facts.commands,
+            vec![SemanticCommandEnvelopeCommandResultClassFacts {
+                command: &3,
+                family: (!family_admitted).then_some(
+                    SemanticCommandResultClass::UnsupportedProtocolOrCapability,
+                ),
+                location: (!target_admitted).then_some(
+                    SemanticCommandResultClass::WritableScopeViolation,
+                ),
+            }],
+            "command result classes mismatch for mask {mask:#08b}",
+        );
         assert_eq!(
             admission.capability,
             if behavior_matches {
@@ -1161,6 +1209,88 @@ fn envelope_preflight_preserves_invalid_graph_for_graph_validator() {
                 actual: 1,
                 limit: 1,
             },
+        },
+    );
+}
+
+#[test]
+fn envelope_result_class_facts_preserve_simultaneous_failures() {
+    let identities = IdentityAllocator::new();
+    let notebook = identities.allocate_accepted().expect("notebook identity");
+    let target = identities.allocate_accepted().expect("target identity");
+    let other_target = identities.allocate_accepted().expect("other target");
+    let base = identities.allocate_revision().expect("base revision");
+    let other_base = identities
+        .allocate_revision()
+        .expect("other base revision");
+    let mut snapshot = protocol_snapshot(&[]);
+    snapshot.behavior_version = CommandBehaviorVersion(95);
+    let context = SemanticCommandContext {
+        admitted_families: Vec::new(),
+        base,
+        behavior_version: CommandBehaviorVersion(94),
+        context_identity: String::from("result-context"),
+        insertion_anchors: Vec::<String>::new(),
+        local_preconditions: Vec::<String>::new(),
+        notebook,
+        readable_context: (),
+        relevant_constraints: Vec::new(),
+        requested_intent: (),
+        resource_limits: CommandResourceLimits {
+            commands_per_batch: Some(0),
+            dependency_edges: None,
+            envelope_bytes: None,
+            readable_context_bytes: None,
+            writable_targets: None,
+        },
+        writable_targets: vec![target],
+    };
+    let envelope = SemanticCommandBatchEnvelope {
+        binding: SemanticCommandContextBinding {
+            base: other_base,
+            behavior_version: CommandBehaviorVersion(93),
+            context_identity: String::from("other-context"),
+            notebook,
+        },
+        commands: vec![command(
+            7,
+            SemanticCommandFamily::StyleRole,
+            other_target,
+        )],
+        protocol_version: CommandBehaviorVersion(7),
+        retry_identity: String::from("result-retry"),
+    };
+    let admission = semantic_command_envelope_admission(
+        &snapshot,
+        CommandApplicationCapability::Validate,
+        &context,
+        &envelope,
+    );
+    assert_eq!(
+        semantic_command_envelope_result_class_facts(&admission),
+        SemanticCommandEnvelopeResultClassFacts {
+            application: Some(
+                SemanticCommandResultClass::UnsupportedProtocolOrCapability,
+            ),
+            capability: Some(
+                SemanticCommandResultClass::UnsupportedProtocolOrCapability,
+            ),
+            commands: vec![SemanticCommandEnvelopeCommandResultClassFacts {
+                command: &7,
+                family: Some(
+                    SemanticCommandResultClass::UnsupportedProtocolOrCapability,
+                ),
+                location: Some(
+                    SemanticCommandResultClass::WritableScopeViolation,
+                ),
+            }],
+            context: Some(SemanticCommandResultClass::CommandContextMismatch),
+            protocol: Some(
+                SemanticCommandResultClass::UnsupportedProtocolOrCapability,
+            ),
+            resources: Some(
+                SemanticCommandResultClass::ResourceLimitRejection,
+            ),
         },
     );
 }

@@ -32,6 +32,12 @@ Missing accepted state, candidate replay failure, and revision-identity
 exhaustion deliberately remain unclassified until the final application result
 contract assigns them semantics; that absence is not transport-unknown state.
 
+Separately, envelope preflight can project each independent rejected axis to the
+frozen class it already implies without choosing final batch precedence.
+Application, capability, protocol, family, context binding, writable location,
+and measured resource facts therefore remain inspectable together when several
+fail at once.
+
 ## Contract
 
 ### Result envelope principles

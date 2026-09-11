@@ -1484,6 +1484,45 @@ pub struct SemanticCommandEnvelopeAdmission<'command, CommandIdentity> {
     pub resources: SemanticCommandResourceAdmission,
 }
 
+/// Result-class facts for one ordered command in envelope preflight.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct SemanticCommandEnvelopeCommandResultClassFacts<
+    'command,
+    CommandIdentity,
+> {
+    /// Borrowed caller-owned command identity in original batch order.
+    pub command: &'command CommandIdentity,
+    /// Unsupported capability class when family admission failed.
+    pub family: Option<SemanticCommandResultClass>,
+    /// Writable-scope class when target admission failed.
+    pub location: Option<SemanticCommandResultClass>,
+}
+
+/// Independent frozen result-class facts derivable from envelope preflight.
+///
+/// Multiple fields may carry classes simultaneously. This evidence does not
+/// choose the single final batch-level result required by Validate or Apply.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SemanticCommandEnvelopeResultClassFacts<'command, CommandIdentity> {
+    /// Requested application capability classification, when rejected.
+    pub application: Option<SemanticCommandResultClass>,
+    /// Snapshot-to-context capability behavior classification, when rejected.
+    pub capability: Option<SemanticCommandResultClass>,
+    /// Ordered per-command family and writable-location result facts.
+    pub commands: Vec<
+        SemanticCommandEnvelopeCommandResultClassFacts<
+            'command,
+            CommandIdentity,
+        >,
+    >,
+    /// Batch-to-command-context binding classification, when rejected.
+    pub context: Option<SemanticCommandResultClass>,
+    /// Parsed protocol membership classification, when rejected.
+    pub protocol: Option<SemanticCommandResultClass>,
+    /// Count-resource classification when any measured limit rejects.
+    pub resources: Option<SemanticCommandResultClass>,
+}
+
 /// Context-only review of one parsed semantic command envelope.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SemanticCommandEnvelopeContextAdmission<'command, CommandIdentity> {

@@ -43,9 +43,12 @@ use atrament_semantic_notebook_port::{
     SemanticCommandContextBinding, SemanticCommandContextBindingAdmission,
     SemanticCommandContextMatch, SemanticCommandEnvelopeAdmission,
     SemanticCommandEnvelopeCommandAdmission,
-    SemanticCommandEnvelopeContextAdmission, SemanticCommandFamily,
+    SemanticCommandEnvelopeCommandResultClassFacts,
+    SemanticCommandEnvelopeContextAdmission,
+    SemanticCommandEnvelopeResultClassFacts, SemanticCommandFamily,
     SemanticCommandFamilyBehaviorAdmission, SemanticCommandProtocolAdmission,
     SemanticCommandResourceAdmission, SemanticCommandResourceLimitAdmission,
+    SemanticCommandResultClass,
     SemanticCommandScopeAdmission, SemanticCommandScopeLocation,
 };
 
@@ -388,6 +391,87 @@ where
             envelope.protocol_version,
         ),
         resources: semantic_command_resource_admission(context, envelope),
+    }
+}
+
+fn resource_limit_rejected(
+    admission: SemanticCommandResourceLimitAdmission,
+) -> bool {
+    matches!(
+        admission,
+        SemanticCommandResourceLimitAdmission::Exceeded { .. }
+            | SemanticCommandResourceLimitAdmission::Overflow
+    )
+}
+
+/// Project independent envelope preflight failures into frozen result classes.
+///
+/// Every field remains independent and per-command order is preserved. This
+/// function deliberately does not choose batch-level rejection precedence.
+#[must_use]
+pub fn semantic_command_envelope_result_class_facts<'command, CommandIdentity>(
+    admission: &SemanticCommandEnvelopeAdmission<'command, CommandIdentity>,
+) -> SemanticCommandEnvelopeResultClassFacts<'command, CommandIdentity> {
+    let unsupported = Some(
+        SemanticCommandResultClass::UnsupportedProtocolOrCapability,
+    );
+    let application = match admission.application {
+        SemanticCommandApplicationAdmission::Admitted { .. } => None,
+        SemanticCommandApplicationAdmission::Unsupported { .. } => unsupported,
+    };
+    let capability = match admission.capability {
+        CommandCapabilityCompatibilityOutcome::Compatible { .. } => None,
+        CommandCapabilityCompatibilityOutcome::Mismatch { .. } => unsupported,
+    };
+    let context = if [
+        admission.context.binding.base,
+        admission.context.binding.behavior,
+        admission.context.binding.context,
+        admission.context.binding.notebook,
+    ]
+    .contains(&SemanticCommandContextMatch::Mismatched)
+    {
+        Some(SemanticCommandResultClass::CommandContextMismatch)
+    } else {
+        None
+    };
+    let protocol = match admission.protocol {
+        SemanticCommandProtocolAdmission::Admitted { .. } => None,
+        SemanticCommandProtocolAdmission::Unsupported { .. } => unsupported,
+    };
+    let resources = if [
+        admission.resources.commands_per_batch,
+        admission.resources.dependency_edges,
+        admission.resources.writable_targets,
+    ]
+    .into_iter()
+    .any(resource_limit_rejected)
+    {
+        Some(SemanticCommandResultClass::ResourceLimitRejection)
+    } else {
+        None
+    };
+    let commands = admission
+        .context
+        .commands
+        .iter()
+        .map(|command| SemanticCommandEnvelopeCommandResultClassFacts {
+            command: command.command,
+            family: (!command.family_admitted).then_some(
+                SemanticCommandResultClass::UnsupportedProtocolOrCapability,
+            ),
+            location: (!command.location_admitted).then_some(
+                SemanticCommandResultClass::WritableScopeViolation,
+            ),
+        })
+        .collect();
+    SemanticCommandEnvelopeResultClassFacts {
+        application,
+        capability,
+        commands,
+        context,
+        protocol,
+        resources,
     }
 }
 
