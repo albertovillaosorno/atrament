@@ -48,6 +48,9 @@ use atrament_semantic_notebook::{
     TableGridError, TableRowRole,
 };
 
+/// Maximum admitted block-containment depth for one candidate acceptance.
+pub const CANDIDATE_BLOCK_NESTING_LIMIT: usize = 256;
+
 /// Transport-neutral semantic result class for completed command application.
 ///
 /// These are core application semantics, not final wire enum names or transport
@@ -86,9 +89,6 @@ pub enum SemanticCommandResultClass {
     /// Returned batch attempts to mutate outside admitted writable scope.
     WritableScopeViolation,
 }
-
-/// Maximum admitted block-containment depth for one candidate acceptance.
-pub const CANDIDATE_BLOCK_NESTING_LIMIT: usize = 256;
 
 /// Result of one explicit candidate acceptance request.
 #[derive(Clone, Debug, Eq, PartialEq)]
