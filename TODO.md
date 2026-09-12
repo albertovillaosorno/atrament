@@ -1676,7 +1676,9 @@ without creating parallel semantic block kinds. An ordered structure plan points
 to existing notebook blocks; represented entries must resolve to non-Unresolved
 blocks, while explicitly missing or ambiguous task facts must point to typed
 Unresolved blocks. Empty plans and repeated roles remain valid because source
-content, not this boundary, decides which organizational roles are needed.
+content, not this boundary, decides which organizational roles are needed. A
+54-case role/disposition oracle proves all nine roles obey only that block
+resolution authority instead of gaining hidden role-to-kind mappings.
 
 Content generation, role selection, source/provenance inference, candidate
 construction, layout, rendering, and assignment-quality policy remain open.

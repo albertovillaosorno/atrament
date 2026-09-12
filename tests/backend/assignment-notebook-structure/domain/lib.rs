@@ -250,3 +250,64 @@ fn unknown_and_non_block_identities_reject_at_exact_entry() {
         Err(AssignmentNotebookStructureError::NotBlock { entry_index: 0 }),
     );
 }
+#[test]
+fn every_role_obeys_only_block_resolution_authority() {
+    let notebook = notebook();
+    let mut cases = 0_u8;
+    for role in ASSIGNMENT_NOTEBOOK_ROLES {
+        let checks = [
+            (
+                AssignmentNotebookDisposition::Represented { block: 11 },
+                Ok(()),
+            ),
+            (
+                AssignmentNotebookDisposition::UnresolvedMissingFact {
+                    block: 12,
+                },
+                Ok(()),
+            ),
+            (
+                AssignmentNotebookDisposition::Represented { block: 12 },
+                Err(AssignmentNotebookStructureError::RepresentedIsUnresolved {
+                    entry_index: 0,
+                }),
+            ),
+            (
+                AssignmentNotebookDisposition::UnresolvedMissingFact {
+                    block: 11,
+                },
+                Err(
+                    AssignmentNotebookStructureError::
+                        UnresolvedMissingFactIsResolved { entry_index: 0 },
+                ),
+            ),
+            (
+                AssignmentNotebookDisposition::Represented { block: 3 },
+                Err(AssignmentNotebookStructureError::NotBlock {
+                    entry_index: 0,
+                }),
+            ),
+            (
+                AssignmentNotebookDisposition::Represented { block: 99 },
+                Err(AssignmentNotebookStructureError::UnknownIdentity {
+                    entry_index: 0,
+                }),
+            ),
+        ];
+        for (disposition, expected) in checks {
+            let plan = AssignmentNotebookStructurePlan {
+                entries: vec![AssignmentNotebookStructureEntry {
+                    disposition,
+                    role,
+                }],
+            };
+            assert_eq!(
+                validate_assignment_notebook_structure(&notebook, &plan),
+                expected,
+                "role {role:?}, disposition {disposition:?}",
+            );
+            cases = cases.saturating_add(1);
+        }
+    }
+    assert_eq!(cases, 54);
+}
