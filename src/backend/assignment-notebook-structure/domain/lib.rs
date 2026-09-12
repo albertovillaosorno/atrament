@@ -40,7 +40,8 @@
 //! Assignment organization over existing semantic notebook block authority.
 
 use atrament_semantic_notebook::{
-    Notebook, SemanticBlockKind, SemanticIdentityKind, semantic_identity_kind,
+    Block, Notebook, SemanticBlockKind, SemanticIdentityKind, semantic_block,
+    semantic_identity_kind,
 };
 
 /// All organizational roles named by the first-release assignment task.
@@ -110,6 +111,10 @@ pub struct AssignmentNotebookStructurePlan<Identity> {
     pub entries: Vec<AssignmentNotebookStructureEntry<Identity>>,
 }
 
+/// Exact semantic blocks referenced by one validated assignment structure.
+pub type AssignmentNotebookStructureBlocks<'notebook, Identity> =
+    Vec<&'notebook Block<Identity>>;
+
 /// Why one assignment organization entry cannot be admitted structurally.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum AssignmentNotebookStructureError {
@@ -135,6 +140,59 @@ pub enum AssignmentNotebookStructureError {
     },
 }
 
+const fn assignment_entry_block<Identity>(
+    entry: &AssignmentNotebookStructureEntry<Identity>,
+) -> Identity
+where
+    Identity: Copy,
+{
+    match entry.disposition {
+        AssignmentNotebookDisposition::Represented { block }
+        | AssignmentNotebookDisposition::UnresolvedMissingFact { block } => {
+            block
+        },
+    }
+}
+
+/// Project exact semantic blocks only after complete structural validation.
+///
+/// The result preserves caller plan order and repeated entries. It borrows the
+/// authoritative notebook blocks without rewriting content, assigning roles,
+/// choosing structure, or turning unresolved material into resolved content.
+///
+/// # Errors
+///
+/// Returns the same first structural failure as
+/// [`validate_assignment_notebook_structure`] and exposes no partial
+/// projection.
+pub fn project_assignment_notebook_structure_blocks<'notebook, Identity>(
+    notebook: &'notebook Notebook<Identity>,
+    plan: &AssignmentNotebookStructurePlan<Identity>,
+) -> Result<
+    AssignmentNotebookStructureBlocks<'notebook, Identity>,
+    AssignmentNotebookStructureError,
+>
+where
+    Identity: Copy + Eq,
+{
+    validate_assignment_notebook_structure(notebook, plan)?;
+    plan.entries
+        .iter()
+        .enumerate()
+        .map(|(entry_index, entry)| {
+            semantic_block(
+                notebook,
+                assignment_entry_block(entry),
+            )
+            .ok_or(
+                AssignmentNotebookStructureError::UnknownIdentity {
+                    entry_index,
+                },
+            )
+        })
+        .collect()
+}
+
 /// Validate one assignment organization against exact notebook block authority.
 ///
 /// Organizational roles remain caller-owned labels. This function does not map
@@ -154,14 +212,11 @@ where
     Identity: Copy + Eq,
 {
     for (entry_index, entry) in plan.entries.iter().enumerate() {
-        let (block, expects_unresolved) = match entry.disposition {
-            AssignmentNotebookDisposition::Represented { block } => {
-                (block, false)
-            }
-            AssignmentNotebookDisposition::UnresolvedMissingFact { block } => {
-                (block, true)
-            }
-        };
+        let block = assignment_entry_block(entry);
+        let expects_unresolved = matches!(
+            entry.disposition,
+            AssignmentNotebookDisposition::UnresolvedMissingFact { .. },
+        );
         let Some(kind) = semantic_identity_kind(notebook, block) else {
             return Err(AssignmentNotebookStructureError::UnknownIdentity {
                 entry_index,

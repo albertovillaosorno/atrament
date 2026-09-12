@@ -1680,8 +1680,12 @@ content, not this boundary, decides which organizational roles are needed. A
 54-case role/disposition oracle proves all nine roles obey only that block
 resolution authority instead of gaining hidden role-to-kind mappings.
 
-Content generation, role selection, source/provenance inference, candidate
-construction, layout, rendering, and assignment-quality policy remain open.
+After complete structural validation, a read-only projection returns the exact
+referenced semantic blocks in caller plan order. Repeated entries remain
+repeated references, unresolved entries remain typed unresolved blocks, and a
+failing plan exposes no partial projection. Content generation, role selection,
+source/provenance inference, candidate construction, layout, rendering, and
+assignment-quality policy remain open.
 
 ### TODO - Implement source and claim provenance
 

@@ -33,6 +33,7 @@ use atrament_assignment_notebook_structure::{
     ASSIGNMENT_NOTEBOOK_ROLES, AssignmentNotebookDisposition,
     AssignmentNotebookRole, AssignmentNotebookStructureEntry,
     AssignmentNotebookStructureError, AssignmentNotebookStructurePlan,
+    project_assignment_notebook_structure_blocks,
     validate_assignment_notebook_structure,
 };
 use atrament_semantic_notebook::{
@@ -148,6 +149,18 @@ fn represented_and_missing_fact_entries_validate_without_role_inference() {
     );
     assert_eq!(plan.entries[0].role, AssignmentNotebookRole::Title);
     assert_eq!(plan.entries[1].role, AssignmentNotebookRole::Example);
+    let notebook = notebook();
+    let projected = project_assignment_notebook_structure_blocks(
+        &notebook,
+        &plan,
+    )
+    .expect("validated structure projects exact source blocks");
+    assert_eq!(
+        projected.iter().map(|block| block.id).collect::<Vec<_>>(),
+        [10, 11, 12],
+    );
+    assert!(matches!(projected[0].content, BlockContent::Heading(_)));
+    assert!(matches!(projected[2].content, BlockContent::Unresolved(_)));
 }
 
 #[test]
@@ -158,6 +171,14 @@ fn empty_plan_and_repeated_roles_do_not_synthesize_structure_policy() {
             &AssignmentNotebookStructurePlan { entries: vec![] },
         ),
         Ok(()),
+    );
+    let source = notebook();
+    assert_eq!(
+        project_assignment_notebook_structure_blocks(
+            &source,
+            &AssignmentNotebookStructurePlan { entries: vec![] },
+        ),
+        Ok(vec![]),
     );
     let repeated = AssignmentNotebookStructurePlan {
         entries: vec![
@@ -179,6 +200,14 @@ fn empty_plan_and_repeated_roles_do_not_synthesize_structure_policy() {
         validate_assignment_notebook_structure(&notebook(), &repeated),
         Ok(()),
     );
+    let notebook = notebook();
+    let projected = project_assignment_notebook_structure_blocks(
+        &notebook,
+        &repeated,
+    )
+    .expect("repeated review entries remain valid");
+    assert_eq!(projected.len(), 2);
+    assert!(std::ptr::eq(projected[0], projected[1]));
 }
 
 #[test]
@@ -251,6 +280,33 @@ fn unknown_and_non_block_identities_reject_at_exact_entry() {
     );
 }
 #[test]
+fn projection_rejects_complete_plan_before_exposing_any_blocks() {
+    let notebook = notebook();
+    let plan = AssignmentNotebookStructurePlan {
+        entries: vec![
+            AssignmentNotebookStructureEntry {
+                disposition: AssignmentNotebookDisposition::Represented {
+                    block: 11,
+                },
+                role: AssignmentNotebookRole::Explanation,
+            },
+            AssignmentNotebookStructureEntry {
+                disposition: AssignmentNotebookDisposition::Represented {
+                    block: 99,
+                },
+                role: AssignmentNotebookRole::Conclusion,
+            },
+        ],
+    };
+    assert_eq!(
+        project_assignment_notebook_structure_blocks(&notebook, &plan),
+        Err(AssignmentNotebookStructureError::UnknownIdentity {
+            entry_index: 1,
+        }),
+    );
+}
+
+#[test]
 fn every_role_obeys_only_block_resolution_authority() {
     let notebook = notebook();
     let mut cases = 0_u8;
@@ -306,6 +362,24 @@ fn every_role_obeys_only_block_resolution_authority() {
                 expected,
                 "role {role:?}, disposition {disposition:?}",
             );
+            let projection = project_assignment_notebook_structure_blocks(
+                &notebook,
+                &plan,
+            );
+            match expected {
+                Ok(()) => assert_eq!(
+                    projection
+                        .expect("valid case projects one exact block")[0]
+                        .id,
+                    match disposition {
+                        AssignmentNotebookDisposition::Represented { block }
+                        | AssignmentNotebookDisposition::UnresolvedMissingFact {
+                            block,
+                        } => block,
+                    },
+                ),
+                Err(error) => assert_eq!(projection, Err(error)),
+            }
             cases = cases.saturating_add(1);
         }
     }
