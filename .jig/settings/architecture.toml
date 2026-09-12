@@ -112,6 +112,9 @@ depends_on = []
 [component.atrament_english_spanish_grapheme_inventory]
 depends_on = []
 
+[component.atrament_educational_assignment_fixture]
+depends_on = ["atrament_educational_coverage_evidence"]
+
 [component.atrament_educational_coverage_evidence]
 depends_on = []
 

@@ -198,6 +198,13 @@ name = "atrament_digital_paper_note_plan"
 version = "0.1.0"
 
 [[package]]
+name = "atrament_educational_assignment_fixture"
+version = "0.1.0"
+dependencies = [
+ "atrament_educational_coverage_evidence",
+]
+
+[[package]]
 name = "atrament_educational_coverage_evidence"
 version = "0.1.0"
 

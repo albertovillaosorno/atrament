@@ -37,6 +37,7 @@ members = [
     "src/backend/english-spanish-diacritic-composition",
     "src/backend/english-spanish-diacritic-rule",
     "src/backend/english-spanish-grapheme-inventory",
+    "src/backend/educational-assignment-fixture",
     "src/backend/educational-coverage-evidence",
     "src/backend/export-layout-preflight",
     "src/backend/fixed-region-bounds",

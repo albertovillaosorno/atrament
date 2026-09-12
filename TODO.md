@@ -1729,8 +1729,13 @@ A 64-case subject-presence oracle proves every subset rejects at the first
 missing subject, while 48 property-state cases cross every observation position
 with all bilingual/dense/readable evidence masks and pin property precedence.
 
-Actual cross-subject assignment fixtures, curriculum/source correctness,
-language selection, density/readability measurement and thresholds, page layout,
+A checked-in fixture set now supplies concrete bilingual assignment prompts for
+all six subjects. Each prompt has three compact authored modules and links its
+stable artifact identity to the existing caller-declared coverage observation;
+fixture validation does not infer those evidence statuses from prose.
+
+Curriculum/source correctness, natural-language verification, language
+selection, density/readability measurement and thresholds, page layout,
 rendering, and pedagogical quality policy remain open.
 
 ### TODO - Freeze the semantic command-batch envelope

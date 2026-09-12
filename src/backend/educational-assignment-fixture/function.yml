@@ -1,0 +1,9 @@
+identity:
+  id: function:educational-assignment-fixture
+  name: educational-assignment-fixture
+  path: src/backend/educational-assignment-fixture
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: domain
