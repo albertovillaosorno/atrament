@@ -22,6 +22,7 @@ members = [
     "src/backend/autonomous-semantic-progress-projection",
     "src/backend/autonomous-session-boundary",
     "src/backend/autonomous-stable-blocking-stop-projection",
+    "src/backend/autonomous-unavailable-capability-stop-projection",
     "src/backend/autonomous-unresolved-stop-projection",
     "src/backend/application-operation-lifecycle",
     "src/backend/assignment-notebook-structure",

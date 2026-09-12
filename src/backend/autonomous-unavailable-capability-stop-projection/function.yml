@@ -1,0 +1,9 @@
+identity:
+  id: function:autonomous-unavailable-capability-stop-projection
+  name: autonomous-unavailable-capability-stop-projection
+  path: src/backend/autonomous-unavailable-capability-stop-projection
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: application

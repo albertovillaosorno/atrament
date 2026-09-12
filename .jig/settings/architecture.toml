@@ -73,6 +73,9 @@ depends_on = []
 [component.atrament_autonomous_stable_blocking_stop_projection]
 depends_on = ["atrament_autonomous_goal_outcome", "atrament_autonomous_progress_evidence"]
 
+[component.atrament_autonomous_unavailable_capability_stop_projection]
+depends_on = ["atrament_autonomous_goal_outcome"]
+
 [component.atrament_autonomous_unresolved_stop_projection]
 depends_on = ["atrament_autonomous_goal_outcome", "atrament_semantic_notebook_port"]
 

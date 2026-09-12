@@ -162,6 +162,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "atrament_autonomous_unavailable_capability_stop_projection"
+version = "0.1.0"
+dependencies = [
+ "atrament_autonomous_goal_outcome",
+]
+
+[[package]]
 name = "atrament_autonomous_unresolved_stop_projection"
 version = "0.1.0"
 dependencies = [

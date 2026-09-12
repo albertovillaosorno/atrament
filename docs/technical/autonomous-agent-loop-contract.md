@@ -312,6 +312,14 @@ A transport-neutral terminal-outcome vocabulary now preserves one successful
 completion class separately from the four frozen stop classes above. It does not
 decide when the goal is satisfied or when a stop condition has been reached.
 
+An application-level unavailable-capability projection now accepts only an
+already-qualified availability fact for a capability required by the admitted
+bounded goal. Qualified unavailability maps to the frozen unavailable-capability
+stop; an admitted capability remains nonterminal on this axis. Goal-requirement
+detection, discovery comparison, compatibility negotiation, and deciding that a
+recoverable unsupported result has become unavailable remain with their owning
+boundaries.
+
 A transport-neutral completion-admission boundary now emits that successful
 terminal class only when already-qualified semantic satisfaction is present and
 any explicitly requested output is complete. Goals with no requested output do

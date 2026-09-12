@@ -2074,8 +2074,11 @@ Requesting broader workflow remains nonterminal and grants no authority itself.
 
 Autonomous terminal outcomes now distinguish successful goal completion from
 stopping for unresolved evidence, exhausted budget, stable blocking failure, or
-unavailable capability. Detecting those terminal conditions and constructing
-completion receipts remain open coordinator work.
+unavailable capability. An unavailable-capability stop projection now maps only
+owner-qualified unavailability of a capability required by the admitted bounded
+goal to that terminal class; admitted required capability remains nonterminal.
+Goal-requirement detection, capability discovery comparison, compatibility
+negotiation, and completion receipts remain open coordinator work.
 
 Autonomous completion admission now requires qualified semantic satisfaction
 and complete explicitly requested output work before producing the successful
