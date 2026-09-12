@@ -1,0 +1,9 @@
+identity:
+  id: function:assignment-notebook-structure
+  name: assignment-notebook-structure
+  path: src/backend/assignment-notebook-structure
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: domain

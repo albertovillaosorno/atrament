@@ -1,0 +1,252 @@
+// Copyright:
+//   - Copyright © 2026 Alberto Villa Osorno.
+// SPDX-License-Identifier:
+//   - MIT
+// Confidential:
+//   - false
+// License-File:
+//   - LICENSE-MIT
+//
+// Boundary-Contract:
+// - Owns:
+//   - Regression evidence for assignment organization over semantic blocks.
+// - Must-Not:
+//   - Generate assignment content, infer facts/provenance, lay out, or render.
+// - Allows:
+//   - Inputs: Deterministic notebook and assignment-role fixtures.
+//   - Outputs: Assertions over role vocabulary and no-invention admission.
+//   - Side effects: Process-local test allocation only.
+// - Split-When:
+//   - Assignment generation gains independent acceptance fixtures.
+// - Merge-When:
+//   - Structure evidence moves into a complete candidate-construction harness.
+// - Summary:
+//   - Proves missing facts remain explicitly unresolved instead of invented.
+// - Description:
+//   - Also proves organizational roles do not redefine semantic block kinds.
+// - Usage:
+//   - Compile against assignment-notebook-structure and semantic-notebook.
+// - Defaults:
+//   - Empty and repeated organizational roles remain caller-owned choices.
+//
+use atrament_assignment_notebook_structure::{
+    ASSIGNMENT_NOTEBOOK_ROLES, AssignmentNotebookDisposition,
+    AssignmentNotebookRole, AssignmentNotebookStructureEntry,
+    AssignmentNotebookStructureError, AssignmentNotebookStructurePlan,
+    validate_assignment_notebook_structure,
+};
+use atrament_semantic_notebook::{
+    Block, BlockContent, Flow, InlineSpan, Notebook, Page, UnresolvedBlock,
+    UnresolvedReason,
+};
+
+fn span(id: u32, text: &str) -> InlineSpan<u32> {
+    InlineSpan {
+        id,
+        provenance: None,
+        style: None,
+        text: String::from(text),
+    }
+}
+
+fn notebook() -> Notebook<u32> {
+    Notebook {
+        assets: vec![],
+        constraints: vec![],
+        extensions: vec![],
+        id: 1,
+        output_profiles: vec![],
+        page_profiles: vec![],
+        pages: vec![Page {
+            flows: vec![Flow {
+                blocks: vec![
+                    Block {
+                        content: BlockContent::Heading(vec![span(20, "Title")]),
+                        extensions: vec![],
+                        id: 10,
+                        provenance: None,
+                        style: None,
+                    },
+                    Block {
+                        content: BlockContent::Paragraph(vec![span(
+                            21,
+                            "Evidence-backed explanation",
+                        )]),
+                        extensions: vec![],
+                        id: 11,
+                        provenance: None,
+                        style: None,
+                    },
+                    Block {
+                        content: BlockContent::Unresolved(UnresolvedBlock {
+                            extensions: vec![],
+                            reason: UnresolvedReason::Ambiguous,
+                            source: String::from("missing task fact"),
+                        }),
+                        extensions: vec![],
+                        id: 12,
+                        provenance: None,
+                        style: None,
+                    },
+                ],
+                id: 4,
+            }],
+            id: 3,
+            paper_profile: 2,
+        }],
+        provenance: vec![],
+        styles: vec![],
+    }
+}
+
+#[test]
+fn all_nine_assignment_organization_roles_are_explicit() {
+    assert_eq!(
+        ASSIGNMENT_NOTEBOOK_ROLES,
+        [
+            AssignmentNotebookRole::Title,
+            AssignmentNotebookRole::Explanation,
+            AssignmentNotebookRole::Derivation,
+            AssignmentNotebookRole::Table,
+            AssignmentNotebookRole::Equation,
+            AssignmentNotebookRole::Diagram,
+            AssignmentNotebookRole::Citation,
+            AssignmentNotebookRole::Example,
+            AssignmentNotebookRole::Conclusion,
+        ],
+    );
+}
+
+#[test]
+fn represented_and_missing_fact_entries_validate_without_role_inference() {
+    let plan = AssignmentNotebookStructurePlan {
+        entries: vec![
+            AssignmentNotebookStructureEntry {
+                disposition: AssignmentNotebookDisposition::Represented {
+                    block: 10,
+                },
+                role: AssignmentNotebookRole::Title,
+            },
+            AssignmentNotebookStructureEntry {
+                disposition: AssignmentNotebookDisposition::Represented {
+                    block: 11,
+                },
+                role: AssignmentNotebookRole::Example,
+            },
+            AssignmentNotebookStructureEntry {
+                disposition:
+                    AssignmentNotebookDisposition::UnresolvedMissingFact {
+                        block: 12,
+                    },
+                role: AssignmentNotebookRole::Conclusion,
+            },
+        ],
+    };
+    assert_eq!(
+        validate_assignment_notebook_structure(&notebook(), &plan),
+        Ok(())
+    );
+    assert_eq!(plan.entries[0].role, AssignmentNotebookRole::Title);
+    assert_eq!(plan.entries[1].role, AssignmentNotebookRole::Example);
+}
+
+#[test]
+fn empty_plan_and_repeated_roles_do_not_synthesize_structure_policy() {
+    assert_eq!(
+        validate_assignment_notebook_structure(
+            &notebook(),
+            &AssignmentNotebookStructurePlan { entries: vec![] },
+        ),
+        Ok(()),
+    );
+    let repeated = AssignmentNotebookStructurePlan {
+        entries: vec![
+            AssignmentNotebookStructureEntry {
+                disposition: AssignmentNotebookDisposition::Represented {
+                    block: 11,
+                },
+                role: AssignmentNotebookRole::Explanation,
+            },
+            AssignmentNotebookStructureEntry {
+                disposition: AssignmentNotebookDisposition::Represented {
+                    block: 11,
+                },
+                role: AssignmentNotebookRole::Explanation,
+            },
+        ],
+    };
+    assert_eq!(
+        validate_assignment_notebook_structure(&notebook(), &repeated),
+        Ok(()),
+    );
+}
+
+#[test]
+fn disposition_must_match_resolved_or_unresolved_block_authority() {
+    let represented_unresolved = AssignmentNotebookStructurePlan {
+        entries: vec![AssignmentNotebookStructureEntry {
+            disposition: AssignmentNotebookDisposition::Represented {
+                block: 12,
+            },
+            role: AssignmentNotebookRole::Conclusion,
+        }],
+    };
+    assert_eq!(
+        validate_assignment_notebook_structure(
+            &notebook(),
+            &represented_unresolved,
+        ),
+        Err(AssignmentNotebookStructureError::RepresentedIsUnresolved {
+            entry_index: 0,
+        }),
+    );
+    let unresolved_resolved = AssignmentNotebookStructurePlan {
+        entries: vec![AssignmentNotebookStructureEntry {
+            disposition: AssignmentNotebookDisposition::UnresolvedMissingFact {
+                block: 11,
+            },
+            role: AssignmentNotebookRole::Conclusion,
+        }],
+    };
+    assert_eq!(
+        validate_assignment_notebook_structure(
+            &notebook(),
+            &unresolved_resolved
+        ),
+        Err(
+            AssignmentNotebookStructureError::UnresolvedMissingFactIsResolved {
+                entry_index: 0,
+            }
+        ),
+    );
+}
+
+#[test]
+fn unknown_and_non_block_identities_reject_at_exact_entry() {
+    let unknown = AssignmentNotebookStructurePlan {
+        entries: vec![AssignmentNotebookStructureEntry {
+            disposition: AssignmentNotebookDisposition::Represented {
+                block: 99,
+            },
+            role: AssignmentNotebookRole::Explanation,
+        }],
+    };
+    assert_eq!(
+        validate_assignment_notebook_structure(&notebook(), &unknown),
+        Err(AssignmentNotebookStructureError::UnknownIdentity {
+            entry_index: 0,
+        }),
+    );
+    let page_identity = AssignmentNotebookStructurePlan {
+        entries: vec![AssignmentNotebookStructureEntry {
+            disposition: AssignmentNotebookDisposition::Represented {
+                block: 3,
+            },
+            role: AssignmentNotebookRole::Explanation,
+        }],
+    };
+    assert_eq!(
+        validate_assignment_notebook_structure(&notebook(), &page_identity),
+        Err(AssignmentNotebookStructureError::NotBlock { entry_index: 0 }),
+    );
+}

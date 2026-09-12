@@ -24,6 +24,7 @@ members = [
     "src/backend/autonomous-stable-blocking-stop-projection",
     "src/backend/autonomous-unresolved-stop-projection",
     "src/backend/application-operation-lifecycle",
+    "src/backend/assignment-notebook-structure",
     "src/backend/browser-launch",
     "src/backend/citation-review-linkage",
     "src/backend/clipboard-intake-evidence",

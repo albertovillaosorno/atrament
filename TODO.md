@@ -1671,6 +1671,16 @@ command refinement remain separate open authorities.
 Support titles, explanations, derivations, tables, equations, diagrams,
 citations, examples, and conclusions without inventing missing task facts.
 
+Current executable evidence now freezes those nine assignment-organization roles
+without creating parallel semantic block kinds. An ordered structure plan points
+to existing notebook blocks; represented entries must resolve to non-Unresolved
+blocks, while explicitly missing or ambiguous task facts must point to typed
+Unresolved blocks. Empty plans and repeated roles remain valid because source
+content, not this boundary, decides which organizational roles are needed.
+
+Content generation, role selection, source/provenance inference, candidate
+construction, layout, rendering, and assignment-quality policy remain open.
+
 ### TODO - Implement source and claim provenance
 
 Distinguish provided, derived, cited, and unverified content and link every
