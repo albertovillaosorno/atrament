@@ -199,9 +199,9 @@ no new admission produces the frozen repeated-same-inputs non-progress evidence.
 An application-level stable-blocking projection now compares consecutive
 owner-qualified blocking observations. It emits repeated stable-blocking
 evidence only when the typed diagnostic fingerprint, accepted revision, and
-bounded intent are unchanged and no new admission occurred, then maps only that
-evidence class
-to the frozen stable-blocking terminal stop. Diagnostic fingerprint construction
+bounded intent are unchanged and no new admission occurred, then maps only
+that evidence class to the frozen stable-blocking terminal stop. Diagnostic
+fingerprint construction
 remains owner-controlled; replay, repeated No-op, and generic unchanged-input
 evidence do not become terminal on this projection alone.
 

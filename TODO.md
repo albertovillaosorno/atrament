@@ -2033,8 +2033,9 @@ persistent Export, and edited/model-provided content grants none.
 
 Autonomous progress evidence now distinguishes five frozen authoritative
 progress conditions from four explicit non-progress conditions without
-inspecting raw state or model prose. Stateful revision/diagnostic comparison
-and loop orchestration remain open application work.
+inspecting raw state or model prose. Fingerprint construction,
+blocker-resolution progress comparison, and loop orchestration remain open
+application work.
 
 Application-capability progress projection now treats a transition from
 Unsupported to Admitted as new authority only for the exact same capability. It
@@ -2052,8 +2053,9 @@ relevant-evidence qualification remain caller-owned; the control does not choose
 a terminal goal class or grant continuation on other evidence.
 
 Semantic-result progress projection now maps Applied directly to accepted
-revision progress and Idempotent replay to replay-recovery non-progress. No-op
-repetition, stale-state comparison, and diagnostic progress still require
+revision progress and Idempotent replay to replay-recovery non-progress.
+Repeated-No-op qualification now has its separate stateful control;
+stale-state comparison and diagnostic-resolution progress still require owning
 stateful evidence.
 
 History-result progress projection now maps Traversed directly to accepted
