@@ -886,9 +886,9 @@ segmentation adapter. A same-source selection resolver validates provider
 anchors once, preserves caller anchor/focus order for forward and reverse
 selections, and reuses one internal boundary for a collapsed selection.
 
-`SessionApplication` exposes the single-position query against one exact current
-Text-content target without mutation; no-session, stale-base, missing-target,
-and non-text outcomes are resolved before provider access.
+`SessionApplication` exposes both position and selection queries against one
+exact current Text-content target without mutation; no-session, stale-base,
+missing-target, and non-text outcomes are resolved before provider access.
 
 Normalization policy, punctuation generation, language-aware wrapping, cursor
 movement/selection-extension/visual-affinity policy, and browser, CLI, or MCP

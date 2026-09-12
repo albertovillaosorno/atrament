@@ -95,8 +95,8 @@ use atrament_session_draft::SessionDraftService;
 use atrament_session_draft_port::{DraftField, DraftMutation, SessionDraft};
 use atrament_unicode_grapheme_boundary_port::GraphemeBoundaryProvider;
 use atrament_unicode_grapheme_cursor::{
-    GraphemeCursorError, GraphemeCursorPosition,
-    resolve_grapheme_cursor_position,
+    GraphemeCursorError, GraphemeCursorPosition, GraphemeCursorSelection,
+    resolve_grapheme_cursor_position, resolve_grapheme_cursor_selection,
 };
 use atrament_unicode_grapheme_edit::{
     GraphemeRange, GraphemeRangeError, replace_grapheme_range,
@@ -126,6 +126,19 @@ pub struct TextGraphemeCursorQuery {
     pub target: AcceptedIdentity,
 }
 
+/// One read-only anchor/focus query against accepted inline text.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct TextGraphemeSelectionQuery {
+    /// Zero-based anchor boundary index retained in caller order.
+    pub anchor_index: usize,
+    /// Accepted revision whose exact text owns both selection endpoints.
+    pub base: RevisionIdentity,
+    /// Zero-based focus boundary index retained in caller order.
+    pub focus_index: usize,
+    /// Accepted inline-text identity inspected by this request.
+    pub target: AcceptedIdentity,
+}
+
 /// Read-only semantic outcome of one grapheme cursor-position query.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum TextGraphemeCursorOutcome {
@@ -138,6 +151,41 @@ pub enum TextGraphemeCursorOutcome {
         /// Accepted revision that owns the inspected text.
         revision: RevisionIdentity,
         /// Accepted inline-text identity that owns the cursor.
+        target: AcceptedIdentity,
+    },
+    /// Caller names an accepted revision that is no longer current.
+    StaleBase {
+        /// Current accepted revision that rejected stale inspection.
+        current: RevisionIdentity,
+    },
+    /// Requested accepted identity is absent from the named revision.
+    TargetNotFound {
+        /// Accepted revision checked without mutation.
+        revision: RevisionIdentity,
+        /// Requested identity absent from that revision.
+        target: AcceptedIdentity,
+    },
+    /// Existing semantic target does not expose editable inline text.
+    TargetNotText {
+        /// Accepted revision checked without mutation.
+        revision: RevisionIdentity,
+        /// Existing non-text target supplied by the caller.
+        target: AcceptedIdentity,
+    },
+}
+
+/// Read-only semantic outcome of one grapheme selection query.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum TextGraphemeSelectionOutcome {
+    /// Session has no accepted semantic revision to inspect.
+    NoAcceptedRevision,
+    /// Exact current text admitted and resolved both selection endpoints.
+    Prepared {
+        /// Accepted revision that owns the inspected text.
+        revision: RevisionIdentity,
+        /// Exact validated caller-ordered selection endpoints.
+        selection: GraphemeCursorSelection,
+        /// Accepted inline-text identity that owns the selection.
         target: AcceptedIdentity,
     },
     /// Caller names an accepted revision that is no longer current.
@@ -804,6 +852,73 @@ impl SessionApplication {
         Ok(TextGraphemeCursorOutcome::Prepared {
             position,
             revision: base,
+            target,
+        })
+    }
+
+    /// Resolve one caller-ordered grapheme selection in accepted inline text.
+    ///
+    /// Semantic revision/target admission runs before the grapheme provider is
+    /// queried. This is read-only and does not choose movement, extension,
+    /// clamping, visual affinity, or transport behavior.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed endpoint failure only after the exact current text
+    /// target has been admitted for the named revision.
+    pub fn text_grapheme_selection(
+        &self,
+        boundaries: &dyn GraphemeBoundaryProvider,
+        query: TextGraphemeSelectionQuery,
+    ) -> Result<TextGraphemeSelectionOutcome, GraphemeCursorError> {
+        let TextGraphemeSelectionQuery {
+            anchor_index,
+            base,
+            focus_index,
+            target,
+        } = query;
+        let material_outcome = self.command_target_material_for_family(
+            base,
+            target,
+            SemanticCommandFamily::TextContent,
+        );
+        let current_text = match material_outcome {
+            CommandTargetMaterialOutcome::NoAcceptedRevision => {
+                return Ok(TextGraphemeSelectionOutcome::NoAcceptedRevision);
+            },
+            CommandTargetMaterialOutcome::Prepared { material } => {
+                match material.editable_value {
+                    Some(EditableSemanticValue::Text(value)) => value,
+                    _ => {
+                        return Ok(TextGraphemeSelectionOutcome::TargetNotText {
+                            revision: material.revision,
+                            target: material.target,
+                        });
+                    },
+                }
+            },
+            CommandTargetMaterialOutcome::StaleBase { current } => {
+                return Ok(TextGraphemeSelectionOutcome::StaleBase { current });
+            },
+            CommandTargetMaterialOutcome::TargetNotFound {
+                revision,
+                target: missing_target,
+            } => {
+                return Ok(TextGraphemeSelectionOutcome::TargetNotFound {
+                    revision,
+                    target: missing_target,
+                });
+            },
+        };
+        let selection = resolve_grapheme_cursor_selection(
+            boundaries,
+            &current_text,
+            anchor_index,
+            focus_index,
+        )?;
+        Ok(TextGraphemeSelectionOutcome::Prepared {
+            revision: base,
+            selection,
             target,
         })
     }

@@ -79,8 +79,9 @@ normalization; each frozen visible-text grapheme admits only its start and end
 positions. The same boundary can resolve a caller-ordered anchor/focus pair
 against one validated provider snapshot, preserving forward, reverse, or
 collapsed endpoint order without choosing selection-extension behavior. The
-active `SessionApplication` can resolve one position against an exact current
-text target read-only, with semantic rejection preceding provider access.
+active `SessionApplication` can resolve positions or selections against an
+exact current text target read-only, with semantic rejection preceding provider
+access.
 
 The generic handwriting-coverage report also consumes the complete 114-entry
 inventory. An empty profile reports every requirement in exact order, while a

@@ -95,7 +95,7 @@ use atrament_session_draft::MAX_DRAFT_FIELD_BYTES;
 use atrament_session_draft_port::{DraftField, DraftMutation, SessionDraft};
 use atrament_unicode_grapheme_boundary_port::GraphemeBoundaryProvider;
 use atrament_unicode_grapheme_cursor::{
-    GraphemeCursorError, GraphemeCursorPosition,
+    GraphemeCursorError, GraphemeCursorPosition, GraphemeCursorSelection,
 };
 use atrament_unicode_grapheme_edit::{GraphemeRange, GraphemeRangeError};
 use atrament_unicode_grapheme_segmentation::UnicodeGraphemeSegmentation;
@@ -4720,6 +4720,68 @@ fn application_resolves_exact_grapheme_cursor_positions_without_mutation() {
 }
 
 #[test]
+fn application_resolves_grapheme_selection_without_mutation() {
+    let identities = IdentityAllocator::new();
+    let source = "Áe\u{301}👩‍🔬Z";
+    let (candidate, candidate_span) =
+        editable_text_candidate(&identities, source);
+    let mut session = application::SessionApplication::default();
+    let AcceptanceOutcome::Accepted { mapping, revision: base } =
+        session.accept_candidate(candidate)
+    else {
+        panic!("selection fixture candidate must be accepted");
+    };
+    let span = mapping
+        .iter()
+        .find(|entry| entry.candidate == candidate_span)
+        .expect("selection span identity must map")
+        .accepted;
+    let history_before = session.history_availability();
+    let provider = UnicodeGraphemeSegmentation;
+    assert_eq!(
+        session.text_grapheme_selection(
+            &provider,
+            application::TextGraphemeSelectionQuery {
+                anchor_index: 3,
+                base,
+                focus_index: 1,
+                target: span,
+            },
+        ),
+        Ok(application::TextGraphemeSelectionOutcome::Prepared {
+            revision: base,
+            selection: GraphemeCursorSelection {
+                anchor: GraphemeCursorPosition {
+                    byte_offset: "Áe\u{301}👩‍🔬".len(),
+                    grapheme_index: 3,
+                },
+                focus: GraphemeCursorPosition {
+                    byte_offset: "Á".len(),
+                    grapheme_index: 1,
+                },
+            },
+            target: span,
+        }),
+    );
+    assert_eq!(
+        session.text_grapheme_selection(
+            &provider,
+            application::TextGraphemeSelectionQuery {
+                anchor_index: 1,
+                base,
+                focus_index: 5,
+                target: span,
+            },
+        ),
+        Err(GraphemeCursorError::CursorOutOfBounds {
+            grapheme_count: 4,
+            grapheme_index: 5,
+        }),
+    );
+    assert_eq!(session.history_availability(), history_before);
+}
+
+#[test]
 fn inadmissible_cursor_queries_do_not_query_grapheme_boundaries() {
     let provider = PanicBoundaryProvider;
     let synthetic = IdentityAllocator::new();
@@ -4738,6 +4800,18 @@ fn inadmissible_cursor_queries_do_not_query_grapheme_boundaries() {
             },
         ),
         Ok(application::TextGraphemeCursorOutcome::NoAcceptedRevision),
+    );
+    assert_eq!(
+        session.text_grapheme_selection(
+            &provider,
+            application::TextGraphemeSelectionQuery {
+                anchor_index: 0,
+                base: unavailable_base,
+                focus_index: 0,
+                target: unavailable_target,
+            },
+        ),
+        Ok(application::TextGraphemeSelectionOutcome::NoAcceptedRevision),
     );
 
     let candidate_ids = IdentityAllocator::new();
@@ -4770,6 +4844,18 @@ fn inadmissible_cursor_queries_do_not_query_grapheme_boundaries() {
         ),
         Ok(application::TextGraphemeCursorOutcome::StaleBase { current }),
     );
+    assert_eq!(
+        session.text_grapheme_selection(
+            &provider,
+            application::TextGraphemeSelectionQuery {
+                anchor_index: 0,
+                base,
+                focus_index: 0,
+                target: span,
+            },
+        ),
+        Ok(application::TextGraphemeSelectionOutcome::StaleBase { current }),
+    );
     let missing = (0..32)
         .map(|_| synthetic.allocate_accepted().expect("missing accepted id"))
         .last()
@@ -4784,6 +4870,21 @@ fn inadmissible_cursor_queries_do_not_query_grapheme_boundaries() {
             },
         ),
         Ok(application::TextGraphemeCursorOutcome::TargetNotFound {
+            revision: current,
+            target: missing,
+        }),
+    );
+    assert_eq!(
+        session.text_grapheme_selection(
+            &provider,
+            application::TextGraphemeSelectionQuery {
+                anchor_index: 0,
+                base: current,
+                focus_index: 0,
+                target: missing,
+            },
+        ),
+        Ok(application::TextGraphemeSelectionOutcome::TargetNotFound {
             revision: current,
             target: missing,
         }),
@@ -4815,6 +4916,21 @@ fn inadmissible_cursor_queries_do_not_query_grapheme_boundaries() {
             },
         ),
         Ok(application::TextGraphemeCursorOutcome::TargetNotText {
+            revision: replacement_revision,
+            target: formula,
+        }),
+    );
+    assert_eq!(
+        non_text_session.text_grapheme_selection(
+            &provider,
+            application::TextGraphemeSelectionQuery {
+                anchor_index: 0,
+                base: replacement_revision,
+                focus_index: 0,
+                target: formula,
+            },
+        ),
+        Ok(application::TextGraphemeSelectionOutcome::TargetNotText {
             revision: replacement_revision,
             target: formula,
         }),
