@@ -131,26 +131,30 @@ fn review_preserves_every_source_and_explicit_conversion_evidence() {
             },
         ],
     );
-    assert_eq!(projection.entries.len(), 4);
-    assert_eq!(projection.entries[0].source_identity, "paragraph-1");
+    assert_eq!(projection.mode(), OutputMode::Live);
+    assert_eq!(projection.entries().len(), 4);
+    assert_eq!(projection.entries()[0].source_identity, "paragraph-1");
     assert_eq!(
-        projection.entries[0].status,
+        projection.entries()[0].status,
         OutputCapabilityProjectionStatus::AcceptedDirect,
     );
-    assert_eq!(projection.entries[1].source_identity, "photo-2");
+    assert_eq!(projection.entries()[1].source_identity, "photo-2");
     assert_eq!(
-        projection.entries[1].status,
+        projection.entries()[1].status,
         OutputCapabilityProjectionStatus::ConversionRequired,
     );
-    let accepted = projection.entries[1].accepted_conversion.as_ref().unwrap();
+    let accepted = projection.entries()[1]
+        .accepted_conversion
+        .as_ref()
+        .unwrap();
     assert_eq!(accepted.choice, "photo-to-line-art");
     assert_eq!(accepted.provenance, "user-confirmed-conversion");
     assert_eq!(
-        projection.entries[2].status,
+        projection.entries()[2].status,
         OutputCapabilityProjectionStatus::Rejected,
     );
     assert_eq!(
-        projection.entries[3].status,
+        projection.entries()[3].status,
         OutputCapabilityProjectionStatus::FutureUnavailable,
     );
     assert!(!projection.is_ready());
@@ -169,7 +173,7 @@ fn convert_without_explicit_acceptance_remains_blocked() {
         }],
     );
     assert_eq!(
-        projection.entries[0].status,
+        projection.entries()[0].status,
         OutputCapabilityProjectionStatus::ConversionRequired,
     );
     assert!(!projection.is_ready());
@@ -204,15 +208,15 @@ fn conversion_cannot_override_reject_future_or_direct_acceptance() {
         ],
     );
     assert_eq!(
-        projection.entries[0].status,
+        projection.entries()[0].status,
         OutputCapabilityProjectionStatus::Rejected,
     );
     assert_eq!(
-        projection.entries[1].status,
+        projection.entries()[1].status,
         OutputCapabilityProjectionStatus::FutureUnavailable,
     );
     assert_eq!(
-        projection.entries[2].status,
+        projection.entries()[2].status,
         OutputCapabilityProjectionStatus::UnexpectedConversion,
     );
     assert!(!projection.is_ready());
@@ -240,7 +244,7 @@ fn generic_live_review_cannot_admit_unvalidated_conversion_evidence() {
         ],
     );
     assert_eq!(
-        projection.entries[1].status,
+        projection.entries()[1].status,
         OutputCapabilityProjectionStatus::ConversionRequired,
     );
     assert!(!projection.is_ready());
@@ -443,10 +447,13 @@ fn live_review_keeps_supported_conversion_details_and_provenance() {
         }]);
     assert!(projection.is_ready());
     assert_eq!(
-        projection.entries[0].status,
+        projection.entries()[0].status,
         OutputCapabilityProjectionStatus::Converted,
     );
-    let accepted = projection.entries[0].accepted_conversion.as_ref().unwrap();
+    let accepted = projection.entries()[0]
+        .accepted_conversion
+        .as_ref()
+        .unwrap();
     assert_eq!(accepted.choice.details, "line-art-projection-17");
     assert_eq!(accepted.provenance, "user-confirmed-live-conversion",);
 }
@@ -465,7 +472,7 @@ fn live_review_blocks_explicit_but_mismatched_conversion_kind() {
             source_identity: "photo-8",
         }]);
     assert_eq!(
-        projection.entries[0].status,
+        projection.entries()[0].status,
         OutputCapabilityProjectionStatus::UnsupportedConversionChoice,
     );
     assert!(!projection.is_ready());

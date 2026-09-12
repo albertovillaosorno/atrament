@@ -113,15 +113,25 @@ pub type OutputCapabilityProjectionEntries<Choice, Provenance, SourceIdentity> =
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct OutputCapabilityProjection<Choice, Provenance, SourceIdentity> {
     /// Every source capability use in caller-supplied order.
-    pub entries:
+    entries:
         OutputCapabilityProjectionEntries<Choice, Provenance, SourceIdentity>,
     /// Output mode under review.
-    pub mode: OutputMode,
+    mode: OutputMode,
 }
 
 impl<Choice, Provenance, SourceIdentity>
     OutputCapabilityProjection<Choice, Provenance, SourceIdentity>
 {
+    /// Return reviewed entries in caller-supplied source order.
+    #[must_use]
+    pub fn entries(
+        &self,
+    ) -> &[
+        OutputCapabilityProjectionEntry<Choice, Provenance, SourceIdentity>
+    ] {
+        &self.entries
+    }
+
     /// Whether every source capability use is currently admissible for output.
     #[must_use]
     pub fn is_ready(&self) -> bool {
@@ -132,6 +142,12 @@ impl<Choice, Provenance, SourceIdentity>
                     | OutputCapabilityProjectionStatus::Converted
             )
         })
+    }
+
+    /// Return the exact output mode used for this review.
+    #[must_use]
+    pub const fn mode(&self) -> OutputMode {
+        self.mode
     }
 }
 

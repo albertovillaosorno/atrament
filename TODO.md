@@ -2230,8 +2230,10 @@ frozen conversion kind so over-admission cannot silently make an unsupported
 projection ready.
 The mode-neutral review retains supplied conversion evidence but cannot mark
 a Live `Convert` row ready; only the typed Live review promotes an admitted kind
-to `Converted`. Blocking diagnostics, conversion execution, semantic projection
-construction, and Plan compilation remain open.
+to `Converted`. Completed capability projections are constructor-owned with
+read-only mode/entry views, so callers cannot fabricate a ready review by
+supplying their own statuses. Blocking diagnostics, conversion execution,
+semantic projection construction, and Plan compilation remain open.
 
 ### TODO - Implement the device-neutral motion plan
 
