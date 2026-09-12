@@ -923,14 +923,21 @@ fn process_restart_drops_session_state_and_derived_outputs() {
         return;
     }
 
+    #[cfg(target_os = "linux")]
+    let inherited_writable =
+        writable_regular_file_descriptors(std::process::id());
     let mut orderly = spawn_process_fixture("populated");
     let mut orderly_stdout = await_populated_marker(&mut orderly);
     #[cfg(target_os = "linux")]
     {
         let writable = writable_regular_file_descriptors(orderly.id());
+        let added = writable
+            .iter()
+            .filter(|descriptor| !inherited_writable.contains(descriptor))
+            .collect::<Vec<_>>();
         assert!(
-            writable.is_empty(),
-            "populated child holds writable regular files: {writable:?}",
+            added.is_empty(),
+            "populated child added writable regular files: {added:?}",
         );
     }
     orderly
@@ -951,9 +958,13 @@ fn process_restart_drops_session_state_and_derived_outputs() {
     #[cfg(target_os = "linux")]
     {
         let writable = writable_regular_file_descriptors(forced.id());
+        let added = writable
+            .iter()
+            .filter(|descriptor| !inherited_writable.contains(descriptor))
+            .collect::<Vec<_>>();
         assert!(
-            writable.is_empty(),
-            "Redo child holds writable regular files: {writable:?}",
+            added.is_empty(),
+            "Redo child added writable regular files: {added:?}",
         );
     }
     forced.kill().expect("force session child termination");

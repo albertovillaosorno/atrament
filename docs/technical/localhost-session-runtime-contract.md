@@ -240,13 +240,13 @@ notebook, service worker cache of session data, hidden recovery file, or cloud
 copy. Frontend state that can reconstruct private notebook content is session
 memory, not browser persistence.
 
-Current Linux process evidence blocks a child after draft text and accepted
-semantic
+Current Linux process evidence blocks a child with draft text, accepted semantic
 history, retained asset bytes, derived-output review, and pending media cleanup
-state are all live, then inspects `/proc/<pid>/fd`. Both the ordinary populated
-state and a variant retaining a Redo branch expose zero writable regular-file
-descriptors. The same fixture then terminates and restarts the child to prove
-none of that application state becomes fresh-process authority.
+state all live, then inspects `/proc/<pid>/fd`. Both the ordinary populated
+state and a variant retaining a Redo branch add no writable regular-file
+descriptors beyond those inherited from the test harness. The same fixture then
+terminates and restarts the child to prove none of that application state
+becomes fresh-process authority.
 
 Temporary media or conversion files use repository-independent operating-system
 runtime storage owned by the process adapter. They have bounded names and

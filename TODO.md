@@ -80,8 +80,8 @@ orderly and forced
 termination leave a fresh process with empty draft fields, no accepted revision,
 history, bytes, or prior media-job authority; derived results and cleanup
 bookkeeping exist only in the terminated process. On Linux, both populated
-variants expose zero writable regular-file descriptors while all of that state
-is live.
+variants add zero writable regular-file descriptors beyond descriptors
+inherited from the test harness while all of that state is live.
 
 Browser edits send complete authenticated replacements and use no browser
 persistence API.
@@ -156,7 +156,8 @@ yet.
 While private draft text is live, the runtime changes no declared repository
 runtime-root file. The fuller application-process fixture also proves on Linux
 that populated draft, semantic history, retained asset bytes, derived results,
-and pending media cleanup coexist with zero writable regular-file descriptors.
+and pending media cleanup add no writable regular-file descriptors beyond
+process descriptors inherited from the test harness.
 
 Checked-in browser policy tests guard one-time launch-credential fragment
 consumption, credential invalidation on `pagehide`, in-flight handshake and
