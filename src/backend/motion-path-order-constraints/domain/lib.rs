@@ -72,11 +72,29 @@ pub struct MotionOrderConstraintSet<PlanIdentity> {
     pub plan_identity: PlanIdentity,
 }
 
+/// Constructor-owned evidence that one constraint set is structurally valid.
+#[derive(Debug, Eq, PartialEq)]
+pub struct ValidatedMotionOrderConstraints<'constraints, PlanIdentity> {
+    constraints: &'constraints MotionOrderConstraintSet<PlanIdentity>,
+}
+
+impl<'constraints, PlanIdentity>
+    ValidatedMotionOrderConstraints<'constraints, PlanIdentity>
+{
+    /// Return the exact validated plan-bound constraint set.
+    #[must_use]
+    pub const fn constraints(
+        &self,
+    ) -> &'constraints MotionOrderConstraintSet<PlanIdentity> {
+        self.constraints
+    }
+}
+
 /// Constructor-owned evidence that one candidate order passed all constraints.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq)]
 pub struct ValidatedMotionOrder<'order, PlanIdentity> {
     candidate: &'order [usize],
-    constraints: &'order MotionOrderConstraintSet<PlanIdentity>,
+    constraints: ValidatedMotionOrderConstraints<'order, PlanIdentity>,
 }
 
 impl<'order, PlanIdentity> ValidatedMotionOrder<'order, PlanIdentity> {
@@ -91,7 +109,15 @@ impl<'order, PlanIdentity> ValidatedMotionOrder<'order, PlanIdentity> {
     pub const fn constraints(
         &self,
     ) -> &'order MotionOrderConstraintSet<PlanIdentity> {
-        self.constraints
+        self.constraints.constraints()
+    }
+
+    /// Return the sealed structural constraint evidence used for this order.
+    #[must_use]
+    pub const fn validated_constraints(
+        &self,
+    ) -> &ValidatedMotionOrderConstraints<'order, PlanIdentity> {
+        &self.constraints
     }
 }
 
@@ -177,6 +203,21 @@ pub fn validate_motion_order_constraints<PlanIdentity>(
     Ok(())
 }
 
+/// Validate and retain one exact constraint set as read-only evidence.
+///
+/// # Errors
+///
+/// Returns the same first failure as [`validate_motion_order_constraints`].
+pub fn validate_motion_order_constraints_view<PlanIdentity>(
+    constraints: &MotionOrderConstraintSet<PlanIdentity>,
+) -> Result<
+    ValidatedMotionOrderConstraints<'_, PlanIdentity>,
+    MotionOrderValidationError,
+> {
+    validate_motion_order_constraints(constraints)?;
+    Ok(ValidatedMotionOrderConstraints { constraints })
+}
+
 /// Validate a complete proposed permutation against explicit preservation
 /// rules.
 ///
@@ -187,7 +228,15 @@ pub fn validate_candidate_operation_order<PlanIdentity>(
     constraints: &MotionOrderConstraintSet<PlanIdentity>,
     candidate: &[usize],
 ) -> Result<(), MotionOrderValidationError> {
-    validate_motion_order_constraints(constraints)?;
+    let validated = validate_motion_order_constraints_view(constraints)?;
+    validate_candidate_against_validated_constraints(&validated, candidate)
+}
+
+fn validate_candidate_against_validated_constraints<PlanIdentity>(
+    validated: &ValidatedMotionOrderConstraints<'_, PlanIdentity>,
+    candidate: &[usize],
+) -> Result<(), MotionOrderValidationError> {
+    let constraints = validated.constraints();
     if candidate.len() != constraints.operation_count {
         return Err(MotionOrderValidationError::CandidateLengthMismatch {
             observed: candidate.len(),
@@ -263,9 +312,33 @@ pub fn validate_candidate_operation_order_view<'order, PlanIdentity>(
     ValidatedMotionOrder<'order, PlanIdentity>,
     MotionOrderValidationError,
 > {
-    validate_candidate_operation_order(constraints, candidate)?;
+    let validated = validate_motion_order_constraints_view(constraints)?;
+    validate_candidate_operation_order_against_validated(&validated, candidate)
+}
+
+/// Validate one candidate against an already validated exact constraint set.
+///
+/// This reuses structural constraint evidence when a caller evaluates multiple
+/// candidate permutations. It still does not score or choose any candidate.
+///
+/// # Errors
+///
+/// Returns the first structural candidate failure or violated constraint.
+pub fn validate_candidate_operation_order_against_validated<
+    'order,
+    PlanIdentity,
+>(
+    constraints: &ValidatedMotionOrderConstraints<'order, PlanIdentity>,
+    candidate: &'order [usize],
+) -> Result<
+    ValidatedMotionOrder<'order, PlanIdentity>,
+    MotionOrderValidationError,
+> {
+    validate_candidate_against_validated_constraints(constraints, candidate)?;
     Ok(ValidatedMotionOrder {
         candidate,
-        constraints,
+        constraints: ValidatedMotionOrderConstraints {
+            constraints: constraints.constraints(),
+        },
     })
 }

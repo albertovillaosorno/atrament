@@ -2288,11 +2288,14 @@ HandwritingProfile reasons. A proposed optimized order must be a complete
 permutation of source operation indexes and retain every declared earlier/later
 relation; unconstrained operations may move.
 
-Successful validation can now return constructor-owned read-only evidence that
-borrows the exact candidate permutation and exact plan-bound constraint set.
-Invalid candidates produce no validated view. Route selection, operation
-materialization, distance/cost metrics, drying-conflict detection, and
-optimization policy remain open.
+Constraint-set validation can now also return constructor-owned read-only
+evidence that borrows the exact plan-bound constraint set. Candidate loops may
+reuse that sealed structural evidence across multiple proposed permutations
+without repeating constraint validation or gaining route-selection authority.
+Successful candidate validation retains the exact candidate permutation and the
+sealed constraint evidence; invalid constraints or candidates produce no
+validated view. Route selection, operation materialization, distance/cost
+metrics, drying-conflict detection, and optimization policy remain open.
 
 ### TODO - Build the hardware simulator and dry run
 

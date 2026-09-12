@@ -33,8 +33,10 @@
 use atrament_motion_path_order_constraints::{
     MotionOrderConstraint, MotionOrderConstraintSet,
     MotionOrderPreservationReason, MotionOrderValidationError,
-    validate_candidate_operation_order, validate_candidate_operation_order_view,
-    validate_motion_order_constraints,
+    validate_candidate_operation_order,
+    validate_candidate_operation_order_against_validated,
+    validate_candidate_operation_order_view, validate_motion_order_constraints,
+    validate_motion_order_constraints_view,
 };
 
 fn constraints() -> MotionOrderConstraintSet<&'static str> {
@@ -88,6 +90,28 @@ fn all_frozen_preservation_reasons_remain_explicit_and_plan_bound() {
 }
 
 #[test]
+fn validated_constraint_view_borrows_exact_constraint_set() {
+    let constraints = constraints();
+    let validated = validate_motion_order_constraints_view(&constraints)
+        .expect("valid constraints produce sealed evidence");
+    assert!(std::ptr::eq(validated.constraints(), &constraints));
+    assert_eq!(validated.constraints().plan_identity, "plan-42");
+}
+
+#[test]
+fn invalid_constraints_never_produce_validated_constraint_evidence() {
+    let mut constraints = constraints();
+    constraints.constraints[2].later_operation = 9;
+    assert_eq!(
+        validate_motion_order_constraints_view(&constraints),
+        Err(MotionOrderValidationError::ConstraintOperationOutOfRange {
+            constraint_index: 2,
+            operation_index: 9,
+        }),
+    );
+}
+
+#[test]
 fn unconstrained_operations_may_move_when_every_preserved_pair_stays_ordered() {
     let constraints = constraints();
     let candidate = [0, 3, 2, 1, 4, 5];
@@ -110,6 +134,27 @@ fn validated_order_view_borrows_exact_candidate_and_constraint_set() {
     assert!(std::ptr::eq(validated.constraints(), &constraints));
     assert_eq!(validated.constraints().plan_identity, "plan-42");
     assert_eq!(validated.candidate(), candidate);
+}
+
+#[test]
+fn validated_constraints_can_check_multiple_candidates_without_revalidation() {
+    let constraints = constraints();
+    let validated = validate_motion_order_constraints_view(&constraints)
+        .expect("valid constraints produce sealed evidence");
+    let first = [0, 3, 2, 1, 4, 5];
+    let second = [1, 0, 3, 2, 4, 5];
+    for candidate in [&first[..], &second[..]] {
+        let order = validate_candidate_operation_order_against_validated(
+            &validated, candidate,
+        )
+        .expect("candidate preserves validated constraints");
+        assert!(std::ptr::eq(order.constraints(), &constraints));
+        assert!(std::ptr::eq(
+            order.validated_constraints().constraints(),
+            &constraints,
+        ));
+        assert!(std::ptr::eq(order.candidate(), candidate));
+    }
 }
 
 #[test]
