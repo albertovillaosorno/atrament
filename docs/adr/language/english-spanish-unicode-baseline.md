@@ -73,6 +73,9 @@ The pinned Unicode segmentation adapter reports all 114 visible-text
 requirements as exactly one extended grapheme with exact UTF-8 start/end
 boundaries.
 
+The generic grapheme-edit boundary also replaces each requirement as one exact
+unit and inserts each requirement byte-for-byte without normalization.
+
 A separate cursor-position application resolves those same boundaries to exact
 UTF-8 offsets without defining movement, selection, clamping, keybindings, or
 normalization; each frozen visible-text grapheme admits only its start and end

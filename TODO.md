@@ -864,6 +864,11 @@ same pinned segmentation adapter. Every entry reports exactly one extended
 grapheme cluster, boundary zero at byte zero, boundary one at the exact UTF-8
 length, and no second cluster boundary, including every decomposed diacritic.
 
+The same inventory now exercises the generic grapheme-edit boundary directly.
+Every required entry can be replaced as one exact grapheme unit and inserted at
+an internal boundary with its authored UTF-8 bytes unchanged; this adds no
+normalization or punctuation-generation policy.
+
 Missing, invalid, non-advancing, reversed, or inconsistent source-anchor
 boundaries from an injected segmentation provider remain typed failures and do
 not mutate accepted state. Source-anchor validation runs before caller range

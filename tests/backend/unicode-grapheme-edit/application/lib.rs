@@ -13,11 +13,13 @@
 // - Must-Not:
 //   - Normalize Unicode, mutate notebooks, or define language punctuation.
 // - Allows:
-//   - Inputs: Deterministic composed/decomposed and multi-code-point text.
+//   - Inputs: Deterministic composed/decomposed and multi-code-point text plus
+//     the frozen English/Spanish visible-text inventory as regression fixtures.
 //   - Outputs: Exact replacement and typed range assertions.
 //   - Side effects: Process-local test allocation only.
 // - Split-When:
-//   - Language-specific editing receives independent fixtures.
+//   - Language-specific normalization, punctuation, or editing policy gains
+//     independent executable authority.
 // - Merge-When:
 //   - Grapheme editing is fully covered by a broader language test suite.
 // - Summary:
@@ -31,6 +33,7 @@
 //
 use std::cell::Cell;
 
+use atrament_english_spanish_grapheme_inventory::REQUIRED_TEXT_GRAPHEMES;
 use atrament_unicode_grapheme_boundary_port::GraphemeBoundaryProvider;
 use atrament_unicode_grapheme_edit::{
     GraphemeRange, GraphemeRangeError, replace_grapheme_range,
@@ -407,4 +410,50 @@ fn provider_boundary_failures_are_not_reported_as_user_range_errors() {
             start_byte: source.len(),
         }),
     );
+}
+
+#[test]
+fn every_required_bilingual_grapheme_replaces_as_one_exact_edit_unit() {
+    let provider = UnicodeGraphemeSegmentation;
+    let mut cases = 0_usize;
+    for required in REQUIRED_TEXT_GRAPHEMES {
+        let source = format!("x{}y", required.grapheme);
+        let edited = replace_grapheme_range(
+            &provider,
+            &source,
+            GraphemeRange { count: 1, start: 1 },
+            "Q",
+        );
+        assert_eq!(
+            edited,
+            Ok(String::from("xQy")),
+            "replacement for {:?}",
+            required.grapheme,
+        );
+        cases = cases.saturating_add(1);
+    }
+    assert_eq!(cases, 114);
+}
+
+#[test]
+fn every_required_bilingual_grapheme_inserts_with_exact_authored_bytes() {
+    let provider = UnicodeGraphemeSegmentation;
+    let mut cases = 0_usize;
+    for required in REQUIRED_TEXT_GRAPHEMES {
+        let edited = replace_grapheme_range(
+            &provider,
+            "xy",
+            GraphemeRange { count: 0, start: 1 },
+            required.grapheme,
+        )
+        .expect("required bilingual grapheme must insert");
+        assert_eq!(
+            edited,
+            format!("x{}y", required.grapheme),
+            "insertion for {:?}",
+            required.grapheme,
+        );
+        cases = cases.saturating_add(1);
+    }
+    assert_eq!(cases, 114);
 }
