@@ -104,6 +104,7 @@ members = [
     "src/backend/transcript-evidence",
     "src/backend/transcript-structure",
     "src/backend/unicode-grapheme-boundary-port",
+    "src/backend/unicode-grapheme-cursor",
     "src/backend/unicode-grapheme-edit",
     "src/backend/unicode-grapheme-segmentation",
     "src/backend/vector-geometry",

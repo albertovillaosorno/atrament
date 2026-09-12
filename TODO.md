@@ -869,10 +869,19 @@ replacement.
 
 A provider that reports zero graphemes also resolves boundary zero once, so
 changing answers cannot make nonempty authored text masquerade as an empty
-source. Normalization policy, punctuation generation,
-language-aware wrapping,
-cursor
-behavior, and browser, CLI, or MCP grapheme-range transport remain open.
+source.
+
+A separate transport-neutral cursor-position boundary now resolves one caller
+extended-grapheme boundary index to its exact UTF-8 byte offset. It validates
+provider start/end anchors before caller bounds, resolves an internal boundary
+once, admits both endpoints including empty text, and returns typed failures for
+missing, invalid, or out-of-range positions. All 114 frozen bilingual visible
+text graphemes admit exactly start and end cursor positions under the pinned
+segmentation adapter.
+
+Normalization policy, punctuation generation, language-aware wrapping, cursor
+movement/selection/visual-affinity policy, and browser, CLI, or MCP
+grapheme-range transport remain open.
 
 ### TODO - Make missing glyph coverage impossible to miss
 

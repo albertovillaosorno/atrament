@@ -631,6 +631,13 @@ name = "atrament_unicode_grapheme_boundary_port"
 version = "0.1.0"
 
 [[package]]
+name = "atrament_unicode_grapheme_cursor"
+version = "0.1.0"
+dependencies = [
+ "atrament_unicode_grapheme_boundary_port",
+]
+
+[[package]]
 name = "atrament_unicode_grapheme_edit"
 version = "0.1.0"
 dependencies = [

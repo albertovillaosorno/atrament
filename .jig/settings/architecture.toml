@@ -271,6 +271,9 @@ depends_on = ["atrament_transcript_evidence"]
 [component.atrament_unicode_grapheme_boundary_port]
 depends_on = []
 
+[component.atrament_unicode_grapheme_cursor]
+depends_on = ["atrament_unicode_grapheme_boundary_port"]
+
 [component.atrament_unicode_grapheme_edit]
 depends_on = ["atrament_unicode_grapheme_boundary_port"]
 

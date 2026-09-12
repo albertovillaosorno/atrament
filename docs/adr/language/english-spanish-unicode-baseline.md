@@ -73,6 +73,11 @@ The pinned Unicode segmentation adapter reports all 114 visible-text
 requirements as exactly one extended grapheme with exact UTF-8 start/end
 boundaries.
 
+A separate cursor-position application resolves those same boundaries to exact
+UTF-8 offsets without defining movement, selection, clamping, keybindings, or
+normalization; each frozen visible-text grapheme admits only its start and end
+positions.
+
 The generic handwriting-coverage report also consumes the complete 114-entry
 inventory. An empty profile reports every requirement in exact order, while a
 profile declaring all 114 exact graphemes reports none.

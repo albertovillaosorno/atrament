@@ -1,0 +1,9 @@
+identity:
+  id: function:unicode-grapheme-cursor
+  name: unicode-grapheme-cursor
+  path: src/backend/unicode-grapheme-cursor
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: application
