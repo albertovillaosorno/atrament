@@ -2294,8 +2294,13 @@ reuse that sealed structural evidence across multiple proposed permutations
 without repeating constraint validation or gaining route-selection authority.
 Successful candidate validation retains the exact candidate permutation and the
 sealed constraint evidence; invalid constraints or candidates produce no
-validated view. Route selection, operation materialization, distance/cost
-metrics, drying-conflict detection, and optimization policy remain open.
+validated view. A checked-in 720-permutation oracle independently evaluates all
+six-operation orders and requires exact agreement between ordinary validation
+and the prevalidated-constraint path, including first violated-constraint
+precedence; exactly 24 permutations preserve all four fixture constraints.
+
+Route selection, operation materialization, distance/cost metrics,
+drying-conflict detection, and optimization policy remain open.
 
 ### TODO - Build the hardware simulator and dry run
 

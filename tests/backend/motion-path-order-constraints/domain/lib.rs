@@ -39,6 +39,46 @@ use atrament_motion_path_order_constraints::{
     validate_motion_order_constraints_view,
 };
 
+fn visit_permutations(
+    values: &mut [usize],
+    index: usize,
+    visit: &mut impl FnMut(&[usize]),
+) {
+    if index == values.len() {
+        visit(values);
+        return;
+    }
+    for candidate_index in index..values.len() {
+        values.swap(index, candidate_index);
+        visit_permutations(values, index + 1, visit);
+        values.swap(index, candidate_index);
+    }
+}
+
+fn expected_constraint_result(
+    constraints: &MotionOrderConstraintSet<&str>,
+    candidate: &[usize],
+) -> Result<(), MotionOrderValidationError> {
+    for (constraint_index, constraint) in
+        constraints.constraints.iter().enumerate()
+    {
+        let earlier_position = candidate
+            .iter()
+            .position(|&item| item == constraint.earlier_operation)
+            .expect("permutation contains earlier operation");
+        let later_position = candidate
+            .iter()
+            .position(|&item| item == constraint.later_operation)
+            .expect("permutation contains later operation");
+        if earlier_position >= later_position {
+            return Err(MotionOrderValidationError::ConstraintViolated {
+                constraint_index,
+            });
+        }
+    }
+    Ok(())
+}
+
 fn constraints() -> MotionOrderConstraintSet<&'static str> {
     MotionOrderConstraintSet {
         constraints: vec![
@@ -125,11 +165,9 @@ fn unconstrained_operations_may_move_when_every_preserved_pair_stays_ordered() {
 fn validated_order_view_borrows_exact_candidate_and_constraint_set() {
     let constraints = constraints();
     let candidate = [0, 3, 2, 1, 4, 5];
-    let validated = validate_candidate_operation_order_view(
-        &constraints,
-        &candidate,
-    )
-    .expect("valid permutation produces read-only evidence");
+    let validated =
+        validate_candidate_operation_order_view(&constraints, &candidate)
+            .expect("valid permutation produces read-only evidence");
     assert!(std::ptr::eq(validated.candidate(), candidate.as_slice()));
     assert!(std::ptr::eq(validated.constraints(), &constraints));
     assert_eq!(validated.constraints().plan_identity, "plan-42");
@@ -155,6 +193,45 @@ fn validated_constraints_can_check_multiple_candidates_without_revalidation() {
         ));
         assert!(std::ptr::eq(order.candidate(), candidate));
     }
+}
+
+#[test]
+fn every_six_operation_permutation_matches_independent_constraint_oracle() {
+    let constraints = constraints();
+    let validated = validate_motion_order_constraints_view(&constraints)
+        .expect("valid constraints produce sealed evidence");
+    let mut candidate = [0, 1, 2, 3, 4, 5];
+    let mut cases = 0_u32;
+    let mut admitted = 0_u32;
+    let mut rejected = 0_u32;
+
+    visit_permutations(&mut candidate, 0, &mut |candidate| {
+        cases += 1;
+        let expected = expected_constraint_result(&constraints, candidate);
+        assert_eq!(
+            validate_candidate_operation_order(&constraints, candidate),
+            expected,
+            "direct validation mismatch for {candidate:?}",
+        );
+        match validate_candidate_operation_order_against_validated(
+            &validated, candidate,
+        ) {
+            Ok(order) => {
+                assert_eq!(expected, Ok(()));
+                assert_eq!(order.candidate(), candidate);
+                assert!(std::ptr::eq(order.constraints(), &constraints));
+                admitted += 1;
+            }
+            Err(error) => {
+                assert_eq!(Err(error), expected);
+                rejected += 1;
+            }
+        }
+    });
+
+    assert_eq!(cases, 720);
+    assert_eq!(admitted, 24);
+    assert_eq!(rejected, 696);
 }
 
 #[test]
