@@ -59,10 +59,10 @@ editing now also preserves Redo and its reachable bytes on provider rejection
 or semantic no-op, while an applied grapheme mutation prunes the abandoned
 Redo-only bytes through the same gate.
 
-Read-only grapheme cursor-position inspection also routes through
-`SessionApplication`; semantic revision/target
-rejection occurs before the boundary provider is consulted and cannot mutate
-history.
+Read-only grapheme position, signed-step, and selection inspection also route
+through `SessionApplication`; semantic revision/target rejection occurs before
+the boundary provider is consulted and cannot mutate history. Edit, Undo, and
+Redo each invalidate older query revision identities.
 
 A 256-state asset-history fixture undoes halfway, then branches: cleanup removes
 exactly 128 Redo-only retained byte entries and preserves all 128 identities
