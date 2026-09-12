@@ -132,6 +132,7 @@ name = "atrament_autonomous_repeated_no_op_control"
 version = "0.1.0"
 dependencies = [
  "atrament_autonomous_progress_evidence",
+ "atrament_semantic_notebook_port",
 ]
 
 [[package]]

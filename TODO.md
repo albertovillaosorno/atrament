@@ -2044,9 +2044,12 @@ Repeated-input progress projection now recognizes unchanged qualified revision,
 blocking evidence, and bounded intent with no new admission as frozen
 non-progress. Fingerprint construction and owning loop policy remain open.
 
-Repeated-No-op control now maps only qualified repeated No-op for the same
-bounded intent to a local requirement to stop equivalent mutation attempts. It
-does not choose a terminal goal class or grant continuation on other evidence.
+Repeated-No-op control now derives qualified repeated No-op evidence only when
+two consecutive semantic results are No-op for the same owner-qualified bounded
+intent and no new relevant evidence is supplied, then maps that evidence to a
+local requirement to stop equivalent mutation attempts. Intent-fingerprint and
+relevant-evidence qualification remain caller-owned; the control does not choose
+a terminal goal class or grant continuation on other evidence.
 
 Semantic-result progress projection now maps Applied directly to accepted
 revision progress and Idempotent replay to replay-recovery non-progress. No-op

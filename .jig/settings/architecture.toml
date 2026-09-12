@@ -41,7 +41,7 @@ depends_on = ["atrament_autonomous_completion_admission", "atrament_autonomous_g
 depends_on = ["atrament_autonomous_progress_evidence"]
 
 [component.atrament_autonomous_repeated_no_op_control]
-depends_on = ["atrament_autonomous_progress_evidence"]
+depends_on = ["atrament_autonomous_progress_evidence", "atrament_semantic_notebook_port"]
 
 [component.atrament_autonomous_derived_output_guidance]
 depends_on = ["atrament_derived_output_result"]
