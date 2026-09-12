@@ -129,8 +129,10 @@ layout, vector topology, layer composition, render seeds, physical bounds, final
 pixels, digital theme, live theme, and overflow overlays. Duplicate or missing
 axes reject before completeness can be claimed.
 
-A mismatch remains valid evidence. The domain does not choose pixel tolerances,
-topology metrics, release policy, or golden-artifact storage.
+A mismatch remains valid evidence. A checked-in 512-state oracle exhausts every
+match/mismatch combination across the nine axes and requires canonical mismatch
+order even when caller evidence is reversed. The domain does not choose pixel
+tolerances, topology metrics, release policy, or golden-artifact storage.
 
 ## Failure Modes
 

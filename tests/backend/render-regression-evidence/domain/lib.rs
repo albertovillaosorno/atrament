@@ -130,6 +130,52 @@ fn mismatches_remain_independent_and_canonically_ordered() {
 }
 
 #[test]
+fn every_match_mismatch_mask_projects_exact_canonical_axes() {
+    const MASKS: usize = 1 << AXES.len();
+    let mut saw_match = [false; AXES.len()];
+    let mut saw_mismatch = [false; AXES.len()];
+    let mut cases = 0_usize;
+    for mask in 0..MASKS {
+        let mut evidence = AXES
+            .into_iter()
+            .enumerate()
+            .map(|(index, axis)| {
+                let comparison = if mask & (1 << index) == 0 {
+                    saw_match[index] = true;
+                    RenderRegressionComparison::Match
+                } else {
+                    saw_mismatch[index] = true;
+                    RenderRegressionComparison::Mismatch
+                };
+                RenderRegressionEvidence { axis, comparison }
+            })
+            .collect::<Vec<_>>();
+        evidence.reverse();
+        let expected = AXES
+            .into_iter()
+            .enumerate()
+            .filter_map(|(index, axis)| {
+                (mask & (1 << index) != 0).then_some(axis)
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            validate_render_regression_evidence(&evidence),
+            Ok(()),
+            "structural completeness for mask {mask:#011b}",
+        );
+        assert_eq!(
+            render_regression_mismatches(&evidence),
+            Ok(expected),
+            "canonical mismatch projection for mask {mask:#011b}",
+        );
+        cases += 1;
+    }
+    assert_eq!(cases, MASKS);
+    assert!(saw_match.into_iter().all(|seen| seen));
+    assert!(saw_mismatch.into_iter().all(|seen| seen));
+}
+
+#[test]
 fn every_mismatched_axis_is_returned_in_canonical_order() {
     let mut evidence = complete_evidence();
     for item in &mut evidence {
