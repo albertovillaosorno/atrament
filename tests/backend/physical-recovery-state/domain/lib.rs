@@ -34,7 +34,8 @@
 use atrament_physical_recovery_state::{
     PhysicalBoundaryState, PhysicalFeedbackState, PhysicalInterruptionKind,
     PhysicalPositionState, PhysicalRecoverySnapshot, PhysicalResumeDisposition,
-    PhysicalStrokeState, physical_resume_disposition,
+    PhysicalStrokeState, admit_known_physical_recovery_state,
+    physical_resume_disposition,
 };
 
 fn safe_snapshot(
@@ -64,6 +65,9 @@ fn fully_known_state_is_the_only_resumable_shape() {
             physical_resume_disposition(&snapshot),
             PhysicalResumeDisposition::ResumeKnownState,
         );
+        let known = admit_known_physical_recovery_state(&snapshot)
+            .expect("fully known snapshot admits read-only evidence");
+        assert!(std::ptr::eq(known.snapshot(), &snapshot));
         assert_eq!(snapshot.interruption, interruption);
     }
 }
@@ -181,6 +185,13 @@ fn every_physical_recovery_state_combination_fails_closed_except_fully_known() {
                             physical_resume_disposition(&snapshot),
                             expected,
                             "recovery mismatch for {snapshot:?}",
+                        );
+                        assert_eq!(
+                            admit_known_physical_recovery_state(&snapshot)
+                                .is_some(),
+                            expected
+                                == PhysicalResumeDisposition::ResumeKnownState,
+                            "known-state evidence mismatch for {snapshot:?}",
                         );
                     }
                 }

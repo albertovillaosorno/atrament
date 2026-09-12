@@ -2365,14 +2365,16 @@ stroke, unknown carriage position, restart, and refusal to resume unsafely.
 Current executable evidence now freezes fail-closed recovery admission after
 disconnect, power loss, pause, emergency stop, process crash, or process
 restart.
+
 Resume remains admissible only when required feedback is available, carriage
 position is known, bounds remain valid, and no partial stroke is unresolved;
-every other snapshot requires operator recovery. A 96-state Cartesian fixture
-covers all six interruption provenances across feedback, position, boundary,
-and stroke certainty; only the six fully known states remain resumable.
-Restart is provenance only:
-adapter commands, homing, position acquisition, safe-stop execution, restart
-persistence, and operator procedures remain open.
+every other snapshot requires operator recovery. A constructor-owned borrowed
+known-state view is available only for those admitted snapshots and grants no
+hardware execution authority. A 96-state Cartesian fixture covers all six
+interruption provenances across feedback, position, boundary, and stroke
+certainty; only the six fully known states are resumable or produce that view.
+Restart is provenance only: adapter commands, homing, position acquisition,
+safe-stop execution, restart persistence, and operator procedures remain open.
 
 ### TODO - Prove complete single-pen notebook output
 

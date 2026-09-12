@@ -105,6 +105,28 @@ pub struct PhysicalRecoverySnapshot<Position> {
     pub stroke: PhysicalStrokeState,
 }
 
+/// Constructor-owned read-only evidence for one fully known recovery state.
+///
+/// This value does not authorize or execute physical motion. It only proves the
+/// wrapped snapshot satisfied the same fail-closed known-state predicate used
+/// by
+/// [`physical_resume_disposition`].
+#[derive(Debug, Eq, PartialEq)]
+pub struct KnownPhysicalRecoveryState<'snapshot, Position> {
+    snapshot: &'snapshot PhysicalRecoverySnapshot<Position>,
+}
+
+impl<'snapshot, Position> KnownPhysicalRecoveryState<'snapshot, Position> {
+    /// Return the exact recovery snapshot that satisfied known-state
+    /// admission.
+    #[must_use]
+    pub const fn snapshot(
+        &self,
+    ) -> &'snapshot PhysicalRecoverySnapshot<Position> {
+        self.snapshot
+    }
+}
+
 /// Resume admission derived only from explicit physical recovery evidence.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PhysicalResumeDisposition {
@@ -127,4 +149,20 @@ pub const fn physical_resume_disposition<Position>(
         return PhysicalResumeDisposition::OperatorRecoveryRequired;
     }
     PhysicalResumeDisposition::ResumeKnownState
+}
+
+/// Admit a read-only known-state view only when resume state is fully known.
+///
+/// This function does not issue a resume command or grant physical execution
+/// authority. Callers still need a separate admitted hardware boundary.
+#[must_use]
+pub const fn admit_known_physical_recovery_state<Position>(
+    snapshot: &PhysicalRecoverySnapshot<Position>,
+) -> Option<KnownPhysicalRecoveryState<'_, Position>> {
+    match physical_resume_disposition(snapshot) {
+        PhysicalResumeDisposition::OperatorRecoveryRequired => None,
+        PhysicalResumeDisposition::ResumeKnownState => {
+            Some(KnownPhysicalRecoveryState { snapshot })
+        }
+    }
 }

@@ -139,8 +139,11 @@ when:
 - no partial stroke remains.
 
 Any missing feedback, unknown position, violated boundary, or partial stroke
-returns `OperatorRecoveryRequired`. The domain does not issue a resume, home, or
-safe-stop command and does not choose the operator's recovery steps.
+returns `OperatorRecoveryRequired`. `admit_known_physical_recovery_state` can
+additionally return a constructor-owned borrowed view only for the same fully
+known states. That view is evidence, not a hardware token: the domain does not
+issue a resume, home, or safe-stop command and does not choose the operator's
+recovery steps.
 
 ### Compatibility is exact and evidence scoped
 
