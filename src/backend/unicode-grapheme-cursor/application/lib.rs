@@ -9,31 +9,31 @@
 //
 // Boundary-Contract:
 // - Owns:
-//   - Validation and exact UTF-8 resolution of one caller-supplied Unicode
-//     grapheme cursor position.
+//   - Validation and exact UTF-8 resolution of caller-supplied Unicode
+//     grapheme cursor positions and one anchor/focus pair.
 // - Must-Not:
 //   - Normalize Unicode, move or clamp cursors, choose language or keybindings,
 //     mutate notebooks, generate punctuation, wrap text, or define transport.
 // - Allows:
-//   - Inputs: Exact UTF-8 text, one grapheme-boundary index, and one outbound
+//   - Inputs: Exact UTF-8 text, grapheme-boundary indexes, and one outbound
 //     grapheme-boundary provider.
-//   - Outputs: Exact grapheme index/byte offset or typed position rejection.
+//   - Outputs: Exact positions or one caller-ordered anchor/focus pair.
 //   - Side effects: None.
 // - Split-When:
-//   - Cursor movement, selection, or visual affinity gains independent policy.
+//   - Cursor movement, selection extension, or visual affinity gains policy.
 // - Merge-When:
 //   - Cursor-position validation becomes inseparable from semantic text edits.
 // - Summary:
-//   - Resolves cursor positions at Unicode grapheme boundaries exactly.
+//   - Resolves cursor positions and selection endpoints at grapheme boundaries.
 // - Description:
-//   - Checks provider anchors before accepting one caller boundary position.
+//   - Checks one provider snapshot before accepting caller boundary positions.
 // - Usage:
 //   - Validate a transport-neutral text cursor before movement or selection.
 // - Defaults:
 //   - Both text endpoints are valid cursor positions, including empty text.
 //
 
-//! Exact Unicode grapheme cursor-position resolution without movement policy.
+//! Exact Unicode grapheme cursor/selection resolution without movement policy.
 
 use atrament_unicode_grapheme_boundary_port::GraphemeBoundaryProvider;
 
@@ -44,6 +44,15 @@ pub struct GraphemeCursorPosition {
     pub byte_offset: usize,
     /// Zero-based grapheme boundary index in the unchanged source.
     pub grapheme_index: usize,
+}
+
+/// One caller-ordered anchor/focus pair on the same unchanged source text.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct GraphemeCursorSelection {
+    /// Anchor endpoint retained exactly as supplied by the caller.
+    pub anchor: GraphemeCursorPosition,
+    /// Focus endpoint retained exactly as supplied by the caller.
+    pub focus: GraphemeCursorPosition,
 }
 
 /// Typed rejection of one grapheme cursor position.
@@ -103,6 +112,43 @@ pub fn resolve_grapheme_cursor_position(
     grapheme_index: usize,
 ) -> Result<GraphemeCursorPosition, GraphemeCursorError> {
     let anchors = provider_anchors(boundaries, source)?;
+    resolve_position(boundaries, source, grapheme_index, anchors)
+}
+
+/// Resolve one caller-ordered selection without choosing extension policy.
+///
+/// Start/end provider anchors are validated once for the shared source. The
+/// anchor endpoint is resolved before focus, and a collapsed selection reuses
+/// the same resolved position instead of querying an internal boundary twice.
+/// Caller anchor/focus order is retained even when focus precedes anchor.
+///
+/// # Errors
+///
+/// Returns the same typed cursor-position failures as
+/// [`resolve_grapheme_cursor_position`]. A caller-bound failure identifies its
+/// exact requested grapheme index.
+pub fn resolve_grapheme_cursor_selection(
+    boundaries: &dyn GraphemeBoundaryProvider,
+    source: &str,
+    anchor_index: usize,
+    focus_index: usize,
+) -> Result<GraphemeCursorSelection, GraphemeCursorError> {
+    let anchors = provider_anchors(boundaries, source)?;
+    let anchor = resolve_position(boundaries, source, anchor_index, anchors)?;
+    let focus = if focus_index == anchor_index {
+        anchor
+    } else {
+        resolve_position(boundaries, source, focus_index, anchors)?
+    };
+    Ok(GraphemeCursorSelection { anchor, focus })
+}
+
+fn resolve_position(
+    boundaries: &dyn GraphemeBoundaryProvider,
+    source: &str,
+    grapheme_index: usize,
+    anchors: AnchoredBoundaries,
+) -> Result<GraphemeCursorPosition, GraphemeCursorError> {
     if grapheme_index > anchors.total {
         return Err(GraphemeCursorError::CursorOutOfBounds {
             grapheme_count: anchors.total,

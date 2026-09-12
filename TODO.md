@@ -882,12 +882,16 @@ provider start/end anchors before caller bounds, resolves an internal boundary
 once, admits both endpoints including empty text, and returns typed failures for
 missing, invalid, or out-of-range positions. All 114 frozen bilingual visible
 text graphemes admit exactly start and end cursor positions under the pinned
-segmentation adapter. `SessionApplication` exposes the same query against one
-exact current Text-content target without mutation; no-session, stale-base,
-missing-target, and non-text outcomes are resolved before provider access.
+segmentation adapter. A same-source selection resolver validates provider
+anchors once, preserves caller anchor/focus order for forward and reverse
+selections, and reuses one internal boundary for a collapsed selection.
+
+`SessionApplication` exposes the single-position query against one exact current
+Text-content target without mutation; no-session, stale-base, missing-target,
+and non-text outcomes are resolved before provider access.
 
 Normalization policy, punctuation generation, language-aware wrapping, cursor
-movement/selection/visual-affinity policy, and browser, CLI, or MCP
+movement/selection-extension/visual-affinity policy, and browser, CLI, or MCP
 grapheme-range transport remain open.
 
 ### TODO - Make missing glyph coverage impossible to miss

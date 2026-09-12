@@ -9,18 +9,18 @@
 //
 // Boundary-Contract:
 // - Owns:
-//   - Regression evidence for exact Unicode grapheme cursor-position
-//     resolution.
+//   - Regression evidence for exact Unicode grapheme cursor-position and
+//     anchor/focus selection resolution.
 // - Must-Not:
-//   - Normalize Unicode, define cursor movement, mutate notebooks, or choose
-//     browser keybindings.
+//   - Normalize Unicode, define cursor movement/selection-extension policy,
+//     mutate notebooks, or choose browser keybindings.
 // - Allows:
 //   - Inputs: Deterministic composed/decomposed and multi-code-point text plus
 //     injected provider failures.
 //   - Outputs: Exact boundary positions and typed rejection assertions.
 //   - Side effects: Process-local test allocation only.
 // - Split-When:
-//   - Cursor movement or selection receives independent fixtures.
+//   - Cursor movement or visual-affinity policy receives independent fixtures.
 // - Merge-When:
 //   - Cursor positioning is covered by a broader language acceptance harness.
 // - Summary:
@@ -39,7 +39,9 @@ use atrament_english_spanish_grapheme_inventory::REQUIRED_TEXT_GRAPHEMES;
 use atrament_unicode_grapheme_boundary_port::GraphemeBoundaryProvider;
 use atrament_unicode_grapheme_cursor::GraphemeCursorError;
 use atrament_unicode_grapheme_cursor::GraphemeCursorPosition;
+use atrament_unicode_grapheme_cursor::GraphemeCursorSelection;
 use atrament_unicode_grapheme_cursor::resolve_grapheme_cursor_position;
+use atrament_unicode_grapheme_cursor::resolve_grapheme_cursor_selection;
 use atrament_unicode_grapheme_segmentation::UnicodeGraphemeSegmentation;
 
 #[test]
@@ -300,4 +302,97 @@ fn bilingual_inventory_exposes_only_start_and_end_cursor_positions() {
             required.grapheme,
         );
     }
+}
+
+#[test]
+fn selection_preserves_forward_reverse_and_collapsed_endpoint_order() {
+    let provider = UnicodeGraphemeSegmentation;
+    let source = "Áe\u{301}👩‍🔬Z";
+    let position =
+        |grapheme_index: usize, byte_offset: usize| GraphemeCursorPosition {
+            byte_offset,
+            grapheme_index,
+        };
+    assert_eq!(
+        resolve_grapheme_cursor_selection(&provider, source, 1, 3),
+        Ok(GraphemeCursorSelection {
+            anchor: position(1, "Á".len()),
+            focus: position(3, "Áe\u{301}👩‍🔬".len()),
+        }),
+    );
+    assert_eq!(
+        resolve_grapheme_cursor_selection(&provider, source, 3, 1),
+        Ok(GraphemeCursorSelection {
+            anchor: position(3, "Áe\u{301}👩‍🔬".len()),
+            focus: position(1, "Á".len()),
+        }),
+    );
+    assert_eq!(
+        resolve_grapheme_cursor_selection(&provider, source, 2, 2),
+        Ok(GraphemeCursorSelection {
+            anchor: position(2, "Áe\u{301}".len()),
+            focus: position(2, "Áe\u{301}".len()),
+        }),
+    );
+}
+
+#[test]
+fn collapsed_internal_selection_resolves_boundary_once() {
+    let provider = ChangingInternalBoundaryProvider {
+        internal_calls: Cell::new(0),
+    };
+    let position = GraphemeCursorPosition {
+        byte_offset: "é".len(),
+        grapheme_index: 1,
+    };
+    assert_eq!(
+        resolve_grapheme_cursor_selection(&provider, "éx", 1, 1),
+        Ok(GraphemeCursorSelection {
+            anchor: position,
+            focus: position,
+        }),
+    );
+    assert_eq!(provider.internal_calls.get(), 1);
+}
+
+#[test]
+fn selection_reports_anchor_then_focus_bounds_without_reordering() {
+    let provider = UnicodeGraphemeSegmentation;
+    assert_eq!(
+        resolve_grapheme_cursor_selection(&provider, "aé", 3, 1),
+        Err(GraphemeCursorError::CursorOutOfBounds {
+            grapheme_count: 2,
+            grapheme_index: 3,
+        }),
+    );
+    assert_eq!(
+        resolve_grapheme_cursor_selection(&provider, "aé", 1, 3),
+        Err(GraphemeCursorError::CursorOutOfBounds {
+            grapheme_count: 2,
+            grapheme_index: 3,
+        }),
+    );
+}
+
+#[test]
+fn empty_text_accepts_only_collapsed_zero_selection() {
+    let provider = UnicodeGraphemeSegmentation;
+    let zero = GraphemeCursorPosition {
+        byte_offset: 0,
+        grapheme_index: 0,
+    };
+    assert_eq!(
+        resolve_grapheme_cursor_selection(&provider, "", 0, 0),
+        Ok(GraphemeCursorSelection {
+            anchor: zero,
+            focus: zero,
+        }),
+    );
+    assert_eq!(
+        resolve_grapheme_cursor_selection(&provider, "", 0, 1),
+        Err(GraphemeCursorError::CursorOutOfBounds {
+            grapheme_count: 0,
+            grapheme_index: 1,
+        }),
+    );
 }
