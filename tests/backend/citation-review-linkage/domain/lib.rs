@@ -32,7 +32,7 @@
 use atrament_citation_review_linkage::{
     CitationClaimLink, CitationReviewLinkage, CitationReviewLinkageError,
     CitationSource, ClaimProvenance, citation_source_identities_for_claim,
-    validate_citation_review_linkage,
+    citation_sources_for_claim, validate_citation_review_linkage,
 };
 use atrament_semantic_notebook::{Provenance, ProvenanceKind};
 
@@ -222,6 +222,48 @@ fn validated_claim_source_projection_preserves_link_order_and_empty_non_cited()
     assert_eq!(
         citation_source_identities_for_claim(&value, &99),
         Err(CitationReviewLinkageError::UnknownClaim { claim: 99 }),
+    );
+}
+
+#[test]
+fn validated_claim_source_records_preserve_link_order_and_metadata() {
+    let mut value = review();
+    value.sources.push(CitationSource {
+        metadata: "source metadata b",
+        source_identity: 22,
+    });
+    value.links.insert(0, CitationClaimLink {
+        claim_identity: 1,
+        provenance_identity: 11,
+        source_identity: 22,
+    });
+    let sources = citation_sources_for_claim(&value, &1)
+        .expect("cited claim source records must project");
+    assert_eq!(sources.len(), 2);
+    assert_eq!(sources[0].source_identity, 22);
+    assert_eq!(sources[0].metadata, "source metadata b");
+    assert_eq!(sources[1].source_identity, 21);
+    assert_eq!(
+        sources[1].metadata,
+        "doi:10.1000/example; title=Example Source",
+    );
+    assert_eq!(
+        citation_sources_for_claim(&value, &2),
+        Ok(Vec::<&Source>::new()),
+    );
+    assert_eq!(
+        citation_sources_for_claim(&value, &99),
+        Err(CitationReviewLinkageError::UnknownClaim { claim: 99 }),
+    );
+}
+
+#[test]
+fn claim_source_record_projection_preserves_structural_error_precedence() {
+    let mut value = review();
+    value.sources.clear();
+    assert_eq!(
+        citation_sources_for_claim(&value, &99),
+        Err(CitationReviewLinkageError::UnknownSource { source: 21 }),
     );
 }
 

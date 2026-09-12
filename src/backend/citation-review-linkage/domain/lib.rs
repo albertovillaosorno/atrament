@@ -166,6 +166,90 @@ type CitationReviewResult<ClaimIdentity, ProvenanceIdentity, SourceIdentity> =
         >,
     >;
 
+/// Exact reviewable source records projected for one validated claim.
+pub type CitationSourceProjectionResult<
+    'review,
+    ClaimIdentity,
+    Metadata,
+    ProvenanceIdentity,
+    SourceIdentity,
+> = Result<
+    Vec<&'review CitationSource<Metadata, SourceIdentity>>,
+    CitationReviewLinkageError<
+        ClaimIdentity,
+        ProvenanceIdentity,
+        SourceIdentity,
+    >,
+>;
+
+/// Return exact reviewable source records linked to one claim after full
+/// structural validation.
+///
+/// Records follow caller citation-link order. A valid non-cited claim returns
+/// an empty collection. Metadata remains caller-owned opaque review data: this
+/// projection does not fetch, parse, rank, normalize, or judge sources.
+///
+/// # Errors
+///
+/// Returns the first structural linkage error before projection, or
+/// [`CitationReviewLinkageError::UnknownClaim`] when the requested claim is not
+/// present in an otherwise valid review set.
+pub fn citation_sources_for_claim<
+    'review,
+    ClaimIdentity,
+    Metadata,
+    ProvenanceIdentity,
+    SourceIdentity,
+>(
+    review: &'review TypedCitationReviewLinkage<
+        ClaimIdentity,
+        Metadata,
+        ProvenanceIdentity,
+        SourceIdentity,
+    >,
+    claim_identity: &ClaimIdentity,
+) -> CitationSourceProjectionResult<
+    'review,
+    ClaimIdentity,
+    Metadata,
+    ProvenanceIdentity,
+    SourceIdentity,
+>
+where
+    ClaimIdentity: Clone + Eq,
+    ProvenanceIdentity: Clone + Eq,
+    SourceIdentity: Clone + Eq,
+{
+    validate_citation_review_linkage(review)?;
+    if !review
+        .claims
+        .iter()
+        .any(|claim| claim.claim_identity == *claim_identity)
+    {
+        return Err(CitationReviewLinkageError::UnknownClaim {
+            claim: claim_identity.clone(),
+        });
+    }
+    let mut sources = Vec::new();
+    for link in review
+        .links
+        .iter()
+        .filter(|link| link.claim_identity == *claim_identity)
+    {
+        let Some(source) = review
+            .sources
+            .iter()
+            .find(|source| source.source_identity == link.source_identity)
+        else {
+            return Err(CitationReviewLinkageError::UnknownSource {
+                source: link.source_identity.clone(),
+            });
+        };
+        sources.push(source);
+    }
+    Ok(sources)
+}
+
 /// Return source identities linked to one claim after full structural
 /// validation.
 ///
