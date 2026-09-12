@@ -106,7 +106,7 @@ use atrament_unicode_grapheme_segmentation::UnicodeGraphemeSegmentation;
 mod application;
 
 const CURRENT_COMMAND_BEHAVIOR_VERSION: CommandBehaviorVersion =
-    CommandBehaviorVersion(94);
+    CommandBehaviorVersion(95);
 
 fn physical_page_profile() -> PageProfile {
     PageProfile {
@@ -2727,6 +2727,7 @@ fn application_preserves_every_simple_inline_block_family() {
         (SemanticBlockKind::Footnote, BlockContent::Footnote),
         (SemanticBlockKind::Definition, BlockContent::Definition),
         (SemanticBlockKind::Heading, BlockContent::Heading),
+        (SemanticBlockKind::Label, BlockContent::Label),
         (SemanticBlockKind::MarginNote, BlockContent::MarginNote),
         (SemanticBlockKind::Paragraph, BlockContent::Paragraph),
         (SemanticBlockKind::Quotation, BlockContent::Quotation),

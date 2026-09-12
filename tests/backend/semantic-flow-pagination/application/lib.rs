@@ -225,6 +225,7 @@ fn measured_inline_block_families_preserve_semantic_order_and_identity() {
         BlockContent::Definition,
         BlockContent::Footnote,
         BlockContent::Heading,
+        BlockContent::Label,
         BlockContent::MarginNote,
         BlockContent::Paragraph,
         BlockContent::Quotation,

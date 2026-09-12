@@ -233,10 +233,12 @@ Current executable evidence defines transport-independent typed values for those
 semantic families, separate opaque candidate, accepted, and revision identities,
 non-recycling active-session allocation, unresolved semantic blocks, and exact
 extension-data preservation. Citations, definitions, footnotes, quotations,
-source notes, and margin notes are now distinct semantic block kinds whose
-editable inline spans retain their own identities, style references, and
+source notes, margin notes, and labels are now distinct semantic block kinds
+whose editable inline spans retain their own identities, style references, and
 provenance references rather than being flattened into paragraph text.
-Explicit candidate acceptance validates
+
+Label text remains semantic authority without inventing diagram-node or arrow
+geometry. Explicit candidate acceptance validates
 duplicate, dangling, and wrong-kind references before mutation, promotes
 candidate-local identities through one backend-owned mapping, and commits one
 new accepted revision atomically while preserving nested semantic references.
@@ -291,8 +293,8 @@ supports read-only behavior-version drift checks. It deliberately advertises no
 command protocol, normalizer, command context, Validate, Apply, rebatching, or
 numeric command/context limits yet.
 
-Aggregate command behavior and typed-result behavior are version 94 after
-admitting LaTeX-base math-mode glyph aliases as exact source. Asset
+Aggregate command behavior and typed-result behavior are version 95 after
+admitting semantic label blocks. Asset
 reference,
 Ordering and grouping, and Text content retain family behavior version 1;
 Provenance and Style role are version 2, Document constraint is version 3, and
@@ -558,9 +560,9 @@ Measurements bind to one accepted revision and one accepted flow; stale,
 incomplete, reordered, unknown-flow, and out-of-flow measurements reject before
 layout. Repeated measured fragments may retain one block owner, and no fragment
 is split by pagination. Already-measured top-level citation, date, definition,
-footnote, heading, list, margin-note, paragraph, quotation, and source-note
-blocks retain their accepted block identities and semantic order through
-pagination.
+footnote, heading, label, list, margin-note, paragraph, quotation, and
+source-note blocks retain their accepted block identities and semantic order
+through pagination.
 
 List pagination keeps the containing top-level block as the measured owner while
 preserving its accepted list, item, and child-block identities. This admits
@@ -839,9 +841,11 @@ Candidate acceptance preserves that block kind and its generic block style
 reference, so divider meaning is not flattened into paragraph text or inferred
 from drawn geometry. Ruler-like divider measurement and rendering remain open.
 
-The task remains open for cell alignment and wrapping semantics, ruler-like
-border geometry, table measurement/layout, command-batch cell content
-operations, and the remaining structured educational block families.
+Label text now has its own semantic block kind and editable inline-span
+authority, so diagram labels need not be flattened into figure pixels or generic
+paragraphs. Diagram topology, arrows, page references, label attachment, cell
+alignment and wrapping, ruler-like border geometry, table measurement/layout,
+and command-batch cell content operations remain open.
 
 ### TODO - Implement English and Spanish text behavior
 

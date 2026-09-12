@@ -101,6 +101,8 @@ pub enum BlockContent<Identity> {
     Freeform(Vec<Block<Identity>>),
     /// Heading content retained as editable spans.
     Heading(Vec<InlineSpan<Identity>>),
+    /// Semantic label text retained independently from diagram geometry.
+    Label(Vec<InlineSpan<Identity>>),
     /// Ordered or unordered semantic list.
     List(List<Identity>),
     /// Semantic margin note retained as editable authored spans.
@@ -569,6 +571,8 @@ pub enum SemanticBlockKind {
     Freeform,
     /// Heading block containing inline text spans.
     Heading,
+    /// Label block containing inline text spans.
+    Label,
     /// Structured semantic list block.
     List,
     /// Margin-note block containing inline text spans.
@@ -1090,6 +1094,7 @@ where
         | BlockContent::Definition(spans)
         | BlockContent::Footnote(spans)
         | BlockContent::Heading(spans)
+        | BlockContent::Label(spans)
         | BlockContent::MarginNote(spans)
         | BlockContent::Paragraph(spans)
         | BlockContent::Quotation(spans)
@@ -1431,6 +1436,7 @@ const fn semantic_block_kind<Identity>(
         BlockContent::Footnote(_) => SemanticBlockKind::Footnote,
         BlockContent::Freeform(_) => SemanticBlockKind::Freeform,
         BlockContent::Heading(_) => SemanticBlockKind::Heading,
+        BlockContent::Label(_) => SemanticBlockKind::Label,
         BlockContent::List(_) => SemanticBlockKind::List,
         BlockContent::MarginNote(_) => SemanticBlockKind::MarginNote,
         BlockContent::Mathematics(_) => SemanticBlockKind::Mathematics,
@@ -1490,6 +1496,7 @@ where
                     | BlockContent::Figure(_)
                     | BlockContent::Footnote(_)
                     | BlockContent::Heading(_)
+                    | BlockContent::Label(_)
                     | BlockContent::MarginNote(_)
                     | BlockContent::Mathematics(_)
                     | BlockContent::Paragraph(_)
@@ -1661,6 +1668,7 @@ where
         | BlockContent::SourceNote(spans)
         | BlockContent::Footnote(spans)
         | BlockContent::Heading(spans)
+        | BlockContent::Label(spans)
         | BlockContent::MarginNote(spans)
         | BlockContent::Paragraph(spans) => {
             semantic_spans_descriptor(spans, target, block.id)

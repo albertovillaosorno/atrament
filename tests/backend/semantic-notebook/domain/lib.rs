@@ -530,6 +530,7 @@ fn simple_inline_block_kinds_keep_span_ownership() {
         (SemanticBlockKind::Footnote, BlockContent::Footnote),
         (SemanticBlockKind::Definition, BlockContent::Definition),
         (SemanticBlockKind::Heading, BlockContent::Heading),
+        (SemanticBlockKind::Label, BlockContent::Label),
         (SemanticBlockKind::MarginNote, BlockContent::MarginNote),
         (SemanticBlockKind::Paragraph, BlockContent::Paragraph),
         (SemanticBlockKind::Quotation, BlockContent::Quotation),

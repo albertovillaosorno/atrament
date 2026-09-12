@@ -89,7 +89,7 @@ use atrament_semantic_notebook_session::{
 };
 
 const CURRENT_COMMAND_BEHAVIOR_VERSION: CommandBehaviorVersion =
-    CommandBehaviorVersion(94);
+    CommandBehaviorVersion(95);
 
 #[derive(Debug)]
 struct CountingCommandIdentity {
@@ -3166,6 +3166,7 @@ fn every_simple_inline_family_remains_editable_through_block_containers() {
         (SemanticBlockKind::Footnote, BlockContent::Footnote),
         (SemanticBlockKind::Definition, BlockContent::Definition),
         (SemanticBlockKind::Heading, BlockContent::Heading),
+        (SemanticBlockKind::Label, BlockContent::Label),
         (SemanticBlockKind::MarginNote, BlockContent::MarginNote),
         (SemanticBlockKind::Paragraph, BlockContent::Paragraph),
         (SemanticBlockKind::Quotation, BlockContent::Quotation),
@@ -3409,6 +3410,7 @@ fn every_simple_inline_family_preserves_attached_semantic_references() {
         (SemanticBlockKind::Footnote, BlockContent::Footnote),
         (SemanticBlockKind::Definition, BlockContent::Definition),
         (SemanticBlockKind::Heading, BlockContent::Heading),
+        (SemanticBlockKind::Label, BlockContent::Label),
         (SemanticBlockKind::MarginNote, BlockContent::MarginNote),
         (SemanticBlockKind::Paragraph, BlockContent::Paragraph),
         (SemanticBlockKind::Quotation, BlockContent::Quotation),
@@ -3578,6 +3580,7 @@ fn every_simple_inline_family_keeps_text_impact_scope() {
         BlockContent::Footnote,
         BlockContent::Definition,
         BlockContent::Heading,
+        BlockContent::Label,
         BlockContent::MarginNote,
         BlockContent::Paragraph,
         BlockContent::Quotation,
@@ -14882,6 +14885,7 @@ fn every_simple_inline_family_validates_span_reference_kinds() {
         BlockContent::Footnote,
         BlockContent::Definition,
         BlockContent::Heading,
+        BlockContent::Label,
         BlockContent::MarginNote,
         BlockContent::Paragraph,
         BlockContent::Quotation,
