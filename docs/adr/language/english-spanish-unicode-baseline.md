@@ -75,6 +75,8 @@ boundaries.
 
 The generic grapheme-edit boundary also replaces each requirement as one exact
 unit and inserts each requirement byte-for-byte without normalization.
+The active session owner admits the same 114 exact insertions into accepted text
+and Undo restores the original semantic text without changing authored bytes.
 
 A separate cursor-position application resolves those same boundaries to exact
 UTF-8 offsets without defining movement, selection, clamping, keybindings, or

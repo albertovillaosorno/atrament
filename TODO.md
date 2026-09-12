@@ -869,6 +869,10 @@ Every required entry can be replaced as one exact grapheme unit and inserted at
 an internal boundary with its authored UTF-8 bytes unchanged; this adds no
 normalization or punctuation-generation policy.
 
+A 114-entry application sweep also inserts each exact requirement through
+`SessionApplication`, verifies the accepted semantic text byte-for-byte, and
+Undo restores the original text under a fresh revision identity.
+
 Missing, invalid, non-advancing, reversed, or inconsistent source-anchor
 boundaries from an injected segmentation provider remain typed failures and do
 not mutate accepted state. Source-anchor validation runs before caller range

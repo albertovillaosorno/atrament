@@ -37,6 +37,7 @@ use std::io::{BufRead, BufReader, Read, Write};
 use std::num::NonZeroU32;
 use std::process::{Command, Stdio};
 
+use atrament_english_spanish_grapheme_inventory::REQUIRED_TEXT_GRAPHEMES;
 use atrament_export_layout_preflight::{
     ExportLayoutPreflightError, ExportLayoutPreflightResult,
     RevisionLayoutDiagnostics,
@@ -5206,6 +5207,77 @@ fn cursor_and_selection_queries_follow_history_revision_freshness() {
             target: span,
         }),
     );
+}
+
+#[test]
+fn application_edits_and_undoes_every_required_bilingual_grapheme() {
+    let provider = UnicodeGraphemeSegmentation;
+    let mut cases = 0_usize;
+    for required in REQUIRED_TEXT_GRAPHEMES {
+        let identities = IdentityAllocator::new();
+        let (candidate, candidate_span) =
+            editable_text_candidate(&identities, "xy");
+        let mut session = application::SessionApplication::default();
+        let AcceptanceOutcome::Accepted { mapping, revision: base } =
+            session.accept_candidate(candidate)
+        else {
+            panic!("bilingual grapheme candidate must be accepted");
+        };
+        let span = mapping
+            .iter()
+            .find(|entry| entry.candidate == candidate_span)
+            .expect("bilingual grapheme span identity must map")
+            .accepted;
+        let outcome = session
+            .replace_text_grapheme_range(
+                &provider,
+                application::TextGraphemeRangeEdit {
+                    base,
+                    range: GraphemeRange { count: 0, start: 1 },
+                    replacement: required.grapheme,
+                    target: span,
+                },
+            )
+            .expect("required bilingual grapheme insertion must resolve");
+        let TextEditOutcome::Applied { revision, .. } = outcome else {
+            panic!("required bilingual grapheme insertion must apply");
+        };
+        let CommandTargetMaterialOutcome::Prepared { material } =
+            session.command_target_material(revision, span)
+        else {
+            panic!("inserted bilingual grapheme must remain inspectable");
+        };
+        assert_eq!(
+            material.editable_value,
+            Some(EditableSemanticValue::Text(format!(
+                "x{}y",
+                required.grapheme,
+            ))),
+            "accepted text for {:?}",
+            required.grapheme,
+        );
+        let HistoryTraversalOutcome::Traversed {
+            direction: HistoryDirection::Undo,
+            revision: restored,
+            ..
+        } = session.traverse_history(revision, HistoryDirection::Undo)
+        else {
+            panic!("required bilingual grapheme insertion must Undo");
+        };
+        let CommandTargetMaterialOutcome::Prepared { material } =
+            session.command_target_material(restored, span)
+        else {
+            panic!("restored bilingual grapheme target must be inspectable");
+        };
+        assert_eq!(
+            material.editable_value,
+            Some(EditableSemanticValue::Text(String::from("xy"))),
+            "Undo text for {:?}",
+            required.grapheme,
+        );
+        cases = cases.saturating_add(1);
+    }
+    assert_eq!(cases, 114);
 }
 
 #[test]
