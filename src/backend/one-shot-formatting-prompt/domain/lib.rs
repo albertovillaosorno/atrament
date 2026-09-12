@@ -44,6 +44,13 @@
 /// First-release self-contained formatting-prompt contract identity.
 pub const FORMATTING_PROMPT_VERSION: &str = "atrament.prompt/1";
 
+/// Why one initial-formatting prompt cannot use the current prompt contract.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum FormattingPromptVersionError {
+    /// Prompt carries a version other than the frozen first-release contract.
+    UnsupportedVersion,
+}
+
 /// User-provided task and complete source material included in one request.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct FormattingPromptSourceInputs<SourceMaterial, Task> {
@@ -110,4 +117,37 @@ pub struct OneShotFormattingPrompt<
     pub source: SourceInputs,
     /// Version of the backend-owned prompt protocol.
     pub version: PromptVersion,
+}
+
+/// Validate that one formatting prompt uses the frozen prompt contract version.
+///
+/// This check does not serialize the prompt, compute its identity, or choose
+/// any browser/clipboard presentation behavior.
+///
+/// # Errors
+///
+/// Returns [`FormattingPromptVersionError::UnsupportedVersion`] when the prompt
+/// version differs exactly from [`FORMATTING_PROMPT_VERSION`].
+pub fn validate_formatting_prompt_version<
+    ConstraintInputs,
+    PromptIdentity,
+    ProtocolInputs,
+    SourceInputs,
+    PromptVersion,
+>(
+    prompt: &OneShotFormattingPrompt<
+        ConstraintInputs,
+        PromptIdentity,
+        ProtocolInputs,
+        SourceInputs,
+        PromptVersion,
+    >,
+) -> Result<(), FormattingPromptVersionError>
+where
+    PromptVersion: AsRef<str>,
+{
+    if prompt.version.as_ref() != FORMATTING_PROMPT_VERSION {
+        return Err(FormattingPromptVersionError::UnsupportedVersion);
+    }
+    Ok(())
 }

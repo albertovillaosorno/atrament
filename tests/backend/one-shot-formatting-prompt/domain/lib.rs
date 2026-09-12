@@ -31,9 +31,10 @@
 //   - No hidden chat state or browser state participates in the value.
 //
 use atrament_one_shot_formatting_prompt::{
-    FormattingPromptConstraintInputs, FormattingPromptProtocolInputs,
-    FORMATTING_PROMPT_VERSION, FormattingPromptSourceInputs,
-    OneShotFormattingPrompt,
+    FORMATTING_PROMPT_VERSION, FormattingPromptConstraintInputs,
+    FormattingPromptProtocolInputs, FormattingPromptSourceInputs,
+    FormattingPromptVersionError, OneShotFormattingPrompt,
+    validate_formatting_prompt_version,
 };
 
 #[test]
@@ -103,4 +104,26 @@ fn prompt_identity_and_version_are_data_not_browser_side_effects() {
     assert_eq!(unchanged, prompt);
     assert_eq!(unchanged.identity, 41);
     assert_eq!(unchanged.version, 7);
+}
+
+#[test]
+fn prompt_version_validation_requires_the_frozen_contract_exactly() {
+    let prompt = |version| OneShotFormattingPrompt {
+        constraints: (),
+        identity: "prompt-identity",
+        protocol: (),
+        source: (),
+        version,
+    };
+    assert_eq!(
+        validate_formatting_prompt_version(&prompt(FORMATTING_PROMPT_VERSION)),
+        Ok(()),
+    );
+    for unsupported in ["atrament.prompt/0", "atrament.prompt/2", "prompt/1"] {
+        assert_eq!(
+            validate_formatting_prompt_version(&prompt(unsupported)),
+            Err(FormattingPromptVersionError::UnsupportedVersion),
+            "unsupported prompt version {unsupported}",
+        );
+    }
 }

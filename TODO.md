@@ -1176,8 +1176,10 @@ validation remain authoritative for model-injection resistance.
 
 The one-shot prompt domain now owns the shared `atrament.prompt/1` contract
 identity consumed by browser/backend handshake compatibility, eliminating a
-second hard-coded backend prompt-version source. Prompt serialization, identity
-computation, mode selection, and browser transport still keep this task open.
+second hard-coded backend prompt-version source. A transport-neutral validator
+also rejects prompt values carrying any other version before presentation.
+Prompt serialization, identity computation, mode selection, and browser
+transport still keep this task open.
 
 ### TODO - Validate pasted model responses transactionally
 
