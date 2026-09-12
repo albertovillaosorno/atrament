@@ -196,10 +196,14 @@ blocking-evidence, and bounded-intent fingerprints plus an explicit fact stating
 whether new admission occurred. Only exact repetition of all three inputs with
 no new admission produces the frozen repeated-same-inputs non-progress evidence.
 
-An application-level stop projection now maps only the already-qualified
-repeated stable-blocking evidence class to the frozen stable-blocking terminal
-stop. Replay, repeated No-op, and generic unchanged-input evidence do not become
-terminal on this projection alone.
+An application-level stable-blocking projection now compares consecutive
+owner-qualified blocking observations. It emits repeated stable-blocking
+evidence only when the typed diagnostic fingerprint, accepted revision, and
+bounded intent are unchanged and no new admission occurred, then maps only that
+evidence class
+to the frozen stable-blocking terminal stop. Diagnostic fingerprint construction
+remains owner-controlled; replay, repeated No-op, and generic unchanged-input
+evidence do not become terminal on this projection alone.
 
 An agent uses typed diagnostic code, semantic location, blocking disposition,
 and evidence to recognize this condition rather than comparing only localized

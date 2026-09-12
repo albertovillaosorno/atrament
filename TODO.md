@@ -2067,9 +2067,13 @@ Read-only history availability now projects each requested direction as
 admitted, boundary, or no accepted revision before mutation. This does not
 implement scheduling, traversal, retry, or terminal-goal policy.
 
-Stable-blocking stop projection now maps only qualified repeated blocking
-diagnostic evidence to the frozen stable-blocking terminal outcome. Stateful
-diagnostic comparison and all other stop/completion composition remain open.
+Stable-blocking stop projection now compares consecutive owner-qualified
+blocking
+observations and derives repeated-blocking evidence only when diagnostic
+fingerprint, accepted revision, and bounded intent all remain unchanged with no
+new admission. Only that evidence maps to the frozen stable-blocking terminal
+outcome. Diagnostic fingerprint construction and all other stop/completion
+composition remain open.
 
 Unresolved-stop projection now requires an explicit owning-caller choice before
 Unrepresentable or unresolved can become the frozen unresolved terminal class.

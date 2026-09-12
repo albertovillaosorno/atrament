@@ -9,12 +9,14 @@
 //
 // Boundary-Contract:
 // - Owns:
-//   - Exhaustive projection evidence across all nine progress-evidence classes.
+//   - Exhaustive stable-blocking detection and terminal-projection evidence.
 // - Must-Not:
-//   - Infer diagnostics, stop on unrelated evidence, retry, or execute a loop.
+//   - Construct diagnostic fingerprints, stop on unrelated evidence, retry, or
+//     execute a loop.
 // - Allows:
-//   - Inputs: Every frozen progress-evidence class.
-//   - Outputs: Exactly one stable-blocking terminal mapping and eight `None`s.
+//   - Inputs: Every progress-evidence class plus all equality/admission states
+//     for consecutive qualified blocking observations.
+//   - Outputs: Exact repeated-blocking evidence and terminal-stop assertions.
 //   - Side effects: None.
 // - Split-When:
 //   - Stateful diagnostic comparison requires independent integration evidence.
@@ -32,6 +34,8 @@
 use atrament_autonomous_goal_outcome::AutonomousGoalTerminalClass;
 use atrament_autonomous_progress_evidence::AutonomousProgressEvidenceClass;
 use atrament_autonomous_stable_blocking_stop_projection::{
+    AutonomousStableBlockingObservation,
+    autonomous_stable_blocking_progress_evidence,
     autonomous_stable_blocking_terminal_outcome,
 };
 
@@ -65,4 +69,54 @@ fn only_repeated_stable_blocking_evidence_maps_to_terminal_stop() {
         }
     }
     assert_eq!(stops, 1);
+}
+
+#[test]
+fn all_16_blocking_observation_states_match_stability_rule() {
+    let previous = AutonomousStableBlockingObservation {
+        diagnostic: 1_u8,
+        intent: 1_u16,
+        revision: 1_u32,
+    };
+    let mut combinations = 0_usize;
+    let mut repeated = 0_usize;
+    for same_diagnostic in [false, true] {
+        for same_intent in [false, true] {
+            for same_revision in [false, true] {
+                for new_admission in [false, true] {
+                    let current = AutonomousStableBlockingObservation {
+                        diagnostic: if same_diagnostic { 1 } else { 2 },
+                        intent: if same_intent { 1 } else { 2 },
+                        revision: if same_revision { 1 } else { 2 },
+                    };
+                    let expected = if same_diagnostic
+                        && same_intent
+                        && same_revision
+                        && !new_admission
+                    {
+                        Some(
+                            AutonomousProgressEvidenceClass::
+                                StableBlockingDiagnosticRepeated,
+                        )
+                    } else {
+                        None
+                    };
+                    assert_eq!(
+                        autonomous_stable_blocking_progress_evidence(
+                            &previous,
+                            &current,
+                            new_admission,
+                        ),
+                        expected,
+                    );
+                    combinations += 1;
+                    if expected.is_some() {
+                        repeated += 1;
+                    }
+                }
+            }
+        }
+    }
+    assert_eq!(combinations, 16);
+    assert_eq!(repeated, 1);
 }
