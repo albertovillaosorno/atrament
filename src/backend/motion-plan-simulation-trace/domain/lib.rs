@@ -66,10 +66,31 @@ where
 {
     /// Exact validated dry-run package, including plan and calibration
     /// identity.
-    pub dry_run: &'trace MotionPlanDryRun<Calibration, LimitEvidence, Plan>,
+    dry_run: &'trace MotionPlanDryRun<Calibration, LimitEvidence, Plan>,
     /// Ordered operation inspection trace.
-    pub steps:
-        MotionPlanSimulationSteps<'trace, LimitEvidence, Plan::Operation>,
+    steps: MotionPlanSimulationSteps<'trace, LimitEvidence, Plan::Operation>,
+}
+
+impl<'trace, Calibration, LimitEvidence, Plan>
+    MotionPlanSimulationTrace<'trace, Calibration, LimitEvidence, Plan>
+where
+    Plan: DryRunPlan,
+{
+    /// Return the exact validated dry-run package retained by this trace.
+    #[must_use]
+    pub const fn dry_run(
+        &self,
+    ) -> &'trace MotionPlanDryRun<Calibration, LimitEvidence, Plan> {
+        self.dry_run
+    }
+
+    /// Return ordered borrowed simulation steps.
+    #[must_use]
+    pub fn steps(
+        &self,
+    ) -> &[MotionPlanSimulationStep<'trace, LimitEvidence, Plan::Operation>] {
+        &self.steps
+    }
 }
 
 /// Result of building one validated offline simulation trace.

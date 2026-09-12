@@ -163,12 +163,12 @@ fn simulation_trace_preserves_exact_operation_order_and_kind() {
     let dry_run = dry_run();
     let trace = build_motion_plan_simulation_trace(&dry_run)
         .expect("clean dry run");
-    assert_eq!(trace.steps.len(), 4);
-    assert_eq!(trace.steps[0].operation_index, 0);
-    assert_eq!(trace.steps[0].kind, DryRunOperationKind::PenUp);
-    assert_eq!(trace.steps[1].kind, DryRunOperationKind::Pause);
-    assert_eq!(trace.steps[2].kind, DryRunOperationKind::Checkpoint);
-    assert_eq!(trace.steps[3].kind, DryRunOperationKind::PenDown);
+    assert_eq!(trace.steps().len(), 4);
+    assert_eq!(trace.steps()[0].operation_index, 0);
+    assert_eq!(trace.steps()[0].kind, DryRunOperationKind::PenUp);
+    assert_eq!(trace.steps()[1].kind, DryRunOperationKind::Pause);
+    assert_eq!(trace.steps()[2].kind, DryRunOperationKind::Checkpoint);
+    assert_eq!(trace.steps()[3].kind, DryRunOperationKind::PenDown);
 }
 
 #[test]
@@ -176,20 +176,20 @@ fn simulation_trace_borrows_exact_geometry_pause_checkpoint_and_limits() {
     let dry_run = dry_run();
     let trace = build_motion_plan_simulation_trace(&dry_run)
         .expect("clean dry run");
-    let MotionPlanOperation::Segment(first) = trace.steps[0].operation else {
+    let MotionPlanOperation::Segment(first) = trace.steps()[0].operation else {
         panic!("first operation must remain pen-up segment");
     };
     assert_eq!(first.geometry, "travel");
     assert_eq!(
-        trace.steps[0].limit_evaluation.evidence,
+        trace.steps()[0].limit_evaluation.evidence,
         "travel-within-limits",
     );
     assert_eq!(
-        trace.steps[1].operation,
+        trace.steps()[1].operation,
         &MotionPlanOperation::Pause("drying-pause"),
     );
     assert_eq!(
-        trace.steps[2].operation,
+        trace.steps()[2].operation,
         &MotionPlanOperation::Checkpoint("checkpoint-1"),
     );
 }
@@ -199,12 +199,15 @@ fn trace_retains_exact_plan_calibration_duration_bounds_and_identities() {
     let dry_run = dry_run();
     let trace = build_motion_plan_simulation_trace(&dry_run)
         .expect("clean dry run");
-    assert_eq!(trace.dry_run.plan.plan_identity, "plan-22");
-    assert_eq!(trace.dry_run.plan.revision_identity, "revision-14");
-    assert_eq!(trace.dry_run.plan.estimated_duration, Some(4_200));
-    assert_eq!(trace.dry_run.plan.bounds.physical_bounds, "page-bounds");
-    assert_eq!(trace.dry_run.calibration.calibration_identity, "calibration-4");
-    assert_eq!(trace.dry_run.calibration.device_identity, "device-7");
+    assert_eq!(trace.dry_run().plan.plan_identity, "plan-22");
+    assert_eq!(trace.dry_run().plan.revision_identity, "revision-14");
+    assert_eq!(trace.dry_run().plan.estimated_duration, Some(4_200));
+    assert_eq!(trace.dry_run().plan.bounds.physical_bounds, "page-bounds");
+    assert_eq!(
+        trace.dry_run().calibration.calibration_identity,
+        "calibration-4",
+    );
+    assert_eq!(trace.dry_run().calibration.device_identity, "device-7");
 }
 
 #[test]
