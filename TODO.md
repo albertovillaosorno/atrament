@@ -2484,7 +2484,10 @@ exercising only one routing disposition.
 The profile manifest/evidence and browser fragment/draft generators likewise
 assert their declared selector and result classes, so deterministic P8 coverage
 fails when a generator loses a promised branch even if its sampled assertions
-would otherwise remain green.
+would otherwise remain green. The generated manifest corpus now also requires
+all five declared-path failure reasons, while the observed-inventory corpus
+requires all four non-manifest path failures it can produce; aggregate invalid
+path coverage alone is no longer sufficient.
 
 A second 4,096-case corpus mutates only post-request-line bytes of one
 canonical

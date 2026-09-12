@@ -400,6 +400,10 @@ fn generated_archive_inventory_mutations_match_reference_oracle() {
     let mut saw_valid = false;
     let mut saw_duplicate = false;
     let mut saw_invalid_observed_path = false;
+    let mut saw_inventory_backslash = false;
+    let mut saw_inventory_empty_segment = false;
+    let mut saw_inventory_traversal = false;
+    let mut saw_inventory_unsupported_root = false;
     let mut saw_missing_manifest = false;
     let mut saw_missing_declared = false;
     let mut saw_undeclared_observed = false;
@@ -444,9 +448,31 @@ fn generated_archive_inventory_mutations_match_reference_oracle() {
                 panic!("fixed valid manifest cannot fail inventory admission");
             },
             Err(
-                ProfileEntryInventoryError::InvalidObservedEntryPath { .. },
+                ProfileEntryInventoryError::InvalidObservedEntryPath {
+                    reason,
+                    ..
+                },
             ) => {
                 saw_invalid_observed_path = true;
+                match reason {
+                    ProfileEntryPathError::BackslashSeparator => {
+                        saw_inventory_backslash = true;
+                    },
+                    ProfileEntryPathError::EmptySegment => {
+                        saw_inventory_empty_segment = true;
+                    },
+                    ProfileEntryPathError::TraversalSegment => {
+                        saw_inventory_traversal = true;
+                    },
+                    ProfileEntryPathError::UnsupportedRoot => {
+                        saw_inventory_unsupported_root = true;
+                    },
+                    ProfileEntryPathError::ManifestReserved => {
+                        panic!(
+                            "root manifest is valid inventory metadata",
+                        );
+                    },
+                }
             },
             Err(ProfileEntryInventoryError::MissingDeclaredEntry { .. }) => {
                 saw_missing_declared = true;
@@ -472,6 +498,10 @@ fn generated_archive_inventory_mutations_match_reference_oracle() {
     assert!(saw_valid);
     assert!(saw_duplicate);
     assert!(saw_invalid_observed_path);
+    assert!(saw_inventory_backslash);
+    assert!(saw_inventory_empty_segment);
+    assert!(saw_inventory_traversal);
+    assert!(saw_inventory_unsupported_root);
     assert!(saw_missing_manifest);
     assert!(saw_missing_declared);
     assert!(saw_undeclared_observed);
@@ -565,6 +595,11 @@ fn generated_manifest_values_match_reference_admission_oracle() {
     let mut saw_duplicate_path = false;
     let mut saw_empty_media_type = false;
     let mut saw_invalid_path = false;
+    let mut saw_manifest_backslash = false;
+    let mut saw_manifest_empty_segment = false;
+    let mut saw_manifest_reserved = false;
+    let mut saw_manifest_traversal = false;
+    let mut saw_manifest_unsupported_root = false;
     let mut saw_unsupported_version = false;
     let mut saw_unsupported_feature = false;
     for case in 0..CASES {
@@ -618,8 +653,25 @@ fn generated_manifest_values_match_reference_admission_oracle() {
             Err(ProfileManifestError::EmptyMediaType { .. }) => {
                 saw_empty_media_type = true;
             },
-            Err(ProfileManifestError::InvalidEntryPath { .. }) => {
+            Err(ProfileManifestError::InvalidEntryPath { reason, .. }) => {
                 saw_invalid_path = true;
+                match reason {
+                    ProfileEntryPathError::BackslashSeparator => {
+                        saw_manifest_backslash = true;
+                    },
+                    ProfileEntryPathError::EmptySegment => {
+                        saw_manifest_empty_segment = true;
+                    },
+                    ProfileEntryPathError::ManifestReserved => {
+                        saw_manifest_reserved = true;
+                    },
+                    ProfileEntryPathError::TraversalSegment => {
+                        saw_manifest_traversal = true;
+                    },
+                    ProfileEntryPathError::UnsupportedRoot => {
+                        saw_manifest_unsupported_root = true;
+                    },
+                }
             },
             Err(ProfileManifestError::UnsupportedContainerVersion { .. }) => {
                 saw_unsupported_version = true;
@@ -643,6 +695,11 @@ fn generated_manifest_values_match_reference_admission_oracle() {
     assert!(saw_duplicate_path);
     assert!(saw_empty_media_type);
     assert!(saw_invalid_path);
+    assert!(saw_manifest_backslash);
+    assert!(saw_manifest_empty_segment);
+    assert!(saw_manifest_reserved);
+    assert!(saw_manifest_traversal);
+    assert!(saw_manifest_unsupported_root);
     assert!(saw_unsupported_version);
     assert!(saw_unsupported_feature);
 }
