@@ -83,9 +83,11 @@ UTF-8 offsets without defining movement, selection, clamping, keybindings, or
 normalization; each frozen visible-text grapheme admits only its start and end
 positions. The same boundary can resolve a caller-ordered anchor/focus pair
 against one validated provider snapshot, preserving forward, reverse, or
-collapsed endpoint order without choosing selection-extension behavior. The
-active `SessionApplication` can resolve positions or selections against an
-exact current text target read-only, with semantic rejection preceding provider
+collapsed endpoint order without choosing selection-extension behavior. A
+caller-supplied signed step resolves only across exact grapheme boundaries and
+rejects movement beyond either text endpoint without clamping. The active
+`SessionApplication` can resolve positions or selections against an exact
+current text target read-only, with semantic rejection preceding provider
 access.
 
 The generic handwriting-coverage report also consumes the complete 114-entry

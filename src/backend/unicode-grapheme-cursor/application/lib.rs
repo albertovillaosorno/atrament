@@ -10,21 +10,23 @@
 // Boundary-Contract:
 // - Owns:
 //   - Validation and exact UTF-8 resolution of caller-supplied Unicode
-//     grapheme cursor positions and one anchor/focus pair.
+//     grapheme positions, one anchor/focus pair, and one signed grapheme step.
 // - Must-Not:
-//   - Normalize Unicode, move or clamp cursors, choose language or keybindings,
-//     mutate notebooks, generate punctuation, wrap text, or define transport.
+//   - Normalize Unicode, choose movement direction or step size, clamp cursors,
+//     choose language or keybindings, mutate notebooks, generate punctuation,
+//     wrap text, or define transport.
 // - Allows:
-//   - Inputs: Exact UTF-8 text, grapheme-boundary indexes, and one outbound
-//     grapheme-boundary provider.
+//   - Inputs: Exact UTF-8 text, grapheme-boundary indexes, one signed step, and
+//     one outbound grapheme-boundary provider.
 //   - Outputs: Exact positions or one caller-ordered anchor/focus pair.
 //   - Side effects: None.
 // - Split-When:
-//   - Cursor movement, selection extension, or visual affinity gains policy.
+//   - Direction choice, clamping, selection extension, or visual affinity gains
+//     independent policy.
 // - Merge-When:
 //   - Cursor-position validation becomes inseparable from semantic text edits.
 // - Summary:
-//   - Resolves cursor positions and selection endpoints at grapheme boundaries.
+//   - Resolves positions, selections, and caller-supplied steps at boundaries.
 // - Description:
 //   - Checks one provider snapshot before accepting caller boundary positions.
 // - Usage:
@@ -33,7 +35,8 @@
 //   - Both text endpoints are valid cursor positions, including empty text.
 //
 
-//! Exact Unicode grapheme cursor/selection resolution without movement policy.
+//! Exact Unicode grapheme cursor/selection resolution without UI movement
+//! policy.
 
 use atrament_unicode_grapheme_boundary_port::GraphemeBoundaryProvider;
 
@@ -78,6 +81,15 @@ pub enum GraphemeCursorError {
         grapheme_count: usize,
         /// Requested grapheme boundary index.
         grapheme_index: usize,
+    },
+    /// Caller-supplied signed step would leave the source boundary range.
+    CursorStepOutOfBounds {
+        /// Number of grapheme clusters in the source text.
+        grapheme_count: usize,
+        /// Current grapheme boundary index supplied by the caller.
+        origin_index: usize,
+        /// Caller-supplied signed grapheme step.
+        step: isize,
     },
     /// Provider returned a byte offset that is not a valid source boundary.
     InvalidBoundary {
@@ -141,6 +153,51 @@ pub fn resolve_grapheme_cursor_selection(
         resolve_position(boundaries, source, focus_index, anchors)?
     };
     Ok(GraphemeCursorSelection { anchor, focus })
+}
+
+/// Resolve one caller-supplied signed grapheme step without clamping.
+///
+/// The origin must already be an admitted grapheme boundary. The signed step is
+/// applied only after provider anchors and the origin index are validated. A
+/// step that would leave the source range rejects instead of being clamped.
+///
+/// # Errors
+///
+/// Returns the same provider/origin failures as
+/// [`resolve_grapheme_cursor_position`] or
+/// [`GraphemeCursorError::CursorStepOutOfBounds`] when the signed step would
+/// leave the inclusive boundary range `0..=grapheme_count`.
+pub fn resolve_grapheme_cursor_step(
+    boundaries: &dyn GraphemeBoundaryProvider,
+    source: &str,
+    origin_index: usize,
+    step: isize,
+) -> Result<GraphemeCursorPosition, GraphemeCursorError> {
+    let anchors = provider_anchors(boundaries, source)?;
+    let origin = resolve_position(boundaries, source, origin_index, anchors)?;
+    let out_of_bounds = || GraphemeCursorError::CursorStepOutOfBounds {
+        grapheme_count: anchors.total,
+        origin_index,
+        step,
+    };
+    let target_index = if step >= 0 {
+        let distance = step.cast_unsigned();
+        let target = origin_index
+            .checked_add(distance)
+            .ok_or_else(out_of_bounds)?;
+        if target > anchors.total {
+            return Err(out_of_bounds());
+        }
+        target
+    } else {
+        origin_index
+            .checked_sub(step.unsigned_abs())
+            .ok_or_else(out_of_bounds)?
+    };
+    if target_index == origin_index {
+        return Ok(origin);
+    }
+    resolve_position(boundaries, source, target_index, anchors)
 }
 
 fn resolve_position(

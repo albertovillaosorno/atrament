@@ -42,6 +42,7 @@ use atrament_unicode_grapheme_cursor::GraphemeCursorPosition;
 use atrament_unicode_grapheme_cursor::GraphemeCursorSelection;
 use atrament_unicode_grapheme_cursor::resolve_grapheme_cursor_position;
 use atrament_unicode_grapheme_cursor::resolve_grapheme_cursor_selection;
+use atrament_unicode_grapheme_cursor::resolve_grapheme_cursor_step;
 use atrament_unicode_grapheme_segmentation::UnicodeGraphemeSegmentation;
 
 #[test]
@@ -435,6 +436,89 @@ fn bilingual_inventory_resolves_both_full_grapheme_selection_directions() {
                 focus: start,
             }),
             "reverse selection for {:?}",
+            required.grapheme,
+        );
+    }
+}
+
+#[test]
+fn signed_steps_resolve_exact_grapheme_boundaries_without_clamping() {
+    let provider = UnicodeGraphemeSegmentation;
+    let source = "Áe\u{301}👩‍🔬Z";
+    assert_eq!(
+        resolve_grapheme_cursor_step(&provider, source, 2, 1),
+        Ok(GraphemeCursorPosition {
+            byte_offset: "Áe\u{301}👩‍🔬".len(),
+            grapheme_index: 3,
+        }),
+    );
+    assert_eq!(
+        resolve_grapheme_cursor_step(&provider, source, 2, -2),
+        Ok(GraphemeCursorPosition {
+            byte_offset: 0,
+            grapheme_index: 0,
+        }),
+    );
+    assert_eq!(
+        resolve_grapheme_cursor_step(&provider, source, 4, 1),
+        Err(GraphemeCursorError::CursorStepOutOfBounds {
+            grapheme_count: 4,
+            origin_index: 4,
+            step: 1,
+        }),
+    );
+    assert_eq!(
+        resolve_grapheme_cursor_step(&provider, source, 0, -1),
+        Err(GraphemeCursorError::CursorStepOutOfBounds {
+            grapheme_count: 4,
+            origin_index: 0,
+            step: -1,
+        }),
+    );
+    assert_eq!(
+        resolve_grapheme_cursor_step(&provider, source, 5, 0),
+        Err(GraphemeCursorError::CursorOutOfBounds {
+            grapheme_count: 4,
+            grapheme_index: 5,
+        }),
+    );
+}
+
+#[test]
+fn zero_step_reuses_the_resolved_origin_boundary() {
+    let provider = ChangingInternalBoundaryProvider {
+        internal_calls: Cell::new(0),
+    };
+    assert_eq!(
+        resolve_grapheme_cursor_step(&provider, "éx", 1, 0),
+        Ok(GraphemeCursorPosition {
+            byte_offset: "é".len(),
+            grapheme_index: 1,
+        }),
+    );
+    assert_eq!(provider.internal_calls.get(), 1);
+}
+
+#[test]
+fn every_required_bilingual_grapheme_steps_between_its_two_boundaries() {
+    let provider = UnicodeGraphemeSegmentation;
+    for required in REQUIRED_TEXT_GRAPHEMES {
+        assert_eq!(
+            resolve_grapheme_cursor_step(&provider, required.grapheme, 0, 1),
+            Ok(GraphemeCursorPosition {
+                byte_offset: required.grapheme.len(),
+                grapheme_index: 1,
+            }),
+            "forward step for {:?}",
+            required.grapheme,
+        );
+        assert_eq!(
+            resolve_grapheme_cursor_step(&provider, required.grapheme, 1, -1),
+            Ok(GraphemeCursorPosition {
+                byte_offset: 0,
+                grapheme_index: 0,
+            }),
+            "backward step for {:?}",
             required.grapheme,
         );
     }
