@@ -791,138 +791,6 @@ impl SessionApplication {
         })
     }
 
-    /// Resolve one grapheme cursor position in exact accepted inline text.
-    ///
-    /// Semantic revision/target admission runs before the grapheme provider is
-    /// queried. This is read-only and does not choose cursor movement,
-    /// selection, clamping, visual affinity, or transport behavior.
-    ///
-    /// # Errors
-    ///
-    /// Returns a typed cursor-position failure only after the exact current
-    /// text target has been admitted for the named revision.
-    pub fn text_grapheme_cursor_position(
-        &self,
-        boundaries: &dyn GraphemeBoundaryProvider,
-        query: TextGraphemeCursorQuery,
-    ) -> Result<TextGraphemeCursorOutcome, GraphemeCursorError> {
-        let TextGraphemeCursorQuery {
-            base,
-            grapheme_index,
-            target,
-        } = query;
-        let material_outcome = self.command_target_material_for_family(
-            base,
-            target,
-            SemanticCommandFamily::TextContent,
-        );
-        let current_text = match material_outcome {
-            CommandTargetMaterialOutcome::NoAcceptedRevision => {
-                return Ok(TextGraphemeCursorOutcome::NoAcceptedRevision);
-            },
-            CommandTargetMaterialOutcome::Prepared { material } => {
-                match material.editable_value {
-                    Some(EditableSemanticValue::Text(value)) => value,
-                    _ => {
-                        return Ok(TextGraphemeCursorOutcome::TargetNotText {
-                            revision: material.revision,
-                            target: material.target,
-                        });
-                    },
-                }
-            },
-            CommandTargetMaterialOutcome::StaleBase { current } => {
-                return Ok(TextGraphemeCursorOutcome::StaleBase { current });
-            },
-            CommandTargetMaterialOutcome::TargetNotFound {
-                revision,
-                target: missing_target,
-            } => {
-                return Ok(TextGraphemeCursorOutcome::TargetNotFound {
-                    revision,
-                    target: missing_target,
-                });
-            },
-        };
-        let position = resolve_grapheme_cursor_position(
-            boundaries,
-            &current_text,
-            grapheme_index,
-        )?;
-        Ok(TextGraphemeCursorOutcome::Prepared {
-            position,
-            revision: base,
-            target,
-        })
-    }
-
-    /// Resolve one caller-ordered grapheme selection in accepted inline text.
-    ///
-    /// Semantic revision/target admission runs before the grapheme provider is
-    /// queried. This is read-only and does not choose movement, extension,
-    /// clamping, visual affinity, or transport behavior.
-    ///
-    /// # Errors
-    ///
-    /// Returns a typed endpoint failure only after the exact current text
-    /// target has been admitted for the named revision.
-    pub fn text_grapheme_selection(
-        &self,
-        boundaries: &dyn GraphemeBoundaryProvider,
-        query: TextGraphemeSelectionQuery,
-    ) -> Result<TextGraphemeSelectionOutcome, GraphemeCursorError> {
-        let TextGraphemeSelectionQuery {
-            anchor_index,
-            base,
-            focus_index,
-            target,
-        } = query;
-        let material_outcome = self.command_target_material_for_family(
-            base,
-            target,
-            SemanticCommandFamily::TextContent,
-        );
-        let current_text = match material_outcome {
-            CommandTargetMaterialOutcome::NoAcceptedRevision => {
-                return Ok(TextGraphemeSelectionOutcome::NoAcceptedRevision);
-            },
-            CommandTargetMaterialOutcome::Prepared { material } => {
-                match material.editable_value {
-                    Some(EditableSemanticValue::Text(value)) => value,
-                    _ => {
-                        return Ok(TextGraphemeSelectionOutcome::TargetNotText {
-                            revision: material.revision,
-                            target: material.target,
-                        });
-                    },
-                }
-            },
-            CommandTargetMaterialOutcome::StaleBase { current } => {
-                return Ok(TextGraphemeSelectionOutcome::StaleBase { current });
-            },
-            CommandTargetMaterialOutcome::TargetNotFound {
-                revision,
-                target: missing_target,
-            } => {
-                return Ok(TextGraphemeSelectionOutcome::TargetNotFound {
-                    revision,
-                    target: missing_target,
-                });
-            },
-        };
-        let selection = resolve_grapheme_cursor_selection(
-            boundaries,
-            &current_text,
-            anchor_index,
-            focus_index,
-        )?;
-        Ok(TextGraphemeSelectionOutcome::Prepared {
-            revision: base,
-            selection,
-            target,
-        })
-    }
-
     /// Replace one grapheme range inside an accepted inline text value.
     ///
     /// The exact current text is derived from `base` before grapheme boundaries
@@ -1071,6 +939,138 @@ impl SessionApplication {
         proposal: DirectEditProposal,
     ) -> DirectEditProposalOutcome {
         self.semantic.simulate_direct_edit_proposal(proposal)
+    }
+
+    /// Resolve one grapheme cursor position in exact accepted inline text.
+    ///
+    /// Semantic revision/target admission runs before the grapheme provider is
+    /// queried. This is read-only and does not choose cursor movement,
+    /// selection, clamping, visual affinity, or transport behavior.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed cursor-position failure only after the exact current
+    /// text target has been admitted for the named revision.
+    pub fn text_grapheme_cursor_position(
+        &self,
+        boundaries: &dyn GraphemeBoundaryProvider,
+        query: TextGraphemeCursorQuery,
+    ) -> Result<TextGraphemeCursorOutcome, GraphemeCursorError> {
+        let TextGraphemeCursorQuery {
+            base,
+            grapheme_index,
+            target,
+        } = query;
+        let material_outcome = self.command_target_material_for_family(
+            base,
+            target,
+            SemanticCommandFamily::TextContent,
+        );
+        let current_text = match material_outcome {
+            CommandTargetMaterialOutcome::NoAcceptedRevision => {
+                return Ok(TextGraphemeCursorOutcome::NoAcceptedRevision);
+            },
+            CommandTargetMaterialOutcome::Prepared { material } => {
+                match material.editable_value {
+                    Some(EditableSemanticValue::Text(value)) => value,
+                    _ => {
+                        return Ok(TextGraphemeCursorOutcome::TargetNotText {
+                            revision: material.revision,
+                            target: material.target,
+                        });
+                    },
+                }
+            },
+            CommandTargetMaterialOutcome::StaleBase { current } => {
+                return Ok(TextGraphemeCursorOutcome::StaleBase { current });
+            },
+            CommandTargetMaterialOutcome::TargetNotFound {
+                revision,
+                target: missing_target,
+            } => {
+                return Ok(TextGraphemeCursorOutcome::TargetNotFound {
+                    revision,
+                    target: missing_target,
+                });
+            },
+        };
+        let position = resolve_grapheme_cursor_position(
+            boundaries,
+            &current_text,
+            grapheme_index,
+        )?;
+        Ok(TextGraphemeCursorOutcome::Prepared {
+            position,
+            revision: base,
+            target,
+        })
+    }
+
+    /// Resolve one caller-ordered grapheme selection in accepted inline text.
+    ///
+    /// Semantic revision/target admission runs before the grapheme provider is
+    /// queried. This is read-only and does not choose movement, extension,
+    /// clamping, visual affinity, or transport behavior.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed endpoint failure only after the exact current text
+    /// target has been admitted for the named revision.
+    pub fn text_grapheme_selection(
+        &self,
+        boundaries: &dyn GraphemeBoundaryProvider,
+        query: TextGraphemeSelectionQuery,
+    ) -> Result<TextGraphemeSelectionOutcome, GraphemeCursorError> {
+        let TextGraphemeSelectionQuery {
+            anchor_index,
+            base,
+            focus_index,
+            target,
+        } = query;
+        let material_outcome = self.command_target_material_for_family(
+            base,
+            target,
+            SemanticCommandFamily::TextContent,
+        );
+        let current_text = match material_outcome {
+            CommandTargetMaterialOutcome::NoAcceptedRevision => {
+                return Ok(TextGraphemeSelectionOutcome::NoAcceptedRevision);
+            },
+            CommandTargetMaterialOutcome::Prepared { material } => {
+                match material.editable_value {
+                    Some(EditableSemanticValue::Text(value)) => value,
+                    _ => {
+                        return Ok(TextGraphemeSelectionOutcome::TargetNotText {
+                            revision: material.revision,
+                            target: material.target,
+                        });
+                    },
+                }
+            },
+            CommandTargetMaterialOutcome::StaleBase { current } => {
+                return Ok(TextGraphemeSelectionOutcome::StaleBase { current });
+            },
+            CommandTargetMaterialOutcome::TargetNotFound {
+                revision,
+                target: missing_target,
+            } => {
+                return Ok(TextGraphemeSelectionOutcome::TargetNotFound {
+                    revision,
+                    target: missing_target,
+                });
+            },
+        };
+        let selection = resolve_grapheme_cursor_selection(
+            boundaries,
+            &current_text,
+            anchor_index,
+            focus_index,
+        )?;
+        Ok(TextGraphemeSelectionOutcome::Prepared {
+            revision: base,
+            selection,
+            target,
+        })
     }
 
     /// Traverse one in-memory semantic history transaction.
