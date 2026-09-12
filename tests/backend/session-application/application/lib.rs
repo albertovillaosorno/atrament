@@ -4938,7 +4938,7 @@ fn inadmissible_cursor_queries_do_not_query_grapheme_boundaries() {
 }
 
 #[test]
-fn cursor_queries_follow_history_revision_freshness() {
+fn cursor_and_selection_queries_follow_history_revision_freshness() {
     let identities = IdentityAllocator::new();
     let original = "aé";
     let edited_text = "e\u{301}x";
@@ -4994,6 +4994,20 @@ fn cursor_queries_follow_history_revision_freshness() {
         }),
     );
     assert_eq!(
+        session.text_grapheme_selection(
+            &provider,
+            application::TextGraphemeSelectionQuery {
+                anchor_index: 0,
+                base,
+                focus_index: 1,
+                target: span,
+            },
+        ),
+        Ok(application::TextGraphemeSelectionOutcome::StaleBase {
+            current: edited,
+        }),
+    );
+    assert_eq!(
         session.text_grapheme_cursor_position(
             &provider,
             application::TextGraphemeCursorQuery {
@@ -5008,6 +5022,31 @@ fn cursor_queries_follow_history_revision_freshness() {
                 grapheme_index: 1,
             },
             revision: edited,
+            target: span,
+        }),
+    );
+    assert_eq!(
+        session.text_grapheme_selection(
+            &provider,
+            application::TextGraphemeSelectionQuery {
+                anchor_index: 0,
+                base: edited,
+                focus_index: 2,
+                target: span,
+            },
+        ),
+        Ok(application::TextGraphemeSelectionOutcome::Prepared {
+            revision: edited,
+            selection: GraphemeCursorSelection {
+                anchor: GraphemeCursorPosition {
+                    byte_offset: 0,
+                    grapheme_index: 0,
+                },
+                focus: GraphemeCursorPosition {
+                    byte_offset: edited_text.len(),
+                    grapheme_index: 2,
+                },
+            },
             target: span,
         }),
     );
@@ -5033,6 +5072,20 @@ fn cursor_queries_follow_history_revision_freshness() {
         }),
     );
     assert_eq!(
+        session.text_grapheme_selection(
+            &provider,
+            application::TextGraphemeSelectionQuery {
+                anchor_index: 0,
+                base: edited,
+                focus_index: 1,
+                target: span,
+            },
+        ),
+        Ok(application::TextGraphemeSelectionOutcome::StaleBase {
+            current: undone,
+        }),
+    );
+    assert_eq!(
         session.text_grapheme_cursor_position(
             &provider,
             application::TextGraphemeCursorQuery {
@@ -5047,6 +5100,31 @@ fn cursor_queries_follow_history_revision_freshness() {
                 grapheme_index: 2,
             },
             revision: undone,
+            target: span,
+        }),
+    );
+    assert_eq!(
+        session.text_grapheme_selection(
+            &provider,
+            application::TextGraphemeSelectionQuery {
+                anchor_index: 2,
+                base: undone,
+                focus_index: 0,
+                target: span,
+            },
+        ),
+        Ok(application::TextGraphemeSelectionOutcome::Prepared {
+            revision: undone,
+            selection: GraphemeCursorSelection {
+                anchor: GraphemeCursorPosition {
+                    byte_offset: original.len(),
+                    grapheme_index: 2,
+                },
+                focus: GraphemeCursorPosition {
+                    byte_offset: 0,
+                    grapheme_index: 0,
+                },
+            },
             target: span,
         }),
     );
@@ -5072,6 +5150,20 @@ fn cursor_queries_follow_history_revision_freshness() {
         }),
     );
     assert_eq!(
+        session.text_grapheme_selection(
+            &provider,
+            application::TextGraphemeSelectionQuery {
+                anchor_index: 0,
+                base: undone,
+                focus_index: 1,
+                target: span,
+            },
+        ),
+        Ok(application::TextGraphemeSelectionOutcome::StaleBase {
+            current: redone,
+        }),
+    );
+    assert_eq!(
         session.text_grapheme_cursor_position(
             &provider,
             application::TextGraphemeCursorQuery {
@@ -5086,6 +5178,31 @@ fn cursor_queries_follow_history_revision_freshness() {
                 grapheme_index: 1,
             },
             revision: redone,
+            target: span,
+        }),
+    );
+    assert_eq!(
+        session.text_grapheme_selection(
+            &provider,
+            application::TextGraphemeSelectionQuery {
+                anchor_index: 0,
+                base: redone,
+                focus_index: 2,
+                target: span,
+            },
+        ),
+        Ok(application::TextGraphemeSelectionOutcome::Prepared {
+            revision: redone,
+            selection: GraphemeCursorSelection {
+                anchor: GraphemeCursorPosition {
+                    byte_offset: 0,
+                    grapheme_index: 0,
+                },
+                focus: GraphemeCursorPosition {
+                    byte_offset: edited_text.len(),
+                    grapheme_index: 2,
+                },
+            },
             target: span,
         }),
     );
