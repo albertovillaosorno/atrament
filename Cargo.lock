@@ -214,6 +214,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "atrament_english_spanish_diacritic_composition"
+version = "0.1.0"
+dependencies = [
+ "atrament_english_spanish_diacritic_rule",
+ "atrament_handwriting_diacritic_composition",
+ "atrament_handwriting_glyph_coverage",
+]
+
+[[package]]
 name = "atrament_english_spanish_diacritic_rule"
 version = "0.1.0"
 

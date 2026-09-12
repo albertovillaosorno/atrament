@@ -103,6 +103,12 @@ to acute, tilde, or diaeresis composition without normalizing their source. A
 profile declaring the other 100 requirements exactly plus those three rules has
 complete coverage; arbitrary profile-specific composition remains separate.
 
+A language-specific composition boundary now applies that exact matcher before
+generic profile-evidenced diacritic admission. It admits all 14 decomposed
+requirements only when the selected profile declares the matched rule, rejects
+all other 100 textual requirements without decomposition inference, and retains
+exact-profile coverage precedence when both paths are present.
+
 A checked-in corpus fixture now supplies exact UTF-8 content for every required
 verification scenario plus a 114-token sweep that must equal the visible-text
 grapheme inventory in exact order. Its normalized-equivalent fixture keeps both

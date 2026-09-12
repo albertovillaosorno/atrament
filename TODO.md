@@ -1310,6 +1310,17 @@ selection, stroke planning, rendering, and fallback remain open.
 Exact coverage remains the first classification even when the supplied
 compositional rule is also undeclared.
 
+A separate English/Spanish composition boundary now performs the frozen
+language-rule lookup before generic profile admission. All 14 decomposed
+bilingual requirements reach their exact Acute, Diaeresis, or Tilde rule when
+the profile declares it; all other 100 textual requirements and deterministic
+near misses reject before generic composition instead of gaining inferred
+Unicode decomposition. Exact profile coverage still wins after a language rule
+matches, and a matched rule still requires declaration by the selected profile.
+
+Unicode normalization, placement/scale geometry, collision evaluation,
+language-form selection, stroke planning, rendering, and fallback remain open.
+
 ### TODO - Implement continuous contextual stroke planning
 
 Select, connect, deform, space, and lift strokes from neighboring graphemes,

@@ -1,0 +1,17 @@
+[package]
+name = "atrament_english_spanish_diacritic_composition"
+version = "0.1.0"
+edition = "2024"
+publish = false
+license = "MIT"
+
+[dependencies]
+atrament_english_spanish_diacritic_rule = { path = "../english-spanish-diacritic-rule" }
+atrament_handwriting_diacritic_composition = { path = "../handwriting-diacritic-composition" }
+atrament_handwriting_glyph_coverage = { path = "../handwriting-glyph-coverage" }
+
+[lib]
+path = "domain/lib.rs"
+
+[lints]
+workspace = true

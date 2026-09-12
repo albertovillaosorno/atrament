@@ -1,0 +1,9 @@
+identity:
+  id: function:english-spanish-diacritic-composition
+  name: english-spanish-diacritic-composition
+  path: src/backend/english-spanish-diacritic-composition
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: domain
