@@ -32,7 +32,8 @@
 use atrament_educational_coverage_evidence::{
     EducationalCoverageError, EducationalCoverageObservation,
     EducationalEvidenceStatus, EducationalSubject,
-    REQUIRED_EDUCATIONAL_SUBJECTS as SUBJECTS, validate_educational_coverage,
+    REQUIRED_EDUCATIONAL_SUBJECTS as SUBJECTS,
+    project_educational_coverage_by_subject, validate_educational_coverage,
 };
 
 fn observation(
@@ -54,6 +55,29 @@ fn complete_subject_set_with_all_three_properties_is_admitted() {
     assert_eq!(observations.len(), 6);
     assert_eq!(observations[0].subject, EducationalSubject::Biology);
     assert_eq!(observations[5].subject, EducationalSubject::Physics);
+}
+
+#[test]
+fn validated_projection_groups_exact_observations_in_required_subject_order() {
+    let mut observations = SUBJECTS.map(observation).to_vec();
+    observations.push(EducationalCoverageObservation {
+        artifact_identity: String::from("history-extra"),
+        bilingual: EducationalEvidenceStatus::Established,
+        dense_organization: EducationalEvidenceStatus::Established,
+        readable_organization: EducationalEvidenceStatus::Established,
+        subject: EducationalSubject::History,
+    });
+    let review = project_educational_coverage_by_subject(&observations)
+        .expect("complete evidence projects for review");
+    assert_eq!(review.len(), SUBJECTS.len());
+    for (group, subject) in review.iter().zip(SUBJECTS) {
+        assert_eq!(group.subject(), subject);
+    }
+    let history = &review[2];
+    assert_eq!(history.subject(), EducationalSubject::History);
+    assert_eq!(history.observations().len(), 2);
+    assert!(std::ptr::eq(history.observations()[0], &observations[2]));
+    assert!(std::ptr::eq(history.observations()[1], &observations[6]));
 }
 
 #[test]
@@ -143,6 +167,18 @@ fn every_subject_presence_mask_matches_first_missing_subject_oracle() {
             expected,
             "subject presence mask {subject_mask:#08b}",
         );
+        match expected {
+            Ok(()) => assert_eq!(
+                project_educational_coverage_by_subject(&observations)
+                    .expect("complete mask projects")
+                    .len(),
+                SUBJECTS.len(),
+            ),
+            Err(error) => assert_eq!(
+                project_educational_coverage_by_subject(&observations),
+                Err(error),
+            ),
+        }
         cases = cases.saturating_add(1);
     }
     assert_eq!(cases, 64);
@@ -196,6 +232,16 @@ fn every_property_mask_at_every_position_matches_evidence_precedence() {
                 "observation {observation_index}, established mask \
                  {established_mask:#05b}",
             );
+            match expected {
+                Ok(()) => assert!(
+                    project_educational_coverage_by_subject(&observations)
+                        .is_ok(),
+                ),
+                Err(error) => assert_eq!(
+                    project_educational_coverage_by_subject(&observations),
+                    Err(error),
+                ),
+            }
             cases = cases.saturating_add(1);
         }
     }

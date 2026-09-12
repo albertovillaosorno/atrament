@@ -70,6 +70,38 @@ pub enum EducationalSubject {
     Physics,
 }
 
+/// Read-only exact evidence grouped under one required subject after
+/// validation.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct EducationalSubjectCoverageReview<'evidence, ArtifactIdentity> {
+    observations: Vec<
+        &'evidence EducationalCoverageObservation<
+            ArtifactIdentity,
+            EducationalEvidenceStatus,
+        >,
+    >,
+    subject: EducationalSubject,
+}
+
+impl<ArtifactIdentity> EducationalSubjectCoverageReview<'_, ArtifactIdentity> {
+    /// Return exact caller observations in their original relative order.
+    #[must_use]
+    pub fn observations(
+        &self,
+    ) -> &[&EducationalCoverageObservation<
+        ArtifactIdentity,
+        EducationalEvidenceStatus,
+    >] {
+        &self.observations
+    }
+
+    /// Return the required subject represented by this review group.
+    #[must_use]
+    pub const fn subject(&self) -> EducationalSubject {
+        self.subject
+    }
+}
+
 /// One caller-produced educational exercise observation.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct EducationalCoverageObservation<ArtifactIdentity, Evidence> {
@@ -106,6 +138,39 @@ pub enum EducationalCoverageError {
     },
     /// No fully evidenced observation exists for one required subject.
     SubjectAbsent(EducationalSubject),
+}
+
+/// Project complete evidence into canonical required-subject review order.
+///
+/// Every caller observation is borrowed exactly and remains in its original
+/// relative order within the matching subject group. This projection does not
+/// choose a representative artifact, infer evidence, or score educational
+/// quality.
+///
+/// # Errors
+///
+/// Returns the same first incomplete requirement as
+/// [`validate_educational_coverage`] before exposing any review groups.
+pub fn project_educational_coverage_by_subject<ArtifactIdentity>(
+    observations: &[EducationalCoverageObservation<
+        ArtifactIdentity,
+        EducationalEvidenceStatus,
+    >],
+) -> Result<
+    Vec<EducationalSubjectCoverageReview<'_, ArtifactIdentity>>,
+    EducationalCoverageError,
+> {
+    validate_educational_coverage(observations)?;
+    Ok(REQUIRED_EDUCATIONAL_SUBJECTS
+        .into_iter()
+        .map(|subject| EducationalSubjectCoverageReview {
+            observations: observations
+                .iter()
+                .filter(|observation| observation.subject == subject)
+                .collect(),
+            subject,
+        })
+        .collect())
 }
 
 /// Validate all required subject exercises and their caller-owned evidence.

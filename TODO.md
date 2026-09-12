@@ -1749,6 +1749,10 @@ subject observations and preserving their caller-owned artifact identities.
 A 64-case subject-presence oracle proves every subset rejects at the first
 missing subject, while 48 property-state cases cross every observation position
 with all bilingual/dense/readable evidence masks and pin property precedence.
+After complete validation, a constructor-owned read-only projection groups the
+exact caller observations in canonical required-subject order while preserving
+all observations and their relative order inside each subject; it does not pick
+a representative artifact or score quality.
 
 A checked-in fixture set now supplies concrete bilingual assignment prompts for
 all six subjects. Each prompt has three compact authored modules and links its
