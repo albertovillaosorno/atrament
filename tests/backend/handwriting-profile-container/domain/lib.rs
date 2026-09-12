@@ -735,6 +735,119 @@ fn canonical_archive_order_includes_root_manifest_by_path() {
     );
 }
 
+fn next_index_permutation(values: &mut [usize]) -> bool {
+    let Some(pivot) = (0..values.len().saturating_sub(1))
+        .rev()
+        .find(|&index| values[index] < values[index + 1])
+    else {
+        return false;
+    };
+    let successor = (pivot + 1..values.len())
+        .rev()
+        .find(|&index| values[pivot] < values[index])
+        .expect("nonterminal permutation has a successor");
+    values.swap(pivot, successor);
+    values[pivot + 1..].reverse();
+    true
+}
+
+#[test]
+fn every_declaration_order_has_identical_canonical_profile_projections() {
+    let declarations = [
+        ("sections/z.json", "application/json", 1_u8),
+        ("assets/b.bin", "application/octet-stream", 2_u8),
+        ("sections/a.json", "application/json", 3_u8),
+        ("assets/y.bin", "application/octet-stream", 4_u8),
+        ("sections/m.json", "application/json", 5_u8),
+        ("assets/c.bin", "application/octet-stream", 6_u8),
+    ];
+    let expected_archive_paths = [
+        "assets/b.bin",
+        "assets/c.bin",
+        "assets/y.bin",
+        PROFILE_MANIFEST_PATH,
+        "sections/a.json",
+        "sections/m.json",
+        "sections/z.json",
+    ];
+    let expected_entry_paths = [
+        "assets/b.bin",
+        "assets/c.bin",
+        "assets/y.bin",
+        "sections/a.json",
+        "sections/m.json",
+        "sections/z.json",
+    ];
+    let expected_section_paths = [
+        "sections/a.json",
+        "sections/m.json",
+        "sections/z.json",
+    ];
+    let mut order = [0_usize, 1, 2, 3, 4, 5];
+    let mut cases = 0_usize;
+    loop {
+        let entries = order
+            .iter()
+            .map(|&index| {
+                let (path, media_type, byte) = declarations[index];
+                entry(path, media_type, byte)
+            })
+            .collect::<Vec<_>>();
+        let value = manifest(entries);
+        let original_order = value
+            .entries
+            .iter()
+            .map(|item| item.path.clone())
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            canonical_profile_archive_paths(&value, &["stroke-vocabulary"]),
+            Ok(expected_archive_paths.to_vec()),
+            "archive order for permutation {order:?}",
+        );
+        let entry_order = canonical_profile_entry_order(
+            &value,
+            &["stroke-vocabulary"],
+        )
+        .expect("valid declarations have canonical entry order");
+        assert_eq!(
+            entry_order
+                .iter()
+                .map(|item| item.path.as_str())
+                .collect::<Vec<_>>(),
+            expected_entry_paths,
+            "entry order for permutation {order:?}",
+        );
+        let sections = profile_section_entries(&value, &["stroke-vocabulary"])
+            .expect("valid declarations have section projection");
+        assert_eq!(
+            sections
+                .iter()
+                .map(|item| item.path.as_str())
+                .collect::<Vec<_>>(),
+            expected_section_paths,
+            "section order for permutation {order:?}",
+        );
+        assert_eq!(
+            value
+                .entries
+                .iter()
+                .map(|item| item.path.as_str())
+                .collect::<Vec<_>>(),
+            original_order
+                .iter()
+                .map(String::as_str)
+                .collect::<Vec<_>>(),
+            "projection mutated declaration order for {order:?}",
+        );
+        cases += 1;
+        if !next_index_permutation(&mut order) {
+            break;
+        }
+    }
+    assert_eq!(cases, 720);
+}
+
 #[test]
 fn canonical_order_is_path_sorted_without_rewriting_manifest() {
     let value = manifest(vec![

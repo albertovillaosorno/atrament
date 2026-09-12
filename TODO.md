@@ -2398,9 +2398,14 @@ current, prior-version, future-version, partially unsupported, corrupted,
 truncated, and missing-entry evidence. Current data admits without mutation,
 unknown optional metadata remains intact, unsupported required features and
 non-current container versions fail closed, and corrupt/truncated/missing entry
-evidence leaves declarations unchanged. No prior migration is claimed because
-the accepted profile contract does not yet define one; notebook migrations and
-all real supported profile migrations remain open.
+evidence leaves declarations unchanged. A 720-permutation oracle also proves six
+manifest entry declarations produce identical canonical archive, writer-entry,
+and typed-section projections regardless of declaration order while leaving the
+supplied order untouched. This does not freeze JSON object-key ordering.
+
+No prior migration is claimed because the accepted profile contract does not yet
+define one; notebook migrations and all real supported profile migrations remain
+open.
 
 ### TODO - Fuzz every untrusted input boundary
 

@@ -240,7 +240,8 @@ covers:
 - canonical ZIP storage/extras/ZIP64 relationships;
 - archive inventory agreement and mismatch cases;
 - path safety and duplicate declarations;
-- deterministic archive ordering;
+- deterministic archive ordering, including all 720 declaration orders for a
+  six-entry fixture without mutating caller order;
 - typed section projection without opaque asset extraction;
 - current/non-current/partially unsupported compatibility outcomes;
 - digest and truncation evidence;
