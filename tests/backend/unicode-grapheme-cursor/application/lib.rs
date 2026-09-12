@@ -396,3 +396,46 @@ fn empty_text_accepts_only_collapsed_zero_selection() {
         }),
     );
 }
+
+#[test]
+fn bilingual_inventory_resolves_both_full_grapheme_selection_directions() {
+    let provider = UnicodeGraphemeSegmentation;
+    for required in REQUIRED_TEXT_GRAPHEMES {
+        let start = GraphemeCursorPosition {
+            byte_offset: 0,
+            grapheme_index: 0,
+        };
+        let end = GraphemeCursorPosition {
+            byte_offset: required.grapheme.len(),
+            grapheme_index: 1,
+        };
+        assert_eq!(
+            resolve_grapheme_cursor_selection(
+                &provider,
+                required.grapheme,
+                0,
+                1,
+            ),
+            Ok(GraphemeCursorSelection {
+                anchor: start,
+                focus: end,
+            }),
+            "forward selection for {:?}",
+            required.grapheme,
+        );
+        assert_eq!(
+            resolve_grapheme_cursor_selection(
+                &provider,
+                required.grapheme,
+                1,
+                0,
+            ),
+            Ok(GraphemeCursorSelection {
+                anchor: end,
+                focus: start,
+            }),
+            "reverse selection for {:?}",
+            required.grapheme,
+        );
+    }
+}
