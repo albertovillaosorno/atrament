@@ -32,17 +32,8 @@
 use atrament_educational_coverage_evidence::{
     EducationalCoverageError, EducationalCoverageObservation,
     EducationalEvidenceStatus, EducationalSubject,
-    validate_educational_coverage,
+    REQUIRED_EDUCATIONAL_SUBJECTS as SUBJECTS, validate_educational_coverage,
 };
-
-const SUBJECTS: [EducationalSubject; 6] = [
-    EducationalSubject::Biology,
-    EducationalSubject::Chemistry,
-    EducationalSubject::History,
-    EducationalSubject::Language,
-    EducationalSubject::Mathematics,
-    EducationalSubject::Physics,
-];
 
 fn observation(
     subject: EducationalSubject,

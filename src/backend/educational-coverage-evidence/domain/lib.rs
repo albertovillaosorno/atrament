@@ -34,6 +34,16 @@
 
 //! Educational coverage evidence without curriculum or rendering authority.
 
+/// All first-release educational subjects in completeness-check order.
+pub const REQUIRED_EDUCATIONAL_SUBJECTS: [EducationalSubject; 6] = [
+    EducationalSubject::Biology,
+    EducationalSubject::Chemistry,
+    EducationalSubject::History,
+    EducationalSubject::Language,
+    EducationalSubject::Mathematics,
+    EducationalSubject::Physics,
+];
+
 /// Whether caller-owned evidence establishes one required exercise property.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum EducationalEvidenceStatus {
@@ -138,14 +148,7 @@ pub fn validate_educational_coverage<ArtifactIdentity>(
             );
         }
     }
-    for subject in [
-        EducationalSubject::Biology,
-        EducationalSubject::Chemistry,
-        EducationalSubject::History,
-        EducationalSubject::Language,
-        EducationalSubject::Mathematics,
-        EducationalSubject::Physics,
-    ] {
+    for subject in REQUIRED_EDUCATIONAL_SUBJECTS {
         if !observations
             .iter()
             .any(|observation| observation.subject == subject)

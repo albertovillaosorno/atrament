@@ -1719,8 +1719,9 @@ provenance and citation linkage rather than inventing parallel source status.
 Exercise bilingual mathematics, physics, chemistry, biology, history, and
 language assignments with dense but readable page organization.
 
-Current executable evidence now names all six required subject families and
-requires every admitted exercise observation to carry caller-established
+Current executable evidence now names all six required subject families in one
+canonical completeness-check order and requires every admitted exercise
+observation to carry caller-established
 bilingual, dense-organization, and readable-organization evidence. Complete
 coverage requires at least one fully evidenced observation for mathematics,
 physics, chemistry, biology, history, and language while permitting additional

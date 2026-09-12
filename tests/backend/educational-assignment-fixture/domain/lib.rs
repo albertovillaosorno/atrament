@@ -37,18 +37,9 @@ use atrament_educational_assignment_fixture::{
     validate_checked_in_educational_assignment_fixtures,
 };
 use atrament_educational_coverage_evidence::{
-    EducationalEvidenceStatus, EducationalSubject,
-    validate_educational_coverage,
+    EducationalEvidenceStatus,
+    REQUIRED_EDUCATIONAL_SUBJECTS as SUBJECTS, validate_educational_coverage,
 };
-
-const SUBJECTS: [EducationalSubject; 6] = [
-    EducationalSubject::Biology,
-    EducationalSubject::Chemistry,
-    EducationalSubject::History,
-    EducationalSubject::Language,
-    EducationalSubject::Mathematics,
-    EducationalSubject::Physics,
-];
 
 #[test]
 fn checked_in_assignment_fixture_set_is_structurally_complete() {
