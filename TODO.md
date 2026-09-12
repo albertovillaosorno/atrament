@@ -1313,7 +1313,10 @@ Current executable evidence now admits one compositional diacritic intent only
 when the exact handwriting profile classifies its externally matched rule as
 `Compositional`. The admitted value retains the exact admitting profile
 identity and profile-declared rule together with caller-owned placement, scale,
-collision evidence, and language-specific form. Exact-covered graphemes and
+collision evidence, and language-specific form.
+
+That admitted output is constructor-owned and read-only, so callers cannot
+fabricate a successful profile/rule admission. Exact-covered graphemes and
 missing or undeclared composition rules reject
 instead of silently switching to accent reuse. Unicode decomposition, rule
 applicability, placement/scale geometry, collision evaluation, language-form

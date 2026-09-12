@@ -74,17 +74,17 @@ fn declared_compositional_coverage_admits_and_retains_presentation() {
         intent("a\u{301}", "latin-base-plus-acute"),
     )
     .expect("declared composition must admit");
-    assert_eq!(*admitted.profile_identity, "writer-profile-7");
-    assert_eq!(*admitted.profile_rule, "latin-base-plus-acute");
-    assert_eq!(admitted.intent.target_grapheme, "a\u{301}");
-    assert_eq!(admitted.intent.presentation.placement, "above-base-anchor");
-    assert_eq!(admitted.intent.presentation.scale, 92);
+    assert_eq!(*admitted.profile_identity(), "writer-profile-7");
+    assert_eq!(*admitted.profile_rule(), "latin-base-plus-acute");
+    assert_eq!(admitted.intent().target_grapheme, "a\u{301}");
+    assert_eq!(admitted.intent().presentation.placement, "above-base-anchor");
+    assert_eq!(admitted.intent().presentation.scale, 92);
     assert_eq!(
-        admitted.intent.presentation.collision_evidence,
+        admitted.intent().presentation.collision_evidence,
         "clear-of-neighbors",
     );
     assert_eq!(
-        admitted.intent.presentation.language_form,
+        admitted.intent().presentation.language_form,
         "spanish-acute",
     );
 }
@@ -98,8 +98,8 @@ fn same_rule_from_another_profile_retains_the_other_profile_identity() {
         intent("a\u{301}", "latin-base-plus-acute"),
     )
     .expect("declared composition must admit");
-    assert_eq!(*admitted.profile_identity, "writer-profile-8");
-    assert_eq!(*admitted.profile_rule, "latin-base-plus-acute");
+    assert_eq!(*admitted.profile_identity(), "writer-profile-8");
+    assert_eq!(*admitted.profile_rule(), "latin-base-plus-acute");
 }
 
 #[test]

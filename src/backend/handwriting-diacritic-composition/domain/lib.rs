@@ -80,11 +80,33 @@ pub struct AdmittedDiacriticComposition<
     Rule,
 > {
     /// Complete caller-owned composition intent.
-    pub intent: Intent,
+    intent: Intent,
     /// Exact identity of the handwriting profile that admitted this reuse.
-    pub profile_identity: &'profile ProfileIdentity,
+    profile_identity: &'profile ProfileIdentity,
     /// Exact rule declaration from the admitting handwriting profile.
-    pub profile_rule: &'profile Rule,
+    profile_rule: &'profile Rule,
+}
+
+impl<'profile, Intent, ProfileIdentity, Rule>
+    AdmittedDiacriticComposition<'profile, Intent, ProfileIdentity, Rule>
+{
+    /// Return the complete caller-owned composition intent.
+    #[must_use]
+    pub const fn intent(&self) -> &Intent {
+        &self.intent
+    }
+
+    /// Return the exact identity of the profile that admitted this reuse.
+    #[must_use]
+    pub const fn profile_identity(&self) -> &'profile ProfileIdentity {
+        self.profile_identity
+    }
+
+    /// Return the exact rule declaration from the admitting profile.
+    #[must_use]
+    pub const fn profile_rule(&self) -> &'profile Rule {
+        self.profile_rule
+    }
 }
 
 /// Result of admitting one profile-evidenced compositional reuse.

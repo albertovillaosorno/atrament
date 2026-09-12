@@ -96,10 +96,10 @@ fn every_decomposed_bilingual_requirement_uses_its_language_rule() {
             presentation(),
         )
         .expect("frozen decomposed bilingual grapheme must admit composition");
-        assert_eq!(admitted.intent.target_grapheme, required.grapheme);
-        assert_eq!(admitted.intent.presentation, presentation());
-        assert_eq!(admitted.profile_identity, &"writer-a");
-        assert_eq!(admitted.profile_rule, &admitted.intent.matched_rule);
+        assert_eq!(admitted.intent().target_grapheme, required.grapheme);
+        assert_eq!(admitted.intent().presentation, presentation());
+        assert_eq!(admitted.profile_identity(), &"writer-a");
+        assert_eq!(admitted.profile_rule(), &admitted.intent().matched_rule);
         cases = cases.saturating_add(1);
     }
     assert_eq!(cases, 14);
