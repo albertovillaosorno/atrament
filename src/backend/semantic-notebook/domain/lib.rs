@@ -649,6 +649,14 @@ pub enum UnresolvedReason {
 }
 
 #[derive(Clone, Copy)]
+enum SemanticBlockLookupFrame<'notebook, Identity> {
+    Blocks(&'notebook [Block<Identity>]),
+    ListItems(&'notebook [ListItem<Identity>]),
+    TableCells(&'notebook [TableCell<Identity>]),
+    TableRows(&'notebook [TableRow<Identity>]),
+}
+
+#[derive(Clone, Copy)]
 enum SemanticDescriptorFrame<'notebook, Identity> {
     Blocks {
         blocks: &'notebook [Block<Identity>],
@@ -723,6 +731,36 @@ where
 {
     semantic_identity_location(notebook, target)
         .map(|(descriptor, _page)| descriptor)
+}
+
+/// Resolve the exact semantic block owned by one identity.
+///
+/// Non-block identities and missing targets return `None`. Identity precedence
+/// is inherited from [`semantic_identity_descriptor`], so a malformed snapshot
+/// cannot make a shadowed block identity appear authoritative. Nested block
+/// traversal is iterative across callouts, freeform regions, lists, and tables.
+#[must_use]
+pub fn semantic_block<Identity>(
+    notebook: &Notebook<Identity>,
+    target: Identity,
+) -> Option<&Block<Identity>>
+where
+    Identity: Copy + Eq,
+{
+    let descriptor = semantic_identity_descriptor(notebook, target)?;
+    if !matches!(descriptor.kind, SemanticIdentityKind::Block(_)) {
+        return None;
+    }
+    for page in &notebook.pages {
+        for flow in &page.flows {
+            if let Some(block) =
+                semantic_blocks_by_identity(&flow.blocks, target)
+            {
+                return Some(block);
+            }
+        }
+    }
+    None
 }
 
 /// Resolve the accepted page structurally containing one semantic block.
@@ -1401,6 +1439,106 @@ const fn semantic_block_kind<Identity>(
         BlockContent::Table(_) => SemanticBlockKind::Table,
         BlockContent::Unresolved(_) => SemanticBlockKind::Unresolved,
     }
+}
+
+fn semantic_blocks_by_identity<Identity>(
+    root_blocks: &[Block<Identity>],
+    target: Identity,
+) -> Option<&Block<Identity>>
+where
+    Identity: Copy + Eq,
+{
+    let mut stack = vec![SemanticBlockLookupFrame::Blocks(root_blocks)];
+    while let Some(frame) = stack.pop() {
+        match frame {
+            SemanticBlockLookupFrame::Blocks(blocks) => {
+                let Some((block, remaining)) = blocks.split_first() else {
+                    continue;
+                };
+                if !remaining.is_empty() {
+                    stack.push(SemanticBlockLookupFrame::Blocks(remaining));
+                }
+                if block.id == target {
+                    return Some(block);
+                }
+                match &block.content {
+                    BlockContent::Callout(children)
+                    | BlockContent::Freeform(children) => {
+                        if !children.is_empty() {
+                            stack.push(SemanticBlockLookupFrame::Blocks(
+                                children,
+                            ));
+                        }
+                    },
+                    BlockContent::List(list) => {
+                        if !list.items.is_empty() {
+                            stack.push(SemanticBlockLookupFrame::ListItems(
+                                &list.items,
+                            ));
+                        }
+                    },
+                    BlockContent::Table(table) => {
+                        if !table.rows.is_empty() {
+                            stack.push(SemanticBlockLookupFrame::TableRows(
+                                &table.rows,
+                            ));
+                        }
+                    },
+                    BlockContent::Citation(_)
+                    | BlockContent::Date(_)
+                    | BlockContent::Definition(_)
+                    | BlockContent::Figure(_)
+                    | BlockContent::Footnote(_)
+                    | BlockContent::Heading(_)
+                    | BlockContent::MarginNote(_)
+                    | BlockContent::Mathematics(_)
+                    | BlockContent::Paragraph(_)
+                    | BlockContent::Quotation(_)
+                    | BlockContent::Rule
+                    | BlockContent::SourceNote(_)
+                    | BlockContent::Unresolved(_) => {},
+                }
+            },
+            SemanticBlockLookupFrame::ListItems(items) => {
+                let Some((item, remaining)) = items.split_first() else {
+                    continue;
+                };
+                if !remaining.is_empty() {
+                    stack.push(SemanticBlockLookupFrame::ListItems(remaining));
+                }
+                if !item.blocks.is_empty() {
+                    stack.push(SemanticBlockLookupFrame::Blocks(&item.blocks));
+                }
+            },
+            SemanticBlockLookupFrame::TableCells(cells) => {
+                let Some((cell, remaining)) = cells.split_first() else {
+                    continue;
+                };
+                if !remaining.is_empty() {
+                    stack.push(SemanticBlockLookupFrame::TableCells(
+                        remaining,
+                    ));
+                }
+                if !cell.blocks.is_empty() {
+                    stack.push(SemanticBlockLookupFrame::Blocks(&cell.blocks));
+                }
+            },
+            SemanticBlockLookupFrame::TableRows(rows) => {
+                let Some((row, remaining)) = rows.split_first() else {
+                    continue;
+                };
+                if !remaining.is_empty() {
+                    stack.push(SemanticBlockLookupFrame::TableRows(remaining));
+                }
+                if !row.cells.is_empty() {
+                    stack.push(SemanticBlockLookupFrame::TableCells(
+                        &row.cells,
+                    ));
+                }
+            },
+        }
+    }
+    None
 }
 
 fn semantic_blocks_descriptor<Identity>(

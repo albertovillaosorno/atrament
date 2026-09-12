@@ -43,7 +43,7 @@ use atrament_semantic_notebook::{
     SemanticBlockKind, SemanticIdentityDescriptor, SemanticIdentityKind,
     SemanticIdentityPathEntry, Style,
     Table, TableCell, TableCellSpan, TableGridError, TableRow, TableRowRole,
-    UnresolvedBlock, UnresolvedReason, semantic_block_page,
+    UnresolvedBlock, UnresolvedReason, semantic_block, semantic_block_page,
     semantic_identity_descriptor, semantic_identity_kind,
     semantic_identity_path,
 };
@@ -584,9 +584,47 @@ fn simple_inline_block_kinds_keep_span_ownership() {
                 owner: Some(5),
             }),
         );
+        assert_eq!(
+            semantic_block(&notebook, 5).map(|block| block.id),
+            Some(5),
+        );
+        assert_eq!(semantic_block(&notebook, 6), None);
         assert_eq!(semantic_block_page(&notebook, 5), Some(3));
         assert_eq!(semantic_block_page(&notebook, 6), None);
     }
+}
+
+#[test]
+fn semantic_block_respects_root_identity_precedence() {
+    let notebook = Notebook {
+        assets: vec![],
+        constraints: vec![],
+        extensions: vec![],
+        id: 1u32,
+        output_profiles: vec![],
+        page_profiles: vec![],
+        pages: vec![Page {
+            flows: vec![Flow {
+                blocks: vec![Block {
+                    content: BlockContent::Rule,
+                    extensions: vec![],
+                    id: 1,
+                    provenance: None,
+                    style: None,
+                }],
+                id: 4,
+            }],
+            id: 3,
+            paper_profile: 2,
+        }],
+        provenance: vec![],
+        styles: vec![],
+    };
+    assert_eq!(
+        semantic_identity_kind(&notebook, 1),
+        Some(SemanticIdentityKind::Notebook),
+    );
+    assert_eq!(semantic_block(&notebook, 1), None);
 }
 
 #[test]
@@ -832,6 +870,18 @@ fn semantic_identity_path_matches_descriptor_walk_on_generated_trees() {
                     .expect("generated block path must reach a page")
                     .identity
             });
+            let expected_block = matches!(
+                path[0].descriptor.kind,
+                SemanticIdentityKind::Block(_),
+            )
+            .then_some(target);
+            assert_eq!(
+                semantic_block(&notebook, target).map(|block| block.id),
+                expected_block,
+                "generated block lookup mismatch in case {} target {}",
+                case,
+                target,
+            );
             assert_eq!(
                 semantic_block_page(&notebook, target),
                 expected_page,
@@ -1196,6 +1246,10 @@ fn semantic_identity_descriptor_handles_deep_nesting_iteratively() {
             kind: SemanticIdentityKind::Block(SemanticBlockKind::Rule),
             owner: Some(1_000),
         }),
+    );
+    assert_eq!(
+        semantic_block(&notebook, TARGET).map(|block| block.id),
+        Some(TARGET),
     );
     let path = semantic_identity_path(&notebook, TARGET)
         .expect("deep target must have a structural path");
