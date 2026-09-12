@@ -166,6 +166,21 @@ type CitationReviewResult<ClaimIdentity, ProvenanceIdentity, SourceIdentity> =
         >,
     >;
 
+/// Exact revision-owned provenance record projected for one validated claim.
+pub type CitationProvenanceProjectionResult<
+    'review,
+    ClaimIdentity,
+    ProvenanceIdentity,
+    SourceIdentity,
+> = Result<
+    &'review Provenance<ProvenanceIdentity>,
+    CitationReviewLinkageError<
+        ClaimIdentity,
+        ProvenanceIdentity,
+        SourceIdentity,
+    >,
+>;
+
 /// Exact reviewable source records projected for one validated claim.
 pub type CitationSourceProjectionResult<
     'review,
@@ -181,6 +196,62 @@ pub type CitationSourceProjectionResult<
         SourceIdentity,
     >,
 >;
+
+/// Return the exact revision-owned provenance assigned to one claim after full
+/// structural validation.
+///
+/// The returned record is borrowed directly from the validated review set. This
+/// projection does not copy provenance kind, reinterpret its source reference,
+/// infer citation status, or create application transaction provenance.
+///
+/// # Errors
+///
+/// Returns the first structural linkage error before projection, or
+/// [`CitationReviewLinkageError::UnknownClaim`] when the requested claim is not
+/// present in an otherwise valid review set.
+pub fn citation_provenance_for_claim<
+    'review,
+    ClaimIdentity,
+    Metadata,
+    ProvenanceIdentity,
+    SourceIdentity,
+>(
+    review: &'review TypedCitationReviewLinkage<
+        ClaimIdentity,
+        Metadata,
+        ProvenanceIdentity,
+        SourceIdentity,
+    >,
+    claim_identity: &ClaimIdentity,
+) -> CitationProvenanceProjectionResult<
+    'review,
+    ClaimIdentity,
+    ProvenanceIdentity,
+    SourceIdentity,
+>
+where
+    ClaimIdentity: Clone + Eq,
+    ProvenanceIdentity: Clone + Eq,
+    SourceIdentity: Clone + Eq,
+{
+    validate_citation_review_linkage(review)?;
+    let Some(claim) = review
+        .claims
+        .iter()
+        .find(|claim| claim.claim_identity == *claim_identity)
+    else {
+        return Err(CitationReviewLinkageError::UnknownClaim {
+            claim: claim_identity.clone(),
+        });
+    };
+    review
+        .provenance
+        .iter()
+        .find(|provenance| provenance.id == claim.provenance_identity)
+        .ok_or_else(|| CitationReviewLinkageError::UnknownProvenance {
+            provenance: claim.provenance_identity.clone(),
+        })
+}
 
 /// Return exact reviewable source records linked to one claim after full
 /// structural validation.

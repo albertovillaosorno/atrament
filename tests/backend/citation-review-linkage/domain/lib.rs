@@ -31,8 +31,9 @@
 //
 use atrament_citation_review_linkage::{
     CitationClaimLink, CitationReviewLinkage, CitationReviewLinkageError,
-    CitationSource, ClaimProvenance, citation_source_identities_for_claim,
-    citation_sources_for_claim, validate_citation_review_linkage,
+    CitationSource, ClaimProvenance, citation_provenance_for_claim,
+    citation_source_identities_for_claim, citation_sources_for_claim,
+    validate_citation_review_linkage,
 };
 use atrament_semantic_notebook::{Provenance, ProvenanceKind};
 
@@ -195,6 +196,37 @@ fn one_cited_claim_may_link_to_multiple_distinct_sources() {
         source_identity: 22,
     });
     assert_eq!(validate_citation_review_linkage(&review), Ok(()));
+}
+
+#[test]
+fn validated_claim_provenance_projection_borrows_exact_revision_record() {
+    let mut value = review();
+    value.provenance[0].reference = Some(String::from("doi:10.1000/example"));
+    let cited = citation_provenance_for_claim(&value, &1)
+        .expect("cited claim provenance must project");
+    assert!(std::ptr::eq(cited, &value.provenance[0]));
+    assert_eq!(cited.id, 11);
+    assert_eq!(cited.kind, ProvenanceKind::Cited);
+    assert_eq!(cited.reference.as_deref(), Some("doi:10.1000/example"));
+
+    let derived = citation_provenance_for_claim(&value, &2)
+        .expect("non-cited claim still has exact semantic provenance");
+    assert!(std::ptr::eq(derived, &value.provenance[1]));
+    assert_eq!(derived.kind, ProvenanceKind::Derived);
+    assert_eq!(
+        citation_provenance_for_claim(&value, &99),
+        Err(CitationReviewLinkageError::UnknownClaim { claim: 99 }),
+    );
+}
+
+#[test]
+fn claim_provenance_projection_preserves_structural_error_precedence() {
+    let mut value = review();
+    value.sources.clear();
+    assert_eq!(
+        citation_provenance_for_claim(&value, &99),
+        Err(CitationReviewLinkageError::UnknownSource { source: 21 }),
+    );
 }
 
 #[test]

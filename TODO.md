@@ -1715,11 +1715,13 @@ provenance links, non-cited claims, duplicate claims/sources, or duplicate exact
 claim/source relationships reject with typed
 structural errors. Multiple distinct sources for one cited claim remain valid.
 
-After full structural validation, read-only projections return one claim's
-exact linked source identities or exact reviewable source records in caller link
-order. The record projection preserves caller-owned metadata without parsing,
-ranking, normalization, or quality judgment. Valid non-cited claims project no
-sources, and unknown requested claims remain typed failures.
+After full structural validation, read-only projections return one claim's exact
+assigned revision-owned provenance record plus its linked source identities or
+exact reviewable source records in caller link order. The provenance projection
+borrows the authoritative semantic record without copying its kind or source
+reference, while source-record projection preserves caller-owned metadata
+without parsing, ranking, normalization, or quality judgment. Valid non-cited
+claims project no sources, and unknown requested claims remain typed failures.
 
 A 32-case compact oracle crosses all four semantic provenance kinds with link
 presence, source presence, and provenance-identity match state to pin the same
