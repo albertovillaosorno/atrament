@@ -2195,9 +2195,12 @@ confidence and cannot be silently promoted to a confident role. Each admitted
 review span also retains an exact source address: a half-open range of
 resolved words or an unresolved-fragment index in the supplied transcript.
 Overlapping and repeated reviewed spans remain valid because source addressing
-does not choose
-segmentation. Span segmentation, role selection, transcript correction,
-confidence policy, semantic notebook construction, and layout remain open.
+does not choose segmentation.
+
+The validated structure is constructor-owned and exposes read-only transcript,
+span, and location views so callers cannot forge span/location alignment. Span
+segmentation, role selection, transcript correction, confidence policy, semantic
+notebook construction, and layout remain open.
 
 ## P7 — Honest single-pen live output
 

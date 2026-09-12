@@ -102,13 +102,38 @@ pub struct ReviewedTranscriptStructure<
     UnresolvedFragment,
 > {
     /// Exact source location aligned one-to-one with each reviewed span.
-    pub locations: Vec<ReviewedTranscriptSourceLocation>,
+    locations: Vec<ReviewedTranscriptSourceLocation>,
     /// Ordered caller-reviewed spans.
-    pub spans:
-        Vec<ReviewedTranscriptSpan<'transcript, Word, UnresolvedFragment>>,
+    spans: Vec<ReviewedTranscriptSpan<'transcript, Word, UnresolvedFragment>>,
     /// Complete source transcript, including its provenance and uncertainty.
-    pub transcript:
+    transcript:
         &'transcript TranscriptEvidence<Origin, Word, UnresolvedFragment>,
+}
+
+impl<'transcript, Origin, Word, UnresolvedFragment>
+    ReviewedTranscriptStructure<'transcript, Origin, Word, UnresolvedFragment>
+{
+    /// Return exact source locations aligned one-to-one with reviewed spans.
+    #[must_use]
+    pub fn locations(&self) -> &[ReviewedTranscriptSourceLocation] {
+        &self.locations
+    }
+
+    /// Return caller-reviewed spans in admitted review order.
+    #[must_use]
+    pub fn spans(
+        &self,
+    ) -> &[ReviewedTranscriptSpan<'transcript, Word, UnresolvedFragment>] {
+        &self.spans
+    }
+
+    /// Return the complete source transcript retained by this review.
+    #[must_use]
+    pub const fn transcript(
+        &self,
+    ) -> &'transcript TranscriptEvidence<Origin, Word, UnresolvedFragment> {
+        self.transcript
+    }
 }
 
 /// Fail-closed reviewed-structure validation error.

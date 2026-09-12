@@ -94,13 +94,13 @@ fn reviewed_structure_keeps_complete_transcript_provenance() {
     let reviewed = review_transcript_structure(&transcript, spans)
         .expect("resolved section review is admitted");
     assert_eq!(
-        reviewed.transcript.origin.media_identity,
+        reviewed.transcript().origin.media_identity,
         "lecture-video-3",
     );
-    assert_eq!(reviewed.transcript.origin.job_identity, "job-17");
-    assert_eq!(reviewed.transcript.origin.engine_identity, "engine/model-a");
+    assert_eq!(reviewed.transcript().origin.job_identity, "job-17");
+    assert_eq!(reviewed.transcript().origin.engine_identity, "engine/model-a");
     assert_eq!(
-        reviewed.transcript.origin.media_kind,
+        reviewed.transcript().origin.media_kind,
         TranscriptMediaKind::Video,
     );
 }
@@ -131,7 +131,7 @@ fn reviewed_roles_preserve_resolved_word_evidence_exactly() {
     let reviewed = review_transcript_structure(&transcript, spans)
         .expect("resolved semantic roles are admitted");
     let ReviewedTranscriptSource::ResolvedWords(definition) =
-        reviewed.spans[0].source
+        reviewed.spans()[0].source
     else {
         panic!("definition source must remain resolved words");
     };
@@ -140,7 +140,7 @@ fn reviewed_roles_preserve_resolved_word_evidence_exactly() {
     assert_eq!(definition[0].time_range, Some((1_000, 1_220)));
     assert_eq!(definition[0].text, "Definition");
     assert_eq!(
-        reviewed.locations,
+        reviewed.locations(),
         [
             ReviewedTranscriptSourceLocation::ResolvedWords {
                 end_word: 2,
@@ -157,7 +157,7 @@ fn reviewed_roles_preserve_resolved_word_evidence_exactly() {
         ],
     );
     let ReviewedTranscriptSource::ResolvedWords(formula) =
-        reviewed.spans[2].source
+        reviewed.spans()[2].source
     else {
         panic!("formula source must remain resolved words");
     };
@@ -178,7 +178,7 @@ fn unresolved_fragment_keeps_text_timing_and_confidence() {
     let reviewed = review_transcript_structure(&transcript, spans)
         .expect("unresolved review is admitted");
     let ReviewedTranscriptSource::UnresolvedFragment(fragment) =
-        reviewed.spans[0].source
+        reviewed.spans()[0].source
     else {
         panic!("unresolved source must remain an unresolved fragment");
     };
@@ -186,7 +186,7 @@ fn unresolved_fragment_keeps_text_timing_and_confidence() {
     assert_eq!(fragment.confidence, Some(21));
     assert_eq!(fragment.time_range, Some((3_400, 3_900)));
     assert_eq!(
-        reviewed.locations,
+        reviewed.locations(),
         [ReviewedTranscriptSourceLocation::UnresolvedFragment {
             fragment_index: 0,
         }],
@@ -219,7 +219,7 @@ fn overlapping_and_repeated_review_spans_keep_exact_source_ranges() {
     let reviewed = review_transcript_structure(&transcript, spans)
         .expect("overlap and repeated review remain caller-owned");
     assert_eq!(
-        reviewed.locations,
+        reviewed.locations(),
         [
             ReviewedTranscriptSourceLocation::ResolvedWords {
                 end_word: 2,
@@ -374,5 +374,5 @@ fn resolved_words_may_remain_semantically_unresolved_after_review() {
     }];
     let reviewed = review_transcript_structure(&transcript, spans)
         .expect("review may retain semantic uncertainty");
-    assert_eq!(reviewed.spans[0].role, ReviewedTranscriptRole::Unresolved);
+    assert_eq!(reviewed.spans()[0].role, ReviewedTranscriptRole::Unresolved);
 }
