@@ -4822,6 +4822,160 @@ fn inadmissible_cursor_queries_do_not_query_grapheme_boundaries() {
 }
 
 #[test]
+fn cursor_queries_follow_history_revision_freshness() {
+    let identities = IdentityAllocator::new();
+    let original = "aé";
+    let edited_text = "e\u{301}x";
+    let (candidate, candidate_span) =
+        editable_text_candidate(&identities, original);
+    let mut session = application::SessionApplication::default();
+    let AcceptanceOutcome::Accepted { mapping, revision: base } =
+        session.accept_candidate(candidate)
+    else {
+        panic!("cursor history candidate must be accepted");
+    };
+    let span = mapping
+        .iter()
+        .find(|entry| entry.candidate == candidate_span)
+        .expect("cursor history span must map")
+        .accepted;
+    let provider = UnicodeGraphemeSegmentation;
+    assert_eq!(
+        session.text_grapheme_cursor_position(
+            &provider,
+            application::TextGraphemeCursorQuery {
+                base,
+                grapheme_index: 2,
+                target: span,
+            },
+        ),
+        Ok(application::TextGraphemeCursorOutcome::Prepared {
+            position: GraphemeCursorPosition {
+                byte_offset: original.len(),
+                grapheme_index: 2,
+            },
+            revision: base,
+            target: span,
+        }),
+    );
+
+    let TextEditOutcome::Applied { revision: edited, .. } =
+        session.replace_text(base, span, String::from(edited_text))
+    else {
+        panic!("cursor history edit must apply");
+    };
+    assert_eq!(
+        session.text_grapheme_cursor_position(
+            &provider,
+            application::TextGraphemeCursorQuery {
+                base,
+                grapheme_index: 0,
+                target: span,
+            },
+        ),
+        Ok(application::TextGraphemeCursorOutcome::StaleBase {
+            current: edited,
+        }),
+    );
+    assert_eq!(
+        session.text_grapheme_cursor_position(
+            &provider,
+            application::TextGraphemeCursorQuery {
+                base: edited,
+                grapheme_index: 1,
+                target: span,
+            },
+        ),
+        Ok(application::TextGraphemeCursorOutcome::Prepared {
+            position: GraphemeCursorPosition {
+                byte_offset: "e\u{301}".len(),
+                grapheme_index: 1,
+            },
+            revision: edited,
+            target: span,
+        }),
+    );
+
+    let HistoryTraversalOutcome::Traversed {
+        revision: undone, ..
+    } = session.traverse_history(edited, HistoryDirection::Undo)
+    else {
+        panic!("cursor history edit must Undo");
+    };
+    assert_ne!(undone, base);
+    assert_eq!(
+        session.text_grapheme_cursor_position(
+            &provider,
+            application::TextGraphemeCursorQuery {
+                base: edited,
+                grapheme_index: 0,
+                target: span,
+            },
+        ),
+        Ok(application::TextGraphemeCursorOutcome::StaleBase {
+            current: undone,
+        }),
+    );
+    assert_eq!(
+        session.text_grapheme_cursor_position(
+            &provider,
+            application::TextGraphemeCursorQuery {
+                base: undone,
+                grapheme_index: 2,
+                target: span,
+            },
+        ),
+        Ok(application::TextGraphemeCursorOutcome::Prepared {
+            position: GraphemeCursorPosition {
+                byte_offset: original.len(),
+                grapheme_index: 2,
+            },
+            revision: undone,
+            target: span,
+        }),
+    );
+
+    let HistoryTraversalOutcome::Traversed {
+        revision: redone, ..
+    } = session.traverse_history(undone, HistoryDirection::Redo)
+    else {
+        panic!("cursor history edit must Redo");
+    };
+    assert_ne!(redone, edited);
+    assert_eq!(
+        session.text_grapheme_cursor_position(
+            &provider,
+            application::TextGraphemeCursorQuery {
+                base: undone,
+                grapheme_index: 0,
+                target: span,
+            },
+        ),
+        Ok(application::TextGraphemeCursorOutcome::StaleBase {
+            current: redone,
+        }),
+    );
+    assert_eq!(
+        session.text_grapheme_cursor_position(
+            &provider,
+            application::TextGraphemeCursorQuery {
+                base: redone,
+                grapheme_index: 1,
+                target: span,
+            },
+        ),
+        Ok(application::TextGraphemeCursorOutcome::Prepared {
+            position: GraphemeCursorPosition {
+                byte_offset: "e\u{301}".len(),
+                grapheme_index: 1,
+            },
+            revision: redone,
+            target: span,
+        }),
+    );
+}
+
+#[test]
 fn application_edits_and_undoes_exact_grapheme_ranges() {
     let identities = IdentityAllocator::new();
     let original = "A e\u{301} 👩‍🔬 Z";
