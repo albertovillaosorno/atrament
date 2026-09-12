@@ -94,6 +94,10 @@ use atrament_semantic_notebook_session::SemanticNotebookSessionService;
 use atrament_session_draft::SessionDraftService;
 use atrament_session_draft_port::{DraftField, DraftMutation, SessionDraft};
 use atrament_unicode_grapheme_boundary_port::GraphemeBoundaryProvider;
+use atrament_unicode_grapheme_cursor::{
+    GraphemeCursorError, GraphemeCursorPosition,
+    resolve_grapheme_cursor_position,
+};
 use atrament_unicode_grapheme_edit::{
     GraphemeRange, GraphemeRangeError, replace_grapheme_range,
 };
@@ -109,6 +113,52 @@ pub struct TextGraphemeRangeEdit<'edit> {
     pub replacement: &'edit str,
     /// Accepted inline-text identity edited by this request.
     pub target: AcceptedIdentity,
+}
+
+/// One read-only cursor-position query against accepted inline text.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct TextGraphemeCursorQuery {
+    /// Accepted revision whose exact text value owns the cursor position.
+    pub base: RevisionIdentity,
+    /// Zero-based extended-grapheme boundary index supplied by the caller.
+    pub grapheme_index: usize,
+    /// Accepted inline-text identity inspected by this request.
+    pub target: AcceptedIdentity,
+}
+
+/// Read-only semantic outcome of one grapheme cursor-position query.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum TextGraphemeCursorOutcome {
+    /// Session has no accepted semantic revision to inspect.
+    NoAcceptedRevision,
+    /// Exact current text admitted and resolved the requested cursor position.
+    Prepared {
+        /// Exact validated grapheme/byte cursor position.
+        position: GraphemeCursorPosition,
+        /// Accepted revision that owns the inspected text.
+        revision: RevisionIdentity,
+        /// Accepted inline-text identity that owns the cursor.
+        target: AcceptedIdentity,
+    },
+    /// Caller names an accepted revision that is no longer current.
+    StaleBase {
+        /// Current accepted revision that rejected stale inspection.
+        current: RevisionIdentity,
+    },
+    /// Requested accepted identity is absent from the named revision.
+    TargetNotFound {
+        /// Accepted revision checked without mutation.
+        revision: RevisionIdentity,
+        /// Requested identity absent from that revision.
+        target: AcceptedIdentity,
+    },
+    /// Existing semantic target does not expose editable inline text.
+    TargetNotText {
+        /// Accepted revision checked without mutation.
+        revision: RevisionIdentity,
+        /// Existing non-text target supplied by the caller.
+        target: AcceptedIdentity,
+    },
 }
 
 /// Typed failure to retain or inspect process-owned raw asset bytes.
@@ -690,6 +740,71 @@ impl SessionApplication {
     ) -> TextEditOutcome {
         self.mutate_semantic(|semantic| {
             semantic.replace_text(base, target, value)
+        })
+    }
+
+    /// Resolve one grapheme cursor position in exact accepted inline text.
+    ///
+    /// Semantic revision/target admission runs before the grapheme provider is
+    /// queried. This is read-only and does not choose cursor movement,
+    /// selection, clamping, visual affinity, or transport behavior.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed cursor-position failure only after the exact current
+    /// text target has been admitted for the named revision.
+    pub fn text_grapheme_cursor_position(
+        &self,
+        boundaries: &dyn GraphemeBoundaryProvider,
+        query: TextGraphemeCursorQuery,
+    ) -> Result<TextGraphemeCursorOutcome, GraphemeCursorError> {
+        let TextGraphemeCursorQuery {
+            base,
+            grapheme_index,
+            target,
+        } = query;
+        let material_outcome = self.command_target_material_for_family(
+            base,
+            target,
+            SemanticCommandFamily::TextContent,
+        );
+        let current_text = match material_outcome {
+            CommandTargetMaterialOutcome::NoAcceptedRevision => {
+                return Ok(TextGraphemeCursorOutcome::NoAcceptedRevision);
+            },
+            CommandTargetMaterialOutcome::Prepared { material } => {
+                match material.editable_value {
+                    Some(EditableSemanticValue::Text(value)) => value,
+                    _ => {
+                        return Ok(TextGraphemeCursorOutcome::TargetNotText {
+                            revision: material.revision,
+                            target: material.target,
+                        });
+                    },
+                }
+            },
+            CommandTargetMaterialOutcome::StaleBase { current } => {
+                return Ok(TextGraphemeCursorOutcome::StaleBase { current });
+            },
+            CommandTargetMaterialOutcome::TargetNotFound {
+                revision,
+                target: missing_target,
+            } => {
+                return Ok(TextGraphemeCursorOutcome::TargetNotFound {
+                    revision,
+                    target: missing_target,
+                });
+            },
+        };
+        let position = resolve_grapheme_cursor_position(
+            boundaries,
+            &current_text,
+            grapheme_index,
+        )?;
+        Ok(TextGraphemeCursorOutcome::Prepared {
+            position,
+            revision: base,
+            target,
         })
     }
 

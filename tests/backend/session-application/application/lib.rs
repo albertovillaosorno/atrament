@@ -94,6 +94,9 @@ use atrament_semantic_notebook_port::{
 use atrament_session_draft::MAX_DRAFT_FIELD_BYTES;
 use atrament_session_draft_port::{DraftField, DraftMutation, SessionDraft};
 use atrament_unicode_grapheme_boundary_port::GraphemeBoundaryProvider;
+use atrament_unicode_grapheme_cursor::{
+    GraphemeCursorError, GraphemeCursorPosition,
+};
 use atrament_unicode_grapheme_edit::{GraphemeRange, GraphemeRangeError};
 use atrament_unicode_grapheme_segmentation::UnicodeGraphemeSegmentation;
 
@@ -4649,6 +4652,171 @@ fn abandoned_redo_asset_bytes_cannot_attach_to_new_asset_identity() {
         Err(application::AssetBytesError::BytesNotRetained {
             asset: branch_asset,
             revision: branched,
+        }),
+    );
+}
+
+#[test]
+fn application_resolves_exact_grapheme_cursor_positions_without_mutation() {
+    let identities = IdentityAllocator::new();
+    let source = "Áe\u{301}👩‍🔬Z";
+    let (candidate, candidate_span) =
+        editable_text_candidate(&identities, source);
+    let mut session = application::SessionApplication::default();
+    let AcceptanceOutcome::Accepted { mapping, revision: base } =
+        session.accept_candidate(candidate)
+    else {
+        panic!("cursor fixture candidate must be accepted");
+    };
+    let span = mapping
+        .iter()
+        .find(|entry| entry.candidate == candidate_span)
+        .expect("cursor span identity must map")
+        .accepted;
+    let history_before = session.history_availability();
+    let provider = UnicodeGraphemeSegmentation;
+    assert_eq!(
+        session.text_grapheme_cursor_position(
+            &provider,
+            application::TextGraphemeCursorQuery {
+                base,
+                grapheme_index: 2,
+                target: span,
+            },
+        ),
+        Ok(application::TextGraphemeCursorOutcome::Prepared {
+            position: GraphemeCursorPosition {
+                byte_offset: "Áe\u{301}".len(),
+                grapheme_index: 2,
+            },
+            revision: base,
+            target: span,
+        }),
+    );
+    assert_eq!(
+        session.text_grapheme_cursor_position(
+            &provider,
+            application::TextGraphemeCursorQuery {
+                base,
+                grapheme_index: 5,
+                target: span,
+            },
+        ),
+        Err(GraphemeCursorError::CursorOutOfBounds {
+            grapheme_count: 4,
+            grapheme_index: 5,
+        }),
+    );
+    assert_eq!(session.history_availability(), history_before);
+    let CommandTargetMaterialOutcome::Prepared { material } =
+        session.command_target_material(base, span)
+    else {
+        panic!("cursor inspection must preserve text target");
+    };
+    assert_eq!(
+        material.editable_value,
+        Some(EditableSemanticValue::Text(String::from(source))),
+    );
+}
+
+#[test]
+fn inadmissible_cursor_queries_do_not_query_grapheme_boundaries() {
+    let provider = PanicBoundaryProvider;
+    let synthetic = IdentityAllocator::new();
+    let unavailable_base = synthetic.allocate_revision().expect("revision id");
+    let unavailable_target = synthetic
+        .allocate_accepted()
+        .expect("accepted id");
+    let mut session = application::SessionApplication::default();
+    assert_eq!(
+        session.text_grapheme_cursor_position(
+            &provider,
+            application::TextGraphemeCursorQuery {
+                base: unavailable_base,
+                grapheme_index: 0,
+                target: unavailable_target,
+            },
+        ),
+        Ok(application::TextGraphemeCursorOutcome::NoAcceptedRevision),
+    );
+
+    let candidate_ids = IdentityAllocator::new();
+    let (candidate, candidate_span) =
+        editable_text_candidate(&candidate_ids, "current text");
+    let AcceptanceOutcome::Accepted { mapping, revision: base } =
+        session.accept_candidate(candidate)
+    else {
+        panic!("cursor text candidate must be accepted");
+    };
+    let span = mapping
+        .iter()
+        .find(|entry| entry.candidate == candidate_span)
+        .expect("cursor text span must map")
+        .accepted;
+    let TextEditOutcome::Applied {
+        revision: current, ..
+    } = session.replace_text(base, span, String::from("new current text"))
+    else {
+        panic!("cursor stale-base fixture edit must apply");
+    };
+    assert_eq!(
+        session.text_grapheme_cursor_position(
+            &provider,
+            application::TextGraphemeCursorQuery {
+                base,
+                grapheme_index: 0,
+                target: span,
+            },
+        ),
+        Ok(application::TextGraphemeCursorOutcome::StaleBase { current }),
+    );
+    let missing = (0..32)
+        .map(|_| synthetic.allocate_accepted().expect("missing accepted id"))
+        .last()
+        .expect("missing identity sequence");
+    assert_eq!(
+        session.text_grapheme_cursor_position(
+            &provider,
+            application::TextGraphemeCursorQuery {
+                base: current,
+                grapheme_index: 0,
+                target: missing,
+            },
+        ),
+        Ok(application::TextGraphemeCursorOutcome::TargetNotFound {
+            revision: current,
+            target: missing,
+        }),
+    );
+
+    let replacement_ids = IdentityAllocator::new();
+    let (replacement, candidate_formula, _, _, _) =
+        replacement_family_candidate(&replacement_ids);
+    let mut non_text_session = application::SessionApplication::default();
+    let AcceptanceOutcome::Accepted {
+        mapping: replacement_mapping,
+        revision: replacement_revision,
+    } = non_text_session.accept_candidate(replacement)
+    else {
+        panic!("cursor non-text candidate must be accepted");
+    };
+    let formula = replacement_mapping
+        .iter()
+        .find(|entry| entry.candidate == candidate_formula)
+        .expect("cursor formula identity must map")
+        .accepted;
+    assert_eq!(
+        non_text_session.text_grapheme_cursor_position(
+            &provider,
+            application::TextGraphemeCursorQuery {
+                base: replacement_revision,
+                grapheme_index: 0,
+                target: formula,
+            },
+        ),
+        Ok(application::TextGraphemeCursorOutcome::TargetNotText {
+            revision: replacement_revision,
+            target: formula,
         }),
     );
 }

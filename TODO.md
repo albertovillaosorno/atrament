@@ -59,6 +59,11 @@ editing now also preserves Redo and its reachable bytes on provider rejection
 or semantic no-op, while an applied grapheme mutation prunes the abandoned
 Redo-only bytes through the same gate.
 
+Read-only grapheme cursor-position inspection also routes through
+`SessionApplication`; semantic revision/target
+rejection occurs before the boundary provider is consulted and cannot mutate
+history.
+
 A 256-state asset-history fixture undoes halfway, then branches: cleanup removes
 exactly 128 Redo-only retained byte entries and preserves all 128 identities
 still reachable through older history, including their exact byte sequences.
@@ -877,7 +882,9 @@ provider start/end anchors before caller bounds, resolves an internal boundary
 once, admits both endpoints including empty text, and returns typed failures for
 missing, invalid, or out-of-range positions. All 114 frozen bilingual visible
 text graphemes admit exactly start and end cursor positions under the pinned
-segmentation adapter.
+segmentation adapter. `SessionApplication` exposes the same query against one
+exact current Text-content target without mutation; no-session, stale-base,
+missing-target, and non-text outcomes are resolved before provider access.
 
 Normalization policy, punctuation generation, language-aware wrapping, cursor
 movement/selection/visual-affinity policy, and browser, CLI, or MCP

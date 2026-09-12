@@ -17,6 +17,7 @@ atrament_semantic_notebook_session = { path = "../semantic-notebook-session" }
 atrament_session_draft = { path = "../session-draft" }
 atrament_session_draft_port = { path = "../session-draft-port" }
 atrament_unicode_grapheme_boundary_port = { path = "../unicode-grapheme-boundary-port" }
+atrament_unicode_grapheme_cursor = { path = "../unicode-grapheme-cursor" }
 atrament_unicode_grapheme_edit = { path = "../unicode-grapheme-edit" }
 
 [lib]

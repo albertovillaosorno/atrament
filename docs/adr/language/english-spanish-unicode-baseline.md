@@ -76,7 +76,9 @@ boundaries.
 A separate cursor-position application resolves those same boundaries to exact
 UTF-8 offsets without defining movement, selection, clamping, keybindings, or
 normalization; each frozen visible-text grapheme admits only its start and end
-positions.
+positions. The active `SessionApplication` can resolve that position against one
+exact current text target read-only, with semantic rejection preceding provider
+access.
 
 The generic handwriting-coverage report also consumes the complete 114-entry
 inventory. An empty profile reports every requirement in exact order, while a

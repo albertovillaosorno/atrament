@@ -560,6 +560,7 @@ dependencies = [
  "atrament_session_draft",
  "atrament_session_draft_port",
  "atrament_unicode_grapheme_boundary_port",
+ "atrament_unicode_grapheme_cursor",
  "atrament_unicode_grapheme_edit",
 ]
 
