@@ -904,6 +904,10 @@ against one exact current Text-content target without mutation; no-session,
 stale-base, missing-target, and non-text outcomes are resolved before provider
 access.
 
+The application owner also sweeps all 114 frozen visible-text requirements:
+exact end position, forward/backward signed steps, and forward/reverse selection
+all preserve the same accepted revision and leave history unchanged.
+
 Normalization policy, punctuation generation, language-aware wrapping, cursor
 direction/step-size/clamping, selection-extension/visual-affinity policy, and
 browser, CLI, or MCP grapheme-range transport remain open.

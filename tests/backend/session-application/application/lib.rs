@@ -4658,6 +4658,135 @@ fn abandoned_redo_asset_bytes_cannot_attach_to_new_asset_identity() {
 }
 
 #[test]
+fn application_resolves_every_required_bilingual_grapheme_query() {
+    let provider = UnicodeGraphemeSegmentation;
+    let mut cases = 0_usize;
+    for required in REQUIRED_TEXT_GRAPHEMES {
+        let identities = IdentityAllocator::new();
+        let (candidate, candidate_span) =
+            editable_text_candidate(&identities, required.grapheme);
+        let mut session = application::SessionApplication::default();
+        let AcceptanceOutcome::Accepted { mapping, revision: base } =
+            session.accept_candidate(candidate)
+        else {
+            panic!("bilingual query candidate must be accepted");
+        };
+        let span = mapping
+            .iter()
+            .find(|entry| entry.candidate == candidate_span)
+            .expect("bilingual query span identity must map")
+            .accepted;
+        let history_before = session.history_availability();
+        let start = GraphemeCursorPosition {
+            byte_offset: 0,
+            grapheme_index: 0,
+        };
+        let end = GraphemeCursorPosition {
+            byte_offset: required.grapheme.len(),
+            grapheme_index: 1,
+        };
+        assert_eq!(
+            session.text_grapheme_cursor_position(
+                &provider,
+                application::TextGraphemeCursorQuery {
+                    base,
+                    grapheme_index: 1,
+                    target: span,
+                },
+            ),
+            Ok(application::TextGraphemeCursorOutcome::Prepared {
+                position: end,
+                revision: base,
+                target: span,
+            }),
+            "end position for {:?}",
+            required.grapheme,
+        );
+        assert_eq!(
+            session.text_grapheme_cursor_step(
+                &provider,
+                application::TextGraphemeCursorStepQuery {
+                    base,
+                    origin_index: 0,
+                    step: 1,
+                    target: span,
+                },
+            ),
+            Ok(application::TextGraphemeCursorOutcome::Prepared {
+                position: end,
+                revision: base,
+                target: span,
+            }),
+            "forward step for {:?}",
+            required.grapheme,
+        );
+        assert_eq!(
+            session.text_grapheme_cursor_step(
+                &provider,
+                application::TextGraphemeCursorStepQuery {
+                    base,
+                    origin_index: 1,
+                    step: -1,
+                    target: span,
+                },
+            ),
+            Ok(application::TextGraphemeCursorOutcome::Prepared {
+                position: start,
+                revision: base,
+                target: span,
+            }),
+            "backward step for {:?}",
+            required.grapheme,
+        );
+        assert_eq!(
+            session.text_grapheme_selection(
+                &provider,
+                application::TextGraphemeSelectionQuery {
+                    anchor_index: 0,
+                    base,
+                    focus_index: 1,
+                    target: span,
+                },
+            ),
+            Ok(application::TextGraphemeSelectionOutcome::Prepared {
+                revision: base,
+                selection: GraphemeCursorSelection {
+                    anchor: start,
+                    focus: end,
+                },
+                target: span,
+            }),
+            "forward selection for {:?}",
+            required.grapheme,
+        );
+        assert_eq!(
+            session.text_grapheme_selection(
+                &provider,
+                application::TextGraphemeSelectionQuery {
+                    anchor_index: 1,
+                    base,
+                    focus_index: 0,
+                    target: span,
+                },
+            ),
+            Ok(application::TextGraphemeSelectionOutcome::Prepared {
+                revision: base,
+                selection: GraphemeCursorSelection {
+                    anchor: end,
+                    focus: start,
+                },
+                target: span,
+            }),
+            "reverse selection for {:?}",
+            required.grapheme,
+        );
+        assert_eq!(session.history_availability(), history_before);
+        cases = cases.saturating_add(1);
+    }
+    assert_eq!(cases, 114);
+}
+
+#[test]
 fn application_resolves_exact_grapheme_cursor_positions_without_mutation() {
     let identities = IdentityAllocator::new();
     let source = "Áe\u{301}👩‍🔬Z";

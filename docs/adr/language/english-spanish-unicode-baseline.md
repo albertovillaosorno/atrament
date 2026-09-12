@@ -90,6 +90,9 @@ rejects movement beyond either text endpoint without clamping. The active
 an exact current text target read-only, with semantic rejection preceding
 provider access.
 
+All 114 visible-text requirements run through those three session-owned query
+forms without changing accepted revision or history state.
+
 The generic handwriting-coverage report also consumes the complete 114-entry
 inventory. An empty profile reports every requirement in exact order, while a
 profile declaring all 114 exact graphemes reports none.
