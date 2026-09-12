@@ -41,30 +41,6 @@
 
 //! Exact textual grapheme inventory for the first English/Spanish baseline.
 
-/// Semantic reason one exact textual grapheme belongs to the baseline.
-#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
-pub enum EnglishSpanishGraphemeCategory {
-    /// ASCII Latin letter used by both English and Spanish.
-    BasicLatinLetter,
-    /// Decimal numeral used by both English and Spanish.
-    Numeral,
-    /// Sentence or typographic punctuation required by the language baseline.
-    Punctuation,
-    /// Decomposed Unicode equivalent retained as an exact distinct spelling.
-    SpanishDecomposedEquivalent,
-    /// Precomposed Spanish letter carrying an admitted diacritic.
-    SpanishPrecomposedLetter,
-}
-
-/// One exact textual grapheme required before handwriting projection.
-#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
-pub struct RequiredEnglishSpanishGrapheme {
-    /// Why this grapheme belongs to the first-release textual baseline.
-    pub category: EnglishSpanishGraphemeCategory,
-    /// Exact Unicode grapheme spelling retained without normalization.
-    pub grapheme: &'static str,
-}
-
 /// Frozen non-mathematical handwriting inventory for English and Spanish.
 ///
 /// Mathematical symbols are deliberately absent because the accepted language
@@ -282,59 +258,59 @@ pub const REQUIRED_TEXT_GRAPHEMES: &[RequiredEnglishSpanishGrapheme] = &[
     },
     RequiredEnglishSpanishGrapheme {
         category: EnglishSpanishGraphemeCategory::SpanishPrecomposedLetter,
-        grapheme: "Á",
+        grapheme: "\u{c1}",
     },
     RequiredEnglishSpanishGrapheme {
         category: EnglishSpanishGraphemeCategory::SpanishPrecomposedLetter,
-        grapheme: "É",
+        grapheme: "\u{c9}",
     },
     RequiredEnglishSpanishGrapheme {
         category: EnglishSpanishGraphemeCategory::SpanishPrecomposedLetter,
-        grapheme: "Í",
+        grapheme: "\u{cd}",
     },
     RequiredEnglishSpanishGrapheme {
         category: EnglishSpanishGraphemeCategory::SpanishPrecomposedLetter,
-        grapheme: "Ñ",
+        grapheme: "\u{d1}",
     },
     RequiredEnglishSpanishGrapheme {
         category: EnglishSpanishGraphemeCategory::SpanishPrecomposedLetter,
-        grapheme: "Ó",
+        grapheme: "\u{d3}",
     },
     RequiredEnglishSpanishGrapheme {
         category: EnglishSpanishGraphemeCategory::SpanishPrecomposedLetter,
-        grapheme: "Ú",
+        grapheme: "\u{da}",
     },
     RequiredEnglishSpanishGrapheme {
         category: EnglishSpanishGraphemeCategory::SpanishPrecomposedLetter,
-        grapheme: "Ü",
+        grapheme: "\u{dc}",
     },
     RequiredEnglishSpanishGrapheme {
         category: EnglishSpanishGraphemeCategory::SpanishPrecomposedLetter,
-        grapheme: "á",
+        grapheme: "\u{e1}",
     },
     RequiredEnglishSpanishGrapheme {
         category: EnglishSpanishGraphemeCategory::SpanishPrecomposedLetter,
-        grapheme: "é",
+        grapheme: "\u{e9}",
     },
     RequiredEnglishSpanishGrapheme {
         category: EnglishSpanishGraphemeCategory::SpanishPrecomposedLetter,
-        grapheme: "í",
+        grapheme: "\u{ed}",
     },
     RequiredEnglishSpanishGrapheme {
         category: EnglishSpanishGraphemeCategory::SpanishPrecomposedLetter,
-        grapheme: "ñ",
+        grapheme: "\u{f1}",
     },
     RequiredEnglishSpanishGrapheme {
         category: EnglishSpanishGraphemeCategory::SpanishPrecomposedLetter,
-        grapheme: "ó",
+        grapheme: "\u{f3}",
     },
     RequiredEnglishSpanishGrapheme {
         category: EnglishSpanishGraphemeCategory::SpanishPrecomposedLetter,
-        grapheme: "ú",
+        grapheme: "\u{fa}",
     },
     RequiredEnglishSpanishGrapheme {
         category: EnglishSpanishGraphemeCategory::SpanishPrecomposedLetter,
-        grapheme: "ü",
+        grapheme: "\u{fc}",
     },
     RequiredEnglishSpanishGrapheme {
         category: EnglishSpanishGraphemeCategory::SpanishDecomposedEquivalent,
@@ -458,11 +434,11 @@ pub const REQUIRED_TEXT_GRAPHEMES: &[RequiredEnglishSpanishGrapheme] = &[
     },
     RequiredEnglishSpanishGrapheme {
         category: EnglishSpanishGraphemeCategory::Punctuation,
-        grapheme: "¿",
+        grapheme: "\u{bf}",
     },
     RequiredEnglishSpanishGrapheme {
         category: EnglishSpanishGraphemeCategory::Punctuation,
-        grapheme: "¡",
+        grapheme: "\u{a1}",
     },
     RequiredEnglishSpanishGrapheme {
         category: EnglishSpanishGraphemeCategory::Punctuation,
@@ -474,39 +450,39 @@ pub const REQUIRED_TEXT_GRAPHEMES: &[RequiredEnglishSpanishGrapheme] = &[
     },
     RequiredEnglishSpanishGrapheme {
         category: EnglishSpanishGraphemeCategory::Punctuation,
-        grapheme: "“",
+        grapheme: "\u{201c}",
     },
     RequiredEnglishSpanishGrapheme {
         category: EnglishSpanishGraphemeCategory::Punctuation,
-        grapheme: "”",
+        grapheme: "\u{201d}",
     },
     RequiredEnglishSpanishGrapheme {
         category: EnglishSpanishGraphemeCategory::Punctuation,
-        grapheme: "‘",
+        grapheme: "\u{2018}",
     },
     RequiredEnglishSpanishGrapheme {
         category: EnglishSpanishGraphemeCategory::Punctuation,
-        grapheme: "’",
+        grapheme: "\u{2019}",
     },
     RequiredEnglishSpanishGrapheme {
         category: EnglishSpanishGraphemeCategory::Punctuation,
-        grapheme: "«",
+        grapheme: "\u{ab}",
     },
     RequiredEnglishSpanishGrapheme {
         category: EnglishSpanishGraphemeCategory::Punctuation,
-        grapheme: "»",
+        grapheme: "\u{bb}",
     },
     RequiredEnglishSpanishGrapheme {
         category: EnglishSpanishGraphemeCategory::Punctuation,
-        grapheme: "…",
+        grapheme: "\u{2026}",
     },
     RequiredEnglishSpanishGrapheme {
         category: EnglishSpanishGraphemeCategory::Punctuation,
-        grapheme: "–",
+        grapheme: "\u{2013}",
     },
     RequiredEnglishSpanishGrapheme {
         category: EnglishSpanishGraphemeCategory::Punctuation,
-        grapheme: "—",
+        grapheme: "\u{2014}",
     },
     RequiredEnglishSpanishGrapheme {
         category: EnglishSpanishGraphemeCategory::Punctuation,
@@ -529,3 +505,27 @@ pub const REQUIRED_TEXT_GRAPHEMES: &[RequiredEnglishSpanishGrapheme] = &[
         grapheme: "]",
     },
 ];
+
+/// Semantic reason one exact textual grapheme belongs to the baseline.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub enum EnglishSpanishGraphemeCategory {
+    /// ASCII Latin letter used by both English and Spanish.
+    BasicLatinLetter,
+    /// Decimal numeral used by both English and Spanish.
+    Numeral,
+    /// Sentence or typographic punctuation required by the language baseline.
+    Punctuation,
+    /// Decomposed Unicode equivalent retained as an exact distinct spelling.
+    SpanishDecomposedEquivalent,
+    /// Precomposed Spanish letter carrying an admitted diacritic.
+    SpanishPrecomposedLetter,
+}
+
+/// One exact textual grapheme required before handwriting projection.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub struct RequiredEnglishSpanishGrapheme {
+    /// Why this grapheme belongs to the first-release textual baseline.
+    pub category: EnglishSpanishGraphemeCategory,
+    /// Exact Unicode grapheme spelling retained without normalization.
+    pub grapheme: &'static str,
+}
