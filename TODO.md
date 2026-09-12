@@ -299,7 +299,7 @@ reference,
 Ordering and grouping, and Text content retain family behavior version 1;
 Provenance and Style role are version 2, Document constraint is version 3, and
 Structured
-content is version 82. The immediately previous aggregate version 93 rejects
+content is version 82. The immediately previous aggregate version 94 rejects
 instead of being reinterpreted.
 
 A version-bound single-target proposal combines capability, exact local

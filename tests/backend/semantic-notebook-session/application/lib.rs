@@ -8092,11 +8092,11 @@ fn command_capability_version_detects_drift_independently_of_revision() {
     );
     assert_eq!(
         session.check_command_capability_compatibility(
-            CommandBehaviorVersion(93),
+            CommandBehaviorVersion(94),
         ),
         CommandCapabilityCompatibilityOutcome::Mismatch {
             current: CURRENT_COMMAND_BEHAVIOR_VERSION,
-            expected: CommandBehaviorVersion(93),
+            expected: CommandBehaviorVersion(94),
         },
     );
     assert_eq!(
