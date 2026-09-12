@@ -1464,10 +1464,12 @@ rules, tables, and diagram paths with physical units and semantic provenance.
 Current executable evidence now centralizes those seven authoritative vector
 primitive families. Every primitive structurally carries caller-owned geometry
 and semantic provenance, while page geometry retains caller-owned physical
-bounds
-and composition order. Geometry generation, physical unit vocabulary, contour
-expansion, tessellation, rasterization, material behavior, PDF, and live-motion
-projection remain open.
+bounds and composition order. A read-only provenance projection returns the
+exact composition-order primitive indices owned by one semantic origin without
+interpreting or mutating geometry.
+
+Geometry generation, physical unit vocabulary, contour expansion, tessellation,
+rasterization, material behavior, PDF, and live-motion projection remain open.
 
 ### TODO - Implement layered ink materials
 

@@ -33,6 +33,7 @@
 //
 use atrament_vector_geometry::{
     VectorGeometryPage, VectorPrimitive, VectorPrimitiveKind,
+    semantic_origin_primitive_indices,
 };
 
 #[test]
@@ -91,4 +92,40 @@ fn vector_primitive_kind_does_not_rewrite_caller_geometry() {
     };
     assert_eq!(contour.geometry, [(1, 2), (3, 4)]);
     assert_eq!(contour.semantic_origin, 7);
+}
+#[test]
+fn semantic_origin_projection_preserves_composition_order_and_duplicates() {
+    let page = VectorGeometryPage {
+        physical_bounds: "page-a",
+        primitives: vec![
+            VectorPrimitive {
+                geometry: "box-a",
+                kind: VectorPrimitiveKind::LayoutBox,
+                semantic_origin: "block-a",
+            },
+            VectorPrimitive {
+                geometry: "stroke-a",
+                kind: VectorPrimitiveKind::StrokeCenterline,
+                semantic_origin: "span-b",
+            },
+            VectorPrimitive {
+                geometry: "contour-a",
+                kind: VectorPrimitiveKind::ExpandedInkContour,
+                semantic_origin: "span-b",
+            },
+            VectorPrimitive {
+                geometry: "rule-a",
+                kind: VectorPrimitiveKind::RulePath,
+                semantic_origin: "block-a",
+            },
+        ],
+    };
+    assert_eq!(semantic_origin_primitive_indices(&page, &"block-a"), [0, 3],);
+    assert_eq!(semantic_origin_primitive_indices(&page, &"span-b"), [1, 2],);
+    assert_eq!(
+        semantic_origin_primitive_indices(&page, &"missing"),
+        Vec::<usize>::new(),
+    );
+    assert_eq!(page.primitives.len(), 4);
+    assert_eq!(page.physical_bounds, "page-a");
 }

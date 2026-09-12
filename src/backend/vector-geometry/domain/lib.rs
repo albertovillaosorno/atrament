@@ -73,3 +73,32 @@ pub struct VectorGeometryPage<PhysicalBounds, Primitive> {
     /// Authoritative primitives in accepted composition order.
     pub primitives: Vec<Primitive>,
 }
+/// Return composition-order primitive indices for one exact semantic origin.
+///
+/// This projection preserves page geometry and primitive order unchanged. It
+/// identifies an existing provenance dependency region only; no geometry is
+/// generated, validated, or interpreted.
+#[must_use]
+pub fn semantic_origin_primitive_indices<
+    PhysicalBounds,
+    SemanticOrigin,
+    Geometry,
+>(
+    page: &VectorGeometryPage<
+        PhysicalBounds,
+        VectorPrimitive<SemanticOrigin, Geometry>,
+    >,
+    semantic_origin: &SemanticOrigin,
+) -> Vec<usize>
+where
+    SemanticOrigin: PartialEq,
+{
+    page.primitives
+        .iter()
+        .enumerate()
+        .filter_map(|(primitive_index, primitive)| {
+            (primitive.semantic_origin == *semantic_origin)
+                .then_some(primitive_index)
+        })
+        .collect()
+}
