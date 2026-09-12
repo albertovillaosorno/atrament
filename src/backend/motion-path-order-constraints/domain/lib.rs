@@ -72,6 +72,29 @@ pub struct MotionOrderConstraintSet<PlanIdentity> {
     pub plan_identity: PlanIdentity,
 }
 
+/// Constructor-owned evidence that one candidate order passed all constraints.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ValidatedMotionOrder<'order, PlanIdentity> {
+    candidate: &'order [usize],
+    constraints: &'order MotionOrderConstraintSet<PlanIdentity>,
+}
+
+impl<'order, PlanIdentity> ValidatedMotionOrder<'order, PlanIdentity> {
+    /// Return the exact validated candidate permutation.
+    #[must_use]
+    pub const fn candidate(&self) -> &'order [usize] {
+        self.candidate
+    }
+
+    /// Return the exact constraint set that admitted this candidate.
+    #[must_use]
+    pub const fn constraints(
+        &self,
+    ) -> &'order MotionOrderConstraintSet<PlanIdentity> {
+        self.constraints
+    }
+}
+
 /// Why an order constraint set or proposed operation permutation is invalid.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum MotionOrderValidationError {
@@ -222,4 +245,27 @@ pub fn validate_candidate_operation_order<PlanIdentity>(
         }
     }
     Ok(())
+}
+
+/// Validate and retain one exact candidate order as read-only evidence.
+///
+/// The returned view borrows both the candidate permutation and the exact
+/// plan-bound constraint set. It does not reorder source operations, score the
+/// route, or create a new plan identity.
+///
+/// # Errors
+///
+/// Returns the same first failure as [`validate_candidate_operation_order`].
+pub fn validate_candidate_operation_order_view<'order, PlanIdentity>(
+    constraints: &'order MotionOrderConstraintSet<PlanIdentity>,
+    candidate: &'order [usize],
+) -> Result<
+    ValidatedMotionOrder<'order, PlanIdentity>,
+    MotionOrderValidationError,
+> {
+    validate_candidate_operation_order(constraints, candidate)?;
+    Ok(ValidatedMotionOrder {
+        candidate,
+        constraints,
+    })
 }

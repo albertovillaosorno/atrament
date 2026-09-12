@@ -33,7 +33,8 @@
 use atrament_motion_path_order_constraints::{
     MotionOrderConstraint, MotionOrderConstraintSet,
     MotionOrderPreservationReason, MotionOrderValidationError,
-    validate_candidate_operation_order, validate_motion_order_constraints,
+    validate_candidate_operation_order, validate_candidate_operation_order_view,
+    validate_motion_order_constraints,
 };
 
 fn constraints() -> MotionOrderConstraintSet<&'static str> {
@@ -93,6 +94,35 @@ fn unconstrained_operations_may_move_when_every_preserved_pair_stays_ordered() {
     assert_eq!(
         validate_candidate_operation_order(&constraints, &candidate),
         Ok(()),
+    );
+}
+
+#[test]
+fn validated_order_view_borrows_exact_candidate_and_constraint_set() {
+    let constraints = constraints();
+    let candidate = [0, 3, 2, 1, 4, 5];
+    let validated = validate_candidate_operation_order_view(
+        &constraints,
+        &candidate,
+    )
+    .expect("valid permutation produces read-only evidence");
+    assert!(std::ptr::eq(validated.candidate(), candidate.as_slice()));
+    assert!(std::ptr::eq(validated.constraints(), &constraints));
+    assert_eq!(validated.constraints().plan_identity, "plan-42");
+    assert_eq!(validated.candidate(), candidate);
+}
+
+#[test]
+fn invalid_candidate_never_produces_validated_order_evidence() {
+    let constraints = constraints();
+    assert_eq!(
+        validate_candidate_operation_order_view(
+            &constraints,
+            &[3, 2, 0, 1, 4, 5],
+        ),
+        Err(MotionOrderValidationError::ConstraintViolated {
+            constraint_index: 0,
+        }),
     );
 }
 
