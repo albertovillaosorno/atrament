@@ -4721,6 +4721,63 @@ fn application_resolves_exact_grapheme_cursor_positions_without_mutation() {
 }
 
 #[test]
+fn application_resolves_grapheme_cursor_steps_without_mutation() {
+    let identities = IdentityAllocator::new();
+    let source = "Áe\u{301}👩‍🔬Z";
+    let (candidate, candidate_span) =
+        editable_text_candidate(&identities, source);
+    let mut session = application::SessionApplication::default();
+    let AcceptanceOutcome::Accepted { mapping, revision: base } =
+        session.accept_candidate(candidate)
+    else {
+        panic!("cursor-step fixture candidate must be accepted");
+    };
+    let span = mapping
+        .iter()
+        .find(|entry| entry.candidate == candidate_span)
+        .expect("cursor-step span identity must map")
+        .accepted;
+    let history_before = session.history_availability();
+    let provider = UnicodeGraphemeSegmentation;
+    assert_eq!(
+        session.text_grapheme_cursor_step(
+            &provider,
+            application::TextGraphemeCursorStepQuery {
+                base,
+                origin_index: 2,
+                step: 1,
+                target: span,
+            },
+        ),
+        Ok(application::TextGraphemeCursorOutcome::Prepared {
+            position: GraphemeCursorPosition {
+                byte_offset: "Áe\u{301}👩‍🔬".len(),
+                grapheme_index: 3,
+            },
+            revision: base,
+            target: span,
+        }),
+    );
+    assert_eq!(
+        session.text_grapheme_cursor_step(
+            &provider,
+            application::TextGraphemeCursorStepQuery {
+                base,
+                origin_index: 4,
+                step: 1,
+                target: span,
+            },
+        ),
+        Err(GraphemeCursorError::CursorStepOutOfBounds {
+            grapheme_count: 4,
+            origin_index: 4,
+            step: 1,
+        }),
+    );
+    assert_eq!(session.history_availability(), history_before);
+}
+
+#[test]
 fn application_resolves_grapheme_selection_without_mutation() {
     let identities = IdentityAllocator::new();
     let source = "Áe\u{301}👩‍🔬Z";
@@ -4803,6 +4860,18 @@ fn inadmissible_cursor_queries_do_not_query_grapheme_boundaries() {
         Ok(application::TextGraphemeCursorOutcome::NoAcceptedRevision),
     );
     assert_eq!(
+        session.text_grapheme_cursor_step(
+            &provider,
+            application::TextGraphemeCursorStepQuery {
+                base: unavailable_base,
+                origin_index: 0,
+                step: 1,
+                target: unavailable_target,
+            },
+        ),
+        Ok(application::TextGraphemeCursorOutcome::NoAcceptedRevision),
+    );
+    assert_eq!(
         session.text_grapheme_selection(
             &provider,
             application::TextGraphemeSelectionQuery {
@@ -4846,6 +4915,18 @@ fn inadmissible_cursor_queries_do_not_query_grapheme_boundaries() {
         Ok(application::TextGraphemeCursorOutcome::StaleBase { current }),
     );
     assert_eq!(
+        session.text_grapheme_cursor_step(
+            &provider,
+            application::TextGraphemeCursorStepQuery {
+                base,
+                origin_index: 0,
+                step: 1,
+                target: span,
+            },
+        ),
+        Ok(application::TextGraphemeCursorOutcome::StaleBase { current }),
+    );
+    assert_eq!(
         session.text_grapheme_selection(
             &provider,
             application::TextGraphemeSelectionQuery {
@@ -4867,6 +4948,21 @@ fn inadmissible_cursor_queries_do_not_query_grapheme_boundaries() {
             application::TextGraphemeCursorQuery {
                 base: current,
                 grapheme_index: 0,
+                target: missing,
+            },
+        ),
+        Ok(application::TextGraphemeCursorOutcome::TargetNotFound {
+            revision: current,
+            target: missing,
+        }),
+    );
+    assert_eq!(
+        session.text_grapheme_cursor_step(
+            &provider,
+            application::TextGraphemeCursorStepQuery {
+                base: current,
+                origin_index: 0,
+                step: 1,
                 target: missing,
             },
         ),
@@ -4913,6 +5009,21 @@ fn inadmissible_cursor_queries_do_not_query_grapheme_boundaries() {
             application::TextGraphemeCursorQuery {
                 base: replacement_revision,
                 grapheme_index: 0,
+                target: formula,
+            },
+        ),
+        Ok(application::TextGraphemeCursorOutcome::TargetNotText {
+            revision: replacement_revision,
+            target: formula,
+        }),
+    );
+    assert_eq!(
+        non_text_session.text_grapheme_cursor_step(
+            &provider,
+            application::TextGraphemeCursorStepQuery {
+                base: replacement_revision,
+                origin_index: 0,
+                step: 1,
                 target: formula,
             },
         ),

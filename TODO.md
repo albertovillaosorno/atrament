@@ -899,9 +899,10 @@ A caller-supplied signed-step resolver advances only by extended-grapheme
 boundaries, rejects out-of-range steps without clamping, and covers both
 directions for all 114 frozen visible-text requirements.
 
-`SessionApplication` exposes both position and selection queries against one
-exact current Text-content target without mutation; no-session, stale-base,
-missing-target, and non-text outcomes are resolved before provider access.
+`SessionApplication` exposes position, signed-step, and selection queries
+against one exact current Text-content target without mutation; no-session,
+stale-base, missing-target, and non-text outcomes are resolved before provider
+access.
 
 Normalization policy, punctuation generation, language-aware wrapping, cursor
 direction/step-size/clamping, selection-extension/visual-affinity policy, and

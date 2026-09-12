@@ -97,6 +97,7 @@ use atrament_unicode_grapheme_boundary_port::GraphemeBoundaryProvider;
 use atrament_unicode_grapheme_cursor::{
     GraphemeCursorError, GraphemeCursorPosition, GraphemeCursorSelection,
     resolve_grapheme_cursor_position, resolve_grapheme_cursor_selection,
+    resolve_grapheme_cursor_step,
 };
 use atrament_unicode_grapheme_edit::{
     GraphemeRange, GraphemeRangeError, replace_grapheme_range,
@@ -122,6 +123,19 @@ pub struct TextGraphemeCursorQuery {
     pub base: RevisionIdentity,
     /// Zero-based extended-grapheme boundary index supplied by the caller.
     pub grapheme_index: usize,
+    /// Accepted inline-text identity inspected by this request.
+    pub target: AcceptedIdentity,
+}
+
+/// One read-only signed-step query against accepted inline text.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct TextGraphemeCursorStepQuery {
+    /// Accepted revision whose exact text value owns the cursor position.
+    pub base: RevisionIdentity,
+    /// Current zero-based extended-grapheme boundary index.
+    pub origin_index: usize,
+    /// Caller-supplied signed grapheme step; no clamping is implied.
+    pub step: isize,
     /// Accepted inline-text identity inspected by this request.
     pub target: AcceptedIdentity,
 }
@@ -998,6 +1012,73 @@ impl SessionApplication {
             boundaries,
             &current_text,
             grapheme_index,
+        )?;
+        Ok(TextGraphemeCursorOutcome::Prepared {
+            position,
+            revision: base,
+            target,
+        })
+    }
+
+    /// Resolve one caller-supplied signed grapheme step in accepted text.
+    ///
+    /// Semantic revision/target admission runs before the grapheme provider is
+    /// queried. The application does not choose direction, step size, clamping,
+    /// selection extension, visual affinity, or transport behavior.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed cursor-step failure only after the exact current text
+    /// target has been admitted for the named revision.
+    pub fn text_grapheme_cursor_step(
+        &self,
+        boundaries: &dyn GraphemeBoundaryProvider,
+        query: TextGraphemeCursorStepQuery,
+    ) -> Result<TextGraphemeCursorOutcome, GraphemeCursorError> {
+        let TextGraphemeCursorStepQuery {
+            base,
+            origin_index,
+            step,
+            target,
+        } = query;
+        let material_outcome = self.command_target_material_for_family(
+            base,
+            target,
+            SemanticCommandFamily::TextContent,
+        );
+        let current_text = match material_outcome {
+            CommandTargetMaterialOutcome::NoAcceptedRevision => {
+                return Ok(TextGraphemeCursorOutcome::NoAcceptedRevision);
+            },
+            CommandTargetMaterialOutcome::Prepared { material } => {
+                match material.editable_value {
+                    Some(EditableSemanticValue::Text(value)) => value,
+                    _ => {
+                        return Ok(TextGraphemeCursorOutcome::TargetNotText {
+                            revision: material.revision,
+                            target: material.target,
+                        });
+                    },
+                }
+            },
+            CommandTargetMaterialOutcome::StaleBase { current } => {
+                return Ok(TextGraphemeCursorOutcome::StaleBase { current });
+            },
+            CommandTargetMaterialOutcome::TargetNotFound {
+                revision,
+                target: missing_target,
+            } => {
+                return Ok(TextGraphemeCursorOutcome::TargetNotFound {
+                    revision,
+                    target: missing_target,
+                });
+            },
+        };
+        let position = resolve_grapheme_cursor_step(
+            boundaries,
+            &current_text,
+            origin_index,
+            step,
         )?;
         Ok(TextGraphemeCursorOutcome::Prepared {
             position,

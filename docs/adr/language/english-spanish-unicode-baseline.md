@@ -86,9 +86,9 @@ against one validated provider snapshot, preserving forward, reverse, or
 collapsed endpoint order without choosing selection-extension behavior. A
 caller-supplied signed step resolves only across exact grapheme boundaries and
 rejects movement beyond either text endpoint without clamping. The active
-`SessionApplication` can resolve positions or selections against an exact
-current text target read-only, with semantic rejection preceding provider
-access.
+`SessionApplication` can resolve positions, signed steps, or selections against
+an exact current text target read-only, with semantic rejection preceding
+provider access.
 
 The generic handwriting-coverage report also consumes the complete 114-entry
 inventory. An empty profile reports every requirement in exact order, while a
