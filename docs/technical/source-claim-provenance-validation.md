@@ -56,6 +56,14 @@ link-order
 identity/kind/duplicate checks; then claim-order missing-link checks. No invalid
 set is reordered or repaired by the validator.
 
+After that complete structural validation, callers can project either exact
+source identities or the exact `CitationSource` records linked to one claim.
+Both projections preserve caller citation-link order. The source-record
+projection exposes the same opaque metadata already admitted by the review set;
+it does not fetch, parse, normalize, rank, or judge that metadata. A valid
+non-cited claim projects an empty set, while an unknown requested claim remains
+a typed failure after structural validation.
+
 ### Relationship to semantic notebook provenance
 
 The semantic notebook already retains `Supplied`, `Derived`, `Cited`, and
@@ -104,8 +112,9 @@ according to any citation style.
 `tests/backend/citation-review-linkage/domain/lib.rs` proves exact claim,
 provenance, source, and metadata retention; unknown and mismatched identities;
 resolved provenance-kind authority; non-cited and missing-link rejection;
-duplicate inventory/link rejection; and
-multiple distinct sources for one cited claim.
+duplicate inventory/link rejection; multiple distinct sources for one cited
+claim; and exact source-record projection in caller link order with structural
+failure precedence preserved.
 
 A 32-case compact oracle crosses all four semantic provenance kinds with link
 presence, source presence, and provenance-identity match state. It independently
