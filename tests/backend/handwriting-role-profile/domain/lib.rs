@@ -31,23 +31,27 @@
 //   - Missing roles remain absent instead of receiving implicit defaults.
 //
 use atrament_handwriting_role_profile::{
-    HandwritingRole, HandwritingRoleLookupError, HandwritingRolePresentation,
-    HandwritingRoleProfile, handwriting_role_presentation,
+    HandwritingRole, HandwritingRoleAudit, HandwritingRoleLookupError,
+    HandwritingRoleMultiplicity, HandwritingRolePresentation,
+    HandwritingRoleProfile, REQUIRED_HANDWRITING_ROLES,
+    audit_handwriting_role_profile, handwriting_role_presentation,
 };
 
 #[test]
 fn first_release_role_vocabulary_is_explicit() {
-    let roles = [
-        HandwritingRole::Annotation,
-        HandwritingRole::Body,
-        HandwritingRole::Caption,
-        HandwritingRole::Formula,
-        HandwritingRole::Label,
-        HandwritingRole::Margin,
-        HandwritingRole::Subtitle,
-        HandwritingRole::Title,
-    ];
-    assert_eq!(roles.len(), 8);
+    assert_eq!(
+        REQUIRED_HANDWRITING_ROLES,
+        [
+            HandwritingRole::Annotation,
+            HandwritingRole::Body,
+            HandwritingRole::Caption,
+            HandwritingRole::Formula,
+            HandwritingRole::Label,
+            HandwritingRole::Margin,
+            HandwritingRole::Subtitle,
+            HandwritingRole::Title,
+        ],
+    );
 }
 
 #[test]
@@ -85,6 +89,61 @@ fn size_and_style_vocabularies_remain_caller_owned_without_defaults() {
     assert_eq!(profile.roles[0].size, 42);
     assert_eq!(profile.roles[0].style, ("formula-style", 3));
     assert_eq!(profile.roles.len(), 1);
+}
+
+#[test]
+fn complete_role_audit_reports_missing_unique_and_ambiguous_without_policy() {
+    let profile = HandwritingRoleProfile {
+        profile_identity: "writer-profile-7",
+        roles: vec![
+            HandwritingRolePresentation {
+                role: HandwritingRole::Body,
+                size: "body-a",
+                style: "style-a",
+            },
+            HandwritingRolePresentation {
+                role: HandwritingRole::Title,
+                size: "title",
+                style: "title-style",
+            },
+            HandwritingRolePresentation {
+                role: HandwritingRole::Body,
+                size: "body-b",
+                style: "style-b",
+            },
+        ],
+    };
+    let audit = audit_handwriting_role_profile(&profile);
+    assert_eq!(audit.len(), 8);
+    assert_eq!(
+        audit[0],
+        HandwritingRoleAudit {
+            presentation_indices: vec![],
+            role: HandwritingRole::Annotation,
+            status: HandwritingRoleMultiplicity::Missing,
+        },
+    );
+    assert_eq!(
+        audit[1],
+        HandwritingRoleAudit {
+            presentation_indices: vec![0, 2],
+            role: HandwritingRole::Body,
+            status: HandwritingRoleMultiplicity::Ambiguous,
+        },
+    );
+    assert_eq!(
+        audit[7],
+        HandwritingRoleAudit {
+            presentation_indices: vec![1],
+            role: HandwritingRole::Title,
+            status: HandwritingRoleMultiplicity::Unique,
+        },
+    );
+    for missing in &audit[2..7] {
+        assert_eq!(missing.status, HandwritingRoleMultiplicity::Missing);
+        assert!(missing.presentation_indices.is_empty());
+    }
+    assert_eq!(profile.roles.len(), 3);
 }
 
 #[test]
@@ -171,6 +230,7 @@ fn all_31_two_role_sequences_match_independent_lookup_oracle() {
                 profile_identity: 7_u8,
                 roles: presentations,
             };
+            let audit = audit_handwriting_role_profile(&profile);
             for requested in roles {
                 let matches = profile
                     .roles
@@ -179,6 +239,17 @@ fn all_31_two_role_sequences_match_independent_lookup_oracle() {
                     .filter(|(_, item)| item.role == requested)
                     .map(|(index, _)| index)
                     .collect::<Vec<_>>();
+                let expected_status = match matches.len() {
+                    0 => HandwritingRoleMultiplicity::Missing,
+                    1 => HandwritingRoleMultiplicity::Unique,
+                    _ => HandwritingRoleMultiplicity::Ambiguous,
+                };
+                let audit_entry = audit
+                    .iter()
+                    .find(|entry| entry.role == requested)
+                    .expect("required role must have one audit entry");
+                assert_eq!(audit_entry.presentation_indices, matches);
+                assert_eq!(audit_entry.status, expected_status);
                 let expected = match matches.as_slice() {
                     [] => {
                         saw_missing = true;

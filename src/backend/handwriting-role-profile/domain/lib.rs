@@ -36,6 +36,18 @@
 
 //! One-writer role and size presentation vocabulary for handwriting profiles.
 
+/// All first-release handwriting roles in stable semantic order.
+pub const REQUIRED_HANDWRITING_ROLES: [HandwritingRole; 8] = [
+    HandwritingRole::Annotation,
+    HandwritingRole::Body,
+    HandwritingRole::Caption,
+    HandwritingRole::Formula,
+    HandwritingRole::Label,
+    HandwritingRole::Margin,
+    HandwritingRole::Subtitle,
+    HandwritingRole::Title,
+];
+
 /// First-release semantic presentation roles exposed by one handwriting
 /// profile.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -88,6 +100,59 @@ pub struct HandwritingRoleLookupError {
     pub first_index: usize,
     /// Requested role with more than one presentation.
     pub role: HandwritingRole,
+}
+
+/// Multiplicity observed for one first-release role in a profile.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum HandwritingRoleMultiplicity {
+    /// More than one presentation claims the role.
+    Ambiguous,
+    /// No presentation claims the role.
+    Missing,
+    /// Exactly one presentation claims the role.
+    Unique,
+}
+
+/// Read-only occurrence audit for one first-release handwriting role.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct HandwritingRoleAudit {
+    /// Caller-order presentation indices that claim this role.
+    pub presentation_indices: Vec<usize>,
+    /// First-release role being audited.
+    pub role: HandwritingRole,
+    /// Missing, unique, or ambiguous occurrence classification.
+    pub status: HandwritingRoleMultiplicity,
+}
+
+/// Audit all first-release roles without choosing missing/duplicate policy.
+///
+/// Results follow [`REQUIRED_HANDWRITING_ROLES`] order. Presentation indices
+/// preserve caller order exactly. Missing roles receive no synthesized default,
+/// and ambiguous roles remain reported rather than being resolved implicitly.
+#[must_use]
+pub fn audit_handwriting_role_profile<ProfileIdentity, Size, Style>(
+    profile: &HandwritingRoleProfile<ProfileIdentity, Size, Style>,
+) -> [HandwritingRoleAudit; 8] {
+    REQUIRED_HANDWRITING_ROLES.map(|role| {
+        let presentation_indices = profile
+            .roles
+            .iter()
+            .enumerate()
+            .filter_map(|(index, presentation)| {
+                (presentation.role == role).then_some(index)
+            })
+            .collect::<Vec<_>>();
+        let status = match presentation_indices.len() {
+            0 => HandwritingRoleMultiplicity::Missing,
+            1 => HandwritingRoleMultiplicity::Unique,
+            _ => HandwritingRoleMultiplicity::Ambiguous,
+        };
+        HandwritingRoleAudit {
+            presentation_indices,
+            role,
+            status,
+        }
+    })
 }
 
 /// Return one unambiguous presentation for a requested handwriting role.

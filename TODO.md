@@ -1408,8 +1408,13 @@ Current executable evidence now centralizes those eight handwriting roles and
 stores the profile identity once around caller-supplied role presentations. Role
 entries therefore carry size/style metadata but cannot independently claim a
 different writer identity. A read-only role lookup returns `None` for a missing
-role and refuses an ambiguous duplicate claim instead of silently choosing one;
-a 31-case two-role oracle covers zero through four supplied presentations.
+role and refuses an ambiguous duplicate claim instead of silently choosing one.
+
+A complete read-only audit now walks the canonical eight-role order and reports
+each role as Missing, Unique, or Ambiguous together with every caller-order
+presentation index. It does not synthesize defaults or declare any global
+validity policy. The 31-case two-role oracle covers zero through four supplied
+presentations through both exact lookup and complete audit evidence.
 
 Size units, role defaults, style vocabulary, global duplicate/missing-role
 policy, glyph behavior, and semantic document-style mappings remain open.
