@@ -245,7 +245,9 @@ semantics.
 
 An autonomous caller handles classes by semantics:
 
-- Applied, No-op, and Idempotent replay continue from the reported revision;
+- Applied and Idempotent replay continue from the reported revision;
+- No-op requires inspecting accepted state before deciding whether the bounded
+  semantic intent is already satisfied;
 - Stale base and Command-context mismatch require fresh inspection or context;
 - Retry conflict requires correcting caller retry identity handling;
 - Writable-scope, Dependency-graph, and Semantic validation rejections require a
