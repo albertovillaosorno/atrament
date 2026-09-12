@@ -34,6 +34,7 @@ use atrament_handwriting_contextual_stroke_candidates::{
     ContextualStrokeCandidate, ContextualStrokeCandidateIdentityError,
     ContextualStrokePlanningInput, StrokePlanningContext,
     validate_contextual_stroke_candidate_identities,
+    validate_contextual_stroke_planning_input,
 };
 
 type Candidate = ContextualStrokeCandidate<
@@ -118,6 +119,34 @@ fn empty_candidate_collection_has_no_implicit_fallback_candidate() {
     assert!(input.candidates.is_empty());
 }
 #[test]
+fn complete_planning_input_explicitly_validates_candidate_addressing() {
+    let valid = ContextualStrokePlanningInput {
+        candidates: vec![candidate(2, "variant-b"), candidate(1, "variant-a")],
+        context: context(),
+    };
+    assert_eq!(validate_contextual_stroke_planning_input(&valid), Ok(()));
+    assert_eq!(valid.context, context());
+    assert_eq!(valid.candidates[0].candidate_identity, 2);
+
+    let duplicate = ContextualStrokePlanningInput {
+        candidates: vec![
+            candidate(7, "variant-a"),
+            candidate(3, "variant-b"),
+            candidate(7, "variant-c"),
+        ],
+        context: context(),
+    };
+    assert_eq!(
+        validate_contextual_stroke_planning_input(&duplicate),
+        Err(ContextualStrokeCandidateIdentityError {
+            duplicate_index: 2,
+            first_index: 0,
+        }),
+    );
+    assert_eq!(duplicate.context, context());
+}
+
+#[test]
 fn distinct_candidate_identities_are_addressable_without_ranking() {
     let candidates = [candidate(2, "variant-b"), candidate(1, "variant-a")];
     assert_eq!(
@@ -181,7 +210,16 @@ fn all_31_two_identity_sequences_match_first_duplicate_oracle() {
             assert_eq!(
                 validate_contextual_stroke_candidate_identities(&candidates),
                 expected,
-                "length {length}, encoded {encoded}",
+                "direct length {length}, encoded {encoded}",
+            );
+            let input = ContextualStrokePlanningInput {
+                candidates,
+                context: context(),
+            };
+            assert_eq!(
+                validate_contextual_stroke_planning_input(&input),
+                expected,
+                "input length {length}, encoded {encoded}",
             );
             cases = cases.saturating_add(1);
         }

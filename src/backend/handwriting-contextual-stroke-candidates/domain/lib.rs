@@ -94,6 +94,29 @@ pub struct StrokePlanningContext<
     pub writing_style: WritingStyle,
 }
 
+/// Complete planning-input shape for the contextual candidate value above.
+pub type ContextualCandidatePlanningInput<
+    CandidateIdentity,
+    CharacterIntent,
+    Context,
+    EntryCondition,
+    ExitCondition,
+    ProfileChoice,
+    SemanticOrigin,
+    StrokePayload,
+> = ContextualStrokePlanningInput<
+    ContextualStrokeCandidate<
+        CandidateIdentity,
+        CharacterIntent,
+        EntryCondition,
+        ExitCondition,
+        ProfileChoice,
+        SemanticOrigin,
+        StrokePayload,
+    >,
+    Context,
+>;
+
 /// Complete transport-neutral input to a later contextual stroke planner.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ContextualStrokePlanningInput<Candidate, Context> {
@@ -101,6 +124,43 @@ pub struct ContextualStrokePlanningInput<Candidate, Context> {
     pub candidates: Vec<Candidate>,
     /// Neighbor, word, line, role, and calibrated-style planning context.
     pub context: Context,
+}
+
+/// Validate candidate addressing for one complete planning input.
+///
+/// This is an explicit admission check rather than a constructor side effect.
+/// It preserves candidate order and planning context exactly and performs no
+/// candidate scoring or selection.
+///
+/// # Errors
+///
+/// Returns the same first duplicate identity evidence as
+/// [`validate_contextual_stroke_candidate_identities`].
+pub fn validate_contextual_stroke_planning_input<
+    CandidateIdentity,
+    CharacterIntent,
+    Context,
+    EntryCondition,
+    ExitCondition,
+    ProfileChoice,
+    SemanticOrigin,
+    StrokePayload,
+>(
+    input: &ContextualCandidatePlanningInput<
+        CandidateIdentity,
+        CharacterIntent,
+        Context,
+        EntryCondition,
+        ExitCondition,
+        ProfileChoice,
+        SemanticOrigin,
+        StrokePayload,
+    >,
+) -> Result<(), ContextualStrokeCandidateIdentityError>
+where
+    CandidateIdentity: Eq,
+{
+    validate_contextual_stroke_candidate_identities(&input.candidates)
 }
 
 /// Detect identity collisions without selecting or ranking any candidate.

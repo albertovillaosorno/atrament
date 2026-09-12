@@ -1336,9 +1336,11 @@ and calibrated writing style while preserving caller candidate order.
 
 A pure identity-collision check can now reject the first repeated candidate
 identity and report its earliest prior owner without selecting, ranking, or
-rewriting candidates. A 31-case compact oracle exhausts every two-identity
-sequence through length four; applying that check remains an explicit planner
-boundary decision rather than an implicit constructor side effect.
+rewriting candidates. A complete planning input has an explicit validator that
+applies the same invariant while leaving candidate order and context unchanged;
+construction still has no implicit validation, selection, or fallback side
+effect. A 31-case compact oracle exhausts every two-identity sequence through
+length four through both the raw-candidate and complete-input paths.
 
 The inspectable output plan keeps ordered samples with caller-owned position,
 tangent, curvature, width or pressure proxy, velocity, and explicit contact
