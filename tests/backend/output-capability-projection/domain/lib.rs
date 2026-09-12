@@ -161,6 +161,68 @@ fn review_preserves_every_source_and_explicit_conversion_evidence() {
 }
 
 #[test]
+fn blocking_projection_preserves_every_non_ready_source_in_order() {
+    let projection = review_output_capabilities(
+        OutputMode::Live,
+        vec![
+            OutputCapabilityRequest::<&str, &str, &str> {
+                accepted_conversion: None,
+                capability: OutputCapability::Semantic(
+                    SemanticCapability::Paragraph,
+                ),
+                source_identity: "ready-direct",
+            },
+            OutputCapabilityRequest {
+                accepted_conversion: None,
+                capability: OutputCapability::Semantic(
+                    SemanticCapability::Photograph,
+                ),
+                source_identity: "needs-conversion",
+            },
+            OutputCapabilityRequest {
+                accepted_conversion: None,
+                capability: OutputCapability::Semantic(
+                    SemanticCapability::LoosePaperNote,
+                ),
+                source_identity: "rejected",
+            },
+            OutputCapabilityRequest {
+                accepted_conversion: None,
+                capability: OutputCapability::HardwareAction(
+                    HardwareActionCapability::AutomaticToolChange,
+                ),
+                source_identity: "future",
+            },
+        ],
+    );
+    let blocked = projection.blocking_entries();
+    assert_eq!(blocked.len(), 3);
+    assert_eq!(blocked[0].source_identity, "needs-conversion");
+    assert_eq!(blocked[1].source_identity, "rejected");
+    assert_eq!(blocked[2].source_identity, "future");
+    assert!(blocked.iter().all(|entry| !entry.status.is_ready()));
+}
+
+#[test]
+fn readiness_predicate_covers_all_projection_statuses() {
+    let cases = [
+        (OutputCapabilityProjectionStatus::AcceptedDirect, true),
+        (OutputCapabilityProjectionStatus::ConversionRequired, false),
+        (OutputCapabilityProjectionStatus::Converted, true),
+        (OutputCapabilityProjectionStatus::FutureUnavailable, false),
+        (OutputCapabilityProjectionStatus::Rejected, false),
+        (OutputCapabilityProjectionStatus::UnexpectedConversion, false),
+        (
+            OutputCapabilityProjectionStatus::UnsupportedConversionChoice,
+            false,
+        ),
+    ];
+    for (status, expected) in cases {
+        assert_eq!(status.is_ready(), expected, "status {status:?}");
+    }
+}
+
+#[test]
 fn convert_without_explicit_acceptance_remains_blocked() {
     let projection = review_output_capabilities(
         OutputMode::Live,

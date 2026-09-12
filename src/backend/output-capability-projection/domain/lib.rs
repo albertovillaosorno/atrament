@@ -122,6 +122,19 @@ pub struct OutputCapabilityProjection<Choice, Provenance, SourceIdentity> {
 impl<Choice, Provenance, SourceIdentity>
     OutputCapabilityProjection<Choice, Provenance, SourceIdentity>
 {
+    /// Return blocked source entries in original caller order.
+    #[must_use]
+    pub fn blocking_entries(
+        &self,
+    ) -> Vec<
+        &OutputCapabilityProjectionEntry<Choice, Provenance, SourceIdentity>,
+    > {
+        self.entries
+            .iter()
+            .filter(|entry| !entry.status.is_ready())
+            .collect()
+    }
+
     /// Return reviewed entries in caller-supplied source order.
     #[must_use]
     pub fn entries(
@@ -135,13 +148,7 @@ impl<Choice, Provenance, SourceIdentity>
     /// Whether every source capability use is currently admissible for output.
     #[must_use]
     pub fn is_ready(&self) -> bool {
-        self.entries.iter().all(|entry| {
-            matches!(
-                entry.status,
-                OutputCapabilityProjectionStatus::AcceptedDirect
-                    | OutputCapabilityProjectionStatus::Converted
-            )
-        })
+        self.entries.iter().all(|entry| entry.status.is_ready())
     }
 
     /// Return the exact output mode used for this review.
@@ -182,6 +189,14 @@ pub enum OutputCapabilityProjectionStatus {
     UnexpectedConversion,
     /// Explicit conversion evidence names a kind not admitted for this source.
     UnsupportedConversionChoice,
+}
+
+impl OutputCapabilityProjectionStatus {
+    /// Whether this exact status is ready for the requested output mode.
+    #[must_use]
+    pub const fn is_ready(self) -> bool {
+        matches!(self, Self::AcceptedDirect | Self::Converted)
+    }
 }
 
 /// One source-linked capability use before output projection review.

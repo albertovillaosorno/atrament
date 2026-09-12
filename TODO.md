@@ -2242,8 +2242,13 @@ The mode-neutral review retains supplied conversion evidence but cannot mark
 a Live `Convert` row ready; only the typed Live review promotes an admitted kind
 to `Converted`. Completed capability projections are constructor-owned with
 read-only mode/entry views, so callers cannot fabricate a ready review by
-supplying their own statuses. Blocking diagnostics, conversion execution,
-semantic projection construction, and Plan compilation remain open.
+supplying their own statuses.
+
+A read-only blocker projection now returns every non-ready source entry in
+original caller order using the same frozen readiness predicate as whole-review
+admission. It assigns no diagnostic code or prose. Blocking diagnostics,
+conversion execution, semantic projection construction, and Plan compilation
+remain open.
 
 ### TODO - Implement the device-neutral motion plan
 
