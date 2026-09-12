@@ -2262,9 +2262,11 @@ physical geometry, semantic origin, speed/acceleration intent, optional
 pressure,
 pauses/checkpoints, physical/writable-bound evidence, calibrated pen and live
 capability assumptions, accepted revision identity, backend plan identity, and
-optional estimated duration. Path optimization, coordinate calibration, plan
-identity computation, capability compilation, simulation, vendor command
-projection, device I/O, and physical authorization remain open.
+optional estimated duration. The plan domain also owns the exact structural
+operation kind (checkpoint, pause, pen-up, or pen-down) so downstream dry-run
+validation does not redefine plan semantics. Path optimization, coordinate
+calibration, plan identity computation, capability compilation, simulation,
+vendor command projection, device I/O, and physical authorization remain open.
 
 Current design evidence freezes Plan as a read-only derived application
 capability bound to one accepted revision and live capability profile, with
@@ -2294,13 +2296,14 @@ without connecting to a physical machine.
 
 Current executable dry-run evidence now binds one exact device-neutral plan to
 one concrete coordinate-calibration record and one ordered limit-evidence entry
-per plan operation. Real plan operations classify as pen-up, pen-down, pause, or
-checkpoint; motion cannot mark limit checking inapplicable, and unknown or
-violated limits reject at the exact operation index. A 16-case matrix covers
-all four limit states at pen-up, pause, checkpoint, and pen-down operations.
-Coordinate transforms,
-limit geometry, visual rendering, timing simulation beyond plan evidence, and
-hardware contact remain open.
+per plan operation. It reuses the plan domain's structural operation kind rather
+than defining a second pen-up/pen-down/pause/checkpoint vocabulary.
+
+Motion cannot mark limit checking inapplicable, and unknown or violated limits
+reject at the exact operation index. A 16-case matrix covers all four limit
+states at pen-up, pause, checkpoint, and pen-down operations. Coordinate
+transforms, limit geometry, visual rendering, timing simulation beyond plan
+evidence, and hardware contact remain open.
 
 Offline simulation now also produces a borrowed inspection trace only after the
 complete dry run validates. The trace retains the exact plan and calibration,

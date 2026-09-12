@@ -47,6 +47,19 @@ pub enum MotionContactState {
     PenUp,
 }
 
+/// Structural family of one device-neutral plan operation.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub enum MotionPlanOperationKind {
+    /// Inspectable plan checkpoint.
+    Checkpoint,
+    /// Explicit plan pause.
+    Pause,
+    /// Physical pen-down motion segment.
+    PenDown,
+    /// Physical pen-up motion segment.
+    PenUp,
+}
+
 /// One physical motion segment with semantic provenance and dynamics intent.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MotionSegment<
@@ -79,6 +92,35 @@ pub enum MotionPlanOperation<Checkpoint, Pause, Segment> {
     Pause(Pause),
     /// Pen-up or pen-down physical geometry traversal.
     Segment(Segment),
+}
+
+impl<
+    Acceleration,
+    Checkpoint,
+    Geometry,
+    Pause,
+    Pressure,
+    SemanticOrigin,
+    Speed,
+>
+    MotionPlanOperation<
+        Checkpoint,
+        Pause,
+        MotionSegment<Acceleration, Geometry, Pressure, SemanticOrigin, Speed>,
+    >
+{
+    /// Return this operation's structural family without changing plan intent.
+    #[must_use]
+    pub const fn kind(&self) -> MotionPlanOperationKind {
+        match self {
+            Self::Checkpoint(_) => MotionPlanOperationKind::Checkpoint,
+            Self::Pause(_) => MotionPlanOperationKind::Pause,
+            Self::Segment(segment) => match segment.contact_state {
+                MotionContactState::PenDown => MotionPlanOperationKind::PenDown,
+                MotionContactState::PenUp => MotionPlanOperationKind::PenUp,
+            },
+        }
+    }
 }
 
 /// Physical page and writable-region evidence retained by the plan.

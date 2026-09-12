@@ -35,7 +35,8 @@
 //
 use atrament_device_neutral_motion_plan::{
     DeviceNeutralMotionPlan, MotionBoundsEvidence, MotionCapabilityAssumptions,
-    MotionContactState, MotionPlanOperation, MotionSegment,
+    MotionContactState, MotionPlanOperation, MotionPlanOperationKind,
+    MotionSegment,
 };
 
 type Segment = MotionSegment<u16, &'static str, u16, &'static str, u16>;
@@ -72,6 +73,34 @@ fn ordered_motion_retains_contact_geometry_dynamics_and_semantic_origin() {
     assert_eq!(second.geometry, "title-stroke-1");
     assert_eq!(second.pressure, Some(640));
     assert_eq!(second.semantic_origin, "title-17");
+}
+
+#[test]
+fn operation_kind_is_owned_by_the_device_neutral_plan() {
+    let operations: [Operation; 4] = [
+        MotionPlanOperation::Checkpoint("checkpoint"),
+        MotionPlanOperation::Pause("pause"),
+        MotionPlanOperation::Segment(MotionSegment {
+            acceleration: 20,
+            contact_state: MotionContactState::PenUp,
+            geometry: "travel",
+            pressure: None,
+            semantic_origin: "paragraph-2",
+            speed: 80,
+        }),
+        MotionPlanOperation::Segment(MotionSegment {
+            acceleration: 20,
+            contact_state: MotionContactState::PenDown,
+            geometry: "stroke",
+            pressure: Some(500),
+            semantic_origin: "paragraph-2",
+            speed: 60,
+        }),
+    ];
+    assert_eq!(operations[0].kind(), MotionPlanOperationKind::Checkpoint);
+    assert_eq!(operations[1].kind(), MotionPlanOperationKind::Pause);
+    assert_eq!(operations[2].kind(), MotionPlanOperationKind::PenUp);
+    assert_eq!(operations[3].kind(), MotionPlanOperationKind::PenDown);
 }
 
 #[test]

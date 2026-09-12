@@ -38,7 +38,7 @@
 
 use atrament_device_coordinate_calibration::DeviceCoordinateCalibration;
 use atrament_device_neutral_motion_plan::{
-    DeviceNeutralMotionPlan, MotionContactState, MotionPlanOperation,
+    DeviceNeutralMotionPlan, MotionPlanOperation, MotionPlanOperationKind,
     MotionSegment,
 };
 
@@ -65,17 +65,7 @@ pub enum DryRunLimitState {
 }
 
 /// Actual operation family exposed by dry-run inspection.
-#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
-pub enum DryRunOperationKind {
-    /// Inspectable plan checkpoint.
-    Checkpoint,
-    /// Explicit plan pause.
-    Pause,
-    /// Physical pen-down motion segment.
-    PenDown,
-    /// Physical pen-up motion segment.
-    PenUp,
-}
+pub type DryRunOperationKind = MotionPlanOperationKind;
 
 /// Why one dry-run package is incomplete or physically blocked.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -209,14 +199,7 @@ impl<
     >
 {
     fn dry_run_kind(&self) -> DryRunOperationKind {
-        match self {
-            Self::Checkpoint(_) => DryRunOperationKind::Checkpoint,
-            Self::Pause(_) => DryRunOperationKind::Pause,
-            Self::Segment(segment) => match segment.contact_state {
-                MotionContactState::PenDown => DryRunOperationKind::PenDown,
-                MotionContactState::PenUp => DryRunOperationKind::PenUp,
-            },
-        }
+        self.kind()
     }
 }
 
