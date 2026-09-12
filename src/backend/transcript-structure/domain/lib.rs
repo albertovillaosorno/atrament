@@ -67,6 +67,23 @@ pub enum ReviewedTranscriptSource<'transcript, Word, UnresolvedFragment> {
     UnresolvedFragment(&'transcript UnresolvedFragment),
 }
 
+/// Address of reviewed evidence within the exact supplied transcript.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ReviewedTranscriptSourceLocation {
+    /// Half-open resolved-word range in source transcript order.
+    ResolvedWords {
+        /// Exclusive source-word index after the reviewed span.
+        end_word: usize,
+        /// Inclusive source-word index where the reviewed span begins.
+        start_word: usize,
+    },
+    /// Exact unresolved-fragment index in source transcript order.
+    UnresolvedFragment {
+        /// Zero-based source unresolved-fragment index.
+        fragment_index: usize,
+    },
+}
+
 /// One reviewed transcript span and its retained source evidence.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ReviewedTranscriptSpan<'transcript, Word, UnresolvedFragment> {
@@ -84,6 +101,8 @@ pub struct ReviewedTranscriptStructure<
     Word,
     UnresolvedFragment,
 > {
+    /// Exact source location aligned one-to-one with each reviewed span.
+    pub locations: Vec<ReviewedTranscriptSourceLocation>,
     /// Ordered caller-reviewed spans.
     pub spans:
         Vec<ReviewedTranscriptSpan<'transcript, Word, UnresolvedFragment>>,
@@ -157,8 +176,9 @@ pub fn review_transcript_structure<
     Word,
     UnresolvedFragment,
 > {
+    let mut locations = Vec::with_capacity(spans.len());
     for (span_index, span) in spans.iter().enumerate() {
-        match span.source {
+        let location = match span.source {
             ReviewedTranscriptSource::ResolvedWords(words) => {
                 if words.is_empty() || size_of::<Word>() == 0 {
                     return Err(
@@ -167,13 +187,17 @@ pub fn review_transcript_structure<
                         },
                     );
                 }
-                if !resolved_words_belong_to_transcript(
+                let Some((start_word, end_word)) = resolved_word_range(
                     &transcript.words,
                     words,
-                ) {
+                ) else {
                     return Err(TranscriptStructureError::ForeignResolvedWords {
                         span_index,
                     });
+                };
+                ReviewedTranscriptSourceLocation::ResolvedWords {
+                    end_word,
+                    start_word,
                 }
             },
             ReviewedTranscriptSource::UnresolvedFragment(fragment) => {
@@ -184,17 +208,17 @@ pub fn review_transcript_structure<
                         },
                     );
                 }
-                if !transcript
+                let Some(fragment_index) = transcript
                     .unresolved_fragments
                     .iter()
-                    .any(|candidate| ptr_eq(candidate, fragment))
-                {
+                    .position(|candidate| ptr_eq(candidate, fragment))
+                else {
                     return Err(
                         TranscriptStructureError::ForeignUnresolvedFragment {
                             span_index,
                         },
                     );
-                }
+                };
                 if span.role != ReviewedTranscriptRole::Unresolved {
                     return Err(
                         TranscriptStructureError::UnresolvedFragmentPromotion {
@@ -202,21 +226,32 @@ pub fn review_transcript_structure<
                         },
                     );
                 }
+                ReviewedTranscriptSourceLocation::UnresolvedFragment {
+                    fragment_index,
+                }
             },
-        }
+        };
+        locations.push(location);
     }
 
-    Ok(ReviewedTranscriptStructure { spans, transcript })
+    Ok(ReviewedTranscriptStructure {
+        locations,
+        spans,
+        transcript,
+    })
 }
 
-fn resolved_words_belong_to_transcript<Word>(
+fn resolved_word_range<Word>(
     transcript_words: &[Word],
     reviewed_words: &[Word],
-) -> bool {
+) -> Option<(usize, usize)> {
     if reviewed_words.len() > transcript_words.len() {
-        return false;
+        return None;
     }
     transcript_words
         .windows(reviewed_words.len())
-        .any(|candidate| ptr_eq(candidate, reviewed_words))
+        .position(|candidate| ptr_eq(candidate, reviewed_words))
+        .map(|start_word| {
+            (start_word, start_word.saturating_add(reviewed_words.len()))
+        })
 }

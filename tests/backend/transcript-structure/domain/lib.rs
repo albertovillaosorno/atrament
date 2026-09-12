@@ -36,7 +36,8 @@ use atrament_transcript_evidence::{
     UnresolvedTranscriptFragment,
 };
 use atrament_transcript_structure::{
-    ReviewedTranscriptRole, ReviewedTranscriptSource, ReviewedTranscriptSpan,
+    ReviewedTranscriptRole, ReviewedTranscriptSource,
+    ReviewedTranscriptSourceLocation, ReviewedTranscriptSpan,
     TranscriptStructureError, review_transcript_structure,
 };
 
@@ -138,6 +139,23 @@ fn reviewed_roles_preserve_resolved_word_evidence_exactly() {
     assert_eq!(definition[0].speaker, Some("teacher"));
     assert_eq!(definition[0].time_range, Some((1_000, 1_220)));
     assert_eq!(definition[0].text, "Definition");
+    assert_eq!(
+        reviewed.locations,
+        [
+            ReviewedTranscriptSourceLocation::ResolvedWords {
+                end_word: 2,
+                start_word: 0,
+            },
+            ReviewedTranscriptSourceLocation::ResolvedWords {
+                end_word: 2,
+                start_word: 1,
+            },
+            ReviewedTranscriptSourceLocation::ResolvedWords {
+                end_word: 3,
+                start_word: 2,
+            },
+        ],
+    );
     let ReviewedTranscriptSource::ResolvedWords(formula) =
         reviewed.spans[2].source
     else {
@@ -167,6 +185,56 @@ fn unresolved_fragment_keeps_text_timing_and_confidence() {
     assert_eq!(fragment.text, "[inaudible denominator]");
     assert_eq!(fragment.confidence, Some(21));
     assert_eq!(fragment.time_range, Some((3_400, 3_900)));
+    assert_eq!(
+        reviewed.locations,
+        [ReviewedTranscriptSourceLocation::UnresolvedFragment {
+            fragment_index: 0,
+        }],
+    );
+}
+
+#[test]
+fn overlapping_and_repeated_review_spans_keep_exact_source_ranges() {
+    let transcript = transcript_fixture();
+    let spans = vec![
+        ReviewedTranscriptSpan {
+            role: ReviewedTranscriptRole::Definition,
+            source: ReviewedTranscriptSource::ResolvedWords(
+                &transcript.words[0..2],
+            ),
+        },
+        ReviewedTranscriptSpan {
+            role: ReviewedTranscriptRole::Example,
+            source: ReviewedTranscriptSource::ResolvedWords(
+                &transcript.words[1..3],
+            ),
+        },
+        ReviewedTranscriptSpan {
+            role: ReviewedTranscriptRole::Section,
+            source: ReviewedTranscriptSource::ResolvedWords(
+                &transcript.words[0..2],
+            ),
+        },
+    ];
+    let reviewed = review_transcript_structure(&transcript, spans)
+        .expect("overlap and repeated review remain caller-owned");
+    assert_eq!(
+        reviewed.locations,
+        [
+            ReviewedTranscriptSourceLocation::ResolvedWords {
+                end_word: 2,
+                start_word: 0,
+            },
+            ReviewedTranscriptSourceLocation::ResolvedWords {
+                end_word: 3,
+                start_word: 1,
+            },
+            ReviewedTranscriptSourceLocation::ResolvedWords {
+                end_word: 2,
+                start_word: 0,
+            },
+        ],
+    );
 }
 
 #[test]

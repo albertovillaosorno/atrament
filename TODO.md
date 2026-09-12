@@ -2191,9 +2191,13 @@ evidence that can prove source membership.
 
 Resolved spans retain original word timing, confidence, speaker, and text
 evidence; explicit unresolved fragments retain their text, timing, and
-confidence and cannot be silently promoted to a confident role. Span
-segmentation, role selection, transcript correction, confidence policy, semantic
-notebook construction, and layout remain open.
+confidence and cannot be silently promoted to a confident role. Each admitted
+review span also retains an exact source address: a half-open range of
+resolved words or an unresolved-fragment index in the supplied transcript.
+Overlapping and repeated reviewed spans remain valid because source addressing
+does not choose
+segmentation. Span segmentation, role selection, transcript correction,
+confidence policy, semantic notebook construction, and layout remain open.
 
 ## P7 — Honest single-pen live output
 
