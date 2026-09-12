@@ -97,7 +97,9 @@ fn unknown_and_mismatched_identities_fail_in_documented_order() {
     unknown_assignment.claims[0].provenance_identity = 99;
     assert_eq!(
         validate_citation_review_linkage(&unknown_assignment),
-        Err(CitationReviewLinkageError::UnknownProvenance { provenance: 99 }),
+        Err(CitationReviewLinkageError::UnknownProvenance {
+            provenance: 99,
+        }),
     );
 
     let mut unknown_claim = review();
@@ -145,9 +147,7 @@ fn only_cited_provenance_records_admit_links_and_each_cited_claim_needs_one() {
 #[test]
 fn duplicate_claim_provenance_source_and_link_reject_deterministically() {
     let mut duplicate_claim = review();
-    duplicate_claim
-        .claims
-        .push(duplicate_claim.claims[0].clone());
+    duplicate_claim.claims.push(duplicate_claim.claims[0].clone());
     assert_eq!(
         validate_citation_review_linkage(&duplicate_claim),
         Err(CitationReviewLinkageError::DuplicateClaim { claim: 1 }),
@@ -159,13 +159,13 @@ fn duplicate_claim_provenance_source_and_link_reject_deterministically() {
         .push(duplicate_provenance.provenance[0].clone());
     assert_eq!(
         validate_citation_review_linkage(&duplicate_provenance),
-        Err(CitationReviewLinkageError::DuplicateProvenance { provenance: 11 }),
+        Err(CitationReviewLinkageError::DuplicateProvenance {
+            provenance: 11,
+        }),
     );
 
     let mut duplicate_source = review();
-    duplicate_source
-        .sources
-        .push(duplicate_source.sources[0].clone());
+    duplicate_source.sources.push(duplicate_source.sources[0].clone());
     assert_eq!(
         validate_citation_review_linkage(&duplicate_source),
         Err(CitationReviewLinkageError::DuplicateSource { source: 21 }),

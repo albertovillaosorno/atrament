@@ -47,8 +47,11 @@ pub struct ClaimProvenance<ClaimIdentity, ProvenanceIdentity> {
 
 /// One exact citation relationship from claim/provenance to source metadata.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct CitationClaimLink<ClaimIdentity, ProvenanceIdentity, SourceIdentity>
-{
+pub struct CitationClaimLink<
+    ClaimIdentity,
+    ProvenanceIdentity,
+    SourceIdentity,
+> {
     /// Exact claim receiving the citation.
     pub claim_identity: ClaimIdentity,
     /// Exact provenance record assigned to that claim.
@@ -346,11 +349,9 @@ where
             });
         };
         if claim.provenance_identity != link.provenance_identity {
-            return Err(
-                CitationReviewLinkageError::ProvenanceIdentityMismatch {
-                    claim: link.claim_identity.clone(),
-                },
-            );
+            return Err(CitationReviewLinkageError::ProvenanceIdentityMismatch {
+                claim: link.claim_identity.clone(),
+            });
         }
         if !review
             .sources
