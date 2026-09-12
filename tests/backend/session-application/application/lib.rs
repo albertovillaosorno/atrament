@@ -849,6 +849,42 @@ fn spawn_process_fixture(mode: &str) -> std::process::Child {
         .expect("spawn session process fixture")
 }
 
+#[cfg(target_os = "linux")]
+fn writable_regular_file_descriptors(pid: u32) -> Vec<String> {
+    let fd_root = format!("/proc/{pid}/fd");
+    let fdinfo_root = format!("/proc/{pid}/fdinfo");
+    let mut writable = Vec::new();
+    for entry in std::fs::read_dir(&fd_root).expect("child fd directory") {
+        let entry = entry.expect("child fd entry");
+        let fd = entry.file_name();
+        let fd_path = entry.path();
+        if !std::fs::metadata(&fd_path)
+            .map(|metadata| metadata.is_file())
+            .unwrap_or(false)
+        {
+            continue;
+        }
+        let fdinfo = std::fs::read_to_string(
+            std::path::Path::new(&fdinfo_root).join(&fd),
+        )
+        .expect("child fdinfo");
+        let flags = fdinfo
+            .lines()
+            .find_map(|line| line.strip_prefix("flags:\t"))
+            .expect("child fd flags");
+        let flags = u32::from_str_radix(flags, 8).expect("octal fd flags");
+        if flags & 0o3 != 0 {
+            let target = std::fs::read_link(&fd_path)
+                .expect("child fd target")
+                .display()
+                .to_string();
+            writable.push(format!("{} -> {target}", fd.to_string_lossy()));
+        }
+    }
+    writable.sort();
+    writable
+}
+
 fn await_populated_marker(
     child: &mut std::process::Child,
 ) -> BufReader<std::process::ChildStdout> {
@@ -889,6 +925,14 @@ fn process_restart_drops_session_state_and_derived_outputs() {
 
     let mut orderly = spawn_process_fixture("populated");
     let mut orderly_stdout = await_populated_marker(&mut orderly);
+    #[cfg(target_os = "linux")]
+    {
+        let writable = writable_regular_file_descriptors(orderly.id());
+        assert!(
+            writable.is_empty(),
+            "populated child holds writable regular files: {writable:?}",
+        );
+    }
     orderly
         .stdin
         .take()
@@ -904,6 +948,14 @@ fn process_restart_drops_session_state_and_derived_outputs() {
 
     let mut forced = spawn_process_fixture("populated-redo");
     let mut forced_stdout = await_populated_marker(&mut forced);
+    #[cfg(target_os = "linux")]
+    {
+        let writable = writable_regular_file_descriptors(forced.id());
+        assert!(
+            writable.is_empty(),
+            "Redo child holds writable regular files: {writable:?}",
+        );
+    }
     forced.kill().expect("force session child termination");
     let mut forced_tail = String::new();
     forced_stdout

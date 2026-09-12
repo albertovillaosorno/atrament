@@ -79,8 +79,12 @@ Both
 orderly and forced
 termination leave a fresh process with empty draft fields, no accepted revision,
 history, bytes, or prior media-job authority; derived results and cleanup
-bookkeeping exist only in the terminated process. Browser edits send complete
-authenticated replacements and no browser persistence API is used.
+bookkeeping exist only in the terminated process. On Linux, both populated
+variants expose zero writable regular-file descriptors while all of that state
+is live.
+
+Browser edits send complete authenticated replacements and use no browser
+persistence API.
 
 This evidence establishes raw-byte ownership after a separate ingestion
 boundary and one semantic direct-edit preview lifecycle; it does not implement
@@ -149,8 +153,10 @@ Media decoding and actual temporary
 conversion-file cleanup remain open because no filesystem intermediate exists
 yet.
 
-While private draft text is live, the runtime holds no writable regular-file
-descriptor and changes no declared repository runtime-root file.
+While private draft text is live, the runtime changes no declared repository
+runtime-root file. The fuller application-process fixture also proves on Linux
+that populated draft, semantic history, retained asset bytes, derived results,
+and pending media cleanup coexist with zero writable regular-file descriptors.
 
 Checked-in browser policy tests guard one-time launch-credential fragment
 consumption, credential invalidation on `pagehide`, in-flight handshake and
