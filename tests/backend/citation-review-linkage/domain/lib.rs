@@ -31,7 +31,8 @@
 //
 use atrament_citation_review_linkage::{
     CitationClaimLink, CitationReviewLinkage, CitationReviewLinkageError,
-    CitationSource, ClaimProvenance, validate_citation_review_linkage,
+    CitationSource, ClaimProvenance, citation_source_identities_for_claim,
+    validate_citation_review_linkage,
 };
 use atrament_semantic_notebook::{Provenance, ProvenanceKind};
 
@@ -96,9 +97,7 @@ fn unknown_and_mismatched_identities_fail_in_documented_order() {
     unknown_assignment.claims[0].provenance_identity = 99;
     assert_eq!(
         validate_citation_review_linkage(&unknown_assignment),
-        Err(CitationReviewLinkageError::UnknownProvenance {
-            provenance: 99,
-        }),
+        Err(CitationReviewLinkageError::UnknownProvenance { provenance: 99 }),
     );
 
     let mut unknown_claim = review();
@@ -146,7 +145,9 @@ fn only_cited_provenance_records_admit_links_and_each_cited_claim_needs_one() {
 #[test]
 fn duplicate_claim_provenance_source_and_link_reject_deterministically() {
     let mut duplicate_claim = review();
-    duplicate_claim.claims.push(duplicate_claim.claims[0].clone());
+    duplicate_claim
+        .claims
+        .push(duplicate_claim.claims[0].clone());
     assert_eq!(
         validate_citation_review_linkage(&duplicate_claim),
         Err(CitationReviewLinkageError::DuplicateClaim { claim: 1 }),
@@ -158,13 +159,13 @@ fn duplicate_claim_provenance_source_and_link_reject_deterministically() {
         .push(duplicate_provenance.provenance[0].clone());
     assert_eq!(
         validate_citation_review_linkage(&duplicate_provenance),
-        Err(CitationReviewLinkageError::DuplicateProvenance {
-            provenance: 11,
-        }),
+        Err(CitationReviewLinkageError::DuplicateProvenance { provenance: 11 }),
     );
 
     let mut duplicate_source = review();
-    duplicate_source.sources.push(duplicate_source.sources[0].clone());
+    duplicate_source
+        .sources
+        .push(duplicate_source.sources[0].clone());
     assert_eq!(
         validate_citation_review_linkage(&duplicate_source),
         Err(CitationReviewLinkageError::DuplicateSource { source: 21 }),
@@ -194,6 +195,44 @@ fn one_cited_claim_may_link_to_multiple_distinct_sources() {
         source_identity: 22,
     });
     assert_eq!(validate_citation_review_linkage(&review), Ok(()));
+}
+
+#[test]
+fn validated_claim_source_projection_preserves_link_order_and_empty_non_cited()
+{
+    let mut value = review();
+    value.sources.push(CitationSource {
+        metadata: "source metadata b",
+        source_identity: 22,
+    });
+    value.links.push(CitationClaimLink {
+        claim_identity: 1,
+        provenance_identity: 11,
+        source_identity: 22,
+    });
+    assert_eq!(
+        citation_source_identities_for_claim(&value, &1),
+        Ok(vec![&21, &22]),
+    );
+
+    assert_eq!(
+        citation_source_identities_for_claim(&value, &2),
+        Ok(Vec::<&u8>::new()),
+    );
+    assert_eq!(
+        citation_source_identities_for_claim(&value, &99),
+        Err(CitationReviewLinkageError::UnknownClaim { claim: 99 }),
+    );
+}
+
+#[test]
+fn claim_source_projection_preserves_structural_error_precedence() {
+    let mut value = review();
+    value.sources.clear();
+    assert_eq!(
+        citation_source_identities_for_claim(&value, &99),
+        Err(CitationReviewLinkageError::UnknownSource { source: 21 }),
+    );
 }
 
 #[test]

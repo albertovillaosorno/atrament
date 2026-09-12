@@ -47,11 +47,8 @@ pub struct ClaimProvenance<ClaimIdentity, ProvenanceIdentity> {
 
 /// One exact citation relationship from claim/provenance to source metadata.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct CitationClaimLink<
-    ClaimIdentity,
-    ProvenanceIdentity,
-    SourceIdentity,
-> {
+pub struct CitationClaimLink<ClaimIdentity, ProvenanceIdentity, SourceIdentity>
+{
     /// Exact claim receiving the citation.
     pub claim_identity: ClaimIdentity,
     /// Exact provenance record assigned to that claim.
@@ -165,6 +162,65 @@ type CitationReviewResult<ClaimIdentity, ProvenanceIdentity, SourceIdentity> =
             SourceIdentity,
         >,
     >;
+
+/// Return source identities linked to one claim after full structural
+/// validation.
+///
+/// Source identities follow caller link order. A valid non-cited claim returns
+/// an empty collection. This projection does not fetch, rank, deduplicate, or
+/// judge source metadata.
+///
+/// # Errors
+///
+/// Returns the first structural linkage error before projection, or
+/// [`CitationReviewLinkageError::UnknownClaim`] when the requested claim is not
+/// present in an otherwise valid review set.
+pub fn citation_source_identities_for_claim<
+    'review,
+    ClaimIdentity,
+    Metadata,
+    ProvenanceIdentity,
+    SourceIdentity,
+>(
+    review: &'review TypedCitationReviewLinkage<
+        ClaimIdentity,
+        Metadata,
+        ProvenanceIdentity,
+        SourceIdentity,
+    >,
+    claim_identity: &ClaimIdentity,
+) -> Result<
+    Vec<&'review SourceIdentity>,
+    CitationReviewLinkageError<
+        ClaimIdentity,
+        ProvenanceIdentity,
+        SourceIdentity,
+    >,
+>
+where
+    ClaimIdentity: Clone + Eq,
+    ProvenanceIdentity: Clone + Eq,
+    SourceIdentity: Clone + Eq,
+{
+    validate_citation_review_linkage(review)?;
+    if !review
+        .claims
+        .iter()
+        .any(|claim| claim.claim_identity == *claim_identity)
+    {
+        return Err(CitationReviewLinkageError::UnknownClaim {
+            claim: claim_identity.clone(),
+        });
+    }
+    Ok(review
+        .links
+        .iter()
+        .filter_map(|link| {
+            (link.claim_identity == *claim_identity)
+                .then_some(&link.source_identity)
+        })
+        .collect())
+}
 
 /// Validate exact citation-to-claim-to-source metadata relationships.
 ///
@@ -290,9 +346,11 @@ where
             });
         };
         if claim.provenance_identity != link.provenance_identity {
-            return Err(CitationReviewLinkageError::ProvenanceIdentityMismatch {
-                claim: link.claim_identity.clone(),
-            });
+            return Err(
+                CitationReviewLinkageError::ProvenanceIdentityMismatch {
+                    claim: link.claim_identity.clone(),
+                },
+            );
         }
         if !review
             .sources
