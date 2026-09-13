@@ -114,6 +114,12 @@ rejection preceding provider access.
 All 114 visible-text requirements run through those three session-owned query
 forms without changing accepted revision or history state.
 
+The production Unicode-segmentation adapter also has a deterministic 4,096-case
+mixed-Unicode port-invariant corpus. It requires exact start/end anchors,
+strictly increasing UTF-8-aligned boundaries, deterministic repeated lookup,
+count-to-byte capacity, and rejection beyond the final boundary while leaving
+actual extended-grapheme classification to the pinned Unicode implementation.
+
 The generic handwriting-coverage report also consumes the complete 114-entry
 inventory. An empty profile reports every requirement in exact order, while a
 profile declaring all 114 exact graphemes reports none.

@@ -1013,6 +1013,15 @@ therefore cannot silently jump to an impossible source position. All 114 frozen
 bilingual visible-text graphemes admit exactly start and end cursor positions
 under the pinned segmentation adapter.
 
+The pinned production segmentation adapter also runs a deterministic 4,096-case
+mixed-Unicode corpus spanning ASCII, precomposed and decomposed Spanish text,
+isolated combining marks, emoji ZWJ/modifier sequences, regional indicators,
+CR/LF, variation selectors, punctuation, and non-Latin text. Every generated
+source must expose deterministic, strictly advancing UTF-8 boundaries with exact
+zero/final anchors, a grapheme count no larger than source bytes, and explicit
+out-of-range rejection. This checks the outbound port invariants without
+reimplementing Unicode segmentation or adding locale tailoring.
+
 A same-source selection resolver validates provider
 anchors once, preserves caller anchor/focus order for forward and reverse
 selections, and reuses one internal boundary for a collapsed selection.
@@ -2840,6 +2849,14 @@ deterministically. Any non-204 outcome leaves all seeded drafts unchanged; a
 successful replacement may change only Task and must agree across repeated runs.
 Responses never reflect the session secret.
 
+
+The production Unicode grapheme-segmentation adapter now adds a deterministic
+4,096-case mixed-Unicode invariant corpus. Generated sources combine combining
+marks, emoji ZWJ/modifier sequences, regional indicators, CR/LF, variation
+selectors, English/Spanish punctuation, precomposed/decomposed text, and
+non-Latin scalars. It asserts every declared fragment/count bucket is exercised
+and that all returned boundaries are deterministic, strictly advancing UTF-8
+boundaries with exact anchors and fail-closed out-of-range lookup.
 
 The browser session-fragment parser now also runs a deterministic 4,096-case
 mutation corpus against an independent ASCII oracle. Replacement, insertion,

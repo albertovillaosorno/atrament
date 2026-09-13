@@ -10,12 +10,12 @@
 // Boundary-Contract:
 // - Owns:
 //   - Regression evidence for pinned Unicode extended-grapheme segmentation
-//     across constructed cases and the frozen bilingual text inventory.
+//     across constructed, generated, and frozen bilingual text cases.
 // - Must-Not:
 //   - Normalize text, mutate notebooks, or infer language-specific boundaries.
 // - Allows:
-//   - Inputs: Deterministic combining-mark, emoji-ZWJ, and required bilingual
-//     text graphemes.
+//   - Inputs: Deterministic mixed-Unicode sources and required bilingual text
+//     graphemes.
 //   - Outputs: Exact grapheme counts and UTF-8 boundary offsets.
 //   - Side effects: None.
 // - Split-When:
@@ -94,4 +94,124 @@ fn adapter_treats_every_required_bilingual_text_entry_as_one_grapheme() {
         cases = cases.saturating_add(1);
     }
     assert_eq!(cases, 114);
+}
+
+fn next_corpus_value(seed: &mut u64) -> u64 {
+    *seed = seed
+        .wrapping_mul(6_364_136_223_846_793_005)
+        .wrapping_add(1_442_695_040_888_963_407);
+    *seed
+}
+
+#[test]
+fn generated_mixed_unicode_corpus_preserves_boundary_port_invariants() {
+    const CASES: usize = 4_096;
+    const FRAGMENTS: [&str; 16] = [
+        "A",
+        "ñ",
+        "n\u{301}",
+        "\u{301}",
+        "👩‍🔬",
+        "👍🏽",
+        "🇲",
+        "🇽",
+        "\r",
+        "\n",
+        "\u{200d}",
+        "❤️",
+        "¿",
+        "…",
+        "—",
+        "क",
+    ];
+    let provider = UnicodeGraphemeSegmentation;
+    let mut seed = 0x6a09_e667_f3bc_c909_u64;
+    let mut seen_fragment_counts = [false; 9];
+    let mut seen_fragments = [false; FRAGMENTS.len()];
+    let mut saw_empty = false;
+    let mut saw_single = false;
+    let mut saw_multiple = false;
+
+    for case in 0..CASES {
+        let fragment_count = usize::try_from(
+            (next_corpus_value(&mut seed) >> 56) % 9,
+        )
+        .expect("generated fragment count fits usize");
+        seen_fragment_counts[fragment_count] = true;
+        let mut source = String::new();
+        for _ in 0..fragment_count {
+            let fragment_index = usize::try_from(
+                (next_corpus_value(&mut seed) >> 48)
+                    % u64::try_from(FRAGMENTS.len())
+                        .expect("fragment table length fits u64"),
+            )
+            .expect("generated fragment index fits usize");
+            seen_fragments[fragment_index] = true;
+            source.push_str(FRAGMENTS[fragment_index]);
+        }
+
+        let count = provider.grapheme_count(&source);
+        assert!(
+            count <= source.len(),
+            "case {case}: grapheme count exceeds UTF-8 bytes",
+        );
+        if source.is_empty() {
+            saw_empty = true;
+            assert_eq!(count, 0, "case {case}: empty source count");
+        } else {
+            assert!(count > 0, "case {case}: nonempty source count");
+            saw_single |= count == 1;
+            saw_multiple |= count > 1;
+        }
+
+        let mut previous = None;
+        for index in 0..=count {
+            let first = provider.byte_offset(&source, index);
+            let second = provider.byte_offset(&source, index);
+            assert_eq!(
+                first, second,
+                "case {case}: boundary {index} is nondeterministic",
+            );
+            let offset = first.expect("in-range boundary must exist");
+            assert!(
+                offset <= source.len(),
+                "case {case}: boundary {index} exceeds source",
+            );
+            assert!(
+                source.is_char_boundary(offset),
+                "case {case}: boundary {index} is not UTF-8 aligned",
+            );
+            if let Some(prior) = previous {
+                assert!(
+                    prior < offset,
+                    "case {case}: boundaries must advance",
+                );
+            } else {
+                assert_eq!(offset, 0, "case {case}: first boundary anchor");
+            }
+            previous = Some(offset);
+        }
+        assert_eq!(
+            previous,
+            Some(source.len()),
+            "case {case}: final boundary anchor",
+        );
+        let past_end = count.checked_add(1).expect("small generated count");
+        assert_eq!(
+            provider.byte_offset(&source, past_end),
+            None,
+            "case {case}: boundary past end must reject",
+        );
+        assert_eq!(
+            provider.byte_offset(&source, usize::MAX),
+            None,
+            "case {case}: maximum index must reject",
+        );
+    }
+
+    assert!(seen_fragment_counts.into_iter().all(|seen| seen));
+    assert!(seen_fragments.into_iter().all(|seen| seen));
+    assert!(saw_empty);
+    assert!(saw_single);
+    assert!(saw_multiple);
 }
