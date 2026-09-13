@@ -697,6 +697,66 @@ fn run_process_fixture_child(mode: &str) {
         kind: SemanticIdentityKind::InlineSpan,
         owner: Some(text_block),
     };
+    let CommandTargetMaterialOutcome::Prepared {
+        material: style_material,
+    } = session.command_target_material_for_family(
+        revision,
+        span,
+        SemanticCommandFamily::StyleRole,
+    ) else {
+        panic!("process fixture span style material must be available");
+    };
+    assert_eq!(style_material.revision, revision);
+    assert_eq!(style_material.target, span);
+    assert_eq!(style_material.descriptor, span_descriptor);
+    assert_eq!(
+        style_material.direct_edit_family,
+        Some(SemanticCommandFamily::StyleRole),
+    );
+    assert_eq!(
+        style_material.editable_value,
+        Some(EditableSemanticValue::StyleReference(None)),
+    );
+    assert_eq!(
+        session.check_identity_precondition(
+            revision,
+            span,
+            IdentityPrecondition {
+                expected_kind: Some(SemanticIdentityKind::InlineSpan),
+                expected_owner: IdentityOwnerExpectation::Direct(text_block),
+            },
+        ),
+        IdentityPreconditionOutcome::Satisfied {
+            descriptor: span_descriptor,
+            revision,
+            target: span,
+        },
+    );
+    let current_text = EditableSemanticValue::Text(String::from(
+        "process-private after",
+    ));
+    assert_eq!(
+        session.check_editable_value_precondition(
+            revision,
+            span,
+            current_text.clone(),
+        ),
+        EditableValuePreconditionOutcome::Satisfied {
+            actual: current_text,
+            revision,
+            target: span,
+        },
+    );
+    let CommandFamilyAdmissionOutcome::Admitted {
+        material: family_material,
+    } = session.check_command_family_admission(
+        revision,
+        span,
+        SemanticCommandFamily::TextContent,
+    ) else {
+        panic!("process fixture text family must be admitted");
+    };
+    assert_eq!(family_material.as_ref(), material.as_ref());
     assert_eq!(
         session.inspect_identity(revision, span),
         IdentityInspectOutcome::Inspected {
@@ -749,6 +809,27 @@ fn run_process_fixture_child(mode: &str) {
                 "process-private after",
             )),
             expected: stale_expected,
+            revision,
+            target: span,
+        },
+    );
+    assert_eq!(
+        session.accepted_revision().map(|accepted| accepted.id),
+        Some(revision),
+    );
+
+    let simulated_requested = EditableSemanticValue::Text(String::from(
+        "process-private direct simulation",
+    ));
+    assert_eq!(
+        session.simulate_direct_edit(
+            revision,
+            span,
+            simulated_requested.clone(),
+        ),
+        DirectEditSimulationOutcome::Applicable {
+            family: SemanticCommandFamily::TextContent,
+            requested: simulated_requested,
             revision,
             target: span,
         },

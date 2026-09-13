@@ -71,12 +71,12 @@ still reachable through older history, including their exact byte sequences.
 A process fixture now retains all three private draft fields, rejects one
 oversized draft replacement with the shared resource-limit diagnostic,
 retains bytes for two semantic assets, commits text and asset-reference history,
-computes command-target material, bounded identity inspection and typed
-precondition rejection, a revision-bound direct-edit preview, version-bound
-direct-edit proposal, ordered
-and caller-bounded batch review with graph-resource and dependency-selection
+computes default and family-specific command-target material, bounded
+identity inspection, constituent and combined precondition review, direct-edit
+simulation and preview, version-bound direct-edit proposal, ordered and
+caller-bounded batch review with graph-resource and dependency-selection
 analysis, grapheme cursor and selection inspection, measured pagination,
-fixed-region overflow diagnostics
+fixed-region overflow diagnostics,
 and layout-only Export preflight. It also
 owns one terminal media job with a registered waveform still requiring cleanup.
 Both
