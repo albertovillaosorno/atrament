@@ -208,9 +208,10 @@ expected identity to equal the browser's current value for that exact dimension.
 The localhost adapter requires exactly one route-specific application
 diagnostic for the current singleton handshake-mismatch and draft-resource
 response schemas.
-Empty, multi-item, incomplete, advisory, wrong-severity, malformed-location,
-wrong-remediation, contextualized, cross-operation, or wrong-code diagnostics
-fail as `invalid_diagnostic`. Handshake projection also requires one
+Empty, multi-item, incomplete, advisory, wrong-severity, wrong-location
+identity, malformed-location, wrong-remediation, contextualized,
+cross-operation, or wrong-code diagnostics fail as `invalid_diagnostic`.
+Handshake projection also requires one
 `RequiredVersion` evidence item that exactly matches the reported dimension and
 expected identity, while the result's observed identity must equal the version
 actually presented for that dimension and differ from the expected identity.

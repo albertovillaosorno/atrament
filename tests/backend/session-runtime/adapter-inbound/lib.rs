@@ -2172,6 +2172,7 @@ enum RouteDiagnosticShapeMutation {
     MissingRemediation,
     RelatedLocation,
     RelationalLocation,
+    WrongLocationIdentity,
     WrongLocationKind,
     WrongSeverity,
 }
@@ -2226,6 +2227,9 @@ fn mutate_route_diagnostic_shape(
         RouteDiagnosticShapeMutation::RelationalLocation => {
             diagnostic.locations[0].relationship =
                 Some(RelationshipKind::Dependency);
+        },
+        RouteDiagnosticShapeMutation::WrongLocationIdentity => {
+            diagnostic.locations[0].identity = String::from("wrong:location");
         },
         RouteDiagnosticShapeMutation::WrongLocationKind => {
             diagnostic.locations[0].kind = LocationKind::Object;
@@ -2664,6 +2668,7 @@ fn adapter_rejects_malformed_route_diagnostic_shape_and_draft_evidence() {
         RouteDiagnosticShapeMutation::MissingRemediation,
         RouteDiagnosticShapeMutation::RelatedLocation,
         RouteDiagnosticShapeMutation::RelationalLocation,
+        RouteDiagnosticShapeMutation::WrongLocationIdentity,
         RouteDiagnosticShapeMutation::WrongLocationKind,
         RouteDiagnosticShapeMutation::WrongSeverity,
     ];

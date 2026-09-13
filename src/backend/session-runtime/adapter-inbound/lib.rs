@@ -650,13 +650,14 @@ fn invalid_diagnostic_response() -> Vec<u8> {
     )
 }
 
-fn route_diagnostic(
-    diagnostics: &DiagnosticSet,
+fn route_diagnostic<'diagnostic>(
+    diagnostics: &'diagnostic DiagnosticSet,
     code: DiagnosticCode,
     operation: Operation,
+    location_identity: &str,
     location_kind: LocationKind,
     remediation: Remediation,
-) -> Option<&Diagnostic> {
+) -> Option<&'diagnostic Diagnostic> {
     if diagnostics.completeness != Completeness::Complete {
         return None;
     }
@@ -674,7 +675,8 @@ fn route_diagnostic(
     let [location] = diagnostic.locations.as_slice() else {
         return None;
     };
-    if location.kind != location_kind
+    if location.identity != location_identity
+        || location.kind != location_kind
         || location.role != LocationRole::Primary
         || location.relationship.is_some()
     {
@@ -694,10 +696,13 @@ fn handshake_incompatible_response(
     dimension: VersionDimension,
     expected: &str,
 ) -> Vec<u8> {
+    let location_identity =
+        format!("handshake:{}", handshake_dimension_name(dimension));
     let Some(diagnostic) = route_diagnostic(
         diagnostics,
         DiagnosticCode::HandshakeVersionMismatch,
         Operation::SessionHandshake,
+        &location_identity,
         LocationKind::Capability,
         Remediation::UseCompatibleClient,
     ) else {
@@ -871,14 +876,24 @@ fn route_draft_read(
     response("200 OK", TEXT_CONTENT_TYPE, draft.value(field).as_bytes())
 }
 
+const fn draft_field_diagnostic_identity(field: DraftField) -> &'static str {
+    match field {
+        DraftField::Candidate => "session-draft:candidate",
+        DraftField::Source => "session-draft:source",
+        DraftField::Task => "session-draft:task",
+    }
+}
+
 fn draft_resource_limit_response(
     diagnostics: &DiagnosticSet,
+    field: DraftField,
     observed_bytes: usize,
 ) -> Vec<u8> {
     let Some(diagnostic) = route_diagnostic(
         diagnostics,
         DiagnosticCode::SessionDraftResourceLimit,
         Operation::SessionDraftReplace,
+        draft_field_diagnostic_identity(field),
         LocationKind::Field,
         Remediation::ReduceInput,
     ) else {
@@ -944,7 +959,7 @@ fn route_draft_replace(
     match draft.replace(field, value.to_owned()) {
         DraftMutation::Applied => empty_response("204 No Content"),
         DraftMutation::ResourceLimit { diagnostics } => {
-            draft_resource_limit_response(&diagnostics, body.len())
+            draft_resource_limit_response(&diagnostics, field, body.len())
         },
     }
 }
