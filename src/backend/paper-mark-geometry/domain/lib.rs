@@ -236,12 +236,11 @@ pub fn compile_profile_marks(
     profile: PageProfile,
 ) -> Result<ProfilePaperMarks, ProfilePaperMarksError> {
     let valid = profile
-        .validate()
+        .validated()
         .map_err(ProfilePaperMarksError::InvalidProfile)?;
     validate_region(region).map_err(ProfilePaperMarksError::Geometry)?;
-    let sheet = valid
-        .oriented_sheet()
-        .map_err(ProfilePaperMarksError::InvalidProfile)?;
+    let sheet = valid.oriented_sheet();
+    let admitted = valid.profile();
     let right = horizontal_span(region)
         .map_err(ProfilePaperMarksError::Geometry)?
         .end;
@@ -251,12 +250,12 @@ pub fn compile_profile_marks(
     if right > sheet.width || bottom > sheet.height {
         return Err(ProfilePaperMarksError::RegionOutsideSheet);
     }
-    let geometry = compile_nominal_marks(region, valid.paper_pattern)
+    let geometry = compile_nominal_marks(region, admitted.paper_pattern)
         .map_err(ProfilePaperMarksError::Geometry)?;
     Ok(ProfilePaperMarks {
-        appearance: valid.paper_mark_appearance,
+        appearance: admitted.paper_mark_appearance,
         geometry,
-        layer: valid.paper_mark_layer,
+        layer: admitted.paper_mark_layer,
     })
 }
 

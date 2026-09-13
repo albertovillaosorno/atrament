@@ -194,18 +194,13 @@ fn page_regions(
         {
             writable
         } else {
-            let valid = profile.geometry.validate().map_err(|reason| {
+            let valid = profile.geometry.validated().map_err(|reason| {
                 SemanticPaginationError::InvalidPageProfile {
                     page: page.id,
                     reason,
                 }
             })?;
-            let writable = valid.writable_region().map_err(|reason| {
-                SemanticPaginationError::InvalidPageProfile {
-                    page: page.id,
-                    reason,
-                }
-            })?;
+            let writable = valid.writable_region();
             let _previous =
                 writable_by_profile.insert(page.paper_profile, writable);
             writable

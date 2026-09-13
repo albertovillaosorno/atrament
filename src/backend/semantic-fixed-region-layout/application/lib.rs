@@ -179,12 +179,10 @@ pub fn validate_fixed_placement(
             profile: page.paper_profile,
         });
     };
-    let valid = profile.geometry.validate().map_err(|reason| {
+    let valid = profile.geometry.validated().map_err(|reason| {
         FixedRegionLayoutError::InvalidPageProfile { page: page.id, reason }
     })?;
-    let writable = valid.writable_region().map_err(|reason| {
-        FixedRegionLayoutError::InvalidPageProfile { page: page.id, reason }
-    })?;
+    let writable = valid.writable_region();
     let report = check_bounds(writable, placement.rectangle)
         .map_err(FixedRegionLayoutError::Bounds)?;
     if report.is_within_bounds() {
