@@ -14,8 +14,8 @@
 //   - Expose MCP tools, admit adapters, schedule work, report progress, cancel
 //     execution, recover retries, assign operation IDs, or perform effects.
 // - Allows:
-//   - Inputs: One frozen generic MCP application capability class.
-//   - Outputs: Its shared lifecycle operation and authoritative effect boundary
+//   - Inputs: One MCP capability plus optional lifecycle completion evidence.
+//   - Outputs: Shared operation, effect boundary, or completion disposition
 //     when that capability participates in the lifecycle contract.
 //   - Side effects: None.
 // - Split-When:
@@ -37,7 +37,10 @@
 //! lifecycle.
 
 use atrament_application_operation_lifecycle::{
-    ApplicationOperationClass, ApplicationOperationEffectBoundary,
+    ApplicationOperationClass, ApplicationOperationCompletionDisposition,
+    ApplicationOperationCompletionObservation,
+    ApplicationOperationEffectBoundary,
+    application_operation_completion_disposition,
     application_operation_effect_boundary,
 };
 use atrament_mcp_capability_effect::McpApplicationCapabilityClass;
@@ -71,6 +74,25 @@ pub const fn mcp_application_operation_class(
         McpApplicationCapabilityClass::Validate => {
             Some(ApplicationOperationClass::Validate)
         },
+    }
+}
+
+/// Classify completion authority through one mapped MCP operation lifecycle.
+///
+/// Inspect and Command context return `None` because they are outside the
+/// shared
+/// six-operation lifecycle. The returned disposition does not execute work,
+/// recover a retry, or turn progress/transport state into a final result.
+#[must_use]
+pub const fn mcp_application_operation_completion_disposition(
+    capability: McpApplicationCapabilityClass,
+    observation: ApplicationOperationCompletionObservation,
+) -> Option<ApplicationOperationCompletionDisposition> {
+    match mcp_application_operation_class(capability) {
+        Some(operation) => {
+            application_operation_completion_disposition(operation, observation)
+        },
+        None => None,
     }
 }
 

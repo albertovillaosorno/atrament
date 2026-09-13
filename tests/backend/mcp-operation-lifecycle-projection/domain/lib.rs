@@ -31,11 +31,14 @@
 //   - No mapping means no shared application operation lifecycle is implied.
 //
 use atrament_application_operation_lifecycle::{
-    ApplicationOperationClass, ApplicationOperationEffectBoundary,
+    ApplicationOperationClass, ApplicationOperationCompletionDisposition,
+    ApplicationOperationCompletionObservation,
+    ApplicationOperationEffectBoundary,
 };
 use atrament_mcp_capability_effect::McpApplicationCapabilityClass;
 use atrament_mcp_operation_lifecycle_projection::{
     mcp_application_operation_class,
+    mcp_application_operation_completion_disposition,
     mcp_application_operation_effect_boundary,
 };
 
@@ -98,4 +101,90 @@ fn all_eight_mcp_capabilities_have_exact_lifecycle_projection() {
             expected.map(|(_operation, boundary)| boundary),
         );
     }
+}
+
+
+#[test]
+fn all_40_capability_completion_pairs_preserve_lifecycle_authority() {
+    const CAPABILITIES: [McpApplicationCapabilityClass; 8] = [
+        McpApplicationCapabilityClass::Apply,
+        McpApplicationCapabilityClass::CommandContext,
+        McpApplicationCapabilityClass::Export,
+        McpApplicationCapabilityClass::HistoryTraversal,
+        McpApplicationCapabilityClass::Inspect,
+        McpApplicationCapabilityClass::Plan,
+        McpApplicationCapabilityClass::Render,
+        McpApplicationCapabilityClass::Validate,
+    ];
+    const OBSERVATIONS: [ApplicationOperationCompletionObservation; 5] = [
+        ApplicationOperationCompletionObservation::CancellationRequest,
+        ApplicationOperationCompletionObservation::FinalTypedResultOrReceipt,
+        ApplicationOperationCompletionObservation::ProgressObservation,
+        ApplicationOperationCompletionObservation::SameRetryRecovery,
+        ApplicationOperationCompletionObservation::TransportTermination,
+    ];
+    let mut cases = 0_usize;
+    for capability in CAPABILITIES {
+        for observation in OBSERVATIONS {
+            let expected = match capability {
+                McpApplicationCapabilityClass::CommandContext
+                | McpApplicationCapabilityClass::Inspect => None,
+                McpApplicationCapabilityClass::Apply
+                | McpApplicationCapabilityClass::Export
+                | McpApplicationCapabilityClass::HistoryTraversal => {
+                    Some(match observation {
+                        ApplicationOperationCompletionObservation::
+                            FinalTypedResultOrReceipt => {
+                            ApplicationOperationCompletionDisposition::
+                                CompleteByFinalResult
+                        },
+                        ApplicationOperationCompletionObservation::
+                            SameRetryRecovery => {
+                            ApplicationOperationCompletionDisposition::
+                                CompleteByRecoveredMutatingOutcome
+                        },
+                        ApplicationOperationCompletionObservation::
+                            CancellationRequest
+                        | ApplicationOperationCompletionObservation::
+                            ProgressObservation
+                        | ApplicationOperationCompletionObservation::
+                            TransportTermination => {
+                            ApplicationOperationCompletionDisposition::
+                                NotEstablished
+                        },
+                    })
+                },
+                McpApplicationCapabilityClass::Plan
+                | McpApplicationCapabilityClass::Render
+                | McpApplicationCapabilityClass::Validate => match observation {
+                    ApplicationOperationCompletionObservation::
+                        SameRetryRecovery => None,
+                    ApplicationOperationCompletionObservation::
+                        FinalTypedResultOrReceipt => Some(
+                        ApplicationOperationCompletionDisposition::
+                            CompleteByFinalResult,
+                    ),
+                    ApplicationOperationCompletionObservation::
+                        CancellationRequest
+                    | ApplicationOperationCompletionObservation::
+                        ProgressObservation
+                    | ApplicationOperationCompletionObservation::
+                        TransportTermination => Some(
+                        ApplicationOperationCompletionDisposition::
+                            NotEstablished,
+                    ),
+                },
+            };
+            assert_eq!(
+                mcp_application_operation_completion_disposition(
+                    capability,
+                    observation,
+                ),
+                expected,
+                "capability={capability:?} observation={observation:?}",
+            );
+            cases += 1;
+        }
+    }
+    assert_eq!(cases, 40);
 }

@@ -2193,6 +2193,13 @@ classes to the frozen application operation lifecycle and leaves Inspect and
 Command context outside that lifecycle. It does not imply those capabilities
 are packaged, admitted, running, cancellable, or exposed as tools.
 
+The same projection now preserves completion authority for all 40 MCP
+capability/observation pairs. Final typed results complete all six mapped
+operations; progress, cancellation requests, and transport termination do not;
+and same-retry recovery completes only Apply, Export, and History traversal.
+Inspect and Command context remain outside this lifecycle rather than acquiring
+completion meaning implicitly.
+
 MCP Render, Plan, and Export cancellation projection now reuses the same shared
 output result boundary: pre-boundary cancellation, crossed read-only completion,
 and crossed file commit retain their frozen meanings only for those three
