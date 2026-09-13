@@ -1514,8 +1514,9 @@ role and refuses an ambiguous duplicate claim instead of silently choosing one.
 A complete read-only audit now walks the canonical eight-role order and reports
 each role as Missing, Unique, or Ambiguous together with every caller-order
 presentation index. It does not synthesize defaults or declare any global
-validity policy. The 31-case two-role oracle covers zero through four supplied
-presentations through both exact lookup and complete audit evidence.
+validity policy. A 4,681-case exhaustive oracle covers every sequence through
+four supplied presentations over all eight roles and cross-checks exact lookup,
+duplicate indices, and complete audit evidence against an independent oracle.
 
 Size units, role defaults, style vocabulary, global duplicate/missing-role
 policy, glyph behavior, and semantic document-style mappings remain open.

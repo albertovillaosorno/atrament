@@ -207,19 +207,19 @@ fn duplicate_requested_role_reports_earliest_and_later_indices() {
 }
 
 #[test]
-fn all_31_two_role_sequences_match_independent_lookup_oracle() {
-    let roles = [HandwritingRole::Body, HandwritingRole::Title];
-    let mut cases = 0_u8;
+fn all_role_sequences_through_length_four_match_independent_oracle() {
+    let roles = REQUIRED_HANDWRITING_ROLES;
+    let mut cases = 0_u16;
     let mut saw_missing = false;
     let mut saw_unique = false;
     let mut saw_ambiguous = false;
     for length in 0_u32..=4 {
-        for encoded in 0_u32..2_u32.pow(length) {
+        for encoded in 0_u32..8_u32.pow(length) {
             let mut state = encoded;
             let mut presentations = Vec::new();
             for index in 0..length {
-                let role = roles[(state % 2) as usize];
-                state /= 2;
+                let role = roles[(state % 8) as usize];
+                state /= 8;
                 presentations.push(HandwritingRolePresentation {
                     role,
                     size: index,
@@ -277,7 +277,7 @@ fn all_31_two_role_sequences_match_independent_lookup_oracle() {
             cases = cases.saturating_add(1);
         }
     }
-    assert_eq!(cases, 31);
+    assert_eq!(cases, 4_681);
     assert!(saw_missing);
     assert!(saw_unique);
     assert!(saw_ambiguous);
