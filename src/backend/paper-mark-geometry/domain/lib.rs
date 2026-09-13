@@ -158,6 +158,35 @@ pub struct RulerSample {
     pub normal_offset: RulerOffset,
 }
 
+/// Constructor-sealed evidence that one exact ruler sample was admitted
+/// against one line length and one profile-owned appearance envelope.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ValidatedRulerSample {
+    appearance: PaperMarkAppearance,
+    line_length: Length,
+    sample: RulerSample,
+}
+
+impl ValidatedRulerSample {
+    /// Return the exact appearance envelope that admitted this sample.
+    #[must_use]
+    pub const fn appearance(self) -> PaperMarkAppearance {
+        self.appearance
+    }
+
+    /// Return the exact nominal line length used during admission.
+    #[must_use]
+    pub const fn line_length(self) -> Length {
+        self.line_length
+    }
+
+    /// Return the exact ruler sample that passed admission.
+    #[must_use]
+    pub const fn sample(self) -> RulerSample {
+        self.sample
+    }
+}
+
 /// Exact one-dimensional physical span.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Span {
@@ -290,6 +319,24 @@ pub fn validate_ruler_sample(
         return Err(RulerSampleError::ErrorBoundExceeded);
     }
     Ok(sample)
+}
+
+/// Validate and seal one ruler sample together with its exact admission bounds.
+///
+/// # Errors
+///
+/// Returns exactly the same failure as [`validate_ruler_sample`].
+pub fn validate_ruler_sample_view(
+    sample: RulerSample,
+    line_length: Length,
+    appearance: PaperMarkAppearance,
+) -> Result<ValidatedRulerSample, RulerSampleError> {
+    let admitted = validate_ruler_sample(sample, line_length, appearance)?;
+    Ok(ValidatedRulerSample {
+        appearance,
+        line_length,
+        sample: admitted,
+    })
 }
 
 fn horizontal_span(region: Rect) -> Result<Span, GeometryError> {

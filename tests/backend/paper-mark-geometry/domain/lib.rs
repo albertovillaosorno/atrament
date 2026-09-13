@@ -35,7 +35,7 @@
 use atrament_paper_mark_geometry::{
     AxisSeries, GeometryError, PaperMarkGeometry, ProfilePaperMarksError,
     RulerOffset, RulerSample, RulerSampleError, compile_nominal_marks,
-    compile_profile_marks, validate_ruler_sample,
+    compile_profile_marks, validate_ruler_sample, validate_ruler_sample_view,
 };
 use atrament_physical_page_profile::{
     BindingEdge, BorderShape, Length, Orientation, PageProfile,
@@ -244,14 +244,22 @@ fn ruler_samples_match_bounded_reference_oracle() {
             saw_valid = true;
             Ok(sample)
         };
+        let line_length = Length::from_micrometres(line_length);
         assert_eq!(
-            validate_ruler_sample(
-                sample,
-                Length::from_micrometres(line_length),
-                appearance,
-            ),
+            validate_ruler_sample(sample, line_length, appearance),
             expected,
             "ruler oracle mismatch in generated case {case}",
+        );
+        assert_eq!(
+            validate_ruler_sample_view(sample, line_length, appearance).map(
+                |validated| (
+                    validated.sample(),
+                    validated.line_length(),
+                    validated.appearance(),
+                ),
+            ),
+            expected.map(|admitted| (admitted, line_length, appearance)),
+            "sealed ruler oracle mismatch in generated case {case}",
         );
     }
     assert!(saw_outside_span);
@@ -441,6 +449,60 @@ fn ruler_sample_rejects_excess_error_outside_span_and_signed_overflow() {
         ),
         Err(RulerSampleError::OffsetMagnitudeOverflow),
     );
+}
+
+#[test]
+fn sealed_ruler_sample_preserves_all_typed_rejections() {
+    let line_length = Length::from_micrometres(17_000);
+    let appearance = rounded_appearance(Length::from_micrometres(200));
+    let invalid_appearance = PaperMarkAppearance {
+        join: PaperMarkJoin::Rounded {
+            radius: Length::ZERO,
+        },
+        maximum_ruler_error: Length::from_micrometres(200),
+    };
+    let cases = [
+        (
+            RulerSample {
+                along: Length::from_micrometres(17_001),
+                normal_offset: RulerOffset::from_micrometres(201),
+            },
+            invalid_appearance,
+            RulerSampleError::InvalidAppearance(
+                PageProfileError::PaperMarkRoundedJoinRadiusIsZero,
+            ),
+        ),
+        (
+            RulerSample {
+                along: Length::from_micrometres(17_001),
+                normal_offset: RulerOffset::from_micrometres(0),
+            },
+            appearance,
+            RulerSampleError::OutsideSpan,
+        ),
+        (
+            RulerSample {
+                along: Length::ZERO,
+                normal_offset: RulerOffset::from_micrometres(i64::MIN),
+            },
+            appearance,
+            RulerSampleError::OffsetMagnitudeOverflow,
+        ),
+        (
+            RulerSample {
+                along: Length::from_micrometres(8_000),
+                normal_offset: RulerOffset::from_micrometres(201),
+            },
+            appearance,
+            RulerSampleError::ErrorBoundExceeded,
+        ),
+    ];
+    for (sample, appearance, expected) in cases {
+        assert_eq!(
+            validate_ruler_sample_view(sample, line_length, appearance),
+            Err(expected),
+        );
+    }
 }
 
 #[test]
