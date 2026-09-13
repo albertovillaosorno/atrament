@@ -546,6 +546,54 @@ fn selection_rejects_provider_boundaries_that_reverse_index_order() {
     );
 }
 
+struct CompressedBoundaryProvider;
+
+impl GraphemeBoundaryProvider for CompressedBoundaryProvider {
+    fn byte_offset(
+        &self,
+        source: &str,
+        grapheme_index: usize,
+    ) -> Option<usize> {
+        match grapheme_index {
+            0 => Some(0),
+            2 => Some(1),
+            4 => Some(source.len()),
+            _ => None,
+        }
+    }
+
+    fn grapheme_count(&self, _source: &str) -> usize {
+        4
+    }
+}
+
+#[test]
+fn multi_boundary_queries_reject_impossible_byte_distance() {
+    let provider = CompressedBoundaryProvider;
+    let source = "abcd";
+    assert_eq!(
+        resolve_grapheme_cursor_selection(&provider, source, 0, 2),
+        Err(GraphemeCursorError::BoundaryDistanceTooSmall {
+            byte_distance: 1,
+            grapheme_distance: 2,
+        }),
+    );
+    assert_eq!(
+        resolve_grapheme_cursor_selection(&provider, source, 2, 0),
+        Err(GraphemeCursorError::BoundaryDistanceTooSmall {
+            byte_distance: 1,
+            grapheme_distance: 2,
+        }),
+    );
+    assert_eq!(
+        resolve_grapheme_cursor_step(&provider, source, 0, 2),
+        Err(GraphemeCursorError::BoundaryDistanceTooSmall {
+            byte_distance: 1,
+            grapheme_distance: 2,
+        }),
+    );
+}
+
 #[test]
 fn signed_steps_resolve_exact_grapheme_boundaries_without_clamping() {
     let provider = UnicodeGraphemeSegmentation;

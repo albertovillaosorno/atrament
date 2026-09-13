@@ -989,7 +989,9 @@ source.
 
 Provider grapheme counts larger than the source UTF-8 byte length reject before
 any boundary lookup or caller range/position check because such a count is
-impossible for non-overlapping extended grapheme clusters.
+impossible for non-overlapping extended grapheme clusters. Multi-boundary
+selection, step, and edit queries likewise reject a claimed grapheme distance
+that is larger than the resolved UTF-8 byte distance.
 
 A separate transport-neutral cursor-position boundary now resolves one caller
 extended-grapheme boundary index to its exact UTF-8 byte offset. It validates

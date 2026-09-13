@@ -234,6 +234,43 @@ fn replacement_preserves_normalization_spelling_exactly() {
     assert_ne!(edited, "cafseñor");
 }
 
+struct CompressedRangeBoundaryProvider;
+
+impl GraphemeBoundaryProvider for CompressedRangeBoundaryProvider {
+    fn byte_offset(
+        &self,
+        source: &str,
+        grapheme_index: usize,
+    ) -> Option<usize> {
+        match grapheme_index {
+            0 => Some(0),
+            2 => Some(1),
+            4 => Some(source.len()),
+            _ => None,
+        }
+    }
+
+    fn grapheme_count(&self, _source: &str) -> usize {
+        4
+    }
+}
+
+#[test]
+fn range_rejects_byte_span_too_small_for_grapheme_count() {
+    assert_eq!(
+        replace_grapheme_range(
+            &CompressedRangeBoundaryProvider,
+            "abcd",
+            GraphemeRange { count: 2, start: 0 },
+            "z",
+        ),
+        Err(GraphemeRangeError::BoundaryDistanceTooSmall {
+            byte_distance: 1,
+            grapheme_distance: 2,
+        }),
+    );
+}
+
 #[test]
 fn invalid_ranges_return_typed_errors() {
     let provider = UnicodeGraphemeSegmentation;

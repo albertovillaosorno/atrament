@@ -82,6 +82,13 @@ pub enum GraphemeCursorError {
         /// Requested grapheme boundary index.
         grapheme_index: usize,
     },
+    /// Provider byte distance cannot contain the claimed grapheme distance.
+    BoundaryDistanceTooSmall {
+        /// Absolute UTF-8 byte distance between the resolved boundaries.
+        byte_distance: usize,
+        /// Absolute grapheme-index distance between those boundaries.
+        grapheme_distance: usize,
+    },
     /// Provider byte order contradicts caller grapheme selection index order.
     SelectionBoundaryOrderMismatch {
         /// UTF-8 byte offset resolved for the caller anchor.
@@ -170,7 +177,8 @@ pub fn resolve_grapheme_cursor_position(
 /// the same resolved position instead of querying an internal boundary twice.
 /// Caller anchor/focus order is retained even when focus precedes anchor. The
 /// provider's resolved byte offsets must still preserve the same relative order
-/// as those two grapheme boundary indexes.
+/// as those two grapheme boundary indexes and enough byte distance to contain
+/// the claimed grapheme distance.
 ///
 /// # Errors
 ///
@@ -208,6 +216,14 @@ pub fn resolve_grapheme_cursor_selection(
             focus_index,
         });
     }
+    let grapheme_distance = anchor_index.abs_diff(focus_index);
+    let byte_distance = anchor.byte_offset.abs_diff(focus.byte_offset);
+    if byte_distance < grapheme_distance {
+        return Err(GraphemeCursorError::BoundaryDistanceTooSmall {
+            byte_distance,
+            grapheme_distance,
+        });
+    }
     Ok(GraphemeCursorSelection { anchor, focus })
 }
 
@@ -226,7 +242,9 @@ pub fn resolve_grapheme_cursor_selection(
 /// [`GraphemeCursorError::CursorStepOutOfBounds`] when the signed step would
 /// leave the inclusive boundary range `0..=grapheme_count`, or
 /// [`GraphemeCursorError::StepBoundaryOrderMismatch`] when a provider returns
-/// individually valid boundaries in an order inconsistent with the step.
+/// individually valid boundaries in an order inconsistent with the step, or
+/// [`GraphemeCursorError::BoundaryDistanceTooSmall`] when the byte distance
+/// cannot contain the claimed grapheme count.
 pub fn resolve_grapheme_cursor_step(
     boundaries: &dyn GraphemeBoundaryProvider,
     source: &str,
@@ -270,6 +288,14 @@ pub fn resolve_grapheme_cursor_step(
             origin_index,
             target_byte: target.byte_offset,
             target_index,
+        });
+    }
+    let grapheme_distance = origin_index.abs_diff(target_index);
+    let byte_distance = origin.byte_offset.abs_diff(target.byte_offset);
+    if byte_distance < grapheme_distance {
+        return Err(GraphemeCursorError::BoundaryDistanceTooSmall {
+            byte_distance,
+            grapheme_distance,
         });
     }
     Ok(target)

@@ -58,6 +58,13 @@ pub enum GraphemeRangeError {
         /// UTF-8 byte offset reported by the provider.
         observed: usize,
     },
+    /// Provider byte span cannot contain the requested grapheme count.
+    BoundaryDistanceTooSmall {
+        /// UTF-8 byte span between the resolved range boundaries.
+        byte_distance: usize,
+        /// Grapheme-cluster count claimed for that span.
+        grapheme_distance: usize,
+    },
     /// Provider omitted a boundary that its grapheme count advertised.
     BoundaryUnavailable {
         /// Grapheme boundary index whose byte offset was unavailable.
@@ -142,8 +149,9 @@ struct ResolvedRange {
 ///
 /// # Errors
 ///
-/// Returns a typed error when the range start/end is outside the source or when
-/// the exclusive end index cannot be represented.
+/// Returns a typed error when the range start/end is outside the source, when
+/// the exclusive end index cannot be represented, or when provider byte
+/// distance cannot contain the requested grapheme count.
 pub fn replace_grapheme_range(
     boundaries: &dyn GraphemeBoundaryProvider,
     source: &str,
@@ -258,6 +266,13 @@ fn resolve_range(
         return Err(GraphemeRangeError::NonAdvancingBoundaries {
             end_byte,
             start_byte,
+        });
+    }
+    let byte_distance = end_byte.saturating_sub(start_byte);
+    if byte_distance < range.count {
+        return Err(GraphemeRangeError::BoundaryDistanceTooSmall {
+            byte_distance,
+            grapheme_distance: range.count,
         });
     }
     Ok(ResolvedRange {

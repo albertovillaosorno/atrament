@@ -80,7 +80,8 @@ and Undo restores the original semantic text without changing authored bytes.
 
 Provider counts larger than the exact source UTF-8 byte length reject before any
 boundary lookup because no extended grapheme partition can contain more
-clusters than source bytes.
+clusters than source bytes. Resolved multi-boundary queries also reject when
+the UTF-8 byte distance is smaller than the claimed grapheme-index distance.
 
 A separate cursor-position application resolves those same boundaries to exact
 UTF-8 offsets without defining movement, selection, clamping, keybindings, or
