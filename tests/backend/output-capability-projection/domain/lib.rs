@@ -204,6 +204,100 @@ fn blocking_projection_preserves_every_non_ready_source_in_order() {
 }
 
 #[test]
+fn blocker_projection_filters_all_statuses_in_caller_order() {
+    let projection = review_live_output_capabilities(vec![
+        OutputCapabilityRequest {
+            accepted_conversion: None,
+            capability: OutputCapability::Semantic(
+                SemanticCapability::Paragraph,
+            ),
+            source_identity: "accepted-direct",
+        },
+        OutputCapabilityRequest {
+            accepted_conversion: None,
+            capability: OutputCapability::Semantic(
+                SemanticCapability::Photograph,
+            ),
+            source_identity: "conversion-required",
+        },
+        OutputCapabilityRequest {
+            accepted_conversion: Some(live_conversion(
+                LiveConversionKind::AcceptedLineArtProjection,
+                "accepted-line-art",
+            )),
+            capability: OutputCapability::Semantic(
+                SemanticCapability::Photograph,
+            ),
+            source_identity: "converted",
+        },
+        OutputCapabilityRequest {
+            accepted_conversion: None,
+            capability: OutputCapability::HardwareAction(
+                HardwareActionCapability::AutomaticToolChange,
+            ),
+            source_identity: "future",
+        },
+        OutputCapabilityRequest {
+            accepted_conversion: None,
+            capability: OutputCapability::Semantic(
+                SemanticCapability::LoosePaperNote,
+            ),
+            source_identity: "rejected",
+        },
+        OutputCapabilityRequest {
+            accepted_conversion: Some(live_conversion(
+                LiveConversionKind::OnePenGeometry,
+                "unexpected",
+            )),
+            capability: OutputCapability::Semantic(
+                SemanticCapability::Paragraph,
+            ),
+            source_identity: "unexpected-conversion",
+        },
+        OutputCapabilityRequest {
+            accepted_conversion: Some(live_conversion(
+                LiveConversionKind::SoberOnePenTitle,
+                "unsupported",
+            )),
+            capability: OutputCapability::Semantic(
+                SemanticCapability::Photograph,
+            ),
+            source_identity: "unsupported-conversion",
+        },
+    ]);
+    assert_eq!(
+        projection
+            .entries()
+            .iter()
+            .map(|entry| entry.status)
+            .collect::<Vec<_>>(),
+        [
+            OutputCapabilityProjectionStatus::AcceptedDirect,
+            OutputCapabilityProjectionStatus::ConversionRequired,
+            OutputCapabilityProjectionStatus::Converted,
+            OutputCapabilityProjectionStatus::FutureUnavailable,
+            OutputCapabilityProjectionStatus::Rejected,
+            OutputCapabilityProjectionStatus::UnexpectedConversion,
+            OutputCapabilityProjectionStatus::UnsupportedConversionChoice,
+        ],
+    );
+    assert_eq!(
+        projection
+            .blocking_entries()
+            .into_iter()
+            .map(|entry| entry.source_identity)
+            .collect::<Vec<_>>(),
+        [
+            "conversion-required",
+            "future",
+            "rejected",
+            "unexpected-conversion",
+            "unsupported-conversion",
+        ],
+    );
+}
+
+#[test]
 fn readiness_predicate_covers_all_projection_statuses() {
     let cases = [
         (OutputCapabilityProjectionStatus::AcceptedDirect, true),

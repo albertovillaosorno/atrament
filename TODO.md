@@ -2497,9 +2497,11 @@ supplying their own statuses.
 
 A read-only blocker projection now returns every non-ready source entry in
 original caller order using the same frozen readiness predicate as whole-review
-admission. It assigns no diagnostic code or prose. Blocking diagnostics,
-conversion execution, semantic projection construction, and Plan compilation
-remain open.
+admission. A seven-status fixture covers direct acceptance, conversion required,
+converted, future, rejected, unexpected conversion, and unsupported conversion
+choice together, proving only the two ready statuses are omitted. It assigns no
+diagnostic code or prose. Blocking diagnostics, conversion execution, semantic
+projection construction, and Plan compilation remain open.
 
 ### TODO - Implement the device-neutral motion plan
 
