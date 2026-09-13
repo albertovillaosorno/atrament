@@ -2914,9 +2914,10 @@ Current loopback-runtime evidence requires the exact canonical Host, browser
 Origin, and Bearer credential before protected draft mutation. The request line
 requires exactly one ASCII space between method, target, and HTTP/1.1; full
 0–255 byte sweeps now pin both separators to that one byte and reject every byte
-after the HTTP version. GET and POST are also case-sensitive across every ASCII
-case variant; tabs, repeated spaces, trailing whitespace, and other versions
-reject before routing.
+after the HTTP version. An independent 2,048-case byte-substitution matrix pins
+all eight `HTTP/1.1` bytes exactly. GET and POST are also case-sensitive across
+every ASCII case variant; tabs, repeated spaces, trailing whitespace, and other
+versions reject before routing.
 
 Browser privacy regression evidence also pins the generated workspace to exactly
 three admitted same-origin `fetch` call sites for handshake and draft transport.
@@ -3015,7 +3016,8 @@ matching body lengths and proves every other ASCII byte rejects without draft
 mutation. A second full-ASCII composition oracle permits outer SP/HTAB or
 another decimal digit around an existing zero while matching the resulting body
 length; every other byte rejects. Same or conflicting duplicate lengths reject
-regardless of header-name casing.
+regardless of header-name casing, including every ASCII case variant of the
+second `Content-Length` field name.
 
 Security-sensitive header values trim only HTTP space/tab OWS;
 Unicode whitespace remains part of the value and therefore cannot normalize a

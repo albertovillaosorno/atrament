@@ -683,6 +683,32 @@ fn request_methods_are_ascii_case_sensitive() {
 }
 
 #[test]
+fn every_http_version_byte_is_exact() {
+    const VERSION: &[u8] = b"HTTP/1.1";
+    for index in 0..VERSION.len() {
+        for byte in 0_u8..=255 {
+            let mut version = VERSION.to_vec();
+            version[index] = byte;
+            let mut request = b"GET /health ".to_vec();
+            request.extend_from_slice(&version);
+            request.extend_from_slice(
+                format!("\r\nHost: {EXPECTED_HOST}\r\n\r\n").as_bytes(),
+            );
+            let expected = if byte == VERSION[index] {
+                "HTTP/1.1 200 OK"
+            } else {
+                "HTTP/1.1 400 Bad Request"
+            };
+            assert_eq!(
+                status_line(&route_runtime(&request, EXPECTED_HOST)),
+                expected,
+                "HTTP version byte index={index} value={byte}",
+            );
+        }
+    }
+}
+
+#[test]
 fn every_request_line_trailing_byte_after_http_version_rejects() {
     for byte in 0_u8..=255 {
         let mut request = b"GET /health HTTP/1.1".to_vec();
@@ -2711,6 +2737,39 @@ fn content_length_outer_ows_and_duplicates_are_exact() {
                 status_line(&response),
                 "HTTP/1.1 400 Bad Request",
                 "duplicate lengths {first}/{second} name={second_name}",
+            );
+            assert_private_draft_unchanged(&draft);
+        }
+    }
+}
+
+#[test]
+fn content_length_case_variants_cannot_hide_duplicates() {
+    let authorization = format!("Bearer {EXPECTED_SECRET}");
+    for mask in 0..ascii_case_variant_count("Content-Length") {
+        let variant = ascii_case_variant("Content-Length", mask);
+        for second in ["0", "1"] {
+            let request = format!(
+                concat!(
+                    "POST /api/session/task HTTP/1.1\r\n",
+                    "Host: {}\r\nAuthorization: {}\r\nOrigin: {}\r\n",
+                    "Content-Length: 0\r\n{}: {}\r\n\r\n",
+                ),
+                EXPECTED_HOST,
+                authorization,
+                EXPECTED_ORIGIN,
+                variant,
+                second,
+            );
+            let mut draft = seeded_private_draft();
+            assert_eq!(
+                status_line(&route_with_draft(
+                    request.as_bytes(),
+                    EXPECTED_HOST,
+                    &mut draft,
+                )),
+                "HTTP/1.1 400 Bad Request",
+                "Content-Length duplicate case mask {mask} second={second}",
             );
             assert_private_draft_unchanged(&draft);
         }
