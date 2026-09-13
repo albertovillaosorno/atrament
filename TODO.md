@@ -1429,9 +1429,10 @@ construction still has no implicit validation, selection, or fallback side
 effect.
 
 Successful admission now also returns constructor-sealed evidence borrowing the
-exact input, caller-order candidate slice, and planning context. A 31-case
-compact oracle exhausts every two-identity sequence through length four and
-requires raw-candidate, complete-input, and sealed-input outcomes to agree.
+exact input, caller-order candidate slice, and planning context. A 1,093-case
+compact oracle exhausts every three-identity sequence through length six and
+requires raw-candidate, complete-input, and sealed-input outcomes to agree on
+the exact first duplicate and earliest prior owner.
 
 The inspectable output plan keeps ordered samples with caller-owned position,
 tangent, curvature, width or pressure proxy, velocity, and explicit contact

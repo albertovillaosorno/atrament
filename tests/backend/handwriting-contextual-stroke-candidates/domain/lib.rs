@@ -183,18 +183,18 @@ fn duplicate_candidate_identity_reports_earliest_prior_owner() {
 }
 
 #[test]
-fn all_31_two_identity_sequences_match_first_duplicate_oracle() {
-    let mut cases = 0_u8;
+fn all_three_identity_sequences_through_length_six_match_oracle() {
+    let mut cases = 0_u16;
     let mut saw_unique = false;
     let mut saw_duplicate = false;
-    for length in 0_u32..=4 {
-        for encoded in 0_u32..2_u32.pow(length) {
+    for length in 0_u32..=6 {
+        for encoded in 0_u32..3_u32.pow(length) {
             let mut state = encoded;
             let mut identities = Vec::new();
             let mut candidates = Vec::new();
             for index in 0..length {
-                let identity = (state % 2) as u16;
-                state /= 2;
+                let identity = (state % 3) as u16;
+                state /= 3;
                 identities.push(identity);
                 candidates.push(candidate(
                     identity,
@@ -252,7 +252,7 @@ fn all_31_two_identity_sequences_match_first_duplicate_oracle() {
             cases = cases.saturating_add(1);
         }
     }
-    assert_eq!(cases, 31);
+    assert_eq!(cases, 1_093);
     assert!(saw_unique);
     assert!(saw_duplicate);
 }
