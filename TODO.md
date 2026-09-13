@@ -2570,12 +2570,17 @@ transforms, limit geometry, visual rendering, timing simulation beyond plan
 evidence, and hardware contact remain open.
 
 Offline simulation now also produces a borrowed inspection trace only after the
-complete dry run validates. The trace retains the exact plan and calibration,
-operation order, pen-up/down geometry, pause/checkpoint payloads, per-operation
-limit evidence, plan/revision identities, physical bounds, and admitted total
-estimated duration without copying or rewriting plan authority. The validated
-trace is constructor-owned and exposes only read-only dry-run and step views, so
-callers cannot fabricate a successful trace around an invalid dry run.
+complete dry run validates. Trace construction runs the same 16-state matrix and
+must either return the identical typed dry-run failure or borrow the exact
+admitted package with aligned limit evidence. The trace retains the exact plan
+and calibration, operation order, pen-up/down geometry, pause/checkpoint
+payloads, per-operation limit evidence, plan/revision identities, physical
+bounds, and admitted total estimated duration without copying or rewriting plan
+authority.
+
+The validated trace is constructor-owned and exposes only read-only dry-run and
+step views, so callers cannot fabricate a successful trace around an invalid
+dry run.
 Pixel/vector visualization, coordinate transforms, limit geometry, and derived
 per-operation timing remain open.
 

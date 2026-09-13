@@ -219,3 +219,59 @@ fn invalid_dry_run_produces_no_simulation_trace() {
         Err(DryRunValidationError::UnknownLimitState { operation_index: 3 }),
     );
 }
+
+#[test]
+fn simulation_trace_matches_all_dry_run_limit_states() {
+    let states = [
+        DryRunLimitState::NotApplicable,
+        DryRunLimitState::Unknown,
+        DryRunLimitState::Violated,
+        DryRunLimitState::WithinLimits,
+    ];
+    let mut cases = 0_u8;
+    for operation_index in 0..4 {
+        let is_motion = matches!(operation_index, 0 | 3);
+        for state in states {
+            let mut dry_run = dry_run();
+            dry_run.limit_evaluations[operation_index].state = state;
+            let expected_error = match state {
+                DryRunLimitState::NotApplicable if is_motion => {
+                    Some(DryRunValidationError::MotionLimitMissing {
+                        operation_index,
+                    })
+                },
+                DryRunLimitState::Unknown => {
+                    Some(DryRunValidationError::UnknownLimitState {
+                        operation_index,
+                    })
+                },
+                DryRunLimitState::Violated => {
+                    Some(DryRunValidationError::ViolatedBoundary {
+                        operation_index,
+                    })
+                },
+                DryRunLimitState::NotApplicable
+                | DryRunLimitState::WithinLimits => None,
+            };
+            match expected_error {
+                Some(error) => assert_eq!(
+                    build_motion_plan_simulation_trace(&dry_run),
+                    Err(error),
+                    "trace rejection mismatch at operation {operation_index}",
+                ),
+                None => {
+                    let trace = build_motion_plan_simulation_trace(&dry_run)
+                        .expect("admitted dry run must produce a trace");
+                    assert!(std::ptr::eq(trace.dry_run(), &dry_run));
+                    assert_eq!(trace.steps().len(), 4);
+                    assert_eq!(
+                        trace.steps()[operation_index].limit_evaluation.state,
+                        state,
+                    );
+                },
+            }
+            cases = cases.saturating_add(1);
+        }
+    }
+    assert_eq!(cases, 16);
+}
