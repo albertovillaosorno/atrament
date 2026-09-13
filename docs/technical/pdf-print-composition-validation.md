@@ -118,6 +118,11 @@ scanner distortion. Each observation retains its caller-owned source/provenance,
 unit, and measured value. `PrintScanEvidence` binds an ordered observation set
 to the exact rendered or exported output identity being measured.
 
+Structural admission requires at least one observation from every family in
+canonical requirement order and then seals the exact evidence set for later
+consumers. Repeated measurements remain valid, so this does not choose an
+aggregation or sample-sufficiency policy.
+
 No tolerance or calibration conclusion is inferred from a measurement. Device
 selection, correction transforms, statistical treatment, and pass/fail policy
 remain separate authorities.
@@ -141,8 +146,9 @@ The present output domains fail structurally before adapter work when:
 - preview/final roles are supplied incorrectly;
 - preview and final disagree on shared geometry, seed, blend order, or physical
   bounds;
-- render-regression evidence duplicates an axis; or
-- render-regression evidence omits a required independent axis.
+- render-regression evidence duplicates an axis;
+- render-regression evidence omits a required independent axis; or
+- print/scan evidence omits a required physical measurement family.
 
 Other important failures are not executable yet because their owning adapters or
 policies do not exist. These include malformed PDF objects, font or asset
@@ -179,7 +185,8 @@ Current checked-in regression evidence includes:
 - `tests/backend/digital-paper-note-plan/domain/lib.rs`, which pins fill, fold,
   stacking, soft-shadow intent, and caller-provided readable-contrast evidence;
 - `tests/backend/print-scan-measurement/domain/lib.rs`, which pins all eight
-  first-release physical observation families and their provenance; and
+  first-release physical observation families, their provenance, and all 256
+  completeness masks through both direct and sealed admission; and
 - `tests/backend/render-regression-evidence/domain/lib.rs`, which pins complete,
   independent visual-regression evidence and explicit mismatches.
 

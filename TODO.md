@@ -1717,9 +1717,14 @@ Current executable evidence now names all eight physical round-trip measurement
 families explicitly and keeps each caller-owned observation tied to its source,
 unit, value, and rendered/exported output identity. The four ADR verification
 families remain physical scale, clipping, grid registration, and photo
-placement;
-P5 additionally retains margins, color shift, line weight, and scanner
-distortion. No observation is interpreted as calibration success.
+placement; P5 additionally retains margins, color shift, line weight, and
+scanner distortion.
+
+Structural admission now requires at least one observation for every family and
+returns constructor-sealed evidence borrowing the exact complete set. Repeated
+measurements remain valid. An exhaustive 256-mask oracle requires the direct and
+sealed paths to report the first missing family in canonical requirement order
+without interpreting any observation as calibration success.
 
 Representative-device selection, concrete units, tolerances, statistical
 analysis, correction transforms, calibration fitting, and pass/fail policy
