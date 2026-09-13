@@ -975,9 +975,11 @@ A 114-entry application sweep also inserts each exact requirement through
 `SessionApplication`, verifies the accepted semantic text byte-for-byte, and
 Undo restores the original text under a fresh revision identity.
 
-Missing, invalid, non-advancing, reversed, or inconsistent source-anchor
-boundaries from an injected segmentation provider remain typed failures and do
-not mutate accepted state. Source-anchor validation runs before caller range
+Missing, invalid, non-advancing, reversed, inconsistent source-anchor, or
+impossible byte-capacity boundaries from an injected segmentation provider
+remain typed failures and do not mutate accepted state. Active-session range
+edits propagate both single-boundary and multi-boundary capacity failures before
+semantic mutation. Source-anchor validation runs before caller range
 bounds, so an underreported provider count cannot masquerade as a user error.
 Zero-length insertion resolves an internal provider
 boundary once, so a changing repeated answer cannot turn insertion into byte

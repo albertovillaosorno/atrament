@@ -6462,6 +6462,49 @@ impl GraphemeBoundaryProvider for EdgeAliasingAdvertisedBoundary {
     }
 }
 
+struct CapacityMismatchAdvertisedBoundary;
+
+impl GraphemeBoundaryProvider for CapacityMismatchAdvertisedBoundary {
+    fn byte_offset(
+        &self,
+        source: &str,
+        grapheme_index: usize,
+    ) -> Option<usize> {
+        match grapheme_index {
+            0 => Some(0),
+            3 => Some(1),
+            4 => Some(source.len()),
+            _ => None,
+        }
+    }
+
+    fn grapheme_count(&self, _source: &str) -> usize {
+        4
+    }
+}
+
+struct CompressedDistanceAdvertisedBoundary;
+
+impl GraphemeBoundaryProvider for CompressedDistanceAdvertisedBoundary {
+    fn byte_offset(
+        &self,
+        source: &str,
+        grapheme_index: usize,
+    ) -> Option<usize> {
+        match grapheme_index {
+            0 => Some(0),
+            1 => Some(3),
+            3 => Some(4),
+            4 => Some(source.len()),
+            _ => None,
+        }
+    }
+
+    fn grapheme_count(&self, _source: &str) -> usize {
+        4
+    }
+}
+
 #[test]
 fn grapheme_provider_invariant_failure_is_atomic_for_session_state() {
     let identities = IdentityAllocator::new();
@@ -6546,6 +6589,68 @@ fn grapheme_provider_invariant_failure_is_atomic_for_session_state() {
         Err(GraphemeRangeError::InternalBoundaryAtSourceEdge {
             byte_offset: "éx".len(),
             grapheme_index: 1,
+        }),
+    );
+    assert_eq!(session.history_availability(), before_history);
+    assert_eq!(session.accepted_revision(), Some(&before_revision));
+}
+
+#[test]
+fn grapheme_capacity_failures_are_atomic_for_session_state() {
+    let identities = IdentityAllocator::new();
+    let source = "abcdefgh";
+    let (candidate, candidate_span) =
+        editable_text_candidate(&identities, source);
+    let mut session = application::SessionApplication::default();
+    let AcceptanceOutcome::Accepted { mapping, revision: base } =
+        session.accept_candidate(candidate)
+    else {
+        panic!("grapheme-capacity fixture candidate must be accepted");
+    };
+    let span = mapping
+        .iter()
+        .find(|entry| entry.candidate == candidate_span)
+        .expect("grapheme-capacity span identity must map")
+        .accepted;
+    let before_history = session.history_availability();
+    let before_revision = session
+        .accepted_revision()
+        .expect("grapheme-capacity accepted revision")
+        .clone();
+
+    assert_eq!(
+        session.replace_text_grapheme_range(
+            &CapacityMismatchAdvertisedBoundary,
+            application::TextGraphemeRangeEdit {
+                base,
+                range: GraphemeRange { count: 0, start: 3 },
+                replacement: "z",
+                target: span,
+            },
+        ),
+        Err(GraphemeRangeError::InternalBoundaryCapacityMismatch {
+            byte_offset: 1,
+            grapheme_count: 4,
+            grapheme_index: 3,
+            source_bytes: source.len(),
+        }),
+    );
+    assert_eq!(session.history_availability(), before_history);
+    assert_eq!(session.accepted_revision(), Some(&before_revision));
+
+    assert_eq!(
+        session.replace_text_grapheme_range(
+            &CompressedDistanceAdvertisedBoundary,
+            application::TextGraphemeRangeEdit {
+                base,
+                range: GraphemeRange { count: 2, start: 1 },
+                replacement: "z",
+                target: span,
+            },
+        ),
+        Err(GraphemeRangeError::BoundaryDistanceTooSmall {
+            byte_distance: 1,
+            grapheme_distance: 2,
         }),
     );
     assert_eq!(session.history_availability(), before_history);
