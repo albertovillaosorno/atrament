@@ -2008,8 +2008,11 @@ session, choose rejection precedence, normalize commands, or execute work.
 
 The shared application-operation-lifecycle domain now freezes the six
 first-release operation classes and maps Apply, history traversal, Export, and
-the three read-only operations to their authoritative effect boundaries. It does
-not implement cancellation, progress, operation identity, scheduling, or retry.
+the three read-only operations to their authoritative effect boundaries. It also
+resolves already-qualified cancellation observations without treating a request
+as proof: proven pre-boundary cancellation means no effect, while a crossed
+boundary remains authoritative. Cancellation admission/execution, progress,
+operation identity, scheduling, and retry remain open.
 
 Current design evidence freezes autonomous-agent loop stop conditions, typed
 progress versus non-progress, same-retry recovery, bounded automation budgets,

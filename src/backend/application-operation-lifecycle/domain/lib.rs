@@ -9,16 +9,20 @@
 //
 // Boundary-Contract:
 // - Owns:
-//   - Frozen application operation classes and their lifecycle effect boundary.
+//   - Frozen application operation classes, their lifecycle effect boundary,
+//     and cancellation meaning for already-qualified boundary observations.
 // - Must-Not:
 //   - Schedule work, assign operation IDs, report progress, cancel execution,
 //     persist jobs, recover retries, mutate state, or map adapter protocols.
 // - Allows:
-//   - Inputs: One frozen first-release application operation class.
-//   - Outputs: Its exact authoritative completion/effect boundary class.
+//   - Inputs: One frozen operation class and already-qualified cancellation
+//     observations.
+//   - Outputs: Its exact effect boundary and cancellation disposition when
+//     established.
 //   - Side effects: None.
 // - Split-When:
-//   - Progress or cancellation admission gains executable lifecycle authority.
+//   - Progress, cancellation admission, or execution scheduling gains lifecycle
+//     authority.
 // - Merge-When:
 //   - One application coordinator directly owns every operation lifecycle.
 // - Summary:
@@ -65,6 +69,40 @@ pub enum ApplicationOperationEffectBoundary {
     ReadOnlyCompletion,
 }
 
+/// Already-qualified observation relevant to cancellation resolution.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub enum ApplicationCancellationObservation {
+    /// The owning operation proved its authoritative effect boundary was
+    /// crossed.
+    EffectBoundaryCrossed,
+    /// A cancellation request exists, but no final boundary fact is
+    /// established.
+    RequestOnly,
+    /// The owning operation proved cancellation took effect before its
+    /// boundary.
+    TookEffectBeforeBoundary,
+}
+
+/// Lifecycle meaning established by a qualified cancellation observation.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ApplicationCancellationDisposition {
+    /// Cancellation took effect before the owning boundary, so no effect was
+    /// established by that operation.
+    CancelledBeforeEffect,
+    /// The authoritative boundary was already crossed and cannot be relabeled
+    /// as cancelled or rolled back by the cancellation request.
+    EffectRemainsAuthoritative,
+}
+
+/// Qualified cancellation resolution retaining the operation's owning boundary.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ApplicationCancellationResolution {
+    /// Boundary whose status makes the cancellation outcome authoritative.
+    pub boundary: ApplicationOperationEffectBoundary,
+    /// Cancellation meaning established by the qualified observation.
+    pub disposition: ApplicationCancellationDisposition,
+}
+
 /// Return the authoritative effect boundary for one operation class.
 ///
 /// This does not say whether the boundary was crossed, whether cancellation is
@@ -76,17 +114,48 @@ pub const fn application_operation_effect_boundary(
     match operation {
         ApplicationOperationClass::Apply => {
             ApplicationOperationEffectBoundary::AcceptedSemanticCommit
-        },
+        }
         ApplicationOperationClass::Export => {
             ApplicationOperationEffectBoundary::FileCommit
-        },
+        }
         ApplicationOperationClass::HistoryTraversal => {
             ApplicationOperationEffectBoundary::HistoryTraversalCommit
-        },
+        }
         ApplicationOperationClass::Plan
         | ApplicationOperationClass::Render
         | ApplicationOperationClass::Validate => {
             ApplicationOperationEffectBoundary::ReadOnlyCompletion
+        }
+    }
+}
+
+/// Resolve cancellation meaning only from an already-qualified boundary fact.
+///
+/// A request alone returns `None`: it is not proof that cancellation took
+/// effect, that a commit was avoided, or that completed work was rolled back.
+/// This function does not admit cancellation, observe execution, or create a
+/// result class.
+#[must_use]
+pub const fn application_cancellation_resolution(
+    operation: ApplicationOperationClass,
+    observation: ApplicationCancellationObservation,
+) -> Option<ApplicationCancellationResolution> {
+    let boundary = application_operation_effect_boundary(operation);
+    match observation {
+        ApplicationCancellationObservation::RequestOnly => None,
+        ApplicationCancellationObservation::TookEffectBeforeBoundary => {
+            Some(ApplicationCancellationResolution {
+                boundary,
+                disposition:
+                    ApplicationCancellationDisposition::CancelledBeforeEffect,
+            })
+        },
+        ApplicationCancellationObservation::EffectBoundaryCrossed => {
+            Some(ApplicationCancellationResolution {
+                boundary,
+                disposition: ApplicationCancellationDisposition::
+                    EffectRemainsAuthoritative,
+            })
         },
     }
 }
