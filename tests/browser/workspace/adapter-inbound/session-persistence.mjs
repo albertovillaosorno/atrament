@@ -165,6 +165,32 @@ test("page exit invalidates credential, work, and session text", async () => {
 });
 
 
+test("bfcache restore cannot resume an invalidated page session", async () => {
+    const source = await readFile(MAIN_MODULE, "utf8");
+    const start = source.indexOf(
+        'window.addEventListener("pageshow", (event) => {',
+    );
+    assert.notEqual(start, -1, "generated workspace must handle pageshow");
+    const end = source.indexOf("\n});", start);
+    assert.notEqual(end, -1, "pageshow handler must have a bounded body");
+    const handler = source.slice(start, end);
+    const persisted = handler.indexOf("if (event.persisted)");
+    const reload = handler.indexOf("window.location.reload();", persisted);
+    const returnAfterReload = handler.indexOf("return;", reload);
+    const ordinaryRestore = handler.indexOf(
+        "const hadLocalNavigationFragment",
+        returnAfterReload,
+    );
+    assert.ok(
+        persisted !== -1
+            && reload > persisted
+            && returnAfterReload > reload
+            && ordinaryRestore > returnAfterReload,
+        "persisted pages must reload before ordinary pageshow restoration",
+    );
+});
+
+
 test(
     "authorization loss invalidates the complete browser session",
     async () => {

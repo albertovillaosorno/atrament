@@ -176,7 +176,9 @@ process descriptors inherited from the test harness.
 Checked-in browser policy tests guard one-time launch-credential fragment
 consumption, credential invalidation on `pagehide`, in-flight handshake and
 draft request cancellation, pending clipboard/draft invalidation, session-text
-clearing, and bfcache subtree scrubbing. A `401` during handshake, draft
+clearing, bfcache subtree scrubbing, and mandatory reload when a persisted page
+is restored. A `401`
+during handshake, draft
 hydration, or draft replacement now invalidates the same page-session work and
 scrubs all four session text surfaces before requiring restart.
 
