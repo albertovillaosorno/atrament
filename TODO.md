@@ -71,8 +71,9 @@ still reachable through older history, including their exact byte sequences.
 A process fixture now retains all three private draft fields, rejects one
 oversized draft replacement with the shared resource-limit diagnostic,
 retains bytes for two semantic assets, commits text and asset-reference history,
-computes command-target material and typed precondition rejection, a
-revision-bound direct-edit preview, version-bound direct-edit proposal, ordered
+computes command-target material, bounded identity inspection and typed
+precondition rejection, a revision-bound direct-edit preview, version-bound
+direct-edit proposal, ordered
 and caller-bounded batch review with dependency-selection analysis, grapheme
 cursor and selection inspection, measured pagination,
 fixed-region overflow diagnostics

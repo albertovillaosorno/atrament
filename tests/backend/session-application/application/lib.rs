@@ -693,6 +693,40 @@ fn run_process_fixture_child(mode: &str) {
         material.direct_edit_family,
         Some(SemanticCommandFamily::TextContent),
     );
+    let span_descriptor = SemanticIdentityDescriptor {
+        kind: SemanticIdentityKind::InlineSpan,
+        owner: Some(text_block),
+    };
+    assert_eq!(
+        session.inspect_identity(revision, span),
+        IdentityInspectOutcome::Inspected {
+            descriptor: span_descriptor,
+            revision,
+            target: span,
+        },
+    );
+    assert_eq!(
+        session.inspect_identity_kind(revision, span),
+        IdentityKindInspectOutcome::Inspected {
+            kind: SemanticIdentityKind::InlineSpan,
+            revision,
+            target: span,
+        },
+    );
+    assert_eq!(
+        session.inspect_identity_ancestry_bounded(revision, span, 1),
+        IdentityAncestryInspectOutcome::Inspected {
+            completeness: IdentityAncestryCompleteness::Incomplete {
+                remaining_identity: text_block,
+            },
+            entries: vec![IdentityAncestryEntry {
+                descriptor: span_descriptor,
+                identity: span,
+            }],
+            revision,
+            target: span,
+        },
+    );
     let stale_expected = EditableSemanticValue::Text(String::from(
         "process-private stale expectation",
     ));
