@@ -3006,7 +3006,10 @@ sign before draft state can change.
 
 Security-sensitive header values trim only HTTP space/tab OWS;
 Unicode whitespace remains part of the value and therefore cannot normalize a
-malformed Host, Origin, or Bearer credential into an admitted one.
+malformed Host, Origin, or Bearer credential into an admitted one. Full-ASCII
+boundary oracles now verify outer Host and Origin normalization byte by byte,
+and a separate 128-byte Bearer-separator oracle requires the scheme's literal
+single ASCII space rather than treating tab or other whitespace as equivalent.
 Session-secret comparison executes all 64 admitted byte positions for every
 candidate length;
 0 through 128 byte candidates pin exact-length admission without claiming

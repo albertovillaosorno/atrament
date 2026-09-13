@@ -711,6 +711,124 @@ fn every_ascii_header_field_value_byte_matches_control_rule() {
     }
 }
 
+fn ascii_header_byte_status(byte: u8, visible_rejection: &str) -> &str {
+    if byte == b'\t' || (byte >= b' ' && byte != 0x7f) {
+        visible_rejection
+    } else {
+        "HTTP/1.1 400 Bad Request"
+    }
+}
+
+#[test]
+fn security_header_outer_ows_trims_only_ascii_space_and_tab() {
+    let authorization = format!("Bearer {EXPECTED_SECRET}");
+    for byte in 0_u8..=127 {
+        for prefix in [true, false] {
+            let mut host_value = EXPECTED_HOST.as_bytes().to_vec();
+            if prefix {
+                host_value.insert(0, byte);
+            } else {
+                host_value.push(byte);
+            }
+            let mut request = b"GET /health HTTP/1.1\r\nHost:".to_vec();
+            request.extend_from_slice(&host_value);
+            request.extend_from_slice(b"\r\n\r\n");
+            let expected = if matches!(byte, b' ' | b'\t') {
+                "HTTP/1.1 200 OK"
+            } else {
+                ascii_header_byte_status(
+                    byte,
+                    "HTTP/1.1 421 Misdirected Request",
+                )
+            };
+            assert_eq!(
+                status_line(&route_runtime(&request, EXPECTED_HOST)),
+                expected,
+                "Host byte {byte} prefix={prefix}",
+            );
+
+            let mut origin_value = EXPECTED_ORIGIN.as_bytes().to_vec();
+            if prefix {
+                origin_value.insert(0, byte);
+            } else {
+                origin_value.push(byte);
+            }
+            let mut request = format!(
+                concat!(
+                    "POST /api/session/task HTTP/1.1\r\n",
+                    "Host: {}\r\nAuthorization: {}\r\nOrigin:",
+                ),
+                EXPECTED_HOST, authorization,
+            )
+            .into_bytes();
+            request.extend_from_slice(&origin_value);
+            request.extend_from_slice(
+                b"\r\nContent-Length: 0\r\n\r\n",
+            );
+            let expected = if matches!(byte, b' ' | b'\t') {
+                "HTTP/1.1 204 No Content"
+            } else {
+                ascii_header_byte_status(
+                    byte,
+                    "HTTP/1.1 401 Unauthorized",
+                )
+            };
+            let mut draft = SessionDraftService::default();
+            let response = route_with_draft(
+                &request,
+                EXPECTED_HOST,
+                &mut draft,
+            );
+            assert_eq!(
+                status_line(&response),
+                expected,
+                "Origin byte {byte} prefix={prefix}",
+            );
+        }
+    }
+}
+
+#[test]
+fn bearer_scheme_requires_one_literal_ascii_space_separator() {
+    for byte in 0_u8..=127 {
+        let mut request = format!(
+            concat!(
+                "POST /api/session/task HTTP/1.1\r\n",
+                "Host: {}\r\nAuthorization: Bearer",
+            ),
+            EXPECTED_HOST,
+        )
+        .into_bytes();
+        request.push(byte);
+        request.extend_from_slice(EXPECTED_SECRET.as_bytes());
+        request.extend_from_slice(
+            format!(
+                "\r\nOrigin: {EXPECTED_ORIGIN}\r\nContent-Length: 0\r\n\r\n",
+            )
+            .as_bytes(),
+        );
+        let expected = if byte == b' ' {
+            "HTTP/1.1 204 No Content"
+        } else {
+            ascii_header_byte_status(
+                byte,
+                "HTTP/1.1 401 Unauthorized",
+            )
+        };
+        let mut draft = SessionDraftService::default();
+        let response = route_with_draft(
+            &request,
+            EXPECTED_HOST,
+            &mut draft,
+        );
+        assert_eq!(
+            status_line(&response),
+            expected,
+            "Bearer separator byte {byte}",
+        );
+    }
+}
+
 #[test]
 fn origin_form_ascii_graphics_match_rfc3986_character_classes() {
     let allowed = |byte: u8| {
