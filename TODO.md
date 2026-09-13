@@ -1619,10 +1619,14 @@ Current executable evidence now makes Preview and Final explicit quality roles.
 A pair validates only when vector geometry, calibrated material authority,
 physical noise scale, render seed, material blend order, and physical bounds
 remain exactly shared; caller-owned texture resolution and sampling cost may
-differ. Rendering, concrete quality values, performance budgets, scheduling,
-and sampling algorithms remain open.
-Both wrong-role paths reject before shared-authority comparison, including when
-other authority fields also drift.
+differ. Successful comparison now returns constructor-sealed evidence borrowing
+the exact preview and final profiles.
+
+An exhaustive 256-mask oracle crosses both wrong-role states with independent
+drift in all six shared-authority fields. It requires direct and sealed
+admission to preserve preview-role, final-role, then authority-mismatch
+precedence while quality-only costs differ. Rendering, concrete quality values,
+performance budgets, scheduling, and sampling algorithms remain open.
 
 Current design evidence freezes Render as a read-only application capability
 bound to one accepted revision and deterministic vector/material inputs. Preview

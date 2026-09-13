@@ -100,7 +100,10 @@ such as sampling cost or texture resolution may differ between Preview and
 Final.
 
 This enforces the accepted rule that preview and final are quality variants of
-one layout/render authority rather than separate layout engines.
+one layout/render authority rather than separate layout engines. A
+constructor-sealed view retains the exact admitted pair, and an exhaustive
+256-mask oracle crosses both role errors with all six shared-authority drift
+bits while quality-only costs differ.
 
 ### Physical round-trip evidence is typed but uninterpreted
 

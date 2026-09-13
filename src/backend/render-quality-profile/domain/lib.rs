@@ -87,6 +87,46 @@ pub struct RenderQualityProfile<Authority, Cost> {
     pub mode: RenderQualityMode,
 }
 
+/// Constructor-sealed evidence that one preview/final pair shares exact render
+/// authority and carries the required quality roles.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ValidatedRenderQualityPair<
+    'preview,
+    'final_profile,
+    Authority,
+    PreviewCost,
+    FinalCost,
+> {
+    final_profile: &'final_profile RenderQualityProfile<Authority, FinalCost>,
+    preview: &'preview RenderQualityProfile<Authority, PreviewCost>,
+}
+
+impl<'preview, 'final_profile, Authority, PreviewCost, FinalCost>
+    ValidatedRenderQualityPair<
+        'preview,
+        'final_profile,
+        Authority,
+        PreviewCost,
+        FinalCost,
+    >
+{
+    /// Return the exact admitted final-quality profile.
+    #[must_use]
+    pub const fn final_profile(
+        &self,
+    ) -> &'final_profile RenderQualityProfile<Authority, FinalCost> {
+        self.final_profile
+    }
+
+    /// Return the exact admitted preview-quality profile.
+    #[must_use]
+    pub const fn preview(
+        &self,
+    ) -> &'preview RenderQualityProfile<Authority, PreviewCost> {
+        self.preview
+    }
+}
+
 /// Why a preview/final profile pair violates deterministic render authority.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum RenderQualityPairError {
@@ -120,4 +160,39 @@ where
         return Err(RenderQualityPairError::SharedAuthorityMismatch);
     }
     Ok(())
+}
+
+/// Validate and seal one preview/final pair for downstream render consumers.
+///
+/// # Errors
+///
+/// Returns the same role or shared-authority failure as
+/// [`validate_preview_final_pair`].
+pub fn validate_preview_final_pair_view<
+    'preview,
+    'final_profile,
+    Authority,
+    PreviewCost,
+    FinalCost,
+>(
+    preview: &'preview RenderQualityProfile<Authority, PreviewCost>,
+    final_profile: &'final_profile RenderQualityProfile<Authority, FinalCost>,
+) -> Result<
+    ValidatedRenderQualityPair<
+        'preview,
+        'final_profile,
+        Authority,
+        PreviewCost,
+        FinalCost,
+    >,
+    RenderQualityPairError,
+>
+where
+    Authority: PartialEq,
+{
+    validate_preview_final_pair(preview, final_profile)?;
+    Ok(ValidatedRenderQualityPair {
+        final_profile,
+        preview,
+    })
 }

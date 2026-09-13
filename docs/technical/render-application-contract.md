@@ -88,7 +88,9 @@ bounds.
 
 A quality option that can legitimately change authoritative geometry is not a
 mere preview-quality setting and must enter through the owning semantic or
-layout contract instead.
+layout contract instead. Successful pair admission is constructor-sealed so a
+later renderer can retain the exact compared preview/final profiles without
+reinterpreting the shared-authority rule.
 
 ### Material rendering
 
