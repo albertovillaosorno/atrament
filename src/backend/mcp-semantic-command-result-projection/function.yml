@@ -1,0 +1,9 @@
+identity:
+  id: function:mcp-semantic-command-result-projection
+  name: mcp-semantic-command-result-projection
+  path: src/backend/mcp-semantic-command-result-projection
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: application

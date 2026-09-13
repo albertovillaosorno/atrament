@@ -2210,6 +2210,16 @@ onto semantic-command application admission. Exact backend snapshot membership
 remains authoritative across all four command application bits; MCP vocabulary
 alone never turns an omitted operation into an admitted one.
 
+
+MCP Validate and Apply now also have a separate read-only semantic-result
+projection. It preserves the shared 15-class Validate/Apply applicability gate
+before exposing commit disposition. Qualified Apply cancellation is projected
+only through Apply.
+
+The other six MCP capability classes receive no semantic command-result meaning.
+No command execution, retry storage, tool schema, or transport admission is
+implied.
+
 MCP History traversal now has a separate read-only projection for all six frozen
 history result dispositions and backend-owned Undo/Redo availability. Qualified
 history cancellation also reuses the shared lifecycle mapping only through that

@@ -69,6 +69,7 @@ members = [
     "src/backend/mcp-history-result-projection",
     "src/backend/mcp-operation-lifecycle-projection",
     "src/backend/mcp-semantic-command-admission-projection",
+    "src/backend/mcp-semantic-command-result-projection",
     "src/backend/pdf-composition-plan",
     "src/backend/physical-compatibility-ledger",
     "src/backend/physical-recovery-state",
