@@ -3004,7 +3004,10 @@ headers or generated request mutation.
 Request framing rejects transfer encoding,
 duplicate content lengths,
 body-length mismatch, and non-digit Content-Length syntax such as a leading plus
-sign before draft state can change.
+sign before draft state can change. A complete 128-byte single-character
+`Content-Length` oracle admits exactly the ten ASCII decimal digits with
+matching body lengths and proves every other ASCII byte rejects without draft
+mutation.
 
 Security-sensitive header values trim only HTTP space/tab OWS;
 Unicode whitespace remains part of the value and therefore cannot normalize a
