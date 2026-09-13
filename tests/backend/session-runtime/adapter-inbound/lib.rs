@@ -711,6 +711,199 @@ fn every_ascii_header_field_value_byte_matches_control_rule() {
     }
 }
 
+fn ascii_case_variant(name: &str, mut mask: u32) -> String {
+    let mut variant = String::with_capacity(name.len());
+    for byte in name.bytes() {
+        if byte.is_ascii_alphabetic() {
+            let byte = if mask & 1 == 0 {
+                byte.to_ascii_lowercase()
+            } else {
+                byte.to_ascii_uppercase()
+            };
+            variant.push(char::from(byte));
+            mask >>= 1;
+        } else {
+            variant.push(char::from(byte));
+        }
+    }
+    assert_eq!(mask, 0, "case mask exceeds field-name letter count");
+    variant
+}
+
+fn ascii_case_variant_count(name: &str) -> u32 {
+    let letters = name
+        .bytes()
+        .filter(u8::is_ascii_alphabetic)
+        .count();
+    1_u32
+        .checked_shl(
+            u32::try_from(letters).expect("field-name length fits u32"),
+        )
+        .expect("field-name case variants fit u32")
+}
+
+#[test]
+fn security_and_framing_headers_admit_every_ascii_case_variant() {
+    let authorization = format!("Bearer {EXPECTED_SECRET}");
+
+    for mask in 0..ascii_case_variant_count("Host") {
+        let name = ascii_case_variant("Host", mask);
+        let request = format!(
+            "GET /health HTTP/1.1\r\n{name}: {EXPECTED_HOST}\r\n\r\n",
+        );
+        assert_eq!(
+            status_line(&route_runtime(request.as_bytes(), EXPECTED_HOST)),
+            "HTTP/1.1 200 OK",
+            "Host case mask {mask}",
+        );
+    }
+
+    for mask in 0..ascii_case_variant_count("Origin") {
+        let name = ascii_case_variant("Origin", mask);
+        let request = format!(
+            concat!(
+                "POST /api/session/task HTTP/1.1\r\n",
+                "Host: {}\r\nAuthorization: {}\r\n",
+                "{}: {}\r\nContent-Length: 1\r\n\r\nx",
+            ),
+            EXPECTED_HOST, authorization, name, EXPECTED_ORIGIN,
+        );
+        let mut draft = SessionDraftService::default();
+        assert_eq!(
+            status_line(&route_with_draft(
+                request.as_bytes(),
+                EXPECTED_HOST,
+                &mut draft,
+            )),
+            "HTTP/1.1 204 No Content",
+            "Origin case mask {mask}",
+        );
+        assert_eq!(draft.value(DraftField::Task), "x");
+    }
+
+    for mask in 0..ascii_case_variant_count("Authorization") {
+        let name = ascii_case_variant("Authorization", mask);
+        let request = format!(
+            concat!(
+                "POST /api/session/task HTTP/1.1\r\n",
+                "Host: {}\r\n{}: {}\r\nOrigin: {}\r\n",
+                "Content-Length: 1\r\n\r\nx",
+            ),
+            EXPECTED_HOST, name, authorization, EXPECTED_ORIGIN,
+        );
+        let mut draft = SessionDraftService::default();
+        assert_eq!(
+            status_line(&route_with_draft(
+                request.as_bytes(),
+                EXPECTED_HOST,
+                &mut draft,
+            )),
+            "HTTP/1.1 204 No Content",
+            "Authorization case mask {mask}",
+        );
+        assert_eq!(draft.value(DraftField::Task), "x");
+    }
+
+    for mask in 0..ascii_case_variant_count("Content-Length") {
+        let name = ascii_case_variant("Content-Length", mask);
+        let request = format!(
+            concat!(
+                "POST /api/session/task HTTP/1.1\r\n",
+                "Host: {}\r\nAuthorization: {}\r\nOrigin: {}\r\n",
+                "{}: 1\r\n\r\nx",
+            ),
+            EXPECTED_HOST, authorization, EXPECTED_ORIGIN, name,
+        );
+        let mut draft = SessionDraftService::default();
+        assert_eq!(
+            status_line(&route_with_draft(
+                request.as_bytes(),
+                EXPECTED_HOST,
+                &mut draft,
+            )),
+            "HTTP/1.1 204 No Content",
+            "Content-Length case mask {mask}",
+        );
+        assert_eq!(draft.value(DraftField::Task), "x");
+    }
+
+    for mask in 0..ascii_case_variant_count("Transfer-Encoding") {
+        let name = ascii_case_variant("Transfer-Encoding", mask);
+        let request = format!(
+            concat!(
+                "POST /api/session/task HTTP/1.1\r\n",
+                "Host: {}\r\nAuthorization: {}\r\nOrigin: {}\r\n",
+                "{}: chunked\r\n\r\n",
+            ),
+            EXPECTED_HOST, authorization, EXPECTED_ORIGIN, name,
+        );
+        let mut draft = seeded_private_draft();
+        assert_eq!(
+            status_line(&route_with_draft(
+                request.as_bytes(),
+                EXPECTED_HOST,
+                &mut draft,
+            )),
+            "HTTP/1.1 400 Bad Request",
+            "Transfer-Encoding case mask {mask}",
+        );
+        assert_private_draft_unchanged(&draft);
+    }
+}
+
+#[test]
+fn case_variants_cannot_bypass_single_value_security_headers() {
+    let authorization = format!("Bearer {EXPECTED_SECRET}");
+
+    for mask in 0..ascii_case_variant_count("Host") {
+        let variant = ascii_case_variant("Host", mask);
+        let request = format!(
+            concat!(
+                "GET /health HTTP/1.1\r\n",
+                "Host: {}\r\n{}: {}\r\n\r\n",
+            ),
+            EXPECTED_HOST, variant, EXPECTED_HOST,
+        );
+        assert_eq!(
+            status_line(&route_runtime(request.as_bytes(), EXPECTED_HOST)),
+            "HTTP/1.1 400 Bad Request",
+            "duplicate Host case mask {mask}",
+        );
+    }
+
+    for (field, admitted_value) in [
+        ("Origin", EXPECTED_ORIGIN.to_owned()),
+        ("Authorization", authorization.clone()),
+    ] {
+        for mask in 0..ascii_case_variant_count(field) {
+            let variant = ascii_case_variant(field, mask);
+            let request = format!(
+                concat!(
+                    "POST /api/session/task HTTP/1.1\r\n",
+                    "Host: {}\r\nAuthorization: {}\r\nOrigin: {}\r\n",
+                    "{}: {}\r\nContent-Length: 0\r\n\r\n",
+                ),
+                EXPECTED_HOST,
+                authorization,
+                EXPECTED_ORIGIN,
+                variant,
+                admitted_value,
+            );
+            let mut draft = seeded_private_draft();
+            assert_eq!(
+                status_line(&route_with_draft(
+                    request.as_bytes(),
+                    EXPECTED_HOST,
+                    &mut draft,
+                )),
+                "HTTP/1.1 401 Unauthorized",
+                "duplicate {field} case mask {mask}",
+            );
+            assert_private_draft_unchanged(&draft);
+        }
+    }
+}
+
 fn ascii_header_byte_status(byte: u8, visible_rejection: &str) -> &str {
     if byte == b'\t' || (byte >= b' ' && byte != 0x7f) {
         visible_rejection

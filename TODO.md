@@ -3020,7 +3020,10 @@ malformed Host, Origin, or Bearer credential into an admitted one. Full-ASCII
 boundary oracles now verify outer Host, Origin, and Authorization normalization
 byte by byte, and a separate 128-byte Bearer-separator oracle requires the
 scheme's literal single ASCII space rather than treating tab or other whitespace
-as equivalent.
+as equivalent. Exhaustive ASCII case-variant sweeps cover Host, Origin,
+Authorization, Content-Length, and Transfer-Encoding field names; alternate
+casing remains equivalent for admission, and case changes cannot hide duplicate
+Host, Origin, or Authorization values.
 Session-secret comparison executes all 64 admitted byte positions for every
 candidate length;
 0 through 128 byte candidates pin exact-length admission without claiming
