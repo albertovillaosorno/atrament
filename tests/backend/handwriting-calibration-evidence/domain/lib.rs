@@ -37,8 +37,8 @@ use atrament_handwriting_calibration_evidence::{
     CalibrationParameterEvidence, CalibrationSample, CalibrationSampleRole,
     CalibrationSampleRoleError, HeldOutQualityDimension,
     HeldOutQualityMeasurement, HeldOutQualityReport, HeldOutQualityReportError,
-    validate_calibration_sample_roles, validate_held_out_quality_report,
-    validate_held_out_quality_report_view,
+    validate_calibration_sample_roles, validate_calibration_sample_roles_view,
+    validate_held_out_quality_report, validate_held_out_quality_report_view,
 };
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -200,6 +200,24 @@ fn every_compact_sample_role_sequence_matches_separation_oracle() {
                 expected,
                 "role mismatch at length {length} encoding {encoded:#x}",
             );
+            match expected {
+                Ok(()) => {
+                    let validated = validate_calibration_sample_roles_view(
+                        &samples,
+                    )
+                    .expect("valid sample roles seal exact declarations");
+                    assert!(std::ptr::eq(
+                        validated.samples(),
+                        samples.as_slice(),
+                    ));
+                },
+                Err(reason) => assert_eq!(
+                    validate_calibration_sample_roles_view(&samples),
+                    Err(reason),
+                    "sealed role mismatch at length {length} encoding \
+                     {encoded:#x}",
+                ),
+            }
             cases += 1;
         }
     }

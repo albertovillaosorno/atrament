@@ -1314,8 +1314,12 @@ sample.
 
 A 5,461-case exhaustive compact oracle covers every declaration sequence through
 six samples over two identities and both roles. Repeated same-role declarations
-remain valid while the first cross-role reuse rejects in declaration order. This
-does not choose a minimum sample set, confidence scale, unit vocabulary,
+remain valid while the first cross-role reuse rejects in declaration order.
+Successful separation now returns constructor-sealed evidence borrowing the
+exact sample declaration slice, and the same oracle requires direct/sealed
+parity.
+
+This does not choose a minimum sample set, confidence scale, unit vocabulary,
 source-region syntax, capture geometry, extraction algorithm, or calibration
 workflow.
 

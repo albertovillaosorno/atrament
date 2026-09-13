@@ -234,6 +234,21 @@ pub enum HeldOutQualityReportError<Identity> {
     },
 }
 
+/// Constructor-sealed evidence that one exact sample declaration sequence
+/// preserves training/held-out separation.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ValidatedCalibrationSampleRoles<'samples, Identity> {
+    samples: &'samples [CalibrationSample<Identity>],
+}
+
+impl<'samples, Identity> ValidatedCalibrationSampleRoles<'samples, Identity> {
+    /// Return the exact caller-owned sample declarations that were admitted.
+    #[must_use]
+    pub const fn samples(&self) -> &'samples [CalibrationSample<Identity>] {
+        self.samples
+    }
+}
+
 /// Why calibration sample roles violate held-out separation.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum CalibrationSampleRoleError<Identity> {
@@ -242,6 +257,23 @@ pub enum CalibrationSampleRoleError<Identity> {
         /// Conflicting caller-owned sample identity.
         sample: Identity,
     },
+}
+
+/// Validate one exact sample declaration sequence and seal its role evidence.
+///
+/// # Errors
+///
+/// Returns the same first caller-order conflict as
+/// [`validate_calibration_sample_roles`].
+pub fn validate_calibration_sample_roles_view<Identity>(
+    samples: &[CalibrationSample<Identity>],
+) -> Result<ValidatedCalibrationSampleRoles<'_, Identity>,
+    CalibrationSampleRoleError<Identity>>
+where
+    Identity: Clone + Ord,
+{
+    validate_calibration_sample_roles(samples)?;
+    Ok(ValidatedCalibrationSampleRoles { samples })
 }
 
 /// Validate that held-out writing never participates in training evidence.

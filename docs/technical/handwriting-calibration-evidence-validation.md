@@ -74,7 +74,9 @@ model-policy decisions.
 
 Every `CalibrationSample` carries a stable caller-owned identity and either the
 `Training` or `HeldOut` role. `validate_calibration_sample_roles` rejects the
-first identity that appears in both roles. An exhaustive 5,461-case compact
+first identity that appears in both roles. Successful separation can also be
+sealed as a borrowed view over the exact declaration slice. An exhaustive
+5,461-case compact
 oracle covers every declaration sequence through six samples over two identities
 and both roles, including repeated same-role declarations and both possible
 conflict owners.
@@ -233,8 +235,8 @@ Current checked-in regression evidence includes:
 
 - `tests/backend/handwriting-calibration-evidence/domain/lib.rs`, which pins
   complete evidence retention, observed/inferred separation, held-out/training
-  conflict rejection, held-out report attribution/completeness, and explicit
-  additional-sample requirements;
+  direct/sealed conflict rejection, held-out report attribution/completeness,
+  and explicit additional-sample requirements;
 - `tests/backend/handwriting-calibration-session/domain/lib.rs`, which pins all
   nine prompt categories, caller-owned plan order/reference geometry, completed
   sample inspection and exact replacement, resume position, completion state,
