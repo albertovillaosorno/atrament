@@ -537,7 +537,7 @@ fn run_process_fixture_child(mode: &str) {
         "process-private model response",
     );
     let media_job = session.begin_media_job().expect("process media job");
-    let _waveform = session
+    let waveform = session
         .register_media_waveform_intermediate(media_job)
         .expect("process waveform intermediate");
     assert_eq!(
@@ -547,6 +547,14 @@ fn run_process_fixture_child(mode: &str) {
     assert_eq!(
         session.media_job_cleanup_status(media_job),
         Ok(MediaJobCleanupStatus::CleanupRequired),
+    );
+    assert_eq!(
+        session.record_media_cleanup_failure(media_job, waveform),
+        Ok(MediaJobCleanupStatus::CleanupRetryRequired),
+    );
+    assert_eq!(
+        session.media_job_cleanup_status(media_job),
+        Ok(MediaJobCleanupStatus::CleanupRetryRequired),
     );
     assert!(
         !session.media_jobs_are_empty_for_test(),

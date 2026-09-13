@@ -79,8 +79,8 @@ caller-bounded batch review with graph-resource and dependency-selection
 analysis, grapheme cursor and selection inspection, measured pagination,
 fixed-region overflow diagnostics,
 and layout-only Export preflight. It also
-owns one terminal media job with a registered waveform still requiring cleanup.
-Both
+owns one terminal media job whose registered waveform has a recorded cleanup
+failure and remains retry-required. Both
 orderly and forced
 termination leave a fresh process with empty draft fields, no accepted revision,
 history, bytes, or prior media-job authority; derived results and cleanup
@@ -157,8 +157,9 @@ orderly restart and forced process death yield empty fields in the fresh
 session. A checked-in application-process fixture now also populates an accepted
 semantic revision containing two semantic asset records and a figure reference,
 retains distinct raw byte sequences for both assets, commits text and
-asset-reference history, and leaves one terminal media job with registered
-waveform cleanup pending in process memory. Orderly exit and forced process
+asset-reference history, and leaves one terminal media job with a registered
+waveform plus retry-required cleanup bookkeeping in process memory. Orderly exit
+and forced process
 death both leave a fresh owner with no accepted revision, history position, raw
 bytes, or prior media-job authority.
 
@@ -169,7 +170,7 @@ yet.
 While private draft text is live, the runtime changes no declared repository
 runtime-root file. The fuller application-process fixture also proves on Linux
 that populated draft, semantic history, retained asset bytes, derived results,
-and pending media cleanup add no writable regular-file descriptors beyond
+and retry-required media cleanup add no writable regular-file descriptors beyond
 process descriptors inherited from the test harness.
 
 Checked-in browser policy tests guard one-time launch-credential fragment
