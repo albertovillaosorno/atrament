@@ -34,6 +34,7 @@ use atrament_render_regression_evidence::{
     RenderRegressionAxis, RenderRegressionComparison, RenderRegressionEvidence,
     RenderRegressionEvidenceError, render_regression_mismatches,
     validate_render_regression_evidence,
+    validate_render_regression_evidence_view,
 };
 
 const AXES: [RenderRegressionAxis; 9] = [
@@ -71,10 +72,17 @@ fn every_axis_is_independently_required_even_when_other_axes_match() {
     for missing in AXES {
         let mut evidence = complete_evidence();
         evidence.retain(|item| item.axis != missing);
+        let expected =
+            Err(RenderRegressionEvidenceError::MissingAxis { axis: missing });
         assert_eq!(
             validate_render_regression_evidence(&evidence),
-            Err(RenderRegressionEvidenceError::MissingAxis { axis: missing }),
+            expected,
             "missing axis {missing:?}",
+        );
+        assert_eq!(
+            validate_render_regression_evidence_view(&evidence).map(|_| ()),
+            expected,
+            "sealed missing axis {missing:?}",
         );
         if missing != RenderRegressionAxis::FinalPixels {
             assert!(evidence.iter().any(|item| {
@@ -95,12 +103,18 @@ fn every_duplicate_axis_rejects_before_completeness_is_claimed() {
             .copied()
             .expect("complete evidence contains every axis");
         evidence.insert(4, item);
+        let expected = Err(RenderRegressionEvidenceError::DuplicateAxis {
+            axis: duplicate,
+        });
         assert_eq!(
             validate_render_regression_evidence(&evidence),
-            Err(RenderRegressionEvidenceError::DuplicateAxis {
-                axis: duplicate,
-            }),
+            expected,
             "duplicate axis {duplicate:?}",
+        );
+        assert_eq!(
+            validate_render_regression_evidence_view(&evidence).map(|_| ()),
+            expected,
+            "sealed duplicate axis {duplicate:?}",
         );
     }
 }
@@ -162,6 +176,14 @@ fn every_match_mismatch_mask_projects_exact_canonical_axes() {
             validate_render_regression_evidence(&evidence),
             Ok(()),
             "structural completeness for mask {mask:#011b}",
+        );
+        let validated = validate_render_regression_evidence_view(&evidence)
+            .expect("complete evidence seals");
+        assert!(std::ptr::eq(validated.evidence(), evidence.as_slice()));
+        assert_eq!(
+            validated.mismatches(),
+            expected,
+            "sealed mismatch projection for mask {mask:#011b}",
         );
         assert_eq!(
             render_regression_mismatches(&evidence),

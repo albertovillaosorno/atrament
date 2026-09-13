@@ -92,6 +92,36 @@ pub struct RenderRegressionEvidence {
     pub comparison: RenderRegressionComparison,
 }
 
+/// Constructor-sealed evidence that every first-release regression axis is
+/// represented exactly once.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ValidatedRenderRegressionEvidence<'evidence> {
+    evidence: &'evidence [RenderRegressionEvidence],
+}
+
+impl<'evidence> ValidatedRenderRegressionEvidence<'evidence> {
+    /// Return the exact caller-owned evidence sequence that was admitted.
+    #[must_use]
+    pub const fn evidence(&self) -> &'evidence [RenderRegressionEvidence] {
+        self.evidence
+    }
+
+    /// Return reported mismatches in canonical axis order.
+    #[must_use]
+    pub fn mismatches(&self) -> Vec<RenderRegressionAxis> {
+        REQUIRED_AXES
+            .into_iter()
+            .filter(|axis| {
+                self.evidence.iter().any(|item| {
+                    item.axis == *axis
+                        && item.comparison
+                            == RenderRegressionComparison::Mismatch
+                })
+            })
+            .collect()
+    }
+}
+
 /// Structural failure in one first-release render-regression report.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum RenderRegressionEvidenceError {
@@ -135,6 +165,22 @@ pub fn validate_render_regression_evidence(
     Ok(())
 }
 
+/// Validate and seal one complete first-release render-regression report.
+///
+/// # Errors
+///
+/// Returns the same duplicate-first or canonical missing-axis failure as
+/// [`validate_render_regression_evidence`].
+pub fn validate_render_regression_evidence_view(
+    evidence: &[RenderRegressionEvidence],
+) -> Result<
+    ValidatedRenderRegressionEvidence<'_>,
+    RenderRegressionEvidenceError,
+> {
+    validate_render_regression_evidence(evidence)?;
+    Ok(ValidatedRenderRegressionEvidence { evidence })
+}
+
 /// Return every independently reported mismatch in canonical axis order.
 ///
 /// # Errors
@@ -145,14 +191,5 @@ pub fn validate_render_regression_evidence(
 pub fn render_regression_mismatches(
     evidence: &[RenderRegressionEvidence],
 ) -> Result<Vec<RenderRegressionAxis>, RenderRegressionEvidenceError> {
-    validate_render_regression_evidence(evidence)?;
-    Ok(REQUIRED_AXES
-        .into_iter()
-        .filter(|axis| {
-            evidence.iter().any(|item| {
-                item.axis == *axis
-                    && item.comparison == RenderRegressionComparison::Mismatch
-            })
-        })
-        .collect())
+    Ok(validate_render_regression_evidence_view(evidence)?.mismatches())
 }

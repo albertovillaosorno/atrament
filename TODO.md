@@ -2730,9 +2730,14 @@ both completeness checks. Axis-specific comparators, pixel tolerances, golden
 artifact storage, renderer output, and visual acceptance policy remain open.
 
 Reversed all-mismatch evidence also proves every axis is surfaced in canonical
-mismatch order. A 512-state exhaustive match/mismatch oracle now covers every
-combination of the nine axes, reverses caller evidence order, and requires the
-exact canonical mismatch projection for each mask.
+mismatch order. Complete reports now return constructor-sealed evidence
+borrowing the exact caller sequence, and canonical mismatch projection can run
+from that admitted view without repeating structural interpretation.
+
+A 512-state exhaustive match/mismatch oracle covers every combination of the
+nine axes, reverses caller evidence order, and requires the exact direct and
+sealed canonical mismatch projection for each mask. Missing- and duplicate-axis
+fixtures also require direct/sealed error parity.
 
 ### TODO - Complete accessibility and keyboard operation
 
