@@ -1882,8 +1882,12 @@ coverage requires at least one fully evidenced observation for mathematics,
 physics, chemistry, biology, history, and language while permitting additional
 subject observations and preserving their caller-owned artifact identities.
 A 64-case subject-presence oracle proves every subset rejects at the first
-missing subject, while 48 property-state cases cross every observation position
-with all bilingual/dense/readable evidence masks and pin property precedence.
+missing subject, while 48 single-position property cases pin local
+bilingual/dense/readable precedence. An exhaustive 262,144-case six-observation
+Cartesian oracle now crosses all three evidence bits at every subject position
+and requires validation/projection parity for the first caller-order property
+failure.
+
 After complete validation, a constructor-owned read-only projection groups the
 exact caller observations in canonical required-subject order while preserving
 all observations and their relative order inside each subject; it does not pick

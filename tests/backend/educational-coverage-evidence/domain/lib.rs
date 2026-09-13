@@ -247,3 +247,78 @@ fn every_property_mask_at_every_position_matches_evidence_precedence() {
     }
     assert_eq!(cases, 48);
 }
+
+
+#[test]
+fn every_six_observation_property_state_preserves_global_precedence() {
+    const STATES_PER_OBSERVATION: u32 = 8;
+    const OBSERVATION_COUNT: u32 = 6;
+    const CASES: u32 = STATES_PER_OBSERVATION.pow(OBSERVATION_COUNT);
+
+    let mut cases = 0_u32;
+    for encoded in 0..CASES {
+        let mut value = encoded;
+        let mut observations = SUBJECTS.map(observation);
+        let mut expected = Ok(());
+
+        for observation_index in 0..SUBJECTS.len() {
+            let state = (value % STATES_PER_OBSERVATION) as u8;
+            value /= STATES_PER_OBSERVATION;
+            let current = observations
+                .get_mut(observation_index)
+                .expect("six enumerated observations exist");
+            current.bilingual = if state & 0b001 != 0 {
+                EducationalEvidenceStatus::Established
+            } else {
+                EducationalEvidenceStatus::NotEstablished
+            };
+            current.dense_organization = if state & 0b010 != 0 {
+                EducationalEvidenceStatus::Established
+            } else {
+                EducationalEvidenceStatus::NotEstablished
+            };
+            current.readable_organization = if state & 0b100 != 0 {
+                EducationalEvidenceStatus::Established
+            } else {
+                EducationalEvidenceStatus::NotEstablished
+            };
+
+            if expected.is_ok() {
+                expected = if state & 0b001 == 0 {
+                    Err(EducationalCoverageError::BilingualEvidenceMissing {
+                        observation_index,
+                    })
+                } else if state & 0b010 == 0 {
+                    Err(
+                        EducationalCoverageError::
+                            DenseOrganizationEvidenceMissing {
+                                observation_index,
+                            },
+                    )
+                } else if state & 0b100 == 0 {
+                    Err(
+                        EducationalCoverageError::
+                            ReadableOrganizationEvidenceMissing {
+                                observation_index,
+                            },
+                    )
+                } else {
+                    Ok(())
+                };
+            }
+        }
+
+        assert_eq!(
+            validate_educational_coverage(&observations),
+            expected,
+            "encoded property state {encoded:#08x}",
+        );
+        assert_eq!(
+            project_educational_coverage_by_subject(&observations).map(|_| ()),
+            expected,
+            "projected property state {encoded:#08x}",
+        );
+        cases = cases.saturating_add(1);
+    }
+    assert_eq!(cases, CASES);
+}
