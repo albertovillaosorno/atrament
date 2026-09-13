@@ -58,6 +58,31 @@ pub struct DigitalPaperNotePlan<Fill, Fold, Shadow, StackOrder> {
     pub stack_order: StackOrder,
 }
 
+/// Constructor-sealed evidence that one exact digital paper-note plan has
+/// caller-established readable contrast.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ValidatedDigitalPaperNotePlan<
+    'plan,
+    Fill,
+    Fold,
+    Shadow,
+    StackOrder,
+> {
+    plan: &'plan DigitalPaperNotePlan<Fill, Fold, Shadow, StackOrder>,
+}
+
+impl<'plan, Fill, Fold, Shadow, StackOrder>
+    ValidatedDigitalPaperNotePlan<'plan, Fill, Fold, Shadow, StackOrder>
+{
+    /// Return the exact caller-owned note plan that was admitted.
+    #[must_use]
+    pub const fn plan(
+        &self,
+    ) -> &'plan DigitalPaperNotePlan<Fill, Fold, Shadow, StackOrder> {
+        self.plan
+    }
+}
+
 /// Why one digital paper-note plan is not structurally admissible.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum DigitalPaperNotePlanError {
@@ -81,4 +106,20 @@ pub fn validate_digital_paper_note_plan<Fill, Fold, Shadow, StackOrder>(
         return Err(DigitalPaperNotePlanError::ReadableContrastNotEstablished);
     }
     Ok(())
+}
+
+/// Validate and seal one exact digital paper-note plan.
+///
+/// # Errors
+///
+/// Returns the same readability failure as
+/// [`validate_digital_paper_note_plan`].
+pub fn validate_digital_paper_note_plan_view<Fill, Fold, Shadow, StackOrder>(
+    plan: &DigitalPaperNotePlan<Fill, Fold, Shadow, StackOrder>,
+) -> Result<
+    ValidatedDigitalPaperNotePlan<'_, Fill, Fold, Shadow, StackOrder>,
+    DigitalPaperNotePlanError,
+> {
+    validate_digital_paper_note_plan(plan)?;
+    Ok(ValidatedDigitalPaperNotePlan { plan })
 }

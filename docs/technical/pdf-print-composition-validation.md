@@ -187,7 +187,8 @@ Current checked-in regression evidence includes:
   all six caller-owned extraction controls, transparent-black appearance,
   ordered vector paths, and the complete 128-case control/source drift oracle;
 - `tests/backend/digital-paper-note-plan/domain/lib.rs`, which pins fill, fold,
-  stacking, soft-shadow intent, and caller-provided readable-contrast evidence;
+  stacking, soft-shadow intent, caller-provided readable-contrast evidence, and
+  sealed/direct parity across the 64-state style/readability sweep;
 - `tests/backend/print-scan-measurement/domain/lib.rs`, which pins all eight
   first-release physical observation families, their provenance, and all 256
   completeness masks through both direct and sealed admission; and

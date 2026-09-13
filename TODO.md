@@ -1670,12 +1670,15 @@ objects with readable contrast and explicit live incompatibility.
 
 Current executable evidence now freezes one digital loose-paper-note plan with
 caller-owned fill, fold, stack order, and soft-shadow intent plus
-caller-computed
-readable-contrast evidence. Structural validation requires that readability
-evidence without choosing a contrast metric or threshold. The existing output
-capability matrix separately keeps loose paper notes, folds, paper shadows,
-simulated shadows, and textured fills accepted only for Digital and rejected for
-Live.
+caller-computed readable-contrast evidence. Structural validation requires that
+readability evidence without choosing a contrast metric or threshold, and
+success now returns constructor-sealed evidence borrowing the exact note plan.
+A 64-state style/readability sweep requires direct and sealed admission to
+depend only on caller-established readability, never on opaque effect values.
+
+The existing output capability matrix separately keeps loose paper notes, folds,
+paper shadows, simulated shadows, and textured fills accepted only for Digital
+and rejected for Live.
 
 Contrast measurement, concrete style/geometry values, note layout, occlusion,
 shadow rendering, raster composition, and digital preview/export remain open.

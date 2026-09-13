@@ -32,7 +32,7 @@
 //
 use atrament_digital_paper_note_plan::{
     DigitalPaperNoteContrast, DigitalPaperNotePlan, DigitalPaperNotePlanError,
-    validate_digital_paper_note_plan,
+    validate_digital_paper_note_plan, validate_digital_paper_note_plan_view,
 };
 
 #[test]
@@ -85,9 +85,17 @@ fn readability_result_is_independent_of_caller_owned_effect_values() {
             ..readable.clone()
         };
         assert_eq!(validate_digital_paper_note_plan(&readable), Ok(()));
+        let validated = validate_digital_paper_note_plan_view(&readable)
+            .expect("readable note seals");
+        assert!(std::ptr::eq(validated.plan(), &readable));
+        let reason = DigitalPaperNotePlanError::ReadableContrastNotEstablished;
         assert_eq!(
             validate_digital_paper_note_plan(&not_established),
-            Err(DigitalPaperNotePlanError::ReadableContrastNotEstablished),
+            Err(reason),
+        );
+        assert_eq!(
+            validate_digital_paper_note_plan_view(&not_established),
+            Err(reason),
         );
     }
 }
