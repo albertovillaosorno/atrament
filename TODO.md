@@ -147,7 +147,9 @@ state and media intermediates disappear while explicit exports remain intact.
 
 Current runtime evidence proves orderly process termination releases the old
 loopback listener, restart generates a fresh session credential, and a stale
-credential cannot authenticate to the new process.
+credential cannot authenticate to the new process. A colocated runtime fixture
+now drops its owner and immediately rebinds the exact OS-assigned loopback
+endpoint, pinning listener release directly.
 
 The secret adapter separately pins that independent operating-system-backed
 generations do not reuse the same encoded credential. Process-level draft

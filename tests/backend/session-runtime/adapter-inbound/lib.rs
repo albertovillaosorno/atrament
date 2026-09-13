@@ -142,6 +142,20 @@ fn binds_ipv4_loopback_on_an_os_assigned_port() {
 }
 
 #[test]
+fn dropping_runtime_releases_the_assigned_loopback_listener() {
+    let runtime = runtime::Runtime::bind().expect("runtime binds");
+    let address = runtime.local_addr().expect("listener address");
+    drop(runtime);
+
+    let rebound = TcpListener::bind(address)
+        .expect("dropped runtime must release its assigned listener");
+    assert_eq!(
+        rebound.local_addr().expect("rebound listener address"),
+        address,
+    );
+}
+
+#[test]
 fn health_requires_the_exact_canonical_host() {
     let host = "127.0.0.1:43123";
     let accepted = route_runtime(
