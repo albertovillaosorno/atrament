@@ -16,7 +16,8 @@
 // - Allows:
 //   - Inputs: Caller-owned artifact identity and supporting evidence for one
 //     ADR-required corpus scenario.
-//   - Outputs: Deterministic required-scenario completeness validation.
+//   - Outputs: Deterministic required-scenario completeness validation and
+//     constructor-sealed evidence borrowing the exact admitted set.
 //   - Side effects: None.
 // - Split-When:
 //   - Concrete corpus construction or cross-surface grapheme verification gains
