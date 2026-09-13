@@ -186,7 +186,8 @@ Aborted draft requests and stale `413` diagnostic-body completions cannot
 repopulate status text after invalidation. Concurrent field failures also remain
 visible until the failed field succeeds; another field cannot announce
 `Session ready` while work or failure remains. Refresh cannot recover the launch
-credential from the rewritten browser URL or persistence API.
+credential from the rewritten browser URL or persistence API, and fragment-free
+startup remains disabled without attempting a handshake.
 
 Handshake response admission now invalidates `401` directly from the status and
 parses JSON bodies only for the two body-bearing handshake result classes,

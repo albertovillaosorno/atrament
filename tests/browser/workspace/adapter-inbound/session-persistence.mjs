@@ -408,6 +408,36 @@ test("draft hydration is atomic and stale-page guarded", async () => {
 });
 
 
+test(
+    "fragment-free refresh cannot silently resume the backend session",
+    async () => {
+    const source = await readFile(MAIN_MODULE, "utf8");
+    const startup = source.slice(source.lastIndexOf("setPreviewZoom(100);"));
+    const missing = startup.indexOf("if (sessionSecret === null)");
+    const unavailable = startup.indexOf(
+        '"Frontend ready · credential unavailable"',
+        missing,
+    );
+    const compatible = startup.indexOf(
+        "void completeSessionHandshake(sessionSecret);",
+        unavailable,
+    );
+    assert.ok(
+        missing !== -1
+            && unavailable > missing
+            && compatible > unavailable,
+        "fragment-free startup must remain disabled instead of rejoining",
+    );
+        assert.equal(
+            startup.indexOf("completeSessionHandshake(sessionSecret)", 0),
+            compatible + "void ".length,
+            "startup must have no alternate handshake path without "
+                + "a credential",
+        );
+    },
+);
+
+
 test("session credential fragment is one-time browser handoff", async () => {
     const source = await readFile(MAIN_MODULE, "utf8");
     const urlStart = source.indexOf("function fragmentFreeLocalUrl() {");
