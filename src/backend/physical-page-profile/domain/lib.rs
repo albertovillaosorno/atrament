@@ -231,6 +231,34 @@ pub struct SheetSize {
     pub width: Length,
 }
 
+/// Constructor-sealed evidence for one completely validated page profile.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ValidatedPageProfile {
+    oriented_sheet: SheetSize,
+    profile: PageProfile,
+    writable_region: Rect,
+}
+
+impl ValidatedPageProfile {
+    /// Return exact oriented physical sheet dimensions.
+    #[must_use]
+    pub const fn oriented_sheet(self) -> SheetSize {
+        self.oriented_sheet
+    }
+
+    /// Return the exact page profile that produced this validation evidence.
+    #[must_use]
+    pub const fn profile(self) -> PageProfile {
+        self.profile
+    }
+
+    /// Return the exact writable region established by this validation.
+    #[must_use]
+    pub const fn writable_region(self) -> Rect {
+        self.writable_region
+    }
+}
+
 impl PageProfile {
     fn binding_rect(
         self,
@@ -337,6 +365,25 @@ impl PageProfile {
         )?;
         let _writable = self.writable_region()?;
         Ok(self)
+    }
+
+    /// Seal this complete profile together with validated derived geometry.
+    ///
+    /// The returned value can be reused by later read-only consumers without
+    /// treating a freely modified `PageProfile` as validation evidence.
+    ///
+    /// # Errors
+    ///
+    /// Returns exactly the same first full-profile error as [`Self::validate`].
+    pub fn validated(self) -> Result<ValidatedPageProfile, PageProfileError> {
+        let profile = self.validate()?;
+        let oriented_sheet = profile.oriented_sheet()?;
+        let writable_region = profile.writable_region()?;
+        Ok(ValidatedPageProfile {
+            oriented_sheet,
+            profile,
+            writable_region,
+        })
     }
 
     /// Derive the exact writable region from the validated printable area.

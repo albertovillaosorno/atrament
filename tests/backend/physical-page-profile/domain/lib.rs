@@ -376,6 +376,23 @@ fn mixed_profile_failures_match_independent_precedence_oracle() {
             expected,
             "profile validation mismatch in generated case {case}",
         );
+        let sealed = profile.validated();
+        assert_eq!(
+            sealed.map(|validated| validated.profile()).map(|_profile| ()),
+            expected,
+            "sealed profile precedence mismatch in generated case {case}",
+        );
+        if let Ok(validated) = sealed {
+            assert_eq!(
+                validated.oriented_sheet(),
+                profile.oriented_sheet().expect("validated oriented sheet"),
+            );
+            assert_eq!(
+                validated.writable_region(),
+                reference_writable_region(profile)
+                    .expect("validated writable region"),
+            );
+        }
         if reference_printable_region(profile).is_ok() {
             assert_eq!(
                 profile.writable_region(),
@@ -488,6 +505,18 @@ fn valid_profiles_match_writable_region_reference_oracle() {
             },
         };
         assert_eq!(profile.validate(), Ok(profile), "generated case {case}");
+        let validated = profile.validated().expect("generated valid profile");
+        assert_eq!(validated.profile(), profile, "generated case {case}");
+        assert_eq!(
+            validated.oriented_sheet(),
+            profile.oriented_sheet().expect("oriented sheet"),
+            "generated case {case}",
+        );
+        assert_eq!(
+            validated.writable_region(),
+            expected,
+            "sealed writable region in generated case {case}",
+        );
         assert_eq!(
             profile.writable_region(),
             Ok(expected),

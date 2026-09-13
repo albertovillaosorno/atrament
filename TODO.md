@@ -566,6 +566,11 @@ across 20,000 valid profiles covering both orientations and all four binding
 edges. Another 120,000 mixed profiles compare validation failure precedence and
 writable-region results against an independent integer-arithmetic model,
 including coordinate overflow and simultaneous invalid conditions.
+Full-profile validation now also produces constructor-sealed reusable evidence
+that retains the exact admitted profile, oriented sheet, and writable rectangle.
+The same 20,000 valid and 120,000 mixed-profile corpora require this sealed view
+to preserve exact geometry and first-error precedence; it adds no layout policy.
+
 The mixed-profile oracle also requires every typed page-profile validation error
 plus a valid outcome to occur, preventing precedence coverage from collapsing to
 a subset of its nine failure classes. Its generated binding edge and orientation
