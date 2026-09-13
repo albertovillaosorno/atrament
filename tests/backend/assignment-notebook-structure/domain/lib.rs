@@ -35,6 +35,7 @@ use atrament_assignment_notebook_structure::{
     AssignmentNotebookStructureError, AssignmentNotebookStructurePlan,
     project_assignment_notebook_structure_blocks,
     validate_assignment_notebook_structure,
+    validate_assignment_notebook_structure_view,
 };
 use atrament_semantic_notebook::{
     Block, BlockContent, Flow, InlineSpan, Notebook, Page, UnresolvedBlock,
@@ -451,8 +452,18 @@ fn every_three_entry_disposition_tuple_preserves_first_failure_and_atomicity() {
                     &notebook,
                     &plan,
                 );
+                let validated = validate_assignment_notebook_structure_view(
+                    &notebook,
+                    &plan,
+                );
                 if let Some(error) = expected {
                     assert_eq!(projection, Err(error), "states {states:?}");
+                    match validated {
+                        Err(actual) => assert_eq!(actual, error),
+                        Ok(_) => panic!(
+                            "invalid states {states:?} cannot seal a view",
+                        ),
+                    }
                 } else {
                     let projected = projection.expect("valid tuple projects");
                     let expected_ids = states.map(|state| {
@@ -462,13 +473,27 @@ fn every_three_entry_disposition_tuple_preserves_first_failure_and_atomicity() {
                                 UnresolvedMissingFact { block } => block,
                         }
                     });
+                    let projected_ids = projected
+                        .iter()
+                        .map(|block| block.id)
+                        .collect::<Vec<_>>();
                     assert_eq!(
-                        projected
+                        projected_ids,
+                        expected_ids,
+                        "states {states:?}",
+                    );
+                    let validated = validated
+                        .expect("valid tuple seals exact assignment structure");
+                    assert!(std::ptr::eq(validated.notebook(), &notebook));
+                    assert!(std::ptr::eq(validated.plan(), &plan));
+                    assert_eq!(
+                        validated
+                            .blocks()
                             .iter()
                             .map(|block| block.id)
                             .collect::<Vec<_>>(),
-                        expected_ids,
-                        "states {states:?}",
+                        projected_ids,
+                        "sealed states {states:?}",
                     );
                 }
                 cases = cases.saturating_add(1);

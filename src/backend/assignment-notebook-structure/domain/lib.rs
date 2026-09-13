@@ -115,6 +115,43 @@ pub struct AssignmentNotebookStructurePlan<Identity> {
 pub type AssignmentNotebookStructureBlocks<'notebook, Identity> =
     Vec<&'notebook Block<Identity>>;
 
+/// Constructor-sealed evidence binding one exact notebook snapshot and
+/// assignment plan to its fully validated block projection.
+#[derive(Debug)]
+pub struct ValidatedAssignmentNotebookStructure<
+    'notebook,
+    'plan,
+    Identity,
+> {
+    blocks: AssignmentNotebookStructureBlocks<'notebook, Identity>,
+    notebook: &'notebook Notebook<Identity>,
+    plan: &'plan AssignmentNotebookStructurePlan<Identity>,
+}
+
+impl<'notebook, 'plan, Identity>
+    ValidatedAssignmentNotebookStructure<'notebook, 'plan, Identity>
+{
+    /// Return exact projected blocks in caller plan order.
+    #[must_use]
+    pub fn blocks(&self) -> &[&'notebook Block<Identity>] {
+        &self.blocks
+    }
+
+    /// Return the exact semantic notebook snapshot used for admission.
+    #[must_use]
+    pub const fn notebook(&self) -> &'notebook Notebook<Identity> {
+        self.notebook
+    }
+
+    /// Return the exact caller-produced assignment plan that was admitted.
+    #[must_use]
+    pub const fn plan(
+        &self,
+    ) -> &'plan AssignmentNotebookStructurePlan<Identity> {
+        self.plan
+    }
+}
+
 /// Why one assignment organization entry cannot be admitted structurally.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum AssignmentNotebookStructureError {
@@ -191,6 +228,35 @@ where
             )
         })
         .collect()
+}
+
+/// Validate one assignment structure and seal its exact notebook/plan
+/// projection.
+///
+/// # Errors
+///
+/// Returns exactly the same first structural failure as
+/// [`validate_assignment_notebook_structure`].
+pub fn validate_assignment_notebook_structure_view<
+    'notebook,
+    'plan,
+    Identity,
+>(
+    notebook: &'notebook Notebook<Identity>,
+    plan: &'plan AssignmentNotebookStructurePlan<Identity>,
+) -> Result<
+    ValidatedAssignmentNotebookStructure<'notebook, 'plan, Identity>,
+    AssignmentNotebookStructureError,
+>
+where
+    Identity: Copy + Eq,
+{
+    let blocks = project_assignment_notebook_structure_blocks(notebook, plan)?;
+    Ok(ValidatedAssignmentNotebookStructure {
+        blocks,
+        notebook,
+        plan,
+    })
 }
 
 /// Validate one assignment organization against exact notebook block authority.

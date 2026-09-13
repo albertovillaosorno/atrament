@@ -1843,11 +1843,16 @@ resolution authority instead of gaining hidden role-to-kind mappings.
 After complete structural validation, a read-only projection returns the exact
 referenced semantic blocks in caller plan order. Repeated entries remain
 repeated references, unresolved entries remain typed unresolved blocks, and a
-failing plan exposes no partial projection. An exhaustive 216-case three-entry
-disposition oracle now proves the first invalid entry wins in caller order and
-projection returns the same whole-plan failure without exposing a valid prefix.
-Content generation, role selection, source/provenance inference, candidate
-construction, layout, rendering, and assignment-quality policy remain open.
+failing plan exposes no partial projection. A constructor-sealed view now binds
+the exact notebook snapshot, caller plan, and projected block sequence after the
+same admission succeeds.
+
+An exhaustive 216-case three-entry disposition oracle proves the first invalid
+entry wins in caller order and requires direct validation, projection, and
+sealed admission to agree without exposing a valid prefix. Content generation,
+role
+selection, source/provenance inference, candidate construction, layout,
+rendering, and assignment-quality policy remain open.
 
 ### TODO - Implement source and claim provenance
 
