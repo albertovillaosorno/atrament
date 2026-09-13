@@ -1743,10 +1743,12 @@ Current executable evidence now freezes the transport-neutral render-manifest
 input structure required by the accepted reproducibility contract. It retains
 accepted revision/document/profile/paper identities, asset identities, engine
 version, model choices, variation seed, material authority, renderer version,
-quality profile, and output-affecting render options. Render identity
-computation,
-serialization, PDF bytes, resource embedding, searchable-text policy, and file
-commit remain open.
+quality profile, and output-affecting render options. A 2,880-state exhaustive
+oracle crosses all 120 orders of five assets with all 24 orders of four model
+choices while requiring every scalar reproducibility input to remain exact.
+
+Render identity computation, serialization, PDF bytes, resource embedding,
+searchable-text policy, and file commit remain open.
 
 A transport-neutral PDF composition plan now also preserves final page order,
 caller-owned physical page boxes, vector authority, color intent, explicit

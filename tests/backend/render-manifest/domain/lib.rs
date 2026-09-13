@@ -96,3 +96,73 @@ fn manifest_preserves_caller_owned_asset_and_model_order() {
     assert_eq!(source.asset_identities, [3, 1, 2]);
     assert_eq!(behavior.model_choices, [7, 5, 6]);
 }
+
+fn next_index_permutation(values: &mut [u8]) -> bool {
+    let Some(pivot) = (0..values.len().saturating_sub(1))
+        .rev()
+        .find(|&index| values[index] < values[index + 1])
+    else {
+        return false;
+    };
+    let successor = (pivot + 1..values.len())
+        .rev()
+        .find(|&index| values[pivot] < values[index])
+        .expect("nonterminal permutation has a successor");
+    values.swap(pivot, successor);
+    values[pivot + 1..].reverse();
+    true
+}
+
+#[test]
+fn every_asset_and_model_order_preserves_complete_manifest_inputs() {
+    let mut asset_order = [0_u8, 1, 2, 3, 4];
+    let mut asset_permutations = 0_u8;
+    let mut cases = 0_u16;
+    loop {
+        asset_permutations = asset_permutations.saturating_add(1);
+        let mut model_order = [0_u8, 1, 2, 3];
+        loop {
+            let manifest = RenderManifest {
+                appearance: RenderAppearanceInputs {
+                    material_authority: 21_u8,
+                    quality_profile: 22_u8,
+                    render_options: 23_u8,
+                    renderer_version: 24_u8,
+                },
+                behavior: RenderBehaviorInputs {
+                    engine_version: 31_u8,
+                    model_choices: model_order.to_vec(),
+                    variation_seed: 32_u8,
+                },
+                source: RenderSourceInputs {
+                    asset_identities: asset_order.to_vec(),
+                    handwriting_profile_identity: 41_u8,
+                    paper_profile_identity: 42_u8,
+                    revision_identity: 43_u8,
+                    semantic_document_identity: 44_u8,
+                },
+            };
+            assert_eq!(manifest.source.asset_identities, asset_order);
+            assert_eq!(manifest.behavior.model_choices, model_order);
+            assert_eq!(manifest.source.handwriting_profile_identity, 41);
+            assert_eq!(manifest.source.paper_profile_identity, 42);
+            assert_eq!(manifest.source.revision_identity, 43);
+            assert_eq!(manifest.source.semantic_document_identity, 44);
+            assert_eq!(manifest.behavior.engine_version, 31);
+            assert_eq!(manifest.behavior.variation_seed, 32);
+            assert_eq!(manifest.appearance.material_authority, 21);
+            assert_eq!(manifest.appearance.quality_profile, 22);
+            assert_eq!(manifest.appearance.render_options, 23);
+            assert_eq!(manifest.appearance.renderer_version, 24);
+            cases = cases.saturating_add(1);
+            if !next_index_permutation(&mut model_order) {
+                break;
+            }
+        }
+        if !next_index_permutation(&mut asset_order) {
+            break;
+        }
+    }
+    assert_eq!(asset_permutations, 120);
+    assert_eq!(cases, 2_880);
+}

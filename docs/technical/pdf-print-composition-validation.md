@@ -90,10 +90,11 @@ inputs retain engine behavior version, ordered model choices, and the accepted
 variation seed. Appearance inputs retain material authority, quality profile,
 output-affecting render options, and renderer behavior version.
 
-The domain preserves caller-owned order and values exactly. It does not
-normalize
-models or assets, choose a seed, or claim that the current Rust struct layout is
-a persistent manifest schema.
+The domain preserves caller-owned order and values exactly. A 2,880-state
+exhaustive oracle crosses every order of five asset identities with every order
+of four model choices while retaining all scalar source, behavior, and
+appearance inputs. It does not normalize models or assets, choose a seed, or
+claim that the current Rust struct layout is a persistent manifest schema.
 
 ### Preview and final share output authority
 
@@ -183,8 +184,8 @@ Current checked-in regression evidence includes:
   asset disposition, manifest linkage, and all 18,432 compact order/disposition
   states;
 - `tests/backend/render-manifest/domain/lib.rs`, which pins source, asset,
-  model,
-  seed, quality, and version input retention;
+  model, seed, quality, and version input retention across all 2,880 compact
+  asset/model ordering states;
 - `tests/backend/pen-contact-model/domain/lib.rs`, which pins calibrated-input
   and observable-output range classification with two exhaustive 343-case
   compact integer oracles;
