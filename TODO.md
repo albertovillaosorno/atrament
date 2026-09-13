@@ -1694,9 +1694,12 @@ The digital treatment structurally carries layered lettering, outline,
 highlight,
 and motif inputs while the live treatment remains caller-owned one-pen intent.
 Validation rejects title-identity drift first and hierarchy drift second while
-allowing the mode-specific treatments themselves to differ. A 256-case compact
-oracle crosses 64 hierarchy values with both identity- and hierarchy-drift bits
-while varying digital/live treatment values independently.
+allowing the mode-specific treatments themselves to differ. Successful
+comparison now returns constructor-sealed evidence borrowing the exact plan.
+
+A 256-case compact oracle crosses 64 hierarchy values with both identity- and
+hierarchy-drift bits while varying digital/live treatment values independently
+and requires direct/sealed admission parity.
 
 Title-style derivation, hierarchy semantics, typography, colors, motif
 generation, one-pen geometry, layout, rendering, and conversion orchestration

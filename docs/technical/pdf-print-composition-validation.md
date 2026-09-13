@@ -189,6 +189,9 @@ Current checked-in regression evidence includes:
 - `tests/backend/digital-paper-note-plan/domain/lib.rs`, which pins fill, fold,
   stacking, soft-shadow intent, caller-provided readable-contrast evidence, and
   sealed/direct parity across the 64-state style/readability sweep;
+- `tests/backend/theme-safe-title-plan/domain/lib.rs`, which pins shared title
+  identity/hierarchy precedence and sealed/direct parity across all 256 compact
+  drift states while allowing media-specific treatments to differ;
 - `tests/backend/print-scan-measurement/domain/lib.rs`, which pins all eight
   first-release physical observation families, their provenance, and all 256
   completeness masks through both direct and sealed admission; and

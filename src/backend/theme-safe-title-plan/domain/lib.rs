@@ -67,6 +67,32 @@ pub struct ThemeSafeTitlePlan<DigitalProjection, LiveProjection> {
     pub live: LiveProjection,
 }
 
+/// Concrete cross-mode title plan shape admitted by this domain.
+pub type CrossModeTitlePlan<
+    Hierarchy,
+    TitleIdentity,
+    DigitalTreatment,
+    LiveTreatment,
+> = ThemeSafeTitlePlan<
+    TitleProjection<Hierarchy, TitleIdentity, DigitalTreatment>,
+    TitleProjection<Hierarchy, TitleIdentity, LiveTreatment>,
+>;
+
+/// Constructor-sealed evidence that one digital/live title pair preserves the
+/// exact semantic title identity and hierarchy.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ValidatedThemeSafeTitlePlan<'plan, Plan> {
+    plan: &'plan Plan,
+}
+
+impl<'plan, Plan> ValidatedThemeSafeTitlePlan<'plan, Plan> {
+    /// Return the exact caller-owned title plan that was admitted.
+    #[must_use]
+    pub const fn plan(&self) -> &'plan Plan {
+        self.plan
+    }
+}
+
 /// Why digital/live title projections do not preserve semantic hierarchy.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ThemeSafeTitlePlanError {
@@ -106,4 +132,42 @@ where
         return Err(ThemeSafeTitlePlanError::HierarchyMismatch);
     }
     Ok(())
+}
+
+/// Validate and seal one caller-produced digital/live title projection pair.
+///
+/// # Errors
+///
+/// Returns the same identity-first or hierarchy failure as
+/// [`validate_theme_safe_title_plan`].
+pub fn validate_theme_safe_title_plan_view<
+    DigitalTreatment,
+    Hierarchy,
+    LiveTreatment,
+    TitleIdentity,
+>(
+    plan: &CrossModeTitlePlan<
+        Hierarchy,
+        TitleIdentity,
+        DigitalTreatment,
+        LiveTreatment,
+    >,
+) -> Result<
+    ValidatedThemeSafeTitlePlan<
+        '_,
+        CrossModeTitlePlan<
+            Hierarchy,
+            TitleIdentity,
+            DigitalTreatment,
+            LiveTreatment,
+        >,
+    >,
+    ThemeSafeTitlePlanError,
+>
+where
+    Hierarchy: PartialEq,
+    TitleIdentity: PartialEq,
+{
+    validate_theme_safe_title_plan(plan)?;
+    Ok(ValidatedThemeSafeTitlePlan { plan })
 }

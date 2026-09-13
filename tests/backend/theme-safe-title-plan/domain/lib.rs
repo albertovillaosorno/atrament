@@ -33,6 +33,7 @@
 use atrament_theme_safe_title_plan::{
     DigitalTitleTreatment, ThemeSafeTitlePlan, ThemeSafeTitlePlanError,
     TitleProjection, validate_theme_safe_title_plan,
+    validate_theme_safe_title_plan_view,
 };
 
 type DigitalTreatment =
@@ -151,6 +152,21 @@ fn every_compact_title_drift_case_matches_identity_hierarchy_oracle() {
                     "hierarchy {hierarchy}, identity drift {identity_drift}, \
                      hierarchy drift {hierarchy_drift}",
                 );
+                match expected {
+                    Ok(()) => {
+                        let validated = validate_theme_safe_title_plan_view(
+                            &plan,
+                        )
+                        .expect("matching title plan seals");
+                        assert!(std::ptr::eq(validated.plan(), &plan));
+                    },
+                    Err(reason) => assert_eq!(
+                        validate_theme_safe_title_plan_view(&plan),
+                        Err(reason),
+                        "sealed hierarchy {hierarchy}, identity drift \
+                         {identity_drift}, hierarchy drift {hierarchy_drift}",
+                    ),
+                }
                 cases = cases.saturating_add(1);
             }
         }
