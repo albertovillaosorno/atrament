@@ -425,6 +425,21 @@ where
         Ok(placements)
     }
 
+    /// Return the logical column count of one completely validated grid.
+    ///
+    /// The count is semantic table topology, not a physical width. No count is
+    /// returned when any row or cell makes the complete grid invalid.
+    ///
+    /// # Errors
+    ///
+    /// Returns the same first structural failure and owner as `validate_grid`.
+    pub fn logical_column_count(
+        &self,
+    ) -> Result<u64, TableGridError<Identity>> {
+        table_grid_walk(self, |_| {})?;
+        table_grid_width(self)
+    }
+
     /// Validate logical row/column spans as one complete rectangular grid.
     ///
     /// The first row establishes logical width. Later rows fill the first

@@ -851,6 +851,11 @@ Its placement output is also checked against the independent occupancy model for
 all 20,000 generated table cases and the complete 9,724 compact-grid corpus,
 including typed invalid-grid parity rather than valid layouts alone.
 
+The same validated topology now exposes its compact logical column count only
+after complete-grid validation. Generated and exhaustive occupancy oracles check
+that count with identical invalid-grid failure precedence, including the full
+nonzero `u32` cell-span range without per-column allocation.
+
 An exact-base direct cell-span edit reuses that complete table-grid invariant. A
 valid edit preserves cell identity and child blocks, creates one accepted
 revision, and enters Undo history; a structurally invalid replacement is a typed

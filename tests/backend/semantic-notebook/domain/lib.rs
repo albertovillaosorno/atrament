@@ -150,6 +150,16 @@ fn grid_oracle_result(
     grid_oracle_placements(table).map(|_placements| ())
 }
 
+fn grid_oracle_column_count(
+    table: &Table<u32>,
+) -> Result<u64, TableGridError<u32>> {
+    grid_oracle_placements(table)?;
+    let count = table.rows.first().map_or(0, |row| {
+        row.cells.iter().map(|cell| u64::from(cell.span.columns.get())).sum()
+    });
+    Ok(count)
+}
+
 fn next_grid_seed(seed: &mut u64) -> u32 {
     *seed = seed
         .wrapping_mul(6_364_136_223_846_793_005)
@@ -972,6 +982,11 @@ fn logical_table_validator_matches_naive_occupancy_oracle() {
             grid_oracle_placements(&table),
             "logical placement oracle mismatch in generated case {case}",
         );
+        assert_eq!(
+            table.logical_column_count(),
+            grid_oracle_column_count(&table),
+            "logical column-count oracle mismatch in generated case {case}",
+        );
     }
     assert!(seen_row_counts.into_iter().all(|seen| seen));
     assert!(seen_cell_counts.into_iter().all(|seen| seen));
@@ -1034,6 +1049,11 @@ fn compact_table_grids_exhaustively_match_naive_occupancy_oracle() {
                 grid_oracle_placements(&table),
                 "compact table placement mismatch in exhaustive case {cases}",
             );
+            assert_eq!(
+                table.logical_column_count(),
+                grid_oracle_column_count(&table),
+                "compact table column count mismatch in case {cases}",
+            );
             cases = cases.saturating_add(1);
         }
     }
@@ -1049,6 +1069,7 @@ fn maximum_logical_colspan_stays_compact() {
     };
 
     assert_eq!(table.validate_grid(), Ok(()));
+    assert_eq!(table.logical_column_count(), Ok(u64::from(maximum)));
 }
 
 #[test]
@@ -1124,6 +1145,10 @@ fn logical_cell_placements_return_no_partial_projection_for_invalid_grid() {
 
     assert_eq!(
         table.logical_cell_placements(),
+        Err(TableGridError::RowWidth { row: 2 }),
+    );
+    assert_eq!(
+        table.logical_column_count(),
         Err(TableGridError::RowWidth { row: 2 }),
     );
 }
