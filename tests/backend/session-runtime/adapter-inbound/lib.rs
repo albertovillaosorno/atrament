@@ -784,6 +784,49 @@ fn security_header_outer_ows_trims_only_ascii_space_and_tab() {
                 expected,
                 "Origin byte {byte} prefix={prefix}",
             );
+
+
+            let mut authorization_value = authorization.as_bytes().to_vec();
+            if prefix {
+                authorization_value.insert(0, byte);
+            } else {
+                authorization_value.push(byte);
+            }
+            let mut request = format!(
+                concat!(
+                    "POST /api/session/task HTTP/1.1\r\n",
+                    "Host: {}\r\nAuthorization:",
+                ),
+                EXPECTED_HOST,
+            )
+            .into_bytes();
+            request.extend_from_slice(&authorization_value);
+            request.extend_from_slice(
+                format!(
+                    "\r\nOrigin: {EXPECTED_ORIGIN}\r\n",
+                )
+                .as_bytes(),
+            );
+            request.extend_from_slice(b"Content-Length: 0\r\n\r\n");
+            let expected = if matches!(byte, b' ' | b'\t') {
+                "HTTP/1.1 204 No Content"
+            } else {
+                ascii_header_byte_status(
+                    byte,
+                    "HTTP/1.1 401 Unauthorized",
+                )
+            };
+            let mut draft = SessionDraftService::default();
+            let response = route_with_draft(
+                &request,
+                EXPECTED_HOST,
+                &mut draft,
+            );
+            assert_eq!(
+                status_line(&response),
+                expected,
+                "Authorization byte {byte} prefix={prefix}",
+            );
         }
     }
 }
