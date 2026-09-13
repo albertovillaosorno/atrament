@@ -2449,11 +2449,14 @@ evidence that can prove source membership.
 
 Resolved spans retain original word timing, confidence, speaker, and text
 evidence; explicit unresolved fragments retain their text, timing, and
-confidence and cannot be silently promoted to a confident role. Each admitted
-review span also retains an exact source address: a half-open range of
-resolved words or an unresolved-fragment index in the supplied transcript.
-Overlapping and repeated reviewed spans remain valid because source addressing
-does not choose segmentation.
+confidence and cannot be silently promoted to a confident role. A 10-state
+role/source oracle crosses all five reviewed roles with resolved-word and
+unresolved-fragment evidence: every role may retain resolved evidence, while
+only `Unresolved` may retain an unresolved fragment. Each admitted review span
+also retains an exact source address: a half-open range of resolved words or an
+unresolved-fragment index in the supplied transcript. Overlapping and repeated
+reviewed spans remain valid because source addressing does not choose
+segmentation.
 
 The validated structure is constructor-owned and exposes read-only transcript,
 span, and location views so callers cannot forge span/location alignment. Span

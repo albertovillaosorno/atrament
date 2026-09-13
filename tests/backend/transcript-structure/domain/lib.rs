@@ -376,3 +376,63 @@ fn resolved_words_may_remain_semantically_unresolved_after_review() {
         .expect("review may retain semantic uncertainty");
     assert_eq!(reviewed.spans()[0].role, ReviewedTranscriptRole::Unresolved);
 }
+
+#[test]
+fn every_review_role_matches_resolved_and_unresolved_source_oracle() {
+    let roles = [
+        ReviewedTranscriptRole::Definition,
+        ReviewedTranscriptRole::Example,
+        ReviewedTranscriptRole::Formula,
+        ReviewedTranscriptRole::Section,
+        ReviewedTranscriptRole::Unresolved,
+    ];
+    let transcript = transcript_fixture();
+    let mut cases = 0_u8;
+    for role in roles {
+        let resolved = vec![ReviewedTranscriptSpan {
+            role,
+            source: ReviewedTranscriptSource::ResolvedWords(
+                &transcript.words[0..1],
+            ),
+        }];
+        let reviewed = review_transcript_structure(&transcript, resolved)
+            .expect("every reviewed role may retain resolved evidence");
+        assert_eq!(reviewed.spans()[0].role, role);
+        assert_eq!(
+            reviewed.locations(),
+            [ReviewedTranscriptSourceLocation::ResolvedWords {
+                end_word: 1,
+                start_word: 0,
+            }],
+        );
+        cases = cases.saturating_add(1);
+
+        let unresolved = vec![ReviewedTranscriptSpan {
+            role,
+            source: ReviewedTranscriptSource::UnresolvedFragment(
+                &transcript.unresolved_fragments[0],
+            ),
+        }];
+        if role == ReviewedTranscriptRole::Unresolved {
+            let reviewed = review_transcript_structure(&transcript, unresolved)
+                .expect("unresolved source may remain explicitly unresolved");
+            assert_eq!(reviewed.spans()[0].role, role);
+            assert_eq!(
+                reviewed.locations(),
+                [ReviewedTranscriptSourceLocation::UnresolvedFragment {
+                    fragment_index: 0,
+                }],
+            );
+        } else {
+            assert_eq!(
+                review_transcript_structure(&transcript, unresolved),
+                Err(TranscriptStructureError::UnresolvedFragmentPromotion {
+                    span_index: 0,
+                }),
+                "role {role:?} must not promote unresolved source evidence",
+            );
+        }
+        cases = cases.saturating_add(1);
+    }
+    assert_eq!(cases, 10);
+}
