@@ -1906,8 +1906,10 @@ sources, and unknown requested claims remain typed failures.
 
 A 32-case compact oracle crosses all four semantic provenance kinds with link
 presence, source presence, and provenance-identity match state to pin the same
-failure precedence through direct and sealed admission. Source retrieval,
-source-quality policy, citation
+failure precedence through direct and sealed admission. All ten structural
+error classes also require exact direct/sealed rejection parity, so none can
+produce constructor-sealed review evidence. Source retrieval, source-quality
+policy, citation
 parsing/formatting, and review UI remain separate.
 
 The task remains open for source retrieval/admission, a concrete source-metadata

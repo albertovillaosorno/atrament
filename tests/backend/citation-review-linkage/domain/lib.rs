@@ -200,6 +200,111 @@ fn duplicate_claim_provenance_source_and_link_reject_deterministically() {
     );
 }
 
+fn assert_direct_and_sealed_rejection(
+    review: &Review,
+    expected: CitationReviewLinkageError<u8, u8, u8>,
+) {
+    assert_eq!(
+        validate_citation_review_linkage(review),
+        Err(expected.clone()),
+    );
+    assert_eq!(
+        validate_citation_review_linkage_view(review).map(|_| ()),
+        Err(expected),
+    );
+}
+
+#[test]
+fn every_structural_error_rejects_direct_and_sealed_admission_identically() {
+    let mut cases = 0_u8;
+
+    let mut value = review();
+    value.claims.push(value.claims[0].clone());
+    assert_direct_and_sealed_rejection(
+        &value,
+        CitationReviewLinkageError::DuplicateClaim { claim: 1 },
+    );
+    cases += 1;
+
+    let mut value = review();
+    value.provenance.push(value.provenance[0].clone());
+    assert_direct_and_sealed_rejection(
+        &value,
+        CitationReviewLinkageError::DuplicateProvenance { provenance: 11 },
+    );
+    cases += 1;
+
+    let mut value = review();
+    value.sources.push(value.sources[0].clone());
+    assert_direct_and_sealed_rejection(
+        &value,
+        CitationReviewLinkageError::DuplicateSource { source: 21 },
+    );
+    cases += 1;
+
+    let mut value = review();
+    value.links.push(value.links[0].clone());
+    assert_direct_and_sealed_rejection(
+        &value,
+        CitationReviewLinkageError::DuplicateCitationLink {
+            claim: 1,
+            source: 21,
+        },
+    );
+    cases += 1;
+
+    let mut value = review();
+    value.links.clear();
+    assert_direct_and_sealed_rejection(
+        &value,
+        CitationReviewLinkageError::MissingCitationLink { claim: 1 },
+    );
+    cases += 1;
+
+    let mut value = review();
+    value.links[0].claim_identity = 2;
+    value.links[0].provenance_identity = 12;
+    assert_direct_and_sealed_rejection(
+        &value,
+        CitationReviewLinkageError::NonCitedClaimLink { claim: 2 },
+    );
+    cases += 1;
+
+    let mut value = review();
+    value.links[0].provenance_identity = 12;
+    assert_direct_and_sealed_rejection(
+        &value,
+        CitationReviewLinkageError::ProvenanceIdentityMismatch { claim: 1 },
+    );
+    cases += 1;
+
+    let mut value = review();
+    value.links[0].claim_identity = 99;
+    assert_direct_and_sealed_rejection(
+        &value,
+        CitationReviewLinkageError::UnknownClaim { claim: 99 },
+    );
+    cases += 1;
+
+    let mut value = review();
+    value.claims[0].provenance_identity = 99;
+    assert_direct_and_sealed_rejection(
+        &value,
+        CitationReviewLinkageError::UnknownProvenance { provenance: 99 },
+    );
+    cases += 1;
+
+    let mut value = review();
+    value.links[0].source_identity = 99;
+    assert_direct_and_sealed_rejection(
+        &value,
+        CitationReviewLinkageError::UnknownSource { source: 99 },
+    );
+    cases += 1;
+
+    assert_eq!(cases, 10);
+}
+
 #[test]
 fn one_cited_claim_may_link_to_multiple_distinct_sources() {
     let mut review = review();
