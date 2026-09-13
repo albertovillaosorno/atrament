@@ -196,9 +196,10 @@ claim and earliest prior owner without defining a parameter vocabulary.
 
 `validate_variation_sample_set` composes the structural checks in deterministic
 order: parameter validity, caller-order parameter identity, caller-order sample
-bounds, then replay consistency. Compact evidence covers 341 replay sequences
-and 2,700 complete two-sample sets in addition to the existing 1,099
-parameter/bound cases.
+bounds, then replay consistency. Successful admission can also seal the exact
+parameter and sample slice for downstream read-only use. Compact evidence covers
+341 replay sequences and 2,700 complete two-sample sets in addition to the
+existing 1,099 parameter/bound cases.
 
 The variation domain still does not infer a distribution, fit a statistical
 model, choose correlation semantics or an RNG, interpret context rules, or turn
@@ -250,8 +251,8 @@ Current checked-in regression evidence includes:
   interpreting evidence values; and
 - `tests/backend/handwriting-variation/domain/lib.rs`, which pins bound
   evidence, envelope ordering, metadata preservation, variation scale, sample
-  bounds, exact replay consistency, and complete sample-set validation without
-  implementing sampling.
+  bounds, exact replay consistency, and direct/sealed complete sample-set
+  validation without implementing sampling.
 
 Before extending calibration, preserve these boundaries:
 

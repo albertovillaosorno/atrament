@@ -39,6 +39,7 @@ use atrament_handwriting_variation::{
     VariationSampleSetError, VariationScale,
     validate_variation_parameter_identities,
     validate_variation_replay_consistency, validate_variation_sample_set,
+    validate_variation_sample_set_view,
 };
 
 type Parameter = VariationParameter<
@@ -691,6 +692,32 @@ fn compact_sample_sets_match_identity_bounds_and_replay_precedence() {
                                 first_value,
                                 second_value,
                             );
+                            match expected {
+                                Ok(()) => {
+                                    let validated =
+                                        validate_variation_sample_set_view(
+                                            &parameter,
+                                            &samples,
+                                        )
+                                        .expect("valid sample set seals");
+                                    assert!(std::ptr::eq(
+                                        validated.parameter(),
+                                        &parameter,
+                                    ));
+                                    assert!(std::ptr::eq(
+                                        validated.samples(),
+                                        samples.as_slice(),
+                                    ));
+                                },
+                                Err(reason) => assert_eq!(
+                                    validate_variation_sample_set_view(
+                                        &parameter,
+                                        &samples,
+                                    ),
+                                    Err(reason),
+                                    "sealed sample-set parity",
+                                ),
+                            }
                             cases = cases.saturating_add(1);
                         }
                     }

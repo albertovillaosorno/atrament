@@ -1484,11 +1484,15 @@ outcome.
 
 A complete sample-set gate now composes those invariants in one deterministic
 order: parameter validity, caller-order parameter identity, caller-order sample
-bounds, then exact replay consistency. A 2,700-case compact oracle crosses all
-parameter triples in `[-1, 1]`, both match/mismatch states for each sample's
-parameter identity, and every two-sample value pair in `[-2, 2]`. It reaches
-parameter, identity, bound, replay-conflict, and accepted outcomes while pinning
-the first identity mismatch in caller order.
+bounds, then exact replay consistency. Successful admission seals the exact
+parameter and caller-produced sample slice without choosing how values were
+generated.
+
+A 2,700-case compact oracle crosses all parameter triples in `[-1, 1]`, both
+match/mismatch states for each sample's parameter identity, and every two-sample
+value pair in `[-2, 2]`. It reaches parameter, identity, bound, replay-conflict,
+and accepted outcomes while pinning direct/sealed parity and the first identity
+mismatch in caller order.
 
 This does not choose parameter vocabularies, distribution families,
 correlations, context semantics, random generators, fitting policy, or a

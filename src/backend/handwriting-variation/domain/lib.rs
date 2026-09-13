@@ -244,6 +244,68 @@ where
     }
 }
 
+/// Constructor-sealed evidence that one exact parameter-bound sample set
+/// passed
+/// all structural variation invariants.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ValidatedVariationSampleSet<
+    'parameter,
+    'samples,
+    Parameter,
+    Sample,
+> {
+    parameter: &'parameter Parameter,
+    samples: &'samples [Sample],
+}
+
+impl<'parameter, 'samples, Parameter, Sample>
+    ValidatedVariationSampleSet<'parameter, 'samples, Parameter, Sample>
+{
+    /// Return the exact caller-owned parameter envelope used for admission.
+    #[must_use]
+    pub const fn parameter(&self) -> &'parameter Parameter {
+        self.parameter
+    }
+
+    /// Return the exact caller-produced sample slice used for admission.
+    #[must_use]
+    pub const fn samples(&self) -> &'samples [Sample] {
+        self.samples
+    }
+}
+
+/// Result of admitting one exact parameter-bound variation sample set.
+pub type VariationSampleSetValidationResult<
+    'parameter,
+    'samples,
+    ParameterIdentity,
+    Value,
+    Unit,
+    Distribution,
+    CorrelationGroup,
+    ContextRule,
+    Seed,
+    SemanticIdentity,
+> = Result<
+    ValidatedVariationSampleSet<
+        'parameter,
+        'samples,
+        VariationParameter<
+            ParameterIdentity,
+            Value,
+            Unit,
+            Distribution,
+            CorrelationGroup,
+            ContextRule,
+        >,
+        VariationSample<
+            VariationReplayKey<ParameterIdentity, Seed, SemanticIdentity>,
+            Value,
+        >,
+    >,
+    VariationSampleSetError,
+>;
+
 /// Require equal sampled values whenever exact replay inputs repeat.
 ///
 /// Samples remain caller-produced. This function does not choose a random
@@ -343,6 +405,60 @@ where
     validate_variation_replay_consistency(samples)
         .map_err(VariationSampleSetError::ReplayConflict)
 }
+/// Validate one complete sample set and seal its exact borrowed evidence.
+///
+/// # Errors
+///
+/// Returns exactly the same parameter, identity, bound, then replay failure as
+/// [`validate_variation_sample_set`].
+pub fn validate_variation_sample_set_view<
+    'parameter,
+    'samples,
+    ParameterIdentity,
+    Value,
+    Unit,
+    Distribution,
+    CorrelationGroup,
+    ContextRule,
+    Seed,
+    SemanticIdentity,
+>(
+    parameter: &'parameter VariationParameter<
+        ParameterIdentity,
+        Value,
+        Unit,
+        Distribution,
+        CorrelationGroup,
+        ContextRule,
+    >,
+    samples: &'samples [
+        VariationSample<
+            VariationReplayKey<ParameterIdentity, Seed, SemanticIdentity>,
+            Value,
+        >
+    ],
+) -> VariationSampleSetValidationResult<
+    'parameter,
+    'samples,
+    ParameterIdentity,
+    Value,
+    Unit,
+    Distribution,
+    CorrelationGroup,
+    ContextRule,
+    Seed,
+    SemanticIdentity,
+>
+where
+    ParameterIdentity: Eq,
+    Seed: Eq,
+    SemanticIdentity: Eq,
+    Value: Eq + Ord,
+{
+    validate_variation_sample_set(parameter, samples)?;
+    Ok(ValidatedVariationSampleSet { parameter, samples })
+}
+
 /// Require unique caller-owned identities across one parameter collection.
 ///
 /// This does not choose or interpret a parameter vocabulary. It only prevents
