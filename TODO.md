@@ -1651,10 +1651,13 @@ one source image identity plus caller-owned levels, threshold, cleanup, detail,
 minimum-feature, and preview controls can produce an ordered transparent-black
 vector-path result linked back to that source. Result validation rejects drift
 in any control or source identity from the exact request, with control drift
-checked first. A 128-case oracle crosses every six-control drift subset with
-matching or changed source identity and reaches both mismatch classes plus the
-exact-match path. The control values remain generic and have no inferred
-defaults.
+checked first. Successful comparison now seals the exact request/result pair so
+later vector or live projection can require source linkage without repeating
+identity logic. A 128-case oracle crosses every six-control drift subset with
+matching or changed source identity and requires direct/sealed parity across
+both mismatch classes plus the exact-match path.
+
+The control values remain generic and have no inferred defaults.
 
 Image decoding, control units/ranges/semantics, path extraction, vector
 geometry,

@@ -212,7 +212,9 @@ The line-art extraction boundary now also preserves caller-owned levels,
 threshold, cleanup, detail, minimum-feature, and preview controls as one exact
 request configuration. A result must match that entire configuration and the
 source image identity before its ordered transparent-black vector paths can be
-accepted as belonging to the request. Control units, ranges, algorithms, and
+accepted as belonging to the request. Successful comparison returns sealed
+request/result evidence; the 128-state drift oracle requires that sealed path to
+match the direct validator exactly. Control units, ranges, algorithms, and
 defaults remain intentionally unspecified.
 
 Still-open implementation work includes PDF serialization and validation,

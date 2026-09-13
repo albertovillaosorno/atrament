@@ -33,7 +33,7 @@
 use atrament_line_art_extraction::{
     LineArtAppearance, LineArtExtractionControls, LineArtExtractionPairError,
     LineArtExtractionRequest, LineArtExtractionResult,
-    validate_line_art_extraction_pair,
+    validate_line_art_extraction_pair, validate_line_art_extraction_pair_view,
 };
 
 type Controls = LineArtExtractionControls<u8, u8, u8, u8, u8, u8>;
@@ -184,6 +184,22 @@ fn every_control_and_source_drift_mask_matches_exact_pair_oracle() {
                 expected,
                 "control mask {control_mask:#08b}, source drift {source_drift}",
             );
+            match expected {
+                Ok(()) => {
+                    let validated = validate_line_art_extraction_pair_view(
+                        &request,
+                        &result,
+                    )
+                    .expect("exact extraction pair seals");
+                    assert!(std::ptr::eq(validated.request(), &request));
+                    assert!(std::ptr::eq(validated.result(), &result));
+                },
+                Err(reason) => assert_eq!(
+                    validate_line_art_extraction_pair_view(&request, &result),
+                    Err(reason),
+                    "sealed control {control_mask:#08b}, source {source_drift}",
+                ),
+            }
             cases = cases.saturating_add(1);
         }
     }

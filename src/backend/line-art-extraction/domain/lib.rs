@@ -66,6 +66,46 @@ pub struct LineArtExtractionControls<
     pub threshold: Threshold,
 }
 
+/// Constructor-sealed evidence that one extracted result belongs to the exact
+/// originating request.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ValidatedLineArtExtractionPair<
+    'request,
+    'result,
+    Controls,
+    Path,
+    SourceIdentity,
+> {
+    request: &'request LineArtExtractionRequest<Controls, SourceIdentity>,
+    result: &'result LineArtExtractionResult<Controls, Path, SourceIdentity>,
+}
+
+impl<'request, 'result, Controls, Path, SourceIdentity>
+    ValidatedLineArtExtractionPair<
+        'request,
+        'result,
+        Controls,
+        Path,
+        SourceIdentity,
+    >
+{
+    /// Return the exact request that admitted this result.
+    #[must_use]
+    pub const fn request(
+        &self,
+    ) -> &'request LineArtExtractionRequest<Controls, SourceIdentity> {
+        self.request
+    }
+
+    /// Return the exact result linked to the admitted request.
+    #[must_use]
+    pub const fn result(
+        &self,
+    ) -> &'result LineArtExtractionResult<Controls, Path, SourceIdentity> {
+        self.result
+    }
+}
+
 /// Why one extracted result does not belong to its originating request.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum LineArtExtractionPairError {
@@ -117,4 +157,37 @@ where
         return Err(LineArtExtractionPairError::SourceIdentityMismatch);
     }
     Ok(())
+}
+
+/// Validate and seal one exact request/result extraction pair.
+///
+/// # Errors
+///
+/// Returns the same control-first mismatch as
+/// [`validate_line_art_extraction_pair`].
+pub fn validate_line_art_extraction_pair_view<
+    'request,
+    'result,
+    Controls,
+    Path,
+    SourceIdentity,
+>(
+    request: &'request LineArtExtractionRequest<Controls, SourceIdentity>,
+    result: &'result LineArtExtractionResult<Controls, Path, SourceIdentity>,
+) -> Result<
+    ValidatedLineArtExtractionPair<
+        'request,
+        'result,
+        Controls,
+        Path,
+        SourceIdentity,
+    >,
+    LineArtExtractionPairError,
+>
+where
+    Controls: PartialEq,
+    SourceIdentity: PartialEq,
+{
+    validate_line_art_extraction_pair(request, result)?;
+    Ok(ValidatedLineArtExtractionPair { request, result })
 }
