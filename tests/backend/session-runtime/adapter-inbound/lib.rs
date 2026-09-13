@@ -1482,6 +1482,58 @@ impl SessionHandshake for JsonEdgeCompatibleHandshake {
     }
 }
 
+struct WrongObservedHandshake;
+
+impl SessionHandshake for WrongObservedHandshake {
+    fn evaluate<'version>(
+        &self,
+        versions: Versions<'version>,
+    ) -> HandshakeResult<'version> {
+        let result = HandshakeService.evaluate(versions);
+        let HandshakeResult::Incompatible {
+            diagnostics,
+            dimension,
+            expected,
+            ..
+        } = result
+        else {
+            panic!("fixture requires a real presented mismatch");
+        };
+        HandshakeResult::Incompatible {
+            diagnostics,
+            dimension,
+            expected,
+            observed: "atrament.prompt/not-presented",
+        }
+    }
+}
+
+struct EqualExpectedObservedHandshake;
+
+impl SessionHandshake for EqualExpectedObservedHandshake {
+    fn evaluate<'version>(
+        &self,
+        versions: Versions<'version>,
+    ) -> HandshakeResult<'version> {
+        let result = HandshakeService.evaluate(versions);
+        let HandshakeResult::Incompatible {
+            diagnostics,
+            dimension,
+            expected,
+            ..
+        } = result
+        else {
+            panic!("fixture requires a real presented mismatch");
+        };
+        HandshakeResult::Incompatible {
+            diagnostics,
+            dimension,
+            expected,
+            observed: expected,
+        }
+    }
+}
+
 struct JsonEdgeIncompatibleHandshake;
 
 impl SessionHandshake for JsonEdgeIncompatibleHandshake {
@@ -1513,7 +1565,10 @@ impl SessionHandshake for JsonEdgeIncompatibleHandshake {
     }
 }
 
-fn route_with_handshake(handshake: &dyn SessionHandshake) -> Vec<u8> {
+fn route_with_handshake_prompt(
+    handshake: &dyn SessionHandshake,
+    prompt_version: &str,
+) -> Vec<u8> {
     let authorization = format!("Bearer {EXPECTED_SECRET}");
     let request = format!(
         concat!(
@@ -1532,7 +1587,7 @@ fn route_with_handshake(handshake: &dyn SessionHandshake) -> Vec<u8> {
         CAPABILITY_VERSION,
         PRODUCT_VERSION,
         PROFILE_VERSION,
-        PROMPT_VERSION,
+        prompt_version,
         PROTOCOL_VERSION,
         RENDERER_VERSION,
     );
@@ -1546,6 +1601,27 @@ fn route_with_handshake(handshake: &dyn SessionHandshake) -> Vec<u8> {
         ),
         &mut draft,
     )
+}
+
+fn route_with_handshake(handshake: &dyn SessionHandshake) -> Vec<u8> {
+    route_with_handshake_prompt(handshake, PROMPT_VERSION)
+}
+
+#[test]
+fn handshake_mismatch_binds_observed_to_presented_version() {
+    const MISMATCH: &str = "atrament.prompt/client-old";
+    for handshake in [
+        &WrongObservedHandshake as &dyn SessionHandshake,
+        &EqualExpectedObservedHandshake as &dyn SessionHandshake,
+    ] {
+        let response = route_with_handshake_prompt(handshake, MISMATCH);
+        let (head, body) = response_parts(&response);
+        assert!(head.starts_with("HTTP/1.1 500 Internal Server Error\r\n"));
+        assert_eq!(body, br#"{"error":"invalid_diagnostic"}"#);
+    }
+
+    let response = route_with_handshake_prompt(&HANDSHAKE, MISMATCH);
+    assert_eq!(status_line(&response), "HTTP/1.1 409 Conflict");
 }
 
 #[test]

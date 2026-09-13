@@ -578,6 +578,20 @@ const fn handshake_dimension_name(dimension: VersionDimension) -> &'static str {
     }
 }
 
+const fn handshake_dimension_version(
+    versions: Versions<'_>,
+    dimension: VersionDimension,
+) -> &str {
+    match dimension {
+        VersionDimension::Capability => versions.capability,
+        VersionDimension::Product => versions.product,
+        VersionDimension::Profile => versions.profile,
+        VersionDimension::Prompt => versions.prompt,
+        VersionDimension::Protocol => versions.protocol,
+        VersionDimension::Renderer => versions.renderer,
+    }
+}
+
 const fn completeness_name(completeness: Completeness) -> &'static str {
     match completeness {
         Completeness::Complete => "complete",
@@ -777,8 +791,20 @@ fn route_handshake(
             diagnostics,
             dimension,
             expected,
-            ..
-        } => handshake_incompatible_response(&diagnostics, dimension, expected),
+            observed,
+        } => {
+            let presented =
+                handshake_dimension_version(presented_versions, dimension);
+            if observed != presented || observed == expected {
+                invalid_diagnostic_response()
+            } else {
+                handshake_incompatible_response(
+                    &diagnostics,
+                    dimension,
+                    expected,
+                )
+            }
+        },
     }
 }
 

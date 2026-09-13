@@ -212,10 +212,11 @@ Empty, multi-item, incomplete, advisory, wrong-severity, malformed-location,
 wrong-remediation, contextualized, cross-operation, or wrong-code diagnostics
 fail as `invalid_diagnostic`. Handshake projection also requires one
 `RequiredVersion` evidence item that exactly matches the reported dimension and
-expected identity. Draft resource projection requires one byte-limit observation
-whose observed count equals the rejected request body and exceeds its reported
-maximum, so transport neither invents, truncates, nor relabels application
-evidence.
+expected identity, while the result's observed identity must equal the version
+actually presented for that dimension and differ from the expected identity.
+Draft resource projection requires one byte-limit observation whose observed
+count equals the rejected request body and exceeds its reported maximum, so
+transport neither invents, truncates, nor relabels application evidence.
 
 Layout now provides the first accepted-revision producer beyond handshake and
 session draft: fixed-region overflow emits stable blocking diagnostics with
