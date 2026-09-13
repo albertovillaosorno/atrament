@@ -3007,7 +3007,10 @@ body-length mismatch, and non-digit Content-Length syntax such as a leading plus
 sign before draft state can change. A complete 128-byte single-character
 `Content-Length` oracle admits exactly the ten ASCII decimal digits with
 matching body lengths and proves every other ASCII byte rejects without draft
-mutation.
+mutation. A second full-ASCII composition oracle permits outer SP/HTAB or
+another decimal digit around an existing zero while matching the resulting body
+length; every other byte rejects. Same or conflicting duplicate lengths reject
+regardless of header-name casing.
 
 Security-sensitive header values trim only HTTP space/tab OWS;
 Unicode whitespace remains part of the value and therefore cannot normalize a

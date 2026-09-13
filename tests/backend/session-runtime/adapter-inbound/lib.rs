@@ -2255,6 +2255,94 @@ fn every_ascii_single_byte_content_length_matches_decimal_grammar() {
 }
 
 #[test]
+fn content_length_outer_ows_and_duplicates_are_exact() {
+    let authorization = format!("Bearer {EXPECTED_SECRET}");
+    for byte in 0_u8..=127 {
+        for prefix in [true, false] {
+            let mut value = vec![b'0'];
+            if prefix {
+                value.insert(0, byte);
+            } else {
+                value.push(byte);
+            }
+            let mut request = format!(
+                concat!(
+                    "POST /api/session/task HTTP/1.1\r\n",
+                    "Host: {}\r\nAuthorization: {}\r\n",
+                    "Origin: {}\r\nContent-Length:",
+                ),
+                EXPECTED_HOST, authorization, EXPECTED_ORIGIN,
+            )
+            .into_bytes();
+            request.extend_from_slice(&value);
+            request.extend_from_slice(b"\r\n\r\n");
+            let body_length = if byte.is_ascii_digit() {
+                let digit = usize::from(byte - b'0');
+                if prefix { digit * 10 } else { digit }
+            } else {
+                0
+            };
+            request.extend(std::iter::repeat_n(b'x', body_length));
+            let mut draft = seeded_private_draft();
+            let response = route_with_draft(
+                &request,
+                EXPECTED_HOST,
+                &mut draft,
+            );
+            if matches!(byte, b' ' | b'\t') || byte.is_ascii_digit() {
+                assert_eq!(
+                    status_line(&response),
+                    "HTTP/1.1 204 No Content",
+                    "Content-Length byte {byte} prefix={prefix}",
+                );
+                assert_eq!(
+                    draft.value(DraftField::Task),
+                    "x".repeat(body_length),
+                );
+            } else {
+                assert_eq!(
+                    status_line(&response),
+                    "HTTP/1.1 400 Bad Request",
+                    "Content-Length byte {byte} prefix={prefix}",
+                );
+                assert_private_draft_unchanged(&draft);
+            }
+        }
+    }
+
+    for (first, second) in [("0", "0"), ("0", "1"), ("1", "0")] {
+        for second_name in ["Content-Length", "content-length"] {
+            let request = format!(
+                concat!(
+                    "POST /api/session/task HTTP/1.1\r\n",
+                    "Host: {}\r\nAuthorization: {}\r\n",
+                    "Origin: {}\r\nContent-Length: {}\r\n",
+                    "{}: {}\r\n\r\n",
+                ),
+                EXPECTED_HOST,
+                authorization,
+                EXPECTED_ORIGIN,
+                first,
+                second_name,
+                second,
+            );
+            let mut draft = seeded_private_draft();
+            let response = route_with_draft(
+                request.as_bytes(),
+                EXPECTED_HOST,
+                &mut draft,
+            );
+            assert_eq!(
+                status_line(&response),
+                "HTTP/1.1 400 Bad Request",
+                "duplicate lengths {first}/{second} name={second_name}",
+            );
+            assert_private_draft_unchanged(&draft);
+        }
+    }
+}
+
+#[test]
 fn malformed_draft_body_framing_never_mutates_state() {
     let authorization = format!("Bearer {EXPECTED_SECRET}");
     let prefix = format!(
