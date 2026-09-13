@@ -450,6 +450,31 @@ where
         self.nodes
     }
 
+    /// Validate batch-local handles without revalidating the admitted graph.
+    ///
+    /// # Errors
+    ///
+    /// Returns the first declaration/reference failure in caller order.
+    pub fn validate_batch_local_handles<Handle>(
+        &self,
+        declarations: &[
+            BatchLocalHandleDeclaration<Node::Identity, Handle>
+        ],
+        references: &[
+            BatchLocalHandleReference<Node::Identity, Handle>
+        ],
+    ) -> BatchLocalHandleValidationResult<Node::Identity, Handle>
+    where
+        Handle: Clone + Ord,
+    {
+        validate_batch_local_handles_with_positions(
+            self.nodes,
+            &self.positions,
+            declarations,
+            references,
+        )
+    }
+
     /// Check dependency closure without revalidating the admitted graph.
     ///
     /// # Errors
@@ -533,6 +558,27 @@ where
 {
     let positions = validated_command_positions(nodes)
         .map_err(|reason| BatchLocalHandleError::Graph { reason })?;
+    validate_batch_local_handles_with_positions(
+        nodes,
+        &positions,
+        declarations,
+        references,
+    )
+}
+
+fn validate_batch_local_handles_with_positions<Node, Handle>(
+    nodes: &[Node],
+    positions: &CommandPositions<'_, Node::Identity>,
+    declarations: &[
+        BatchLocalHandleDeclaration<Node::Identity, Handle>
+    ],
+    references: &[BatchLocalHandleReference<Node::Identity, Handle>],
+) -> BatchLocalHandleValidationResult<Node::Identity, Handle>
+where
+    Node: CommandDependencyNode,
+    Node::Identity: Clone,
+    Handle: Clone + Ord,
+{
     let mut producers = BTreeMap::<&Handle, &Node::Identity>::new();
     for declaration in declarations {
         if !positions.contains_key(&declaration.command) {

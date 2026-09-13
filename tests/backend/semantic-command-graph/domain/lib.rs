@@ -271,6 +271,21 @@ fn all_16_handle_declaration_reference_dependency_states_match_oracle() {
             ),
             "handle-state mask {mask:#06b}",
         );
+        let validated = validate_command_graph_view(&nodes)
+            .expect("handle oracle graph seals");
+        assert_eq!(
+            validated.validate_batch_local_handles(
+                &declarations,
+                &references,
+            ),
+            expected_handle_case(
+                declared,
+                duplicate,
+                referenced,
+                dependent,
+            ),
+            "sealed handle-state mask {mask:#06b}",
+        );
         cases = cases.saturating_add(1);
     }
     assert_eq!(cases, 16);

@@ -325,17 +325,19 @@ A separate generic command-graph domain validates duplicate command identities,
 self-dependencies, missing dependencies, cycles, and dependency direction
 without choosing command-ID syntax or changing command order. A
 constructor-sealed valid-graph view retains the exact ordered node slice and its
-validated identity-position index so repeated selection analysis does not
-revalidate graph structure. Interactive command-ID selections can report their
+validated identity-position index so repeated selection and batch-local handle
+analysis does not revalidate graph structure. Interactive command-ID selections
+can report their
 complete transitive omitted dependency requirements without silently changing
 the caller's selection.
 
 A 20,000-case valid-DAG oracle cross-checks exact graph size, dependency
 closure, omitted-edge requirements, summaries, bounded reporting, and
 closed-selection
-results through both direct and sealed graph paths. It also asserts coverage of
-every generated node-count bucket, duplicate edges, empty/full/partial
-selections, and both closed and missing-requirement outcomes.
+results through both direct and sealed graph paths. The existing 16-state
+batch-local handle oracle also requires direct/sealed parity. The graph corpus
+asserts coverage of every generated node-count bucket, duplicate edges,
+empty/full/partial selections, and both closed and missing-requirement outcomes.
 
 Session-level selection analysis binds those requirements to capability behavior
 and the exact accepted base revision, but does not construct a replacement
