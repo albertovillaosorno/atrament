@@ -834,6 +834,12 @@ The occupancy generator also asserts every row/cell-count bucket, every 1–3
 row/column span, valid grids, and all three typed grid failure classes are
 actually reached.
 
+A read-only logical-placement projection now exposes each validated cell's exact
+semantic row/cell identity, zero-based logical row/column start, and existing
+span in semantic row order. It reuses the validator's grid walk and returns no
+partial placement set for an invalid table. These are logical topology indices,
+not physical layout, wrapping, alignment, border, or renderer coordinates.
+
 An exact-base direct cell-span edit reuses that complete table-grid invariant. A
 valid edit preserves cell identity and child blocks, creates one accepted
 revision, and enters Undo history; a structurally invalid replacement is a typed

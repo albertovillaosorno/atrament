@@ -42,7 +42,8 @@ use atrament_semantic_notebook::{
     OutputProfile, Page, PaperProfile, Provenance, ProvenanceKind,
     SemanticBlockKind, SemanticIdentityDescriptor, SemanticIdentityKind,
     SemanticIdentityPathEntry, Style,
-    Table, TableCell, TableCellSpan, TableGridError, TableRow, TableRowRole,
+    Table, TableCell, TableCellSpan, TableGridError,
+    TableLogicalCellPlacement, TableRow, TableRowRole,
     UnresolvedBlock, UnresolvedReason, semantic_block, semantic_block_page,
     semantic_identity_descriptor, semantic_identity_kind,
     semantic_identity_path,
@@ -1024,6 +1025,83 @@ fn maximum_logical_colspan_stays_compact() {
     };
 
     assert_eq!(table.validate_grid(), Ok(()));
+}
+
+#[test]
+fn logical_cell_placements_reuse_validated_merged_grid_topology() {
+    let table = Table {
+        id: 100u32,
+        rows: vec![
+            grid_row(1, vec![grid_cell(10, 2, 2), grid_cell(11, 1, 1)]),
+            grid_row(2, vec![grid_cell(20, 1, 1)]),
+            grid_row(3, vec![grid_cell(30, 1, 1), grid_cell(31, 2, 1)]),
+        ],
+    };
+    let span_two_by_two = TableCellSpan {
+        columns: NonZeroU32::new(2).expect("nonzero columns"),
+        rows: NonZeroU32::new(2).expect("nonzero rows"),
+    };
+    let span_two_by_one = TableCellSpan {
+        columns: NonZeroU32::new(2).expect("nonzero columns"),
+        rows: NonZeroU32::MIN,
+    };
+
+    assert_eq!(
+        table.logical_cell_placements(),
+        Ok(vec![
+            TableLogicalCellPlacement {
+                cell: 10,
+                column_start: 0,
+                row: 1,
+                row_start: 0,
+                span: span_two_by_two,
+            },
+            TableLogicalCellPlacement {
+                cell: 11,
+                column_start: 2,
+                row: 1,
+                row_start: 0,
+                span: TableCellSpan::SINGLE,
+            },
+            TableLogicalCellPlacement {
+                cell: 20,
+                column_start: 2,
+                row: 2,
+                row_start: 1,
+                span: TableCellSpan::SINGLE,
+            },
+            TableLogicalCellPlacement {
+                cell: 30,
+                column_start: 0,
+                row: 3,
+                row_start: 2,
+                span: TableCellSpan::SINGLE,
+            },
+            TableLogicalCellPlacement {
+                cell: 31,
+                column_start: 1,
+                row: 3,
+                row_start: 2,
+                span: span_two_by_one,
+            },
+        ]),
+    );
+}
+
+#[test]
+fn logical_cell_placements_return_no_partial_projection_for_invalid_grid() {
+    let table = Table {
+        id: 101u32,
+        rows: vec![
+            grid_row(1, vec![grid_cell(10, 1, 1), grid_cell(11, 1, 1)]),
+            grid_row(2, vec![grid_cell(20, 1, 1)]),
+        ],
+    };
+
+    assert_eq!(
+        table.logical_cell_placements(),
+        Err(TableGridError::RowWidth { row: 2 }),
+    );
 }
 
 #[test]

@@ -405,6 +405,26 @@ impl<Identity> Table<Identity>
 where
     Identity: Copy,
 {
+    /// Project validated cells into logical row/column placement order.
+    ///
+    /// Starts are zero-based logical indices, not physical coordinates. The
+    /// returned placement retains the exact semantic row/cell identities and
+    /// existing span. No partial placements are returned for an invalid grid.
+    ///
+    /// # Errors
+    ///
+    /// Returns the same first structural failure and owner as `validate_grid`.
+    pub fn logical_cell_placements(
+        &self,
+    ) -> Result<
+        Vec<TableLogicalCellPlacement<Identity>>,
+        TableGridError<Identity>,
+    > {
+        let mut placements = Vec::new();
+        table_grid_walk(self, |placement| placements.push(placement))?;
+        Ok(placements)
+    }
+
     /// Validate logical row/column spans as one complete rectangular grid.
     ///
     /// The first row establishes logical width. Later rows fill the first
@@ -415,35 +435,7 @@ where
     /// Returns the first semantic cell or row whose span cannot participate in
     /// one complete non-overlapping rectangular table grid.
     pub fn validate_grid(&self) -> Result<(), TableGridError<Identity>> {
-        let width = table_grid_width(self)?;
-        let row_count = u64::try_from(self.rows.len()).unwrap_or(u64::MAX);
-        let mut active = Vec::<TableActiveSpan>::new();
-        let mut current_row = 0u64;
-        for row in &self.rows {
-            active.retain(|span| current_row < span.until_row);
-            active.sort_unstable_by_key(|span| span.start);
-            let mut cursor = 0u64;
-            let mut additions = Vec::<TableActiveSpan>::new();
-            let context = TableGridRowContext {
-                active: &active,
-                current_row,
-                row_count,
-                width,
-            };
-            for cell in &row.cells {
-                cursor = table_grid_advance_cursor(cursor, context.active);
-                let placement = table_grid_place_cell(cell, cursor, context)?;
-                additions.extend(placement.active_span);
-                cursor = placement.end;
-            }
-            cursor = table_grid_advance_cursor(cursor, &active);
-            if cursor != width {
-                return Err(TableGridError::RowWidth { row: row.id });
-            }
-            active.extend(additions);
-            current_row = current_row.saturating_add(1);
-        }
-        Ok(())
+        table_grid_walk(self, |_| {})
     }
 }
 
@@ -479,6 +471,21 @@ impl Default for TableCellSpan {
     fn default() -> Self {
         Self::SINGLE
     }
+}
+
+/// Read-only logical placement of one cell in a validated semantic table.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct TableLogicalCellPlacement<Identity> {
+    /// Semantic identity of the placed cell.
+    pub cell: Identity,
+    /// Zero-based logical column where this cell begins.
+    pub column_start: u64,
+    /// Semantic identity of the row that directly owns this cell.
+    pub row: Identity,
+    /// Zero-based logical row where this cell begins.
+    pub row_start: u64,
+    /// Existing logical coverage retained exactly from the semantic cell.
+    pub span: TableCellSpan,
 }
 
 /// Typed structural failure for one logical merged-cell table grid.
@@ -1863,6 +1870,52 @@ where
         until_row,
     });
     Ok(TableGridCellPlacement { active_span, end })
+}
+
+fn table_grid_walk<Identity, Visit>(
+    table: &Table<Identity>,
+    mut visit: Visit,
+) -> Result<(), TableGridError<Identity>>
+where
+    Identity: Copy,
+    Visit: FnMut(TableLogicalCellPlacement<Identity>),
+{
+    let width = table_grid_width(table)?;
+    let row_count = u64::try_from(table.rows.len()).unwrap_or(u64::MAX);
+    let mut active = Vec::<TableActiveSpan>::new();
+    let mut current_row = 0u64;
+    for row in &table.rows {
+        active.retain(|span| current_row < span.until_row);
+        active.sort_unstable_by_key(|span| span.start);
+        let mut cursor = 0u64;
+        let mut additions = Vec::<TableActiveSpan>::new();
+        let context = TableGridRowContext {
+            active: &active,
+            current_row,
+            row_count,
+            width,
+        };
+        for cell in &row.cells {
+            cursor = table_grid_advance_cursor(cursor, context.active);
+            let placement = table_grid_place_cell(cell, cursor, context)?;
+            visit(TableLogicalCellPlacement {
+                cell: cell.id,
+                column_start: cursor,
+                row: row.id,
+                row_start: current_row,
+                span: cell.span,
+            });
+            additions.extend(placement.active_span);
+            cursor = placement.end;
+        }
+        cursor = table_grid_advance_cursor(cursor, &active);
+        if cursor != width {
+            return Err(TableGridError::RowWidth { row: row.id });
+        }
+        active.extend(additions);
+        current_row = current_row.saturating_add(1);
+    }
+    Ok(())
 }
 
 fn table_grid_width<Identity>(
