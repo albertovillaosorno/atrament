@@ -37,6 +37,7 @@ use atrament_handwriting_variation_quality_evidence::{
     HandwritingVariationQualityFinding,
     detected_handwriting_variation_artifacts,
     validate_handwriting_variation_quality_evidence,
+    validate_handwriting_variation_quality_evidence_view,
 };
 
 const AXES: [HandwritingVariationQualityAxis; 7] = [
@@ -67,6 +68,11 @@ fn every_todo_and_adr_artifact_axis_is_required_independently() {
         validate_handwriting_variation_quality_evidence(&evidence),
         Ok(()),
     );
+    let validated =
+        validate_handwriting_variation_quality_evidence_view(&evidence)
+            .expect("complete evidence seals exact report");
+    assert!(std::ptr::eq(validated.evidence(), evidence.as_slice()));
+    assert!(validated.detected_artifacts().is_empty());
     assert_eq!(
         detected_handwriting_variation_artifacts(&evidence),
         Ok(vec![]),
@@ -78,12 +84,19 @@ fn missing_axis_rejects_when_other_axes_have_no_detected_artifact() {
     for missing in AXES {
         let mut evidence = complete_evidence();
         evidence.retain(|item| item.axis != missing);
+        let expected =
+            HandwritingVariationQualityEvidenceError::MissingAxis {
+                axis: missing,
+            };
         assert_eq!(
             validate_handwriting_variation_quality_evidence(&evidence),
-            Err(HandwritingVariationQualityEvidenceError::MissingAxis {
-                axis: missing,
-            }),
+            Err(expected),
             "missing axis {missing:?}",
+        );
+        assert_eq!(
+            validate_handwriting_variation_quality_evidence_view(&evidence),
+            Err(expected),
+            "sealed missing axis {missing:?}",
         );
     }
 }
@@ -98,12 +111,19 @@ fn each_duplicate_axis_rejects_before_completeness_is_claimed() {
             .copied()
             .expect("complete fixture contains every required axis");
         evidence.insert(3, duplicate_item);
+        let expected =
+            HandwritingVariationQualityEvidenceError::DuplicateAxis {
+                axis: duplicate,
+            };
         assert_eq!(
             validate_handwriting_variation_quality_evidence(&evidence),
-            Err(HandwritingVariationQualityEvidenceError::DuplicateAxis {
-                axis: duplicate,
-            }),
+            Err(expected),
             "duplicate axis {duplicate:?}",
+        );
+        assert_eq!(
+            validate_handwriting_variation_quality_evidence_view(&evidence),
+            Err(expected),
+            "sealed duplicate axis {duplicate:?}",
         );
     }
 }
@@ -136,8 +156,17 @@ fn all_128_finding_masks_return_exact_detected_axes_in_canonical_order() {
             .collect::<Vec<_>>();
         assert_eq!(
             detected_handwriting_variation_artifacts(&evidence),
-            Ok(expected),
+            Ok(expected.clone()),
             "finding mask {mask:#09b}",
+        );
+        let validated =
+            validate_handwriting_variation_quality_evidence_view(&evidence)
+                .expect("every finding mask remains structurally complete");
+        assert!(std::ptr::eq(validated.evidence(), evidence.as_slice()));
+        assert_eq!(
+            validated.detected_artifacts(),
+            expected,
+            "sealed finding mask {mask:#09b}",
         );
         cases = cases.saturating_add(1);
     }

@@ -1517,9 +1517,13 @@ Current executable evidence now freezes seven independent variation-quality
 axes spanning those five artifact risks plus the accepted ADR's correlation
 retention and extreme-legibility checks. One caller-computed finding is required
 per axis. Duplicate or omitted axes reject structurally, while detected
-artifacts remain evidence and are reported in canonical axis order. All 128
-combinations
-of not-detected/detected findings are covered without depending on input order.
+artifacts remain evidence and are reported in canonical axis order. Structural
+completeness now also produces constructor-sealed evidence, and canonical
+detected-artifact projection can be repeated from that proof without rescanning
+axis coverage.
+
+All 128 combinations of not-detected/detected findings require the sealed and
+direct projections to agree without depending on input order.
 
 Statistical detectors, thresholds, perceptual metrics, correlation models,
 legibility criteria, sampling, rendering, and release policy remain open.

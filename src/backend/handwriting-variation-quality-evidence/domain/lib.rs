@@ -85,6 +85,38 @@ pub struct HandwritingVariationQualityEvidence {
     pub finding: HandwritingVariationQualityFinding,
 }
 
+/// Constructor-sealed evidence that all required variation-quality axes exist.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ValidatedHandwritingVariationQualityEvidence<'evidence> {
+    evidence: &'evidence [HandwritingVariationQualityEvidence],
+}
+
+impl<'evidence> ValidatedHandwritingVariationQualityEvidence<'evidence> {
+    /// Return every caller-detected artifact in canonical required-axis order.
+    #[must_use]
+    pub fn detected_artifacts(&self) -> Vec<HandwritingVariationQualityAxis> {
+        REQUIRED_AXES
+            .into_iter()
+            .filter(|axis| {
+                self.evidence.iter().any(|item| {
+                    item.axis == *axis
+                        && item.finding
+                            == HandwritingVariationQualityFinding::
+                                ArtifactDetected
+                })
+            })
+            .collect()
+    }
+
+    /// Return the exact caller-owned evidence slice that was admitted.
+    #[must_use]
+    pub const fn evidence(
+        &self,
+    ) -> &'evidence [HandwritingVariationQualityEvidence] {
+        self.evidence
+    }
+}
+
 /// Structural failure in one variation-quality evidence report.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum HandwritingVariationQualityEvidenceError {
@@ -113,17 +145,26 @@ pub fn detected_handwriting_variation_artifacts(
     Vec<HandwritingVariationQualityAxis>,
     HandwritingVariationQualityEvidenceError,
 > {
+    Ok(
+        validate_handwriting_variation_quality_evidence_view(evidence)?
+            .detected_artifacts(),
+    )
+}
+
+/// Validate exact evidence and seal borrowed structural completeness.
+///
+/// # Errors
+///
+/// Returns exactly the same duplicate-before-missing structural failure as
+/// [`validate_handwriting_variation_quality_evidence`].
+pub fn validate_handwriting_variation_quality_evidence_view(
+    evidence: &[HandwritingVariationQualityEvidence],
+) -> Result<
+    ValidatedHandwritingVariationQualityEvidence<'_>,
+    HandwritingVariationQualityEvidenceError,
+> {
     validate_handwriting_variation_quality_evidence(evidence)?;
-    Ok(REQUIRED_AXES
-        .into_iter()
-        .filter(|axis| {
-            evidence.iter().any(|item| {
-                item.axis == *axis
-                    && item.finding
-                        == HandwritingVariationQualityFinding::ArtifactDetected
-            })
-        })
-        .collect())
+    Ok(ValidatedHandwritingVariationQualityEvidence { evidence })
 }
 
 /// Validate independent coverage of every first-release variation-quality axis.
