@@ -2915,9 +2915,12 @@ Origin, and Bearer credential before protected draft mutation. The request line
 requires exactly one ASCII space between method, target, and HTTP/1.1; full
 0–255 byte sweeps now pin both separators to that one byte and reject every byte
 after the HTTP version. An independent 2,048-case byte-substitution matrix pins
-all eight `HTTP/1.1` bytes exactly. GET and POST are also case-sensitive across
-every ASCII case variant; tabs, repeated spaces, trailing whitespace, and other
-versions reject before routing.
+all eight `HTTP/1.1` bytes exactly.
+
+GET and POST are case-sensitive across every ASCII case variant. A separate
+1,792-case byte-substitution matrix pins every byte of both admitted method
+names. Tabs, repeated spaces, trailing whitespace, and other methods or versions
+reject before routing.
 
 Browser privacy regression evidence also pins the generated workspace to exactly
 three admitted same-origin `fetch` call sites for handshake and draft transport.

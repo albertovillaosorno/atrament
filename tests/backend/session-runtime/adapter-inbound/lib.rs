@@ -683,6 +683,59 @@ fn request_methods_are_ascii_case_sensitive() {
 }
 
 #[test]
+fn every_admitted_method_byte_is_exact() {
+    for (method, target, expected_success) in [
+        (b"GET".as_slice(), "/health", "HTTP/1.1 200 OK"),
+        (
+            b"POST".as_slice(),
+            "/api/session/task",
+            "HTTP/1.1 204 No Content",
+        ),
+    ] {
+        for index in 0..method.len() {
+            for byte in 0_u8..=255 {
+                let mut candidate = method.to_vec();
+                candidate[index] = byte;
+                let mut request = candidate;
+                request.push(b' ');
+                request.extend_from_slice(target.as_bytes());
+                request.extend_from_slice(b" HTTP/1.1\r\nHost: ");
+                request.extend_from_slice(EXPECTED_HOST.as_bytes());
+                if method == b"POST" {
+                    request.extend_from_slice(b"\r\nAuthorization: Bearer ");
+                    request.extend_from_slice(EXPECTED_SECRET.as_bytes());
+                    request.extend_from_slice(b"\r\nOrigin: ");
+                    request.extend_from_slice(EXPECTED_ORIGIN.as_bytes());
+                    request.extend_from_slice(b"\r\nContent-Length: 0");
+                }
+                request.extend_from_slice(b"\r\n\r\n");
+                let expected = if byte == method[index] {
+                    expected_success
+                } else {
+                    "HTTP/1.1 400 Bad Request"
+                };
+                let mut draft = seeded_private_draft();
+                let response = route_with_draft(
+                    &request,
+                    EXPECTED_HOST,
+                    &mut draft,
+                );
+                assert_eq!(
+                    status_line(&response),
+                    expected,
+                    "method={method:?} index={index} byte={byte}",
+                );
+                if method == b"POST" && byte == method[index] {
+                    assert_eq!(draft.value(DraftField::Task), "");
+                } else if method == b"POST" {
+                    assert_private_draft_unchanged(&draft);
+                }
+            }
+        }
+    }
+}
+
+#[test]
 fn every_http_version_byte_is_exact() {
     const VERSION: &[u8] = b"HTTP/1.1";
     for index in 0..VERSION.len() {
