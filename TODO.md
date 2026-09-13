@@ -1432,9 +1432,13 @@ tangent, curvature, width or pressure proxy, velocity, and explicit contact
 state; each declared stroke retains semantic origin, profile choice, and
 contextual entry/exit conditions. Empty declared strokes reject before any
 projection, while an empty plan remains valid for content with no handwriting.
-A validated plan can project the exact planner-order stroke indices owned by one
-semantic origin, providing an edit-local dependency region without mutating or
-replanning the plan.
+A constructor-sealed validated plan can project the exact planner-order stroke
+indices owned by one semantic origin repeatedly without rescanning structural
+validity, providing an edit-local dependency region without mutating or
+replanning the plan. An exhaustive 6,561-state eight-stroke oracle crosses
+empty, origin-A, and origin-B strokes; it pins first-empty precedence across
+6,305 invalid states and exact provenance projections across all 256 valid
+states.
 
 Candidate ranking/selection, invalidation orchestration, geometry, units, joins,
 deformation, spacing, interpolation, rendering, PDF, and machine-motion behavior

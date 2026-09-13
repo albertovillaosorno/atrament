@@ -147,6 +147,52 @@ pub struct StrokePlan<Stroke> {
     pub strokes: Vec<Stroke>,
 }
 
+/// Constructor-sealed evidence that one exact stroke plan is structurally
+/// valid.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ValidatedStrokePlan<'plan, Stroke> {
+    plan: &'plan StrokePlan<Stroke>,
+}
+
+impl<'plan, Stroke> ValidatedStrokePlan<'plan, Stroke> {
+    /// Return the exact plan that produced this structural evidence.
+    #[must_use]
+    pub const fn plan(&self) -> &'plan StrokePlan<Stroke> {
+        self.plan
+    }
+
+    /// Return strokes in the exact planner order retained by the plan.
+    #[must_use]
+    pub fn strokes(&self) -> &'plan [Stroke] {
+        &self.plan.strokes
+    }
+}
+
+impl<Stroke> ValidatedStrokePlan<'_, Stroke>
+where
+    Stroke: SemanticStrokePlanEntry,
+{
+    /// Return planner-order indices owned by one exact semantic origin.
+    #[must_use]
+    pub fn semantic_origin_stroke_indices(
+        &self,
+        semantic_origin: &Stroke::SemanticOrigin,
+    ) -> Vec<usize>
+    where
+        Stroke::SemanticOrigin: PartialEq,
+    {
+        self.plan
+            .strokes
+            .iter()
+            .enumerate()
+            .filter_map(|(stroke_index, stroke)| {
+                (stroke.semantic_origin() == semantic_origin)
+                    .then_some(stroke_index)
+            })
+            .collect()
+    }
+}
+
 /// Why an inspectable stroke plan is structurally invalid.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum StrokePlanError {
@@ -175,16 +221,26 @@ where
     Stroke: SemanticStrokePlanEntry,
     Stroke::SemanticOrigin: PartialEq,
 {
+    Ok(
+        validate_stroke_plan_view(plan)?
+            .semantic_origin_stroke_indices(semantic_origin),
+    )
+}
+
+/// Validate one exact plan and seal borrowed structural evidence.
+///
+/// # Errors
+///
+/// Returns exactly the same first empty-stroke failure as
+/// [`validate_stroke_plan`].
+pub fn validate_stroke_plan_view<Stroke>(
+    plan: &StrokePlan<Stroke>,
+) -> Result<ValidatedStrokePlan<'_, Stroke>, StrokePlanError>
+where
+    Stroke: StrokePlanEntry,
+{
     validate_stroke_plan(plan)?;
-    Ok(plan
-        .strokes
-        .iter()
-        .enumerate()
-        .filter_map(|(stroke_index, stroke)| {
-            (stroke.semantic_origin() == semantic_origin)
-                .then_some(stroke_index)
-        })
-        .collect())
+    Ok(ValidatedStrokePlan { plan })
 }
 
 /// Validate structural stroke-plan invariants before any projection.
