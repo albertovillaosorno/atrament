@@ -1148,9 +1148,12 @@ preview overflow contained by their own scroll surfaces. At 320 by 480 px, the
 Task field and page stage are both visible in the initial frame.
 
 Very-short reflow keeps both Task and the page stage visible down to 225 px of
-viewport height without document overflow. A 32-case Firefox matrix spanning
-320 through 1024 px widths, 225 through 576 px heights, split extremes, and 60%
-through 160% preview zoom completed without layout or reachability failures.
+viewport height without document overflow. A checked-in 32-case Firefox matrix
+crosses 320, 480, 481, and 1024 px widths with 225, 360, 480, and 576 px
+heights, plus both split and 60%/160% zoom extremes. Every state keeps the
+document and workspace viewport-bounded, both editor surfaces visible, and all
+four page edges scroll-reachable.
+
 With JavaScript disabled, the short-height warning stays visible without taking
 workspace flow, and Firefox requests only the document and stylesheet. BiDi
 viewport emulation at 320 and 481 pixels confirms the static shell remains 50/50

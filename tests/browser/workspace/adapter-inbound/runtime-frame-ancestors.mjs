@@ -9,8 +9,8 @@
 //
 // Boundary-Contract:
 // - Owns:
-//   - Real-browser evidence for localhost frame isolation and browser-session
-//     disposal.
+//   - Real-browser evidence for workspace layout, localhost frame isolation,
+//     and browser-session disposal.
 // - Must-Not:
 //   - Read live session-private state, persist browser data, or weaken runtime
 //     admission to make automation easier.
@@ -28,8 +28,8 @@
 //   - Proves browser-enforced frame isolation and page-session disposal.
 // - Description:
 //   - Uses Firefox's built-in WebDriver BiDi endpoint through a dependency-free
-//     RFC 6455 client. It checks hostile framing, fragment-scrubbed refresh,
-//     and cancellation of an in-flight draft write when the page closes.
+//     RFC 6455 client. It checks responsive layout, hostile framing,
+//     fragment-scrubbed refresh, and in-flight write cancellation on close.
 // - Usage:
 //   - Run through `pnpm test:browser-security` from the repository root.
 // - Defaults:
@@ -479,6 +479,314 @@ async function waitForSessionStatus(client, context, expected) {
         `session status did not reach ${expected}: ${JSON.stringify(state)}`,
     );
 }
+
+async function setFirefoxViewport(client, context, width, height) {
+    await client.command("browsingContext.setViewport", {
+        context,
+        devicePixelRatio: 1,
+        viewport: { height, width },
+    });
+    for (let attempt = 0; attempt < 40; attempt += 1) {
+        const response = await client.command("script.evaluate", {
+            awaitPromise: false,
+            expression: [
+                "JSON.stringify([window.innerWidth,",
+                "window.innerHeight])",
+            ].join(" "),
+            resultOwnership: "none",
+            target: { context },
+        });
+        assert.equal(response.type, "success");
+        assert.equal(response.result.type, "string");
+        const observed = JSON.parse(response.result.value);
+        if (observed[0] === width && observed[1] === height) {
+            return;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+    throw new Error(`Firefox viewport did not settle at ${width}x${height}`);
+}
+
+async function configureWorkspaceLayout(client, context, key, zoom) {
+    const response = await client.command("script.evaluate", {
+        awaitPromise: false,
+        expression: `(() => {
+            const divider = document.querySelector("#workspace-divider");
+            divider.dispatchEvent(new KeyboardEvent("keydown", {
+                bubbles: true,
+                key: ${JSON.stringify(key)}
+            }));
+            const reset = document.querySelector("#zoom-reset");
+            const zoomOut = document.querySelector("#zoom-out");
+            const zoomIn = document.querySelector("#zoom-in");
+            reset.click();
+            const control = ${zoom} < 100 ? zoomOut : zoomIn;
+            const steps = Math.abs(${zoom} - 100) / 10;
+            for (let step = 0; step < steps; step += 1) {
+                control.click();
+            }
+            return true;
+        })()`,
+        resultOwnership: "none",
+        target: { context },
+    });
+    assert.equal(response.type, "success");
+}
+
+async function evaluateWorkspaceLayout(client, context) {
+    const response = await client.command("script.evaluate", {
+        awaitPromise: false,
+        expression: `JSON.stringify((() => {
+            const rect = (selector) => {
+                const element = document.querySelector(selector);
+                const box = element.getBoundingClientRect();
+                return {
+                    bottom: box.bottom,
+                    height: box.height,
+                    left: box.left,
+                    right: box.right,
+                    top: box.top,
+                    width: box.width
+                };
+            };
+            const divider = document.querySelector("#workspace-divider");
+            const stage = document.querySelector("#page-stage");
+            const paper = document.querySelector(".paper-preview");
+            const stageBox = stage.getBoundingClientRect();
+            stage.scrollLeft = 0;
+            stage.scrollTop = 0;
+            const paperAtStart = paper.getBoundingClientRect();
+            const startReachable = {
+                left: paperAtStart.left >= stageBox.left - 1,
+                top: paperAtStart.top >= stageBox.top - 1
+            };
+            stage.scrollLeft = stage.scrollWidth;
+            stage.scrollTop = stage.scrollHeight;
+            const paperAtEnd = paper.getBoundingClientRect();
+            const endReachable = {
+                bottom: paperAtEnd.bottom <= stageBox.bottom + 1,
+                right: paperAtEnd.right <= stageBox.right + 1
+            };
+            stage.scrollLeft = 0;
+            stage.scrollTop = 0;
+            return {
+                divider: {
+                    disabled: divider.getAttribute("aria-disabled"),
+                    maximum: divider.getAttribute("aria-valuemax"),
+                    minimum: divider.getAttribute("aria-valuemin"),
+                    now: divider.getAttribute("aria-valuenow"),
+                    tabindex: divider.getAttribute("tabindex")
+                },
+                document: {
+                    scrollHeight: document.documentElement.scrollHeight,
+                    scrollWidth: document.documentElement.scrollWidth
+                },
+                endReachable,
+                paper: rect(".paper-preview"),
+                preview: rect("#preview-panel"),
+                source: rect("#source-panel"),
+                stage: rect("#page-stage"),
+                stageSize: {
+                    clientHeight: stage.clientHeight,
+                    clientWidth: stage.clientWidth,
+                    scrollHeight: stage.scrollHeight,
+                    scrollWidth: stage.scrollWidth
+                },
+                startReachable,
+                task: rect("#task-input"),
+                viewport: {
+                    height: window.innerHeight,
+                    width: window.innerWidth
+                },
+                workspace: rect(".workspace-grid"),
+                zoom: document
+                    .querySelector("#preview-scale")
+                    .textContent.trim()
+            };
+        })())`,
+        resultOwnership: "none",
+        target: { context },
+    });
+    assert.equal(response.type, "success");
+    assert.equal(response.result.type, "string");
+    return JSON.parse(response.result.value);
+}
+
+function assertVisibleInViewport(rectangle, viewportHeight, label) {
+    assert.ok(rectangle.width > 0, `${label} has positive width`);
+    assert.ok(rectangle.height > 0, `${label} has positive height`);
+    assert.ok(rectangle.bottom > 0, `${label} reaches below viewport top`);
+    assert.ok(rectangle.top < viewportHeight, `${label} reaches viewport`);
+}
+
+test(
+    "Firefox viewport matrix keeps both workspace surfaces reachable",
+    { skip: !FIREFOX_AVAILABLE, timeout: 30_000 },
+    async () => {
+        fs.mkdirSync(".temp", { recursive: true });
+        const profile = fs.mkdtempSync(".temp/workspace-layout-");
+        const apiRequests = [];
+        const server = createSessionFixtureServer(apiRequests);
+        const children = [];
+        let bidi;
+        try {
+            server.listen(0, "127.0.0.1");
+            await once(server, "listening");
+            const address = server.address();
+            assert.notEqual(typeof address, "string");
+            assert.notEqual(address, null);
+            const origin = `http://127.0.0.1:${address.port}`;
+
+            bidi = await startBidiFirefox(profile, children);
+            const tab = await bidi.command("browsingContext.create", {
+                type: "tab",
+            });
+            await bidi.command("browsingContext.navigate", {
+                context: tab.context,
+                url: origin,
+                wait: "complete",
+            });
+
+            const widths = [320, 480, 481, 1024];
+            const heights = [225, 360, 480, 576];
+            const variants = [
+                { key: "Home", share: 35, zoom: 60 },
+                { key: "End", share: 65, zoom: 160 },
+            ];
+            let cases = 0;
+            for (const width of widths) {
+                for (const height of heights) {
+                    for (const variant of variants) {
+                        await setFirefoxViewport(
+                            bidi,
+                            tab.context,
+                            width,
+                            height,
+                        );
+                        await configureWorkspaceLayout(
+                            bidi,
+                            tab.context,
+                            variant.key,
+                            variant.zoom,
+                        );
+                        const state = await evaluateWorkspaceLayout(
+                            bidi,
+                            tab.context,
+                        );
+                        const label = [
+                            `${width}x${height}`,
+                            variant.key,
+                            `${variant.zoom}%`,
+                        ].join(" ");
+                        assert.deepEqual(
+                            state.viewport,
+                            { height, width },
+                            `${label}: exact viewport`,
+                        );
+                        assert.ok(
+                            state.document.scrollWidth <= width,
+                            `${label}: no document horizontal overflow`,
+                        );
+                        assert.ok(
+                            state.document.scrollHeight <= height,
+                            `${label}: no document vertical overflow`,
+                        );
+                        assert.ok(
+                            state.workspace.left >= -1
+                                && state.workspace.right <= width + 1,
+                            `${label}: workspace remains horizontally visible`,
+                        );
+                        assert.ok(
+                            state.workspace.top >= -1
+                                && state.workspace.bottom <= height + 1,
+                            `${label}: workspace remains viewport bounded`,
+                        );
+                        assertVisibleInViewport(
+                            state.source,
+                            height,
+                            `${label}: source panel`,
+                        );
+                        assertVisibleInViewport(
+                            state.preview,
+                            height,
+                            `${label}: preview panel`,
+                        );
+                        assertVisibleInViewport(
+                            state.task,
+                            height,
+                            `${label}: task field`,
+                        );
+                        assertVisibleInViewport(
+                            state.stage,
+                            height,
+                            `${label}: page stage`,
+                        );
+                        assert.ok(
+                            state.stageSize.clientWidth > 0
+                                && state.stageSize.clientHeight > 0,
+                            `${label}: page stage has a viewport`,
+                        );
+                        assert.deepEqual(
+                            state.startReachable,
+                            { left: true, top: true },
+                            `${label}: page start edges reachable`,
+                        );
+                        assert.deepEqual(
+                            state.endReachable,
+                            { bottom: true, right: true },
+                            `${label}: page end edges reachable`,
+                        );
+                        assert.equal(
+                            state.zoom,
+                            `Preview · ${variant.zoom}%`,
+                            `${label}: preview zoom`,
+                        );
+                        if (width <= 480) {
+                            assert.deepEqual(
+                                state.divider,
+                                {
+                                    disabled: "true",
+                                    maximum: "50",
+                                    minimum: "50",
+                                    now: "50",
+                                    tabindex: "-1",
+                                },
+                                `${label}: compact divider is fixed`,
+                            );
+                        } else {
+                            assert.deepEqual(
+                                state.divider,
+                                {
+                                    disabled: null,
+                                    maximum: "65",
+                                    minimum: "35",
+                                    now: String(variant.share),
+                                    tabindex: "0",
+                                },
+                                `${label}: wide divider reaches requested edge`,
+                            );
+                        }
+                        cases += 1;
+                    }
+                }
+            }
+            assert.equal(cases, 32);
+            assert.deepEqual(apiRequests, []);
+        } finally {
+            if (bidi?.socket != null) {
+                bidi.socket.end();
+            }
+            if (server.listening) {
+                server.close();
+                await once(server, "close");
+            }
+            for (const child of children.reverse()) {
+                await stopChild(child);
+            }
+            fs.rmSync(profile, { recursive: true, force: true });
+        }
+    },
+);
 
 test(
     "Firefox blocks Atrament inside a hostile loopback frame",
