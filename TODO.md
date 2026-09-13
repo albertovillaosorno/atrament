@@ -1273,9 +1273,12 @@ inventory checks reuse one successful manifest admission without treating the
 current Rust value as a wire schema.
 
 Archive inventory validation now also requires exactly one root manifest and
-exact agreement between declared and
-observed non-manifest paths, rejecting missing, undeclared, duplicate, or unsafe
-names before entry decoding. Canonical archive evidence separately rejects
+exact agreement between declared and observed non-manifest paths, rejecting
+missing, undeclared, duplicate, or unsafe names before entry decoding. A sealed
+inventory view retains the exact admitted manifest and exact observed path slice
+only after that comparison succeeds; it carries no entry bytes or ZIP metadata.
+
+Canonical archive evidence separately rejects
 compression and platform-specific extras and requires ZIP64 exactly when an
 adapter reports ordinary ZIP limits are exceeded; the domain does not invent
 those limits. Application-owned complete-profile change detection now maps

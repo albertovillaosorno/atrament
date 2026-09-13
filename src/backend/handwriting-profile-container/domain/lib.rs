@@ -180,7 +180,50 @@ pub struct ValidatedProfileManifest<'manifest> {
     manifest: &'manifest ProfileManifest,
 }
 
+/// Sealed evidence that observed archive names exactly match one admitted
+/// manifest.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ValidatedProfileEntryInventory<'manifest, 'observed> {
+    manifest: &'manifest ProfileManifest,
+    observed_paths: &'observed [&'observed str],
+}
+
+impl<'manifest, 'observed>
+    ValidatedProfileEntryInventory<'manifest, 'observed>
+{
+    /// Return the exact admitted manifest whose declared inventory matched.
+    #[must_use]
+    pub const fn manifest(&self) -> &'manifest ProfileManifest {
+        self.manifest
+    }
+
+    /// Return the exact observed archive path sequence that was admitted.
+    #[must_use]
+    pub const fn observed_paths(&self) -> &'observed [&'observed str] {
+        self.observed_paths
+    }
+}
+
 impl<'manifest> ValidatedProfileManifest<'manifest> {
+    /// Seal one exact observed archive-name inventory after comparison.
+    ///
+    /// # Errors
+    ///
+    /// Returns the same typed mismatch as [`Self::validate_entry_inventory`].
+    pub fn admit_entry_inventory<'observed>(
+        &self,
+        observed_paths: &'observed [&'observed str],
+    ) -> Result<
+        ValidatedProfileEntryInventory<'manifest, 'observed>,
+        ProfileEntryInventoryError,
+    > {
+        self.validate_entry_inventory(observed_paths)?;
+        Ok(ValidatedProfileEntryInventory {
+            manifest: self.manifest,
+            observed_paths,
+        })
+    }
+
     /// Return canonical archive paths without revalidating this manifest.
     #[must_use]
     pub fn canonical_archive_paths(&self) -> Vec<&'manifest str> {

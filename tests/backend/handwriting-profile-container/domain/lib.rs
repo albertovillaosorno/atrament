@@ -505,6 +505,22 @@ fn generated_archive_inventory_mutations_match_reference_oracle() {
             expected,
             "sealed archive inventory case {case}",
         );
+        match (validated.admit_entry_inventory(&observed_refs), &expected) {
+            (Ok(inventory), Ok(())) => {
+                assert!(std::ptr::eq(inventory.manifest(), &value));
+                assert!(std::ptr::eq(
+                    inventory.observed_paths(),
+                    observed_refs.as_slice(),
+                ));
+            },
+            (Err(actual), Err(expected_error)) => {
+                assert_eq!(&actual, expected_error);
+            },
+            (actual, expected) => panic!(
+                "sealed inventory mismatch in case {case}: \
+                 {actual:?} vs {expected:?}",
+            ),
+        }
     }
     assert!(seen_operations.into_iter().all(|seen| seen));
     assert!(saw_valid);
