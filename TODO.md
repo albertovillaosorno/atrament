@@ -1285,12 +1285,13 @@ missing, undeclared, duplicate, or unsafe names before entry decoding. A sealed
 inventory view retains the exact admitted manifest and exact observed path slice
 only after that comparison succeeds; it carries no entry bytes or ZIP metadata.
 
-Canonical archive evidence separately rejects
-compression and platform-specific extras and requires ZIP64 exactly when an
-adapter reports ordinary ZIP limits are exceeded; the domain does not invent
-those limits. Application-owned complete-profile change detection now maps
-changed content to mandatory canonical rewrite while unchanged content retains
-permission to preserve its original archive bytes.
+Canonical archive evidence separately rejects compression and platform-specific
+extras and requires ZIP64 exactly when an adapter reports ordinary ZIP limits
+are exceeded. Successful admission seals the exact adapter-observed encoding
+evidence, while the domain does not invent those limits. Application-owned
+complete-profile change detection maps changed content to mandatory canonical
+rewrite while unchanged content retains permission to preserve its original
+archive bytes.
 
 It does not parse or write ZIP or JSON, choose wire field names or numeric
 resource limits, compute hashes, decode typed sections, interpret opaque assets,
@@ -2656,7 +2657,8 @@ observed.
 
 Canonical archive-encoding evidence now exhausts all 16 stored/compressed,
 platform-extra, ZIP64-required, and ZIP64-present combinations against an
-independent precedence model. Entry verification adds 4,096 full-range `u64`
+independent precedence model through direct and sealed admission. Entry
+verification adds 4,096 full-range `u64`
 length and digest combinations, retaining byte-length mismatch precedence before
 digest comparison.
 

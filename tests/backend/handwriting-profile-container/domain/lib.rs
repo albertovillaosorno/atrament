@@ -42,7 +42,8 @@ use atrament_handwriting_profile_container::{
     ProfileZip64Use, Sha256Digest, canonical_profile_archive_paths,
     canonical_profile_entry_order, profile_entry_kind,
     profile_rewrite_disposition, profile_section_entries,
-    validate_profile_archive_encoding, validate_profile_entry_inventory,
+    validate_profile_archive_encoding, validate_profile_archive_encoding_view,
+    validate_profile_entry_inventory,
     validate_profile_manifest, validate_profile_manifest_view,
     verify_profile_entry,
 };
@@ -115,10 +116,23 @@ fn every_archive_encoding_state_matches_canonical_reference() {
                         zip64_requirement,
                         zip64_use,
                     };
+                    let expected = reference_archive_encoding(evidence);
                     assert_eq!(
                         validate_profile_archive_encoding(evidence),
-                        reference_archive_encoding(evidence),
+                        expected,
                     );
+                    match expected {
+                        Ok(()) => assert_eq!(
+                            validate_profile_archive_encoding_view(evidence)
+                                .expect("canonical ZIP evidence seals")
+                                .evidence(),
+                            evidence,
+                        ),
+                        Err(reason) => assert_eq!(
+                            validate_profile_archive_encoding_view(evidence),
+                            Err(reason),
+                        ),
+                    }
                 }
             }
         }

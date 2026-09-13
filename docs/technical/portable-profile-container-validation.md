@@ -144,7 +144,8 @@ empty, traversal, and backslash-containing segments.
 ### Canonical archive evidence
 
 The domain does not write ZIP bytes, but it validates adapter-observed canonical
-encoding facts through `validate_profile_archive_encoding`.
+encoding facts through `validate_profile_archive_encoding`. Successful admission
+can also seal the exact observed evidence for downstream read-only use.
 
 A canonical archive requires:
 
@@ -244,7 +245,8 @@ The executable profile-container fixture is
 `tests/backend/handwriting-profile-container/domain/lib.rs`. It currently
 covers:
 
-- canonical ZIP storage/extras/ZIP64 relationships;
+- canonical ZIP storage/extras/ZIP64 relationships across all 16 states through
+  direct and sealed admission;
 - archive inventory agreement and mismatch cases;
 - path safety and duplicate declarations;
 - deterministic archive ordering, including all 720 declaration orders for a

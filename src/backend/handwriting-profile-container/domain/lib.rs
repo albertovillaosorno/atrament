@@ -100,6 +100,21 @@ pub struct ProfileArchiveEncodingEvidence {
     pub zip64_use: ProfileZip64Use,
 }
 
+/// Constructor-sealed evidence that one exact adapter-observed ZIP encoding
+/// state satisfies the canonical portable-profile relationship.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ValidatedProfileArchiveEncoding {
+    evidence: ProfileArchiveEncodingEvidence,
+}
+
+impl ValidatedProfileArchiveEncoding {
+    /// Return the exact adapter-observed encoding evidence that was admitted.
+    #[must_use]
+    pub const fn evidence(self) -> ProfileArchiveEncodingEvidence {
+        self.evidence
+    }
+}
+
 /// Platform-specific ZIP metadata presence reported by an archive adapter.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ProfileArchivePlatformExtras {
@@ -674,6 +689,21 @@ pub const fn validate_profile_archive_encoding(
         return Err(ProfileArchiveEncodingError::UnexpectedZip64);
     }
     Ok(())
+}
+
+/// Validate canonical archive encoding and seal the exact observed evidence.
+///
+/// # Errors
+///
+/// Returns exactly the same compression, platform-extra, and ZIP64 failures as
+/// [`validate_profile_archive_encoding`].
+pub const fn validate_profile_archive_encoding_view(
+    evidence: ProfileArchiveEncodingEvidence,
+) -> Result<ValidatedProfileArchiveEncoding, ProfileArchiveEncodingError> {
+    match validate_profile_archive_encoding(evidence) {
+        Ok(()) => Ok(ValidatedProfileArchiveEncoding { evidence }),
+        Err(reason) => Err(reason),
+    }
 }
 
 /// Return every archive path in deterministic canonical writer order.
