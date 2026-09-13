@@ -902,6 +902,30 @@ fn run_process_fixture_child(mode: &str) {
     );
     assert!(!impact_seeds.is_empty());
 
+    let DirectEditBatchGraphSizeOutcome::Sized {
+        revision: graph_revision,
+        size: graph_size,
+    } = session.direct_edit_batch_graph_size(&batch_review)
+    else {
+        panic!("process fixture batch graph size must be derived");
+    };
+    assert_eq!(graph_revision, revision);
+    assert_eq!(graph_size.commands, 2);
+    assert_eq!(graph_size.dependency_edges, 1);
+    assert_eq!(
+        session.direct_edit_batch_graph_limits(
+            &batch_review,
+            CommandGraphLimits {
+                commands: 2,
+                dependency_edges: 1,
+            },
+        ),
+        DirectEditBatchGraphLimitsOutcome::Admitted {
+            revision,
+            size: graph_size,
+        },
+    );
+
     let selected = BTreeSet::from([12_u32]);
     let DirectEditBatchSelectionRequirementsOutcome::Requirements {
         missing,
