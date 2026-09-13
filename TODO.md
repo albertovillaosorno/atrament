@@ -2994,7 +2994,10 @@ and representative upper/lowercase percent escapes against public routing.
 Every header field name must also use the HTTP token grammar; whitespace,
 Unicode, control characters, and other non-token names reject even when the
 header is unrelated to Atrament. Header values reject control bytes other than
-HTTP tab whitespace, including NUL and DEL, before routing.
+HTTP tab whitespace, including NUL and DEL, before routing. Exhaustive 128-byte
+ASCII oracles independently pin both the complete field-name token alphabet and
+the field-value control rule instead of relying only on sampled malformed
+headers or generated request mutation.
 
 Request framing rejects transfer encoding,
 duplicate content lengths,

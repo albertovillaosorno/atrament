@@ -656,6 +656,62 @@ fn malformed_or_missing_host_is_rejected_before_routing() {
 }
 
 #[test]
+fn every_ascii_header_field_name_byte_matches_http_token_grammar() {
+    let is_token = |byte: u8| {
+        byte.is_ascii_alphanumeric()
+            || matches!(
+                byte,
+                b'!' | b'#' | b'$' | b'%' | b'&' | b'\'' | b'*'
+                    | b'+' | b'-' | b'.' | b'^' | b'_' | b'`' | b'|'
+                    | b'~'
+            )
+    };
+
+    for byte in 0_u8..=127 {
+        let mut request = b"GET /health HTTP/1.1\r\nHost: ".to_vec();
+        request.extend_from_slice(EXPECTED_HOST.as_bytes());
+        request.extend_from_slice(b"\r\n");
+        request.push(byte);
+        request.extend_from_slice(b": safe\r\n\r\n");
+        let expected = if is_token(byte) {
+            "HTTP/1.1 200 OK"
+        } else {
+            "HTTP/1.1 400 Bad Request"
+        };
+        assert_eq!(
+            status_line(&route_runtime(&request, EXPECTED_HOST)),
+            expected,
+            "unexpected header-name classification for ASCII byte {byte}",
+        );
+    }
+}
+
+#[test]
+fn every_ascii_header_field_value_byte_matches_control_rule() {
+    let is_admitted = |byte: u8| {
+        byte == b'\t' || (byte >= b' ' && byte != 0x7f)
+    };
+
+    for byte in 0_u8..=127 {
+        let mut request = b"GET /health HTTP/1.1\r\nHost: ".to_vec();
+        request.extend_from_slice(EXPECTED_HOST.as_bytes());
+        request.extend_from_slice(b"\r\nX-Probe: ");
+        request.push(byte);
+        request.extend_from_slice(b"\r\n\r\n");
+        let expected = if is_admitted(byte) {
+            "HTTP/1.1 200 OK"
+        } else {
+            "HTTP/1.1 400 Bad Request"
+        };
+        assert_eq!(
+            status_line(&route_runtime(&request, EXPECTED_HOST)),
+            expected,
+            "unexpected header-value classification for ASCII byte {byte}",
+        );
+    }
+}
+
+#[test]
 fn origin_form_ascii_graphics_match_rfc3986_character_classes() {
     let allowed = |byte: u8| {
         byte.is_ascii_alphanumeric()
