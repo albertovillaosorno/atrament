@@ -208,10 +208,14 @@ expected identity to equal the browser's current value for that exact dimension.
 The localhost adapter requires exactly one route-specific application
 diagnostic for the current singleton handshake-mismatch and draft-resource
 response schemas.
-Empty, multi-item, cross-operation codes, or wrong operation bindings fail as
-`invalid_diagnostic`. Handshake projection also requires one `RequiredVersion`
-evidence item that exactly matches the reported dimension and expected identity,
-so transport neither invents, truncates, nor relabels application evidence.
+Empty, multi-item, incomplete, advisory, wrong-severity, malformed-location,
+wrong-remediation, contextualized, cross-operation, or wrong-code diagnostics
+fail as `invalid_diagnostic`. Handshake projection also requires one
+`RequiredVersion` evidence item that exactly matches the reported dimension and
+expected identity. Draft resource projection requires one byte-limit observation
+whose observed count equals the rejected request body and exceeds its reported
+maximum, so transport neither invents, truncates, nor relabels application
+evidence.
 
 Layout now provides the first accepted-revision producer beyond handshake and
 session draft: fixed-region overflow emits stable blocking diagnostics with

@@ -37,8 +37,9 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 use atrament_diagnostic::{
-    Completeness, DIAGNOSTIC_VERSION, DiagnosticCode, DiagnosticSet, Evidence,
-    Operation,
+    BlockingDisposition, Completeness, DIAGNOSTIC_VERSION, DiagnosticCode,
+    DiagnosticSet, Evidence, LocationKind, LocationRole, Operation,
+    OperationContext, OperationContextKind, RelationshipKind, Severity,
 };
 use atrament_session_draft::{MAX_DRAFT_FIELD_BYTES, SessionDraftService};
 use atrament_session_draft_port::{DraftField, DraftMutation, SessionDraft};
@@ -2083,6 +2084,191 @@ fn draft_read_admission_failure_is_uniform_and_private() {
     }
 }
 
+#[derive(Clone, Copy, Debug)]
+enum RouteDiagnosticShapeMutation {
+    Advisory,
+    Contextualized,
+    ExtraLocation,
+    ExtraRemediation,
+    Incomplete,
+    MissingLocation,
+    MissingRemediation,
+    RelatedLocation,
+    RelationalLocation,
+    WrongLocationKind,
+    WrongSeverity,
+}
+
+fn mutate_route_diagnostic_shape(
+    diagnostics: &mut DiagnosticSet,
+    mutation: RouteDiagnosticShapeMutation,
+) {
+    let diagnostic = diagnostics
+        .diagnostics
+        .first_mut()
+        .expect("fixture starts with one diagnostic");
+    match mutation {
+        RouteDiagnosticShapeMutation::Advisory => {
+            diagnostic.disposition = BlockingDisposition::Advisory;
+        },
+        RouteDiagnosticShapeMutation::Contextualized => {
+            diagnostic.operation.contexts.push(OperationContext {
+                identity: String::from("unexpected-context"),
+                kind: OperationContextKind::AcceptedRevision,
+            });
+        },
+        RouteDiagnosticShapeMutation::ExtraLocation => {
+            diagnostic.locations.push(
+                diagnostic
+                    .locations
+                    .first()
+                    .expect("fixture location")
+                    .clone(),
+            );
+        },
+        RouteDiagnosticShapeMutation::ExtraRemediation => {
+            diagnostic.remediations.push(
+                *diagnostic
+                    .remediations
+                    .first()
+                    .expect("fixture remediation"),
+            );
+        },
+        RouteDiagnosticShapeMutation::Incomplete => {
+            diagnostics.completeness = Completeness::Incomplete;
+        },
+        RouteDiagnosticShapeMutation::MissingLocation => {
+            diagnostic.locations.clear();
+        },
+        RouteDiagnosticShapeMutation::MissingRemediation => {
+            diagnostic.remediations.clear();
+        },
+        RouteDiagnosticShapeMutation::RelatedLocation => {
+            diagnostic.locations[0].role = LocationRole::Related;
+        },
+        RouteDiagnosticShapeMutation::RelationalLocation => {
+            diagnostic.locations[0].relationship =
+                Some(RelationshipKind::Dependency);
+        },
+        RouteDiagnosticShapeMutation::WrongLocationKind => {
+            diagnostic.locations[0].kind = LocationKind::Object;
+        },
+        RouteDiagnosticShapeMutation::WrongSeverity => {
+            diagnostic.severity = Severity::Warning;
+        },
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+enum DraftDiagnosticEvidenceMutation {
+    ExtraEvidence,
+    MaximumNotExceeded,
+    MissingEvidence,
+    ObservedMismatch,
+    WrongEvidenceKind,
+}
+
+struct ShapeDiagnosticDraft(RouteDiagnosticShapeMutation);
+
+impl SessionDraft for ShapeDiagnosticDraft {
+    fn replace(&mut self, field: DraftField, value: String) -> DraftMutation {
+        let mut source = SessionDraftService::default();
+        let DraftMutation::ResourceLimit { mut diagnostics } =
+            source.replace(field, value)
+        else {
+            panic!("oversized fixture must produce a resource diagnostic");
+        };
+        mutate_route_diagnostic_shape(&mut diagnostics, self.0);
+        DraftMutation::ResourceLimit { diagnostics }
+    }
+
+    fn value(&self, _field: DraftField) -> &str {
+        ""
+    }
+}
+
+struct EvidenceDiagnosticDraft(DraftDiagnosticEvidenceMutation);
+
+impl SessionDraft for EvidenceDiagnosticDraft {
+    fn replace(&mut self, field: DraftField, value: String) -> DraftMutation {
+        let mut source = SessionDraftService::default();
+        let DraftMutation::ResourceLimit { mut diagnostics } =
+            source.replace(field, value)
+        else {
+            panic!("oversized fixture must produce a resource diagnostic");
+        };
+        let diagnostic = &mut diagnostics.diagnostics[0];
+        match self.0 {
+            DraftDiagnosticEvidenceMutation::ExtraEvidence => {
+                diagnostic.evidence.push(
+                    *diagnostic.evidence.first().expect("fixture evidence"),
+                );
+            },
+            DraftDiagnosticEvidenceMutation::MaximumNotExceeded => {
+                let Evidence::LimitExceeded {
+                    maximum, observed, ..
+                } = &mut diagnostic.evidence[0]
+                else {
+                    panic!("fixture must use byte-limit evidence");
+                };
+                *maximum = *observed;
+            },
+            DraftDiagnosticEvidenceMutation::MissingEvidence => {
+                diagnostic.evidence.clear();
+            },
+            DraftDiagnosticEvidenceMutation::ObservedMismatch => {
+                let Evidence::LimitExceeded { observed, .. } =
+                    &mut diagnostic.evidence[0]
+                else {
+                    panic!("fixture must use byte-limit evidence");
+                };
+                *observed = observed.saturating_add(1);
+            },
+            DraftDiagnosticEvidenceMutation::WrongEvidenceKind => {
+                diagnostic.evidence = vec![Evidence::RequiredVersion {
+                    dimension: "prompt",
+                    expected: PROMPT_VERSION,
+                }];
+            },
+        }
+        DraftMutation::ResourceLimit { diagnostics }
+    }
+
+    fn value(&self, _field: DraftField) -> &str {
+        ""
+    }
+}
+
+struct ShapeDiagnosticHandshake(RouteDiagnosticShapeMutation);
+
+impl SessionHandshake for ShapeDiagnosticHandshake {
+    fn evaluate<'version>(
+        &self,
+        versions: Versions<'version>,
+    ) -> HandshakeResult<'version> {
+        let mismatch = HandshakeService.evaluate(Versions {
+            prompt: "atrament.prompt/shape-mismatch",
+            ..versions
+        });
+        let HandshakeResult::Incompatible {
+            mut diagnostics,
+            dimension,
+            expected,
+            ..
+        } = mismatch
+        else {
+            panic!("fixture must obtain a mismatch diagnostic");
+        };
+        mutate_route_diagnostic_shape(&mut diagnostics, self.0);
+        HandshakeResult::Incompatible {
+            diagnostics,
+            dimension,
+            expected,
+            observed: versions.prompt,
+        }
+    }
+}
+
 struct EmptyDiagnosticDraft;
 
 impl SessionDraft for EmptyDiagnosticDraft {
@@ -2344,6 +2530,111 @@ impl SessionHandshake for EmptyDiagnosticHandshake {
             expected: PROMPT_VERSION,
             observed: versions.prompt,
         }
+    }
+}
+
+#[test]
+fn adapter_rejects_malformed_route_diagnostic_shape_and_draft_evidence() {
+    let authorization = format!("Bearer {EXPECTED_SECRET}");
+    let handshake_request = format!(
+        concat!(
+            "POST /api/handshake HTTP/1.1\r\n",
+            "Host: {}\r\nAuthorization: {}\r\nOrigin: {}\r\n",
+            "X-Atrament-Capability-Version: {}\r\n",
+            "X-Atrament-Product-Version: {}\r\n",
+            "X-Atrament-Profile-Version: {}\r\n",
+            "X-Atrament-Prompt-Version: {}\r\n",
+            "X-Atrament-Protocol-Version: {}\r\n",
+            "X-Atrament-Renderer-Version: {}\r\n\r\n",
+        ),
+        EXPECTED_HOST,
+        authorization,
+        EXPECTED_ORIGIN,
+        CAPABILITY_VERSION,
+        PRODUCT_VERSION,
+        PROFILE_VERSION,
+        PROMPT_VERSION,
+        PROTOCOL_VERSION,
+        RENDERER_VERSION,
+    );
+    let shape_mutations = [
+        RouteDiagnosticShapeMutation::Advisory,
+        RouteDiagnosticShapeMutation::Contextualized,
+        RouteDiagnosticShapeMutation::ExtraLocation,
+        RouteDiagnosticShapeMutation::ExtraRemediation,
+        RouteDiagnosticShapeMutation::Incomplete,
+        RouteDiagnosticShapeMutation::MissingLocation,
+        RouteDiagnosticShapeMutation::MissingRemediation,
+        RouteDiagnosticShapeMutation::RelatedLocation,
+        RouteDiagnosticShapeMutation::RelationalLocation,
+        RouteDiagnosticShapeMutation::WrongLocationKind,
+        RouteDiagnosticShapeMutation::WrongSeverity,
+    ];
+    for mutation in shape_mutations {
+        let mut draft = SessionDraftService::default();
+        let handshake = ShapeDiagnosticHandshake(mutation);
+        let response = runtime::route_request(
+            handshake_request.as_bytes(),
+            &route_context(
+                EXPECTED_HOST,
+                EXPECTED_SECRET,
+                &handshake,
+            ),
+            &mut draft,
+        );
+        assert_eq!(
+            status_line(&response),
+            "HTTP/1.1 500 Internal Server Error",
+            "handshake mutation {mutation:?}",
+        );
+    }
+
+    let body = vec![b'a'; MAX_DRAFT_FIELD_BYTES + 1];
+    let request = draft_replace_request(
+        "/api/session/task",
+        Some(&authorization),
+        Some(EXPECTED_ORIGIN),
+        &body,
+    );
+    for mutation in shape_mutations {
+        let mut draft = ShapeDiagnosticDraft(mutation);
+        let response = runtime::route_request(
+            &request,
+            &route_context(
+                EXPECTED_HOST,
+                EXPECTED_SECRET,
+                &HANDSHAKE,
+            ),
+            &mut draft,
+        );
+        assert_eq!(
+            status_line(&response),
+            "HTTP/1.1 500 Internal Server Error",
+            "draft shape mutation {mutation:?}",
+        );
+    }
+    for mutation in [
+        DraftDiagnosticEvidenceMutation::ExtraEvidence,
+        DraftDiagnosticEvidenceMutation::MaximumNotExceeded,
+        DraftDiagnosticEvidenceMutation::MissingEvidence,
+        DraftDiagnosticEvidenceMutation::ObservedMismatch,
+        DraftDiagnosticEvidenceMutation::WrongEvidenceKind,
+    ] {
+        let mut draft = EvidenceDiagnosticDraft(mutation);
+        let response = runtime::route_request(
+            &request,
+            &route_context(
+                EXPECTED_HOST,
+                EXPECTED_SECRET,
+                &HANDSHAKE,
+            ),
+            &mut draft,
+        );
+        assert_eq!(
+            status_line(&response),
+            "HTTP/1.1 500 Internal Server Error",
+            "draft evidence mutation {mutation:?}",
+        );
     }
 }
 

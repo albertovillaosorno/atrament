@@ -45,8 +45,9 @@ use std::str;
 use std::time::{Duration, Instant};
 
 use atrament_diagnostic::{
-    Completeness, DIAGNOSTIC_VERSION, DiagnosticCode, DiagnosticSet, Evidence,
-    Operation,
+    BlockingDisposition, Completeness, DIAGNOSTIC_VERSION, Diagnostic,
+    DiagnosticCode, DiagnosticSet, Evidence, EvidenceUnit, LocationKind,
+    LocationRole, Operation, Remediation, Severity,
 };
 use atrament_session_draft_port::{DraftField, DraftMutation, SessionDraft};
 use atrament_session_handshake_port::{
@@ -635,19 +636,59 @@ fn invalid_diagnostic_response() -> Vec<u8> {
     )
 }
 
+fn route_diagnostic(
+    diagnostics: &DiagnosticSet,
+    code: DiagnosticCode,
+    operation: Operation,
+    location_kind: LocationKind,
+    remediation: Remediation,
+) -> Option<&Diagnostic> {
+    if diagnostics.completeness != Completeness::Complete {
+        return None;
+    }
+    let [diagnostic] = diagnostics.diagnostics.as_slice() else {
+        return None;
+    };
+    if diagnostic.code != code
+        || diagnostic.disposition != BlockingDisposition::Blocking
+        || diagnostic.operation.operation != operation
+        || !diagnostic.operation.contexts.is_empty()
+        || diagnostic.severity != Severity::Error
+    {
+        return None;
+    }
+    let [location] = diagnostic.locations.as_slice() else {
+        return None;
+    };
+    if location.kind != location_kind
+        || location.role != LocationRole::Primary
+        || location.relationship.is_some()
+    {
+        return None;
+    }
+    let [actual_remediation] = diagnostic.remediations.as_slice() else {
+        return None;
+    };
+    if *actual_remediation != remediation {
+        return None;
+    }
+    Some(diagnostic)
+}
+
 fn handshake_incompatible_response(
     diagnostics: &DiagnosticSet,
     dimension: VersionDimension,
     expected: &str,
 ) -> Vec<u8> {
-    let [diagnostic] = diagnostics.diagnostics.as_slice() else {
+    let Some(diagnostic) = route_diagnostic(
+        diagnostics,
+        DiagnosticCode::HandshakeVersionMismatch,
+        Operation::SessionHandshake,
+        LocationKind::Capability,
+        Remediation::UseCompatibleClient,
+    ) else {
         return invalid_diagnostic_response();
     };
-    if diagnostic.code != DiagnosticCode::HandshakeVersionMismatch
-        || diagnostic.operation.operation != Operation::SessionHandshake
-    {
-        return invalid_diagnostic_response();
-    }
     let [Evidence::RequiredVersion {
         dimension: evidence_dimension,
         expected: evidence_expected,
@@ -804,13 +845,31 @@ fn route_draft_read(
     response("200 OK", TEXT_CONTENT_TYPE, draft.value(field).as_bytes())
 }
 
-fn draft_resource_limit_response(diagnostics: &DiagnosticSet) -> Vec<u8> {
-    let [diagnostic] = diagnostics.diagnostics.as_slice() else {
+fn draft_resource_limit_response(
+    diagnostics: &DiagnosticSet,
+    observed_bytes: usize,
+) -> Vec<u8> {
+    let Some(diagnostic) = route_diagnostic(
+        diagnostics,
+        DiagnosticCode::SessionDraftResourceLimit,
+        Operation::SessionDraftReplace,
+        LocationKind::Field,
+        Remediation::ReduceInput,
+    ) else {
         return invalid_diagnostic_response();
     };
-    if diagnostic.code != DiagnosticCode::SessionDraftResourceLimit
-        || diagnostic.operation.operation != Operation::SessionDraftReplace
-    {
+    let [Evidence::LimitExceeded {
+        maximum,
+        observed,
+        unit: EvidenceUnit::Bytes,
+    }] = diagnostic.evidence.as_slice()
+    else {
+        return invalid_diagnostic_response();
+    };
+    let Ok(observed_bytes_u64) = u64::try_from(observed_bytes) else {
+        return invalid_diagnostic_response();
+    };
+    if *observed != observed_bytes_u64 || *observed <= *maximum {
         return invalid_diagnostic_response();
     }
     let body = format!(
@@ -859,7 +918,7 @@ fn route_draft_replace(
     match draft.replace(field, value.to_owned()) {
         DraftMutation::Applied => empty_response("204 No Content"),
         DraftMutation::ResourceLimit { diagnostics } => {
-            draft_resource_limit_response(&diagnostics)
+            draft_resource_limit_response(&diagnostics, body.len())
         },
     }
 }
