@@ -913,6 +913,38 @@ fn origin_form_ascii_graphics_match_rfc3986_character_classes() {
 }
 
 #[test]
+fn every_raw_request_target_suffix_byte_matches_origin_form() {
+    let is_raw_target_byte = |byte: u8| {
+        byte.is_ascii_alphanumeric()
+            || matches!(
+                byte,
+                b'-' | b'.' | b'_' | b'~' | b'!' | b'$' | b'&' | b'\''
+                    | b'(' | b')' | b'*' | b'+' | b',' | b';' | b'='
+                    | b':' | b'@' | b'/' | b'?'
+            )
+    };
+
+    for byte in 0_u8..=255 {
+        let mut request = b"GET /probe".to_vec();
+        request.push(byte);
+        request.extend_from_slice(
+            format!(" HTTP/1.1\r\nHost: {EXPECTED_HOST}\r\n\r\n")
+                .as_bytes(),
+        );
+        let expected = if is_raw_target_byte(byte) {
+            "HTTP/1.1 404 Not Found"
+        } else {
+            "HTTP/1.1 400 Bad Request"
+        };
+        assert_eq!(
+            status_line(&route_runtime(&request, EXPECTED_HOST)),
+            expected,
+            "unexpected raw target classification for byte {byte}",
+        );
+    }
+}
+
+#[test]
 fn every_ascii_percent_escape_pair_requires_two_hexadecimal_digits() {
     let mut accepted = 0_usize;
     let mut rejected = 0_usize;
