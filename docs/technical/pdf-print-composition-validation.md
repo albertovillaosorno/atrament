@@ -172,7 +172,8 @@ compatibility disposition, or invent a physical acceptance threshold.
 Current checked-in regression evidence includes:
 
 - `tests/backend/vector-geometry/domain/lib.rs`, which pins primitive taxonomy,
-  provenance, page bounds, ordering, and exact caller geometry;
+  provenance, page bounds, ordering, exact caller geometry, and all 4,096
+  semantic-origin masks over a twelve-primitive ordered page;
 - `tests/backend/pdf-composition-plan/domain/lib.rs`, which pins page order,
   physical boxes, vector authority, color intent, searchable-text disposition,
   asset disposition, and manifest linkage;

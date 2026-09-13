@@ -1565,7 +1565,11 @@ bounds and composition order. A read-only provenance projection returns the
 exact composition-order primitive indices owned by one semantic origin without
 interpreting or mutating geometry.
 
-Geometry generation, physical unit vocabulary, contour expansion, tessellation,
+An exhaustive 4,096-mask oracle crosses semantic-origin membership over twelve
+ordered primitives while cycling all seven primitive families. It requires exact
+composition-order indices, an empty result for an absent origin, and byte-for-
+byte-equivalent page value semantics before and after projection. Geometry
+generation, physical unit vocabulary, contour expansion, tessellation,
 rasterization, material behavior, PDF, and live-motion projection remain open.
 
 ### TODO - Implement layered ink materials

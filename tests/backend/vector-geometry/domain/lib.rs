@@ -129,3 +129,55 @@ fn semantic_origin_projection_preserves_composition_order_and_duplicates() {
     assert_eq!(page.primitives.len(), 4);
     assert_eq!(page.physical_bounds, "page-a");
 }
+
+
+#[test]
+fn every_twelve_primitive_origin_mask_projects_exact_composition_indices() {
+    const PRIMITIVE_COUNT: usize = 12;
+    const MASK_COUNT: usize = 1 << PRIMITIVE_COUNT;
+    const KINDS: [VectorPrimitiveKind; 7] = [
+        VectorPrimitiveKind::DiagramPath,
+        VectorPrimitiveKind::Equation,
+        VectorPrimitiveKind::ExpandedInkContour,
+        VectorPrimitiveKind::LayoutBox,
+        VectorPrimitiveKind::RulePath,
+        VectorPrimitiveKind::StrokeCenterline,
+        VectorPrimitiveKind::Table,
+    ];
+
+    let mut cases = 0_usize;
+    for mask in 0..MASK_COUNT {
+        let primitives = (0..PRIMITIVE_COUNT)
+            .map(|index| VectorPrimitive {
+                geometry: index,
+                kind: KINDS[index % KINDS.len()],
+                semantic_origin: if mask & (1 << index) == 0 {
+                    "other"
+                } else {
+                    "target"
+                },
+            })
+            .collect::<Vec<_>>();
+        let page = VectorGeometryPage {
+            physical_bounds: (210_000_u64, 297_000_u64),
+            primitives,
+        };
+        let before = page.clone();
+        let expected = (0..PRIMITIVE_COUNT)
+            .filter(|index| mask & (1 << index) != 0)
+            .collect::<Vec<_>>();
+        assert_eq!(
+            semantic_origin_primitive_indices(&page, &"target"),
+            expected,
+            "origin mask {mask:#014b}",
+        );
+        assert_eq!(
+            semantic_origin_primitive_indices(&page, &"missing"),
+            Vec::<usize>::new(),
+            "missing origin mask {mask:#014b}",
+        );
+        assert_eq!(page, before, "projection mutated mask {mask:#014b}");
+        cases += 1;
+    }
+    assert_eq!(cases, MASK_COUNT);
+}
