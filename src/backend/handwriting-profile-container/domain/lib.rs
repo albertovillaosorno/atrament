@@ -248,6 +248,15 @@ impl<'manifest> ValidatedProfileManifest<'manifest> {
         entries
     }
 
+    /// Resolve one exact declared non-manifest path without normalization.
+    #[must_use]
+    pub fn entry(&self, path: &str) -> Option<&'manifest ProfileManifestEntry> {
+        self.manifest
+            .entries
+            .iter()
+            .find(|entry| entry.path == path)
+    }
+
     /// Return the exact parsed manifest that produced this admission evidence.
     #[must_use]
     pub const fn manifest(&self) -> &'manifest ProfileManifest {

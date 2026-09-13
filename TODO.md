@@ -1268,9 +1268,10 @@ the manifest.
 The same domain returns deterministic path-sorted writer order for the complete
 archive, including root `manifest.json`, and verifies one entry's independently
 observed byte length before its SHA-256 digest. A constructor-sealed borrowed
-manifest view now lets section projection, canonical ordering, and archive
-inventory checks reuse one successful manifest admission without treating the
-current Rust value as a wire schema.
+manifest view now lets section projection, canonical ordering, exact declared
+entry lookup, and archive inventory checks reuse one successful manifest
+admission without treating the current Rust value as a wire schema. Exact entry
+lookup performs no path normalization or URI decoding.
 
 Archive inventory validation now also requires exactly one root manifest and
 exact agreement between declared and observed non-manifest paths, rejecting

@@ -719,6 +719,12 @@ fn generated_manifest_values_match_reference_admission_oracle() {
         ) {
             (Ok(validated), Ok(())) => {
                 assert!(std::ptr::eq(validated.manifest(), &value));
+                for entry in &value.entries {
+                    let resolved = validated
+                        .entry(&entry.path)
+                        .expect("valid declaration resolves exactly");
+                    assert!(std::ptr::eq(resolved, entry));
+                }
             },
             (Err(actual), Err(expected_error)) => {
                 assert_eq!(&actual, expected_error);
@@ -848,6 +854,18 @@ fn every_declaration_order_has_identical_canonical_profile_projections() {
         )
         .expect("valid declarations seal one manifest");
         assert!(std::ptr::eq(validated.manifest(), &value));
+        for expected_path in expected_entry_paths {
+            let resolved = validated
+                .entry(expected_path)
+                .expect("canonical declared path resolves exactly");
+            assert_eq!(resolved.path, expected_path);
+            assert!(value.entries.iter().any(|entry| {
+                std::ptr::eq(entry, resolved) && entry.path == expected_path
+            }));
+        }
+        assert_eq!(validated.entry(PROFILE_MANIFEST_PATH), None);
+        assert_eq!(validated.entry("sections/missing.json"), None);
+        assert_eq!(validated.entry("sections/../a.json"), None);
         assert_eq!(
             validated.canonical_archive_paths(),
             expected_archive_paths,
