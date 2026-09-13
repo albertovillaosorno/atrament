@@ -109,3 +109,77 @@ fn foreign_intermediate_rejects_instead_of_being_cleaned_by_wrong_job() {
         }),
     );
 }
+
+#[test]
+fn all_terminal_cleanup_states_match_ownership_oracle() {
+    let outcomes = [
+        MediaJobOutcome::Cancelled,
+        MediaJobOutcome::Failed,
+        MediaJobOutcome::Succeeded,
+    ];
+    let mut cases = 0_u8;
+    let mut saw_cleanup_required = false;
+    let mut saw_retry_required = false;
+    let mut saw_settled = false;
+    let mut saw_foreign = false;
+    for outcome in outcomes {
+        for cleanup_kind in 0_u8..3 {
+            for owner_matches in [false, true] {
+                let intermediate = OwnedWaveformIntermediate {
+                    intermediate_identity: "waveform-oracle",
+                    job_identity: if owner_matches {
+                        "job-oracle"
+                    } else {
+                        "job-foreign"
+                    },
+                };
+                let cleanup = match cleanup_kind {
+                    0 => WaveformCleanupState::NoIntermediate,
+                    1 => WaveformCleanupState::Pending(intermediate),
+                    2 => WaveformCleanupState::RetryRequired(intermediate),
+                    _ => unreachable!(),
+                };
+                let job = Job {
+                    cleanup,
+                    job_identity: "job-oracle",
+                    outcome,
+                };
+                let expected = match cleanup_kind {
+                    0 => {
+                        saw_settled = true;
+                        Ok(MediaJobCleanupStatus::Settled)
+                    },
+                    1 if owner_matches => {
+                        saw_cleanup_required = true;
+                        Ok(MediaJobCleanupStatus::CleanupRequired)
+                    },
+                    2 if owner_matches => {
+                        saw_retry_required = true;
+                        Ok(MediaJobCleanupStatus::CleanupRetryRequired)
+                    },
+                    1 | 2 => {
+                        saw_foreign = true;
+                        Err(
+                            MediaJobLifecycleError::ForeignIntermediate {
+                                intermediate_job_identity: "job-foreign",
+                            },
+                        )
+                    },
+                    _ => unreachable!(),
+                };
+                assert_eq!(
+                    media_job_cleanup_status(&job),
+                    expected,
+                    "outcome {outcome:?}, cleanup {cleanup_kind}, owner match \
+                     {owner_matches}",
+                );
+                cases = cases.saturating_add(1);
+            }
+        }
+    }
+    assert_eq!(cases, 18);
+    assert!(saw_cleanup_required);
+    assert!(saw_retry_required);
+    assert!(saw_settled);
+    assert!(saw_foreign);
+}

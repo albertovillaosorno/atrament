@@ -2412,9 +2412,12 @@ Terminal media-job cleanup state is now executable independently of filesystem
 implementation. Success, cancellation, and handled failure all remain unsettled
 while an owned waveform intermediate is pending cleanup; cleanup failure becomes
 an explicit retry-required state, and an intermediate owned by another job
-rejects. Temporary path selection, actual deletion, retry scheduling/limits,
-process interruption recovery, decoder/engine invocation, and persistence remain
-open application/adapter work.
+rejects. An exhaustive 18-state oracle crosses all three terminal outcomes with
+no intermediate, pending cleanup, or retry-required cleanup and matching versus
+foreign ownership; outcome never weakens cleanup or ownership requirements.
+Temporary path selection, actual deletion, retry scheduling/limits, process
+interruption recovery, decoder/engine invocation, and persistence remain open
+application/adapter work.
 
 A process-local media-job application service now owns opaque job and waveform
 identities around that terminal rule. One active job can register at most one
