@@ -869,6 +869,39 @@ fn origin_form_ascii_graphics_match_rfc3986_character_classes() {
     }
 }
 
+#[test]
+fn every_ascii_percent_escape_pair_requires_two_hexadecimal_digits() {
+    let mut accepted = 0_usize;
+    let mut rejected = 0_usize;
+    for first in 0_u8..=127 {
+        for second in 0_u8..=127 {
+            let mut request = b"GET /probe%".to_vec();
+            request.push(first);
+            request.push(second);
+            request.extend_from_slice(
+                format!(" HTTP/1.1\r\nHost: {EXPECTED_HOST}\r\n\r\n")
+                    .as_bytes(),
+            );
+            let expected = if first.is_ascii_hexdigit()
+                && second.is_ascii_hexdigit()
+            {
+                accepted += 1;
+                "HTTP/1.1 404 Not Found"
+            } else {
+                rejected += 1;
+                "HTTP/1.1 400 Bad Request"
+            };
+            assert_eq!(
+                status_line(&route_runtime(&request, EXPECTED_HOST)),
+                expected,
+                "percent pair first={first} second={second}",
+            );
+        }
+    }
+    assert_eq!(accepted, 22 * 22);
+    assert_eq!(rejected, 128 * 128 - accepted);
+}
+
 fn seeded_private_draft() -> SessionDraftService {
     let mut draft = SessionDraftService::default();
     assert_eq!(

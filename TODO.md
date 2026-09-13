@@ -2988,8 +2988,10 @@ with `/`; absolute proxy form, `*`, fragments, controls, raw Unicode, and URI-
 invalid visible punctuation reject before routing. Any `%` escape must carry
 exactly two ASCII hexadecimal digits before routing.
 
-An exhaustive raw graphic-ASCII oracle pins the admitted URI character classes
-and representative upper/lowercase percent escapes against public routing.
+An exhaustive raw graphic-ASCII oracle pins the admitted URI character classes.
+A separate 16,384-pair ASCII oracle crosses every possible two-byte suffix after
+`%` and admits exactly the 484 hexadecimal pairs, so percent-escape grammar no
+longer depends on representative upper/lowercase examples.
 
 Every header field name must also use the HTTP token grammar; whitespace,
 Unicode, control characters, and other non-token names reject even when the
