@@ -150,6 +150,65 @@ pub struct HeldOutQualityReport<Identity, Value, Evidence, Failure> {
     pub measurements: Vec<HeldOutQualityMeasurement<Identity, Value, Evidence>>,
 }
 
+/// Constructor-sealed evidence for one structurally admitted held-out report.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ValidatedHeldOutQualityReport<
+    'samples,
+    'report,
+    Identity,
+    Value,
+    Evidence,
+    Failure,
+> {
+    report: &'report HeldOutQualityReport<Identity, Value, Evidence, Failure>,
+    samples: &'samples [CalibrationSample<Identity>],
+}
+
+impl<'samples, 'report, Identity, Value, Evidence, Failure>
+    ValidatedHeldOutQualityReport<
+        'samples,
+        'report,
+        Identity,
+        Value,
+        Evidence,
+        Failure,
+    >
+{
+    /// Return the exact admitted quality report.
+    #[must_use]
+    pub const fn report(
+        &self,
+    ) -> &'report HeldOutQualityReport<Identity, Value, Evidence, Failure> {
+        self.report
+    }
+
+    /// Return the exact sample-role declarations used for admission.
+    #[must_use]
+    pub const fn samples(&self) -> &'samples [CalibrationSample<Identity>] {
+        self.samples
+    }
+}
+
+/// Result of admitting one exact held-out quality report.
+pub type HeldOutQualityReportValidationResult<
+    'samples,
+    'report,
+    Identity,
+    Value,
+    Evidence,
+    Failure,
+> = Result<
+    ValidatedHeldOutQualityReport<
+        'samples,
+        'report,
+        Identity,
+        Value,
+        Evidence,
+        Failure,
+    >,
+    HeldOutQualityReportError<Identity>,
+>;
+
 /// Why held-out quality evidence cannot be admitted structurally.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum HeldOutQualityReportError<Identity> {
@@ -277,4 +336,39 @@ where
         }
     }
     Ok(())
+}
+
+/// Validate one exact held-out report and seal borrowed admission evidence.
+///
+/// The returned value proves only structural sample-role separation, held-out
+/// measurement attribution, and six-dimension completeness. It does not choose
+/// units, aggregation, thresholds, quality scores, or pass/fail policy.
+///
+/// # Errors
+///
+/// Returns exactly the same role-conflict, measurement-reference, then
+/// missing-dimension precedence as [`validate_held_out_quality_report`].
+pub fn validate_held_out_quality_report_view<
+    'samples,
+    'report,
+    Identity,
+    Value,
+    Evidence,
+    Failure,
+>(
+    samples: &'samples [CalibrationSample<Identity>],
+    report: &'report HeldOutQualityReport<Identity, Value, Evidence, Failure>,
+) -> HeldOutQualityReportValidationResult<
+    'samples,
+    'report,
+    Identity,
+    Value,
+    Evidence,
+    Failure,
+>
+where
+    Identity: Clone + Ord,
+{
+    validate_held_out_quality_report(samples, report)?;
+    Ok(ValidatedHeldOutQualityReport { report, samples })
 }

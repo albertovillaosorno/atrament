@@ -1540,9 +1540,13 @@ first rejects conflicting calibration sample roles, then rejects measurements
 that reference training or unknown samples in report order, and finally requires
 all six quality dimensions. Repeated held-out measurements and an empty known-
 failure list remain valid because aggregation and failure discovery are not
-inferred here. A 793-case compact oracle exhausts all 64 required-dimension
-subsets plus all 729 six-measurement held-out/training/unknown sample-reference
-sequences and pins first invalid-reference precedence.
+inferred here. Successful structural admission now also produces
+constructor-sealed evidence borrowing the exact sample declarations and report.
+
+A 793-case compact oracle exhausts all 64 required-dimension subsets plus all
+729 six-measurement held-out/training/unknown sample-reference sequences. Both
+the direct and sealed paths pin role-conflict, first invalid-reference, then
+missing-dimension precedence without declaring any quality score.
 
 Metric units, thresholds, scoring, statistical/perceptual models, sample
 sufficiency, quality-report generation, and pass/fail policy remain open.

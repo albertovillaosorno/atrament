@@ -104,6 +104,10 @@ known failures may be empty because aggregation, failure discovery, sample
 sufficiency, report generation, and pass/fail policy remain outside this pure
 evidence boundary.
 
+Successful admission also yields a constructor-sealed borrowed view retaining
+the exact sample declarations and report. That proof records only structural
+admission; it does not turn caller-owned measured values into a score or pass.
+
 A compact oracle exhausts all 64 required-dimension subsets and all 729 possible
 six-measurement reference sequences over held-out, training, and unknown sample
 classes. The latter independently derives the first invalid sample in report

@@ -38,6 +38,7 @@ use atrament_handwriting_calibration_evidence::{
     CalibrationSampleRoleError, HeldOutQualityDimension,
     HeldOutQualityMeasurement, HeldOutQualityReport, HeldOutQualityReportError,
     validate_calibration_sample_roles, validate_held_out_quality_report,
+    validate_held_out_quality_report_view,
 };
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -275,10 +276,15 @@ fn complete_quality_report(
 #[test]
 fn held_out_report_retains_all_required_dimensions_and_known_failures() {
     let report = complete_quality_report();
+    let samples = held_out_samples();
     assert_eq!(
-        validate_held_out_quality_report(&held_out_samples(), &report),
+        validate_held_out_quality_report(&samples, &report),
         Ok(()),
     );
+    let validated = validate_held_out_quality_report_view(&samples, &report)
+        .expect("complete held-out report seals exact evidence");
+    assert!(std::ptr::eq(validated.report(), &report));
+    assert!(std::ptr::eq(validated.samples(), samples.as_slice()));
     assert_eq!(report.measurements.len(), 6);
     assert_eq!(
         report.known_failures,
@@ -324,11 +330,16 @@ fn sample_role_conflict_rejects_before_held_out_report_measurements() {
     ];
     let mut report = complete_quality_report();
     report.measurements[0].sample = "unknown-first-measurement";
+    let expected = HeldOutQualityReportError::ConflictingSampleRole {
+        sample: "conflict",
+    };
     assert_eq!(
         validate_held_out_quality_report(&samples, &report),
-        Err(HeldOutQualityReportError::ConflictingSampleRole {
-            sample: "conflict",
-        }),
+        Err(expected.clone()),
+    );
+    assert_eq!(
+        validate_held_out_quality_report_view(&samples, &report),
+        Err(expected),
     );
 }
 
@@ -414,9 +425,23 @@ fn every_quality_dimension_subset_matches_completeness_oracle() {
             });
         assert_eq!(
             validate_held_out_quality_report(&samples, &report),
-            expected,
+            expected.clone(),
             "dimension subset mask {mask:#08b}",
         );
+        match expected {
+            Ok(()) => {
+                let validated =
+                    validate_held_out_quality_report_view(&samples, &report)
+                        .expect("complete dimension set seals exact report");
+                assert!(std::ptr::eq(validated.report(), &report));
+                assert!(std::ptr::eq(validated.samples(), samples.as_slice()));
+            },
+            Err(reason) => assert_eq!(
+                validate_held_out_quality_report_view(&samples, &report),
+                Err(reason),
+                "sealed dimension subset mask {mask:#08b}",
+            ),
+        }
         cases = cases.saturating_add(1);
     }
     assert_eq!(cases, 64);
@@ -487,9 +512,22 @@ fn every_compact_measurement_role_sequence_matches_first_failure_oracle() {
         };
         assert_eq!(
             validate_held_out_quality_report(&samples, &report),
-            expected,
+            expected.clone(),
             "measurement role sequence {encoded}",
         );
+        match expected {
+            Ok(()) => {
+                let validated =
+                    validate_held_out_quality_report_view(&samples, &report)
+                        .expect("all measurements reference held-out sample");
+                assert!(std::ptr::eq(validated.report(), &report));
+            },
+            Err(reason) => assert_eq!(
+                validate_held_out_quality_report_view(&samples, &report),
+                Err(reason),
+                "sealed measurement role sequence {encoded}",
+            ),
+        }
         cases = cases.saturating_add(1);
     }
     assert_eq!(cases, 729);
