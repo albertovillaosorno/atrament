@@ -96,9 +96,13 @@ atoms, direct/inverse and decorated limit operators, set notation, aligned
 separators, and ordered
 aligned, brace-delimited-matrix, bracketed-matrix, cases,
 double-vertical-bar-matrix, gathered, matrix, parenthesized-matrix,
-small-matrix, split, and vertical-bar-matrix environments. Paired
-delimiter-sizing controls remain explicit unsupported input rather than being
-inferred from admitted delimiter glyph names. Context-sensitive ellipsis forms,
+small-matrix, split, and vertical-bar-matrix environments. Optional vertical
+position arguments on `aligned` and `gathered` remain unsupported presentation
+semantics rather than literal formula content.
+
+Paired delimiter-sizing controls remain explicit unsupported input rather than
+being inferred from admitted delimiter glyph names. Context-sensitive ellipsis
+forms,
 the dotted multi-integral form, explicit limit-placement controls, and equation
 reference, tag, intertext, display-break, primitive fraction/root, and advanced
 spacing or layout controls likewise remain unsupported until their presentation,

@@ -334,12 +334,12 @@ supports read-only behavior-version drift checks. It deliberately advertises no
 command protocol, normalizer, command context, Validate, Apply, rebatching, or
 numeric command/context limits yet.
 
-Aggregate command behavior and typed-result behavior are version 97 after
-admitting the LaTeX-base fixed math ellipsis alias. Asset reference, Ordering
-and grouping, and Text content retain family behavior version 1; Provenance and
-Style role are version 2, Document constraint is version 3, and Structured
-content is version 84. The immediately previous aggregate version 96 rejects
-instead of being reinterpreted.
+Aggregate command behavior and typed-result behavior are version 98 after
+rejecting unowned optional position semantics on otherwise admitted math
+environments. Asset reference, Ordering and grouping, and Text content retain
+family behavior version 1; Provenance and Style role are version 2, Document
+constraint is version 3, and Structured content is version 85. The immediately
+previous aggregate version 97 rejects instead of being reinterpreted.
 
 A version-bound single-target proposal combines capability, exact local
 preconditions, and direct-edit simulation read-only. All five dedicated direct
@@ -830,6 +830,12 @@ reference, tag,
 intertext, display-break, primitive fraction/root, negative spacing, and
 advanced layout controls likewise remain unsupported until their presentation,
 expression-grammar, or document-reference semantics have an owning model.
+
+Optional vertical-position arguments on admitted `aligned` and `gathered`
+environments remain explicit unsupported presentation semantics rather than
+being accepted as literal formula content. Matrix and small-matrix leading
+brackets remain ordinary content because those admitted environments own no such
+optional argument.
 
 Math-only alignment, script, and row-break markers remain literal inside grouped
 text. Row breaks are structural inside grouped substacks without admitting

@@ -4163,6 +4163,52 @@ fn environment_names_require_exact_braced_spelling() {
 }
 
 #[test]
+fn optional_environment_position_requires_unowned_presentation_semantics() {
+    for (source, begin) in [
+        (
+            r"\begin{aligned}[t]a&=b\end{aligned}",
+            r"\begin{aligned}",
+        ),
+        (
+            r"\begin{aligned} [b]a&=b\end{aligned}",
+            r"\begin{aligned}",
+        ),
+        (
+            r"\begin{gathered}[b]a\\b\end{gathered}",
+            r"\begin{gathered}",
+        ),
+        (
+            r"\begin{gathered} [t]a\\b\end{gathered}",
+            r"\begin{gathered}",
+        ),
+    ] {
+        let analyzed = analyze(source, FormulaMode::Display)
+            .expect("balanced optional environment position");
+        assert!(!analyzed.is_supported(), "{source}");
+        assert_eq!(reconstructed(&analyzed), source);
+        assert_eq!(analyzed.unsupported.len(), 1, "{source}");
+        assert_eq!(analyzed.unsupported[0].name, begin, "{source}");
+        assert_eq!(
+            analyzed
+                .token_source(analyzed.tokens[0])
+                .expect("begin environment token"),
+            begin,
+            "{source}",
+        );
+    }
+
+    for source in [
+        r"\begin{matrix}[c]x\end{matrix}",
+        r"\begin{smallmatrix}[c]x\end{smallmatrix}",
+    ] {
+        let analyzed = analyze(source, FormulaMode::Display)
+            .expect("brackets are ordinary matrix content");
+        assert!(analyzed.is_supported(), "{source}");
+        assert_eq!(reconstructed(&analyzed), source);
+    }
+}
+
+#[test]
 fn document_level_math_environments_remain_explicitly_unsupported() {
     for source in [
         r"\begin{equation}x=1\end{equation}",

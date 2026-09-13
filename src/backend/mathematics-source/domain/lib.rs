@@ -251,6 +251,7 @@ const STRUCTURED_ENVIRONMENTS: &[StructuredEnvironmentDefinition] = &[
     StructuredEnvironmentDefinition {
         allows_alignment: true,
         begin_command: SupportedCommand::BeginBracedMatrix,
+        rejects_optional_position: false,
         begin_spelling: "\\begin{Bmatrix}",
         end_command: SupportedCommand::EndBracedMatrix,
         end_spelling: "\\end{Bmatrix}",
@@ -260,6 +261,7 @@ const STRUCTURED_ENVIRONMENTS: &[StructuredEnvironmentDefinition] = &[
     StructuredEnvironmentDefinition {
         allows_alignment: true,
         begin_command: SupportedCommand::BeginDoubleVerticalMatrix,
+        rejects_optional_position: false,
         begin_spelling: "\\begin{Vmatrix}",
         end_command: SupportedCommand::EndDoubleVerticalMatrix,
         end_spelling: "\\end{Vmatrix}",
@@ -269,6 +271,7 @@ const STRUCTURED_ENVIRONMENTS: &[StructuredEnvironmentDefinition] = &[
     StructuredEnvironmentDefinition {
         allows_alignment: true,
         begin_command: SupportedCommand::BeginAligned,
+        rejects_optional_position: true,
         begin_spelling: "\\begin{aligned}",
         end_command: SupportedCommand::EndAligned,
         end_spelling: "\\end{aligned}",
@@ -278,6 +281,7 @@ const STRUCTURED_ENVIRONMENTS: &[StructuredEnvironmentDefinition] = &[
     StructuredEnvironmentDefinition {
         allows_alignment: true,
         begin_command: SupportedCommand::BeginBracketedMatrix,
+        rejects_optional_position: false,
         begin_spelling: "\\begin{bmatrix}",
         end_command: SupportedCommand::EndBracketedMatrix,
         end_spelling: "\\end{bmatrix}",
@@ -287,6 +291,7 @@ const STRUCTURED_ENVIRONMENTS: &[StructuredEnvironmentDefinition] = &[
     StructuredEnvironmentDefinition {
         allows_alignment: true,
         begin_command: SupportedCommand::BeginCases,
+        rejects_optional_position: false,
         begin_spelling: "\\begin{cases}",
         end_command: SupportedCommand::EndCases,
         end_spelling: "\\end{cases}",
@@ -296,6 +301,7 @@ const STRUCTURED_ENVIRONMENTS: &[StructuredEnvironmentDefinition] = &[
     StructuredEnvironmentDefinition {
         allows_alignment: false,
         begin_command: SupportedCommand::BeginGathered,
+        rejects_optional_position: true,
         begin_spelling: "\\begin{gathered}",
         end_command: SupportedCommand::EndGathered,
         end_spelling: "\\end{gathered}",
@@ -305,6 +311,7 @@ const STRUCTURED_ENVIRONMENTS: &[StructuredEnvironmentDefinition] = &[
     StructuredEnvironmentDefinition {
         allows_alignment: true,
         begin_command: SupportedCommand::BeginMatrix,
+        rejects_optional_position: false,
         begin_spelling: "\\begin{matrix}",
         end_command: SupportedCommand::EndMatrix,
         end_spelling: "\\end{matrix}",
@@ -314,6 +321,7 @@ const STRUCTURED_ENVIRONMENTS: &[StructuredEnvironmentDefinition] = &[
     StructuredEnvironmentDefinition {
         allows_alignment: true,
         begin_command: SupportedCommand::BeginParenthesizedMatrix,
+        rejects_optional_position: false,
         begin_spelling: "\\begin{pmatrix}",
         end_command: SupportedCommand::EndParenthesizedMatrix,
         end_spelling: "\\end{pmatrix}",
@@ -323,6 +331,7 @@ const STRUCTURED_ENVIRONMENTS: &[StructuredEnvironmentDefinition] = &[
     StructuredEnvironmentDefinition {
         allows_alignment: true,
         begin_command: SupportedCommand::BeginSmallMatrix,
+        rejects_optional_position: false,
         begin_spelling: "\\begin{smallmatrix}",
         end_command: SupportedCommand::EndSmallMatrix,
         end_spelling: "\\end{smallmatrix}",
@@ -332,6 +341,7 @@ const STRUCTURED_ENVIRONMENTS: &[StructuredEnvironmentDefinition] = &[
     StructuredEnvironmentDefinition {
         allows_alignment: true,
         begin_command: SupportedCommand::BeginSplit,
+        rejects_optional_position: false,
         begin_spelling: "\\begin{split}",
         end_command: SupportedCommand::EndSplit,
         end_spelling: "\\end{split}",
@@ -341,6 +351,7 @@ const STRUCTURED_ENVIRONMENTS: &[StructuredEnvironmentDefinition] = &[
     StructuredEnvironmentDefinition {
         allows_alignment: true,
         begin_command: SupportedCommand::BeginVerticalMatrix,
+        rejects_optional_position: false,
         begin_spelling: "\\begin{vmatrix}",
         end_command: SupportedCommand::EndVerticalMatrix,
         end_spelling: "\\end{vmatrix}",
@@ -495,6 +506,7 @@ struct RootIndexBounds {
 struct StructuredEnvironmentDefinition {
     allows_alignment: bool,
     begin_command: SupportedCommand,
+    rejects_optional_position: bool,
     begin_spelling: &'static str,
     end_command: SupportedCommand,
     end_spelling: &'static str,
@@ -1318,6 +1330,22 @@ fn scan_supported_command(
         state.pending_text_group = true;
     }
     if let Some(environment) = beginning_environment(supported) {
+        if environment.rejects_optional_position
+            && source_has_optional_environment_position(
+                context.source,
+                command.end,
+            )
+        {
+            context.unsupported.push(UnsupportedConstruct {
+                end: command.end,
+                name: context
+                    .source
+                    .get(state.index..command.end)
+                    .unwrap_or_default()
+                    .to_owned(),
+                start: state.index,
+            });
+        }
         state.environment_stack.push(StructuredEnvironmentScope {
             definition: environment,
             group_depth: state.group_depth,
@@ -1407,6 +1435,14 @@ fn root_index_bounds(
         cursor = cursor.saturating_add(1);
     }
     Err(error(source.len(), MathSyntaxErrorKind::MissingRootIndexEnd))
+}
+
+fn source_has_optional_environment_position(
+    source: &str,
+    command_end: usize,
+) -> bool {
+    let cursor = skip_ascii_whitespace(source, command_end);
+    source.as_bytes().get(cursor) == Some(&b'[')
 }
 
 fn skip_ascii_whitespace(source: &str, mut cursor: usize) -> usize {

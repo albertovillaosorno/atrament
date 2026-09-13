@@ -89,7 +89,7 @@ use atrament_semantic_notebook_session::{
 };
 
 const CURRENT_COMMAND_BEHAVIOR_VERSION: CommandBehaviorVersion =
-    CommandBehaviorVersion(97);
+    CommandBehaviorVersion(98);
 
 #[derive(Debug)]
 struct CountingCommandIdentity {
@@ -3017,6 +3017,27 @@ fn unsupported_mathematics_rejects_atomically_instead_of_substituting() {
     let valid = candidate_notebook(&ids, "accepted text");
     let (unsupported, formula) =
         candidate_math_notebook(&ids, r"x + \mystery{y}", FormulaMode::Display);
+    let mut session = SemanticNotebookSessionService::default();
+    let _ = session.accept(valid);
+    let before = session.current().expect("accepted revision").clone();
+    assert_eq!(
+        session.accept(unsupported),
+        AcceptanceOutcome::InvalidCandidate {
+            reason: CandidateGraphError::UnsupportedMathematics {
+                candidate: formula,
+            },
+        },
+    );
+    assert_eq!(session.current(), Some(&before));
+}
+
+#[test]
+fn optional_math_environment_position_rejects_atomically() {
+    let ids = IdentityAllocator::new();
+    let valid = candidate_notebook(&ids, "accepted text");
+    let source = r"\begin{aligned}[t]a&=b\end{aligned}";
+    let (unsupported, formula) =
+        candidate_math_notebook(&ids, source, FormulaMode::Display);
     let mut session = SemanticNotebookSessionService::default();
     let _ = session.accept(valid);
     let before = session.current().expect("accepted revision").clone();
@@ -8026,7 +8047,7 @@ fn command_capability_snapshot_is_deterministic_and_does_not_overclaim() {
             family: SemanticCommandFamily::Provenance,
         },
         CommandFamilyCapability {
-            behavior_version: CommandBehaviorVersion(84),
+            behavior_version: CommandBehaviorVersion(85),
             family: SemanticCommandFamily::StructuredContent,
         },
         CommandFamilyCapability {
@@ -8094,11 +8115,11 @@ fn command_capability_version_detects_drift_independently_of_revision() {
     );
     assert_eq!(
         session.check_command_capability_compatibility(
-            CommandBehaviorVersion(96),
+            CommandBehaviorVersion(97),
         ),
         CommandCapabilityCompatibilityOutcome::Mismatch {
             current: CURRENT_COMMAND_BEHAVIOR_VERSION,
-            expected: CommandBehaviorVersion(96),
+            expected: CommandBehaviorVersion(97),
         },
     );
     assert_eq!(
@@ -13426,6 +13447,23 @@ fn direct_formula_edit_rejects_invalid_and_unsupported_without_mutation() {
             FormulaReplacement {
                 mode: FormulaMode::Display,
                 source: String::from(r"\mystery{x}"),
+            },
+        ),
+        FormulaEditOutcome::UnsupportedMathematics {
+            revision,
+            target: formula,
+        },
+    );
+    assert_eq!(session.current(), Some(&before));
+    assert_eq!(
+        session.replace_formula(
+            revision,
+            formula,
+            FormulaReplacement {
+                mode: FormulaMode::Display,
+                source: String::from(
+                    r"\begin{aligned}[t]a&=b\end{aligned}",
+                ),
             },
         ),
         FormulaEditOutcome::UnsupportedMathematics {
