@@ -738,6 +738,95 @@ fn run_process_fixture_child(mode: &str) {
         Some(revision),
     );
 
+    let batch_review = DirectEditBatchProposal {
+        base: revision,
+        capability_version: CURRENT_COMMAND_BEHAVIOR_VERSION,
+        commands: vec![
+            DirectEditBatchCommand {
+                dependencies: vec![],
+                id: 11_u32,
+                preconditions: CommandTargetPreconditions {
+                    expected_value: Some(EditableSemanticValue::Text(
+                        String::from("process-private after"),
+                    )),
+                    identity: IdentityPrecondition {
+                        expected_kind: Some(SemanticIdentityKind::InlineSpan),
+                        expected_owner:
+                            IdentityOwnerExpectation::Direct(text_block),
+                    },
+                    requested_family: SemanticCommandFamily::TextContent,
+                },
+                requested: EditableSemanticValue::Text(String::from(
+                    "process-private batch intermediate",
+                )),
+                target: span,
+            },
+            DirectEditBatchCommand {
+                dependencies: vec![11_u32],
+                id: 12_u32,
+                preconditions: CommandTargetPreconditions {
+                    expected_value: Some(EditableSemanticValue::Text(
+                        String::from("process-private batch intermediate"),
+                    )),
+                    identity: IdentityPrecondition {
+                        expected_kind: Some(SemanticIdentityKind::InlineSpan),
+                        expected_owner:
+                            IdentityOwnerExpectation::Direct(text_block),
+                    },
+                    requested_family: SemanticCommandFamily::TextContent,
+                },
+                requested: EditableSemanticValue::Text(String::from(
+                    "process-private batch final",
+                )),
+                target: span,
+            },
+        ],
+    };
+    let batch_review_result =
+        session.simulate_direct_edit_batch(batch_review.clone());
+    let DirectEditBatchSimulationOutcome::Predicted {
+        changes,
+        commands,
+        effect,
+        impact_seeds,
+        revision: batch_revision,
+    } = &batch_review_result
+    else {
+        panic!("process fixture ordered batch review must predict changes");
+    };
+    assert_eq!(*batch_revision, revision);
+    assert_eq!(*effect, DirectEditEffectClass::Mutation);
+    assert_eq!(commands.len(), 2);
+    assert_eq!(changes.len(), 1);
+    assert_eq!(
+        changes[0],
+        DirectEditSemanticChange {
+            after: EditableSemanticValue::Text(String::from(
+                "process-private batch final",
+            )),
+            before: EditableSemanticValue::Text(String::from(
+                "process-private after",
+            )),
+            family: SemanticCommandFamily::TextContent,
+            target: span,
+        },
+    );
+    assert!(!impact_seeds.is_empty());
+    assert_eq!(
+        session.simulate_direct_edit_batch_bounded(
+            batch_review,
+            CommandGraphLimits {
+                commands: 2,
+                dependency_edges: 1,
+            },
+        ),
+        batch_review_result,
+    );
+    assert_eq!(
+        session.accepted_revision().map(|accepted| accepted.id),
+        Some(revision),
+    );
+
     let measurement = RevisionFlowMeasurement {
         flow,
         revision,
