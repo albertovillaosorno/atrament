@@ -4163,6 +4163,42 @@ fn environment_names_require_exact_braced_spelling() {
 }
 
 #[test]
+fn document_level_math_environments_remain_explicitly_unsupported() {
+    for source in [
+        r"\begin{equation}x=1\end{equation}",
+        r"\begin{equation*}x=1\end{equation*}",
+        r"\begin{align}x=1\end{align}",
+        r"\begin{align*}x=1\end{align*}",
+        r"\begin{alignat}{2}x=1\end{alignat}",
+        r"\begin{alignat*}{2}x=1\end{alignat*}",
+        r"\begin{xalignat}{2}x=1\end{xalignat}",
+        r"\begin{xalignat*}{2}x=1\end{xalignat*}",
+        r"\begin{xxalignat}{2}x=1\end{xxalignat}",
+        r"\begin{flalign}x=1\end{flalign}",
+        r"\begin{flalign*}x=1\end{flalign*}",
+        r"\begin{gather}x=1\end{gather}",
+        r"\begin{gather*}x=1\end{gather*}",
+        r"\begin{multline}x=1\end{multline}",
+        r"\begin{multline*}x=1\end{multline*}",
+        r"\begin{subequations}x=1\end{subequations}",
+    ] {
+        let analyzed = analyze(source, FormulaMode::Display)
+            .expect("balanced document-level math environment");
+        assert!(!analyzed.is_supported(), "{source}");
+        assert_eq!(reconstructed(&analyzed), source);
+        assert_eq!(
+            analyzed
+                .unsupported
+                .iter()
+                .map(|item| item.name.as_str())
+                .collect::<Vec<_>>(),
+            [r"\begin", r"\end"],
+            "{source}",
+        );
+    }
+}
+
+#[test]
 fn unknown_matrix_environment_remains_explicit_unsupported_source() {
     let source = r"\begin{array}a & b";
     let analyzed = analyze(source, FormulaMode::Aligned)
