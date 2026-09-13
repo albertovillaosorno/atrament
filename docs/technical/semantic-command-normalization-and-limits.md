@@ -218,9 +218,12 @@ future admitted insertion-command and protocol boundaries.
 
 The graph layer checks dependency closure for interactive command-ID selections.
 A selected command with an omitted dependency rejects explicitly; the validator
-does not add that dependency on the caller's behalf. It also measures exact
-command and explicit dependency-edge counts and enforces caller-supplied coarse
-bounds at the exact limit and one step beyond without truncation.
+does not add that dependency on the caller's behalf. A constructor-sealed valid
+graph can reuse its exact identity-position index across repeated requirement,
+summary, bounded-report, and closure queries without changing caller order. The
+graph layer also measures exact command and explicit dependency-edge counts and
+enforces caller-supplied coarse bounds at the exact limit and one step beyond
+without truncation.
 
 Session-level graph resource preflight binds those counts to current capability
 behavior and the exact accepted base revision before candidate simulation. It

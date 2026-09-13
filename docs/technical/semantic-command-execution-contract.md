@@ -668,12 +668,16 @@ successful report or typed failure. Stale and unknown inputs remain read-only.
 
 Graph validation fast-paths the normal ordered case where every dependency
 points to an earlier command and reuses borrowed source positions for subset
-analysis. Its read-only node-view contract lets application preflight borrow
-command IDs and dependency slices instead of allocating per-command edge views.
+analysis. A constructor-sealed valid-graph view retains the exact ordered node
+slice plus its validated identity-position index so repeated requirement,
+summary, bounded-report, and closure queries do not revalidate graph structure.
+Its read-only node-view contract lets application preflight borrow command IDs
+and dependency slices instead of allocating per-command edge views.
+
 A complete selection skips closure bitmaps after complete-graph validation,
-while
-an empty selection still validates the source graph before reporting no required
-commands. Partial requirement closure continues to use positional bitmaps.
+while an empty selection still validates the source graph before reporting no
+required commands. Partial requirement closure continues to use positional
+bitmaps.
 
 A caller-bounded report counts omitted edges before materializing pairs and
 rejects one over the supplied bound without truncation. Ordered batch graph

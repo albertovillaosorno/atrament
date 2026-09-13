@@ -315,6 +315,158 @@ pub enum CommandGraphError<Identity> {
 pub type CommandGraphValidationResult<Identity> =
     Result<(), CommandGraphError<Identity>>;
 
+/// Constructor-sealed complete command graph with its validated identity index.
+#[derive(Debug)]
+pub struct ValidatedCommandGraph<'graph, Node>
+where
+    Node: CommandDependencyNode,
+{
+    nodes: &'graph [Node],
+    positions: CommandPositions<'graph, Node::Identity>,
+}
+
+impl<'graph, Node> ValidatedCommandGraph<'graph, Node>
+where
+    Node: CommandDependencyNode,
+    Node::Identity: Clone,
+{
+    /// Derive omitted dependency requirements without revalidating the graph.
+    ///
+    /// # Errors
+    ///
+    /// Returns the first selected identity absent from this admitted graph.
+    pub fn dependency_selection_requirements(
+        &self,
+        selected: &BTreeSet<Node::Identity>,
+    ) -> DependencyRequirementsResult<Node::Identity> {
+        let Some(state) = dependency_selection_state_with_positions(
+            self.nodes,
+            &self.positions,
+            selected,
+        )? else {
+            return Ok(Vec::new());
+        };
+        Ok(missing_dependency_requirements(self.nodes, &state))
+    }
+
+    /// Derive caller-bounded omitted requirements without graph revalidation.
+    ///
+    /// # Errors
+    ///
+    /// Returns an unknown selection, exact count overflow, or bound failure.
+    pub fn dependency_selection_requirements_bounded(
+        &self,
+        selected: &BTreeSet<Node::Identity>,
+        maximum_missing_edges: usize,
+    ) -> BoundedDependencyRequirementsResult<Node::Identity> {
+        let state = match dependency_selection_state_with_positions(
+            self.nodes,
+            &self.positions,
+            selected,
+        ) {
+            Ok(Some(state)) => state,
+            Ok(None) => return Ok(Vec::new()),
+            Err(DependencyRequirementsError::Graph { reason }) => {
+                return Err(BoundedDependencyRequirementsError::Graph {
+                    reason,
+                });
+            },
+            Err(DependencyRequirementsError::UnknownSelection { command }) => {
+                return Err(
+                    BoundedDependencyRequirementsError::UnknownSelection {
+                        command,
+                    },
+                );
+            },
+        };
+        let Some(actual) = missing_dependency_edge_count(self.nodes, &state)
+        else {
+            return Err(
+                BoundedDependencyRequirementsError::RequirementCountOverflow,
+            );
+        };
+        if actual > maximum_missing_edges {
+            return Err(
+                BoundedDependencyRequirementsError::RequirementCountExceeded {
+                    actual,
+                    limit: maximum_missing_edges,
+                },
+            );
+        }
+        Ok(missing_dependency_requirements(self.nodes, &state))
+    }
+
+    /// Summarize one selection without revalidating the admitted graph.
+    ///
+    /// # Errors
+    ///
+    /// Returns an unknown selected identity or exact count overflow.
+    pub fn dependency_selection_summary(
+        &self,
+        selected: &BTreeSet<Node::Identity>,
+    ) -> DependencySummaryResult<Node::Identity> {
+        let state = match dependency_selection_state_with_positions(
+            self.nodes,
+            &self.positions,
+            selected,
+        ) {
+            Ok(Some(state)) => state,
+            Ok(None) => {
+                return Ok(DependencySelectionSummary {
+                    missing_dependency_edges: 0,
+                    required_commands: self.nodes.len(),
+                    selected_commands: selected.len(),
+                });
+            },
+            Err(DependencyRequirementsError::Graph { reason }) => {
+                return Err(DependencySummaryError::Graph { reason });
+            },
+            Err(DependencyRequirementsError::UnknownSelection { command }) => {
+                return Err(DependencySummaryError::UnknownSelection {
+                    command,
+                });
+            },
+        };
+        let required_commands = state
+            .required_positions
+            .iter()
+            .filter(|is_required| **is_required)
+            .count();
+        let Some(missing_dependency_edges) =
+            missing_dependency_edge_count(self.nodes, &state)
+        else {
+            return Err(DependencySummaryError::RequirementCountOverflow);
+        };
+        Ok(DependencySelectionSummary {
+            missing_dependency_edges,
+            required_commands,
+            selected_commands: selected.len(),
+        })
+    }
+
+    /// Return the exact caller-owned ordered node slice that was admitted.
+    #[must_use]
+    pub const fn nodes(&self) -> &'graph [Node] {
+        self.nodes
+    }
+
+    /// Check dependency closure without revalidating the admitted graph.
+    ///
+    /// # Errors
+    ///
+    /// Returns an unknown selected identity or first omitted dependency.
+    pub fn validate_dependency_closed_selection(
+        &self,
+        selected: &BTreeSet<Node::Identity>,
+    ) -> DependencySelectionValidationResult<Node::Identity> {
+        validate_dependency_closed_selection_with_positions(
+            self.nodes,
+            &self.positions,
+            selected,
+        )
+    }
+}
+
 /// Complete omitted-dependency requirement report result.
 pub type DependencyRequirementsResult<Identity> = Result<
     Vec<MissingDependencyRequirement<Identity>>,
@@ -508,6 +660,23 @@ where
     validated_command_positions(nodes).map(|_positions| ())
 }
 
+
+/// Validate one complete command graph and retain its exact identity index.
+///
+/// # Errors
+///
+/// Returns the same graph failure as [`validate_command_graph`].
+pub fn validate_command_graph_view<Node>(
+    nodes: &[Node],
+) -> Result<ValidatedCommandGraph<'_, Node>, CommandGraphError<Node::Identity>>
+where
+    Node: CommandDependencyNode,
+    Node::Identity: Clone,
+{
+    let positions = validated_command_positions(nodes)?;
+    Ok(ValidatedCommandGraph { nodes, positions })
+}
+
 fn collect_command_positions<Node>(
     nodes: &[Node],
 ) -> CommandPositionsResult<'_, Node::Identity>
@@ -641,6 +810,18 @@ where
             return Err(DependencyRequirementsError::Graph { reason });
         },
     };
+    dependency_selection_state_with_positions(nodes, &positions, selected)
+}
+
+fn dependency_selection_state_with_positions<'graph, Node>(
+    nodes: &'graph [Node],
+    positions: &CommandPositions<'graph, Node::Identity>,
+    selected: &BTreeSet<Node::Identity>,
+) -> SelectionStateResult<'graph, Node::Identity>
+where
+    Node: CommandDependencyNode,
+    Node::Identity: Clone,
+{
     if selected.len() == nodes.len()
         && selected.iter().zip(positions.keys()).all(
             |(selected_command, known_command)| {
@@ -680,7 +861,7 @@ where
         }
     }
     Ok(Some(DependencySelectionState {
-        positions,
+        positions: positions.clone(),
         required_positions,
         selected_positions,
     }))
@@ -906,6 +1087,22 @@ where
         Ok(positions) => positions,
         Err(reason) => return Err(DependencySelectionError::Graph { reason }),
     };
+    validate_dependency_closed_selection_with_positions(
+        nodes,
+        &positions,
+        selected,
+    )
+}
+
+fn validate_dependency_closed_selection_with_positions<Node>(
+    nodes: &[Node],
+    positions: &CommandPositions<'_, Node::Identity>,
+    selected: &BTreeSet<Node::Identity>,
+) -> DependencySelectionValidationResult<Node::Identity>
+where
+    Node: CommandDependencyNode,
+    Node::Identity: Clone,
+{
     if selected.len() == nodes.len()
         && selected.iter().zip(positions.keys()).all(
             |(selected_command, known_command)| {

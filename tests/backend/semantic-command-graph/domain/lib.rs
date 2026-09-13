@@ -44,7 +44,8 @@ use atrament_semantic_command_graph::{
     dependency_selection_requirements,
     dependency_selection_requirements_bounded, dependency_selection_summary,
     validate_batch_local_handles, validate_command_graph,
-    validate_command_graph_limits, validate_dependency_closed_selection,
+    validate_command_graph_limits, validate_command_graph_view,
+    validate_dependency_closed_selection,
 };
 
 fn node(id: u32, dependencies: &[u32]) -> CommandNode<u32> {
@@ -1066,6 +1067,9 @@ fn valid_dag_selection_apis_match_reference_oracle() {
             Ok(()),
             "graph validity mismatch in generated case {case}",
         );
+        let validated = validate_command_graph_view(&nodes)
+            .expect("generated ordered DAG seals");
+        assert!(std::ptr::eq(validated.nodes(), nodes.as_slice()));
         assert_eq!(
             command_graph_size(&nodes),
             Ok(expected_size),
@@ -1077,9 +1081,19 @@ fn valid_dag_selection_apis_match_reference_oracle() {
             "requirements mismatch in generated case {case}",
         );
         assert_eq!(
+            validated.dependency_selection_requirements(&selected),
+            Ok(expected_missing.clone()),
+            "sealed requirements mismatch in generated case {case}",
+        );
+        assert_eq!(
             dependency_selection_summary(&nodes, &selected),
             Ok(expected_summary),
             "summary mismatch in generated case {case}",
+        );
+        assert_eq!(
+            validated.dependency_selection_summary(&selected),
+            Ok(expected_summary),
+            "sealed summary mismatch in generated case {case}",
         );
         assert_eq!(
             dependency_selection_requirements_bounded(
@@ -1091,9 +1105,22 @@ fn valid_dag_selection_apis_match_reference_oracle() {
             "bounded requirements mismatch in generated case {case}",
         );
         assert_eq!(
+            validated.dependency_selection_requirements_bounded(
+                &selected,
+                expected_missing.len(),
+            ),
+            Ok(expected_missing.clone()),
+            "sealed bounded requirements mismatch in generated case {case}",
+        );
+        assert_eq!(
             validate_dependency_closed_selection(&nodes, &selected),
             reference_closed_selection(&nodes, &selected),
             "closure mismatch in generated case {case}",
+        );
+        assert_eq!(
+            validated.validate_dependency_closed_selection(&selected),
+            reference_closed_selection(&nodes, &selected),
+            "sealed closure mismatch in generated case {case}",
         );
         if !expected_missing.is_empty() {
             let limit = expected_missing.len() - 1;
@@ -1111,6 +1138,20 @@ fn valid_dag_selection_apis_match_reference_oracle() {
                         },
                 ),
                 "bounded rejection mismatch in generated case {case}",
+            );
+            assert_eq!(
+                validated.dependency_selection_requirements_bounded(
+                    &selected,
+                    limit,
+                ),
+                Err(
+                    BoundedDependencyRequirementsError::
+                        RequirementCountExceeded {
+                            actual: expected_missing.len(),
+                            limit,
+                        },
+                ),
+                "sealed bounded rejection mismatch in generated case {case}",
             );
         }
     }
