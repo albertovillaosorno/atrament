@@ -1302,6 +1302,46 @@ fn entry_evidence_checks_length_before_digest() {
 
 
 #[test]
+fn admitted_inventory_seals_verified_entry_evidence() {
+    let value = manifest(vec![entry(
+        "assets/sample.bin",
+        "application/octet-stream",
+        7,
+    )]);
+    let observed = [PROFILE_MANIFEST_PATH, "assets/sample.bin"];
+    let validated = validate_profile_manifest_view(
+        &value,
+        &["stroke-vocabulary"],
+    )
+    .expect("manifest is admitted");
+    let inventory = validated
+        .admit_entry_inventory(&observed)
+        .expect("inventory matches admitted manifest");
+    let evidence = ProfileEntryEvidence {
+        byte_length: 7,
+        digest: digest(7),
+    };
+    let verified = inventory
+        .verify_entry("assets/sample.bin", evidence)
+        .expect("entry evidence matches")
+        .expect("declared path resolves");
+    assert!(std::ptr::eq(verified.entry(), &value.entries[0]));
+    assert_eq!(verified.evidence(), evidence);
+    assert_eq!(
+        inventory.verify_entry(PROFILE_MANIFEST_PATH, evidence),
+        Ok(None),
+    );
+    assert_eq!(
+        inventory.verify_entry("assets/missing.bin", evidence),
+        Ok(None),
+    );
+    assert_eq!(
+        inventory.verify_entry("assets/../sample.bin", evidence),
+        Ok(None),
+    );
+}
+
+#[test]
 fn generated_full_range_entry_evidence_matches_reference_precedence() {
     const CASES: usize = 4_096;
     let mut seed = 0x5eed_e17e_2026_u64;
@@ -1351,6 +1391,30 @@ fn generated_full_range_entry_evidence_matches_reference_precedence() {
             expected,
             "generated entry evidence case {case}",
         );
+        let value = manifest(vec![declared]);
+        let observed = [PROFILE_MANIFEST_PATH, "assets/generated.bin"];
+        let inventory = validate_profile_manifest_view(
+            &value,
+            &["stroke-vocabulary"],
+        )
+        .expect("generated manifest remains valid")
+        .admit_entry_inventory(&observed)
+        .expect("generated inventory remains exact");
+        match expected {
+            Ok(()) => {
+                let verified = inventory
+                    .verify_entry("assets/generated.bin", evidence)
+                    .expect("matching evidence verifies")
+                    .expect("generated declaration resolves");
+                assert!(std::ptr::eq(verified.entry(), &value.entries[0]));
+                assert_eq!(verified.evidence(), evidence);
+            },
+            Err(reason) => assert_eq!(
+                inventory.verify_entry("assets/generated.bin", evidence),
+                Err(reason),
+                "sealed entry evidence case {case}",
+            ),
+        }
     }
     assert!(saw_length_mismatch);
     assert!(saw_digest_mismatch);

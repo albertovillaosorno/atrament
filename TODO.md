@@ -1273,6 +1273,12 @@ entry lookup, and archive inventory checks reuse one successful manifest
 admission without treating the current Rust value as a wire schema. Exact entry
 lookup performs no path normalization or URI decoding.
 
+Once archive inventory matches, constructor-sealed entry evidence binds one
+exact declared entry to independently observed byte length and digest evidence.
+The same 4,096-case full-range verification corpus requires that sealed path to
+preserve byte-length-before-digest precedence without carrying or decoding
+bytes.
+
 Archive inventory validation now also requires exactly one root manifest and
 exact agreement between declared and observed non-manifest paths, rejecting
 missing, undeclared, duplicate, or unsafe names before entry decoding. A sealed

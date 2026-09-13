@@ -180,6 +180,28 @@ pub struct ValidatedProfileManifest<'manifest> {
     manifest: &'manifest ProfileManifest,
 }
 
+/// Constructor-sealed evidence that one admitted non-manifest entry matches
+/// independently observed framing and digest evidence.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct VerifiedProfileEntry<'manifest> {
+    entry: &'manifest ProfileManifestEntry,
+    evidence: ProfileEntryEvidence,
+}
+
+impl<'manifest> VerifiedProfileEntry<'manifest> {
+    /// Return the exact admitted declaration whose entry bytes were verified.
+    #[must_use]
+    pub const fn entry(&self) -> &'manifest ProfileManifestEntry {
+        self.entry
+    }
+
+    /// Return the independently observed framing and digest evidence.
+    #[must_use]
+    pub const fn evidence(self) -> ProfileEntryEvidence {
+        self.evidence
+    }
+}
+
 /// Sealed evidence that observed archive names exactly match one admitted
 /// manifest.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -201,6 +223,36 @@ impl<'manifest, 'observed>
     #[must_use]
     pub const fn observed_paths(&self) -> &'observed [&'observed str] {
         self.observed_paths
+    }
+
+    /// Verify one exact declared non-manifest entry from this admitted archive.
+    ///
+    /// An absent path returns `Ok(None)` rather than normalizing or
+    /// interpreting
+    /// the caller's path. Declared entries preserve byte-length-before-digest
+    /// failure precedence.
+    ///
+    /// # Errors
+    ///
+    /// Returns the same framing or digest mismatch as [`verify_profile_entry`].
+    pub fn verify_entry(
+        &self,
+        path: &str,
+        evidence: ProfileEntryEvidence,
+    ) -> Result<
+        Option<VerifiedProfileEntry<'manifest>>,
+        ProfileEntryVerificationError,
+    > {
+        let Some(entry) = self
+            .manifest
+            .entries
+            .iter()
+            .find(|entry| entry.path == path)
+        else {
+            return Ok(None);
+        };
+        verify_profile_entry(entry, evidence)?;
+        Ok(Some(VerifiedProfileEntry { entry, evidence }))
     }
 }
 

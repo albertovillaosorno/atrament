@@ -100,6 +100,13 @@ A length mismatch rejects even when the supplied digest happens to equal the
 manifest digest. A matching length with a different digest also rejects. Only
 matching framing and digest evidence may proceed to a future section decoder.
 
+After exact inventory admission, `ValidatedProfileEntryInventory::verify_entry`
+can seal that successful comparison together with the exact manifest
+declaration. The returned evidence carries only declaration plus observed
+length/digest facts; it does not carry or decode entry bytes. Missing or
+near-match paths remain absent rather than being normalized, URI-decoded, or
+resolved through filesystem rules.
+
 The current domain compares a supplied 256-bit digest value. It does not compute
 SHA-256 itself.
 
