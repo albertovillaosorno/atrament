@@ -9,8 +9,8 @@
 //
 // Boundary-Contract:
 // - Owns:
-//   - Real-browser evidence for workspace layout, localhost frame isolation,
-//     and browser-session disposal.
+//   - Real-browser evidence for workspace presentation and layout, localhost
+//     frame isolation, and browser-session disposal.
 // - Must-Not:
 //   - Read live session-private state, persist browser data, or weaken runtime
 //     admission to make automation easier.
@@ -25,11 +25,12 @@
 // - Merge-When:
 //   - Browser security integration moves to one shared automation harness.
 // - Summary:
-//   - Proves browser-enforced frame isolation and page-session disposal.
+//   - Proves workspace presentation, frame isolation, and page-session
+//     disposal.
 // - Description:
 //   - Uses Firefox's built-in WebDriver BiDi endpoint through a dependency-free
-//     RFC 6455 client. It checks responsive layout, hostile framing,
-//     fragment-scrubbed refresh, and in-flight write cancellation on close.
+//     RFC 6455 client. It checks responsive/scriptless layout, inert hostile
+//     text, framing, fragment-scrubbed refresh, and close-time cancellation.
 // - Usage:
 //   - Run through `pnpm test:browser-security` from the repository root.
 // - Defaults:
@@ -349,7 +350,14 @@ function serveFile(response, file, contentType) {
     response.end(fs.readFileSync(file));
 }
 
-function createStaticWorkspaceServer(requests) {
+function createStaticWorkspaceServer(requests, serveScripts = false) {
+    const generated = new Set([
+        "main.js",
+        "session-diagnostic.js",
+        "session-draft.js",
+        "session-fragment.js",
+        "session-handshake.js",
+    ]);
     return http.createServer((request, response) => {
         const pathname = new URL(
             request.url ?? "/",
@@ -371,6 +379,17 @@ function createStaticWorkspaceServer(requests) {
                 "text/css; charset=utf-8",
             );
             return;
+        }
+        if (serveScripts && pathname.startsWith("/generated/")) {
+            const file = pathname.slice("/generated/".length);
+            if (generated.has(file)) {
+                serveFile(
+                    response,
+                    path.join(WORKSPACE_DIR, "generated", file),
+                    "text/javascript; charset=utf-8",
+                );
+                return;
+            }
         }
         response.writeHead(404);
         response.end();
@@ -771,6 +790,116 @@ test(
                 }
             }
             assert.deepEqual(requests, ["/", "/workspace.css"]);
+        } finally {
+            if (bidi?.socket != null) {
+                bidi.socket.end();
+            }
+            if (server.listening) {
+                server.close();
+                await once(server, "close");
+            }
+            for (const child of children.reverse()) {
+                await stopChild(child);
+            }
+            fs.rmSync(profile, { recursive: true, force: true });
+        }
+    },
+);
+
+test(
+    "Firefox keeps hostile prompt and response text inert",
+    { skip: !FIREFOX_AVAILABLE, timeout: 30_000 },
+    async () => {
+        fs.mkdirSync(".temp", { recursive: true });
+        const profile = fs.mkdtempSync(".temp/workspace-hostile-text-");
+        const requests = [];
+        const server = createStaticWorkspaceServer(requests, true);
+        const children = [];
+        let bidi;
+        try {
+            server.listen(0, "127.0.0.1");
+            await once(server, "listening");
+            const address = server.address();
+            assert.notEqual(typeof address, "string");
+            assert.notEqual(address, null);
+            const origin = `http://127.0.0.1:${address.port}`;
+
+            bidi = await startBidiFirefox(profile, children);
+            const tab = await bidi.command("browsingContext.create", {
+                type: "tab",
+            });
+            await bidi.command("browsingContext.navigate", {
+                context: tab.context,
+                url: origin,
+                wait: "complete",
+            });
+
+            const payload = [
+                '<img id="evil-image" src="/evil">',
+                '<script>globalThis.__hostileExecuted = true;</script>',
+                'fetch("/evil")',
+                '{"command":"export","path":"/tmp/private"}',
+                "start hardware now · á n\\u{301} 👩‍🔬",
+            ].join("\n");
+            const response = await bidi.command("script.evaluate", {
+                awaitPromise: true,
+                expression: `(async () => {
+                    const payload = ${JSON.stringify(payload)};
+                    globalThis.__hostileExecuted = false;
+                    globalThis.__clipboardWrites = [];
+                    Object.defineProperty(navigator, "clipboard", {
+                        configurable: true,
+                        value: {
+                            writeText(text) {
+                                globalThis.__clipboardWrites.push(text);
+                                return Promise.resolve();
+                            }
+                        }
+                    });
+                    const prompt = document.querySelector("#prompt-output");
+                    const candidate = document.querySelector(
+                        "#candidate-input"
+                    );
+                    prompt.value = payload;
+                    prompt.dispatchEvent(new Event("input", { bubbles: true }));
+                    candidate.value = payload;
+                    candidate.dispatchEvent(
+                        new Event("input", { bubbles: true })
+                    );
+                    document.querySelector("#copy-prompt").click();
+                    await new Promise((resolve) => setTimeout(resolve, 0));
+                    return JSON.stringify({
+                        candidateChildren: candidate.childElementCount,
+                        candidateValue: candidate.value,
+                        clipboardWrites: globalThis.__clipboardWrites,
+                        evilImage:
+                            document.querySelector("#evil-image") !== null,
+                        executed: globalThis.__hostileExecuted,
+                        promptChildren: prompt.childElementCount,
+                        promptValue: prompt.value,
+                        status: document.querySelector("#copy-status")
+                            .textContent.trim()
+                    });
+                })()`,
+                resultOwnership: "none",
+                target: { context: tab.context },
+            });
+            assert.equal(response.type, "success");
+            assert.equal(response.result.type, "string");
+            const state = JSON.parse(response.result.value);
+            assert.equal(state.promptValue, payload);
+            assert.equal(state.candidateValue, payload);
+            assert.deepEqual(state.clipboardWrites, [payload]);
+            assert.equal(state.promptChildren, 0);
+            assert.equal(state.candidateChildren, 0);
+            assert.equal(state.evilImage, false);
+            assert.equal(state.executed, false);
+            assert.equal(state.status, "Prompt copied.");
+            assert.equal(requests.includes("/evil"), false);
+            assert.equal(
+                requests.some((request) => request.startsWith("/api/")),
+                false,
+            );
         } finally {
             if (bidi?.socket != null) {
                 bidi.socket.end();

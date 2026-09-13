@@ -1316,14 +1316,14 @@ preserved every observed code point through prompt, mocked clipboard write, and
 raw response. These probes do not define a backend protocol limit or prove
 operating-system clipboard capacity.
 
-A hostile-text transport probe placed script markup, a fetch expression,
-out-of-scope command prose, file-export prose, hardware-start prose, JSON-like
-text, and Unicode in the prompt/response surfaces. The frontend preserved the
-payload exactly, performed one mocked clipboard write, created no child
-elements,
-executed none of the text, and emitted no hostile `/evil` request. This proves
-browser transport inertness only; backend prompt construction and semantic
-validation remain authoritative for model-injection resistance.
+A checked-in real-Firefox hostile-text presentation fixture places script
+markup, a fetch expression, out-of-scope command prose, file-export and
+hardware-start prose, JSON-like text, and Unicode in the prompt/response
+surfaces. The frontend preserves the payload exactly, performs one mocked
+clipboard write, creates no child elements, executes none of the text, and emits
+no hostile `/evil` or session-API request. This proves browser presentation
+inertness only; backend prompt construction and semantic validation remain
+authoritative for model-injection resistance.
 
 The one-shot prompt domain now owns the shared `atrament.prompt/1` contract
 identity consumed by browser/backend handshake compatibility, eliminating a
