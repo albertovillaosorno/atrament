@@ -592,6 +592,113 @@ fn request_body_bytes_are_not_subject_to_header_line_ending_grammar() {
 }
 
 #[test]
+fn every_request_line_separator_byte_is_exact_ascii_space() {
+    for byte in 0_u8..=255 {
+        let mut first = b"GET".to_vec();
+        first.push(byte);
+        first.extend_from_slice(
+            format!(
+                "/health HTTP/1.1\r\nHost: {EXPECTED_HOST}\r\n\r\n",
+            )
+            .as_bytes(),
+        );
+        let expected = if byte == b' ' {
+            "HTTP/1.1 200 OK"
+        } else {
+            "HTTP/1.1 400 Bad Request"
+        };
+        assert_eq!(
+            status_line(&route_runtime(&first, EXPECTED_HOST)),
+            expected,
+            "method-target separator byte {byte}",
+        );
+
+        let mut second = b"GET /health".to_vec();
+        second.push(byte);
+        second.extend_from_slice(
+            format!(
+                "HTTP/1.1\r\nHost: {EXPECTED_HOST}\r\n\r\n",
+            )
+            .as_bytes(),
+        );
+        assert_eq!(
+            status_line(&route_runtime(&second, EXPECTED_HOST)),
+            expected,
+            "target-version separator byte {byte}",
+        );
+    }
+}
+
+#[test]
+fn request_methods_are_ascii_case_sensitive() {
+    for mask in 0..ascii_case_variant_count("GET") {
+        let method = ascii_case_variant("GET", mask);
+        let request = format!(
+            "{method} /health HTTP/1.1\r\nHost: {EXPECTED_HOST}\r\n\r\n",
+        );
+        let expected = if method == "GET" {
+            "HTTP/1.1 200 OK"
+        } else {
+            "HTTP/1.1 400 Bad Request"
+        };
+        assert_eq!(
+            status_line(&route_runtime(request.as_bytes(), EXPECTED_HOST)),
+            expected,
+            "GET case mask {mask}",
+        );
+    }
+
+    let authorization = format!("Bearer {EXPECTED_SECRET}");
+    for mask in 0..ascii_case_variant_count("POST") {
+        let method = ascii_case_variant("POST", mask);
+        let request = format!(
+            concat!(
+                "{} /api/session/task HTTP/1.1\r\n",
+                "Host: {}\r\nAuthorization: {}\r\nOrigin: {}\r\n",
+                "Content-Length: 0\r\n\r\n",
+            ),
+            method, EXPECTED_HOST, authorization, EXPECTED_ORIGIN,
+        );
+        let mut draft = seeded_private_draft();
+        let expected = if method == "POST" {
+            "HTTP/1.1 204 No Content"
+        } else {
+            "HTTP/1.1 400 Bad Request"
+        };
+        assert_eq!(
+            status_line(&route_with_draft(
+                request.as_bytes(),
+                EXPECTED_HOST,
+                &mut draft,
+            )),
+            expected,
+            "POST case mask {mask}",
+        );
+        if method == "POST" {
+            assert_eq!(draft.value(DraftField::Task), "");
+        } else {
+            assert_private_draft_unchanged(&draft);
+        }
+    }
+}
+
+#[test]
+fn every_request_line_trailing_byte_after_http_version_rejects() {
+    for byte in 0_u8..=255 {
+        let mut request = b"GET /health HTTP/1.1".to_vec();
+        request.push(byte);
+        request.extend_from_slice(
+            format!("\r\nHost: {EXPECTED_HOST}\r\n\r\n").as_bytes(),
+        );
+        assert_eq!(
+            status_line(&route_runtime(&request, EXPECTED_HOST)),
+            "HTTP/1.1 400 Bad Request",
+            "trailing request-line byte {byte}",
+        );
+    }
+}
+
+#[test]
 fn malformed_or_missing_host_is_rejected_before_routing() {
     let host = "127.0.0.1:43123";
     let rejected = [

@@ -2912,8 +2912,11 @@ network access.
 
 Current loopback-runtime evidence requires the exact canonical Host, browser
 Origin, and Bearer credential before protected draft mutation. The request line
-requires exactly one ASCII space between method, target, and HTTP/1.1; tabs,
-repeated spaces, trailing whitespace, and other versions reject before routing.
+requires exactly one ASCII space between method, target, and HTTP/1.1; full
+0–255 byte sweeps now pin both separators to that one byte and reject every byte
+after the HTTP version. GET and POST are also case-sensitive across every ASCII
+case variant; tabs, repeated spaces, trailing whitespace, and other versions
+reject before routing.
 
 Browser privacy regression evidence also pins the generated workspace to exactly
 three admitted same-origin `fetch` call sites for handshake and draft transport.
