@@ -241,8 +241,8 @@ copy. Frontend state that can reconstruct private notebook content is session
 memory, not browser persistence.
 
 Current Linux process evidence blocks a child with draft text, accepted semantic
-history, retained asset bytes, derived-output review, and pending media cleanup
-state all live, then inspects `/proc/<pid>/fd`. Both the ordinary populated
+history, retained asset bytes, derived-output review, and retry-required media
+cleanup state all live, then inspects `/proc/<pid>/fd`. The ordinary populated
 state and a variant retaining a Redo branch add no writable regular-file
 descriptors beyond those inherited from the test harness. The same fixture then
 terminates and restarts the child to prove none of that application state
