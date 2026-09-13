@@ -71,9 +71,10 @@ still reachable through older history, including their exact byte sequences.
 A process fixture now retains all three private draft fields, rejects one
 oversized draft replacement with the shared resource-limit diagnostic,
 retains bytes for two semantic assets, commits text and asset-reference history,
-computes a revision-bound direct-edit preview, version-bound direct-edit
-proposal, ordered and caller-bounded batch review with dependency-selection
-analysis, grapheme cursor and selection inspection, measured pagination,
+computes command-target material and typed precondition rejection, a
+revision-bound direct-edit preview, version-bound direct-edit proposal, ordered
+and caller-bounded batch review with dependency-selection analysis, grapheme
+cursor and selection inspection, measured pagination,
 fixed-region overflow diagnostics
 and layout-only Export preflight. It also
 owns one terminal media job with a registered waveform still requiring cleanup.
@@ -89,7 +90,7 @@ Browser edits send complete authenticated replacements and use no browser
 persistence API.
 
 This evidence establishes raw-byte ownership after a separate ingestion
-boundary and one semantic direct-edit preview lifecycle; it does not implement
+boundary and several semantic review lifecycles; it does not implement
 media decoding, format validation, clipboard or file intake, or temporary
 conversion files. The task remains open until the remaining preview and
 diagnostic producers, renders, plans, and media operations join the same

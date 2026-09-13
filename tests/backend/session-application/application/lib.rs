@@ -669,6 +669,61 @@ fn run_process_fixture_child(mode: &str) {
         Ok(PROCESS_SECOND_ASSET_BYTES),
     );
 
+    let CommandTargetMaterialOutcome::Prepared { material } =
+        session.command_target_material(revision, span)
+    else {
+        panic!("process fixture command target material must be available");
+    };
+    assert_eq!(material.revision, revision);
+    assert_eq!(material.target, span);
+    assert_eq!(
+        material.descriptor,
+        SemanticIdentityDescriptor {
+            kind: SemanticIdentityKind::InlineSpan,
+            owner: Some(text_block),
+        },
+    );
+    assert_eq!(
+        material.editable_value,
+        Some(EditableSemanticValue::Text(String::from(
+            "process-private after",
+        ))),
+    );
+    assert_eq!(
+        material.direct_edit_family,
+        Some(SemanticCommandFamily::TextContent),
+    );
+    let stale_expected = EditableSemanticValue::Text(String::from(
+        "process-private stale expectation",
+    ));
+    assert_eq!(
+        session.check_command_target_preconditions(
+            revision,
+            span,
+            CommandTargetPreconditions {
+                expected_value: Some(stale_expected.clone()),
+                identity: IdentityPrecondition {
+                    expected_kind: Some(SemanticIdentityKind::InlineSpan),
+                    expected_owner:
+                        IdentityOwnerExpectation::Direct(text_block),
+                },
+                requested_family: SemanticCommandFamily::TextContent,
+            },
+        ),
+        CommandTargetPreconditionOutcome::ValueMismatch {
+            actual: EditableSemanticValue::Text(String::from(
+                "process-private after",
+            )),
+            expected: stale_expected,
+            revision,
+            target: span,
+        },
+    );
+    assert_eq!(
+        session.accepted_revision().map(|accepted| accepted.id),
+        Some(revision),
+    );
+
     let preview_requested = EditableSemanticValue::Text(String::from(
         "process-private preview",
     ));
