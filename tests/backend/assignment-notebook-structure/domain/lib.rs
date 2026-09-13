@@ -385,3 +385,95 @@ fn every_role_obeys_only_block_resolution_authority() {
     }
     assert_eq!(cases, 54);
 }
+
+
+#[test]
+fn every_three_entry_disposition_tuple_preserves_first_failure_and_atomicity() {
+    const STATES: usize = 6;
+    let notebook = notebook();
+    let disposition = |state| match state {
+        0 => AssignmentNotebookDisposition::Represented { block: 11 },
+        1 => AssignmentNotebookDisposition::UnresolvedMissingFact { block: 12 },
+        2 => AssignmentNotebookDisposition::Represented { block: 12 },
+        3 => AssignmentNotebookDisposition::UnresolvedMissingFact { block: 11 },
+        4 => AssignmentNotebookDisposition::Represented { block: 3 },
+        5 => AssignmentNotebookDisposition::Represented { block: 99 },
+        _ => unreachable!("enumerated disposition state"),
+    };
+    let state_error = |state, entry_index| match state {
+        0 | 1 => None,
+        2 => Some(AssignmentNotebookStructureError::RepresentedIsUnresolved {
+            entry_index,
+        }),
+        3 => Some(
+            AssignmentNotebookStructureError::
+                UnresolvedMissingFactIsResolved { entry_index },
+        ),
+        4 => Some(AssignmentNotebookStructureError::NotBlock { entry_index }),
+        5 => Some(AssignmentNotebookStructureError::UnknownIdentity {
+            entry_index,
+        }),
+        _ => unreachable!("enumerated disposition state"),
+    };
+    let roles = [
+        AssignmentNotebookRole::Title,
+        AssignmentNotebookRole::Example,
+        AssignmentNotebookRole::Conclusion,
+    ];
+
+    let mut cases = 0_u16;
+    for first in 0..STATES {
+        for second in 0..STATES {
+            for third in 0..STATES {
+                let states = [first, second, third];
+                let plan = AssignmentNotebookStructurePlan {
+                    entries: states
+                        .into_iter()
+                        .zip(roles)
+                        .map(|(state, role)| AssignmentNotebookStructureEntry {
+                            disposition: disposition(state),
+                            role,
+                        })
+                        .collect(),
+                };
+                let expected = states
+                    .into_iter()
+                    .enumerate()
+                    .find_map(|(entry_index, state)| {
+                        state_error(state, entry_index)
+                    });
+                assert_eq!(
+                    validate_assignment_notebook_structure(&notebook, &plan),
+                    expected.map_or(Ok(()), Err),
+                    "states {states:?}",
+                );
+                let projection = project_assignment_notebook_structure_blocks(
+                    &notebook,
+                    &plan,
+                );
+                if let Some(error) = expected {
+                    assert_eq!(projection, Err(error), "states {states:?}");
+                } else {
+                    let projected = projection.expect("valid tuple projects");
+                    let expected_ids = states.map(|state| {
+                        match disposition(state) {
+                            AssignmentNotebookDisposition::Represented { block }
+                            | AssignmentNotebookDisposition::
+                                UnresolvedMissingFact { block } => block,
+                        }
+                    });
+                    assert_eq!(
+                        projected
+                            .iter()
+                            .map(|block| block.id)
+                            .collect::<Vec<_>>(),
+                        expected_ids,
+                        "states {states:?}",
+                    );
+                }
+                cases = cases.saturating_add(1);
+            }
+        }
+    }
+    assert_eq!(cases, 216);
+}
