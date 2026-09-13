@@ -1597,8 +1597,13 @@ families: base ink, edge variation, deposition texture, paper interaction,
 highlight, and color. Layer plans preserve caller-owned clip geometry, material
 inputs, physical bounds, and blend order without evaluation. Every layer marked
 stochastic carries the complete document-seed, semantic-identity, profile, and
-material-preset replay key. Required-layer policy, transfer equations, blending,
-texture sampling, color spaces, rasterization, and output formats remain open.
+material-preset replay key.
+
+A 46,080-state exhaustive oracle crosses all 720 six-family blend orders with
+all 64 deterministic/stochastic masks and requires
+exact order, clipping, material inputs, and replay tuples to survive unchanged.
+Required-layer policy, transfer equations, blending, texture sampling, color
+spaces, rasterization, and output formats remain open.
 
 Current executable evidence now freezes transport-neutral empirical
 contact-model inputs before material evaluation. Force-calibrated pressure and
