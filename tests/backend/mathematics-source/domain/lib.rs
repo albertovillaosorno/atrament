@@ -4209,6 +4209,28 @@ fn optional_environment_position_requires_unowned_presentation_semantics() {
 }
 
 #[test]
+fn unmodeled_inner_math_environments_remain_explicitly_unsupported() {
+    for source in [
+        r"\begin{alignedat}{2}x=1\end{alignedat}",
+        r"\begin{subarray}{c}x\end{subarray}",
+    ] {
+        let analyzed = analyze(source, FormulaMode::Display)
+            .expect("balanced unmodeled inner math environment");
+        assert!(!analyzed.is_supported(), "{source}");
+        assert_eq!(reconstructed(&analyzed), source);
+        assert_eq!(
+            analyzed
+                .unsupported
+                .iter()
+                .map(|item| item.name.as_str())
+                .collect::<Vec<_>>(),
+            [r"\begin", r"\end"],
+            "{source}",
+        );
+    }
+}
+
+#[test]
 fn document_level_math_environments_remain_explicitly_unsupported() {
     for source in [
         r"\begin{equation}x=1\end{equation}",

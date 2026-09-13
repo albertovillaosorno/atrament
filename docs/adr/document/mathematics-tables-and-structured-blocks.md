@@ -103,7 +103,8 @@ semantics rather than literal formula content.
 Paired delimiter-sizing controls remain explicit unsupported input rather than
 being inferred from admitted delimiter glyph names. Context-sensitive ellipsis
 forms,
-the dotted multi-integral form, explicit limit-placement controls, and equation
+the dotted multi-integral form, explicit limit-placement controls, inner
+`alignedat`/`subarray` layout environments, and equation
 reference, tag, intertext, display-break, primitive fraction/root, and advanced
 spacing or layout controls likewise remain unsupported until their presentation,
 expression-grammar, or document-reference semantics have an owning model.
