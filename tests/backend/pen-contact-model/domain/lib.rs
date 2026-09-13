@@ -212,3 +212,66 @@ fn inverted_observable_output_envelope_rejects_before_classification() {
         Err(ObservableOutputRangeError::MinimumAboveMaximum),
     );
 }
+
+
+#[test]
+fn every_compact_input_range_triple_matches_calibration_oracle() {
+    let mut cases = 0_u16;
+    let mut outcomes = [false; 3];
+    for minimum in -3_i8..=3 {
+        for maximum in -3_i8..=3 {
+            for input in -3_i8..=3 {
+                let range = CalibratedInputRange { minimum, maximum };
+                let expected = if minimum > maximum {
+                    outcomes[0] = true;
+                    Err(CalibratedInputRangeError::MinimumAboveMaximum)
+                } else if input < minimum || input > maximum {
+                    outcomes[1] = true;
+                    Ok(ContactInputAdmission::ExtrapolationRequired)
+                } else {
+                    outcomes[2] = true;
+                    Ok(ContactInputAdmission::Calibrated)
+                };
+                assert_eq!(
+                    classify_contact_input(&input, &range),
+                    expected,
+                    "minimum {minimum}, maximum {maximum}, input {input}",
+                );
+                cases = cases.saturating_add(1);
+            }
+        }
+    }
+    assert_eq!(cases, 343);
+    assert!(outcomes.into_iter().all(|seen| seen));
+}
+
+#[test]
+fn every_compact_output_range_triple_matches_boundedness_oracle() {
+    let mut cases = 0_u16;
+    let mut outcomes = [false; 3];
+    for minimum in -3_i8..=3 {
+        for maximum in -3_i8..=3 {
+            for output in -3_i8..=3 {
+                let range = ObservableOutputRange { minimum, maximum };
+                let expected = if minimum > maximum {
+                    outcomes[0] = true;
+                    Err(ObservableOutputRangeError::MinimumAboveMaximum)
+                } else if output < minimum || output > maximum {
+                    outcomes[1] = true;
+                    Ok(ContactOutputAdmission::OutsideEnvelope)
+                } else {
+                    outcomes[2] = true;
+                    Ok(ContactOutputAdmission::Bounded)
+                };
+                assert_eq!(
+                    classify_contact_output(&output, &range),
+                    expected,
+                    "minimum {minimum}, maximum {maximum}, output {output}",
+                );
+                cases = cases.saturating_add(1);
+            }
+        }
+    }
+    assert_eq!(cases, 343);
+    assert!(outcomes.into_iter().all(|seen| seen));
+}

@@ -179,6 +179,9 @@ Current checked-in regression evidence includes:
 - `tests/backend/render-manifest/domain/lib.rs`, which pins source, asset,
   model,
   seed, quality, and version input retention;
+- `tests/backend/pen-contact-model/domain/lib.rs`, which pins calibrated-input
+  and observable-output range classification with two exhaustive 343-case
+  compact integer oracles;
 - `tests/backend/render-quality-profile/domain/lib.rs`, which pins preview/final
   role and shared-authority invariants;
 - `tests/backend/render-performance-evidence/domain/lib.rs`, which pins all six

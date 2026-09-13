@@ -1593,9 +1593,14 @@ drying response. A caller-owned inclusive output envelope can classify observed
 values as bounded or outside the declared range and rejects inverted
 envelopes. Preset evidence also retains caller-owned pen, ink, paper,
 conditions, calibrated input ranges, bounded output-range evidence, error
-measures, and known failure modes. Transfer functions, concrete output
-units/ranges, preset vocabularies, force units, proxy scales, and rendering
-remain open.
+measures, and known failure modes.
+
+Two exhaustive 343-case compact integer oracles cross every
+minimum/maximum/value triple in `[-3, 3]` for calibrated inputs and observable
+outputs. They require inverted-range rejection before classification, inclusive
+boundaries, and explicit extrapolation/outside-envelope outcomes. Transfer
+functions, concrete output units/ranges, preset vocabularies, force units, proxy
+scales, and rendering remain open.
 
 ### TODO - Implement bounded page texture and soft noise
 
