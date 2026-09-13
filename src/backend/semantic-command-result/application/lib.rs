@@ -9,7 +9,8 @@
 //
 // Boundary-Contract:
 // - Owns:
-//   - Transport-neutral interpretation of frozen semantic command results.
+//   - Transport-neutral interpretation of frozen semantic command results and
+//     qualified Apply cancellation-boundary observations.
 // - Must-Not:
 //   - Choose wire names, normalize receipts, persist retry state, emit
 //     diagnostics, mutate notebooks, or infer unknown transport outcomes.
@@ -18,7 +19,8 @@
 //   - Outputs: Frozen commit disposition implied by that result class.
 //   - Side effects: None.
 // - Split-When:
-//   - Receipt normalization or retry recovery gains executable authority.
+//   - Receipt normalization, retry recovery, or cancellation execution gains
+//     executable authority.
 // - Merge-When:
 //   - Final semantic Apply owns every result interpretation directly.
 // - Summary:
@@ -33,6 +35,10 @@
 
 //! Application semantics for frozen semantic command result classes.
 
+use atrament_application_operation_lifecycle::{
+    ApplicationCancellationDisposition, ApplicationCancellationObservation,
+    ApplicationOperationClass, application_cancellation_resolution,
+};
 use atrament_semantic_notebook_port::{
     SemanticCommandCommitDisposition, SemanticCommandResultClass,
 };
@@ -49,10 +55,10 @@ pub const fn semantic_command_commit_disposition(
     match result {
         SemanticCommandResultClass::Applied => {
             SemanticCommandCommitDisposition::CommittedThisCall
-        },
+        }
         SemanticCommandResultClass::IdempotentReplay => {
             SemanticCommandCommitDisposition::RecoveredPriorCompletion
-        },
+        }
         SemanticCommandResultClass::CancelledBeforeCommit
         | SemanticCommandResultClass::CommandContextMismatch
         | SemanticCommandResultClass::DependencyGraphRejection
@@ -67,6 +73,33 @@ pub const fn semantic_command_commit_disposition(
         | SemanticCommandResultClass::UnsupportedProtocolOrCapability
         | SemanticCommandResultClass::WritableScopeViolation => {
             SemanticCommandCommitDisposition::KnownNoNewCommit
+        }
+    }
+}
+
+/// Project one already-qualified Apply cancellation observation into the frozen
+/// semantic command result taxonomy.
+///
+/// A request alone has no result. Cancellation proven before the accepted
+/// semantic commit maps to `CancelledBeforeCommit`; a crossed commit remains
+/// `Applied`. This does not signal cancellation, execute Apply, or implement
+/// retry identity/recovery.
+#[must_use]
+pub const fn classify_semantic_apply_cancellation_result(
+    observation: ApplicationCancellationObservation,
+) -> Option<SemanticCommandResultClass> {
+    match application_cancellation_resolution(
+        ApplicationOperationClass::Apply,
+        observation,
+    ) {
+        None => None,
+        Some(resolution) => match resolution.disposition {
+            ApplicationCancellationDisposition::CancelledBeforeEffect => {
+                Some(SemanticCommandResultClass::CancelledBeforeCommit)
+            }
+            ApplicationCancellationDisposition::EffectRemainsAuthoritative => {
+                Some(SemanticCommandResultClass::Applied)
+            }
         },
     }
 }

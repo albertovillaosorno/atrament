@@ -254,7 +254,7 @@ depends_on = ["atrament_semantic_notebook_port"]
 depends_on = []
 
 [component.atrament_semantic_command_result]
-depends_on = ["atrament_semantic_notebook_port"]
+depends_on = ["atrament_application_operation_lifecycle", "atrament_semantic_notebook_port"]
 
 [component.atrament_semantic_flow_pagination]
 depends_on = ["atrament_flow_pagination", "atrament_semantic_notebook"]

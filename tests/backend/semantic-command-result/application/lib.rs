@@ -30,7 +30,13 @@
 // - Defaults:
 //   - Unknown transport outcome is absent because it is not a core result.
 //
-use atrament_semantic_command_result::semantic_command_commit_disposition;
+use atrament_application_operation_lifecycle::{
+    ApplicationCancellationObservation,
+};
+use atrament_semantic_command_result::{
+    classify_semantic_apply_cancellation_result,
+    semantic_command_commit_disposition,
+};
 use atrament_semantic_notebook_port::{
     SemanticCommandCommitDisposition, SemanticCommandResultClass,
 };
@@ -59,10 +65,10 @@ fn all_core_result_classes_have_exact_commit_disposition() {
         let expected = match result {
             SemanticCommandResultClass::Applied => {
                 SemanticCommandCommitDisposition::CommittedThisCall
-            },
+            }
             SemanticCommandResultClass::IdempotentReplay => {
                 SemanticCommandCommitDisposition::RecoveredPriorCompletion
-            },
+            }
             SemanticCommandResultClass::CancelledBeforeCommit
             | SemanticCommandResultClass::CommandContextMismatch
             | SemanticCommandResultClass::DependencyGraphRejection
@@ -77,8 +83,29 @@ fn all_core_result_classes_have_exact_commit_disposition() {
             | SemanticCommandResultClass::UnsupportedProtocolOrCapability
             | SemanticCommandResultClass::WritableScopeViolation => {
                 SemanticCommandCommitDisposition::KnownNoNewCommit
-            },
+            }
         };
         assert_eq!(semantic_command_commit_disposition(result), expected);
+    }
+}
+
+#[test]
+fn all_three_apply_cancellation_observations_preserve_commit_semantics() {
+    let cases = [
+        (
+            ApplicationCancellationObservation::EffectBoundaryCrossed,
+            Some(SemanticCommandResultClass::Applied),
+        ),
+        (ApplicationCancellationObservation::RequestOnly, None),
+        (
+            ApplicationCancellationObservation::TookEffectBeforeBoundary,
+            Some(SemanticCommandResultClass::CancelledBeforeCommit),
+        ),
+    ];
+    for (observation, expected) in cases {
+        assert_eq!(
+            classify_semantic_apply_cancellation_result(observation),
+            expected,
+        );
     }
 }

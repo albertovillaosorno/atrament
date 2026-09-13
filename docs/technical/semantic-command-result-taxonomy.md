@@ -199,6 +199,12 @@ Apply attempt according to the ordinary revision and retry rules.
 Cancellation after the commit point cannot convert an Applied transaction into
 this result.
 
+The shared lifecycle boundary now projects already-qualified Apply cancellation
+observations into this taxonomy: proven pre-commit cancellation produces this
+class, a crossed accepted semantic commit remains Applied, and a request alone
+produces no application result. Cancellation signaling and scheduling remain
+outside this projection.
+
 ### Internal failure with known no-commit outcome
 
 Meaning: an application failure occurred and the core can prove the accepted

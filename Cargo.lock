@@ -522,6 +522,7 @@ version = "0.1.0"
 name = "atrament_semantic_command_result"
 version = "0.1.0"
 dependencies = [
+ "atrament_application_operation_lifecycle",
  "atrament_semantic_notebook_port",
 ]
 

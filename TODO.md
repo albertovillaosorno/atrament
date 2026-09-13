@@ -1891,6 +1891,12 @@ the commit point; both therefore map to Internal failure with known no-commit.
 Missing accepted state remains explicitly unclassified rather than being
 assigned invented final result semantics.
 
+Qualified Apply cancellation observations now use the shared operation lifecycle
+boundary: proven cancellation before accepted semantic commit maps to Cancelled
+before commit, a crossed commit remains Applied, and a request alone remains
+unclassified. Cancellation signaling/scheduling and adapter execution remain
+open.
+
 Actual protocol-version implementation/admission, context identity computation,
 context construction/completeness policy, normalization and normalized batch
 identity, retry equality/recovery, receipt normalization, concrete
