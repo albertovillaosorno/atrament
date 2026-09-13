@@ -248,10 +248,11 @@ fn invalid_ranges_return_typed_errors() {
 
 #[derive(Clone, Copy)]
 enum BrokenBoundaryMode {
+    InternalAtEnd,
+    InternalAtStart,
     InvalidUtf8,
     Missing,
     NonAdvancing,
-    Reversed,
     ShiftedFirst,
     TruncatedFinal,
     UnderreportedCount,
@@ -268,6 +269,15 @@ impl GraphemeBoundaryProvider for BrokenBoundaryProvider {
         grapheme_index: usize,
     ) -> Option<usize> {
         match self.mode {
+            BrokenBoundaryMode::InternalAtEnd => match grapheme_index {
+                0 => Some(0),
+                1 => Some(source.len()),
+                _ => Some(source.len()),
+            },
+            BrokenBoundaryMode::InternalAtStart => match grapheme_index {
+                0 | 1 => Some(0),
+                _ => Some(source.len()),
+            },
             BrokenBoundaryMode::InvalidUtf8 => match grapheme_index {
                 0 => Some(0),
                 1 => Some(1),
@@ -280,10 +290,7 @@ impl GraphemeBoundaryProvider for BrokenBoundaryProvider {
             },
             BrokenBoundaryMode::NonAdvancing => match grapheme_index {
                 0 => Some(0),
-                _ => Some(source.len()),
-            },
-            BrokenBoundaryMode::Reversed => match grapheme_index {
-                0 | 2 => Some(0),
+                1 | 2 => Some("é".len()),
                 _ => Some(source.len()),
             },
             BrokenBoundaryMode::ShiftedFirst => match grapheme_index {
@@ -302,7 +309,7 @@ impl GraphemeBoundaryProvider for BrokenBoundaryProvider {
 
     fn grapheme_count(&self, _source: &str) -> usize {
         match self.mode {
-            BrokenBoundaryMode::Reversed => 3,
+            BrokenBoundaryMode::NonAdvancing => 3,
             BrokenBoundaryMode::UnderreportedCount => 0,
             _ => 2,
         }
@@ -392,22 +399,63 @@ fn provider_boundary_failures_are_not_reported_as_user_range_errors() {
             "z",
         ),
         Err(GraphemeRangeError::NonAdvancingBoundaries {
-            end_byte: source.len(),
-            start_byte: source.len(),
+            end_byte: "é".len(),
+            start_byte: "é".len(),
         }),
     );
+    for (mode, byte_offset) in [
+        (BrokenBoundaryMode::InternalAtStart, 0),
+        (BrokenBoundaryMode::InternalAtEnd, source.len()),
+    ] {
+        assert_eq!(
+            replace_grapheme_range(
+                &BrokenBoundaryProvider { mode },
+                source,
+                GraphemeRange { count: 0, start: 1 },
+                "z",
+            ),
+            Err(GraphemeRangeError::InternalBoundaryAtSourceEdge {
+                byte_offset,
+                grapheme_index: 1,
+            }),
+        );
+    }
+}
+
+struct ReversedInteriorBoundaryProvider;
+
+impl GraphemeBoundaryProvider for ReversedInteriorBoundaryProvider {
+    fn byte_offset(
+        &self,
+        source: &str,
+        grapheme_index: usize,
+    ) -> Option<usize> {
+        match grapheme_index {
+            0 => Some(0),
+            1 => Some(3),
+            2 => Some(2),
+            3 => Some(source.len()),
+            _ => None,
+        }
+    }
+
+    fn grapheme_count(&self, _source: &str) -> usize {
+        3
+    }
+}
+
+#[test]
+fn reversed_interior_boundaries_keep_their_distinct_error() {
     assert_eq!(
         replace_grapheme_range(
-            &BrokenBoundaryProvider {
-                mode: BrokenBoundaryMode::Reversed,
-            },
-            source,
+            &ReversedInteriorBoundaryProvider,
+            "abcd",
             GraphemeRange { count: 1, start: 1 },
             "z",
         ),
         Err(GraphemeRangeError::ReversedBoundaries {
-            end_byte: 0,
-            start_byte: source.len(),
+            end_byte: 2,
+            start_byte: 3,
         }),
     );
 }

@@ -77,6 +77,13 @@ pub enum GraphemeRangeError {
         /// Number of grapheme clusters in the source text.
         grapheme_count: usize,
     },
+    /// Provider mapped an internal grapheme index to a source endpoint.
+    InternalBoundaryAtSourceEdge {
+        /// Source-edge UTF-8 byte offset returned for the internal index.
+        byte_offset: usize,
+        /// Internal grapheme boundary index that aliased the source edge.
+        grapheme_index: usize,
+    },
     /// Provider returned a byte offset that is not a valid source boundary.
     InvalidBoundary {
         /// Invalid UTF-8 byte offset returned by the provider.
@@ -219,14 +226,14 @@ fn resolve_range(
     } else if range.start == anchors.total {
         anchors.final_byte
     } else {
-        provider_boundary(boundaries, source, range.start)?
+        provider_internal_boundary(boundaries, source, range.start)?
     };
     let end_byte = if end == range.start {
         start_byte
     } else if end == anchors.total {
         anchors.final_byte
     } else {
-        provider_boundary(boundaries, source, end)?
+        provider_internal_boundary(boundaries, source, end)?
     };
     if end_byte < start_byte {
         return Err(GraphemeRangeError::ReversedBoundaries {
@@ -245,6 +252,21 @@ fn resolve_range(
         end_byte,
         start_byte,
     })
+}
+
+fn provider_internal_boundary(
+    boundaries: &dyn GraphemeBoundaryProvider,
+    source: &str,
+    grapheme_index: usize,
+) -> Result<usize, GraphemeRangeError> {
+    let byte_offset = provider_boundary(boundaries, source, grapheme_index)?;
+    if byte_offset == 0 || byte_offset == source.len() {
+        return Err(GraphemeRangeError::InternalBoundaryAtSourceEdge {
+            byte_offset,
+            grapheme_index,
+        });
+    }
+    Ok(byte_offset)
 }
 
 fn provider_boundary(

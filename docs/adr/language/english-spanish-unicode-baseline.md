@@ -81,7 +81,10 @@ and Undo restores the original semantic text without changing authored bytes.
 A separate cursor-position application resolves those same boundaries to exact
 UTF-8 offsets without defining movement, selection, clamping, keybindings, or
 normalization; each frozen visible-text grapheme admits only its start and end
-positions. The same boundary can resolve a caller-ordered anchor/focus pair
+positions. Internal provider indexes cannot alias either source endpoint, so
+internal cursor and insertion positions remain interior to nonempty text.
+
+The same boundary can resolve a caller-ordered anchor/focus pair
 against one validated provider snapshot, preserving forward, reverse, or
 collapsed endpoint order without choosing selection-extension behavior. For a
 noncollapsed selection, provider byte order must agree with grapheme index order

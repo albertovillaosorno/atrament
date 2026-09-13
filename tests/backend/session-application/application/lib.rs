@@ -6443,9 +6443,9 @@ impl GraphemeBoundaryProvider for UnderreportedAdvertisedBoundary {
     }
 }
 
-struct NonAdvancingAdvertisedBoundary;
+struct EdgeAliasingAdvertisedBoundary;
 
-impl GraphemeBoundaryProvider for NonAdvancingAdvertisedBoundary {
+impl GraphemeBoundaryProvider for EdgeAliasingAdvertisedBoundary {
     fn byte_offset(
         &self,
         source: &str,
@@ -6535,7 +6535,7 @@ fn grapheme_provider_invariant_failure_is_atomic_for_session_state() {
     assert_eq!(session.accepted_revision(), Some(&before_revision));
     assert_eq!(
         session.replace_text_grapheme_range(
-            &NonAdvancingAdvertisedBoundary,
+            &EdgeAliasingAdvertisedBoundary,
             application::TextGraphemeRangeEdit {
                 base,
                 range: GraphemeRange { count: 1, start: 1 },
@@ -6543,9 +6543,9 @@ fn grapheme_provider_invariant_failure_is_atomic_for_session_state() {
                 target: span,
             },
         ),
-        Err(GraphemeRangeError::NonAdvancingBoundaries {
-            end_byte: "éx".len(),
-            start_byte: "éx".len(),
+        Err(GraphemeRangeError::InternalBoundaryAtSourceEdge {
+            byte_offset: "éx".len(),
+            grapheme_index: 1,
         }),
     );
     assert_eq!(session.history_availability(), before_history);

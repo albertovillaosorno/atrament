@@ -991,9 +991,13 @@ A separate transport-neutral cursor-position boundary now resolves one caller
 extended-grapheme boundary index to its exact UTF-8 byte offset. It validates
 provider start/end anchors before caller bounds, resolves an internal boundary
 once, admits both endpoints including empty text, and returns typed failures for
-missing, invalid, or out-of-range positions. All 114 frozen bilingual visible
-text graphemes admit exactly start and end cursor positions under the pinned
-segmentation adapter. A same-source selection resolver validates provider
+missing, invalid, or out-of-range positions. Internal provider indexes cannot
+alias byte zero or the final source byte, so an internal cursor or insertion
+cannot silently jump to a source edge. All 114 frozen bilingual visible-text
+graphemes admit exactly start and end cursor positions under the pinned
+segmentation adapter.
+
+A same-source selection resolver validates provider
 anchors once, preserves caller anchor/focus order for forward and reverse
 selections, and reuses one internal boundary for a collapsed selection.
 

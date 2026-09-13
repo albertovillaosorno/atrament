@@ -113,6 +113,13 @@ pub enum GraphemeCursorError {
         /// Caller-supplied signed grapheme step.
         step: isize,
     },
+    /// Provider mapped an internal grapheme index to a source endpoint.
+    InternalBoundaryAtSourceEdge {
+        /// Source-edge UTF-8 byte offset returned for the internal index.
+        byte_offset: usize,
+        /// Internal grapheme boundary index that aliased the source edge.
+        grapheme_index: usize,
+    },
     /// Provider returned a byte offset that is not a valid source boundary.
     InvalidBoundary {
         /// Invalid UTF-8 byte offset returned by the provider.
@@ -278,7 +285,7 @@ fn resolve_position(
     } else if grapheme_index == anchors.total {
         anchors.final_byte
     } else {
-        provider_boundary(boundaries, source, grapheme_index)?
+        provider_internal_boundary(boundaries, source, grapheme_index)?
     };
     Ok(GraphemeCursorPosition {
         byte_offset,
@@ -316,6 +323,21 @@ fn provider_anchors(
         first_byte,
         total,
     })
+}
+
+fn provider_internal_boundary(
+    boundaries: &dyn GraphemeBoundaryProvider,
+    source: &str,
+    grapheme_index: usize,
+) -> Result<usize, GraphemeCursorError> {
+    let byte_offset = provider_boundary(boundaries, source, grapheme_index)?;
+    if byte_offset == 0 || byte_offset == source.len() {
+        return Err(GraphemeCursorError::InternalBoundaryAtSourceEdge {
+            byte_offset,
+            grapheme_index,
+        });
+    }
+    Ok(byte_offset)
 }
 
 fn provider_boundary(

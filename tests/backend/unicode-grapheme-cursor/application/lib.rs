@@ -140,6 +140,8 @@ struct BrokenBoundaryProvider {
 
 #[derive(Clone, Copy)]
 enum BrokenBoundaryMode {
+    InternalAtEnd,
+    InternalAtStart,
     InvalidUtf8,
     MissingInternal,
     ShiftedFirst,
@@ -154,6 +156,15 @@ impl GraphemeBoundaryProvider for BrokenBoundaryProvider {
         grapheme_index: usize,
     ) -> Option<usize> {
         match self.mode {
+            BrokenBoundaryMode::InternalAtEnd => match grapheme_index {
+                0 => Some(0),
+                1 => Some(source.len()),
+                _ => Some(source.len()),
+            },
+            BrokenBoundaryMode::InternalAtStart => match grapheme_index {
+                0 | 1 => Some(0),
+                _ => Some(source.len()),
+            },
             BrokenBoundaryMode::InvalidUtf8 => match grapheme_index {
                 0 => Some(0),
                 1 => Some(1),
@@ -257,6 +268,22 @@ fn invalid_and_missing_internal_boundaries_are_typed_failures() {
         ),
         Err(GraphemeCursorError::BoundaryUnavailable { grapheme_index: 1 }),
     );
+    for (mode, byte_offset) in [
+        (BrokenBoundaryMode::InternalAtStart, 0),
+        (BrokenBoundaryMode::InternalAtEnd, source.len()),
+    ] {
+        assert_eq!(
+            resolve_grapheme_cursor_position(
+                &BrokenBoundaryProvider { mode },
+                source,
+                1,
+            ),
+            Err(GraphemeCursorError::InternalBoundaryAtSourceEdge {
+                byte_offset,
+                grapheme_index: 1,
+            }),
+        );
+    }
 }
 
 #[test]
@@ -531,7 +558,8 @@ fn signed_steps_resolve_exact_grapheme_boundaries_without_clamping() {
 }
 
 struct MisorderedStepBoundaryProvider {
-    target_byte: usize,
+    first_internal: usize,
+    second_internal: usize,
 }
 
 impl GraphemeBoundaryProvider for MisorderedStepBoundaryProvider {
@@ -542,8 +570,8 @@ impl GraphemeBoundaryProvider for MisorderedStepBoundaryProvider {
     ) -> Option<usize> {
         match grapheme_index {
             0 => Some(0),
-            1 => Some(1),
-            2 => Some(self.target_byte),
+            1 => Some(self.first_internal),
+            2 => Some(self.second_internal),
             3 => Some(source.len()),
             _ => None,
         }
@@ -556,28 +584,33 @@ impl GraphemeBoundaryProvider for MisorderedStepBoundaryProvider {
 
 #[test]
 fn signed_steps_reject_provider_boundaries_that_do_not_advance() {
-    let source = "abc";
-    for target_byte in [0, 1] {
-        let provider = MisorderedStepBoundaryProvider { target_byte };
+    let source = "abcd";
+    for (origin_byte, target_byte) in [(2, 2), (3, 2)] {
+        let provider = MisorderedStepBoundaryProvider {
+            first_internal: origin_byte,
+            second_internal: target_byte,
+        };
         assert_eq!(
             resolve_grapheme_cursor_step(&provider, source, 1, 1),
             Err(GraphemeCursorError::StepBoundaryOrderMismatch {
-                origin_byte: 1,
+                origin_byte,
                 origin_index: 1,
                 target_byte,
                 target_index: 2,
             }),
-            "target byte {target_byte}",
         );
     }
 
-    let provider = MisorderedStepBoundaryProvider { target_byte: 0 };
+    let provider = MisorderedStepBoundaryProvider {
+        first_internal: 2,
+        second_internal: 1,
+    };
     assert_eq!(
         resolve_grapheme_cursor_step(&provider, source, 2, -1),
         Err(GraphemeCursorError::StepBoundaryOrderMismatch {
-            origin_byte: 0,
+            origin_byte: 1,
             origin_index: 2,
-            target_byte: 1,
+            target_byte: 2,
             target_index: 1,
         }),
     );
