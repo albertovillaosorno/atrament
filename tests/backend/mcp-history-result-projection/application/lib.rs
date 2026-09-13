@@ -29,9 +29,13 @@
 // - Defaults:
 //   - Non-history capabilities never acquire history authority by vocabulary.
 //
+use atrament_application_operation_lifecycle::{
+    ApplicationCancellationObservation,
+};
 use atrament_mcp_capability_effect::McpApplicationCapabilityClass;
 use atrament_mcp_history_result_projection::{
-    mcp_history_commit_disposition, mcp_history_direction_is_available,
+    mcp_history_cancellation_result, mcp_history_commit_disposition,
+    mcp_history_direction_is_available,
 };
 use atrament_semantic_history_result::{
     SemanticHistoryCommitDisposition, SemanticHistoryResultClass,
@@ -145,4 +149,42 @@ fn all_80_capability_and_direction_availability_cases_are_exact() {
         }
     }
     assert_eq!(cases, 80);
+}
+
+#[test]
+fn all_24_capability_cancellation_pairs_project_only_through_history() {
+    const OBSERVATIONS: [ApplicationCancellationObservation; 3] = [
+        ApplicationCancellationObservation::EffectBoundaryCrossed,
+        ApplicationCancellationObservation::RequestOnly,
+        ApplicationCancellationObservation::TookEffectBeforeBoundary,
+    ];
+    let mut cases = 0_usize;
+    for capability in CAPABILITIES {
+        for observation in OBSERVATIONS {
+            let expected = if capability
+                != McpApplicationCapabilityClass::HistoryTraversal
+            {
+                None
+            } else {
+                match observation {
+                    ApplicationCancellationObservation::RequestOnly => None,
+                    ApplicationCancellationObservation::
+                        TookEffectBeforeBoundary => Some(
+                        SemanticHistoryResultClass::CancelledBeforeCommit,
+                    ),
+                    ApplicationCancellationObservation::
+                        EffectBoundaryCrossed => {
+                        Some(SemanticHistoryResultClass::Traversed)
+                    },
+                }
+            };
+            assert_eq!(
+                mcp_history_cancellation_result(capability, observation),
+                expected,
+                "capability={capability:?} observation={observation:?}",
+            );
+            cases += 1;
+        }
+    }
+    assert_eq!(cases, 24);
 }

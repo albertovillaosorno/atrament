@@ -35,9 +35,11 @@
 
 //! Frozen MCP projection onto shared derived/output result vocabulary.
 
+use atrament_application_operation_lifecycle as lifecycle;
 use atrament_derived_output_result::{
     DerivedOutputEffectDisposition, DerivedOutputOperation,
-    DerivedOutputResultClass, derived_output_effect_disposition_for_operation,
+    DerivedOutputResultClass, classify_derived_output_cancellation_result,
+    derived_output_effect_disposition_for_operation,
 };
 use atrament_mcp_capability_effect::McpApplicationCapabilityClass;
 
@@ -63,6 +65,24 @@ pub const fn mcp_derived_output_operation(
         | McpApplicationCapabilityClass::HistoryTraversal
         | McpApplicationCapabilityClass::Inspect
         | McpApplicationCapabilityClass::Validate => None,
+    }
+}
+
+/// Project qualified cancellation through a compatible derived/output
+/// capability.
+///
+/// This preserves the shared output lifecycle result and does not imply the MCP
+/// capability is admitted, running, cancellable, or exposed by a concrete tool.
+#[must_use]
+pub const fn mcp_derived_output_cancellation_result(
+    capability: McpApplicationCapabilityClass,
+    observation: lifecycle::ApplicationCancellationObservation,
+) -> Option<DerivedOutputResultClass> {
+    match mcp_derived_output_operation(capability) {
+        Some(operation) => {
+            classify_derived_output_cancellation_result(operation, observation)
+        },
+        None => None,
     }
 }
 

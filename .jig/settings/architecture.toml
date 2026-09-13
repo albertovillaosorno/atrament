@@ -194,13 +194,13 @@ depends_on = []
 depends_on = []
 
 [component.atrament_mcp_derived_output_result_projection]
-depends_on = ["atrament_derived_output_result", "atrament_mcp_capability_effect"]
+depends_on = ["atrament_application_operation_lifecycle", "atrament_derived_output_result", "atrament_mcp_capability_effect"]
 
 [component.atrament_mcp_effect_admission]
 depends_on = ["atrament_mcp_capability_effect"]
 
 [component.atrament_mcp_history_result_projection]
-depends_on = ["atrament_mcp_capability_effect", "atrament_semantic_history_result", "atrament_semantic_notebook_port"]
+depends_on = ["atrament_application_operation_lifecycle", "atrament_mcp_capability_effect", "atrament_semantic_history_result", "atrament_semantic_notebook_port"]
 
 [component.atrament_mcp_operation_lifecycle_projection]
 depends_on = ["atrament_application_operation_lifecycle", "atrament_mcp_capability_effect"]

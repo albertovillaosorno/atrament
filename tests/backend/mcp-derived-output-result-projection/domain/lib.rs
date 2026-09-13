@@ -31,12 +31,16 @@
 // - Defaults:
 //   - Unsupported capability/result combinations produce no disposition.
 //
+use atrament_application_operation_lifecycle::{
+    ApplicationCancellationObservation,
+};
 use atrament_derived_output_result::{
     DerivedOutputEffectDisposition, DerivedOutputOperation,
     DerivedOutputResultClass,
 };
 use atrament_mcp_capability_effect::McpApplicationCapabilityClass;
 use atrament_mcp_derived_output_result_projection::{
+    mcp_derived_output_cancellation_result,
     mcp_derived_output_effect_disposition, mcp_derived_output_operation,
 };
 
@@ -146,4 +150,47 @@ fn all_88_capability_result_pairs_match_independent_oracle() {
         }
     }
     assert_eq!(cases, 88);
+}
+
+#[test]
+fn all_24_capability_cancellation_pairs_preserve_output_boundaries() {
+    const OBSERVATIONS: [ApplicationCancellationObservation; 3] = [
+        ApplicationCancellationObservation::EffectBoundaryCrossed,
+        ApplicationCancellationObservation::RequestOnly,
+        ApplicationCancellationObservation::TookEffectBeforeBoundary,
+    ];
+    let mut cases = 0_usize;
+    for capability in CAPABILITIES {
+        for observation in OBSERVATIONS {
+            let expected = expected_operation(capability).and_then(|operation| {
+                match observation {
+                    ApplicationCancellationObservation::RequestOnly => None,
+                    ApplicationCancellationObservation::
+                        TookEffectBeforeBoundary => Some(
+                        DerivedOutputResultClass::
+                            CancelledBeforeResultOrEffect,
+                    ),
+                    ApplicationCancellationObservation::
+                        EffectBoundaryCrossed => {
+                        match operation {
+                            DerivedOutputOperation::Export => {
+                                Some(DerivedOutputResultClass::Exported)
+                            },
+                            DerivedOutputOperation::Plan
+                            | DerivedOutputOperation::Render => Some(
+                                DerivedOutputResultClass::CompletedProjection,
+                            ),
+                        }
+                    },
+                }
+            });
+            assert_eq!(
+                mcp_derived_output_cancellation_result(capability, observation),
+                expected,
+                "capability={capability:?} observation={observation:?}",
+            );
+            cases += 1;
+        }
+    }
+    assert_eq!(cases, 24);
 }

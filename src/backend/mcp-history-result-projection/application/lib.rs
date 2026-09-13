@@ -35,15 +35,41 @@
 
 //! Read-only MCP projection onto shared semantic-history application meaning.
 
+use atrament_application_operation_lifecycle as lifecycle;
 use atrament_mcp_capability_effect::McpApplicationCapabilityClass;
 use atrament_semantic_history_result::{
     SemanticHistoryCommitDisposition, SemanticHistoryResultClass,
-    semantic_history_commit_disposition,
+    classify_history_cancellation_result, semantic_history_commit_disposition,
     semantic_history_direction_is_available,
 };
 use atrament_semantic_notebook_port::{
     HistoryAvailabilityOutcome, HistoryDirection,
 };
+
+/// Project one qualified cancellation observation through `HistoryTraversal`
+/// only.
+///
+/// A request alone remains unresolved. This maps shared lifecycle evidence
+/// only;
+/// it does not admit, signal, schedule, or execute cancellation.
+#[must_use]
+pub const fn mcp_history_cancellation_result(
+    capability: McpApplicationCapabilityClass,
+    observation: lifecycle::ApplicationCancellationObservation,
+) -> Option<SemanticHistoryResultClass> {
+    match capability {
+        McpApplicationCapabilityClass::HistoryTraversal => {
+            classify_history_cancellation_result(observation)
+        },
+        McpApplicationCapabilityClass::Apply
+        | McpApplicationCapabilityClass::CommandContext
+        | McpApplicationCapabilityClass::Export
+        | McpApplicationCapabilityClass::Inspect
+        | McpApplicationCapabilityClass::Plan
+        | McpApplicationCapabilityClass::Render
+        | McpApplicationCapabilityClass::Validate => None,
+    }
+}
 
 /// Project one history result only through the MCP `HistoryTraversal`
 /// capability.

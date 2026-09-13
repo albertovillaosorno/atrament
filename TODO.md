@@ -2189,6 +2189,11 @@ classes to the frozen application operation lifecycle and leaves Inspect and
 Command context outside that lifecycle. It does not imply those capabilities
 are packaged, admitted, running, cancellable, or exposed as tools.
 
+MCP Render, Plan, and Export cancellation projection now reuses the same shared
+output result boundary: pre-boundary cancellation, crossed read-only completion,
+and crossed file commit retain their frozen meanings only for those three
+capability classes. This adds no tool or cancellation execution authority.
+
 
 A separate MCP/output-result projection now admits derived/output result meaning
 only for Render, Plan, and Export and preserves the result-class applicability
@@ -2202,9 +2207,13 @@ remains authoritative across all four command application bits; MCP vocabulary
 alone never turns an omitted operation into an admitted one.
 
 MCP History traversal now has a separate read-only projection for all six frozen
-history result dispositions and backend-owned Undo/Redo availability. The other
+history result dispositions and backend-owned Undo/Redo availability. Qualified
+history cancellation also reuses the shared lifecycle mapping only through that
+capability: request-only remains unresolved, pre-commit cancellation stays a
+known no-commit result, and crossed traversal commit stays Traversed. The other
 seven MCP capability classes receive no history projection, and retry,
-cancellation, traversal execution, and concrete MCP tooling remain open.
+cancellation execution, traversal execution, and concrete MCP tooling remain
+open.
 
 ### TODO - Package self-contained agent instructions
 
