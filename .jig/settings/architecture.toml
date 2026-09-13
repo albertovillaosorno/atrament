@@ -263,7 +263,7 @@ depends_on = ["atrament_flow_pagination", "atrament_semantic_notebook"]
 depends_on = ["atrament_diagnostic", "atrament_fixed_region_bounds", "atrament_physical_page_profile", "atrament_semantic_notebook"]
 
 [component.atrament_semantic_history_result]
-depends_on = ["atrament_semantic_notebook_port"]
+depends_on = ["atrament_application_operation_lifecycle", "atrament_semantic_notebook_port"]
 
 [component.atrament_semantic_notebook]
 depends_on = ["atrament_mathematics_source", "atrament_physical_page_profile"]

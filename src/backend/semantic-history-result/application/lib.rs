@@ -9,7 +9,8 @@
 //
 // Boundary-Contract:
 // - Owns:
-//   - Transport-neutral interpretation of frozen semantic history results.
+//   - Transport-neutral interpretation of frozen semantic history results and
+//     qualified cancellation-boundary observations.
 // - Must-Not:
 //   - Traverse history, allocate revisions, choose wire names, persist retry
 //     state, execute cancellation, or infer unknown transport outcomes.
@@ -18,7 +19,7 @@
 //   - Outputs: Commit disposition and unambiguous current-outcome projection.
 //   - Side effects: None.
 // - Split-When:
-//   - History retry or cancellation gains executable application authority.
+//   - History retry or cancellation execution gains application authority.
 // - Merge-When:
 //   - Final history execution directly owns every result interpretation.
 // - Summary:
@@ -33,6 +34,10 @@
 
 //! Application semantics for frozen semantic history result classes.
 
+use atrament_application_operation_lifecycle::{
+    ApplicationCancellationDisposition, ApplicationCancellationObservation,
+    ApplicationOperationClass, application_cancellation_resolution,
+};
 use atrament_semantic_notebook_port::{
     HistoryAvailabilityOutcome, HistoryDirection, HistoryTraversalOutcome,
 };
@@ -76,13 +81,13 @@ pub const fn semantic_history_commit_disposition(
         | SemanticHistoryResultClass::KnownNoCommitFailure
         | SemanticHistoryResultClass::StaleCurrentRevision => {
             SemanticHistoryCommitDisposition::KnownNoNewCommit
-        },
+        }
         SemanticHistoryResultClass::IdempotentReplay => {
             SemanticHistoryCommitDisposition::RecoveredPriorCompletion
-        },
+        }
         SemanticHistoryResultClass::Traversed => {
             SemanticHistoryCommitDisposition::CommittedThisCall
-        },
+        }
     }
 }
 
@@ -117,16 +122,43 @@ pub const fn classify_history_traversal_result(
     match outcome {
         HistoryTraversalOutcome::Boundary { .. } => {
             Some(SemanticHistoryResultClass::HistoryBoundary)
-        },
+        }
         HistoryTraversalOutcome::IdentityExhausted { .. } => {
             Some(SemanticHistoryResultClass::KnownNoCommitFailure)
-        },
+        }
         HistoryTraversalOutcome::NoAcceptedRevision => None,
         HistoryTraversalOutcome::StaleBase { .. } => {
             Some(SemanticHistoryResultClass::StaleCurrentRevision)
-        },
+        }
         HistoryTraversalOutcome::Traversed { .. } => {
             Some(SemanticHistoryResultClass::Traversed)
+        }
+    }
+}
+
+/// Project one already-qualified history cancellation observation into the
+/// frozen history result taxonomy.
+///
+/// A request alone has no result. Cancellation proven before the history commit
+/// maps to `CancelledBeforeCommit`; a crossed history commit remains
+/// `Traversed`. This does not signal cancellation, schedule traversal, or
+/// implement history retry identity/recovery.
+#[must_use]
+pub const fn classify_history_cancellation_result(
+    observation: ApplicationCancellationObservation,
+) -> Option<SemanticHistoryResultClass> {
+    match application_cancellation_resolution(
+        ApplicationOperationClass::HistoryTraversal,
+        observation,
+    ) {
+        None => None,
+        Some(resolution) => match resolution.disposition {
+            ApplicationCancellationDisposition::CancelledBeforeEffect => {
+                Some(SemanticHistoryResultClass::CancelledBeforeCommit)
+            }
+            ApplicationCancellationDisposition::EffectRemainsAuthoritative => {
+                Some(SemanticHistoryResultClass::Traversed)
+            }
         },
     }
 }

@@ -162,9 +162,13 @@ The backend now exposes those six frozen semantic history result classes as
 transport-neutral application vocabulary with their commit dispositions. The
 current in-memory traversal can project Traversed, History boundary, Stale
 current revision, and revision-allocation failure as known no-commit failure.
-Missing accepted state remains unclassified, while Idempotent replay and
-Cancelled before commit remain vocabulary only until retry and cancellation
-execution exist.
+Missing accepted state remains unclassified. The shared lifecycle boundary can
+also project an already-qualified history cancellation observation: proven
+pre-commit cancellation maps to Cancelled before commit, while a crossed history
+commit remains Traversed.
+
+Idempotent replay still awaits retry execution, and actual cancellation
+signaling/scheduling remains outside this projection.
 
 A shared read-only helper also projects the exact `can_undo` or `can_redo` fact
 for a requested direction; missing accepted state admits neither direction.

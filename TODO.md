@@ -1107,17 +1107,22 @@ The semantic-history-result application now freezes the six history result
 classes and their commit dispositions independently from traversal execution.
 Current Traversed, Boundary, StaleBase, and revision-allocation exhaustion
 outcomes project only to their unambiguous frozen meanings; missing accepted
-state remains unclassified. Retry replay and cancellation are not implemented.
-Read-only direction availability is now centralized over the existing
+state remains unclassified. An already-qualified lifecycle cancellation
+observation now maps pre-commit cancellation to Cancelled before commit and a
+crossed traversal boundary to Traversed, while a request alone remains
+unclassified.
+
+Retry replay and actual cancellation execution are not implemented. Read-only
+direction availability is now centralized over the existing
 `HistoryAvailabilityOutcome`, and `SessionApplication` uses it for Redo-aware
 asset-byte pruning instead of reinterpreting `can_redo` independently.
 
 Bounded history storage is also blocked on policy rather than mechanics. The
 frozen history contract explicitly leaves depth limits and storage structure
 unfrozen, so the application must not silently choose eviction semantics that
-change which Undo/Redo steps remain admitted. Cancellation likewise awaits an
-owning operation-cancellation boundary instead of being inferred from transport
-disconnect.
+change which Undo/Redo steps remain admitted. Cancellation signaling and
+scheduling remain open even though the shared lifecycle boundary now gives
+qualified pre/post-commit observations exact history-result meaning.
 
 Transaction provenance has frozen origin classes for direct human,
 clipboard-assisted model, CLI, and MCP mutations, but no trusted application

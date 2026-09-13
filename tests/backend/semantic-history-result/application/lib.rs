@@ -30,9 +30,13 @@
 // - Defaults:
 //   - NoAcceptedRevision remains intentionally unclassified.
 //
+use atrament_application_operation_lifecycle::{
+    ApplicationCancellationObservation,
+};
 use atrament_semantic_history_result::{
     SemanticHistoryCommitDisposition, SemanticHistoryResultClass,
-    classify_history_traversal_result, semantic_history_commit_disposition,
+    classify_history_cancellation_result, classify_history_traversal_result,
+    semantic_history_commit_disposition,
     semantic_history_direction_is_available,
 };
 use atrament_semantic_notebook::{IdentityAllocator, IdentityExhausted};
@@ -59,13 +63,13 @@ fn all_six_result_classes_have_exact_commit_disposition() {
             | SemanticHistoryResultClass::KnownNoCommitFailure
             | SemanticHistoryResultClass::StaleCurrentRevision => {
                 SemanticHistoryCommitDisposition::KnownNoNewCommit
-            },
+            }
             SemanticHistoryResultClass::IdempotentReplay => {
                 SemanticHistoryCommitDisposition::RecoveredPriorCompletion
-            },
+            }
             SemanticHistoryResultClass::Traversed => {
                 SemanticHistoryCommitDisposition::CommittedThisCall
-            },
+            }
         };
         assert_eq!(semantic_history_commit_disposition(result), expected);
     }
@@ -125,13 +129,12 @@ fn all_direction_availability_states_match_exact_backend_facts() {
     let mut cases = 0_usize;
     for can_redo in [false, true] {
         for can_undo in [false, true] {
-            let availability = HistoryAvailabilityOutcome::Available(
-                HistoryAvailability {
+            let availability =
+                HistoryAvailabilityOutcome::Available(HistoryAvailability {
                     can_redo,
                     can_undo,
                     revision,
-                },
-            );
+                });
             for direction in [HistoryDirection::Redo, HistoryDirection::Undo] {
                 let expected = match direction {
                     HistoryDirection::Redo => can_redo,
@@ -154,4 +157,22 @@ fn all_direction_availability_states_match_exact_backend_facts() {
         cases += 1;
     }
     assert_eq!(cases, 10);
+}
+
+#[test]
+fn all_three_cancellation_observations_preserve_history_commit_semantics() {
+    let cases = [
+        (
+            ApplicationCancellationObservation::EffectBoundaryCrossed,
+            Some(SemanticHistoryResultClass::Traversed),
+        ),
+        (ApplicationCancellationObservation::RequestOnly, None),
+        (
+            ApplicationCancellationObservation::TookEffectBeforeBoundary,
+            Some(SemanticHistoryResultClass::CancelledBeforeCommit),
+        ),
+    ];
+    for (observation, expected) in cases {
+        assert_eq!(classify_history_cancellation_result(observation), expected);
+    }
 }
