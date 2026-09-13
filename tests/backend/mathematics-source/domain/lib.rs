@@ -1357,6 +1357,26 @@ fn structural_and_size_sensitive_commands_remain_explicitly_unsupported() {
 }
 
 #[test]
+fn extensible_delimiter_components_remain_explicitly_unsupported() {
+    for source in [
+        r"\Arrowvert",
+        r"\arrowvert",
+        r"\bracevert",
+        r"\lgroup",
+        r"\lmoustache",
+        r"\rgroup",
+        r"\rmoustache",
+    ] {
+        let analyzed = analyze(source, FormulaMode::Inline)
+            .expect("balanced extensible delimiter component");
+        assert!(!analyzed.is_supported(), "{source}");
+        assert_eq!(reconstructed(&analyzed), source);
+        assert_eq!(analyzed.unsupported.len(), 1, "{source}");
+        assert_eq!(analyzed.unsupported[0].name, source, "{source}");
+    }
+}
+
+#[test]
 fn sized_delimiter_commands_remain_explicitly_unsupported() {
     let source = r"\left\langle x \right\rangle";
     let analyzed = analyze(source, FormulaMode::Display)
