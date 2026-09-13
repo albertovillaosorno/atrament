@@ -197,6 +197,11 @@ drops its page-session credential on `pagehide`; after the one-time launch
 fragment has been scrubbed, a real Firefox reload starts with blank disabled
 draft fields and issues no new handshake or draft request.
 
+A separate real Firefox fixture holds one authenticated draft replacement in
+flight, closes the owning browsing context, and observes that request transport
+abort while the browser process remains alive. This is page-session request
+cancellation, not a claim about cancellation of backend application operations.
+
 ### Pre-acceptance draft mutation
 
 The first mutable browser application state is source-preparation draft text,

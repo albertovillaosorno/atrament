@@ -10,14 +10,14 @@
 // Boundary-Contract:
 // - Owns:
 //   - Real-browser evidence for localhost frame isolation and browser-session
-//     refresh disposal.
+//     disposal.
 // - Must-Not:
 //   - Read live session-private state, persist browser data, or weaken runtime
 //     admission to make automation easier.
 // - Allows:
 //   - Inputs: The generated workspace, one freshly started Atrament runtime,
 //     and deterministic loopback fixtures.
-//   - Outputs: Assertions over Firefox frame policy and refresh disposal.
+//   - Outputs: Assertions over Firefox frame policy and session disposal.
 //   - Side effects: Starts disposable runtime/browser processes and loopback
 //     HTTP servers, then removes their temporary browser profiles.
 // - Split-When:
@@ -25,11 +25,11 @@
 // - Merge-When:
 //   - Browser security integration moves to one shared automation harness.
 // - Summary:
-//   - Proves browser-enforced frame isolation and one-shot refresh behavior.
+//   - Proves browser-enforced frame isolation and page-session disposal.
 // - Description:
 //   - Uses Firefox's built-in WebDriver BiDi endpoint through a dependency-free
-//     RFC 6455 client. It checks hostile framing and proves a fragment-scrubbed
-//     refresh cannot silently reuse the prior page-session credential.
+//     RFC 6455 client. It checks hostile framing, fragment-scrubbed refresh,
+//     and cancellation of an in-flight draft write when the page closes.
 // - Usage:
 //   - Run through `pnpm test:browser-security` from the repository root.
 // - Defaults:
@@ -349,7 +349,7 @@ function serveFile(response, file, contentType) {
     response.end(fs.readFileSync(file));
 }
 
-function createRefreshFixtureServer(apiRequests) {
+function createSessionFixtureServer(apiRequests, onDraftMutation = null) {
     const generated = new Set([
         "main.js",
         "session-diagnostic.js",
@@ -411,12 +411,19 @@ function createRefreshFixtureServer(apiRequests) {
             apiRequests.push(`${request.method} ${pathname}`);
             const field = pathname.slice("/api/session/".length);
             if (
-                request.method !== "GET"
-                || request.headers.authorization
-                    !== `Bearer ${REFRESH_SECRET}`
+                request.headers.authorization !== `Bearer ${REFRESH_SECRET}`
                 || !(field in REFRESH_DRAFT)
             ) {
                 response.writeHead(401);
+                response.end();
+                return;
+            }
+            if (request.method === "POST" && onDraftMutation !== null) {
+                onDraftMutation(request, response, field);
+                return;
+            }
+            if (request.method !== "GET") {
+                response.writeHead(405);
                 response.end();
                 return;
             }
@@ -713,7 +720,7 @@ test(
         fs.mkdirSync(".temp", { recursive: true });
         const profile = fs.mkdtempSync(".temp/session-refresh-");
         const apiRequests = [];
-        const server = createRefreshFixtureServer(apiRequests);
+        const server = createSessionFixtureServer(apiRequests);
         const children = [];
         let bidi;
         try {
@@ -782,6 +789,135 @@ test(
                 "GET /api/session/candidate",
             ]);
         } finally {
+            if (bidi?.socket != null) {
+                bidi.socket.end();
+            }
+            if (server.listening) {
+                server.close();
+                await once(server, "close");
+            }
+            for (const child of children.reverse()) {
+                await stopChild(child);
+            }
+            fs.rmSync(profile, { recursive: true, force: true });
+        }
+    },
+);
+
+test(
+    "Firefox close aborts an in-flight private draft replacement",
+    { skip: !FIREFOX_AVAILABLE, timeout: 30_000 },
+    async () => {
+        fs.mkdirSync(".temp", { recursive: true });
+        const profile = fs.mkdtempSync(".temp/session-close-");
+        const apiRequests = [];
+        let resolveMutationStarted;
+        const mutationStarted = new Promise((resolve) => {
+            resolveMutationStarted = resolve;
+        });
+        let resolveMutationCancelled;
+        const mutationCancelled = new Promise((resolve) => {
+            resolveMutationCancelled = resolve;
+        });
+        let pendingResponse = null;
+        const server = createSessionFixtureServer(
+            apiRequests,
+            (request, response, field) => {
+                pendingResponse = response;
+                resolveMutationStarted(field);
+                let settled = false;
+                const settle = (reason) => {
+                    if (!settled) {
+                        settled = true;
+                        resolveMutationCancelled(reason);
+                    }
+                };
+                request.on("aborted", () => settle("request-aborted"));
+                response.on("close", () => {
+                    if (!response.writableEnded) {
+                        settle("response-closed");
+                    }
+                });
+            },
+        );
+        const children = [];
+        let bidi;
+        try {
+            server.listen(0, "127.0.0.1");
+            await once(server, "listening");
+            const address = server.address();
+            assert.notEqual(typeof address, "string");
+            assert.notEqual(address, null);
+            const origin = `http://127.0.0.1:${address.port}`;
+
+            bidi = await startBidiFirefox(profile, children);
+            const tab = await bidi.command("browsingContext.create", {
+                type: "tab",
+            });
+            await bidi.command("browsingContext.navigate", {
+                context: tab.context,
+                url: `${origin}/#session=${REFRESH_SECRET}`,
+                wait: "complete",
+            });
+            const ready = await waitForSessionStatus(
+                bidi,
+                tab.context,
+                "Session ready",
+            );
+            assert.equal(ready.task.disabled, false);
+
+            await bidi.command("script.evaluate", {
+                awaitPromise: false,
+                expression: `(() => {
+                    const input = document.querySelector("#task-input");
+                    input.value = "close-private replacement";
+                    input.dispatchEvent(new Event("input", { bubbles: true }));
+                })()`,
+                resultOwnership: "none",
+                target: { context: tab.context },
+            });
+            assert.equal(
+                await observedWithin(
+                    mutationStarted,
+                    "draft mutation start",
+                ),
+                "task",
+            );
+            assert.equal(
+                apiRequests.at(-1),
+                "POST /api/session/task",
+            );
+
+            await bidi.command("browsingContext.close", {
+                context: tab.context,
+            });
+            assert.match(
+                await observedWithin(
+                    mutationCancelled,
+                    "draft mutation cancellation",
+                ),
+                /^(request-aborted|response-closed)$/u,
+            );
+            const tree = await bidi.command("browsingContext.getTree", {
+                maxDepth: 0,
+            });
+            assert.equal(
+                tree.contexts.some((context) => {
+                    return context.context === tab.context;
+                }),
+                false,
+            );
+            assert.deepEqual(apiRequests, [
+                "POST /api/handshake",
+                "GET /api/session/task",
+                "GET /api/session/source",
+                "GET /api/session/candidate",
+                "POST /api/session/task",
+            ]);
+        } finally {
+            if (pendingResponse !== null && !pendingResponse.destroyed) {
+                pendingResponse.destroy();
+            }
             if (bidi?.socket != null) {
                 bidi.socket.end();
             }

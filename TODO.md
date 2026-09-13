@@ -194,6 +194,12 @@ requires the refreshed document to expose blank disabled draft fields without
 issuing another handshake or draft request. Refresh therefore cannot recover the
 launch credential from the rewritten browser URL or persistence API.
 
+A second real Firefox path hydrates the page, holds an authenticated task
+replacement in flight, closes that exact browsing context, and observes the
+request transport abort while Firefox remains alive. This covers browser-close
+cancellation of page-session draft work, not cancellation of backend application
+operations.
+
 Handshake response admission now invalidates `401` directly from the status and
 parses JSON bodies only for the two body-bearing handshake result classes,
 `200` and `409`; unrelated statuses cannot delay failure on an irrelevant body.
@@ -202,7 +208,8 @@ identities, so application-owned quotes, backslashes, controls, and Unicode
 cannot corrupt the handshake response syntax.
 
 The task remains open until temporary media exist and end-to-end fixtures also
-cover browser close, cancellation, media cleanup, and explicit-export survival.
+cover backend operation cancellation, media cleanup, and explicit-export
+survival.
 
 ### TODO - Define one typed diagnostic envelope
 
