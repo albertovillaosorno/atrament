@@ -2424,10 +2424,14 @@ identities around that terminal rule. One active job can register at most one
 waveform intermediate, terminal outcome cannot be rewritten, cleanup failure
 remains retry-required, and recorded cleanup success is the only transition to
 Settled after an intermediate existed; late cleanup success or failure for that
-retired intermediate rejects without recreating cleanup work. Dropping the
-service leaves a fresh owner with no prior job authority. The service still
-chooses no path, creates or
-deletes no file, invokes no decoder or engine, and schedules no retry.
+retired intermediate rejects without recreating cleanup work. A 12-path state
+machine oracle crosses all three terminal outcomes with no waveform, pending
+cleanup, failed cleanup, and failed-then-successful cleanup so outcome cannot
+change session cleanup transitions.
+
+Dropping the service leaves a fresh owner with no prior job authority. The
+service still chooses no path, creates or deletes no file, invokes no decoder or
+engine, and schedules no retry.
 
 ### TODO - Structure transcripts without hiding uncertainty
 

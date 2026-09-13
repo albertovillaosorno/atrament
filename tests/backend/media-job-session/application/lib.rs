@@ -215,3 +215,64 @@ fn settled_job_rejects_late_cleanup_events_without_recreating_work() {
         );
     }
 }
+
+#[test]
+fn all_terminal_session_cleanup_paths_match_state_machine() {
+    let outcomes = [
+        MediaJobOutcome::Cancelled,
+        MediaJobOutcome::Failed,
+        MediaJobOutcome::Succeeded,
+    ];
+    let mut cases = 0_u8;
+    for outcome in outcomes {
+        for path in 0_u8..4 {
+            let mut session = MediaJobSessionService::new();
+            let job = session.begin_job().expect("job identity");
+            if path == 0 {
+                assert_eq!(
+                    session.finish_job(job, outcome),
+                    Ok(MediaJobCleanupStatus::Settled),
+                );
+                assert_eq!(
+                    session.cleanup_status(job),
+                    Ok(MediaJobCleanupStatus::Settled),
+                );
+                cases = cases.saturating_add(1);
+                continue;
+            }
+            let intermediate = session
+                .register_waveform_intermediate(job)
+                .expect("waveform identity");
+            assert_eq!(
+                session.finish_job(job, outcome),
+                Ok(MediaJobCleanupStatus::CleanupRequired),
+            );
+            assert_eq!(
+                session.cleanup_status(job),
+                Ok(MediaJobCleanupStatus::CleanupRequired),
+            );
+            if path >= 2 {
+                assert_eq!(
+                    session.record_cleanup_failure(job, intermediate),
+                    Ok(MediaJobCleanupStatus::CleanupRetryRequired),
+                );
+                assert_eq!(
+                    session.cleanup_status(job),
+                    Ok(MediaJobCleanupStatus::CleanupRetryRequired),
+                );
+            }
+            if path == 3 {
+                assert_eq!(
+                    session.record_cleanup_success(job, intermediate),
+                    Ok(MediaJobCleanupStatus::Settled),
+                );
+                assert_eq!(
+                    session.cleanup_status(job),
+                    Ok(MediaJobCleanupStatus::Settled),
+                );
+            }
+            cases = cases.saturating_add(1);
+        }
+    }
+    assert_eq!(cases, 12);
+}
