@@ -944,8 +944,18 @@ fn every_three_command_graph_matches_invalid_precedence_oracle() {
                 }
                 assert_eq!(
                     validate_command_graph(&nodes),
-                    expected,
+                    expected.clone(),
                     "graph mismatch for masks {}/{}/{}",
+                    first_mask,
+                    second_mask,
+                    third_mask,
+                );
+                assert_eq!(
+                    validate_command_graph_view(&nodes).map(|validated| {
+                        std::ptr::eq(validated.nodes(), nodes.as_slice())
+                    }),
+                    expected.map(|()| true),
+                    "sealed graph mismatch for masks {}/{}/{}",
                     first_mask,
                     second_mask,
                     third_mask,

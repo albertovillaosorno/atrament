@@ -677,7 +677,9 @@ and dependency slices instead of allocating per-command edge views.
 A complete selection skips closure bitmaps after complete-graph validation,
 while an empty selection still validates the source graph before reporting no
 required commands. Partial requirement closure continues to use positional
-bitmaps.
+bitmaps. The exhaustive 4,096-state three-node dependency-mask oracle requires
+direct validation and sealed graph admission to preserve the same valid, self,
+missing, cycle, and forward-dependency precedence.
 
 A caller-bounded report counts omitted edges before materializing pairs and
 rejects one over the supplied bound without truncation. Ordered batch graph

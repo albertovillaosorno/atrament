@@ -333,11 +333,13 @@ the caller's selection.
 
 A 20,000-case valid-DAG oracle cross-checks exact graph size, dependency
 closure, omitted-edge requirements, summaries, bounded reporting, and
-closed-selection
-results through both direct and sealed graph paths. The existing 16-state
-batch-local handle oracle also requires direct/sealed parity. The graph corpus
-asserts coverage of every generated node-count bucket, duplicate edges,
-empty/full/partial selections, and both closed and missing-requirement outcomes.
+closed-selection results through both direct and sealed graph paths. The
+exhaustive 4,096-state three-node dependency-mask oracle also requires direct
+and sealed validation to preserve identical valid, self, missing, cycle, and
+forward-dependency precedence. The existing 16-state batch-local handle oracle
+requires direct/sealed parity too. The graph corpus asserts coverage of every
+generated node-count bucket, duplicate edges, empty/full/partial selections, and
+both closed and missing-requirement outcomes.
 
 Session-level selection analysis binds those requirements to capability behavior
 and the exact accepted base revision, but does not construct a replacement
