@@ -2011,8 +2011,14 @@ first-release operation classes and maps Apply, history traversal, Export, and
 the three read-only operations to their authoritative effect boundaries. It also
 resolves already-qualified cancellation observations without treating a request
 as proof: proven pre-boundary cancellation means no effect, while a crossed
-boundary remains authoritative. Cancellation admission/execution, progress,
-operation identity, scheduling, and retry remain open.
+boundary remains authoritative. Completion authority is also explicit:
+progress,
+cancellation requests, and transport termination never complete work; final
+typed
+results do, and same-retry recovery is completion authority only for
+Apply,
+history traversal, and Export. Cancellation admission/execution, progress
+production, operation identity, scheduling, and retry storage remain open.
 
 Current design evidence freezes autonomous-agent loop stop conditions, typed
 progress versus non-progress, same-retry recovery, bounded automation budgets,

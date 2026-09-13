@@ -27,9 +27,12 @@ The backend now exposes the six frozen operation classes and their four owning
 effect boundaries as transport-neutral vocabulary. It also resolves already-
 qualified cancellation observations: a request alone is unresolved, proven
 cancellation before the owning boundary establishes no effect, and a crossed
-boundary remains authoritative despite cancellation. This does not admit
-cancellation, define progress, assign operation identities, create workers, or
-implement retry/recovery.
+boundary remains authoritative despite cancellation. A separate completion
+projection keeps progress, cancellation requests, and transport termination
+non-authoritative; final typed results establish completion, and same-retry
+recovery establishes it only for Apply, history traversal, and Export. This does
+not admit cancellation, define progress units, assign operation identities,
+create workers, or implement retry storage.
 
 ## Contract
 

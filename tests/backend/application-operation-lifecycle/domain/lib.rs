@@ -34,7 +34,10 @@
 use atrament_application_operation_lifecycle::{
     ApplicationCancellationDisposition, ApplicationCancellationObservation,
     ApplicationCancellationResolution, ApplicationOperationClass,
+    ApplicationOperationCompletionDisposition,
+    ApplicationOperationCompletionObservation,
     ApplicationOperationEffectBoundary, application_cancellation_resolution,
+    application_operation_completion_disposition,
     application_operation_effect_boundary,
 };
 
@@ -118,4 +121,72 @@ fn all_18_operation_cancellation_states_match_frozen_boundary_rule() {
         }
     }
     assert_eq!(cases, 18);
+}
+
+#[test]
+fn all_30_operation_completion_observations_match_frozen_authority_rule() {
+    let operations = [
+        ApplicationOperationClass::Apply,
+        ApplicationOperationClass::Export,
+        ApplicationOperationClass::HistoryTraversal,
+        ApplicationOperationClass::Plan,
+        ApplicationOperationClass::Render,
+        ApplicationOperationClass::Validate,
+    ];
+    let observations = [
+        ApplicationOperationCompletionObservation::CancellationRequest,
+        ApplicationOperationCompletionObservation::FinalTypedResultOrReceipt,
+        ApplicationOperationCompletionObservation::ProgressObservation,
+        ApplicationOperationCompletionObservation::SameRetryRecovery,
+        ApplicationOperationCompletionObservation::TransportTermination,
+    ];
+    let mut cases = 0_usize;
+    let mut incompatible = 0_usize;
+    for operation in operations {
+        for observation in observations {
+            let expected = match observation {
+                ApplicationOperationCompletionObservation::CancellationRequest
+                | ApplicationOperationCompletionObservation::ProgressObservation
+                | ApplicationOperationCompletionObservation::
+                    TransportTermination => Some(
+                    ApplicationOperationCompletionDisposition::NotEstablished,
+                ),
+                ApplicationOperationCompletionObservation::
+                    FinalTypedResultOrReceipt => Some(
+                    ApplicationOperationCompletionDisposition::
+                        CompleteByFinalResult,
+                ),
+                ApplicationOperationCompletionObservation::
+                    SameRetryRecovery => {
+                    if matches!(
+                        operation,
+                        ApplicationOperationClass::Apply
+                            | ApplicationOperationClass::Export
+                            | ApplicationOperationClass::HistoryTraversal
+                    ) {
+                        Some(
+                            ApplicationOperationCompletionDisposition::
+                                CompleteByRecoveredMutatingOutcome,
+                        )
+                    } else {
+                        None
+                    }
+                },
+            };
+            let actual = application_operation_completion_disposition(
+                operation,
+                observation,
+            );
+            assert_eq!(
+                actual, expected,
+                "operation={operation:?} observation={observation:?}",
+            );
+            cases += 1;
+            if actual.is_none() {
+                incompatible += 1;
+            }
+        }
+    }
+    assert_eq!(cases, 30);
+    assert_eq!(incompatible, 3);
 }

@@ -9,16 +9,15 @@
 //
 // Boundary-Contract:
 // - Owns:
-//   - Frozen application operation classes, their lifecycle effect boundary,
-//     and cancellation meaning for already-qualified boundary observations.
+//   - Frozen application operation classes, effect boundaries, cancellation
+//     meaning, and completion authority for already-qualified observations.
 // - Must-Not:
 //   - Schedule work, assign operation IDs, report progress, cancel execution,
 //     persist jobs, recover retries, mutate state, or map adapter protocols.
 // - Allows:
-//   - Inputs: One frozen operation class and already-qualified cancellation
-//     observations.
-//   - Outputs: Its exact effect boundary and cancellation disposition when
-//     established.
+//   - Inputs: One frozen operation class plus qualified cancellation or
+//     completion observations.
+//   - Outputs: Exact effect, cancellation, and completion meaning when defined.
 //   - Side effects: None.
 // - Split-When:
 //   - Progress, cancellation admission, or execution scheduling gains lifecycle
@@ -94,6 +93,32 @@ pub enum ApplicationCancellationDisposition {
     EffectRemainsAuthoritative,
 }
 
+/// Observation that may or may not establish operation completion.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub enum ApplicationOperationCompletionObservation {
+    /// A cancellation request exists without a final operation result.
+    CancellationRequest,
+    /// The owning capability returned its final typed result or receipt.
+    FinalTypedResultOrReceipt,
+    /// One observational progress update was emitted.
+    ProgressObservation,
+    /// The owning mutating capability resolved a prior unknown outcome.
+    SameRetryRecovery,
+    /// Transport ended without a final application result.
+    TransportTermination,
+}
+
+/// Completion meaning established by one lifecycle observation.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ApplicationOperationCompletionDisposition {
+    /// A final typed result or receipt establishes application completion.
+    CompleteByFinalResult,
+    /// Same-retry recovery establishes completion of a prior mutating attempt.
+    CompleteByRecoveredMutatingOutcome,
+    /// This observation does not establish application completion.
+    NotEstablished,
+}
+
 /// Qualified cancellation resolution retaining the operation's owning boundary.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ApplicationCancellationResolution {
@@ -156,6 +181,44 @@ pub const fn application_cancellation_resolution(
                 disposition: ApplicationCancellationDisposition::
                     EffectRemainsAuthoritative,
             })
+        },
+    }
+}
+
+/// Classify whether an observation establishes application-level completion.
+///
+/// Progress, transport termination, and cancellation requests remain
+/// non-authoritative. Same-retry recovery is admitted here only for the three
+/// operations with mutating effect boundaries: Apply, Export, and history
+/// traversal. Read-only operations use a new final result when repeated after
+/// transport loss rather than a mutating-outcome recovery classification.
+#[must_use]
+pub const fn application_operation_completion_disposition(
+    operation: ApplicationOperationClass,
+    observation: ApplicationOperationCompletionObservation,
+) -> Option<ApplicationOperationCompletionDisposition> {
+    match observation {
+        ApplicationOperationCompletionObservation::CancellationRequest
+        | ApplicationOperationCompletionObservation::ProgressObservation
+        | ApplicationOperationCompletionObservation::TransportTermination => {
+            Some(ApplicationOperationCompletionDisposition::NotEstablished)
+        },
+        ApplicationOperationCompletionObservation::
+            FinalTypedResultOrReceipt => Some(
+            ApplicationOperationCompletionDisposition::CompleteByFinalResult,
+        ),
+        ApplicationOperationCompletionObservation::SameRetryRecovery => {
+            match operation {
+                ApplicationOperationClass::Apply
+                | ApplicationOperationClass::Export
+                | ApplicationOperationClass::HistoryTraversal => Some(
+                    ApplicationOperationCompletionDisposition::
+                        CompleteByRecoveredMutatingOutcome,
+                ),
+                ApplicationOperationClass::Plan
+                | ApplicationOperationClass::Render
+                | ApplicationOperationClass::Validate => None,
+            }
         },
     }
 }
