@@ -1751,9 +1751,14 @@ commit remain open.
 A transport-neutral PDF composition plan now also preserves final page order,
 caller-owned physical page boxes, vector authority, color intent, explicit
 searchable-semantic-text disposition, explicit embedded-versus-safe-reference
-asset disposition, and render-manifest linkage. PDF object encoding, fonts,
-compression, concrete safe-reference policy, compatibility decisions, resource
-bytes, serialization, and file commit remain open.
+asset disposition, and render-manifest linkage. An 18,432-state exhaustive
+oracle crosses all 24 orders of four pages, all 16 searchable-text masks, all
+six orders of three assets, and all eight asset-disposition masks while
+requiring exact caller authority to survive unchanged.
+
+PDF object encoding, fonts, compression, concrete safe-reference policy,
+compatibility decisions, resource bytes, serialization, and file commit remain
+open.
 
 ### TODO - Calibrate print and scan round trips
 

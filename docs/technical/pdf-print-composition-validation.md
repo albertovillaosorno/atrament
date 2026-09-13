@@ -71,9 +71,13 @@ is therefore an explicit compatibility result rather than an implicit side
 effect of PDF generation.
 
 Each accepted asset resource similarly records either `Embedded` or
-`SafelyReferenced`. The current domain does not define how a safe external
-reference is represented or whether one is admitted for a particular export;
-that belongs to future resource and PDF adapters.
+`SafelyReferenced`. An 18,432-state exhaustive oracle crosses every order of
+four pages and three resources with every searchable-text and asset-disposition
+mask, requiring the exact caller-owned page, resource, and manifest authority to
+remain
+unchanged. The current domain does not define how a safe external reference is
+represented or whether one is admitted for a particular export; that belongs to
+future resource and PDF adapters.
 
 ### Render manifests retain reproducibility inputs
 
@@ -176,7 +180,8 @@ Current checked-in regression evidence includes:
   semantic-origin masks over a twelve-primitive ordered page;
 - `tests/backend/pdf-composition-plan/domain/lib.rs`, which pins page order,
   physical boxes, vector authority, color intent, searchable-text disposition,
-  asset disposition, and manifest linkage;
+  asset disposition, manifest linkage, and all 18,432 compact order/disposition
+  states;
 - `tests/backend/render-manifest/domain/lib.rs`, which pins source, asset,
   model,
   seed, quality, and version input retention;
