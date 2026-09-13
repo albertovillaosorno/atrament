@@ -1327,12 +1327,14 @@ Guided-session evidence now also preserves a caller-supplied ordered prompt plan
 across resumptions, rejects duplicate prompt identities, derives completion from
 accepted prompt progress, and covers the ADR's isolated-character, join, word,
 sentence, numeral, punctuation, mathematical-symbol, heading, and free-writing
-categories. Completed prompts can be projected read-only in original plan order
-without losing sample links, speed, size, or category metadata.
+categories. Successful identity admission now seals the exact session so
+completed prompts, completion, and next-pending position can be projected
+without rescanning identities.
 
 An exhaustive 511-state compact corpus covers every pending/completed mask from
-zero through eight prompts and cross-checks completion, next-pending position,
-and completed-prompt inspection against an independent bit-mask oracle. One
+zero through eight prompts and cross-checks direct and sealed completion,
+next-pending position, and completed-prompt inspection against an independent
+bit-mask oracle. One
 exact-precondition edit can replace a completed prompt's sample link while
 preserving all unrelated prompt state; stale, pending, missing, ambiguous, and
 no-op cases cannot alter the session. A second exhaustive 3,076-case compact

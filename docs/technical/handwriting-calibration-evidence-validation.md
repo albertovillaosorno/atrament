@@ -134,7 +134,9 @@ speed and size, and either `Pending` progress or one completed sample identity.
 `CalibrationSession` preserves the caller-supplied prompt order and caller-owned
 known reference geometry.
 
-`CalibrationSession::validate` rejects duplicate prompt identities.
+`CalibrationSession::validate` rejects duplicate prompt identities. Successful
+validation can also seal a borrowed view over the exact session so completion,
+next-pending position, and completed-prompt inspection reuse one admission.
 `CalibrationSession::completed_prompts` returns borrowed completed prompts in
 original guidance order for inspection without choosing replacement policy.
 `CalibrationSession::next_pending_prompt_index` returns the first pending
@@ -238,10 +240,10 @@ Current checked-in regression evidence includes:
   direct/sealed conflict rejection, held-out report attribution/completeness,
   and explicit additional-sample requirements;
 - `tests/backend/handwriting-calibration-session/domain/lib.rs`, which pins all
-  nine prompt categories, caller-owned plan order/reference geometry, completed
-  sample inspection and exact replacement, resume position, completion state,
-  duplicate-prompt rejection, and every compact progress mask through eight
-  prompts;
+  nine prompt categories, caller-owned plan order/reference geometry, direct
+  and sealed completed-sample inspection, exact replacement, resume position,
+  completion state, duplicate-prompt rejection, and every compact progress
+  mask through eight prompts;
 - `tests/backend/handwriting-capture-geometry-evidence/domain/lib.rs`, which
   pins all seven capture-geometry families, all 128 presence masks, and 2,801
   short axis sequences for duplicate-before-missing precedence without

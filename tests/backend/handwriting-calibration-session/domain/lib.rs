@@ -450,12 +450,11 @@ fn duplicate_prompt_identity_rejects_before_resume_or_completion() {
         ],
         reference_geometry: "reference",
     };
-    assert_eq!(
-        session.validate(),
-        Err(CalibrationSessionError::DuplicatePromptIdentity {
-            prompt: "duplicate",
-        }),
-    );
+    let expected = CalibrationSessionError::DuplicatePromptIdentity {
+        prompt: "duplicate",
+    };
+    assert_eq!(session.validate(), Err(expected.clone()));
+    assert_eq!(session.validate_view(), Err(expected));
     assert_eq!(
         session.is_complete(),
         Err(CalibrationSessionError::DuplicatePromptIdentity {
@@ -534,6 +533,10 @@ fn every_compact_progress_mask_matches_resume_and_inspection_oracle() {
             let expected_completed = (0..prompt_count)
                 .filter(|identity| mask & (1_u16 << identity) != 0)
                 .collect::<Vec<_>>();
+            let validated = session
+                .validate_view()
+                .expect("compact plan identities are unique");
+            assert!(std::ptr::eq(validated.session(), &session));
             let completed = session
                 .completed_prompts()
                 .expect("compact plan identities are unique");
@@ -543,17 +546,43 @@ fn every_compact_progress_mask_matches_resume_and_inspection_oracle() {
                 "resume mismatch for count {prompt_count} mask {mask:#x}",
             );
             assert_eq!(
+                validated.next_pending_prompt_index(),
+                expected_pending.map(usize::from),
+                "sealed resume mismatch for count {} mask {:#x}",
+                prompt_count,
+                mask,
+            );
+            assert_eq!(
                 session.is_complete(),
                 Ok(expected_pending.is_none()),
                 "completion mismatch for count {prompt_count} mask {mask:#x}",
             );
             assert_eq!(
-                completed
+                validated.is_complete(),
+                expected_pending.is_none(),
+                "sealed completion mismatch for count {} mask {:#x}",
+                prompt_count,
+                mask,
+            );
+            let projected = completed
+                .iter()
+                .map(|prompt| prompt.identity)
+                .collect::<Vec<_>>();
+            assert_eq!(
+                projected,
+                expected_completed,
+                "inspection mismatch for count {prompt_count} mask {mask:#x}",
+            );
+            assert_eq!(
+                validated
+                    .completed_prompts()
                     .iter()
                     .map(|prompt| prompt.identity)
                     .collect::<Vec<_>>(),
                 expected_completed,
-                "inspection mismatch for count {prompt_count} mask {mask:#x}",
+                "sealed inspection mismatch count {} mask {:#x}",
+                prompt_count,
+                mask,
             );
             cases = cases.saturating_add(1);
         }

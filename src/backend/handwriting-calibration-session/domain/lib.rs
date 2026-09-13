@@ -110,6 +110,89 @@ pub struct CalibrationSession<
     pub reference_geometry: ReferenceGeometry,
 }
 
+/// Constructor-sealed evidence that one exact guided calibration session has
+/// unique prompt identities.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ValidatedCalibrationSession<
+    'session,
+    Identity,
+    Speed,
+    Size,
+    SampleIdentity,
+    ReferenceGeometry,
+> {
+    session: &'session CalibrationSession<
+        Identity,
+        Speed,
+        Size,
+        SampleIdentity,
+        ReferenceGeometry,
+    >,
+}
+
+impl<'session, Identity, Speed, Size, SampleIdentity, ReferenceGeometry>
+    ValidatedCalibrationSession<
+        'session,
+        Identity,
+        Speed,
+        Size,
+        SampleIdentity,
+        ReferenceGeometry,
+    >
+{
+    /// Return completed prompts in caller-supplied guidance order.
+    #[must_use]
+    pub fn completed_prompts(
+        &self,
+    ) -> Vec<
+        &'session CalibrationPrompt<Identity, Speed, Size, SampleIdentity>,
+    > {
+        self.session
+            .prompts
+            .iter()
+            .filter(|prompt| {
+                matches!(
+                    prompt.progress,
+                    CalibrationPromptProgress::Completed { .. }
+                )
+            })
+            .collect()
+    }
+
+    /// Return whether every caller-supplied prompt is complete.
+    #[must_use]
+    pub fn is_complete(&self) -> bool {
+        self.session.prompts.iter().all(|prompt| {
+            matches!(
+                prompt.progress,
+                CalibrationPromptProgress::Completed { .. }
+            )
+        })
+    }
+
+    /// Return the first pending prompt index in caller-supplied order.
+    #[must_use]
+    pub fn next_pending_prompt_index(&self) -> Option<usize> {
+        self.session.prompts.iter().position(|prompt| {
+            matches!(prompt.progress, CalibrationPromptProgress::Pending)
+        })
+    }
+
+    /// Return the exact admitted session without copying caller-owned values.
+    #[must_use]
+    pub const fn session(
+        &self,
+    ) -> &'session CalibrationSession<
+        Identity,
+        Speed,
+        Size,
+        SampleIdentity,
+        ReferenceGeometry,
+    > {
+        self.session
+    }
+}
+
 /// Why a caller-supplied guided calibration plan cannot be resumed safely.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum CalibrationSessionError<Identity> {
@@ -204,17 +287,7 @@ where
         Size,
         SampleIdentity,
     > {
-        self.validate()?;
-        Ok(self
-            .prompts
-            .iter()
-            .filter(|prompt| {
-                matches!(
-                    prompt.progress,
-                    CalibrationPromptProgress::Completed { .. }
-                )
-            })
-            .collect())
+        Ok(self.validate_view()?.completed_prompts())
     }
 
     /// Return whether every caller-supplied calibration prompt is complete.
@@ -225,13 +298,7 @@ where
     pub fn is_complete(
         &self,
     ) -> Result<bool, CalibrationSessionError<Identity>> {
-        self.validate()?;
-        Ok(self.prompts.iter().all(|prompt| {
-            matches!(
-                prompt.progress,
-                CalibrationPromptProgress::Completed { .. }
-            )
-        }))
+        Ok(self.validate_view()?.is_complete())
     }
 
     /// Return the first pending prompt index in caller-supplied guidance order.
@@ -245,10 +312,7 @@ where
     pub fn next_pending_prompt_index(
         &self,
     ) -> CalibrationPromptIndexResult<Identity> {
-        self.validate()?;
-        Ok(self.prompts.iter().position(|prompt| {
-            matches!(prompt.progress, CalibrationPromptProgress::Pending)
-        }))
+        Ok(self.validate_view()?.next_pending_prompt_index())
     }
 
     /// Replace the exact sample link of one completed prompt.
@@ -323,4 +387,27 @@ where
         }
         Ok(())
     }
+
+    /// Validate stable prompt identities and seal this exact session.
+    ///
+    /// # Errors
+    ///
+    /// Returns the same first duplicate prompt identity as [`Self::validate`].
+    pub fn validate_view(
+        &self,
+    ) -> Result<
+        ValidatedCalibrationSession<
+            '_,
+            Identity,
+            Speed,
+            Size,
+            SampleIdentity,
+            ReferenceGeometry,
+        >,
+        CalibrationSessionError<Identity>,
+    > {
+        self.validate()?;
+        Ok(ValidatedCalibrationSession { session: self })
+    }
+
 }
