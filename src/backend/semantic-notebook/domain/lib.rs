@@ -421,7 +421,8 @@ where
         TableGridError<Identity>,
     > {
         let mut placements = Vec::new();
-        table_grid_walk(self, |placement| placements.push(placement))?;
+        let _width =
+            table_grid_walk(self, |placement| placements.push(placement))?;
         Ok(placements)
     }
 
@@ -436,8 +437,7 @@ where
     pub fn logical_column_count(
         &self,
     ) -> Result<u64, TableGridError<Identity>> {
-        table_grid_walk(self, |_| {})?;
-        table_grid_width(self)
+        table_grid_walk(self, |_| {})
     }
 
     /// Validate logical row/column spans as one complete rectangular grid.
@@ -450,7 +450,33 @@ where
     /// Returns the first semantic cell or row whose span cannot participate in
     /// one complete non-overlapping rectangular table grid.
     pub fn validate_grid(&self) -> Result<(), TableGridError<Identity>> {
-        table_grid_walk(self, |_| {})
+        table_grid_walk(self, |_| {}).map(|_width| ())
+    }
+
+    /// Seal one completely validated logical topology for read-only reuse.
+    ///
+    /// The returned evidence borrows this exact table and owns its logical cell
+    /// placements. It cannot outlive or be retained across mutation of the
+    /// table. The topology carries no physical coordinates, measurement,
+    /// wrapping, alignment, border, or rendering meaning.
+    ///
+    /// # Errors
+    ///
+    /// Returns the same first structural failure and owner as `validate_grid`.
+    pub fn validated_logical_topology(
+        &self,
+    ) -> Result<
+        ValidatedTableLogicalTopology<'_, Identity>,
+        TableGridError<Identity>,
+    > {
+        let mut placements = Vec::new();
+        let column_count =
+            table_grid_walk(self, |placement| placements.push(placement))?;
+        Ok(ValidatedTableLogicalTopology {
+            column_count,
+            placements,
+            table: self,
+        })
     }
 }
 
@@ -501,6 +527,34 @@ pub struct TableLogicalCellPlacement<Identity> {
     pub row_start: u64,
     /// Existing logical coverage retained exactly from the semantic cell.
     pub span: TableCellSpan,
+}
+
+/// Constructor-sealed logical topology evidence for one exact semantic table.
+#[derive(Debug, Eq, PartialEq)]
+pub struct ValidatedTableLogicalTopology<'table, Identity> {
+    column_count: u64,
+    placements: Vec<TableLogicalCellPlacement<Identity>>,
+    table: &'table Table<Identity>,
+}
+
+impl<'table, Identity> ValidatedTableLogicalTopology<'table, Identity> {
+    /// Return all validated logical cell placements in semantic row order.
+    #[must_use]
+    pub fn cell_placements(&self) -> &[TableLogicalCellPlacement<Identity>] {
+        &self.placements
+    }
+
+    /// Return the validated logical column count.
+    #[must_use]
+    pub const fn logical_column_count(&self) -> u64 {
+        self.column_count
+    }
+
+    /// Return the exact semantic table that produced this evidence.
+    #[must_use]
+    pub const fn table(&self) -> &'table Table<Identity> {
+        self.table
+    }
 }
 
 /// Typed structural failure for one logical merged-cell table grid.
@@ -1890,7 +1944,7 @@ where
 fn table_grid_walk<Identity, Visit>(
     table: &Table<Identity>,
     mut visit: Visit,
-) -> Result<(), TableGridError<Identity>>
+) -> Result<u64, TableGridError<Identity>>
 where
     Identity: Copy,
     Visit: FnMut(TableLogicalCellPlacement<Identity>),
@@ -1930,7 +1984,7 @@ where
         active.extend(additions);
         current_row = current_row.saturating_add(1);
     }
-    Ok(())
+    Ok(width)
 }
 
 fn table_grid_width<Identity>(

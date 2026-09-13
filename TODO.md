@@ -856,6 +856,13 @@ after complete-grid validation. Generated and exhaustive occupancy oracles check
 that count with identical invalid-grid failure precedence, including the full
 nonzero `u32` cell-span range without per-column allocation.
 
+A constructor-sealed logical-topology view now binds one exact table to its
+validated column count and complete caller-order cell placements. The borrowed
+evidence cannot survive mutation of that table, and generated plus exhaustive
+occupancy oracles require it to preserve the same first structural failure as
+the standalone validator. It adds no physical coordinates, wrapping, alignment,
+border, measurement, or rendering policy.
+
 An exact-base direct cell-span edit reuses that complete table-grid invariant. A
 valid edit preserves cell identity and child blocks, creates one accepted
 revision, and enters Undo history; a structurally invalid replacement is a typed

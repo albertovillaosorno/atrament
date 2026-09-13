@@ -160,6 +160,26 @@ fn grid_oracle_column_count(
     Ok(count)
 }
 
+fn assert_validated_table_topology_matches_oracle(table: &Table<u32>) {
+    match table.validated_logical_topology() {
+        Ok(topology) => {
+            assert_eq!(
+                grid_oracle_placements(table).as_deref(),
+                Ok(topology.cell_placements()),
+            );
+            assert_eq!(
+                grid_oracle_column_count(table),
+                Ok(topology.logical_column_count()),
+            );
+            assert!(std::ptr::eq(topology.table(), table));
+        },
+        Err(actual) => {
+            assert_eq!(grid_oracle_placements(table), Err(actual));
+            assert_eq!(grid_oracle_column_count(table), Err(actual));
+        },
+    }
+}
+
 fn next_grid_seed(seed: &mut u64) -> u32 {
     *seed = seed
         .wrapping_mul(6_364_136_223_846_793_005)
@@ -987,6 +1007,7 @@ fn logical_table_validator_matches_naive_occupancy_oracle() {
             grid_oracle_column_count(&table),
             "logical column-count oracle mismatch in generated case {case}",
         );
+        assert_validated_table_topology_matches_oracle(&table);
     }
     assert!(seen_row_counts.into_iter().all(|seen| seen));
     assert!(seen_cell_counts.into_iter().all(|seen| seen));
@@ -1054,6 +1075,7 @@ fn compact_table_grids_exhaustively_match_naive_occupancy_oracle() {
                 grid_oracle_column_count(&table),
                 "compact table column count mismatch in case {cases}",
             );
+            assert_validated_table_topology_matches_oracle(&table);
             cases = cases.saturating_add(1);
         }
     }
@@ -1130,6 +1152,31 @@ fn logical_cell_placements_reuse_validated_merged_grid_topology() {
                 span: span_two_by_one,
             },
         ]),
+    );
+}
+
+#[test]
+fn validated_logical_topology_binds_exact_table_and_complete_projection() {
+    let table = Table {
+        id: 100u32,
+        rows: vec![
+            grid_row(1, vec![grid_cell(10, 2, 2), grid_cell(11, 1, 1)]),
+            grid_row(2, vec![grid_cell(20, 1, 1)]),
+            grid_row(3, vec![grid_cell(30, 3, 1)]),
+        ],
+    };
+    let topology = table
+        .validated_logical_topology()
+        .expect("valid topology evidence");
+
+    assert!(std::ptr::eq(topology.table(), &table));
+    assert_eq!(topology.logical_column_count(), 3);
+    assert_eq!(
+        topology.cell_placements(),
+        table
+            .logical_cell_placements()
+            .expect("standalone placements")
+            .as_slice(),
     );
 }
 
