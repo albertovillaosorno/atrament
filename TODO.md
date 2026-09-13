@@ -1146,12 +1146,12 @@ and base plus direction cannot distinguish a retry from a genuinely new caller.
 
 The semantic-history-result application now freezes the six history result
 classes and their commit dispositions independently from traversal execution.
-Current Traversed, Boundary, StaleBase, and revision-allocation exhaustion
-outcomes project only to their unambiguous frozen meanings; missing accepted
-state remains unclassified. An already-qualified lifecycle cancellation
-observation now maps pre-commit cancellation to Cancelled before commit and a
-crossed traversal boundary to Traversed, while a request alone remains
-unclassified.
+A seven-outcome fixture requires both Undo and Redo Boundary/Traversed results,
+plus StaleBase, revision-allocation exhaustion, and missing accepted state, to
+project only to their unambiguous frozen meanings; missing accepted state
+remains unclassified. An already-qualified lifecycle cancellation observation
+now maps pre-commit cancellation to Cancelled before commit and a crossed
+traversal boundary to Traversed, while a request alone remains unclassified.
 
 Retry replay and actual cancellation execution are not implemented. Read-only
 direction availability is now centralized over the existing

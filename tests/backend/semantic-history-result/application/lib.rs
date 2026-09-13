@@ -76,19 +76,30 @@ fn all_six_result_classes_have_exact_commit_disposition() {
 }
 
 #[test]
-fn current_traversal_outcomes_project_only_unambiguous_classes() {
+fn all_current_traversal_outcomes_project_only_unambiguous_classes() {
     let identities = IdentityAllocator::new();
     let base = identities.allocate_revision().expect("base revision");
     let current = identities.allocate_revision().expect("current revision");
     let traversed = identities.allocate_revision().expect("result revision");
-    let cases = [
-        (
+    let mut cases = Vec::new();
+    for direction in [HistoryDirection::Redo, HistoryDirection::Undo] {
+        cases.push((
             HistoryTraversalOutcome::Boundary {
-                direction: HistoryDirection::Undo,
+                direction,
                 revision: base,
             },
             Some(SemanticHistoryResultClass::HistoryBoundary),
-        ),
+        ));
+        cases.push((
+            HistoryTraversalOutcome::Traversed {
+                base,
+                direction,
+                revision: traversed,
+            },
+            Some(SemanticHistoryResultClass::Traversed),
+        ));
+    }
+    cases.extend([
         (
             HistoryTraversalOutcome::IdentityExhausted {
                 sequence: IdentityExhausted::Revision,
@@ -103,17 +114,14 @@ fn current_traversal_outcomes_project_only_unambiguous_classes() {
             },
             Some(SemanticHistoryResultClass::StaleCurrentRevision),
         ),
-        (
-            HistoryTraversalOutcome::Traversed {
-                base,
-                direction: HistoryDirection::Redo,
-                revision: traversed,
-            },
-            Some(SemanticHistoryResultClass::Traversed),
-        ),
-    ];
+    ]);
+    assert_eq!(cases.len(), 7);
     for (outcome, expected) in cases {
-        assert_eq!(classify_history_traversal_result(&outcome), expected);
+        assert_eq!(
+            classify_history_traversal_result(&outcome),
+            expected,
+            "outcome={outcome:?}",
+        );
     }
 }
 
