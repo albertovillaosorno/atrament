@@ -1205,10 +1205,21 @@ fn layout_and_style_commands_remain_explicitly_unsupported() {
         (r"\color{red}{x}", r"\color"),
         (r"\mathunderscore", r"\mathunderscore"),
         (r"\skew{3}{\hat{x}}{y}", r"\skew"),
+        (r"x\enspace y", r"\enspace"),
+        (r"x\enskip y", r"\enskip"),
+        (r"x\quad y", r"\quad"),
+        (r"x\qquad y", r"\qquad"),
+        (r"x\thinspace y", r"\thinspace"),
+        (r"x\negthinspace y", r"\negthinspace"),
+        (r"x\medspace y", r"\medspace"),
         (r"x\negmedspace y", r"\negmedspace"),
+        (r"x\thickspace y", r"\thickspace"),
         (r"x\negthickspace y", r"\negthickspace"),
         (r"x\,y", r"\,"),
         (r"x\!y", r"\!"),
+        (r"x\:y", r"\:"),
+        (r"x\;y", r"\;"),
+        (r"x\ y", r"\ "),
     ] {
         let analyzed = analyze(source, FormulaMode::Inline)
             .expect("balanced layout-affecting source");

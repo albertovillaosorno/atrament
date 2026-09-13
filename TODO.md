@@ -827,8 +827,9 @@ ellipsis forms,
 the dotted multi-integral form, explicit limit-placement controls,
 document-level equation/alignment/gather/multline environments, inner
 `alignedat`/`subarray` layout environments, equation reference, tag,
-intertext, display-break, primitive fraction/root, negative spacing, and
-advanced layout controls likewise remain unsupported until their presentation,
+intertext, display-break, primitive fraction/root, explicit positive/negative
+spacing, and advanced layout controls likewise remain unsupported until their
+presentation,
 expression-grammar, or document-reference semantics have an owning model.
 
 Optional vertical-position arguments on admitted `aligned` and `gathered`
