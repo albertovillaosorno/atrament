@@ -218,6 +218,55 @@ fn zero_length_range_resolves_one_internal_boundary_once() {
     assert_eq!(provider.internal_calls.get(), 1);
 }
 
+struct ImpossibleInternalCapacityProvider {
+    internal_byte: usize,
+    internal_index: usize,
+}
+
+impl GraphemeBoundaryProvider for ImpossibleInternalCapacityProvider {
+    fn byte_offset(
+        &self,
+        source: &str,
+        grapheme_index: usize,
+    ) -> Option<usize> {
+        match grapheme_index {
+            0 => Some(0),
+            4 => Some(source.len()),
+            index if index == self.internal_index => Some(self.internal_byte),
+            _ => None,
+        }
+    }
+
+    fn grapheme_count(&self, _source: &str) -> usize {
+        4
+    }
+}
+
+#[test]
+fn insertion_boundary_requires_byte_capacity_on_both_sides() {
+    let source = "abcd";
+    for (internal_index, internal_byte) in [(3, 1), (1, 3)] {
+        let provider = ImpossibleInternalCapacityProvider {
+            internal_byte,
+            internal_index,
+        };
+        assert_eq!(
+            replace_grapheme_range(
+                &provider,
+                source,
+                GraphemeRange { count: 0, start: internal_index },
+                "z",
+            ),
+            Err(GraphemeRangeError::InternalBoundaryCapacityMismatch {
+                byte_offset: internal_byte,
+                grapheme_count: 4,
+                grapheme_index: internal_index,
+                source_bytes: source.len(),
+            }),
+        );
+    }
+}
+
 #[test]
 fn replacement_preserves_normalization_spelling_exactly() {
     let provider = UnicodeGraphemeSegmentation;
@@ -244,7 +293,8 @@ impl GraphemeBoundaryProvider for CompressedRangeBoundaryProvider {
     ) -> Option<usize> {
         match grapheme_index {
             0 => Some(0),
-            2 => Some(1),
+            1 => Some(3),
+            3 => Some(4),
             4 => Some(source.len()),
             _ => None,
         }
@@ -260,8 +310,8 @@ fn range_rejects_byte_span_too_small_for_grapheme_count() {
     assert_eq!(
         replace_grapheme_range(
             &CompressedRangeBoundaryProvider,
-            "abcd",
-            GraphemeRange { count: 2, start: 0 },
+            "abcdefgh",
+            GraphemeRange { count: 2, start: 1 },
             "z",
         ),
         Err(GraphemeRangeError::BoundaryDistanceTooSmall {
@@ -464,7 +514,7 @@ fn provider_boundary_failures_are_not_reported_as_user_range_errors() {
             &BrokenBoundaryProvider {
                 mode: BrokenBoundaryMode::NonAdvancing,
             },
-            source,
+            "abcdef",
             GraphemeRange { count: 1, start: 1 },
             "z",
         ),
@@ -502,7 +552,7 @@ impl GraphemeBoundaryProvider for ReversedInteriorBoundaryProvider {
     ) -> Option<usize> {
         match grapheme_index {
             0 => Some(0),
-            1 => Some(3),
+            1 => Some(4),
             2 => Some(2),
             3 => Some(source.len()),
             _ => None,
@@ -519,13 +569,13 @@ fn reversed_interior_boundaries_keep_their_distinct_error() {
     assert_eq!(
         replace_grapheme_range(
             &ReversedInteriorBoundaryProvider,
-            "abcd",
+            "abcdef",
             GraphemeRange { count: 1, start: 1 },
             "z",
         ),
         Err(GraphemeRangeError::ReversedBoundaries {
             end_byte: 2,
-            start_byte: 3,
+            start_byte: 4,
         }),
     );
 }

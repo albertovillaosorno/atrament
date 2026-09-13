@@ -127,6 +127,17 @@ pub enum GraphemeCursorError {
         /// Exact UTF-8 byte length of the unchanged source.
         source_bytes: usize,
     },
+    /// Provider internal index cannot fit in the bytes on both source sides.
+    InternalBoundaryCapacityMismatch {
+        /// UTF-8 byte offset returned for the internal boundary.
+        byte_offset: usize,
+        /// Total grapheme-cluster count advertised for the source.
+        grapheme_count: usize,
+        /// Internal grapheme boundary index being resolved.
+        grapheme_index: usize,
+        /// Exact UTF-8 byte length of the unchanged source.
+        source_bytes: usize,
+    },
     /// Provider mapped an internal grapheme index to a source endpoint.
     InternalBoundaryAtSourceEdge {
         /// Source-edge UTF-8 byte offset returned for the internal index.
@@ -318,7 +329,12 @@ fn resolve_position(
     } else if grapheme_index == anchors.total {
         anchors.final_byte
     } else {
-        provider_internal_boundary(boundaries, source, grapheme_index)?
+        provider_internal_boundary(
+            boundaries,
+            source,
+            grapheme_index,
+            anchors.total,
+        )?
     };
     Ok(GraphemeCursorPosition {
         byte_offset,
@@ -368,12 +384,23 @@ fn provider_internal_boundary(
     boundaries: &dyn GraphemeBoundaryProvider,
     source: &str,
     grapheme_index: usize,
+    grapheme_count: usize,
 ) -> Result<usize, GraphemeCursorError> {
     let byte_offset = provider_boundary(boundaries, source, grapheme_index)?;
     if byte_offset == 0 || byte_offset == source.len() {
         return Err(GraphemeCursorError::InternalBoundaryAtSourceEdge {
             byte_offset,
             grapheme_index,
+        });
+    }
+    let suffix_graphemes = grapheme_count.saturating_sub(grapheme_index);
+    let suffix_bytes = source.len().saturating_sub(byte_offset);
+    if byte_offset < grapheme_index || suffix_bytes < suffix_graphemes {
+        return Err(GraphemeCursorError::InternalBoundaryCapacityMismatch {
+            byte_offset,
+            grapheme_count,
+            grapheme_index,
+            source_bytes: source.len(),
         });
     }
     Ok(byte_offset)

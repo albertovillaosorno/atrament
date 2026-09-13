@@ -86,8 +86,10 @@ the UTF-8 byte distance is smaller than the claimed grapheme-index distance.
 A separate cursor-position application resolves those same boundaries to exact
 UTF-8 offsets without defining movement, selection, clamping, keybindings, or
 normalization; each frozen visible-text grapheme admits only its start and end
-positions. Internal provider indexes cannot alias either source endpoint, so
-internal cursor and insertion positions remain interior to nonempty text.
+positions. Internal provider indexes cannot alias either source endpoint and
+must leave enough bytes on both sides for their advertised prefix and suffix
+grapheme counts. Internal cursor and insertion positions therefore remain
+representable inside nonempty text.
 
 The same boundary can resolve a caller-ordered anchor/focus pair
 against one validated provider snapshot, preserving forward, reverse, or

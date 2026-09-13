@@ -318,6 +318,54 @@ fn invalid_and_missing_internal_boundaries_are_typed_failures() {
     }
 }
 
+struct ImpossibleInternalCapacityProvider {
+    internal_byte: usize,
+    internal_index: usize,
+}
+
+impl GraphemeBoundaryProvider for ImpossibleInternalCapacityProvider {
+    fn byte_offset(
+        &self,
+        source: &str,
+        grapheme_index: usize,
+    ) -> Option<usize> {
+        match grapheme_index {
+            0 => Some(0),
+            4 => Some(source.len()),
+            index if index == self.internal_index => Some(self.internal_byte),
+            _ => None,
+        }
+    }
+
+    fn grapheme_count(&self, _source: &str) -> usize {
+        4
+    }
+}
+
+#[test]
+fn internal_boundary_requires_byte_capacity_on_both_sides() {
+    let source = "abcd";
+    for (internal_index, internal_byte) in [(3, 1), (1, 3)] {
+        let provider = ImpossibleInternalCapacityProvider {
+            internal_byte,
+            internal_index,
+        };
+        assert_eq!(
+            resolve_grapheme_cursor_position(
+                &provider,
+                source,
+                internal_index,
+            ),
+            Err(GraphemeCursorError::InternalBoundaryCapacityMismatch {
+                byte_offset: internal_byte,
+                grapheme_count: 4,
+                grapheme_index: internal_index,
+                source_bytes: source.len(),
+            }),
+        );
+    }
+}
+
 #[test]
 fn valid_provider_reports_caller_positions_after_the_end_as_out_of_bounds() {
     let provider = UnicodeGraphemeSegmentation;
@@ -510,8 +558,8 @@ impl GraphemeBoundaryProvider for MisorderedSelectionBoundaryProvider {
     ) -> Option<usize> {
         match grapheme_index {
             0 => Some(0),
-            1 => Some(2),
-            2 => Some(1),
+            1 => Some(4),
+            2 => Some(2),
             3 => Some(source.len()),
             _ => None,
         }
@@ -525,22 +573,22 @@ impl GraphemeBoundaryProvider for MisorderedSelectionBoundaryProvider {
 #[test]
 fn selection_rejects_provider_boundaries_that_reverse_index_order() {
     let provider = MisorderedSelectionBoundaryProvider;
-    let source = "abc";
+    let source = "abcdef";
     assert_eq!(
         resolve_grapheme_cursor_selection(&provider, source, 1, 2),
         Err(GraphemeCursorError::SelectionBoundaryOrderMismatch {
-            anchor_byte: 2,
+            anchor_byte: 4,
             anchor_index: 1,
-            focus_byte: 1,
+            focus_byte: 2,
             focus_index: 2,
         }),
     );
     assert_eq!(
         resolve_grapheme_cursor_selection(&provider, source, 2, 1),
         Err(GraphemeCursorError::SelectionBoundaryOrderMismatch {
-            anchor_byte: 1,
+            anchor_byte: 2,
             anchor_index: 2,
-            focus_byte: 2,
+            focus_byte: 4,
             focus_index: 1,
         }),
     );
@@ -556,7 +604,8 @@ impl GraphemeBoundaryProvider for CompressedBoundaryProvider {
     ) -> Option<usize> {
         match grapheme_index {
             0 => Some(0),
-            2 => Some(1),
+            1 => Some(3),
+            3 => Some(4),
             4 => Some(source.len()),
             _ => None,
         }
@@ -570,23 +619,23 @@ impl GraphemeBoundaryProvider for CompressedBoundaryProvider {
 #[test]
 fn multi_boundary_queries_reject_impossible_byte_distance() {
     let provider = CompressedBoundaryProvider;
-    let source = "abcd";
+    let source = "abcdefgh";
     assert_eq!(
-        resolve_grapheme_cursor_selection(&provider, source, 0, 2),
+        resolve_grapheme_cursor_selection(&provider, source, 1, 3),
         Err(GraphemeCursorError::BoundaryDistanceTooSmall {
             byte_distance: 1,
             grapheme_distance: 2,
         }),
     );
     assert_eq!(
-        resolve_grapheme_cursor_selection(&provider, source, 2, 0),
+        resolve_grapheme_cursor_selection(&provider, source, 3, 1),
         Err(GraphemeCursorError::BoundaryDistanceTooSmall {
             byte_distance: 1,
             grapheme_distance: 2,
         }),
     );
     assert_eq!(
-        resolve_grapheme_cursor_step(&provider, source, 0, 2),
+        resolve_grapheme_cursor_step(&provider, source, 1, 2),
         Err(GraphemeCursorError::BoundaryDistanceTooSmall {
             byte_distance: 1,
             grapheme_distance: 2,
@@ -664,8 +713,8 @@ impl GraphemeBoundaryProvider for MisorderedStepBoundaryProvider {
 
 #[test]
 fn signed_steps_reject_provider_boundaries_that_do_not_advance() {
-    let source = "abcd";
-    for (origin_byte, target_byte) in [(2, 2), (3, 2)] {
+    let source = "abcdef";
+    for (origin_byte, target_byte) in [(3, 3), (4, 3)] {
         let provider = MisorderedStepBoundaryProvider {
             first_internal: origin_byte,
             second_internal: target_byte,
@@ -682,15 +731,15 @@ fn signed_steps_reject_provider_boundaries_that_do_not_advance() {
     }
 
     let provider = MisorderedStepBoundaryProvider {
-        first_internal: 2,
-        second_internal: 1,
+        first_internal: 3,
+        second_internal: 2,
     };
     assert_eq!(
         resolve_grapheme_cursor_step(&provider, source, 2, -1),
         Err(GraphemeCursorError::StepBoundaryOrderMismatch {
-            origin_byte: 1,
+            origin_byte: 2,
             origin_index: 2,
-            target_byte: 2,
+            target_byte: 3,
             target_index: 1,
         }),
     );
