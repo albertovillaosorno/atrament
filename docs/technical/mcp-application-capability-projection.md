@@ -127,9 +127,11 @@ batch to obscure history traversal.
 
 A shared read-only MCP history projection now exposes the six frozen history
 result dispositions and exact `can_undo`/`can_redo` facts only through the
-History traversal capability class. Every other generic MCP class receives no
-history result or directional-availability projection. This adds no traversal,
-retry, cancellation, or MCP tool execution.
+History traversal capability class. Qualified cancellation observations reuse
+the shared history lifecycle result only through that same capability. Every
+other generic MCP class receives no history result, cancellation result, or
+directional-availability projection. This adds no traversal, retry storage,
+cancellation execution, or MCP tool execution.
 
 #### Render
 
@@ -249,9 +251,13 @@ unknown outcomes still use the owning same-retry recovery contract.
 
 A transport-neutral crosswalk now maps Apply, Export, History traversal, Plan,
 Render, and Validate onto the six shared application operation lifecycle
-classes and their effect boundaries. Inspect and Command context intentionally
-have no lifecycle operation mapping. This does not admit progress, cancellation,
-or any MCP tool.
+classes and their effect boundaries. It also preserves the shared completion
+predicate across all 40 capability/observation pairs: final typed results are
+completion authority, progress/cancellation requests/transport termination are
+not, and same-retry recovery is completion authority only for Apply, Export, and
+History traversal. Inspect and Command context intentionally have no lifecycle
+operation mapping. This does not admit progress, cancellation execution, retry
+storage, or any MCP tool.
 
 ### Derived and output result projection
 
@@ -267,8 +273,11 @@ Plan diagnostic as the operation result itself.
 A shared projection now maps only Render, Plan, and Export into the
 `derived-output-result` operation vocabulary. Its operation-aware effect helper
 returns no disposition for the other five MCP capability classes or for a result
-class incompatible with the selected output operation. No output execution,
-receipt, retry store, or MCP tool is added by this projection.
+class incompatible with the selected output operation. Qualified cancellation
+likewise preserves pre-boundary cancellation, crossed read-only completion, or
+crossed Export file commit only through the matching output capability. No
+output execution, receipt, retry store, cancellation execution, or MCP tool is
+added by this projection.
 
 ### Result-class projection
 
@@ -289,6 +298,16 @@ cancelled application result merely to fit transport error framing.
 Adapter-specific MCP error metadata may exist alongside the application result.
 It cannot erase or reinterpret the normalized core outcome when the application
 actually completed.
+
+
+The executable MCP semantic-result projection maps only Validate and Apply. It
+checks the shared 15-class operation applicability before exposing commit
+disposition, so Successful validation cannot become an Apply result and
+Apply-only success, replay, retry-conflict, No-op, or cancellation classes
+cannot become Validate results. Qualified Apply cancellation is projected only
+through
+Apply, while the other six MCP capability classes receive no semantic-command
+result meaning.
 
 ### Adapter parity
 
