@@ -661,7 +661,7 @@ fn named_symbol_vocabulary_is_supported_without_rewriting() {
         r"\Bbbk", r"\Box", r"\Bumpeq", r"\Cap", r"\Cup", r"\Delta",
         r"\Diamond", r"\Doteq", r"\Downarrow", r"\Finv",
         r"\Game", r"\Gamma",
-        r"\Im", r"\Lambda", r"\Leftarrow",
+        r"\Im", r"\Join", r"\Lambda", r"\Leftarrow",
         r"\Leftrightarrow", r"\Lleftarrow", r"\Longleftarrow",
         r"\Longleftrightarrow",
         r"\Longrightarrow", r"\Lsh", r"\Omega", r"\P", r"\Phi", r"\Pi",
@@ -729,7 +729,7 @@ fn named_symbol_vocabulary_is_supported_without_rewriting() {
         r"\leqslant",
         r"\lessapprox",
         r"\lessdot", r"\lesseqgtr", r"\lesseqqgtr", r"\lessgtr", r"\lesssim",
-        r"\lfloor",
+        r"\lfloor", r"\lhd",
         r"\ll", r"\llcorner", r"\lll", r"\llless", r"\lnapprox", r"\lneq",
         r"\lneqq", r"\lnot", r"\lnsim",
         r"\longleftarrow", r"\longleftrightarrow",
@@ -761,7 +761,7 @@ fn named_symbol_vocabulary_is_supported_without_rewriting() {
         r"\precneqq", r"\precnsim", r"\precsim",
         r"\prime", r"\propto", r"\psi", r"\rVert", r"\rangle", r"\rbrace",
         r"\rbrack",
-        r"\rceil", r"\restriction", r"\rfloor",
+        r"\rceil", r"\restriction", r"\rfloor", r"\rhd",
         r"\rho", r"\rightarrow", r"\rightarrowtail", r"\rightharpoondown",
         r"\rightharpoonup", r"\rightleftarrows",
         r"\rightleftharpoons", r"\rightrightarrows", r"\rightsquigarrow",
@@ -789,7 +789,8 @@ fn named_symbol_vocabulary_is_supported_without_rewriting() {
         r"\triangleq",
         r"\triangleright", r"\trianglerighteq", r"\twoheadleftarrow",
         r"\twoheadrightarrow",
-        r"\ulcorner", r"\uparrow", r"\updownarrow", r"\upharpoonleft",
+        r"\ulcorner", r"\unlhd", r"\unrhd", r"\uparrow", r"\updownarrow",
+        r"\upharpoonleft",
         r"\upharpoonright",
         r"\uplus", r"\upsilon", r"\upuparrows", r"\urcorner", r"\vDash",
         r"\varDelta", r"\varGamma", r"\varLambda", r"\varOmega", r"\varPhi",
@@ -830,6 +831,29 @@ fn named_symbol_vocabulary_is_supported_without_rewriting() {
             assert_eq!(prefixed.unsupported[0].name, longer, "{longer}");
         }
     }
+}
+
+#[test]
+fn latexsym_join_and_triangle_symbols_compose_without_rewriting() {
+    let source = concat!(
+        r"A \Join B; C \lhd D; E \unlhd F; ",
+        r"G \rhd H; I \unrhd J",
+    );
+    let analyzed = analyze(source, FormulaMode::Inline)
+        .expect("latexsym join and triangle expression");
+    assert!(analyzed.is_supported());
+    assert_eq!(reconstructed(&analyzed), source);
+    assert_eq!(
+        analyzed
+            .tokens
+            .iter()
+            .filter(|token| {
+                token.kind
+                    == MathTokenKind::Command(SupportedCommand::NamedSymbol)
+            })
+            .count(),
+        5,
+    );
 }
 
 #[test]

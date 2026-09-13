@@ -481,11 +481,10 @@ that exact family, kind, owner, and optional base value.
 
 A deterministic capability snapshot now reports those seven discoverable family
 behaviors and one top-level behavior version. Aggregate command behavior and
-typed-result behavior are version 95 after admitting semantic label blocks.
-Asset reference, Ordering and grouping, and Text content retain family behavior
-version 1; Document constraint is version 3;
-Structured content
-is version 82; Provenance and Style role are version 2.
+typed-result behavior are version 96 after admitting the remaining `latexsym`
+join and triangle atoms. Asset reference, Ordering and grouping, and Text
+content retain family behavior version 1; Document constraint is version 3;
+Structured content is version 83; Provenance and Style role are version 2.
 
 Because no serialized command protocol is implemented, the snapshot advertises
 no protocol or normalization version, no command-context, Validate, Apply, or
