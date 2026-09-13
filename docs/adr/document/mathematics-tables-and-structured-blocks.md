@@ -66,7 +66,8 @@ starred
 limits variant, stacked annotations and relations, vector, directional over- and
 under-arrows, overline, and underline decorations,
 escaped
-TeX special characters,
+TeX special characters, while unescaped `%`, `#`, and `$` are typed syntax
+failures rather than literal content,
 standard and variant Greek control-sequence notation including italic capital
 Greek forms, complete AMS ordinary, letter-like, geometric, and standalone
 special symbols including the large box/diamond aliases, checkmark, registered

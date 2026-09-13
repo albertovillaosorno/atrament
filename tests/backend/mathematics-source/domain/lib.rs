@@ -3040,6 +3040,32 @@ fn text_fragments_preserve_unicode_and_require_one_group() {
 }
 
 #[test]
+fn unescaped_tex_specials_are_typed_syntax_failures() {
+    for source in ["x % y", "x # y", "x $ y", r"\text{50% done}"] {
+        let byte_offset = source
+            .char_indices()
+            .find_map(|(offset, character)| {
+                matches!(character, '%' | '#' | '$').then_some(offset)
+            })
+            .expect("fixture must contain one unescaped special");
+        assert_eq!(
+            analyze(source, FormulaMode::Inline),
+            Err(MathSyntaxError {
+                byte_offset,
+                kind: MathSyntaxErrorKind::UnescapedSpecialCharacter,
+            }),
+            "{source}",
+        );
+    }
+
+    let escaped = r"x \% y + \#1 + \$5";
+    let analyzed = analyze(escaped, FormulaMode::Inline)
+        .expect("escaped TeX specials remain admitted");
+    assert!(analyzed.is_supported());
+    assert_eq!(reconstructed(&analyzed), escaped);
+}
+
+#[test]
 fn escaped_braces_do_not_close_text_scope() {
     let source = r"\text{\{label_a\}} + x_1";
     let analyzed = analyze(source, FormulaMode::Inline)

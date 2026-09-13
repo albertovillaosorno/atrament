@@ -456,6 +456,8 @@ pub enum MathSyntaxErrorKind {
     MissingVerticalMatrixEnd,
     /// An ordinary source group remains open at end of source.
     UnclosedGroup,
+    /// A TeX special character requiring an escape appears unescaped.
+    UnescapedSpecialCharacter,
 }
 
 /// One source-preserving structural token.
@@ -760,8 +762,8 @@ impl AnalyzedFormula {
 /// # Errors
 ///
 /// Returns the first typed structural failure for unmatched groups or admitted
-/// environment boundaries, missing required braced arguments, or alignment used
-/// in a context that does not admit it.
+/// environment boundaries, missing required braced arguments, unescaped TeX
+/// special characters, or alignment used in a context that does not admit it.
 pub fn analyze(
     source: &str,
     mode: FormulaMode,
@@ -844,7 +846,7 @@ const fn error(
 }
 
 const fn is_structural(character: char) -> bool {
-    matches!(character, '{' | '}' | '^' | '_' | '&' | '\\')
+    matches!(character, '{' | '}' | '^' | '_' | '&' | '%' | '#' | '$' | '\\')
 }
 
 fn matching_group_end(
@@ -1120,6 +1122,10 @@ fn scan_structural(
         },
         '}' => scan_group_close(state, context.tokens, width),
         '\\' => scan_slash(context, state),
+        '%' | '#' | '$' => Err(error(
+            state.index,
+            MathSyntaxErrorKind::UnescapedSpecialCharacter,
+        )),
         _ => {
             state.index = state.index.saturating_add(width);
             Ok(())

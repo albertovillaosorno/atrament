@@ -89,7 +89,7 @@ use atrament_semantic_notebook_session::{
 };
 
 const CURRENT_COMMAND_BEHAVIOR_VERSION: CommandBehaviorVersion =
-    CommandBehaviorVersion(98);
+    CommandBehaviorVersion(99);
 
 #[derive(Debug)]
 struct CountingCommandIdentity {
@@ -3046,6 +3046,31 @@ fn optional_math_environment_position_rejects_atomically() {
         AcceptanceOutcome::InvalidCandidate {
             reason: CandidateGraphError::UnsupportedMathematics {
                 candidate: formula,
+            },
+        },
+    );
+    assert_eq!(session.current(), Some(&before));
+}
+
+#[test]
+fn unescaped_math_special_rejects_candidate_atomically() {
+    let ids = IdentityAllocator::new();
+    let valid = candidate_notebook(&ids, "accepted text");
+    let source = "x % y";
+    let (invalid, formula) =
+        candidate_math_notebook(&ids, source, FormulaMode::Inline);
+    let mut session = SemanticNotebookSessionService::default();
+    let _ = session.accept(valid);
+    let before = session.current().expect("accepted revision").clone();
+    assert_eq!(
+        session.accept(invalid),
+        AcceptanceOutcome::InvalidCandidate {
+            reason: CandidateGraphError::InvalidMathematics {
+                candidate: formula,
+                reason: MathSyntaxError {
+                    byte_offset: 2,
+                    kind: MathSyntaxErrorKind::UnescapedSpecialCharacter,
+                },
             },
         },
     );
@@ -8047,7 +8072,7 @@ fn command_capability_snapshot_is_deterministic_and_does_not_overclaim() {
             family: SemanticCommandFamily::Provenance,
         },
         CommandFamilyCapability {
-            behavior_version: CommandBehaviorVersion(85),
+            behavior_version: CommandBehaviorVersion(86),
             family: SemanticCommandFamily::StructuredContent,
         },
         CommandFamilyCapability {
@@ -8115,11 +8140,11 @@ fn command_capability_version_detects_drift_independently_of_revision() {
     );
     assert_eq!(
         session.check_command_capability_compatibility(
-            CommandBehaviorVersion(97),
+            CommandBehaviorVersion(98),
         ),
         CommandCapabilityCompatibilityOutcome::Mismatch {
             current: CURRENT_COMMAND_BEHAVIOR_VERSION,
-            expected: CommandBehaviorVersion(97),
+            expected: CommandBehaviorVersion(98),
         },
     );
     assert_eq!(
