@@ -1203,6 +1203,10 @@ fn layout_and_style_commands_remain_explicitly_unsupported() {
         (r"\phantom{x}", r"\phantom"),
         (r"\hspace{1em}", r"\hspace"),
         (r"\color{red}{x}", r"\color"),
+        (r"\mathunderscore", r"\mathunderscore"),
+        (r"\skew{3}{\hat{x}}{y}", r"\skew"),
+        (r"x\negmedspace y", r"\negmedspace"),
+        (r"x\negthickspace y", r"\negthickspace"),
         (r"x\,y", r"\,"),
         (r"x\!y", r"\!"),
     ] {
@@ -1283,6 +1287,9 @@ fn primitive_tex_fraction_and_root_controls_remain_explicitly_unsupported() {
         (r"x \over y", vec![r"\over"]),
         (r"x \atop y", vec![r"\atop"]),
         (r"x \above 1pt y", vec![r"\above"]),
+        (r"x \overwithdelims() y", vec![r"\overwithdelims"]),
+        (r"x \atopwithdelims[] y", vec![r"\atopwithdelims"]),
+        (r"x \abovewithdelims() 1pt y", vec![r"\abovewithdelims"]),
         (r"\root 3 \of{x}", vec![r"\root", r"\of"]),
         (r"\buildrel{a}\over{=}", vec![r"\buildrel", r"\over"]),
     ] {
@@ -1328,9 +1335,16 @@ fn latex_base_construction_atoms_remain_explicitly_unsupported() {
         r"\bracerd",
         r"\bracelu",
         r"\braceru",
+        r"\downbracefill",
+        r"\joinrel",
+        r"\leftarrowfill",
         r"\lhook",
         r"\mapstochar",
+        r"\relbar",
+        r"\Relbar",
         r"\rhook",
+        r"\rightarrowfill",
+        r"\upbracefill",
     ] {
         let analyzed = analyze(source, FormulaMode::Inline)
             .expect("balanced LaTeX-base construction atom");
@@ -1380,7 +1394,7 @@ fn extensible_delimiter_components_remain_explicitly_unsupported() {
 fn sized_delimiter_commands_remain_explicitly_unsupported() {
     let source = r"\left\langle x \right\rangle";
     let analyzed = analyze(source, FormulaMode::Display)
-        .expect("balanced sized-delimiter source");
+        .expect("balanced paired sized-delimiter source");
     assert!(!analyzed.is_supported());
     assert_eq!(reconstructed(&analyzed), source);
     assert_eq!(
@@ -1402,6 +1416,20 @@ fn sized_delimiter_commands_remain_explicitly_unsupported() {
             .count(),
         2,
     );
+
+    for (source, unsupported) in [
+        (r"\big(x)", r"\big"),
+        (r"\Big[x]", r"\Big"),
+        (r"\bigg\langle x\rangle", r"\bigg"),
+        (r"\Bigg\lbrace x\rbrace", r"\Bigg"),
+    ] {
+        let analyzed = analyze(source, FormulaMode::Display)
+            .expect("balanced fixed sized-delimiter source");
+        assert!(!analyzed.is_supported(), "{source}");
+        assert_eq!(reconstructed(&analyzed), source);
+        assert_eq!(analyzed.unsupported.len(), 1, "{source}");
+        assert_eq!(analyzed.unsupported[0].name, unsupported, "{source}");
+    }
 }
 
 #[test]
