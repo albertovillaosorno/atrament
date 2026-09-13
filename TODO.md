@@ -1790,8 +1790,12 @@ Current executable evidence now freezes the transport-neutral initial formatting
 request as one self-contained value. It retains task, complete source material,
 paper/style constraints, output targets, backend-owned semantic format, source
 and provenance rules, diagnostic/ambiguity expectations, required return
-envelope, prompt identity, and prompt version. Prompt text
-wording/serialization,
+envelope, prompt identity, and prompt version. Exact current-version admission
+now returns constructor-sealed evidence borrowing the whole prompt.
+
+A generated mutation corpus rejects every one-byte ASCII deletion, substitution,
+and insertion around `atrament.prompt/1`, plus whitespace/newline/NUL aliases,
+through both direct and sealed admission. Prompt text wording/serialization,
 identity computation, clipboard presentation, response parsing, and semantic
 command refinement remain separate open authorities.
 

@@ -119,6 +119,55 @@ pub struct OneShotFormattingPrompt<
     pub version: PromptVersion,
 }
 
+/// Constructor-sealed evidence that one exact prompt uses the current frozen
+/// formatting-prompt contract version.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ValidatedFormattingPromptVersion<'prompt, Prompt> {
+    prompt: &'prompt Prompt,
+}
+
+impl<'prompt, Prompt> ValidatedFormattingPromptVersion<'prompt, Prompt> {
+    /// Return the exact caller/backend-owned prompt that was admitted.
+    #[must_use]
+    pub const fn prompt(&self) -> &'prompt Prompt {
+        self.prompt
+    }
+}
+
+impl<
+    ConstraintInputs,
+    PromptIdentity,
+    ProtocolInputs,
+    SourceInputs,
+    PromptVersion,
+> OneShotFormattingPrompt<
+    ConstraintInputs,
+    PromptIdentity,
+    ProtocolInputs,
+    SourceInputs,
+    PromptVersion,
+>
+where
+    PromptVersion: AsRef<str>,
+{
+    /// Validate and seal this prompt's exact frozen contract version.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`FormattingPromptVersionError::UnsupportedVersion`] when the
+    /// version differs exactly from [`FORMATTING_PROMPT_VERSION`].
+    pub fn validate_version_view(
+        &self,
+    ) -> Result<ValidatedFormattingPromptVersion<'_, Self>,
+        FormattingPromptVersionError>
+    {
+        if self.version.as_ref() != FORMATTING_PROMPT_VERSION {
+            return Err(FormattingPromptVersionError::UnsupportedVersion);
+        }
+        Ok(ValidatedFormattingPromptVersion { prompt: self })
+    }
+}
+
 /// Validate that one formatting prompt uses the frozen prompt contract version.
 ///
 /// This check does not serialize the prompt, compute its identity, or choose
@@ -146,8 +195,5 @@ pub fn validate_formatting_prompt_version<
 where
     PromptVersion: AsRef<str>,
 {
-    if prompt.version.as_ref() != FORMATTING_PROMPT_VERSION {
-        return Err(FormattingPromptVersionError::UnsupportedVersion);
-    }
-    Ok(())
+    prompt.validate_version_view().map(|_| ())
 }

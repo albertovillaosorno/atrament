@@ -115,10 +115,12 @@ fn prompt_version_validation_requires_the_frozen_contract_exactly() {
         source: (),
         version,
     };
-    assert_eq!(
-        validate_formatting_prompt_version(&prompt(FORMATTING_PROMPT_VERSION)),
-        Ok(()),
-    );
+    let current = prompt(FORMATTING_PROMPT_VERSION);
+    assert_eq!(validate_formatting_prompt_version(&current), Ok(()));
+    let validated = current
+        .validate_version_view()
+        .expect("current prompt version seals");
+    assert!(std::ptr::eq(validated.prompt(), &current));
     for unsupported in ["atrament.prompt/0", "atrament.prompt/2", "prompt/1"] {
         assert_eq!(
             validate_formatting_prompt_version(&prompt(unsupported)),
@@ -126,4 +128,71 @@ fn prompt_version_validation_requires_the_frozen_contract_exactly() {
             "unsupported prompt version {unsupported}",
         );
     }
+}
+
+
+#[test]
+fn every_single_ascii_version_edit_remains_unsupported() {
+    let current = FORMATTING_PROMPT_VERSION.as_bytes();
+    let mut cases = 0_usize;
+
+    let assert_unsupported = |version: String| {
+        let prompt = OneShotFormattingPrompt {
+            constraints: (),
+            identity: (),
+            protocol: (),
+            source: (),
+            version,
+        };
+        assert_eq!(
+            validate_formatting_prompt_version(&prompt),
+            Err(FormattingPromptVersionError::UnsupportedVersion),
+        );
+        assert_eq!(
+            prompt.validate_version_view().map(|_| ()),
+            Err(FormattingPromptVersionError::UnsupportedVersion),
+        );
+    };
+
+    for index in 0..current.len() {
+        let mut deleted = current.to_vec();
+        deleted.remove(index);
+        assert_unsupported(String::from_utf8(deleted).expect("ASCII deletion"));
+        cases += 1;
+
+        for replacement in b' '..=b'~' {
+            if replacement == current[index] {
+                continue;
+            }
+            let mut substituted = current.to_vec();
+            substituted[index] = replacement;
+            assert_unsupported(
+                String::from_utf8(substituted).expect("ASCII substitution"),
+            );
+            cases += 1;
+        }
+    }
+
+    for index in 0..=current.len() {
+        for inserted in b' '..=b'~' {
+            let mut value = current.to_vec();
+            value.insert(index, inserted);
+            assert_unsupported(
+                String::from_utf8(value).expect("ASCII insertion"),
+            );
+            cases += 1;
+        }
+    }
+
+    for alias in [
+        format!(" {FORMATTING_PROMPT_VERSION}"),
+        format!("{FORMATTING_PROMPT_VERSION} "),
+        format!("{FORMATTING_PROMPT_VERSION}\n"),
+        format!("{FORMATTING_PROMPT_VERSION}\0"),
+    ] {
+        assert_unsupported(alias);
+        cases += 1;
+    }
+
+    assert!(cases > 3_000);
 }

@@ -90,7 +90,9 @@ domain does not serialize their wording and does not validate pasted responses.
 
 `OneShotFormattingPrompt` retains one backend-owned prompt identity and one
 prompt-protocol version. The current domain preserves them but does not compute
-or hash either value.
+or hash either value. Exact current-version admission returns a
+constructor-sealed view borrowing the complete prompt, so downstream work can
+require the frozen contract without normalizing or rewriting the token.
 
 The frozen journey requires an unchanged task/source/format/paper/style/output
 request to retain the same prompt identity. That identity is correlation data,
@@ -174,8 +176,9 @@ provider that Atrament cannot observe or control.
 Current executable evidence includes:
 
 - `tests/backend/one-shot-formatting-prompt/domain/lib.rs`, which proves every
-  frozen self-contained input remains explicit and prompt identity/version stay
-  ordinary data without browser side effects;
+  frozen self-contained input remains explicit, prompt identity/version stay
+  ordinary data without browser side effects, and generated single-ASCII-edit
+  version mutations reject through direct and sealed admission;
 - browser Copy-prompt tests, which exercise explicit copy availability,
   clipboard failure, duplicate/stale completion handling, prompt-change
   invalidation, and page-exit scrubbing; and
