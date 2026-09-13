@@ -75,11 +75,11 @@ fn grid_row(id: u32, cells: Vec<TableCell<u32>>) -> TableRow<u32> {
     }
 }
 
-fn grid_oracle_result(
+fn grid_oracle_placements(
     table: &Table<u32>,
-) -> Result<(), TableGridError<u32>> {
+) -> Result<Vec<TableLogicalCellPlacement<u32>>, TableGridError<u32>> {
     let Some(first) = table.rows.first() else {
-        return Ok(());
+        return Ok(vec![]);
     };
     let width: usize = first
         .cells
@@ -89,6 +89,7 @@ fn grid_oracle_result(
         })
         .sum();
     let mut occupied = vec![vec![false; width]; table.rows.len()];
+    let mut placements = Vec::new();
     for (row_index, row) in table.rows.iter().enumerate() {
         let mut cursor = 0usize;
         for cell in &row.cells {
@@ -122,6 +123,13 @@ fn grid_oracle_result(
             }) {
                 return Err(TableGridError::ColumnSpan { cell: cell.id });
             }
+            placements.push(TableLogicalCellPlacement {
+                cell: cell.id,
+                column_start: u64::try_from(cursor).expect("small column"),
+                row: row.id,
+                row_start: u64::try_from(row_index).expect("small row"),
+                span: cell.span,
+            });
             for occupied_row in &mut occupied[row_index..end_row] {
                 for slot in &mut occupied_row[cursor..end_column] {
                     *slot = true;
@@ -133,7 +141,13 @@ fn grid_oracle_result(
             return Err(TableGridError::RowWidth { row: row.id });
         }
     }
-    Ok(())
+    Ok(placements)
+}
+
+fn grid_oracle_result(
+    table: &Table<u32>,
+) -> Result<(), TableGridError<u32>> {
+    grid_oracle_placements(table).map(|_placements| ())
 }
 
 fn next_grid_seed(seed: &mut u64) -> u32 {
@@ -953,6 +967,11 @@ fn logical_table_validator_matches_naive_occupancy_oracle() {
             expected,
             "typed occupancy oracle mismatch in generated case {case}",
         );
+        assert_eq!(
+            table.logical_cell_placements(),
+            grid_oracle_placements(&table),
+            "logical placement oracle mismatch in generated case {case}",
+        );
     }
     assert!(seen_row_counts.into_iter().all(|seen| seen));
     assert!(seen_cell_counts.into_iter().all(|seen| seen));
@@ -1009,6 +1028,11 @@ fn compact_table_grids_exhaustively_match_naive_occupancy_oracle() {
                 table.validate_grid(),
                 grid_oracle_result(&table),
                 "compact table grid mismatch in exhaustive case {cases}",
+            );
+            assert_eq!(
+                table.logical_cell_placements(),
+                grid_oracle_placements(&table),
+                "compact table placement mismatch in exhaustive case {cases}",
             );
             cases = cases.saturating_add(1);
         }

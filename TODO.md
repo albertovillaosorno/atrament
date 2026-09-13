@@ -839,6 +839,9 @@ semantic row/cell identity, zero-based logical row/column start, and existing
 span in semantic row order. It reuses the validator's grid walk and returns no
 partial placement set for an invalid table. These are logical topology indices,
 not physical layout, wrapping, alignment, border, or renderer coordinates.
+Its placement output is also checked against the independent occupancy model for
+all 20,000 generated table cases and the complete 9,724 compact-grid corpus,
+including typed invalid-grid parity rather than valid layouts alone.
 
 An exact-base direct cell-span edit reuses that complete table-grid invariant. A
 valid edit preserves cell identity and child blocks, creates one accepted
