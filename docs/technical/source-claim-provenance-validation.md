@@ -56,15 +56,18 @@ link-order
 identity/kind/duplicate checks; then claim-order missing-link checks. No invalid
 set is reordered or repaired by the validator.
 
-After that complete structural validation, callers can project the exact
-revision-owned `Provenance` record assigned to one claim, exact linked source
-identities, or the exact `CitationSource` records. The provenance projection
-borrows the authoritative record without copying its kind or source reference.
-Source projections preserve caller citation-link order, and source-record
-projection exposes the same opaque metadata already admitted by the review set;
-it does not fetch, parse, normalize, rank, or judge that metadata. A valid
-non-cited claim projects an empty source set, while an unknown requested claim
-remains a typed failure after structural validation.
+After that complete structural validation, callers can retain a
+constructor-sealed validated review and project the exact revision-owned
+`Provenance` record assigned to one claim, exact linked source identities, or
+exact `CitationSource` records without rescanning structural linkage. The sealed
+view borrows the original review set rather than copying it.
+
+The provenance projection borrows the authoritative record without copying its
+kind or source reference. Source projections preserve caller citation-link
+order, and source-record projection exposes the same opaque metadata already
+admitted by the review set; it does not fetch, parse, normalize, rank, or judge
+that metadata. A valid non-cited claim projects an empty source set, while an
+unknown requested claim remains a typed failure after structural validation.
 
 ### Relationship to semantic notebook provenance
 
@@ -121,7 +124,8 @@ projection in caller link order with structural failure precedence preserved.
 A 32-case compact oracle crosses all four semantic provenance kinds with link
 presence, source presence, and provenance-identity match state. It independently
 pins missing-link, provenance-mismatch, unknown-source, non-cited-link, and
-success behavior without assigning meaning to source metadata.
+success behavior through both direct and sealed admission without assigning
+meaning to source metadata.
 
 The test suite uses caller-owned scalar identities and opaque metadata so the
 result does not depend on a particular source schema or citation renderer.

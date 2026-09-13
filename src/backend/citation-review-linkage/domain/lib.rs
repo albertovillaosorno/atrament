@@ -166,6 +166,46 @@ type CitationReviewResult<ClaimIdentity, ProvenanceIdentity, SourceIdentity> =
         >,
     >;
 
+/// Constructor-sealed citation review that has passed complete structural
+/// admission.
+#[derive(Debug)]
+pub struct ValidatedCitationReview<
+    'review,
+    ClaimIdentity,
+    Metadata,
+    ProvenanceIdentity,
+    SourceIdentity,
+> {
+    review: &'review TypedCitationReviewLinkage<
+        ClaimIdentity,
+        Metadata,
+        ProvenanceIdentity,
+        SourceIdentity,
+    >,
+}
+
+/// Result of structurally admitting one exact citation review set.
+pub type CitationReviewValidationResult<
+    'review,
+    ClaimIdentity,
+    Metadata,
+    ProvenanceIdentity,
+    SourceIdentity,
+> = Result<
+    ValidatedCitationReview<
+        'review,
+        ClaimIdentity,
+        Metadata,
+        ProvenanceIdentity,
+        SourceIdentity,
+    >,
+    CitationReviewLinkageError<
+        ClaimIdentity,
+        ProvenanceIdentity,
+        SourceIdentity,
+    >,
+>;
+
 /// Exact revision-owned provenance record projected for one validated claim.
 pub type CitationProvenanceProjectionResult<
     'review,
@@ -197,18 +237,166 @@ pub type CitationSourceProjectionResult<
     >,
 >;
 
+impl<
+    'review,
+    ClaimIdentity,
+    Metadata,
+    ProvenanceIdentity,
+    SourceIdentity,
+> ValidatedCitationReview<
+    'review,
+    ClaimIdentity,
+    Metadata,
+    ProvenanceIdentity,
+    SourceIdentity,
+>
+where
+    ClaimIdentity: Clone + Eq,
+    ProvenanceIdentity: Clone + Eq,
+    SourceIdentity: Clone + Eq,
+{
+    /// Return the exact revision-owned provenance assigned to one claim.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CitationReviewLinkageError::UnknownClaim`] when the requested
+    /// claim is not present in this already-admitted review set.
+    pub fn provenance_for_claim(
+        &self,
+        claim_identity: &ClaimIdentity,
+    ) -> CitationProvenanceProjectionResult<
+        'review,
+        ClaimIdentity,
+        ProvenanceIdentity,
+        SourceIdentity,
+    > {
+        let Some(claim) = self
+            .review
+            .claims
+            .iter()
+            .find(|claim| claim.claim_identity == *claim_identity)
+        else {
+            return Err(CitationReviewLinkageError::UnknownClaim {
+                claim: claim_identity.clone(),
+            });
+        };
+        self.review
+            .provenance
+            .iter()
+            .find(|provenance| provenance.id == claim.provenance_identity)
+            .ok_or_else(|| CitationReviewLinkageError::UnknownProvenance {
+                provenance: claim.provenance_identity.clone(),
+            })
+    }
+
+    /// Return the exact structurally admitted review set.
+    #[must_use]
+    pub const fn review(
+        &self,
+    ) -> &'review TypedCitationReviewLinkage<
+        ClaimIdentity,
+        Metadata,
+        ProvenanceIdentity,
+        SourceIdentity,
+    > {
+        self.review
+    }
+
+    /// Return exact source identities linked to one claim in caller link order.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CitationReviewLinkageError::UnknownClaim`] when the requested
+    /// claim is not present in this already-admitted review set.
+    pub fn source_identities_for_claim(
+        &self,
+        claim_identity: &ClaimIdentity,
+    ) -> Result<
+        Vec<&'review SourceIdentity>,
+        CitationReviewLinkageError<
+            ClaimIdentity,
+            ProvenanceIdentity,
+            SourceIdentity,
+        >,
+    > {
+        if !self
+            .review
+            .claims
+            .iter()
+            .any(|claim| claim.claim_identity == *claim_identity)
+        {
+            return Err(CitationReviewLinkageError::UnknownClaim {
+                claim: claim_identity.clone(),
+            });
+        }
+        Ok(self
+            .review
+            .links
+            .iter()
+            .filter_map(|link| {
+                (link.claim_identity == *claim_identity)
+                    .then_some(&link.source_identity)
+            })
+            .collect())
+    }
+
+    /// Return exact reviewable source records linked to one claim in caller
+    /// link order.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CitationReviewLinkageError::UnknownClaim`] when the requested
+    /// claim is not present in this already-admitted review set.
+    pub fn sources_for_claim(
+        &self,
+        claim_identity: &ClaimIdentity,
+    ) -> CitationSourceProjectionResult<
+        'review,
+        ClaimIdentity,
+        Metadata,
+        ProvenanceIdentity,
+        SourceIdentity,
+    > {
+        if !self
+            .review
+            .claims
+            .iter()
+            .any(|claim| claim.claim_identity == *claim_identity)
+        {
+            return Err(CitationReviewLinkageError::UnknownClaim {
+                claim: claim_identity.clone(),
+            });
+        }
+        let mut sources = Vec::new();
+        for link in self
+            .review
+            .links
+            .iter()
+            .filter(|link| link.claim_identity == *claim_identity)
+        {
+            let Some(source) = self
+                .review
+                .sources
+                .iter()
+                .find(|source| source.source_identity == link.source_identity)
+            else {
+                return Err(CitationReviewLinkageError::UnknownSource {
+                    source: link.source_identity.clone(),
+                });
+            };
+            sources.push(source);
+        }
+        Ok(sources)
+    }
+}
+
 /// Return the exact revision-owned provenance assigned to one claim after full
 /// structural validation.
-///
-/// The returned record is borrowed directly from the validated review set. This
-/// projection does not copy provenance kind, reinterpret its source reference,
-/// infer citation status, or create application transaction provenance.
 ///
 /// # Errors
 ///
 /// Returns the first structural linkage error before projection, or
-/// [`CitationReviewLinkageError::UnknownClaim`] when the requested claim is not
-/// present in an otherwise valid review set.
+/// [`CitationReviewLinkageError::UnknownClaim`] for an absent requested claim.
 pub fn citation_provenance_for_claim<
     'review,
     ClaimIdentity,
@@ -234,37 +422,17 @@ where
     ProvenanceIdentity: Clone + Eq,
     SourceIdentity: Clone + Eq,
 {
-    validate_citation_review_linkage(review)?;
-    let Some(claim) = review
-        .claims
-        .iter()
-        .find(|claim| claim.claim_identity == *claim_identity)
-    else {
-        return Err(CitationReviewLinkageError::UnknownClaim {
-            claim: claim_identity.clone(),
-        });
-    };
-    review
-        .provenance
-        .iter()
-        .find(|provenance| provenance.id == claim.provenance_identity)
-        .ok_or_else(|| CitationReviewLinkageError::UnknownProvenance {
-            provenance: claim.provenance_identity.clone(),
-        })
+    validate_citation_review_linkage_view(review)?
+        .provenance_for_claim(claim_identity)
 }
 
 /// Return exact reviewable source records linked to one claim after full
 /// structural validation.
 ///
-/// Records follow caller citation-link order. A valid non-cited claim returns
-/// an empty collection. Metadata remains caller-owned opaque review data: this
-/// projection does not fetch, parse, rank, normalize, or judge sources.
-///
 /// # Errors
 ///
 /// Returns the first structural linkage error before projection, or
-/// [`CitationReviewLinkageError::UnknownClaim`] when the requested claim is not
-/// present in an otherwise valid review set.
+/// [`CitationReviewLinkageError::UnknownClaim`] for an absent requested claim.
 pub fn citation_sources_for_claim<
     'review,
     ClaimIdentity,
@@ -291,48 +459,17 @@ where
     ProvenanceIdentity: Clone + Eq,
     SourceIdentity: Clone + Eq,
 {
-    validate_citation_review_linkage(review)?;
-    if !review
-        .claims
-        .iter()
-        .any(|claim| claim.claim_identity == *claim_identity)
-    {
-        return Err(CitationReviewLinkageError::UnknownClaim {
-            claim: claim_identity.clone(),
-        });
-    }
-    let mut sources = Vec::new();
-    for link in review
-        .links
-        .iter()
-        .filter(|link| link.claim_identity == *claim_identity)
-    {
-        let Some(source) = review
-            .sources
-            .iter()
-            .find(|source| source.source_identity == link.source_identity)
-        else {
-            return Err(CitationReviewLinkageError::UnknownSource {
-                source: link.source_identity.clone(),
-            });
-        };
-        sources.push(source);
-    }
-    Ok(sources)
+    validate_citation_review_linkage_view(review)?
+        .sources_for_claim(claim_identity)
 }
 
 /// Return source identities linked to one claim after full structural
 /// validation.
 ///
-/// Source identities follow caller link order. A valid non-cited claim returns
-/// an empty collection. This projection does not fetch, rank, deduplicate, or
-/// judge source metadata.
-///
 /// # Errors
 ///
 /// Returns the first structural linkage error before projection, or
-/// [`CitationReviewLinkageError::UnknownClaim`] when the requested claim is not
-/// present in an otherwise valid review set.
+/// [`CitationReviewLinkageError::UnknownClaim`] for an absent requested claim.
 pub fn citation_source_identities_for_claim<
     'review,
     ClaimIdentity,
@@ -360,24 +497,8 @@ where
     ProvenanceIdentity: Clone + Eq,
     SourceIdentity: Clone + Eq,
 {
-    validate_citation_review_linkage(review)?;
-    if !review
-        .claims
-        .iter()
-        .any(|claim| claim.claim_identity == *claim_identity)
-    {
-        return Err(CitationReviewLinkageError::UnknownClaim {
-            claim: claim_identity.clone(),
-        });
-    }
-    Ok(review
-        .links
-        .iter()
-        .filter_map(|link| {
-            (link.claim_identity == *claim_identity)
-                .then_some(&link.source_identity)
-        })
-        .collect())
+    validate_citation_review_linkage_view(review)?
+        .source_identities_for_claim(claim_identity)
 }
 
 /// Validate exact citation-to-claim-to-source metadata relationships.
@@ -410,6 +531,40 @@ where
     validate_inventories_and_assignments(review)?;
     validate_links(review)?;
     validate_required_links(review)
+}
+
+/// Validate one exact review and retain constructor-sealed admission evidence.
+///
+/// # Errors
+///
+/// Returns the same first structural failure as
+/// [`validate_citation_review_linkage`].
+pub fn validate_citation_review_linkage_view<
+    ClaimIdentity,
+    Metadata,
+    ProvenanceIdentity,
+    SourceIdentity,
+>(
+    review: &TypedCitationReviewLinkage<
+        ClaimIdentity,
+        Metadata,
+        ProvenanceIdentity,
+        SourceIdentity,
+    >,
+) -> CitationReviewValidationResult<
+    '_,
+    ClaimIdentity,
+    Metadata,
+    ProvenanceIdentity,
+    SourceIdentity,
+>
+where
+    ClaimIdentity: Clone + Eq,
+    ProvenanceIdentity: Clone + Eq,
+    SourceIdentity: Clone + Eq,
+{
+    validate_citation_review_linkage(review)?;
+    Ok(ValidatedCitationReview { review })
 }
 
 fn validate_inventories_and_assignments<

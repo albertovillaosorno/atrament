@@ -33,7 +33,7 @@ use atrament_citation_review_linkage::{
     CitationClaimLink, CitationReviewLinkage, CitationReviewLinkageError,
     CitationSource, ClaimProvenance, citation_provenance_for_claim,
     citation_source_identities_for_claim, citation_sources_for_claim,
-    validate_citation_review_linkage,
+    validate_citation_review_linkage, validate_citation_review_linkage_view,
 };
 use atrament_semantic_notebook::{Provenance, ProvenanceKind};
 
@@ -82,6 +82,23 @@ fn review() -> Review {
 fn cited_claim_resolves_through_exact_provenance_to_reviewable_source() {
     let review = review();
     assert_eq!(validate_citation_review_linkage(&review), Ok(()));
+    let validated = validate_citation_review_linkage_view(&review)
+        .expect("valid review seals");
+    assert!(std::ptr::eq(validated.review(), &review));
+    assert!(std::ptr::eq(
+        validated
+            .provenance_for_claim(&1)
+            .expect("cited provenance projects"),
+        &review.provenance[0],
+    ));
+    assert_eq!(
+        validated.source_identities_for_claim(&1),
+        Ok(vec![&21]),
+    );
+    assert!(std::ptr::eq(
+        validated.sources_for_claim(&1).expect("source projects")[0],
+        &review.sources[0],
+    ));
     assert_eq!(review.links[0].claim_identity, 1);
     assert_eq!(review.links[0].provenance_identity, 11);
     assert_eq!(review.provenance[0].kind, ProvenanceKind::Cited);
@@ -384,6 +401,17 @@ fn compact_provenance_link_state_space_matches_structural_oracle() {
                         expected,
                         "kind {kind:?}, link {link_present}, source \
                          {source_present}, provenance match \
+                         {provenance_matches}",
+                    );
+                    assert_eq!(
+                        validate_citation_review_linkage_view(&review).map(
+                            |validated| {
+                                std::ptr::eq(validated.review(), &review)
+                            },
+                        ),
+                        expected.map(|()| true),
+                        "sealed parity for kind {kind:?}, link {link_present}, \
+                         source {source_present}, provenance match \
                          {provenance_matches}",
                     );
                     cases = cases.saturating_add(1);

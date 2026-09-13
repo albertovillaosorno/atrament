@@ -1884,15 +1884,18 @@ structural errors. Multiple distinct sources for one cited claim remain valid.
 
 After full structural validation, read-only projections return one claim's exact
 assigned revision-owned provenance record plus its linked source identities or
-exact reviewable source records in caller link order. The provenance projection
-borrows the authoritative semantic record without copying its kind or source
-reference, while source-record projection preserves caller-owned metadata
-without parsing, ranking, normalization, or quality judgment. Valid non-cited
-claims project no sources, and unknown requested claims remain typed failures.
+exact reviewable source records in caller link order. A constructor-sealed
+validated review now retains that exact admitted set so repeated claim
+projections do not rescan structural linkage. The provenance projection borrows
+the authoritative semantic record without copying its kind or source reference,
+while source-record projection preserves caller-owned metadata without parsing,
+ranking, normalization, or quality judgment. Valid non-cited claims project no
+sources, and unknown requested claims remain typed failures.
 
 A 32-case compact oracle crosses all four semantic provenance kinds with link
 presence, source presence, and provenance-identity match state to pin the same
-failure precedence. Source retrieval, source-quality policy, citation
+failure precedence through direct and sealed admission. Source retrieval,
+source-quality policy, citation
 parsing/formatting, and review UI remain separate.
 
 The task remains open for source retrieval/admission, a concrete source-metadata
