@@ -738,7 +738,7 @@ fn named_symbol_vocabulary_is_supported_without_rewriting() {
         r"\lor", r"\lozenge", r"\lrcorner", r"\ltimes", r"\lvert",
         r"\lvertneqq", r"\maltese",
         r"\mapsto",
-        r"\mathdollar",
+        r"\mathdollar", r"\mathellipsis",
         r"\mathparagraph",
         r"\mathsection", r"\mathsterling", r"\measuredangle", r"\mho",
         r"\mid", r"\models", r"\mp", r"\mu", r"\multimap", r"\nLeftarrow",
@@ -1028,6 +1028,19 @@ fn complex_and_prime_symbols_compose_without_rewriting() {
             .count(),
         3,
     );
+}
+
+#[test]
+fn latex_base_math_ellipsis_alias_preserves_exact_source() {
+    let source = r"a_1, a_2, \mathellipsis, a_n";
+    let analyzed = analyze(source, FormulaMode::Inline)
+        .expect("LaTeX-base fixed math ellipsis alias");
+    assert!(analyzed.is_supported());
+    assert_eq!(reconstructed(&analyzed), source);
+    assert!(analyzed.tokens.iter().any(|token| {
+        token.kind == MathTokenKind::Command(SupportedCommand::NamedSymbol)
+            && analyzed.token_source(*token) == Some(r"\mathellipsis")
+    }));
 }
 
 #[test]

@@ -89,7 +89,7 @@ use atrament_semantic_notebook_session::{
 };
 
 const CURRENT_COMMAND_BEHAVIOR_VERSION: CommandBehaviorVersion =
-    CommandBehaviorVersion(96);
+    CommandBehaviorVersion(97);
 
 #[derive(Debug)]
 struct CountingCommandIdentity {
@@ -1832,6 +1832,7 @@ fn expanded_tex_vocabulary_is_admitted_and_directly_editable() {
         r"\Box + \Diamond + \checkmark + \circledR + \maltese + \yen; ",
         r"\ulcorner A \urcorner + \llcorner B \lrcorner; ",
         r"\restriction + \Doteq + \doublecup + \doublecap + \llless + \gggtr; ",
+        r"x_1, x_2, \mathellipsis, x_n; ",
         r"A \Join B; C \lhd D; E \unlhd F; G \rhd H; I \unrhd J",
     );
     let outcome = session.replace_formula(
@@ -8025,7 +8026,7 @@ fn command_capability_snapshot_is_deterministic_and_does_not_overclaim() {
             family: SemanticCommandFamily::Provenance,
         },
         CommandFamilyCapability {
-            behavior_version: CommandBehaviorVersion(83),
+            behavior_version: CommandBehaviorVersion(84),
             family: SemanticCommandFamily::StructuredContent,
         },
         CommandFamilyCapability {
@@ -8093,11 +8094,11 @@ fn command_capability_version_detects_drift_independently_of_revision() {
     );
     assert_eq!(
         session.check_command_capability_compatibility(
-            CommandBehaviorVersion(95),
+            CommandBehaviorVersion(96),
         ),
         CommandCapabilityCompatibilityOutcome::Mismatch {
             current: CURRENT_COMMAND_BEHAVIOR_VERSION,
-            expected: CommandBehaviorVersion(95),
+            expected: CommandBehaviorVersion(96),
         },
     );
     assert_eq!(

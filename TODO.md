@@ -334,12 +334,12 @@ supports read-only behavior-version drift checks. It deliberately advertises no
 command protocol, normalizer, command context, Validate, Apply, rebatching, or
 numeric command/context limits yet.
 
-Aggregate command behavior and typed-result behavior are version 96 after
-admitting the remaining `latexsym` join and triangle atoms. Asset reference,
-Ordering and grouping, and Text content retain family behavior version 1;
-Provenance and Style role are version 2, Document constraint is version 3, and
-Structured content is version 83. The immediately previous aggregate version 95
-rejects instead of being reinterpreted.
+Aggregate command behavior and typed-result behavior are version 97 after
+admitting the LaTeX-base fixed math ellipsis alias. Asset reference, Ordering
+and grouping, and Text content retain family behavior version 1; Provenance and
+Style role are version 2, Document constraint is version 3, and Structured
+content is version 84. The immediately previous aggregate version 96 rejects
+instead of being reinterpreted.
 
 A version-bound single-target proposal combines capability, exact local
 preconditions, and direct-edit simulation read-only. All five dedicated direct
@@ -807,7 +807,7 @@ dollar, math sterling, pound, paragraph, section, and dagger aliases, the
 remaining `latexsym` join and triangle relation aliases, and variant
 large-triangle symbols,
 arrow and ellipsis
-symbols including
+symbols including the LaTeX-base fixed `\mathellipsis` alias and
 AMS paired, loop, curve, tail, squiggle, and multimap arrows, harpoons, and
 mapped arrows, positive AMS relation and logic symbols, negated AMS arrows and
 order/equality, containment, divisibility, turnstile, and triangle relations,

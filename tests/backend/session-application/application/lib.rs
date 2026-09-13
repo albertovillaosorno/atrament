@@ -106,7 +106,7 @@ use atrament_unicode_grapheme_segmentation::UnicodeGraphemeSegmentation;
 mod application;
 
 const CURRENT_COMMAND_BEHAVIOR_VERSION: CommandBehaviorVersion =
-    CommandBehaviorVersion(96);
+    CommandBehaviorVersion(97);
 
 fn physical_page_profile() -> PageProfile {
     PageProfile {

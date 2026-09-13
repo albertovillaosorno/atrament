@@ -128,7 +128,7 @@ const NAMED_SYMBOL_COMMANDS: &[&str] = &[
     "\\lor", "\\lozenge", "\\lrcorner", "\\ltimes",
     "\\lvert", "\\lvertneqq",
     "\\maltese", "\\mapsto",
-    "\\mathdollar",
+    "\\mathdollar", "\\mathellipsis",
     "\\mathparagraph", "\\mathsection", "\\mathsterling", "\\measuredangle",
     "\\mho", "\\mid",
     "\\models", "\\mp",
