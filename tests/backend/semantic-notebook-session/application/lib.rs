@@ -15353,6 +15353,53 @@ fn semantic_history_undo_redo_preserves_stable_text_identity() {
 }
 
 #[test]
+fn history_preconditions_reject_both_directions_without_moving_state() {
+    let ids = IdentityAllocator::new();
+    let arbitrary = ids.allocate_revision().expect("arbitrary revision");
+    let mut empty = SemanticNotebookSessionService::default();
+    for direction in [HistoryDirection::Redo, HistoryDirection::Undo] {
+        assert_eq!(
+            empty.traverse_history(arbitrary, direction),
+            HistoryTraversalOutcome::NoAcceptedRevision,
+            "empty session direction={direction:?}",
+        );
+        assert_eq!(
+            empty.history_availability(),
+            HistoryAvailabilityOutcome::NoAcceptedRevision,
+        );
+    }
+
+    let candidate_ids = IdentityAllocator::new();
+    let (candidate, candidate_span) =
+        candidate_notebook_with_span(&candidate_ids, "original");
+    let AcceptanceOutcome::Accepted { mapping, revision: base } =
+        empty.accept(candidate)
+    else {
+        panic!("candidate must be accepted");
+    };
+    let target = accepted_for(&mapping, candidate_span);
+    let TextEditOutcome::Applied { revision: edited, .. } =
+        empty.replace_text(base, target, String::from("edited"))
+    else {
+        panic!("text edit must apply");
+    };
+    let expected_revision = empty.current().expect("edited revision").clone();
+    let expected_history = empty.history_availability();
+    for direction in [HistoryDirection::Redo, HistoryDirection::Undo] {
+        assert_eq!(
+            empty.traverse_history(base, direction),
+            HistoryTraversalOutcome::StaleBase {
+                current: edited,
+                requested: base,
+            },
+            "stale session direction={direction:?}",
+        );
+        assert_eq!(empty.current(), Some(&expected_revision));
+        assert_eq!(empty.history_availability(), expected_history);
+    }
+}
+
+#[test]
 fn semantic_history_rejects_stale_base_without_traversal() {
     let candidate_ids = IdentityAllocator::new();
     let (candidate, candidate_span) =

@@ -1156,7 +1156,10 @@ traversal boundary to Traversed, while a request alone remains unclassified.
 Retry replay and actual cancellation execution are not implemented. Read-only
 direction availability is now centralized over the existing
 `HistoryAvailabilityOutcome`, and `SessionApplication` uses it for Redo-aware
-asset-byte pruning instead of reinterpreting `can_redo` independently.
+asset-byte pruning instead of reinterpreting `can_redo` independently. A
+four-state precondition matrix also requires both Undo and Redo to return the
+same empty-session or stale-base rejection without moving accepted state or
+history position.
 
 Bounded history storage is also blocked on policy rather than mechanics. The
 frozen history contract explicitly leaves depth limits and storage structure
