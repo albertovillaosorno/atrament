@@ -1615,9 +1615,10 @@ fn handshake_mismatch_binds_observed_to_presented_version() {
         &EqualExpectedObservedHandshake as &dyn SessionHandshake,
     ] {
         let response = route_with_handshake_prompt(handshake, MISMATCH);
-        let (head, body) = response_parts(&response);
-        assert!(head.starts_with("HTTP/1.1 500 Internal Server Error\r\n"));
-        assert_eq!(body, br#"{"error":"invalid_diagnostic"}"#);
+        assert_invalid_diagnostic_response(
+            &response,
+            "handshake observed-version mismatch",
+        );
     }
 
     let response = route_with_handshake_prompt(&HANDSHAKE, MISMATCH);
@@ -2609,6 +2610,26 @@ impl SessionHandshake for EmptyDiagnosticHandshake {
     }
 }
 
+fn assert_invalid_diagnostic_response(response: &[u8], context: &str) {
+    let (head, body) = response_parts(response);
+    assert!(
+        head.starts_with("HTTP/1.1 500 Internal Server Error\r\n"),
+        "{context}",
+    );
+    assert_eq!(
+        body,
+        br#"{"error":"invalid_diagnostic"}"#,
+        "{context}",
+    );
+    let text = String::from_utf8_lossy(response);
+    assert!(!text.contains(DIAGNOSTIC_VERSION), "{context}");
+    assert!(!text.contains("atrament.handshake.version-mismatch"), "{context}");
+    assert!(
+        !text.contains("atrament.session-draft.resource-limit"),
+        "{context}",
+    );
+}
+
 #[test]
 fn adapter_rejects_malformed_route_diagnostic_shape_and_draft_evidence() {
     let authorization = format!("Bearer {EXPECTED_SECRET}");
@@ -2658,10 +2679,9 @@ fn adapter_rejects_malformed_route_diagnostic_shape_and_draft_evidence() {
             ),
             &mut draft,
         );
-        assert_eq!(
-            status_line(&response),
-            "HTTP/1.1 500 Internal Server Error",
-            "handshake mutation {mutation:?}",
+        assert_invalid_diagnostic_response(
+            &response,
+            &format!("handshake mutation {mutation:?}"),
         );
     }
 
@@ -2683,10 +2703,9 @@ fn adapter_rejects_malformed_route_diagnostic_shape_and_draft_evidence() {
             ),
             &mut draft,
         );
-        assert_eq!(
-            status_line(&response),
-            "HTTP/1.1 500 Internal Server Error",
-            "draft shape mutation {mutation:?}",
+        assert_invalid_diagnostic_response(
+            &response,
+            &format!("draft shape mutation {mutation:?}"),
         );
     }
     for mutation in [
@@ -2706,10 +2725,9 @@ fn adapter_rejects_malformed_route_diagnostic_shape_and_draft_evidence() {
             ),
             &mut draft,
         );
-        assert_eq!(
-            status_line(&response),
-            "HTTP/1.1 500 Internal Server Error",
-            "draft evidence mutation {mutation:?}",
+        assert_invalid_diagnostic_response(
+            &response,
+            &format!("draft evidence mutation {mutation:?}"),
         );
     }
 }
