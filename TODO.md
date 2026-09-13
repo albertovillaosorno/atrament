@@ -860,8 +860,10 @@ A constructor-sealed logical-topology view now binds one exact table to its
 validated column count and complete caller-order cell placements. The borrowed
 evidence cannot survive mutation of that table, and generated plus exhaustive
 occupancy oracles require it to preserve the same first structural failure as
-the standalone validator. It adds no physical coordinates, wrapping, alignment,
-border, measurement, or rendering policy.
+the standalone validator. The sealed view can also resolve the exact cell whose
+logical span covers one row/column index; both table corpora cross-check every
+in-range logical slot plus out-of-range misses. It adds no physical coordinates,
+wrapping, alignment, border, measurement, hit-testing, or rendering policy.
 
 An exact-base direct cell-span edit reuses that complete table-grid invariant. A
 valid edit preserves cell identity and child blocks, creates one accepted

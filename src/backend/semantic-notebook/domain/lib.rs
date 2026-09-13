@@ -538,6 +538,30 @@ pub struct ValidatedTableLogicalTopology<'table, Identity> {
 }
 
 impl<'table, Identity> ValidatedTableLogicalTopology<'table, Identity> {
+    /// Return the cell whose logical span covers one zero-based grid position.
+    ///
+    /// Positions outside the validated row/column topology return `None`. This
+    /// lookup has no physical-coordinate, hit-testing, or layout meaning.
+    #[must_use]
+    pub fn cell_covering(
+        &self,
+        row: u64,
+        column: u64,
+    ) -> Option<&TableLogicalCellPlacement<Identity>> {
+        self.placements.iter().find(|placement| {
+            let row_end = placement
+                .row_start
+                .checked_add(NonZeroU64::from(placement.span.rows).get());
+            let column_end = placement
+                .column_start
+                .checked_add(NonZeroU64::from(placement.span.columns).get());
+            row_end.is_some_and(|end| placement.row_start <= row && row < end)
+                && column_end.is_some_and(|end| {
+                    placement.column_start <= column && column < end
+                })
+        })
+    }
+
     /// Return all validated logical cell placements in semantic row order.
     #[must_use]
     pub fn cell_placements(&self) -> &[TableLogicalCellPlacement<Identity>] {

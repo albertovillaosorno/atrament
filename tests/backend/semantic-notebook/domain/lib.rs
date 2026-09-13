@@ -163,15 +163,40 @@ fn grid_oracle_column_count(
 fn assert_validated_table_topology_matches_oracle(table: &Table<u32>) {
     match table.validated_logical_topology() {
         Ok(topology) => {
-            assert_eq!(
-                grid_oracle_placements(table).as_deref(),
-                Ok(topology.cell_placements()),
-            );
+            let placements =
+                grid_oracle_placements(table).expect("oracle-valid topology");
+            assert_eq!(placements.as_slice(), topology.cell_placements());
             assert_eq!(
                 grid_oracle_column_count(table),
                 Ok(topology.logical_column_count()),
             );
             assert!(std::ptr::eq(topology.table(), table));
+            for row in 0..u64::try_from(table.rows.len()).expect("small rows") {
+                for column in 0..topology.logical_column_count() {
+                    let expected = placements.iter().find(|placement| {
+                        let row_end = placement.row_start
+                            + u64::from(placement.span.rows.get());
+                        let column_end = placement.column_start
+                            + u64::from(placement.span.columns.get());
+                        placement.row_start <= row
+                            && row < row_end
+                            && placement.column_start <= column
+                            && column < column_end
+                    });
+                    assert_eq!(topology.cell_covering(row, column), expected);
+                }
+            }
+            assert_eq!(
+                topology.cell_covering(
+                    u64::try_from(table.rows.len()).expect("small rows"),
+                    0,
+                ),
+                None,
+            );
+            assert_eq!(
+                topology.cell_covering(0, topology.logical_column_count()),
+                None,
+            );
         },
         Err(actual) => {
             assert_eq!(grid_oracle_placements(table), Err(actual));
@@ -1092,6 +1117,16 @@ fn maximum_logical_colspan_stays_compact() {
 
     assert_eq!(table.validate_grid(), Ok(()));
     assert_eq!(table.logical_column_count(), Ok(u64::from(maximum)));
+    let topology = table
+        .validated_logical_topology()
+        .expect("maximum span topology");
+    assert_eq!(
+        topology
+            .cell_covering(0, u64::from(maximum).saturating_sub(1))
+            .map(|cell| cell.cell),
+        Some(10),
+    );
+    assert_eq!(topology.cell_covering(0, u64::from(maximum)), None);
 }
 
 #[test]
@@ -1171,6 +1206,12 @@ fn validated_logical_topology_binds_exact_table_and_complete_projection() {
 
     assert!(std::ptr::eq(topology.table(), &table));
     assert_eq!(topology.logical_column_count(), 3);
+    assert_eq!(topology.cell_covering(0, 0).map(|cell| cell.cell), Some(10));
+    assert_eq!(topology.cell_covering(1, 1).map(|cell| cell.cell), Some(10));
+    assert_eq!(topology.cell_covering(1, 2).map(|cell| cell.cell), Some(20));
+    assert_eq!(topology.cell_covering(2, 2).map(|cell| cell.cell), Some(30));
+    assert_eq!(topology.cell_covering(3, 0), None);
+    assert_eq!(topology.cell_covering(0, 3), None);
     assert_eq!(
         topology.cell_placements(),
         table
