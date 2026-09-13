@@ -39,7 +39,9 @@ use atrament_english_spanish_diacritic_composition::{
     EnglishSpanishDiacriticCompositionError,
     admit_english_spanish_diacritic_composition,
 };
-use atrament_english_spanish_diacritic_rule::EnglishSpanishDiacriticRule;
+use atrament_english_spanish_diacritic_rule::{
+    EnglishSpanishDiacriticRule, applicable_english_spanish_diacritic_rule,
+};
 use atrament_english_spanish_grapheme_inventory::{
     EnglishSpanishGraphemeCategory, REQUIRED_TEXT_GRAPHEMES,
 };
@@ -139,37 +141,76 @@ fn every_non_decomposed_bilingual_requirement_rejects_without_inference() {
 }
 
 #[test]
-fn exact_profile_coverage_still_precedes_matched_composition() {
-    let target = String::from("n\u{303}");
-    let profile = profile(
-        vec![target.clone()],
-        vec![EnglishSpanishDiacriticRule::Tilde],
-    );
-    assert_eq!(
-        admit_english_spanish_diacritic_composition(
-            &profile,
-            target,
-            presentation(),
-        ),
-        Err(EnglishSpanishDiacriticCompositionError::ProfileAdmission(
-            DiacriticCompositionError::ExactCoverage,
-        )),
-    );
-}
-
-#[test]
-fn matched_language_rule_still_requires_profile_declaration() {
-    let profile = profile(Vec::new(), vec![EnglishSpanishDiacriticRule::Acute]);
-    assert_eq!(
-        admit_english_spanish_diacritic_composition(
-            &profile,
-            String::from("u\u{308}"),
-            presentation(),
-        ),
-        Err(EnglishSpanishDiacriticCompositionError::ProfileAdmission(
-            DiacriticCompositionError::MissingCompositionalCoverage,
-        )),
-    );
+fn every_decomposed_requirement_matches_profile_admission_matrix() {
+    let mut cases = 0_usize;
+    let mut acute = false;
+    let mut diaeresis = false;
+    let mut tilde = false;
+    for required in REQUIRED_TEXT_GRAPHEMES.iter().filter(|required| {
+        required.category
+            == EnglishSpanishGraphemeCategory::SpanishDecomposedEquivalent
+    }) {
+        let rule = applicable_english_spanish_diacritic_rule(required.grapheme)
+            .expect("decomposed bilingual requirement must own a rule");
+        match rule {
+            EnglishSpanishDiacriticRule::Acute => acute = true,
+            EnglishSpanishDiacriticRule::Diaeresis => diaeresis = true,
+            EnglishSpanishDiacriticRule::Tilde => tilde = true,
+        }
+        for exact_covered in [false, true] {
+            for rule_declared in [false, true] {
+                let target = String::from(required.grapheme);
+                let profile = profile(
+                    exact_covered.then(|| target.clone()).into_iter().collect(),
+                    rule_declared.then_some(rule).into_iter().collect(),
+                );
+                let outcome = admit_english_spanish_diacritic_composition(
+                    &profile,
+                    target,
+                    presentation(),
+                );
+                if exact_covered {
+                    assert_eq!(
+                        outcome,
+                        Err(
+                            EnglishSpanishDiacriticCompositionError::
+                                ProfileAdmission(
+                                    DiacriticCompositionError::ExactCoverage,
+                                ),
+                        ),
+                        "exact coverage must win for {:?}",
+                        required.grapheme,
+                    );
+                } else if rule_declared {
+                    let admitted = outcome.expect(
+                        "declared bilingual composition must be admitted",
+                    );
+                    assert_eq!(
+                        admitted.intent().target_grapheme,
+                        required.grapheme,
+                    );
+                    assert_eq!(*admitted.profile_rule(), rule);
+                    assert_eq!(admitted.intent().matched_rule, rule);
+                } else {
+                    assert_eq!(
+                        outcome,
+                        Err(
+                            EnglishSpanishDiacriticCompositionError::
+                                ProfileAdmission(
+                                    DiacriticCompositionError::
+                                        MissingCompositionalCoverage,
+                                ),
+                        ),
+                        "missing declaration must reject {:?}",
+                        required.grapheme,
+                    );
+                }
+                cases = cases.saturating_add(1);
+            }
+        }
+    }
+    assert_eq!(cases, 56);
+    assert!(acute && diaeresis && tilde);
 }
 
 #[test]

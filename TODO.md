@@ -1413,7 +1413,9 @@ language-rule lookup before generic profile admission. All 14 decomposed
 bilingual requirements reach their exact Acute, Diaeresis, or Tilde rule when
 the profile declares it; all other 100 textual requirements and deterministic
 near misses reject before generic composition instead of gaining inferred
-Unicode decomposition. Exact profile coverage still wins after a language rule
+Unicode decomposition. A 56-state profile-admission matrix crosses every one of
+the 14 decomposed spellings with exact coverage present/absent and its required
+rule declared/absent. Exact profile coverage still wins after a language rule
 matches, and a matched rule still requires declaration by the selected profile.
 
 Unicode normalization, placement/scale geometry, collision evaluation,
