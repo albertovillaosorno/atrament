@@ -117,6 +117,57 @@ pub type ContextualCandidatePlanningInput<
     Context,
 >;
 
+/// Constructor-sealed planning-input shape for contextual stroke candidates.
+pub type ValidatedContextualCandidatePlanningInput<
+    'input,
+    CandidateIdentity,
+    CharacterIntent,
+    Context,
+    EntryCondition,
+    ExitCondition,
+    ProfileChoice,
+    SemanticOrigin,
+    StrokePayload,
+> = ValidatedContextualStrokePlanningInput<
+    'input,
+    ContextualStrokeCandidate<
+        CandidateIdentity,
+        CharacterIntent,
+        EntryCondition,
+        ExitCondition,
+        ProfileChoice,
+        SemanticOrigin,
+        StrokePayload,
+    >,
+    Context,
+>;
+
+/// Result of validating and sealing one contextual planning input.
+pub type ContextualCandidatePlanningInputValidationResult<
+    'input,
+    CandidateIdentity,
+    CharacterIntent,
+    Context,
+    EntryCondition,
+    ExitCondition,
+    ProfileChoice,
+    SemanticOrigin,
+    StrokePayload,
+> = Result<
+    ValidatedContextualCandidatePlanningInput<
+        'input,
+        CandidateIdentity,
+        CharacterIntent,
+        Context,
+        EntryCondition,
+        ExitCondition,
+        ProfileChoice,
+        SemanticOrigin,
+        StrokePayload,
+    >,
+    ContextualStrokeCandidateIdentityError,
+>;
+
 /// Complete transport-neutral input to a later contextual stroke planner.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ContextualStrokePlanningInput<Candidate, Context> {
@@ -124,6 +175,37 @@ pub struct ContextualStrokePlanningInput<Candidate, Context> {
     pub candidates: Vec<Candidate>,
     /// Neighbor, word, line, role, and calibrated-style planning context.
     pub context: Context,
+}
+
+/// Constructor-sealed evidence that one exact planning input has unique
+/// candidate identities.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ValidatedContextualStrokePlanningInput<'input, Candidate, Context> {
+    input: &'input ContextualStrokePlanningInput<Candidate, Context>,
+}
+
+impl<'input, Candidate, Context>
+    ValidatedContextualStrokePlanningInput<'input, Candidate, Context>
+{
+    /// Return caller-order candidates from the exact admitted input.
+    #[must_use]
+    pub fn candidates(&self) -> &'input [Candidate] {
+        &self.input.candidates
+    }
+
+    /// Return the exact caller-owned planning context.
+    #[must_use]
+    pub const fn context(&self) -> &'input Context {
+        &self.input.context
+    }
+
+    /// Return the exact planning input that produced this admission evidence.
+    #[must_use]
+    pub const fn input(
+        &self,
+    ) -> &'input ContextualStrokePlanningInput<Candidate, Context> {
+        self.input
+    }
 }
 
 /// Validate candidate addressing for one complete planning input.
@@ -161,6 +243,50 @@ where
     CandidateIdentity: Eq,
 {
     validate_contextual_stroke_candidate_identities(&input.candidates)
+}
+
+/// Validate one exact planner input and seal borrowed addressing evidence.
+///
+/// # Errors
+///
+/// Returns exactly the same first duplicate identity evidence as
+/// [`validate_contextual_stroke_planning_input`].
+pub fn validate_contextual_stroke_planning_input_view<
+    CandidateIdentity,
+    CharacterIntent,
+    Context,
+    EntryCondition,
+    ExitCondition,
+    ProfileChoice,
+    SemanticOrigin,
+    StrokePayload,
+>(
+    input: &ContextualCandidatePlanningInput<
+        CandidateIdentity,
+        CharacterIntent,
+        Context,
+        EntryCondition,
+        ExitCondition,
+        ProfileChoice,
+        SemanticOrigin,
+        StrokePayload,
+    >,
+) -> ContextualCandidatePlanningInputValidationResult<
+    '_,
+    CandidateIdentity,
+    CharacterIntent,
+    Context,
+    EntryCondition,
+    ExitCondition,
+    ProfileChoice,
+    SemanticOrigin,
+    StrokePayload,
+>
+where
+    CandidateIdentity: Eq,
+{
+    validate_contextual_stroke_planning_input(input)?;
+    Ok(ValidatedContextualStrokePlanningInput { input })
 }
 
 /// Detect identity collisions without selecting or ranking any candidate.

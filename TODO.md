@@ -1420,8 +1420,12 @@ identity and report its earliest prior owner without selecting, ranking, or
 rewriting candidates. A complete planning input has an explicit validator that
 applies the same invariant while leaving candidate order and context unchanged;
 construction still has no implicit validation, selection, or fallback side
-effect. A 31-case compact oracle exhausts every two-identity sequence through
-length four through both the raw-candidate and complete-input paths.
+effect.
+
+Successful admission now also returns constructor-sealed evidence borrowing the
+exact input, caller-order candidate slice, and planning context. A 31-case
+compact oracle exhausts every two-identity sequence through length four and
+requires raw-candidate, complete-input, and sealed-input outcomes to agree.
 
 The inspectable output plan keeps ordered samples with caller-owned position,
 tangent, curvature, width or pressure proxy, velocity, and explicit contact

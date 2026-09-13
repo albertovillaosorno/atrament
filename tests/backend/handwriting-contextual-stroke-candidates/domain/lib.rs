@@ -35,6 +35,7 @@ use atrament_handwriting_contextual_stroke_candidates::{
     ContextualStrokePlanningInput, StrokePlanningContext,
     validate_contextual_stroke_candidate_identities,
     validate_contextual_stroke_planning_input,
+    validate_contextual_stroke_planning_input_view,
 };
 
 type Candidate = ContextualStrokeCandidate<
@@ -125,6 +126,11 @@ fn complete_planning_input_explicitly_validates_candidate_addressing() {
         context: context(),
     };
     assert_eq!(validate_contextual_stroke_planning_input(&valid), Ok(()));
+    let validated = validate_contextual_stroke_planning_input_view(&valid)
+        .expect("unique candidates seal exact planning input");
+    assert!(std::ptr::eq(validated.input(), &valid));
+    assert!(std::ptr::eq(validated.context(), &valid.context));
+    assert_eq!(validated.candidates(), valid.candidates.as_slice());
     assert_eq!(valid.context, context());
     assert_eq!(valid.candidates[0].candidate_identity, 2);
 
@@ -136,12 +142,17 @@ fn complete_planning_input_explicitly_validates_candidate_addressing() {
         ],
         context: context(),
     };
+    let expected = ContextualStrokeCandidateIdentityError {
+        duplicate_index: 2,
+        first_index: 0,
+    };
     assert_eq!(
         validate_contextual_stroke_planning_input(&duplicate),
-        Err(ContextualStrokeCandidateIdentityError {
-            duplicate_index: 2,
-            first_index: 0,
-        }),
+        Err(expected),
+    );
+    assert_eq!(
+        validate_contextual_stroke_planning_input_view(&duplicate),
+        Err(expected),
     );
     assert_eq!(duplicate.context, context());
 }
@@ -221,6 +232,23 @@ fn all_31_two_identity_sequences_match_first_duplicate_oracle() {
                 expected,
                 "input length {length}, encoded {encoded}",
             );
+            match expected {
+                Ok(()) => {
+                    let validated =
+                        validate_contextual_stroke_planning_input_view(&input)
+                            .expect("unique sequence seals exact input");
+                    assert!(std::ptr::eq(validated.input(), &input));
+                    assert_eq!(
+                        validated.candidates(),
+                        input.candidates.as_slice(),
+                    );
+                },
+                Err(reason) => assert_eq!(
+                    validate_contextual_stroke_planning_input_view(&input),
+                    Err(reason),
+                    "sealed input length {length}, encoded {encoded}",
+                ),
+            }
             cases = cases.saturating_add(1);
         }
     }
