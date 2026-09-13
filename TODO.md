@@ -2578,7 +2578,9 @@ evidence, and hardware contact remain open.
 Offline simulation now also produces a borrowed inspection trace only after the
 complete dry run validates. Trace construction runs the same 16-state matrix and
 must either return the identical typed dry-run failure or borrow the exact
-admitted package with aligned limit evidence. The trace retains the exact plan
+admitted package with aligned limit evidence. Six compact under/over-count
+fixtures additionally preserve evaluation-count mismatch before limit-state
+inspection. The trace retains the exact plan
 and calibration, operation order, pen-up/down geometry, pause/checkpoint
 payloads, per-operation limit evidence, plan/revision identities, physical
 bounds, and admitted total estimated duration without copying or rewriting plan

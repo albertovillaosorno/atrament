@@ -221,6 +221,37 @@ fn invalid_dry_run_produces_no_simulation_trace() {
 }
 
 #[test]
+fn simulation_trace_preserves_every_compact_evaluation_count_mismatch() {
+    let mut cases = 0_u8;
+    for observed in 0_usize..=6 {
+        if observed == 4 {
+            continue;
+        }
+        let mut dry_run = dry_run();
+        dry_run.limit_evaluations.truncate(observed);
+        while dry_run.limit_evaluations.len() < observed {
+            dry_run.limit_evaluations.push(DryRunLimitEvaluation {
+                evidence: "extra-evaluation",
+                state: DryRunLimitState::Unknown,
+            });
+        }
+        if let Some(first) = dry_run.limit_evaluations.first_mut() {
+            first.state = DryRunLimitState::Unknown;
+        }
+        assert_eq!(
+            build_motion_plan_simulation_trace(&dry_run),
+            Err(DryRunValidationError::EvaluationCountMismatch {
+                observed,
+                required: 4,
+            }),
+            "evaluation count {observed} must reject before state inspection",
+        );
+        cases = cases.saturating_add(1);
+    }
+    assert_eq!(cases, 6);
+}
+
+#[test]
 fn simulation_trace_matches_all_dry_run_limit_states() {
     let states = [
         DryRunLimitState::NotApplicable,
