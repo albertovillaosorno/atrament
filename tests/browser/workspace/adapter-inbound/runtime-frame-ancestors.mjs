@@ -349,6 +349,34 @@ function serveFile(response, file, contentType) {
     response.end(fs.readFileSync(file));
 }
 
+function createStaticWorkspaceServer(requests) {
+    return http.createServer((request, response) => {
+        const pathname = new URL(
+            request.url ?? "/",
+            "http://127.0.0.1",
+        ).pathname;
+        requests.push(pathname);
+        if (pathname === "/" || pathname === "/index.html") {
+            serveFile(
+                response,
+                path.join(WORKSPACE_DIR, "index.html"),
+                "text/html; charset=utf-8",
+            );
+            return;
+        }
+        if (pathname === "/workspace.css") {
+            serveFile(
+                response,
+                path.join(WORKSPACE_DIR, "workspace.css"),
+                "text/css; charset=utf-8",
+            );
+            return;
+        }
+        response.writeHead(404);
+        response.end();
+    });
+}
+
 function createSessionFixtureServer(apiRequests, onDraftMutation = null) {
     const generated = new Set([
         "main.js",
@@ -618,6 +646,146 @@ function assertVisibleInViewport(rectangle, viewportHeight, label) {
     assert.ok(rectangle.bottom > 0, `${label} reaches below viewport top`);
     assert.ok(rectangle.top < viewportHeight, `${label} reaches viewport`);
 }
+
+test(
+    "Firefox without JavaScript keeps both static workspace surfaces visible",
+    { skip: !FIREFOX_AVAILABLE, timeout: 30_000 },
+    async () => {
+        fs.mkdirSync(".temp", { recursive: true });
+        const profile = fs.mkdtempSync(".temp/workspace-static-");
+        fs.writeFileSync(
+            path.join(profile, "user.js"),
+            'user_pref("javascript.enabled", false);\n',
+        );
+        const requests = [];
+        const server = createStaticWorkspaceServer(requests);
+        const children = [];
+        let bidi;
+        try {
+            server.listen(0, "127.0.0.1");
+            await once(server, "listening");
+            const address = server.address();
+            assert.notEqual(typeof address, "string");
+            assert.notEqual(address, null);
+            const origin = `http://127.0.0.1:${address.port}`;
+
+            bidi = await startBidiFirefox(profile, children);
+            const tab = await bidi.command("browsingContext.create", {
+                type: "tab",
+            });
+            await bidi.command("browsingContext.navigate", {
+                context: tab.context,
+                url: origin,
+                wait: "complete",
+            });
+
+            for (const width of [320, 481]) {
+                await setFirefoxViewport(
+                    bidi,
+                    tab.context,
+                    width,
+                    225,
+                );
+                const response = await bidi.command("script.evaluate", {
+                    awaitPromise: false,
+                    expression: `JSON.stringify((() => {
+                        const rect = (selector) => {
+                            const element = document.querySelector(selector);
+                            const box = element.getBoundingClientRect();
+                            return {
+                                bottom: box.bottom,
+                                height: box.height,
+                                top: box.top,
+                                width: box.width
+                            };
+                        };
+                        const divider = document.querySelector(
+                            "#workspace-divider"
+                        );
+                        return {
+                            divider: {
+                                disabled: divider.getAttribute("aria-disabled"),
+                                maximum: divider.getAttribute("aria-valuemax"),
+                                minimum: divider.getAttribute("aria-valuemin"),
+                                now: divider.getAttribute("aria-valuenow"),
+                                tabindex: divider.getAttribute("tabindex")
+                            },
+                            document: {
+                                height: document.documentElement.scrollHeight,
+                                width: document.documentElement.scrollWidth
+                            },
+                            preview: rect("#preview-panel"),
+                            source: rect("#source-panel"),
+                            stage: rect("#page-stage"),
+                            task: rect("#task-input"),
+                            viewport: {
+                                height: window.innerHeight,
+                                width: window.innerWidth
+                            },
+                            warning: rect(".script-warning")
+                        };
+                    })())`,
+                    resultOwnership: "none",
+                    target: { context: tab.context },
+                });
+                assert.equal(response.type, "success");
+                assert.equal(response.result.type, "string");
+                const state = JSON.parse(response.result.value);
+                const label = `${width}x225 static shell`;
+                assert.deepEqual(
+                    state.viewport,
+                    { height: 225, width },
+                    `${label}: exact viewport`,
+                );
+                assert.ok(
+                    state.document.width <= width,
+                    `${label}: no horizontal document overflow`,
+                );
+                assert.ok(
+                    state.document.height <= 225,
+                    `${label}: no vertical document overflow`,
+                );
+                assert.deepEqual(
+                    state.divider,
+                    {
+                        disabled: "true",
+                        maximum: "50",
+                        minimum: "50",
+                        now: "50",
+                        tabindex: "-1",
+                    },
+                    `${label}: divider remains inert 50/50`,
+                );
+                for (const [name, rectangle] of [
+                    ["source panel", state.source],
+                    ["preview panel", state.preview],
+                    ["task field", state.task],
+                    ["page stage", state.stage],
+                    ["script warning", state.warning],
+                ]) {
+                    assertVisibleInViewport(
+                        rectangle,
+                        225,
+                        `${label}: ${name}`,
+                    );
+                }
+            }
+            assert.deepEqual(requests, ["/", "/workspace.css"]);
+        } finally {
+            if (bidi?.socket != null) {
+                bidi.socket.end();
+            }
+            if (server.listening) {
+                server.close();
+                await once(server, "close");
+            }
+            for (const child of children.reverse()) {
+                await stopChild(child);
+            }
+            fs.rmSync(profile, { recursive: true, force: true });
+        }
+    },
+);
 
 test(
     "Firefox viewport matrix keeps both workspace surfaces reachable",

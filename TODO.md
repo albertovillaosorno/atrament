@@ -1154,11 +1154,11 @@ heights, plus both split and 60%/160% zoom extremes. Every state keeps the
 document and workspace viewport-bounded, both editor surfaces visible, and all
 four page edges scroll-reachable.
 
-With JavaScript disabled, the short-height warning stays visible without taking
-workspace flow, and Firefox requests only the document and stylesheet. BiDi
-viewport emulation at 320 and 481 pixels confirms the static shell remains 50/50
-with an inert divider, scrollable source and preview panels, and no document
-overflow before `main.js` is available.
+A checked-in JavaScript-disabled Firefox fixture keeps the short-height
+warning visible without taking workspace flow and observes only document and
+stylesheet requests. BiDi viewport emulation at 320 and 481 pixels confirms the
+static shell remains 50/50 with an inert divider, visible Task and page-stage
+surfaces, and no document overflow before `main.js` is available.
 
 The task stays open for backend-fed page navigation and stable semantic
 selection.
