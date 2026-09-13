@@ -15,8 +15,8 @@
 //   - Choose wire names, normalize receipts, persist retry state, emit
 //     diagnostics, mutate notebooks, or infer unknown transport outcomes.
 // - Allows:
-//   - Inputs: One completed core semantic command result class.
-//   - Outputs: Frozen commit disposition implied by that result class.
+//   - Inputs: One command operation or completed core result class.
+//   - Outputs: Result applicability and frozen commit disposition.
 //   - Side effects: None.
 // - Split-When:
 //   - Receipt normalization, retry recovery, or cancellation execution gains
@@ -42,6 +42,47 @@ use atrament_application_operation_lifecycle::{
 use atrament_semantic_notebook_port::{
     SemanticCommandCommitDisposition, SemanticCommandResultClass,
 };
+
+/// Semantic command application operation governed by this result taxonomy.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub enum SemanticCommandOperation {
+    /// Atomic semantic command application.
+    Apply,
+    /// Read-only semantic command validation.
+    Validate,
+}
+
+/// Check whether one frozen result class belongs to an operation.
+///
+/// This is result-vocabulary applicability only. It does not execute Validate
+/// or Apply, choose rejection precedence, normalize receipts, or admit a batch.
+#[must_use]
+pub const fn semantic_command_result_applies_to(
+    operation: SemanticCommandOperation,
+    result: SemanticCommandResultClass,
+) -> bool {
+    match result {
+        SemanticCommandResultClass::Applied
+        | SemanticCommandResultClass::CancelledBeforeCommit
+        | SemanticCommandResultClass::IdempotentReplay
+        | SemanticCommandResultClass::NoOp
+        | SemanticCommandResultClass::RetryConflict => {
+            matches!(operation, SemanticCommandOperation::Apply)
+        },
+        SemanticCommandResultClass::SuccessfulValidation => {
+            matches!(operation, SemanticCommandOperation::Validate)
+        },
+        SemanticCommandResultClass::CommandContextMismatch
+        | SemanticCommandResultClass::DependencyGraphRejection
+        | SemanticCommandResultClass::InternalFailureKnownNoCommit
+        | SemanticCommandResultClass::ResourceLimitRejection
+        | SemanticCommandResultClass::SemanticValidationRejection
+        | SemanticCommandResultClass::StaleBase
+        | SemanticCommandResultClass::UnrepresentableOrUnresolved
+        | SemanticCommandResultClass::UnsupportedProtocolOrCapability
+        | SemanticCommandResultClass::WritableScopeViolation => true,
+    }
+}
 
 /// Classify the accepted-commit effect guaranteed by one core result class.
 ///

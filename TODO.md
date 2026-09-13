@@ -1883,7 +1883,11 @@ reconstruct evidence.
 
 A transport-neutral core result taxonomy now names the 15 frozen application
 classes required across Validate and Apply without assigning final wire names or
-transport statuses. `Unknown transport outcome` is intentionally absent because
+transport statuses. Its exact operation applicability is now executable:
+Successful validation is Validate-only; Applied, No-op, Idempotent replay, Retry
+conflict, and pre-commit cancellation are Apply-only; the other nine classes are
+shared by both operations. `Unknown transport outcome` is intentionally
+absent because
 the frozen contract defines it as caller state when no valid core response was
 received, not as an application result.
 

@@ -34,8 +34,8 @@ use atrament_application_operation_lifecycle::{
     ApplicationCancellationObservation,
 };
 use atrament_semantic_command_result::{
-    classify_semantic_apply_cancellation_result,
-    semantic_command_commit_disposition,
+    SemanticCommandOperation, classify_semantic_apply_cancellation_result,
+    semantic_command_commit_disposition, semantic_command_result_applies_to,
 };
 use atrament_semantic_notebook_port::{
     SemanticCommandCommitDisposition, SemanticCommandResultClass,
@@ -108,4 +108,46 @@ fn all_three_apply_cancellation_observations_preserve_commit_semantics() {
             expected,
         );
     }
+}
+
+
+#[test]
+fn all_30_operation_result_pairs_match_frozen_applicability() {
+    const OPERATIONS: [SemanticCommandOperation; 2] = [
+        SemanticCommandOperation::Apply,
+        SemanticCommandOperation::Validate,
+    ];
+    let mut cases = 0_usize;
+    for operation in OPERATIONS {
+        for result in ALL_CORE_RESULT_CLASSES {
+            let expected = match result {
+                SemanticCommandResultClass::Applied
+                | SemanticCommandResultClass::CancelledBeforeCommit
+                | SemanticCommandResultClass::IdempotentReplay
+                | SemanticCommandResultClass::NoOp
+                | SemanticCommandResultClass::RetryConflict => {
+                    operation == SemanticCommandOperation::Apply
+                },
+                SemanticCommandResultClass::SuccessfulValidation => {
+                    operation == SemanticCommandOperation::Validate
+                },
+                SemanticCommandResultClass::CommandContextMismatch
+                | SemanticCommandResultClass::DependencyGraphRejection
+                | SemanticCommandResultClass::InternalFailureKnownNoCommit
+                | SemanticCommandResultClass::ResourceLimitRejection
+                | SemanticCommandResultClass::SemanticValidationRejection
+                | SemanticCommandResultClass::StaleBase
+                | SemanticCommandResultClass::UnrepresentableOrUnresolved
+                | SemanticCommandResultClass::UnsupportedProtocolOrCapability
+                | SemanticCommandResultClass::WritableScopeViolation => true,
+            };
+            assert_eq!(
+                semantic_command_result_applies_to(operation, result),
+                expected,
+                "operation={operation:?} result={result:?}",
+            );
+            cases += 1;
+        }
+    }
+    assert_eq!(cases, 30);
 }

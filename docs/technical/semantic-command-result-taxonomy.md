@@ -34,6 +34,12 @@ other core classes mean the current call created no new accepted revision. The
 replay disposition does not infer whether the recovered prior result was Applied
 or No-op.
 
+The same application boundary now freezes exact Validate/Apply applicability.
+Successful validation belongs only to Validate. Applied, No-op, Idempotent
+replay, Retry conflict, and Cancelled before commit belong only to Apply. The
+remaining nine rejection, stale, unresolved, or known-no-commit classes are
+valid for either operation when their owning boundary produces them.
+
 The current internal direct-edit simulation and Apply foundations expose a
 partial projection into this taxonomy only where the meaning is unambiguous.
 Candidate replay failure occurs against isolated candidate state, and revision
