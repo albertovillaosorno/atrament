@@ -187,9 +187,12 @@ scrubs all four session text surfaces before requiring restart.
 Aborted draft requests and stale `413` diagnostic-body completions cannot
 repopulate status text after invalidation. Concurrent field failures also remain
 visible until the failed field succeeds; another field cannot announce
-`Session ready` while work or failure remains. Refresh cannot recover the launch
-credential from the rewritten browser URL or persistence API, and fragment-free
-startup remains disabled without attempting a handshake.
+`Session ready` while work or failure remains. A real Firefox fixture now
+hydrates all three draft fields through a deterministic same-origin session,
+confirms the launch fragment has been scrubbed, reloads that exact tab, and
+requires the refreshed document to expose blank disabled draft fields without
+issuing another handshake or draft request. Refresh therefore cannot recover the
+launch credential from the rewritten browser URL or persistence API.
 
 Handshake response admission now invalidates `401` directly from the status and
 parses JSON bodies only for the two body-bearing handshake result classes,
@@ -199,8 +202,7 @@ identities, so application-owned quotes, backslashes, controls, and Unicode
 cannot corrupt the handshake response syntax.
 
 The task remains open until temporary media exist and end-to-end fixtures also
-cover browser close, refresh, cancellation, media cleanup, and explicit-export
-survival.
+cover browser close, cancellation, media cleanup, and explicit-export survival.
 
 ### TODO - Define one typed diagnostic envelope
 

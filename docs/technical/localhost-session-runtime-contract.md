@@ -192,7 +192,10 @@ without waiting for a diagnostic body, and it parses handshake JSON only for
 
 Refreshing the browser does not create a new backend session. A refresh may
 rejoin the current process only when it still possesses the in-memory session
-secret and completes the handshake again.
+secret and completes the handshake again. The current browser intentionally
+drops its page-session credential on `pagehide`; after the one-time launch
+fragment has been scrubbed, a real Firefox reload starts with blank disabled
+draft fields and issues no new handshake or draft request.
 
 ### Pre-acceptance draft mutation
 

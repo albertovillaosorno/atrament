@@ -9,26 +9,27 @@
 //
 // Boundary-Contract:
 // - Owns:
-//   - Real-browser evidence that the localhost workspace cannot be framed by
-//     another loopback origin.
+//   - Real-browser evidence for localhost frame isolation and browser-session
+//     refresh disposal.
 // - Must-Not:
-//   - Read session-private state, persist browser data, or weaken runtime
+//   - Read live session-private state, persist browser data, or weaken runtime
 //     admission to make automation easier.
 // - Allows:
-//   - Inputs: One freshly started Atrament runtime and hostile loopback page.
-//   - Outputs: Assertions over direct and framed Firefox document identity.
-//   - Side effects: Starts disposable runtime/browser processes and one hostile
-//     loopback HTTP server, then removes their temporary browser profile.
+//   - Inputs: The generated workspace, one freshly started Atrament runtime,
+//     and deterministic loopback fixtures.
+//   - Outputs: Assertions over Firefox frame policy and refresh disposal.
+//   - Side effects: Starts disposable runtime/browser processes and loopback
+//     HTTP servers, then removes their temporary browser profiles.
 // - Split-When:
 //   - More browser-enforced response policies need independent fixtures.
 // - Merge-When:
 //   - Browser security integration moves to one shared automation harness.
 // - Summary:
-//   - Proves `frame-ancestors 'none'` is enforced by Firefox, not just emitted.
+//   - Proves browser-enforced frame isolation and one-shot refresh behavior.
 // - Description:
 //   - Uses Firefox's built-in WebDriver BiDi endpoint through a dependency-free
-//     RFC 6455 client. A direct load must commit the Atrament document, while
-//     a hostile iframe of the same URL must commit Firefox's error document.
+//     RFC 6455 client. It checks hostile framing and proves a fragment-scrubbed
+//     refresh cannot silently reuse the prior page-session credential.
 // - Usage:
 //   - Run through `pnpm test:browser-security` from the repository root.
 // - Defaults:
@@ -52,6 +53,26 @@ const FIREFOX_AVAILABLE = process.platform === "linux"
     ).status === 0;
 const TARGET_DIR = path.resolve(".cache/cargo-target");
 const RUNTIME_BINARY = path.join(TARGET_DIR, "debug", "atrament");
+const WORKSPACE_DIR = path.resolve(
+    "src/browser/workspace/adapter-inbound",
+);
+const REFRESH_SECRET = "a".repeat(64);
+const REFRESH_DRAFT = {
+    candidate: "refresh-private candidate",
+    source: "refresh-private source",
+    task: "refresh-private task",
+};
+const COMPATIBLE_HANDSHAKE = JSON.stringify({
+    result: "compatible",
+    versions: {
+        capability: "atrament.capability/1",
+        product: "0.1.0",
+        profile: "atrament.profile/1",
+        prompt: "atrament.prompt/1",
+        protocol: "atrament.runtime/1",
+        renderer: "atrament.renderer/1",
+    },
+});
 
 function waitForLine(stream, select, timeoutMs = 15_000) {
     return new Promise((resolve, reject) => {
@@ -289,6 +310,169 @@ async function observedWithin(observation, label) {
     ]);
 }
 
+async function startBidiFirefox(profile, children) {
+    const firefox = spawn(
+        "firefox",
+        [
+            "--headless",
+            "--no-remote",
+            "--profile",
+            profile,
+            "--remote-debugging-port",
+            "0",
+            "about:blank",
+        ],
+        { stdio: ["ignore", "ignore", "pipe"] },
+    );
+    children.push(firefox);
+    const remote = await waitForLine(firefox.stderr, (line) => {
+        const prefix = "WebDriver BiDi listening on ";
+        return line.startsWith(prefix)
+            ? line.slice(prefix.length)
+            : null;
+    });
+    const bidi = new BidiClient(`${remote}/session`);
+    await bidi.connect();
+    await bidi.command(
+        "session.new",
+        { capabilities: { alwaysMatch: {} } },
+        15_000,
+    );
+    return bidi;
+}
+
+function serveFile(response, file, contentType) {
+    response.writeHead(200, {
+        "Cache-Control": "no-store",
+        "Content-Type": contentType,
+    });
+    response.end(fs.readFileSync(file));
+}
+
+function createRefreshFixtureServer(apiRequests) {
+    const generated = new Set([
+        "main.js",
+        "session-diagnostic.js",
+        "session-draft.js",
+        "session-fragment.js",
+        "session-handshake.js",
+    ]);
+    return http.createServer((request, response) => {
+        const pathname = new URL(
+            request.url ?? "/",
+            "http://127.0.0.1",
+        ).pathname;
+        if (pathname === "/" || pathname === "/index.html") {
+            serveFile(
+                response,
+                path.join(WORKSPACE_DIR, "index.html"),
+                "text/html; charset=utf-8",
+            );
+            return;
+        }
+        if (pathname === "/workspace.css") {
+            serveFile(
+                response,
+                path.join(WORKSPACE_DIR, "workspace.css"),
+                "text/css; charset=utf-8",
+            );
+            return;
+        }
+        if (pathname.startsWith("/generated/")) {
+            const file = pathname.slice("/generated/".length);
+            if (generated.has(file)) {
+                serveFile(
+                    response,
+                    path.join(WORKSPACE_DIR, "generated", file),
+                    "text/javascript; charset=utf-8",
+                );
+                return;
+            }
+        }
+        if (pathname === "/api/handshake") {
+            apiRequests.push(`${request.method} ${pathname}`);
+            if (
+                request.method !== "POST"
+                || request.headers.authorization
+                    !== `Bearer ${REFRESH_SECRET}`
+            ) {
+                response.writeHead(401);
+                response.end();
+                return;
+            }
+            response.writeHead(200, {
+                "Cache-Control": "no-store",
+                "Content-Type": "application/json; charset=utf-8",
+            });
+            response.end(COMPATIBLE_HANDSHAKE);
+            return;
+        }
+        if (pathname.startsWith("/api/session/")) {
+            apiRequests.push(`${request.method} ${pathname}`);
+            const field = pathname.slice("/api/session/".length);
+            if (
+                request.method !== "GET"
+                || request.headers.authorization
+                    !== `Bearer ${REFRESH_SECRET}`
+                || !(field in REFRESH_DRAFT)
+            ) {
+                response.writeHead(401);
+                response.end();
+                return;
+            }
+            response.writeHead(200, {
+                "Cache-Control": "no-store",
+                "Content-Type": "text/plain; charset=utf-8",
+            });
+            response.end(REFRESH_DRAFT[field]);
+            return;
+        }
+        response.writeHead(404);
+        response.end();
+    });
+}
+
+async function evaluateSessionDocument(client, context) {
+    const response = await client.command("script.evaluate", {
+        awaitPromise: false,
+        expression: `JSON.stringify({
+            hash: window.location.hash,
+            status: document.querySelector("#session-status")?.textContent,
+            task: {
+                disabled: document.querySelector("#task-input")?.disabled,
+                value: document.querySelector("#task-input")?.value
+            },
+            source: {
+                disabled: document.querySelector("#source-input")?.disabled,
+                value: document.querySelector("#source-input")?.value
+            },
+            candidate: {
+                disabled: document.querySelector("#candidate-input")?.disabled,
+                value: document.querySelector("#candidate-input")?.value
+            }
+        })`,
+        resultOwnership: "none",
+        target: { context },
+    });
+    assert.equal(response.type, "success");
+    assert.equal(response.result.type, "string");
+    return JSON.parse(response.result.value);
+}
+
+async function waitForSessionStatus(client, context, expected) {
+    let state = null;
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+        state = await evaluateSessionDocument(client, context);
+        if (state.status === expected) {
+            return state;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 25));
+    }
+    throw new Error(
+        `session status did not reach ${expected}: ${JSON.stringify(state)}`,
+    );
+}
+
 test(
     "Firefox blocks Atrament inside a hostile loopback frame",
     { skip: !FIREFOX_AVAILABLE, timeout: 30_000 },
@@ -418,31 +602,7 @@ test(
             const hostileOrigin =
                 `http://127.0.0.1:${hostileAddress.port}`;
 
-            const firefox = spawn(
-                "firefox",
-                [
-                    "--headless",
-                    "--no-remote",
-                    "--profile",
-                    profile,
-                    "--remote-debugging-port",
-                    "0",
-                    "about:blank",
-                ],
-                { stdio: ["ignore", "ignore", "pipe"] },
-            );
-            children.push(firefox);
-            const remote = await waitForLine(firefox.stderr, (line) => {
-                const prefix = "WebDriver BiDi listening on ";
-                return line.startsWith(prefix)
-                    ? line.slice(prefix.length)
-                    : null;
-            });
-            bidi = new BidiClient(`${remote}/session`);
-            await bidi.connect();
-            await bidi.command("session.new", {
-                capabilities: { alwaysMatch: {} },
-            }, 15_000);
+            bidi = await startBidiFirefox(profile, children);
 
             const direct = await bidi.command("browsingContext.create", {
                 type: "tab",
@@ -537,6 +697,97 @@ test(
                     server.close();
                     await once(server, "close");
                 }
+            }
+            for (const child of children.reverse()) {
+                await stopChild(child);
+            }
+            fs.rmSync(profile, { recursive: true, force: true });
+        }
+    },
+);
+
+test(
+    "Firefox refresh cannot reuse the scrubbed session credential",
+    { skip: !FIREFOX_AVAILABLE, timeout: 30_000 },
+    async () => {
+        fs.mkdirSync(".temp", { recursive: true });
+        const profile = fs.mkdtempSync(".temp/session-refresh-");
+        const apiRequests = [];
+        const server = createRefreshFixtureServer(apiRequests);
+        const children = [];
+        let bidi;
+        try {
+            server.listen(0, "127.0.0.1");
+            await once(server, "listening");
+            const address = server.address();
+            assert.notEqual(typeof address, "string");
+            assert.notEqual(address, null);
+            const origin = `http://127.0.0.1:${address.port}`;
+
+            bidi = await startBidiFirefox(profile, children);
+            const tab = await bidi.command("browsingContext.create", {
+                type: "tab",
+            });
+            await bidi.command("browsingContext.navigate", {
+                context: tab.context,
+                url: `${origin}/#session=${REFRESH_SECRET}`,
+                wait: "complete",
+            });
+            const ready = await waitForSessionStatus(
+                bidi,
+                tab.context,
+                "Session ready",
+            );
+            assert.equal(ready.hash, "");
+            assert.deepEqual(ready.task, {
+                disabled: false,
+                value: REFRESH_DRAFT.task,
+            });
+            assert.deepEqual(ready.source, {
+                disabled: false,
+                value: REFRESH_DRAFT.source,
+            });
+            assert.deepEqual(ready.candidate, {
+                disabled: false,
+                value: REFRESH_DRAFT.candidate,
+            });
+            assert.deepEqual(apiRequests, [
+                "POST /api/handshake",
+                "GET /api/session/task",
+                "GET /api/session/source",
+                "GET /api/session/candidate",
+            ]);
+
+            await bidi.command("browsingContext.reload", {
+                context: tab.context,
+                wait: "complete",
+            });
+            const refreshed = await waitForSessionStatus(
+                bidi,
+                tab.context,
+                "Frontend ready · credential unavailable",
+            );
+            assert.equal(refreshed.hash, "");
+            for (const field of ["task", "source", "candidate"]) {
+                assert.deepEqual(refreshed[field], {
+                    disabled: true,
+                    value: "",
+                });
+            }
+            await new Promise((resolve) => setTimeout(resolve, 100));
+            assert.deepEqual(apiRequests, [
+                "POST /api/handshake",
+                "GET /api/session/task",
+                "GET /api/session/source",
+                "GET /api/session/candidate",
+            ]);
+        } finally {
+            if (bidi?.socket != null) {
+                bidi.socket.end();
+            }
+            if (server.listening) {
+                server.close();
+                await once(server, "close");
             }
             for (const child of children.reverse()) {
                 await stopChild(child);
