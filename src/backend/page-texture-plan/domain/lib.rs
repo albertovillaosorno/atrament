@@ -71,6 +71,56 @@ pub struct PageTexturePlan<
     pub strength: BoundedTextureStrength<Strength>,
 }
 
+/// Constructor-sealed evidence that one exact page-texture plan has an admitted
+/// inclusive strength envelope.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ValidatedPageTexturePlan<
+    'plan,
+    GeometryAuthority,
+    PhysicalBounds,
+    PhysicalScale,
+    Strength,
+    ReplayKey,
+> {
+    plan: &'plan PageTexturePlan<
+        GeometryAuthority,
+        PhysicalBounds,
+        PhysicalScale,
+        Strength,
+        ReplayKey,
+    >,
+}
+
+impl<
+    'plan,
+    GeometryAuthority,
+    PhysicalBounds,
+    PhysicalScale,
+    Strength,
+    ReplayKey,
+> ValidatedPageTexturePlan<
+    'plan,
+    GeometryAuthority,
+    PhysicalBounds,
+    PhysicalScale,
+    Strength,
+    ReplayKey,
+> {
+    /// Return the exact caller-owned plan whose strength was admitted.
+    #[must_use]
+    pub const fn plan(
+        &self,
+    ) -> &'plan PageTexturePlan<
+        GeometryAuthority,
+        PhysicalBounds,
+        PhysicalScale,
+        Strength,
+        ReplayKey,
+    > {
+        self.plan
+    }
+}
+
 /// Why a bounded page-texture strength is invalid.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PageTexturePlanError {
@@ -108,4 +158,41 @@ where
         }
         Ok(())
     }
+}
+
+/// Validate and seal one exact bounded page-texture plan.
+///
+/// # Errors
+///
+/// Returns the same range failure as [`PageTexturePlan::validate`].
+pub fn validate_page_texture_plan_view<
+    GeometryAuthority,
+    PhysicalBounds,
+    PhysicalScale,
+    Strength,
+    ReplayKey,
+>(
+    plan: &PageTexturePlan<
+        GeometryAuthority,
+        PhysicalBounds,
+        PhysicalScale,
+        Strength,
+        ReplayKey,
+    >,
+) -> Result<
+    ValidatedPageTexturePlan<
+        '_,
+        GeometryAuthority,
+        PhysicalBounds,
+        PhysicalScale,
+        Strength,
+        ReplayKey,
+    >,
+    PageTexturePlanError,
+>
+where
+    Strength: Ord,
+{
+    plan.validate()?;
+    Ok(ValidatedPageTexturePlan { plan })
 }

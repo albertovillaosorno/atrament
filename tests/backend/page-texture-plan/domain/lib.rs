@@ -33,7 +33,7 @@
 //
 use atrament_page_texture_plan::{
     BoundedTextureStrength, PageTexturePlan, PageTexturePlanError,
-    StochasticLayerReplayKey,
+    StochasticLayerReplayKey, validate_page_texture_plan_view,
 };
 
 type ReplayKey = StochasticLayerReplayKey<
@@ -116,4 +116,66 @@ fn inverted_strength_envelope_rejects_before_selected_value() {
         plan.validate(),
         Err(PageTexturePlanError::MinimumAboveMaximum),
     );
+}
+
+
+#[test]
+fn every_compact_strength_triple_matches_range_precedence() {
+    let mut cases = 0_u16;
+    let mut outcomes = [false; 3];
+    for minimum in -3_i8..=3 {
+        for maximum in -3_i8..=3 {
+            for selected in -3_i8..=3 {
+                let plan = PageTexturePlan {
+                    geometry_authority: "vector-page-compact",
+                    physical_bounds: (210_000_u64, 297_000_u64),
+                    physical_scale: "caller-owned-scale",
+                    replay_key: ReplayKey {
+                        document_seed: 17,
+                        material_preset: "paper-preset-a",
+                        profile_identity: "profile-4",
+                        semantic_identity: "page-compact",
+                    },
+                    strength: BoundedTextureStrength {
+                        maximum,
+                        minimum,
+                        selected,
+                    },
+                };
+                let expected = if minimum > maximum {
+                    outcomes[0] = true;
+                    Err(PageTexturePlanError::MinimumAboveMaximum)
+                } else if selected < minimum || selected > maximum {
+                    outcomes[1] = true;
+                    Err(PageTexturePlanError::SelectedOutsideBounds)
+                } else {
+                    outcomes[2] = true;
+                    Ok(())
+                };
+                assert_eq!(
+                    plan.validate(),
+                    expected,
+                    "minimum {minimum}, maximum {maximum}, selected {selected}",
+                );
+                match expected {
+                    Ok(()) => {
+                        let validated = validate_page_texture_plan_view(&plan)
+                            .expect("valid compact plan seals");
+                        assert!(std::ptr::eq(validated.plan(), &plan));
+                    },
+                    Err(reason) => assert_eq!(
+                        validate_page_texture_plan_view(&plan),
+                        Err(reason),
+                        "sealed minimum {}, maximum {}, selected {}",
+                        minimum,
+                        maximum,
+                        selected,
+                    ),
+                }
+                cases = cases.saturating_add(1);
+            }
+        }
+    }
+    assert_eq!(cases, 343);
+    assert!(outcomes.into_iter().all(|seen| seen));
 }

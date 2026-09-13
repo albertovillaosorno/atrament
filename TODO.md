@@ -1606,7 +1606,12 @@ Current executable evidence now freezes page-level texture intent without
 generating pixels. A plan retains read-only vector-geometry authority, physical
 page bounds, caller-owned physical noise scale, a bounded strength envelope, and
 the complete stochastic replay key reused by material layers. Strength validates
-inside its inclusive envelope before generation. Frequency models, texture
+inside its inclusive envelope before generation, and successful validation now
+returns constructor-sealed evidence borrowing the exact plan.
+
+An exhaustive 343-case integer oracle covers every minimum/maximum/selected
+triple in `[-3, 3]` and requires both direct and sealed admission to preserve
+inverted-envelope-before-selected-value precedence. Frequency models, texture
 generation, tile detection, legibility thresholds, units, rasterization, and
 visual evaluation remain open.
 
