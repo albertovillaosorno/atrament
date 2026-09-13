@@ -244,6 +244,47 @@ where
     }
 }
 
+/// Constructor-sealed evidence that one exact parameter collection has unique
+/// caller-owned identities.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ValidatedVariationParameters<'parameters, Parameter> {
+    parameters: &'parameters [Parameter],
+}
+
+impl<'parameters, Parameter>
+    ValidatedVariationParameters<'parameters, Parameter>
+{
+    /// Return the exact caller-owned parameter collection that was admitted.
+    #[must_use]
+    pub const fn parameters(&self) -> &'parameters [Parameter] {
+        self.parameters
+    }
+}
+
+/// Result of admitting one exact variation parameter collection.
+pub type VariationParameterIdentityValidationResult<
+    'parameters,
+    ParameterIdentity,
+    Value,
+    Unit,
+    Distribution,
+    CorrelationGroup,
+    ContextRule,
+> = Result<
+    ValidatedVariationParameters<
+        'parameters,
+        VariationParameter<
+            ParameterIdentity,
+            Value,
+            Unit,
+            Distribution,
+            CorrelationGroup,
+            ContextRule,
+        >,
+    >,
+    VariationParameterIdentityError,
+>;
+
 /// Constructor-sealed evidence that one exact parameter-bound sample set
 /// passed
 /// all structural variation invariants.
@@ -506,4 +547,44 @@ where
         }
     }
     Ok(())
+}
+
+/// Validate parameter identity uniqueness and seal the exact collection.
+///
+/// # Errors
+///
+/// Returns the same first duplicate and earliest prior owner as
+/// [`validate_variation_parameter_identities`].
+pub fn validate_variation_parameter_identities_view<
+    ParameterIdentity,
+    Value,
+    Unit,
+    Distribution,
+    CorrelationGroup,
+    ContextRule,
+>(
+    parameters: &[
+        VariationParameter<
+            ParameterIdentity,
+            Value,
+            Unit,
+            Distribution,
+            CorrelationGroup,
+            ContextRule,
+        >
+    ],
+) -> VariationParameterIdentityValidationResult<
+    '_,
+    ParameterIdentity,
+    Value,
+    Unit,
+    Distribution,
+    CorrelationGroup,
+    ContextRule,
+>
+where
+    ParameterIdentity: Eq,
+{
+    validate_variation_parameter_identities(parameters)?;
+    Ok(ValidatedVariationParameters { parameters })
 }

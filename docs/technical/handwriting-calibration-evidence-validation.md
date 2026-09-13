@@ -193,6 +193,8 @@ semantic identity produces a distinct replay key.
 Caller-owned parameter identities must also be unique within one parameter
 collection. Duplicate detection is structural only: it reports the first later
 claim and earliest prior owner without defining a parameter vocabulary.
+Successful admission can seal the exact parameter collection for later read-only
+use.
 
 `validate_variation_sample_set` composes the structural checks in deterministic
 order: parameter validity, caller-order parameter identity, caller-order sample

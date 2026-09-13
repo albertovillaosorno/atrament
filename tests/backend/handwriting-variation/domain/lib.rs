@@ -38,6 +38,7 @@ use atrament_handwriting_variation::{
     VariationReplayKey, VariationSample, VariationSampleError,
     VariationSampleSetError, VariationScale,
     validate_variation_parameter_identities,
+    validate_variation_parameter_identities_view,
     validate_variation_replay_consistency, validate_variation_sample_set,
     validate_variation_sample_set_view,
 };
@@ -813,6 +814,24 @@ fn compact_parameter_identity_sequences_match_first_duplicate_oracle() {
                 expected,
                 "length {length}, encoded {encoded}",
             );
+            match expected {
+                Ok(()) => {
+                    let validated =
+                        validate_variation_parameter_identities_view(
+                            &parameters,
+                        )
+                        .expect("unique parameter identities seal");
+                    assert!(std::ptr::eq(
+                        validated.parameters(),
+                        parameters.as_slice(),
+                    ));
+                },
+                Err(reason) => assert_eq!(
+                    validate_variation_parameter_identities_view(&parameters),
+                    Err(reason),
+                    "sealed length {length}, encoded {encoded}",
+                ),
+            }
             cases = cases.saturating_add(1);
         }
     }
