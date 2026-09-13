@@ -43,7 +43,8 @@ use atrament_handwriting_profile_container::{
     canonical_profile_entry_order, profile_entry_kind,
     profile_rewrite_disposition, profile_section_entries,
     validate_profile_archive_encoding, validate_profile_entry_inventory,
-    validate_profile_manifest, verify_profile_entry,
+    validate_profile_manifest, validate_profile_manifest_view,
+    verify_profile_entry,
 };
 
 fn digest(byte: u8) -> Sha256Digest {
@@ -407,6 +408,12 @@ fn generated_archive_inventory_mutations_match_reference_oracle() {
     let mut saw_missing_manifest = false;
     let mut saw_missing_declared = false;
     let mut saw_undeclared_observed = false;
+    let validated = validate_profile_manifest_view(
+        &value,
+        &["stroke-vocabulary"],
+    )
+    .expect("fixed inventory manifest is valid");
+    assert!(std::ptr::eq(validated.manifest(), &value));
     for case in 0..CASES {
         let operation = next_inventory_selector(&mut seed) % 4;
         seen_operations[operation] = true;
@@ -492,6 +499,11 @@ fn generated_archive_inventory_mutations_match_reference_oracle() {
             ),
             expected,
             "generated archive inventory case {case}",
+        );
+        assert_eq!(
+            validated.validate_entry_inventory(&observed_refs),
+            expected,
+            "sealed archive inventory case {case}",
         );
     }
     assert!(seen_operations.into_iter().all(|seen| seen));
@@ -685,6 +697,21 @@ fn generated_manifest_values_match_reference_admission_oracle() {
             expected,
             "generated manifest case {case}",
         );
+        match (
+            validate_profile_manifest_view(&value, &supported),
+            &expected,
+        ) {
+            (Ok(validated), Ok(())) => {
+                assert!(std::ptr::eq(validated.manifest(), &value));
+            },
+            (Err(actual), Err(expected_error)) => {
+                assert_eq!(&actual, expected_error);
+            },
+            (actual, expected) => panic!(
+                "sealed manifest mismatch in case {case}: \
+                 {actual:?} vs {expected:?}",
+            ),
+        }
     }
     assert!(seen_versions.into_iter().all(|seen| seen));
     assert!(seen_feature_sets.into_iter().all(|seen| seen));
@@ -799,6 +826,35 @@ fn every_declaration_order_has_identical_canonical_profile_projections() {
             .iter()
             .map(|item| item.path.clone())
             .collect::<Vec<_>>();
+        let validated = validate_profile_manifest_view(
+            &value,
+            &["stroke-vocabulary"],
+        )
+        .expect("valid declarations seal one manifest");
+        assert!(std::ptr::eq(validated.manifest(), &value));
+        assert_eq!(
+            validated.canonical_archive_paths(),
+            expected_archive_paths,
+            "sealed archive order for permutation {order:?}",
+        );
+        assert_eq!(
+            validated
+                .canonical_entry_order()
+                .iter()
+                .map(|item| item.path.as_str())
+                .collect::<Vec<_>>(),
+            expected_entry_paths,
+            "sealed entry order for permutation {order:?}",
+        );
+        assert_eq!(
+            validated
+                .section_entries()
+                .iter()
+                .map(|item| item.path.as_str())
+                .collect::<Vec<_>>(),
+            expected_section_paths,
+            "sealed section order for permutation {order:?}",
+        );
 
         assert_eq!(
             canonical_profile_archive_paths(&value, &["stroke-vocabulary"]),

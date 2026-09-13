@@ -174,6 +174,66 @@ pub struct ProfileManifest {
     pub required_features: Vec<String>,
 }
 
+/// Constructor-sealed admission evidence for one exact parsed manifest.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ValidatedProfileManifest<'manifest> {
+    manifest: &'manifest ProfileManifest,
+}
+
+impl<'manifest> ValidatedProfileManifest<'manifest> {
+    /// Return canonical archive paths without revalidating this manifest.
+    #[must_use]
+    pub fn canonical_archive_paths(&self) -> Vec<&'manifest str> {
+        let mut paths = self
+            .manifest
+            .entries
+            .iter()
+            .map(|entry| entry.path.as_str())
+            .collect::<Vec<_>>();
+        paths.push(PROFILE_MANIFEST_PATH);
+        paths.sort_unstable();
+        paths
+    }
+
+    /// Return non-manifest declarations in canonical path order.
+    #[must_use]
+    pub fn canonical_entry_order(
+        &self,
+    ) -> Vec<&'manifest ProfileManifestEntry> {
+        let mut entries = self.manifest.entries.iter().collect::<Vec<_>>();
+        entries.sort_unstable_by(|left, right| left.path.cmp(&right.path));
+        entries
+    }
+
+    /// Return the exact parsed manifest that produced this admission evidence.
+    #[must_use]
+    pub const fn manifest(&self) -> &'manifest ProfileManifest {
+        self.manifest
+    }
+
+    /// Return typed-section declarations in canonical path order.
+    #[must_use]
+    pub fn section_entries(&self) -> Vec<&'manifest ProfileManifestEntry> {
+        self.canonical_entry_order()
+            .into_iter()
+            .filter(|entry| entry.path.starts_with("sections/"))
+            .collect()
+    }
+
+    /// Compare observed archive names against this admitted manifest.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed inventory mismatch. Manifest admission cannot fail here
+    /// because this value can only be constructed by validation.
+    pub fn validate_entry_inventory(
+        &self,
+        observed_paths: &[&str],
+    ) -> Result<(), ProfileEntryInventoryError> {
+        validate_profile_entry_inventory_admitted(self.manifest, observed_paths)
+    }
+}
+
 /// Semantic container kind determined only from one validated archive path.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum ProfileEntryKind {
@@ -336,14 +396,10 @@ pub fn profile_section_entries<'manifest>(
     manifest: &'manifest ProfileManifest,
     supported_required_features: &[&str],
 ) -> Result<Vec<&'manifest ProfileManifestEntry>, ProfileManifestError> {
-    validate_profile_manifest(manifest, supported_required_features)?;
-    let mut sections = manifest
-        .entries
-        .iter()
-        .filter(|entry| entry.path.starts_with("sections/"))
-        .collect::<Vec<_>>();
-    sections.sort_unstable_by(|left, right| left.path.cmp(&right.path));
-    Ok(sections)
+    Ok(
+        validate_profile_manifest_view(manifest, supported_required_features)?
+            .section_entries(),
+    )
 }
 
 /// Validate that archive names exactly match one parsed profile manifest.
@@ -361,9 +417,18 @@ pub fn validate_profile_entry_inventory(
     supported_required_features: &[&str],
     observed_paths: &[&str],
 ) -> Result<(), ProfileEntryInventoryError> {
-    validate_profile_manifest(manifest, supported_required_features).map_err(
-        |reason| ProfileEntryInventoryError::InvalidManifest { reason },
-    )?;
+    let validated = validate_profile_manifest_view(
+        manifest,
+        supported_required_features,
+    )
+    .map_err(|reason| ProfileEntryInventoryError::InvalidManifest { reason })?;
+    validated.validate_entry_inventory(observed_paths)
+}
+
+fn validate_profile_entry_inventory_admitted(
+    manifest: &ProfileManifest,
+    observed_paths: &[&str],
+) -> Result<(), ProfileEntryInventoryError> {
     let declared = manifest
         .entries
         .iter()
@@ -456,6 +521,19 @@ pub fn validate_profile_manifest(
     Ok(())
 }
 
+/// Validate one parsed manifest and seal exact borrowed admission evidence.
+///
+/// # Errors
+///
+/// Returns exactly the same manifest failure as [`validate_profile_manifest`].
+pub fn validate_profile_manifest_view<'manifest>(
+    manifest: &'manifest ProfileManifest,
+    supported_required_features: &[&str],
+) -> Result<ValidatedProfileManifest<'manifest>, ProfileManifestError> {
+    validate_profile_manifest(manifest, supported_required_features)?;
+    Ok(ValidatedProfileManifest { manifest })
+}
+
 /// Validate canonical ZIP encoding facts supplied by an archive adapter.
 ///
 /// This does not compute ZIP limits or inspect concrete metadata fields. The
@@ -508,15 +586,10 @@ pub fn canonical_profile_archive_paths<'manifest>(
     manifest: &'manifest ProfileManifest,
     supported_required_features: &[&str],
 ) -> Result<Vec<&'manifest str>, ProfileManifestError> {
-    validate_profile_manifest(manifest, supported_required_features)?;
-    let mut paths = manifest
-        .entries
-        .iter()
-        .map(|entry| entry.path.as_str())
-        .collect::<Vec<_>>();
-    paths.push(PROFILE_MANIFEST_PATH);
-    paths.sort_unstable();
-    Ok(paths)
+    Ok(
+        validate_profile_manifest_view(manifest, supported_required_features)?
+            .canonical_archive_paths(),
+    )
 }
 
 /// Return non-manifest entries in deterministic canonical archive path order.
@@ -529,10 +602,10 @@ pub fn canonical_profile_entry_order<'manifest>(
     manifest: &'manifest ProfileManifest,
     supported_required_features: &[&str],
 ) -> Result<Vec<&'manifest ProfileManifestEntry>, ProfileManifestError> {
-    validate_profile_manifest(manifest, supported_required_features)?;
-    let mut entries = manifest.entries.iter().collect::<Vec<_>>();
-    entries.sort_unstable_by(|left, right| left.path.cmp(&right.path));
-    Ok(entries)
+    Ok(
+        validate_profile_manifest_view(manifest, supported_required_features)?
+            .canonical_entry_order(),
+    )
 }
 
 /// Verify one entry's observed size and SHA-256 evidence before decoding it.

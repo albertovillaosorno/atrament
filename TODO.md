@@ -1267,8 +1267,13 @@ the manifest.
 
 The same domain returns deterministic path-sorted writer order for the complete
 archive, including root `manifest.json`, and verifies one entry's independently
-observed byte length before its SHA-256 digest. Archive inventory validation now
-also requires exactly one root manifest and exact agreement between declared and
+observed byte length before its SHA-256 digest. A constructor-sealed borrowed
+manifest view now lets section projection, canonical ordering, and archive
+inventory checks reuse one successful manifest admission without treating the
+current Rust value as a wire schema.
+
+Archive inventory validation now also requires exactly one root manifest and
+exact agreement between declared and
 observed non-manifest paths, rejecting missing, undeclared, duplicate, or unsafe
 names before entry decoding. Canonical archive evidence separately rejects
 compression and platform-specific extras and requires ZIP64 exactly when an
