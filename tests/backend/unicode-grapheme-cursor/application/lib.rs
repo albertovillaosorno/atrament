@@ -484,6 +484,59 @@ fn signed_steps_resolve_exact_grapheme_boundaries_without_clamping() {
     );
 }
 
+struct MisorderedStepBoundaryProvider {
+    target_byte: usize,
+}
+
+impl GraphemeBoundaryProvider for MisorderedStepBoundaryProvider {
+    fn byte_offset(
+        &self,
+        source: &str,
+        grapheme_index: usize,
+    ) -> Option<usize> {
+        match grapheme_index {
+            0 => Some(0),
+            1 => Some(1),
+            2 => Some(self.target_byte),
+            3 => Some(source.len()),
+            _ => None,
+        }
+    }
+
+    fn grapheme_count(&self, _source: &str) -> usize {
+        3
+    }
+}
+
+#[test]
+fn signed_steps_reject_provider_boundaries_that_do_not_advance() {
+    let source = "abc";
+    for target_byte in [0, 1] {
+        let provider = MisorderedStepBoundaryProvider { target_byte };
+        assert_eq!(
+            resolve_grapheme_cursor_step(&provider, source, 1, 1),
+            Err(GraphemeCursorError::StepBoundaryOrderMismatch {
+                origin_byte: 1,
+                origin_index: 1,
+                target_byte,
+                target_index: 2,
+            }),
+            "target byte {target_byte}",
+        );
+    }
+
+    let provider = MisorderedStepBoundaryProvider { target_byte: 0 };
+    assert_eq!(
+        resolve_grapheme_cursor_step(&provider, source, 2, -1),
+        Err(GraphemeCursorError::StepBoundaryOrderMismatch {
+            origin_byte: 0,
+            origin_index: 2,
+            target_byte: 1,
+            target_index: 1,
+        }),
+    );
+}
+
 #[test]
 fn zero_step_reuses_the_resolved_origin_boundary() {
     let provider = ChangingInternalBoundaryProvider {

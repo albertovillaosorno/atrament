@@ -85,10 +85,13 @@ positions. The same boundary can resolve a caller-ordered anchor/focus pair
 against one validated provider snapshot, preserving forward, reverse, or
 collapsed endpoint order without choosing selection-extension behavior. A
 caller-supplied signed step resolves only across exact grapheme boundaries and
-rejects movement beyond either text endpoint without clamping. The active
-`SessionApplication` can resolve positions, signed steps, or selections against
-an exact current text target read-only, with semantic rejection preceding
-provider access.
+rejects movement beyond either text endpoint without clamping. Nonzero steps
+also reject provider boundaries whose byte order contradicts the requested
+direction.
+
+The active `SessionApplication` can resolve positions, signed steps, or
+selections against an exact current text target read-only, with semantic
+rejection preceding provider access.
 
 All 114 visible-text requirements run through those three session-owned query
 forms without changing accepted revision or history state.

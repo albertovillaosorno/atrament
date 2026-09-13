@@ -999,7 +999,10 @@ selections, and reuses one internal boundary for a collapsed selection.
 
 A caller-supplied signed-step resolver advances only by extended-grapheme
 boundaries, rejects out-of-range steps without clamping, and covers both
-directions for all 114 frozen visible-text requirements.
+directions for all 114 frozen visible-text requirements. Nonzero steps also
+reject individually valid provider boundaries whose UTF-8 order contradicts the
+requested direction, so a broken provider cannot make `+1` move backward or
+stay in place.
 
 `SessionApplication` exposes position, signed-step, and selection queries
 against one exact current Text-content target without mutation; no-session,

@@ -82,6 +82,17 @@ pub enum GraphemeCursorError {
         /// Requested grapheme boundary index.
         grapheme_index: usize,
     },
+    /// Provider boundary order contradicts the caller-supplied step direction.
+    StepBoundaryOrderMismatch {
+        /// UTF-8 byte offset for the admitted origin boundary.
+        origin_byte: usize,
+        /// Grapheme boundary index supplied as the origin.
+        origin_index: usize,
+        /// UTF-8 byte offset for the resolved target boundary.
+        target_byte: usize,
+        /// Grapheme boundary index reached by the signed step.
+        target_index: usize,
+    },
     /// Caller-supplied signed step would leave the source boundary range.
     CursorStepOutOfBounds {
         /// Number of grapheme clusters in the source text.
@@ -159,14 +170,18 @@ pub fn resolve_grapheme_cursor_selection(
 ///
 /// The origin must already be an admitted grapheme boundary. The signed step is
 /// applied only after provider anchors and the origin index are validated. A
-/// step that would leave the source range rejects instead of being clamped.
+/// step that would leave the source range rejects instead of being clamped. A
+/// nonzero step also requires the resolved UTF-8 boundary to advance in the
+/// same direction as the grapheme index.
 ///
 /// # Errors
 ///
 /// Returns the same provider/origin failures as
-/// [`resolve_grapheme_cursor_position`] or
+/// [`resolve_grapheme_cursor_position`],
 /// [`GraphemeCursorError::CursorStepOutOfBounds`] when the signed step would
-/// leave the inclusive boundary range `0..=grapheme_count`.
+/// leave the inclusive boundary range `0..=grapheme_count`, or
+/// [`GraphemeCursorError::StepBoundaryOrderMismatch`] when a provider returns
+/// individually valid boundaries in an order inconsistent with the step.
 pub fn resolve_grapheme_cursor_step(
     boundaries: &dyn GraphemeBoundaryProvider,
     source: &str,
@@ -197,7 +212,22 @@ pub fn resolve_grapheme_cursor_step(
     if target_index == origin_index {
         return Ok(origin);
     }
-    resolve_position(boundaries, source, target_index, anchors)
+    let target =
+        resolve_position(boundaries, source, target_index, anchors)?;
+    let ordered = if step > 0 {
+        target.byte_offset > origin.byte_offset
+    } else {
+        target.byte_offset < origin.byte_offset
+    };
+    if !ordered {
+        return Err(GraphemeCursorError::StepBoundaryOrderMismatch {
+            origin_byte: origin.byte_offset,
+            origin_index,
+            target_byte: target.byte_offset,
+            target_index,
+        });
+    }
+    Ok(target)
 }
 
 fn resolve_position(
