@@ -72,8 +72,9 @@ A process fixture now retains all three private draft fields, rejects one
 oversized draft replacement with the shared resource-limit diagnostic,
 retains bytes for two semantic assets, commits text and asset-reference history,
 computes a revision-bound direct-edit preview, version-bound direct-edit
-proposal, ordered and caller-bounded batch review, grapheme cursor and
-selection inspection, measured pagination, fixed-region overflow diagnostics
+proposal, ordered and caller-bounded batch review with dependency-selection
+analysis, grapheme cursor and selection inspection, measured pagination,
+fixed-region overflow diagnostics
 and layout-only Export preflight. It also
 owns one terminal media job with a registered waveform still requiring cleanup.
 Both

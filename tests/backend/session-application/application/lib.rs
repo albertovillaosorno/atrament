@@ -812,6 +812,59 @@ fn run_process_fixture_child(mode: &str) {
         },
     );
     assert!(!impact_seeds.is_empty());
+
+    let selected = BTreeSet::from([12_u32]);
+    let DirectEditBatchSelectionRequirementsOutcome::Requirements {
+        missing,
+        revision: selection_revision,
+    } = session
+        .direct_edit_batch_selection_requirements(&batch_review, &selected)
+    else {
+        panic!(
+            "process fixture batch dependency review must resolve selection",
+        );
+    };
+    assert_eq!(selection_revision, revision);
+    assert_eq!(missing.len(), 1);
+    assert_eq!(missing[0].command, 12_u32);
+    assert_eq!(missing[0].dependency, 11_u32);
+    assert_eq!(
+        session.direct_edit_batch_selection_requirements_bounded(
+            &batch_review,
+            &selected,
+            0,
+        ),
+        DirectEditBatchSelectionBoundedOutcome::RequirementCountExceeded {
+            actual: 1,
+            limit: 0,
+        },
+    );
+    let DirectEditBatchSelectionBoundedOutcome::Requirements {
+        missing: bounded_missing,
+        revision: bounded_revision,
+    } = session.direct_edit_batch_selection_requirements_bounded(
+        &batch_review,
+        &selected,
+        1,
+    ) else {
+        panic!(
+            "process fixture exact dependency bound must materialize review",
+        );
+    };
+    assert_eq!(bounded_revision, revision);
+    assert_eq!(bounded_missing, missing);
+    let DirectEditBatchSelectionSummaryOutcome::Summarized {
+        revision: summary_revision,
+        summary,
+    } = session.direct_edit_batch_selection_summary(&batch_review, &selected)
+    else {
+        panic!("process fixture batch selection summary must be derived");
+    };
+    assert_eq!(summary_revision, revision);
+    assert_eq!(summary.selected_commands, 1);
+    assert_eq!(summary.required_commands, 2);
+    assert_eq!(summary.missing_dependency_edges, 1);
+
     assert_eq!(
         session.simulate_direct_edit_batch_bounded(
             batch_review,
