@@ -827,6 +827,75 @@ fn run_process_fixture_child(mode: &str) {
         Some(revision),
     );
 
+    let provider = UnicodeGraphemeSegmentation;
+    let grapheme_source = "process-private after";
+    assert_eq!(
+        session.text_grapheme_cursor_position(
+            &provider,
+            application::TextGraphemeCursorQuery {
+                base: revision,
+                grapheme_index: 7,
+                target: span,
+            },
+        ),
+        Ok(application::TextGraphemeCursorOutcome::Prepared {
+            position: GraphemeCursorPosition {
+                byte_offset: grapheme_source[..7].len(),
+                grapheme_index: 7,
+            },
+            revision,
+            target: span,
+        }),
+    );
+    assert_eq!(
+        session.text_grapheme_cursor_step(
+            &provider,
+            application::TextGraphemeCursorStepQuery {
+                base: revision,
+                origin_index: 7,
+                step: 5,
+                target: span,
+            },
+        ),
+        Ok(application::TextGraphemeCursorOutcome::Prepared {
+            position: GraphemeCursorPosition {
+                byte_offset: grapheme_source[..12].len(),
+                grapheme_index: 12,
+            },
+            revision,
+            target: span,
+        }),
+    );
+    assert_eq!(
+        session.text_grapheme_selection(
+            &provider,
+            application::TextGraphemeSelectionQuery {
+                anchor_index: 15,
+                base: revision,
+                focus_index: 3,
+                target: span,
+            },
+        ),
+        Ok(application::TextGraphemeSelectionOutcome::Prepared {
+            revision,
+            selection: GraphemeCursorSelection {
+                anchor: GraphemeCursorPosition {
+                    byte_offset: grapheme_source[..15].len(),
+                    grapheme_index: 15,
+                },
+                focus: GraphemeCursorPosition {
+                    byte_offset: grapheme_source[..3].len(),
+                    grapheme_index: 3,
+                },
+            },
+            target: span,
+        }),
+    );
+    assert_eq!(
+        session.accepted_revision().map(|accepted| accepted.id),
+        Some(revision),
+    );
+
     let measurement = RevisionFlowMeasurement {
         flow,
         revision,
