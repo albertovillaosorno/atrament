@@ -441,6 +441,52 @@ fn bilingual_inventory_resolves_both_full_grapheme_selection_directions() {
     }
 }
 
+struct MisorderedSelectionBoundaryProvider;
+
+impl GraphemeBoundaryProvider for MisorderedSelectionBoundaryProvider {
+    fn byte_offset(
+        &self,
+        source: &str,
+        grapheme_index: usize,
+    ) -> Option<usize> {
+        match grapheme_index {
+            0 => Some(0),
+            1 => Some(2),
+            2 => Some(1),
+            3 => Some(source.len()),
+            _ => None,
+        }
+    }
+
+    fn grapheme_count(&self, _source: &str) -> usize {
+        3
+    }
+}
+
+#[test]
+fn selection_rejects_provider_boundaries_that_reverse_index_order() {
+    let provider = MisorderedSelectionBoundaryProvider;
+    let source = "abc";
+    assert_eq!(
+        resolve_grapheme_cursor_selection(&provider, source, 1, 2),
+        Err(GraphemeCursorError::SelectionBoundaryOrderMismatch {
+            anchor_byte: 2,
+            anchor_index: 1,
+            focus_byte: 1,
+            focus_index: 2,
+        }),
+    );
+    assert_eq!(
+        resolve_grapheme_cursor_selection(&provider, source, 2, 1),
+        Err(GraphemeCursorError::SelectionBoundaryOrderMismatch {
+            anchor_byte: 1,
+            anchor_index: 2,
+            focus_byte: 2,
+            focus_index: 1,
+        }),
+    );
+}
+
 #[test]
 fn signed_steps_resolve_exact_grapheme_boundaries_without_clamping() {
     let provider = UnicodeGraphemeSegmentation;

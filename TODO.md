@@ -997,6 +997,10 @@ segmentation adapter. A same-source selection resolver validates provider
 anchors once, preserves caller anchor/focus order for forward and reverse
 selections, and reuses one internal boundary for a collapsed selection.
 
+Noncollapsed selections reject provider byte offsets whose order contradicts
+the caller's grapheme boundary indexes, without confusing a legitimate reverse
+selection with broken provider ordering.
+
 A caller-supplied signed-step resolver advances only by extended-grapheme
 boundaries, rejects out-of-range steps without clamping, and covers both
 directions for all 114 frozen visible-text requirements. Nonzero steps also

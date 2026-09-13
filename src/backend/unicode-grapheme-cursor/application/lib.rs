@@ -82,6 +82,17 @@ pub enum GraphemeCursorError {
         /// Requested grapheme boundary index.
         grapheme_index: usize,
     },
+    /// Provider byte order contradicts caller grapheme selection index order.
+    SelectionBoundaryOrderMismatch {
+        /// UTF-8 byte offset resolved for the caller anchor.
+        anchor_byte: usize,
+        /// Grapheme boundary index supplied as the caller anchor.
+        anchor_index: usize,
+        /// UTF-8 byte offset resolved for the caller focus.
+        focus_byte: usize,
+        /// Grapheme boundary index supplied as the caller focus.
+        focus_index: usize,
+    },
     /// Provider boundary order contradicts the caller-supplied step direction.
     StepBoundaryOrderMismatch {
         /// UTF-8 byte offset for the admitted origin boundary.
@@ -143,13 +154,18 @@ pub fn resolve_grapheme_cursor_position(
 /// Start/end provider anchors are validated once for the shared source. The
 /// anchor endpoint is resolved before focus, and a collapsed selection reuses
 /// the same resolved position instead of querying an internal boundary twice.
-/// Caller anchor/focus order is retained even when focus precedes anchor.
+/// Caller anchor/focus order is retained even when focus precedes anchor. The
+/// provider's resolved byte offsets must still preserve the same relative order
+/// as those two grapheme boundary indexes.
 ///
 /// # Errors
 ///
 /// Returns the same typed cursor-position failures as
-/// [`resolve_grapheme_cursor_position`]. A caller-bound failure identifies its
-/// exact requested grapheme index.
+/// [`resolve_grapheme_cursor_position`], or
+/// [`GraphemeCursorError::SelectionBoundaryOrderMismatch`] when two
+/// individually
+/// valid provider boundaries contradict their grapheme index order. A
+/// caller-bound failure identifies its exact requested grapheme index.
 pub fn resolve_grapheme_cursor_selection(
     boundaries: &dyn GraphemeBoundaryProvider,
     source: &str,
@@ -163,6 +179,21 @@ pub fn resolve_grapheme_cursor_selection(
     } else {
         resolve_position(boundaries, source, focus_index, anchors)?
     };
+    let ordered = if focus_index > anchor_index {
+        focus.byte_offset > anchor.byte_offset
+    } else if focus_index < anchor_index {
+        focus.byte_offset < anchor.byte_offset
+    } else {
+        true
+    };
+    if !ordered {
+        return Err(GraphemeCursorError::SelectionBoundaryOrderMismatch {
+            anchor_byte: anchor.byte_offset,
+            anchor_index,
+            focus_byte: focus.byte_offset,
+            focus_index,
+        });
+    }
     Ok(GraphemeCursorSelection { anchor, focus })
 }
 
