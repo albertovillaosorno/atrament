@@ -625,3 +625,138 @@ fn every_required_bilingual_grapheme_inserts_with_exact_authored_bytes() {
     }
     assert_eq!(cases, 114);
 }
+struct CompactAnchoredRangeBoundaryMap {
+    internal: [usize; 3],
+}
+
+impl GraphemeBoundaryProvider for CompactAnchoredRangeBoundaryMap {
+    fn byte_offset(
+        &self,
+        source: &str,
+        grapheme_index: usize,
+    ) -> Option<usize> {
+        match grapheme_index {
+            0 => Some(0),
+            1..=3 => Some(self.internal[grapheme_index - 1]),
+            4 => Some(source.len()),
+            _ => None,
+        }
+    }
+
+    fn grapheme_count(&self, _source: &str) -> usize {
+        4
+    }
+}
+
+fn compact_expected_range_boundary(
+    internal: [usize; 3],
+    grapheme_index: usize,
+) -> Result<usize, GraphemeRangeError> {
+    let byte_offset = match grapheme_index {
+        0 => return Ok(0),
+        1..=3 => internal[grapheme_index - 1],
+        4 => return Ok(4),
+        _ => unreachable!("range oracle only resolves admitted indexes"),
+    };
+    if matches!(byte_offset, 0 | 4) {
+        return Err(GraphemeRangeError::InternalBoundaryAtSourceEdge {
+            byte_offset,
+            grapheme_index,
+        });
+    }
+    let suffix_graphemes = 4 - grapheme_index;
+    let suffix_bytes = 4 - byte_offset;
+    if byte_offset < grapheme_index || suffix_bytes < suffix_graphemes {
+        return Err(GraphemeRangeError::InternalBoundaryCapacityMismatch {
+            byte_offset,
+            grapheme_count: 4,
+            grapheme_index,
+            source_bytes: 4,
+        });
+    }
+    Ok(byte_offset)
+}
+
+fn compact_expected_range(
+    internal: [usize; 3],
+    start: usize,
+    count: usize,
+) -> Result<String, GraphemeRangeError> {
+    if start > 4 {
+        return Err(GraphemeRangeError::StartOutOfBounds {
+            grapheme_count: 4,
+            start,
+        });
+    }
+    let end = start
+        .checked_add(count)
+        .ok_or(GraphemeRangeError::EndIndexOverflow { count, start })?;
+    if end > 4 {
+        return Err(GraphemeRangeError::EndOutOfBounds {
+            end,
+            grapheme_count: 4,
+        });
+    }
+    let start_byte = compact_expected_range_boundary(internal, start)?;
+    let end_byte = if end == start {
+        start_byte
+    } else {
+        compact_expected_range_boundary(internal, end)?
+    };
+    if end_byte < start_byte {
+        return Err(GraphemeRangeError::ReversedBoundaries {
+            end_byte,
+            start_byte,
+        });
+    }
+    if count > 0 && end_byte == start_byte {
+        return Err(GraphemeRangeError::NonAdvancingBoundaries {
+            end_byte,
+            start_byte,
+        });
+    }
+    let byte_distance = end_byte - start_byte;
+    if byte_distance < count {
+        return Err(GraphemeRangeError::BoundaryDistanceTooSmall {
+            byte_distance,
+            grapheme_distance: count,
+        });
+    }
+    Ok(format!("{}X{}", &"abcd"[..start_byte], &"abcd"[end_byte..]))
+}
+
+#[test]
+fn compact_anchored_boundary_maps_match_independent_range_oracle() {
+    let source = "abcd";
+    let mut maps = 0_usize;
+    let mut cases = 0_usize;
+    for first in 0..=4 {
+        for second in 0..=4 {
+            for third in 0..=4 {
+                let internal = [first, second, third];
+                let provider = CompactAnchoredRangeBoundaryMap { internal };
+                maps += 1;
+                for start in 0..=5 {
+                    for count in 0..=5 {
+                        assert_eq!(
+                            replace_grapheme_range(
+                                &provider,
+                                source,
+                                GraphemeRange { count, start },
+                                "X",
+                            ),
+                            compact_expected_range(internal, start, count),
+                            "range map={:?} start={} count={}",
+                            internal,
+                            start,
+                            count,
+                        );
+                        cases += 1;
+                    }
+                }
+            }
+        }
+    }
+    assert_eq!(maps, 125);
+    assert_eq!(cases, 4_500);
+}

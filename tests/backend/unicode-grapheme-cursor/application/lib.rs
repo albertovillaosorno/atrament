@@ -784,3 +784,218 @@ fn every_required_bilingual_grapheme_steps_between_its_two_boundaries() {
         );
     }
 }
+struct CompactAnchoredBoundaryMap {
+    internal: [usize; 3],
+}
+
+impl GraphemeBoundaryProvider for CompactAnchoredBoundaryMap {
+    fn byte_offset(
+        &self,
+        source: &str,
+        grapheme_index: usize,
+    ) -> Option<usize> {
+        match grapheme_index {
+            0 => Some(0),
+            1..=3 => Some(self.internal[grapheme_index - 1]),
+            4 => Some(source.len()),
+            _ => None,
+        }
+    }
+
+    fn grapheme_count(&self, _source: &str) -> usize {
+        4
+    }
+}
+
+fn compact_expected_position(
+    internal: [usize; 3],
+    grapheme_index: usize,
+) -> Result<GraphemeCursorPosition, GraphemeCursorError> {
+    let byte_offset = match grapheme_index {
+        0 => 0,
+        1..=3 => internal[grapheme_index - 1],
+        4 => 4,
+        _ => {
+            return Err(GraphemeCursorError::CursorOutOfBounds {
+                grapheme_count: 4,
+                grapheme_index,
+            });
+        },
+    };
+    if (1..=3).contains(&grapheme_index) {
+        if matches!(byte_offset, 0 | 4) {
+            return Err(GraphemeCursorError::InternalBoundaryAtSourceEdge {
+                byte_offset,
+                grapheme_index,
+            });
+        }
+        let suffix_graphemes = 4 - grapheme_index;
+        let suffix_bytes = 4 - byte_offset;
+        if byte_offset < grapheme_index || suffix_bytes < suffix_graphemes {
+            return Err(GraphemeCursorError::InternalBoundaryCapacityMismatch {
+                byte_offset,
+                grapheme_count: 4,
+                grapheme_index,
+                source_bytes: 4,
+            });
+        }
+    }
+    Ok(GraphemeCursorPosition {
+        byte_offset,
+        grapheme_index,
+    })
+}
+
+fn compact_expected_selection(
+    internal: [usize; 3],
+    anchor_index: usize,
+    focus_index: usize,
+) -> Result<GraphemeCursorSelection, GraphemeCursorError> {
+    let anchor = compact_expected_position(internal, anchor_index)?;
+    let focus = if focus_index == anchor_index {
+        anchor
+    } else {
+        compact_expected_position(internal, focus_index)?
+    };
+    let ordered = if focus_index > anchor_index {
+        focus.byte_offset > anchor.byte_offset
+    } else if focus_index < anchor_index {
+        focus.byte_offset < anchor.byte_offset
+    } else {
+        true
+    };
+    if !ordered {
+        return Err(GraphemeCursorError::SelectionBoundaryOrderMismatch {
+            anchor_byte: anchor.byte_offset,
+            anchor_index,
+            focus_byte: focus.byte_offset,
+            focus_index,
+        });
+    }
+    let grapheme_distance = anchor_index.abs_diff(focus_index);
+    let byte_distance = anchor.byte_offset.abs_diff(focus.byte_offset);
+    if byte_distance < grapheme_distance {
+        return Err(GraphemeCursorError::BoundaryDistanceTooSmall {
+            byte_distance,
+            grapheme_distance,
+        });
+    }
+    Ok(GraphemeCursorSelection { anchor, focus })
+}
+
+fn compact_expected_step(
+    internal: [usize; 3],
+    origin_index: usize,
+    step: isize,
+) -> Result<GraphemeCursorPosition, GraphemeCursorError> {
+    let origin = compact_expected_position(internal, origin_index)?;
+    let out_of_bounds = || GraphemeCursorError::CursorStepOutOfBounds {
+        grapheme_count: 4,
+        origin_index,
+        step,
+    };
+    let target_index = if step >= 0 {
+        let target = origin_index
+            .checked_add(step.cast_unsigned())
+            .ok_or_else(out_of_bounds)?;
+        if target > 4 {
+            return Err(out_of_bounds());
+        }
+        target
+    } else {
+        origin_index
+            .checked_sub(step.unsigned_abs())
+            .ok_or_else(out_of_bounds)?
+    };
+    if target_index == origin_index {
+        return Ok(origin);
+    }
+    let target = compact_expected_position(internal, target_index)?;
+    let ordered = if step > 0 {
+        target.byte_offset > origin.byte_offset
+    } else {
+        target.byte_offset < origin.byte_offset
+    };
+    if !ordered {
+        return Err(GraphemeCursorError::StepBoundaryOrderMismatch {
+            origin_byte: origin.byte_offset,
+            origin_index,
+            target_byte: target.byte_offset,
+            target_index,
+        });
+    }
+    let grapheme_distance = origin_index.abs_diff(target_index);
+    let byte_distance = origin.byte_offset.abs_diff(target.byte_offset);
+    if byte_distance < grapheme_distance {
+        return Err(GraphemeCursorError::BoundaryDistanceTooSmall {
+            byte_distance,
+            grapheme_distance,
+        });
+    }
+    Ok(target)
+}
+
+#[test]
+fn compact_anchored_boundary_maps_match_independent_cursor_oracle() {
+    let source = "abcd";
+    let mut maps = 0_usize;
+    let mut position_cases = 0_usize;
+    let mut selection_cases = 0_usize;
+    let mut step_cases = 0_usize;
+    for first in 0..=4 {
+        for second in 0..=4 {
+            for third in 0..=4 {
+                let internal = [first, second, third];
+                let provider = CompactAnchoredBoundaryMap { internal };
+                maps += 1;
+                for index in 0..=5 {
+                    assert_eq!(
+                        resolve_grapheme_cursor_position(
+                            &provider, source, index,
+                        ),
+                        compact_expected_position(internal, index),
+                        "position map={internal:?} index={index}",
+                    );
+                    position_cases += 1;
+                }
+                for anchor in 0..=4 {
+                    for focus in 0..=4 {
+                        assert_eq!(
+                            resolve_grapheme_cursor_selection(
+                                &provider,
+                                source,
+                                anchor,
+                                focus,
+                            ),
+                            compact_expected_selection(internal, anchor, focus),
+                            "selection map={:?} anchor={} focus={}",
+                            internal,
+                            anchor,
+                            focus,
+                        );
+                        selection_cases += 1;
+                    }
+                }
+                for origin in 0..=4 {
+                    for step in -5_isize..=5 {
+                        assert_eq!(
+                            resolve_grapheme_cursor_step(
+                                &provider,
+                                source,
+                                origin,
+                                step,
+                            ),
+                            compact_expected_step(internal, origin, step),
+                            "step map={internal:?} origin={origin} step={step}",
+                        );
+                        step_cases += 1;
+                    }
+                }
+            }
+        }
+    }
+    assert_eq!(maps, 125);
+    assert_eq!(position_cases, 750);
+    assert_eq!(selection_cases, 3_125);
+    assert_eq!(step_cases, 6_875);
+}

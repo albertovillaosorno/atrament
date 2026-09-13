@@ -995,6 +995,11 @@ impossible for non-overlapping extended grapheme clusters. Multi-boundary
 selection, step, and edit queries likewise reject a claimed grapheme distance
 that is larger than the resolved UTF-8 byte distance.
 
+A compact anchored-provider oracle enumerates all 125 internal-boundary maps for
+a four-grapheme ASCII source. It compares 750 cursor positions, 3,125
+selections, 6,875 signed steps, and 4,500 range edits against independent
+precedence models without requiring a full-source provider scan.
+
 A separate transport-neutral cursor-position boundary now resolves one caller
 extended-grapheme boundary index to its exact UTF-8 byte offset. It validates
 provider start/end anchors before caller bounds, resolves an internal boundary

@@ -83,6 +83,11 @@ boundary lookup because no extended grapheme partition can contain more
 clusters than source bytes. Resolved multi-boundary queries also reject when
 the UTF-8 byte distance is smaller than the claimed grapheme-index distance.
 
+A compact provider oracle enumerates all 125 internal-boundary maps for one
+four-grapheme ASCII source and compares position, selection, signed-step, and
+range outcomes with independent precedence models. The corpus covers 15,250
+queries without turning provider validation into an eager full-source scan.
+
 A separate cursor-position application resolves those same boundaries to exact
 UTF-8 offsets without defining movement, selection, clamping, keybindings, or
 normalization; each frozen visible-text grapheme admits only its start and end
