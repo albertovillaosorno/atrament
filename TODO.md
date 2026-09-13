@@ -987,6 +987,10 @@ A provider that reports zero graphemes also resolves boundary zero once, so
 changing answers cannot make nonempty authored text masquerade as an empty
 source.
 
+Provider grapheme counts larger than the source UTF-8 byte length reject before
+any boundary lookup or caller range/position check because such a count is
+impossible for non-overlapping extended grapheme clusters.
+
 A separate transport-neutral cursor-position boundary now resolves one caller
 extended-grapheme boundary index to its exact UTF-8 byte offset. It validates
 provider start/end anchors before caller bounds, resolves an internal boundary

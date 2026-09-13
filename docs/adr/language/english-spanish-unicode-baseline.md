@@ -78,6 +78,10 @@ unit and inserts each requirement byte-for-byte without normalization.
 The active session owner admits the same 114 exact insertions into accepted text
 and Undo restores the original semantic text without changing authored bytes.
 
+Provider counts larger than the exact source UTF-8 byte length reject before any
+boundary lookup because no extended grapheme partition can contain more
+clusters than source bytes.
+
 A separate cursor-position application resolves those same boundaries to exact
 UTF-8 offsets without defining movement, selection, clamping, keybindings, or
 normalization; each frozen visible-text grapheme admits only its start and end

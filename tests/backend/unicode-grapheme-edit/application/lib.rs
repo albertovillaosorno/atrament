@@ -137,6 +137,39 @@ fn zero_grapheme_count_reuses_the_single_source_anchor() {
     assert_eq!(provider.boundary_calls.get(), 1);
 }
 
+struct ImpossibleGraphemeCountProvider;
+
+impl GraphemeBoundaryProvider for ImpossibleGraphemeCountProvider {
+    fn byte_offset(
+        &self,
+        _source: &str,
+        _grapheme_index: usize,
+    ) -> Option<usize> {
+        panic!("impossible count must reject before boundary access");
+    }
+
+    fn grapheme_count(&self, source: &str) -> usize {
+        source.len().saturating_add(1)
+    }
+}
+
+#[test]
+fn impossible_grapheme_count_rejects_before_boundary_access() {
+    let source = "éx";
+    assert_eq!(
+        replace_grapheme_range(
+            &ImpossibleGraphemeCountProvider,
+            source,
+            GraphemeRange { count: 0, start: 0 },
+            "z",
+        ),
+        Err(GraphemeRangeError::GraphemeCountExceedsSourceBytes {
+            grapheme_count: source.len() + 1,
+            source_bytes: source.len(),
+        }),
+    );
+}
+
 struct ChangingInsertionBoundaryProvider {
     internal_calls: Cell<usize>,
 }

@@ -88,6 +88,38 @@ fn empty_text_has_one_valid_cursor_position() {
     );
 }
 
+struct ImpossibleGraphemeCountProvider;
+
+impl GraphemeBoundaryProvider for ImpossibleGraphemeCountProvider {
+    fn byte_offset(
+        &self,
+        _source: &str,
+        _grapheme_index: usize,
+    ) -> Option<usize> {
+        panic!("impossible count must reject before boundary access");
+    }
+
+    fn grapheme_count(&self, source: &str) -> usize {
+        source.len().saturating_add(1)
+    }
+}
+
+#[test]
+fn impossible_grapheme_count_rejects_before_boundary_access() {
+    let source = "éx";
+    assert_eq!(
+        resolve_grapheme_cursor_position(
+            &ImpossibleGraphemeCountProvider,
+            source,
+            0,
+        ),
+        Err(GraphemeCursorError::GraphemeCountExceedsSourceBytes {
+            grapheme_count: source.len() + 1,
+            source_bytes: source.len(),
+        }),
+    );
+}
+
 struct ChangingInternalBoundaryProvider {
     internal_calls: Cell<usize>,
 }

@@ -77,6 +77,13 @@ pub enum GraphemeRangeError {
         /// Number of grapheme clusters in the source text.
         grapheme_count: usize,
     },
+    /// Provider advertised more grapheme clusters than source UTF-8 bytes.
+    GraphemeCountExceedsSourceBytes {
+        /// Grapheme-cluster count reported by the provider.
+        grapheme_count: usize,
+        /// Exact UTF-8 byte length of the unchanged source.
+        source_bytes: usize,
+    },
     /// Provider mapped an internal grapheme index to a source endpoint.
     InternalBoundaryAtSourceEdge {
         /// Source-edge UTF-8 byte offset returned for the internal index.
@@ -169,6 +176,12 @@ fn provider_anchors(
     source: &str,
 ) -> Result<AnchoredBoundaries, GraphemeRangeError> {
     let total = boundaries.grapheme_count(source);
+    if total > source.len() {
+        return Err(GraphemeRangeError::GraphemeCountExceedsSourceBytes {
+            grapheme_count: total,
+            source_bytes: source.len(),
+        });
+    }
     let first_byte = provider_boundary(boundaries, source, 0)?;
     if first_byte != 0 {
         return Err(GraphemeRangeError::BoundaryAnchorMismatch {
