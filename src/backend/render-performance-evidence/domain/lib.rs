@@ -79,6 +79,43 @@ pub struct RenderPerformanceObservation<Latency, MachineIdentity, PeakMemory> {
 pub type RenderPerformanceObservations<Latency, MachineIdentity, PeakMemory> =
     [RenderPerformanceObservation<Latency, MachineIdentity, PeakMemory>];
 
+/// Constructor-sealed evidence that one exact benchmark observation sequence
+/// covers every required workload and both quality roles.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ValidatedRenderPerformanceCoverage<
+    'observations,
+    Latency,
+    MachineIdentity,
+    PeakMemory,
+> {
+    observations: &'observations RenderPerformanceObservations<
+        Latency,
+        MachineIdentity,
+        PeakMemory,
+    >,
+}
+
+impl<'observations, Latency, MachineIdentity, PeakMemory>
+    ValidatedRenderPerformanceCoverage<
+        'observations,
+        Latency,
+        MachineIdentity,
+        PeakMemory,
+    >
+{
+    /// Return the exact caller-owned observation sequence that was admitted.
+    #[must_use]
+    pub const fn observations(
+        &self,
+    ) -> &'observations RenderPerformanceObservations<
+        Latency,
+        MachineIdentity,
+        PeakMemory,
+    > {
+        self.observations
+    }
+}
+
 /// Missing evidence required for a complete first-release CPU benchmark set.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum RenderPerformanceCoverageError {
@@ -137,4 +174,33 @@ pub fn validate_render_performance_coverage<
         return Err(RenderPerformanceCoverageError::PreviewNotObserved);
     }
     Ok(())
+}
+
+/// Validate and seal one complete first-release CPU benchmark observation set.
+///
+/// # Errors
+///
+/// Returns the same scenario or quality-role omission as
+/// [`validate_render_performance_coverage`].
+pub fn validate_render_performance_coverage_view<
+    Latency,
+    MachineIdentity,
+    PeakMemory,
+>(
+    observations: &RenderPerformanceObservations<
+        Latency,
+        MachineIdentity,
+        PeakMemory,
+    >,
+) -> Result<
+    ValidatedRenderPerformanceCoverage<
+        '_,
+        Latency,
+        MachineIdentity,
+        PeakMemory,
+    >,
+    RenderPerformanceCoverageError,
+> {
+    validate_render_performance_coverage(observations)?;
+    Ok(ValidatedRenderPerformanceCoverage { observations })
 }

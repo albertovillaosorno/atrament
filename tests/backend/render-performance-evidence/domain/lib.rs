@@ -34,6 +34,7 @@ use atrament_render_performance_evidence::{
     NoDiscreteGpuMachine, RenderPerformanceCoverageError,
     RenderPerformanceObservation, RenderPerformanceScenario,
     validate_render_performance_coverage,
+    validate_render_performance_coverage_view,
 };
 use atrament_render_quality_profile::RenderQualityMode;
 
@@ -266,4 +267,82 @@ fn every_complete_scenario_quality_mask_matches_role_coverage_oracle() {
     }
     assert_eq!(cases, 64);
     assert!(saw.into_iter().all(|seen| seen));
+}
+
+
+#[test]
+fn all_256_scenario_and_quality_presence_states_match_coverage_precedence() {
+    let mut cases = 0_u16;
+    let mut outcomes = [false; 4];
+    for scenario_mask in 0_u8..64 {
+        for quality_mask in 0_u8..4 {
+            let mut observations = Vec::new();
+            for (index, scenario) in SCENARIOS.into_iter().enumerate() {
+                if scenario_mask & (1_u8 << index) == 0 {
+                    continue;
+                }
+                if quality_mask & 0b01 != 0 {
+                    observations.push(observation(
+                        scenario,
+                        RenderQualityMode::Preview,
+                    ));
+                }
+                if quality_mask & 0b10 != 0 {
+                    observations.push(observation(
+                        scenario,
+                        RenderQualityMode::Final,
+                    ));
+                }
+            }
+            let first_missing = SCENARIOS
+                .into_iter()
+                .enumerate()
+                .find_map(|(index, scenario)| {
+                    let represented = scenario_mask & (1_u8 << index) != 0
+                        && quality_mask != 0;
+                    (!represented).then_some(scenario)
+                });
+            let expected = if let Some(scenario) = first_missing {
+                outcomes[0] = true;
+                Err(RenderPerformanceCoverageError::ScenarioAbsent(scenario))
+            } else if quality_mask & 0b10 == 0 {
+                outcomes[1] = true;
+                Err(RenderPerformanceCoverageError::FinalQualityMissing)
+            } else if quality_mask & 0b01 == 0 {
+                outcomes[2] = true;
+                Err(RenderPerformanceCoverageError::PreviewNotObserved)
+            } else {
+                outcomes[3] = true;
+                Ok(())
+            };
+            assert_eq!(
+                validate_render_performance_coverage(&observations),
+                expected,
+                "scenario mask {:#08b}, quality {:#04b}",
+                scenario_mask,
+                quality_mask,
+            );
+            match expected {
+                Ok(()) => {
+                    let validated =
+                        validate_render_performance_coverage_view(&observations)
+                            .expect("complete coverage seals");
+                    assert!(std::ptr::eq(
+                        validated.observations(),
+                        observations.as_slice(),
+                    ));
+                },
+                Err(reason) => assert_eq!(
+                    validate_render_performance_coverage_view(&observations),
+                    Err(reason),
+                    "sealed scenario {:#08b}, quality {:#04b}",
+                    scenario_mask,
+                    quality_mask,
+                ),
+            }
+            cases = cases.saturating_add(1);
+        }
+    }
+    assert_eq!(cases, 256);
+    assert!(outcomes.into_iter().all(|seen| seen));
 }

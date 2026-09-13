@@ -1750,14 +1750,16 @@ Preview or Final, retains caller-owned latency and peak-memory measurements, and
 names a caller-owned machine/configuration classified as having no discrete GPU.
 A completeness validator requires evidence for all six scenarios and requires
 both Preview and Final quality to be represented without demanding a Cartesian
-scenario-by-quality matrix. Numeric budgets, units, representative machine
-tiers,
-benchmark execution, render scheduling, and pass/fail policy remain open.
+scenario-by-quality matrix. Successful admission now seals the exact caller
+observation sequence for later budget policy without interpreting its values.
 
 A leave-one-scenario-out matrix proves each workload is independently required
-before quality-role completeness can pass. A second 64-case oracle exhausts
-every Preview/Final assignment over a complete six-scenario set and proves only
-the all-Preview and all-Final assignments fail role completeness.
+before quality-role completeness can pass. The 64-case complete-scenario quality
+oracle is complemented by an exhaustive 256-state corpus crossing every
+scenario-presence mask with absent, Preview-only, Final-only, or both quality
+roles. It pins scenario omissions before quality-role omissions through direct
+and sealed admission. Numeric budgets, units, representative machine tiers,
+benchmark execution, render scheduling, and pass/fail policy remain open.
 
 ## P6 — LLM, CLI, MCP, and media intake
 
