@@ -72,7 +72,8 @@ A process fixture now retains all three private draft fields, rejects one
 oversized draft replacement with the shared resource-limit diagnostic,
 retains bytes for two semantic assets, commits text and asset-reference history,
 computes default and family-specific command-target material, bounded
-identity inspection, constituent and combined precondition review, direct-edit
+identity inspection, constituent success/rejection and combined precondition
+review, direct-edit
 simulation and preview, version-bound direct-edit proposal, ordered and
 caller-bounded batch review with graph-resource and dependency-selection
 analysis, grapheme cursor and selection inspection, measured pagination,

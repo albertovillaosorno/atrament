@@ -758,6 +758,57 @@ fn run_process_fixture_child(mode: &str) {
     };
     assert_eq!(family_material.as_ref(), material.as_ref());
     assert_eq!(
+        session.check_command_family_admission(
+            revision,
+            span,
+            SemanticCommandFamily::AssetReference,
+        ),
+        CommandFamilyAdmissionOutcome::FamilyNotExecutable {
+            available: Some(SemanticCommandFamily::TextContent),
+            requested: SemanticCommandFamily::AssetReference,
+            revision,
+            target: span,
+        },
+    );
+    assert_eq!(
+        session.check_identity_precondition(
+            revision,
+            span,
+            IdentityPrecondition {
+                expected_kind: Some(SemanticIdentityKind::Figure),
+                expected_owner: IdentityOwnerExpectation::Direct(text_block),
+            },
+        ),
+        IdentityPreconditionOutcome::KindMismatch {
+            actual: SemanticIdentityKind::InlineSpan,
+            expected: SemanticIdentityKind::Figure,
+            revision,
+            target: span,
+        },
+    );
+    let rejected_expected = EditableSemanticValue::Text(String::from(
+        "process-private rejected expectation",
+    ));
+    assert_eq!(
+        session.check_editable_value_precondition(
+            revision,
+            span,
+            rejected_expected.clone(),
+        ),
+        EditableValuePreconditionOutcome::ValueMismatch {
+            actual: EditableSemanticValue::Text(String::from(
+                "process-private after",
+            )),
+            expected: rejected_expected,
+            revision,
+            target: span,
+        },
+    );
+    assert_eq!(
+        session.accepted_revision().map(|accepted| accepted.id),
+        Some(revision),
+    );
+    assert_eq!(
         session.inspect_identity(revision, span),
         IdentityInspectOutcome::Inspected {
             descriptor: span_descriptor,
