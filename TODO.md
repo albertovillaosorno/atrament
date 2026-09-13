@@ -127,6 +127,14 @@ A combined operation/result helper now exposes that disposition only for an
 applicable Render, Plan, or Export pair, so callers cannot skip applicability
 validation and accidentally project an operation-incompatible result.
 
+
+Already-qualified lifecycle cancellation can now project into those same output
+results without guessing execution state: proven pre-boundary cancellation maps
+to Cancelled before result or effect; a crossed Render/Plan completion remains
+Completed projection; and a crossed Export file commit remains Exported. A
+request alone produces no final result. Cancellation signaling, adapter
+execution, receipt normalization, and retry storage remain open.
+
 ### TODO - Prove session destruction and temporary cleanup
 
 Close, refresh, cancel, crash, and restart fixtures must show that ephemeral

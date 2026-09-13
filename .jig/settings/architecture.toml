@@ -95,7 +95,7 @@ depends_on = []
 depends_on = []
 
 [component.atrament_derived_output_result]
-depends_on = []
+depends_on = ["atrament_application_operation_lifecycle"]
 
 [component.atrament_diagnostic]
 depends_on = []

@@ -33,6 +33,11 @@
 
 //! Frozen transport-neutral result vocabulary for Render, Plan, and Export.
 
+use atrament_application_operation_lifecycle::{
+    ApplicationCancellationDisposition, ApplicationCancellationObservation,
+    ApplicationOperationClass, application_cancellation_resolution,
+};
+
 /// Application operation governed by the derived/output result taxonomy.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum DerivedOutputOperation {
@@ -162,5 +167,52 @@ pub const fn derived_output_effect_disposition_for_operation(
         Some(derived_output_effect_disposition(result))
     } else {
         None
+    }
+}
+
+
+const fn lifecycle_operation(
+    operation: DerivedOutputOperation,
+) -> ApplicationOperationClass {
+    match operation {
+        DerivedOutputOperation::Export => ApplicationOperationClass::Export,
+        DerivedOutputOperation::Plan => ApplicationOperationClass::Plan,
+        DerivedOutputOperation::Render => ApplicationOperationClass::Render,
+    }
+}
+
+/// Project one already-qualified cancellation observation into this taxonomy.
+///
+/// A request alone has no result. Cancellation proven before the owning
+/// boundary maps to `CancelledBeforeResultOrEffect`; a crossed read-only
+/// completion remains `CompletedProjection`, and crossed Export file commit
+/// remains `Exported`. This does not admit or signal cancellation, execute an
+/// output operation, or recover a lost receipt.
+#[must_use]
+pub const fn classify_derived_output_cancellation_result(
+    operation: DerivedOutputOperation,
+    observation: ApplicationCancellationObservation,
+) -> Option<DerivedOutputResultClass> {
+    match application_cancellation_resolution(
+        lifecycle_operation(operation),
+        observation,
+    ) {
+        None => None,
+        Some(resolution) => match resolution.disposition {
+            ApplicationCancellationDisposition::CancelledBeforeEffect => {
+                Some(DerivedOutputResultClass::CancelledBeforeResultOrEffect)
+            },
+            ApplicationCancellationDisposition::EffectRemainsAuthoritative => {
+                match operation {
+                    DerivedOutputOperation::Export => {
+                        Some(DerivedOutputResultClass::Exported)
+                    },
+                    DerivedOutputOperation::Plan
+                    | DerivedOutputOperation::Render => {
+                        Some(DerivedOutputResultClass::CompletedProjection)
+                    },
+                }
+            },
+        },
     }
 }

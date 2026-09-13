@@ -5,6 +5,9 @@ edition = "2024"
 publish = false
 license = "MIT"
 
+[dependencies]
+atrament_application_operation_lifecycle = { path = "../application-operation-lifecycle" }
+
 [lib]
 path = "domain/lib.rs"
 

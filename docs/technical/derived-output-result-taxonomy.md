@@ -38,6 +38,13 @@ when that result class applies to the named operation. This keeps Export-only
 file outcomes from being projected as Render/Plan results and prevents
 `CompletedProjection` from being interpreted as an Export outcome.
 
+The shared lifecycle boundary can now also project an already-qualified
+cancellation observation into this taxonomy. Proven pre-boundary cancellation
+maps to Cancelled before result or effect; a crossed read-only completion stays
+Completed projection, and a crossed Export file commit stays Exported. A
+cancellation request alone remains unresolved rather than manufacturing a final
+result.
+
 ## Contract
 
 ### Result and diagnostic separation

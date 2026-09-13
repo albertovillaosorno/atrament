@@ -30,9 +30,13 @@
 // - Defaults:
 //   - Unknown transport outcome is absent because it is caller state.
 //
+use atrament_application_operation_lifecycle::{
+    ApplicationCancellationObservation,
+};
 use atrament_derived_output_result::{
     DerivedOutputEffectDisposition, DerivedOutputOperation,
-    DerivedOutputResultClass, derived_output_effect_disposition,
+    DerivedOutputResultClass, classify_derived_output_cancellation_result,
+    derived_output_effect_disposition,
     derived_output_effect_disposition_for_operation,
     derived_output_result_applies_to,
 };
@@ -154,4 +158,50 @@ fn all_33_operation_result_pairs_project_effect_only_when_applicable() {
         }
     }
     assert_eq!(cases, 33);
+}
+
+
+#[test]
+fn all_nine_cancellation_observations_preserve_output_effect_boundaries() {
+    const OBSERVATIONS: [ApplicationCancellationObservation; 3] = [
+        ApplicationCancellationObservation::EffectBoundaryCrossed,
+        ApplicationCancellationObservation::RequestOnly,
+        ApplicationCancellationObservation::TookEffectBeforeBoundary,
+    ];
+    let mut cases = 0_usize;
+    for operation in ALL_OPERATIONS {
+        for observation in OBSERVATIONS {
+            let expected = match observation {
+                ApplicationCancellationObservation::RequestOnly => None,
+                ApplicationCancellationObservation::
+                    TookEffectBeforeBoundary => {
+                    Some(
+                        DerivedOutputResultClass::
+                            CancelledBeforeResultOrEffect,
+                    )
+                },
+                ApplicationCancellationObservation::EffectBoundaryCrossed => {
+                    match operation {
+                        DerivedOutputOperation::Export => {
+                            Some(DerivedOutputResultClass::Exported)
+                        },
+                        DerivedOutputOperation::Plan
+                        | DerivedOutputOperation::Render => {
+                            Some(DerivedOutputResultClass::CompletedProjection)
+                        },
+                    }
+                },
+            };
+            assert_eq!(
+                classify_derived_output_cancellation_result(
+                    operation,
+                    observation,
+                ),
+                expected,
+                "operation={operation:?} observation={observation:?}",
+            );
+            cases += 1;
+        }
+    }
+    assert_eq!(cases, 9);
 }

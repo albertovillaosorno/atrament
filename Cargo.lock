@@ -195,6 +195,9 @@ version = "0.1.0"
 [[package]]
 name = "atrament_derived_output_result"
 version = "0.1.0"
+dependencies = [
+ "atrament_application_operation_lifecycle",
+]
 
 [[package]]
 name = "atrament_device_coordinate_calibration"
