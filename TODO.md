@@ -2949,6 +2949,11 @@ Each of its six required version headers must appear exactly once: a 12-case
 missing/duplicate matrix rejects malformed multiplicity with `400` before the
 application compatibility service is invoked.
 
+Header-name admission also probes canonical, all-lowercase, all-uppercase, and
+every single-letter case flip for all six names. Each variant is equivalent when
+unique and still rejects as a duplicate before application compatibility when
+paired with the canonical name.
+
 Automatic browser launch now fails startup closed before `ready`: the bound
 loopback listener and fresh credential are released instead of leaving an
 unreachable authenticated session running. The opener itself has one five-second

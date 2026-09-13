@@ -2376,6 +2376,92 @@ fn handshake_requires_post_method() {
     assert_eq!(status_line(&response), "HTTP/1.1 400 Bad Request");
 }
 
+fn ascii_case_probe_variants(name: &str) -> std::collections::BTreeSet<String> {
+    let mut variants = std::collections::BTreeSet::from([
+        name.to_owned(),
+        name.to_ascii_lowercase(),
+        name.to_ascii_uppercase(),
+    ]);
+    for (index, byte) in name.bytes().enumerate() {
+        if !byte.is_ascii_alphabetic() {
+            continue;
+        }
+        let mut candidate = name.as_bytes().to_vec();
+        candidate[index] = if byte.is_ascii_lowercase() {
+            byte.to_ascii_uppercase()
+        } else {
+            byte.to_ascii_lowercase()
+        };
+        variants.insert(
+            String::from_utf8(candidate)
+                .expect("ASCII field name remains UTF-8"),
+        );
+    }
+    variants
+}
+
+#[test]
+fn required_handshake_header_names_preserve_case_insensitive_single_value() {
+    let authorization = format!("Bearer {EXPECTED_SECRET}");
+    let version_headers = [
+        ("X-Atrament-Capability-Version", CAPABILITY_VERSION),
+        ("X-Atrament-Product-Version", PRODUCT_VERSION),
+        ("X-Atrament-Profile-Version", PROFILE_VERSION),
+        ("X-Atrament-Prompt-Version", PROMPT_VERSION),
+        ("X-Atrament-Protocol-Version", PROTOCOL_VERSION),
+        ("X-Atrament-Renderer-Version", RENDERER_VERSION),
+    ];
+    let mut request = format!(
+        concat!(
+            "POST /api/handshake HTTP/1.1\r\n",
+            "Host: {host}\r\n",
+            "Authorization: {authorization}\r\n",
+            "Origin: {origin}\r\n",
+        ),
+        host = EXPECTED_HOST,
+        authorization = authorization,
+        origin = EXPECTED_ORIGIN,
+    );
+    for (name, value) in version_headers {
+        request.push_str(&format!("{name}: {value}\r\n"));
+    }
+    request.push_str("\r\n");
+
+    for (name, value) in version_headers {
+        let canonical = format!("{name}: {value}\r\n");
+        for variant in ascii_case_probe_variants(name) {
+            let replacement = format!("{variant}: {value}\r\n");
+            let admitted = request.replacen(&canonical, &replacement, 1);
+            assert_eq!(
+                status_line(&route_runtime(admitted.as_bytes(), EXPECTED_HOST)),
+                "HTTP/1.1 200 OK",
+                "required header {name} variant {variant}",
+            );
+
+            let duplicate = request.replacen(
+                &canonical,
+                &format!("{canonical}{replacement}"),
+                1,
+            );
+            let mut draft = SessionDraftService::default();
+            let response = runtime::route_request(
+                duplicate.as_bytes(),
+                &route_context(
+                    EXPECTED_HOST,
+                    EXPECTED_SECRET,
+                    &MustNotEvaluateHandshake,
+                ),
+                &mut draft,
+            );
+            assert_eq!(
+                status_line(&response),
+                "HTTP/1.1 400 Bad Request",
+                "duplicate required header {name} variant {variant}",
+            );
+        }
+    }
+}
+
 #[test]
 fn every_required_handshake_version_header_requires_exactly_one_value() {
     let authorization = format!("Bearer {EXPECTED_SECRET}");
