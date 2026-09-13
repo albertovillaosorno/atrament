@@ -1347,9 +1347,14 @@ Current executable evidence now requires one caller-produced observation for
 each of those seven photographed-capture geometry families and binds the report
 to one stable capture identity. Duplicate families reject in report order and
 missing families reject in canonical requirement order; a 128-mask compact
-oracle exhausts every presence subset. A separate 2,801-sequence oracle covers
-every axis sequence through length four, pinning duplicate-before-missing
-precedence independently. Detection, image decoding, transform
+oracle exhausts every presence subset. Successful completeness now also returns
+constructor-sealed evidence borrowing the exact report, so later extraction can
+require all seven families without treating structural completeness as a quality
+pass.
+
+A separate 2,801-sequence oracle covers every axis sequence through length four
+and requires the sealed path to preserve duplicate-before-missing precedence
+independently. Detection, image decoding, transform
 fitting, distortion correction, units/tolerances, capture-quality scoring,
 geometry acceptance, and handwriting extraction remain open.
 

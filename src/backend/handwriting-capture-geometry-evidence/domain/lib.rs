@@ -90,6 +90,38 @@ pub struct PhotographedCalibrationGeometryEvidence<CaptureIdentity, Evidence> {
     pub observations: Vec<PhotographedCalibrationGeometryObservation<Evidence>>,
 }
 
+/// Constructor-sealed evidence that one exact capture report is complete.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ValidatedPhotographedCalibrationGeometryEvidence<
+    'report,
+    CaptureIdentity,
+    Evidence,
+> {
+    report: &'report PhotographedCalibrationGeometryEvidence<
+        CaptureIdentity,
+        Evidence,
+    >,
+}
+
+impl<'report, CaptureIdentity, Evidence>
+    ValidatedPhotographedCalibrationGeometryEvidence<
+        'report,
+        CaptureIdentity,
+        Evidence,
+    >
+{
+    /// Return the exact report that produced this completeness evidence.
+    #[must_use]
+    pub const fn report(
+        &self,
+    ) -> &'report PhotographedCalibrationGeometryEvidence<
+        CaptureIdentity,
+        Evidence,
+    > {
+        self.report
+    }
+}
+
 /// Structural failure in one photographed-calibration geometry report.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PhotographedCalibrationGeometryEvidenceError {
@@ -141,4 +173,31 @@ pub fn validate_photographed_calibration_geometry_evidence<
         }
     }
     Ok(())
+}
+
+/// Validate one exact report and seal borrowed completeness evidence.
+///
+/// The returned value proves only that all seven required families are present
+/// exactly once. It does not classify any measurement, tolerance, transform,
+/// or capture-quality result.
+///
+/// # Errors
+///
+/// Returns exactly the same duplicate-before-missing failure as
+/// [`validate_photographed_calibration_geometry_evidence`].
+pub fn validate_photographed_calibration_geometry_evidence_view<
+    CaptureIdentity,
+    Evidence,
+>(
+    report: &PhotographedCalibrationGeometryEvidence<CaptureIdentity, Evidence>,
+) -> Result<
+    ValidatedPhotographedCalibrationGeometryEvidence<
+        '_,
+        CaptureIdentity,
+        Evidence,
+    >,
+    PhotographedCalibrationGeometryEvidenceError,
+> {
+    validate_photographed_calibration_geometry_evidence(report)?;
+    Ok(ValidatedPhotographedCalibrationGeometryEvidence { report })
 }

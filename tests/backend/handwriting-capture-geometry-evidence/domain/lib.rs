@@ -36,6 +36,7 @@ use atrament_handwriting_capture_geometry_evidence::{
     PhotographedCalibrationGeometryEvidenceError,
     PhotographedCalibrationGeometryObservation,
     validate_photographed_calibration_geometry_evidence,
+    validate_photographed_calibration_geometry_evidence_view,
 };
 
 const AXES: [PhotographedCalibrationGeometryAxis; 7] = [
@@ -80,6 +81,10 @@ fn complete_report_retains_capture_identity_and_all_seven_evidence_families() {
         validate_photographed_calibration_geometry_evidence(&report),
         Ok(()),
     );
+    let validated =
+        validate_photographed_calibration_geometry_evidence_view(&report)
+            .expect("complete report seals evidence");
+    assert!(std::ptr::eq(validated.report(), &report));
     assert_eq!(
         report.observations[0].evidence,
         "reference-mark-evidence",
@@ -160,6 +165,23 @@ fn all_128_presence_masks_match_independent_first_missing_axis_oracle() {
             expected_result,
             "presence mask {mask:#09b}",
         );
+        match expected_result {
+            Ok(()) => {
+                let validated =
+                    validate_photographed_calibration_geometry_evidence_view(
+                        &report,
+                    )
+                    .expect("complete mask seals exact report");
+                assert!(std::ptr::eq(validated.report(), &report));
+            },
+            Err(reason) => assert_eq!(
+                validate_photographed_calibration_geometry_evidence_view(
+                    &report,
+                ),
+                Err(reason),
+                "sealed presence mask {mask:#09b}",
+            ),
+        }
         cases = cases.saturating_add(1);
     }
     assert_eq!(cases, 128);
@@ -221,10 +243,19 @@ fn all_2801_short_axis_sequences_match_duplicate_then_missing_oracle() {
                 );
                 saw_missing = true;
             }
+            let expected =
+                expected.expect("short sequence always has an error");
             assert_eq!(
                 validate_photographed_calibration_geometry_evidence(&report),
-                Err(expected.expect("short sequence always has an error")),
+                Err(expected),
                 "length {length}, encoded {encoded}",
+            );
+            assert_eq!(
+                validate_photographed_calibration_geometry_evidence_view(
+                    &report,
+                ),
+                Err(expected),
+                "sealed length {length}, encoded {encoded}",
             );
             cases = cases.saturating_add(1);
         }

@@ -157,8 +157,11 @@ boundary for photographed calibration. One stable capture identity carries one
 observation each for reference marks, perspective, lens distortion, physical
 scale, grid registration, baseline reference, and capture quality. Duplicate
 axes reject in report order; missing axes reject in that canonical requirement
-order. The evidence values remain caller-owned and are not interpreted as a
-geometry or quality pass.
+order. A constructor-sealed borrowed view now exists only after those structural
+checks pass, allowing later extraction to require complete report evidence
+without treating completeness as a geometry or quality pass.
+
+The evidence values remain caller-owned and uninterpreted.
 
 ### Bounded variation remains downstream evidence
 
