@@ -1026,7 +1026,9 @@ A separate corpus-evidence boundary now freezes the ADR verification checklist:
 English prose, Spanish prose, names, quotations, questions, exclamations, en and
 em dashes, combining marks, normalized equivalents, and mixed mathematics. It
 requires caller-owned evidence for all eleven scenarios, permits extra evidence,
-and exhausts all 2,048 scenario-presence masks.
+and returns constructor-sealed evidence borrowing the exact admitted set. All
+2,048 scenario-presence masks require direct and sealed admission to preserve
+the same first missing scenario.
 
 A checked-in corpus fixture now authors exact UTF-8 text for all eleven
 scenarios and a whitespace-delimited sweep whose 114 tokens must match the

@@ -89,6 +89,38 @@ pub struct EnglishSpanishCorpusObservation<ArtifactIdentity, Evidence> {
     pub scenario: EnglishSpanishCorpusScenario,
 }
 
+/// Constructor-sealed evidence that one exact caller-owned corpus checklist
+/// contains every required scenario.
+#[derive(Debug)]
+pub struct ValidatedEnglishSpanishCorpusEvidence<
+    'observations,
+    ArtifactIdentity,
+    Evidence,
+> {
+    observations: &'observations [
+        EnglishSpanishCorpusObservation<ArtifactIdentity, Evidence>
+    ],
+}
+
+impl<'observations, ArtifactIdentity, Evidence>
+    ValidatedEnglishSpanishCorpusEvidence<
+        'observations,
+        ArtifactIdentity,
+        Evidence,
+    >
+{
+    /// Return the exact caller-owned observations that passed completeness
+    /// admission.
+    #[must_use]
+    pub const fn observations(
+        &self,
+    ) -> &'observations [
+        EnglishSpanishCorpusObservation<ArtifactIdentity, Evidence>
+    ] {
+        self.observations
+    }
+}
+
 /// Why the structural English/Spanish corpus checklist is incomplete.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum EnglishSpanishCorpusEvidenceError {
@@ -121,4 +153,25 @@ pub fn validate_english_spanish_corpus_evidence<ArtifactIdentity, Evidence>(
         }
     }
     Ok(())
+}
+
+/// Validate and seal one exact corpus-evidence checklist for read-only reuse.
+///
+/// # Errors
+///
+/// Returns the same first missing scenario as
+/// [`validate_english_spanish_corpus_evidence`].
+pub fn validate_english_spanish_corpus_evidence_view<
+    ArtifactIdentity,
+    Evidence,
+>(
+    observations: &[
+        EnglishSpanishCorpusObservation<ArtifactIdentity, Evidence>
+    ],
+) -> Result<
+    ValidatedEnglishSpanishCorpusEvidence<'_, ArtifactIdentity, Evidence>,
+    EnglishSpanishCorpusEvidenceError,
+> {
+    validate_english_spanish_corpus_evidence(observations)?;
+    Ok(ValidatedEnglishSpanishCorpusEvidence { observations })
 }

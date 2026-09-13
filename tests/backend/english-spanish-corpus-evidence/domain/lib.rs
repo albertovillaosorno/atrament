@@ -34,6 +34,7 @@
 use atrament_english_spanish_corpus_evidence::{
     EnglishSpanishCorpusEvidenceError, EnglishSpanishCorpusObservation,
     EnglishSpanishCorpusScenario, validate_english_spanish_corpus_evidence,
+    validate_english_spanish_corpus_evidence_view,
 };
 
 const SCENARIOS: [EnglishSpanishCorpusScenario; 11] = [
@@ -67,6 +68,12 @@ fn complete_adr_scenario_set_is_structurally_admitted() {
         validate_english_spanish_corpus_evidence(&observations),
         Ok(()),
     );
+    let validated = validate_english_spanish_corpus_evidence_view(&observations)
+        .expect("complete corpus evidence seals");
+    assert!(std::ptr::eq(
+        validated.observations(),
+        observations.as_slice(),
+    ));
     assert_eq!(observations.len(), 11);
 }
 
@@ -118,6 +125,20 @@ fn all_2048_scenario_presence_masks_match_first_missing_scenario_oracle() {
             validate_english_spanish_corpus_evidence(&observations),
             expected,
             "scenario presence mask {mask:#013b}",
+        );
+        let sealed =
+            validate_english_spanish_corpus_evidence_view(&observations).map(
+                |validated| {
+                    std::ptr::eq(
+                        validated.observations(),
+                        observations.as_slice(),
+                    )
+                },
+        );
+        assert_eq!(
+            sealed,
+            expected.map(|()| true),
+            "sealed scenario presence mask {mask:#013b}",
         );
         cases = cases.saturating_add(1);
     }
