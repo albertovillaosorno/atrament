@@ -527,6 +527,38 @@ async function waitForSessionStatus(client, context, expected) {
     );
 }
 
+async function performTrustedKey(client, context, value) {
+    await client.command("input.performActions", {
+        actions: [
+            {
+                actions: [
+                    { type: "keyDown", value },
+                    { type: "keyUp", value },
+                ],
+                id: "keyboard",
+                type: "key",
+            },
+        ],
+        context,
+    });
+}
+
+async function activeElementIdentity(client, context) {
+    const response = await client.command("script.evaluate", {
+        awaitPromise: false,
+        expression: `JSON.stringify({
+            href: document.activeElement?.getAttribute("href") ?? null,
+            id: document.activeElement?.id ?? "",
+            tag: document.activeElement?.tagName ?? ""
+        })`,
+        resultOwnership: "none",
+        target: { context },
+    });
+    assert.equal(response.type, "success");
+    assert.equal(response.result.type, "string");
+    return JSON.parse(response.result.value);
+}
+
 async function setFirefoxViewport(client, context, width, height) {
     await client.command("browsingContext.setViewport", {
         context,
@@ -1335,6 +1367,194 @@ test(
                 },
                 writes: ["repeat-safe prompt"],
             });
+            assert.equal(
+                requests.some((request) => request.startsWith("/api/")),
+                false,
+            );
+        } finally {
+            if (bidi?.socket != null) {
+                bidi.socket.end();
+            }
+            if (server.listening) {
+                server.close();
+                await once(server, "close");
+            }
+            for (const child of children.reverse()) {
+                await stopChild(child);
+            }
+            fs.rmSync(profile, { recursive: true, force: true });
+        }
+    },
+);
+
+test(
+    "Firefox trusted Tab order follows compact divider availability",
+    { skip: !FIREFOX_AVAILABLE, timeout: 30_000 },
+    async () => {
+        fs.mkdirSync(".temp", { recursive: true });
+        const profile = fs.mkdtempSync(".temp/workspace-tab-order-");
+        const requests = [];
+        const server = createStaticWorkspaceServer(requests, true);
+        const children = [];
+        let bidi;
+        try {
+            server.listen(0, "127.0.0.1");
+            await once(server, "listening");
+            const address = server.address();
+            assert.notEqual(typeof address, "string");
+            assert.notEqual(address, null);
+            const origin = `http://127.0.0.1:${address.port}`;
+
+            bidi = await startBidiFirefox(profile, children);
+            for (const [width, expected] of [
+                [320, [
+                    { href: "#llm-editor-title", id: "", tag: "A" },
+                    { href: "#human-editor-title", id: "", tag: "A" },
+                    { href: null, id: "source-panel", tag: "SECTION" },
+                    { href: null, id: "preview-panel", tag: "SECTION" },
+                    { href: null, id: "zoom-out", tag: "BUTTON" },
+                    { href: null, id: "zoom-in", tag: "BUTTON" },
+                    { href: null, id: "page-stage", tag: "DIV" },
+                ]],
+                [481, [
+                    { href: "#llm-editor-title", id: "", tag: "A" },
+                    { href: "#human-editor-title", id: "", tag: "A" },
+                    { href: null, id: "source-panel", tag: "SECTION" },
+                    {
+                        href: null,
+                        id: "workspace-divider",
+                        tag: "DIV",
+                    },
+                    { href: null, id: "preview-panel", tag: "SECTION" },
+                    { href: null, id: "zoom-out", tag: "BUTTON" },
+                    { href: null, id: "zoom-in", tag: "BUTTON" },
+                    { href: null, id: "page-stage", tag: "DIV" },
+                ]],
+            ]) {
+                const tab = await bidi.command("browsingContext.create", {
+                    type: "tab",
+                });
+                await bidi.command("browsingContext.navigate", {
+                    context: tab.context,
+                    url: origin,
+                    wait: "complete",
+                });
+                await setFirefoxViewport(bidi, tab.context, width, 480);
+                const observed = [];
+                for (let index = 0; index < expected.length; index += 1) {
+                    await performTrustedKey(bidi, tab.context, "\uE004");
+                    observed.push(
+                        await activeElementIdentity(bidi, tab.context),
+                    );
+                }
+                assert.deepEqual(
+                    observed,
+                    expected,
+                    `${width}px trusted Tab order`,
+                );
+                await bidi.command("browsingContext.close", {
+                    context: tab.context,
+                });
+            }
+            assert.equal(
+                requests.some((request) => request.startsWith("/api/")),
+                false,
+            );
+        } finally {
+            if (bidi?.socket != null) {
+                bidi.socket.end();
+            }
+            if (server.listening) {
+                server.close();
+                await once(server, "close");
+            }
+            for (const child of children.reverse()) {
+                await stopChild(child);
+            }
+            fs.rmSync(profile, { recursive: true, force: true });
+        }
+    },
+);
+
+test(
+    "Firefox trusted keyboard activates native skip links without workspace JS",
+    { skip: !FIREFOX_AVAILABLE, timeout: 30_000 },
+    async () => {
+        fs.mkdirSync(".temp", { recursive: true });
+        const profile = fs.mkdtempSync(".temp/workspace-skip-links-");
+        const requests = [];
+        const server = createStaticWorkspaceServer(requests);
+        const children = [];
+        let bidi;
+        try {
+            server.listen(0, "127.0.0.1");
+            await once(server, "listening");
+            const address = server.address();
+            assert.notEqual(typeof address, "string");
+            assert.notEqual(address, null);
+            const origin = `http://127.0.0.1:${address.port}`;
+
+            bidi = await startBidiFirefox(profile, children);
+            for (const [tabs, expected] of [
+                [1, {
+                    hash: "#llm-editor-title",
+                    heading: "llm-editor-title",
+                    panel: "source-panel",
+                }],
+                [2, {
+                    hash: "#human-editor-title",
+                    heading: "human-editor-title",
+                    panel: "preview-panel",
+                }],
+            ]) {
+                const tab = await bidi.command("browsingContext.create", {
+                    type: "tab",
+                });
+                await bidi.command("browsingContext.navigate", {
+                    context: tab.context,
+                    url: origin,
+                    wait: "complete",
+                });
+                await setFirefoxViewport(bidi, tab.context, 320, 225);
+                for (let index = 0; index < tabs; index += 1) {
+                    await performTrustedKey(bidi, tab.context, "\uE004");
+                }
+                await performTrustedKey(bidi, tab.context, "\uE007");
+                const response = await bidi.command("script.evaluate", {
+                    awaitPromise: false,
+                    expression: `JSON.stringify((() => {
+                        const heading = document.activeElement;
+                        const panel = document.querySelector(
+                            ${JSON.stringify(`#${expected.panel}`)}
+                        );
+                        const box = heading.getBoundingClientRect();
+                        const panelBox = panel.getBoundingClientRect();
+                        return {
+                            active: heading.id,
+                            hash: window.location.hash,
+                            headingVisible:
+                                box.bottom > panelBox.top
+                                && box.top < panelBox.bottom,
+                            panelScrollLeft: panel.scrollLeft,
+                            panelScrollTop: panel.scrollTop
+                        };
+                    })())`,
+                    resultOwnership: "none",
+                    target: { context: tab.context },
+                });
+                assert.equal(response.type, "success");
+                assert.equal(response.result.type, "string");
+                assert.deepEqual(JSON.parse(response.result.value), {
+                    active: expected.heading,
+                    hash: expected.hash,
+                    headingVisible: true,
+                    panelScrollLeft: 0,
+                    panelScrollTop: 0,
+                });
+                await bidi.command("browsingContext.close", {
+                    context: tab.context,
+                });
+            }
             assert.equal(
                 requests.some((request) => request.startsWith("/api/")),
                 false,

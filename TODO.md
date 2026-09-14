@@ -2932,8 +2932,9 @@ import, export, and hardware arming usable without a pointer.
 Current frontend evidence includes skip links, labeled text areas and counters,
 a keyboard-operable splitter, button-based zoom, and focusable source, preview,
 and page-stage scroll regions with explicit focus indicators measuring at least
-7.08:1 contrast. The two skip links also focus and reveal their panel headings
-using native anchor behavior when `main.ts` is absent. Session text follows its
+7.08:1 contrast. A checked-in real-Firefox trusted-key fixture activates both
+skip links with native Tab/Enter behavior while workspace JavaScript is absent;
+each link focuses and reveals its exact panel heading. Session text follows its
 presented LTR or RTL direction without changing clipboard content; status
 announcements remain available for session, clipboard, and zoom. Diagnostics
 remain ordinary unavailable text until a backend feed can update them.
@@ -2943,10 +2944,10 @@ measure at least 4.5:1 contrast. If a focused splitter becomes inert at the
 compact breakpoint, focus moves to a source heading whose full contextual header
 is scrolled into view.
 
-Trusted Firefox keyboard actions Tab to each skip link, activate it with Enter,
-PageDown the focused heading's scrollport, and continue with Tab to the next
-local control. BiDi viewport emulation confirms the compact 320-pixel tab order
-omits the inert divider while 481 pixels restores it between source and preview.
+A second checked-in trusted-key fixture pins the complete enabled Tab prefix at
+320 and 481 pixels. Compact order omits the inert divider, while the wide order
+restores it exactly between source and preview; enabled zoom-out and zoom-in
+controls remain reachable before the page stage in both states.
 
 At a real 320-pixel viewport, both skip links still focus the expected heading
 and return that panel to its origin. Sharing their viewport anchor keeps the
