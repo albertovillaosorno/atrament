@@ -2165,6 +2165,136 @@ test(
 );
 
 test(
+    "Firefox divider ARIA changes only when compact state changes",
+    { skip: !FIREFOX_AVAILABLE, timeout: 30_000 },
+    async () => {
+        fs.mkdirSync(".temp", { recursive: true });
+        const profile = fs.mkdtempSync(".temp/workspace-resize-aria-");
+        const requests = [];
+        const server = createStaticWorkspaceServer(requests, true);
+        const children = [];
+        let bidi;
+        try {
+            server.listen(0, "127.0.0.1");
+            await once(server, "listening");
+            const address = server.address();
+            assert.notEqual(typeof address, "string");
+            assert.notEqual(address, null);
+            const origin = `http://127.0.0.1:${address.port}`;
+
+            bidi = await startBidiFirefox(profile, children);
+            const tab = await bidi.command("browsingContext.create", {
+                type: "tab",
+            });
+            await bidi.command("browsingContext.navigate", {
+                context: tab.context,
+                url: origin,
+                wait: "complete",
+            });
+            await setFirefoxViewport(bidi, tab.context, 640, 480);
+            await bidi.command("script.evaluate", {
+                awaitPromise: false,
+                expression: `(() => {
+                    globalThis.__dividerAttributeMutations = {};
+                    const divider = document.querySelector(
+                        "#workspace-divider"
+                    );
+                    globalThis.__dividerAttributeObserver =
+                        new MutationObserver((records) => {
+                            for (const record of records) {
+                                const name = record.attributeName;
+                                globalThis.__dividerAttributeMutations[name] =
+                                    (globalThis.__dividerAttributeMutations[
+                                        name
+                                    ] ?? 0) + 1;
+                            }
+                        });
+                    globalThis.__dividerAttributeObserver.observe(divider, {
+                        attributeFilter: [
+                            "aria-disabled",
+                            "aria-valuemax",
+                            "aria-valuemin",
+                            "aria-valuenow",
+                            "aria-valuetext",
+                            "tabindex"
+                        ],
+                        attributes: true
+                    });
+                })()`,
+                resultOwnership: "none",
+                target: { context: tab.context },
+            });
+            const mutationCounts = async () => {
+                await new Promise((resolve) => setTimeout(resolve, 0));
+                const response = await bidi.command("script.evaluate", {
+                    awaitPromise: false,
+                    expression: `JSON.stringify(
+                        globalThis.__dividerAttributeMutations
+                    )`,
+                    resultOwnership: "none",
+                    target: { context: tab.context },
+                });
+                assert.equal(response.type, "success");
+                assert.equal(response.result.type, "string");
+                return JSON.parse(response.result.value);
+            };
+
+            for (const width of [641, 1024, 481]) {
+                await setFirefoxViewport(bidi, tab.context, width, 480);
+            }
+            assert.deepEqual(await mutationCounts(), {});
+
+            await setFirefoxViewport(bidi, tab.context, 480, 480);
+            const oneTransition = {
+                "aria-disabled": 1,
+                "aria-valuemax": 1,
+                "aria-valuemin": 1,
+                "aria-valuenow": 1,
+                "aria-valuetext": 1,
+                tabindex: 1,
+            };
+            assert.deepEqual(await mutationCounts(), oneTransition);
+
+            await setFirefoxViewport(bidi, tab.context, 479, 480);
+            assert.deepEqual(await mutationCounts(), oneTransition);
+
+            await setFirefoxViewport(bidi, tab.context, 481, 480);
+            assert.deepEqual(await mutationCounts(), {
+                "aria-disabled": 2,
+                "aria-valuemax": 2,
+                "aria-valuemin": 2,
+                "aria-valuenow": 2,
+                "aria-valuetext": 2,
+                tabindex: 2,
+            });
+            await bidi.command("script.evaluate", {
+                awaitPromise: false,
+                expression:
+                    `globalThis.__dividerAttributeObserver.disconnect()`,
+                resultOwnership: "none",
+                target: { context: tab.context },
+            });
+            assert.equal(
+                requests.some((request) => request.startsWith("/api/")),
+                false,
+            );
+        } finally {
+            if (bidi?.socket != null) {
+                bidi.socket.end();
+            }
+            if (server.listening) {
+                server.close();
+                await once(server, "close");
+            }
+            for (const child of children.reverse()) {
+                await stopChild(child);
+            }
+            fs.rmSync(profile, { recursive: true, force: true });
+        }
+    },
+);
+
+test(
     "Firefox compact breakpoint matches viewport CSS and divider state",
     { skip: !FIREFOX_AVAILABLE, timeout: 30_000 },
     async () => {

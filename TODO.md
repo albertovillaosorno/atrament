@@ -2978,10 +2978,11 @@ dragging is absent,
 throws, or silently fails to capture, native touch defaults remain available and
 only a completed click changes the split; an uncaptured pointerdown also
 preserves the prior keyboard focus. Compact state is derived from the same
-480-pixel viewport-width boundary as CSS and updates through one resize
-listener.
-Repeated same-state resizes do not rewrite separator ARIA, while real breakpoint
-changes retain the compact splitter contract.
+480-pixel viewport-width boundary as CSS
+and updates through one resize listener. A checked-in real-Firefox mutation
+oracle now proves wide-to-wide and compact-to-compact resizes do not rewrite the
+tracked separator ARIA/tabindex fields, while each real breakpoint transition
+changes every required field exactly once.
 
 A checked-in Firefox BiDi breakpoint oracle now covers 320, 479, 480, 481,
 482, 640, and 1024 pixels. Exact `innerWidth`, the CSS max-480 media query,
