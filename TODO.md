@@ -2978,11 +2978,13 @@ listener.
 Repeated same-state resizes do not rewrite separator ARIA, while real breakpoint
 changes retain the compact splitter contract.
 
-Firefox BiDi viewport emulation at 320, 479, 480, 481, 482, 640, and 1024 pixels
-matched `innerWidth`, CSS media queries, and the rendered compact state exactly.
-A trusted pointer drag interrupted by a wide-to-wide viewport resize released
-capture before geometry changed; its late move did not alter the split, and the
-next drag remained usable.
+A checked-in Firefox BiDi breakpoint oracle now covers 320, 479, 480, 481,
+482, 640, and 1024 pixels. Exact `innerWidth`, the CSS max-480 media query,
+divider enablement, ARIA range, tabindex, and restored 46/54 wide split all
+change at the same boundary. A trusted pointer drag interrupted by a
+wide-to-wide
+viewport resize released capture before geometry changed; its late move did not
+alter the split, and the next drag remained usable.
 
 The inert compact divider restores native touch behavior without an overlapping
 hit target. Backend-owned editing, import, export, diagnostic actions, and

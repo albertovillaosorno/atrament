@@ -1801,6 +1801,97 @@ test(
 );
 
 test(
+    "Firefox compact breakpoint matches viewport CSS and divider state",
+    { skip: !FIREFOX_AVAILABLE, timeout: 30_000 },
+    async () => {
+        fs.mkdirSync(".temp", { recursive: true });
+        const profile = fs.mkdtempSync(".temp/workspace-breakpoint-");
+        const requests = [];
+        const server = createStaticWorkspaceServer(requests, true);
+        const children = [];
+        let bidi;
+        try {
+            server.listen(0, "127.0.0.1");
+            await once(server, "listening");
+            const address = server.address();
+            assert.notEqual(typeof address, "string");
+            assert.notEqual(address, null);
+            const origin = `http://127.0.0.1:${address.port}`;
+
+            bidi = await startBidiFirefox(profile, children);
+            const tab = await bidi.command("browsingContext.create", {
+                type: "tab",
+            });
+            await bidi.command("browsingContext.navigate", {
+                context: tab.context,
+                url: origin,
+                wait: "complete",
+            });
+            const observed = [];
+            for (const width of [320, 479, 480, 481, 482, 640, 1024]) {
+                await setFirefoxViewport(bidi, tab.context, width, 480);
+                const response = await bidi.command("script.evaluate", {
+                    awaitPromise: false,
+                    expression: `JSON.stringify((() => {
+                        const divider = document.querySelector(
+                            "#workspace-divider"
+                        );
+                        return {
+                            compactCss: window.matchMedia(
+                                "(max-width: 480px)"
+                            ).matches,
+                            disabled:
+                                divider.getAttribute("aria-disabled"),
+                            maximum: divider.getAttribute("aria-valuemax"),
+                            minimum: divider.getAttribute("aria-valuemin"),
+                            now: divider.getAttribute("aria-valuenow"),
+                            tabindex: divider.getAttribute("tabindex"),
+                            width: window.innerWidth
+                        };
+                    })())`,
+                    resultOwnership: "none",
+                    target: { context: tab.context },
+                });
+                assert.equal(response.type, "success");
+                assert.equal(response.result.type, "string");
+                observed.push(JSON.parse(response.result.value));
+            }
+            assert.deepEqual(
+                observed,
+                [320, 479, 480, 481, 482, 640, 1024].map((width) => {
+                    const compact = width <= 480;
+                    return {
+                        compactCss: compact,
+                        disabled: compact ? "true" : null,
+                        maximum: compact ? "50" : "65",
+                        minimum: compact ? "50" : "35",
+                        now: compact ? "50" : "46",
+                        tabindex: compact ? "-1" : "0",
+                        width,
+                    };
+                }),
+            );
+            assert.equal(
+                requests.some((request) => request.startsWith("/api/")),
+                false,
+            );
+        } finally {
+            if (bidi?.socket != null) {
+                bidi.socket.end();
+            }
+            if (server.listening) {
+                server.close();
+                await once(server, "close");
+            }
+            for (const child of children.reverse()) {
+                await stopChild(child);
+            }
+            fs.rmSync(profile, { recursive: true, force: true });
+        }
+    },
+);
+
+test(
     "Firefox viewport matrix keeps both workspace surfaces reachable",
     { skip: !FIREFOX_AVAILABLE, timeout: 30_000 },
     async () => {
