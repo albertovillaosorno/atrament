@@ -566,6 +566,20 @@ async function performTrustedKeyChord(
     });
 }
 
+async function performTrustedPointer(client, context, actions) {
+    await client.command("input.performActions", {
+        actions: [
+            {
+                actions,
+                id: "mouse",
+                parameters: { pointerType: "mouse" },
+                type: "pointer",
+            },
+        ],
+        context,
+    });
+}
+
 async function activeElementIdentity(client, context) {
     const response = await client.command("script.evaluate", {
         awaitPromise: false,
@@ -2144,6 +2158,242 @@ test(
                 headerFullyVisible: true,
                 scrollTop: 0,
             });
+            assert.equal(
+                requests.some((request) => request.startsWith("/api/")),
+                false,
+            );
+        } finally {
+            if (bidi?.socket != null) {
+                bidi.socket.end();
+            }
+            if (server.listening) {
+                server.close();
+                await once(server, "close");
+            }
+            for (const child of children.reverse()) {
+                await stopChild(child);
+            }
+            fs.rmSync(profile, { recursive: true, force: true });
+        }
+    },
+);
+
+test(
+    "Firefox resize interrupts pointer capture without poisoning the next drag",
+    { skip: !FIREFOX_AVAILABLE, timeout: 30_000 },
+    async () => {
+        fs.mkdirSync(".temp", { recursive: true });
+        const profile = fs.mkdtempSync(".temp/workspace-pointer-resize-");
+        const requests = [];
+        const server = createStaticWorkspaceServer(requests, true);
+        const children = [];
+        let bidi;
+        try {
+            server.listen(0, "127.0.0.1");
+            await once(server, "listening");
+            const address = server.address();
+            assert.notEqual(typeof address, "string");
+            assert.notEqual(address, null);
+            const origin = `http://127.0.0.1:${address.port}`;
+
+            bidi = await startBidiFirefox(profile, children);
+            const tab = await bidi.command("browsingContext.create", {
+                type: "tab",
+            });
+            await bidi.command("browsingContext.navigate", {
+                context: tab.context,
+                url: origin,
+                wait: "complete",
+            });
+            await setFirefoxViewport(bidi, tab.context, 640, 480);
+            const initialGeometry = await bidi.command("script.evaluate", {
+                awaitPromise: false,
+                expression: `JSON.stringify((() => {
+                    const divider = document.querySelector(
+                        "#workspace-divider"
+                    );
+                    const box = divider.getBoundingClientRect();
+                    globalThis.__dividerPointerEvidence = {
+                        down: null,
+                        lost: 0
+                    };
+                    divider.addEventListener("pointerdown", (event) => {
+                        queueMicrotask(() => {
+                            globalThis.__dividerPointerEvidence.down = {
+                                captured:
+                                    divider.hasPointerCapture(event.pointerId),
+                                pointerId: event.pointerId
+                            };
+                        });
+                    });
+                    divider.addEventListener("lostpointercapture", () => {
+                        globalThis.__dividerPointerEvidence.lost += 1;
+                    });
+                    return {
+                        x: box.left + box.width / 2,
+                        y: box.top + box.height / 2
+                    };
+                })())`,
+                resultOwnership: "none",
+                target: { context: tab.context },
+            });
+            assert.equal(initialGeometry.type, "success");
+            assert.equal(initialGeometry.result.type, "string");
+            const start = JSON.parse(initialGeometry.result.value);
+            await performTrustedPointer(bidi, tab.context, [
+                {
+                    duration: 0,
+                    origin: "viewport",
+                    type: "pointerMove",
+                    x: Math.round(start.x),
+                    y: Math.round(start.y),
+                },
+                { button: 0, type: "pointerDown" },
+            ]);
+            await new Promise((resolve) => setTimeout(resolve, 0));
+            const captured = await bidi.command("script.evaluate", {
+                awaitPromise: false,
+                expression: `JSON.stringify({
+                    evidence: globalThis.__dividerPointerEvidence,
+                    now: document.querySelector("#workspace-divider")
+                        .getAttribute("aria-valuenow")
+                })`,
+                resultOwnership: "none",
+                target: { context: tab.context },
+            });
+            assert.equal(captured.type, "success");
+            assert.equal(captured.result.type, "string");
+            const capturedState = JSON.parse(captured.result.value);
+            assert.equal(capturedState.evidence.down.captured, true);
+            assert.equal(capturedState.evidence.lost, 0);
+            assert.equal(capturedState.now, "46");
+
+            await setFirefoxViewport(bidi, tab.context, 800, 480);
+            const released = await bidi.command("script.evaluate", {
+                awaitPromise: false,
+                expression: `JSON.stringify((() => {
+                    const divider = document.querySelector(
+                        "#workspace-divider"
+                    );
+                    const evidence = globalThis.__dividerPointerEvidence;
+                    return {
+                        evidence,
+                        hasCapture: divider.hasPointerCapture(
+                            evidence.down.pointerId
+                        ),
+                        now: divider.getAttribute("aria-valuenow")
+                    };
+                })())`,
+                resultOwnership: "none",
+                target: { context: tab.context },
+            });
+            assert.equal(released.type, "success");
+            assert.equal(released.result.type, "string");
+            const releasedState = JSON.parse(released.result.value);
+            assert.deepEqual(releasedState.evidence.down, {
+                captured: true,
+                pointerId: capturedState.evidence.down.pointerId,
+            });
+            assert.equal(releasedState.hasCapture, false);
+            assert.equal(releasedState.now, "46");
+
+            await performTrustedPointer(bidi, tab.context, [
+                {
+                    duration: 50,
+                    origin: "viewport",
+                    type: "pointerMove",
+                    x: 760,
+                    y: Math.round(start.y),
+                },
+                { button: 0, type: "pointerUp" },
+            ]);
+            const afterLateMove = await bidi.command("script.evaluate", {
+                awaitPromise: false,
+                expression: `document.querySelector("#workspace-divider")
+                    .getAttribute("aria-valuenow")`,
+                resultOwnership: "none",
+                target: { context: tab.context },
+            });
+            assert.equal(afterLateMove.type, "success");
+            assert.equal(afterLateMove.result.type, "string");
+            assert.equal(afterLateMove.result.value, "46");
+
+            const nextGeometry = await bidi.command("script.evaluate", {
+                awaitPromise: false,
+                expression: `JSON.stringify((() => {
+                    const divider = document.querySelector(
+                        "#workspace-divider"
+                    );
+                    const workspace = document.querySelector(
+                        ".workspace-grid"
+                    );
+                    const dividerBox = divider.getBoundingClientRect();
+                    const workspaceBox = workspace.getBoundingClientRect();
+                    const panelWidth =
+                        workspaceBox.width - dividerBox.width;
+                    const dividerCenter =
+                        dividerBox.left + dividerBox.width / 2;
+                    const startX = Math.round(dividerCenter + 3);
+                    const grabOffset = startX - dividerCenter;
+                    const targetX = Math.round(
+                        workspaceBox.left
+                        + panelWidth * 0.6
+                        + dividerBox.width / 2
+                        + grabOffset
+                    );
+                    const adjustedTarget = targetX - grabOffset;
+                    const sourceWidth =
+                        adjustedTarget
+                        - workspaceBox.left
+                        - dividerBox.width / 2;
+                    const expectedShare = Math.round(
+                        (sourceWidth / panelWidth) * 1_000
+                    ) / 10;
+                    return {
+                        expectedShare,
+                        startX,
+                        targetX,
+                        y: dividerBox.top + dividerBox.height / 2
+                    };
+                })())`,
+                resultOwnership: "none",
+                target: { context: tab.context },
+            });
+            assert.equal(nextGeometry.type, "success");
+            assert.equal(nextGeometry.result.type, "string");
+            const next = JSON.parse(nextGeometry.result.value);
+            await performTrustedPointer(bidi, tab.context, [
+                {
+                    duration: 0,
+                    origin: "viewport",
+                    type: "pointerMove",
+                    x: next.startX,
+                    y: Math.round(next.y),
+                },
+                { button: 0, type: "pointerDown" },
+                {
+                    duration: 80,
+                    origin: "viewport",
+                    type: "pointerMove",
+                    x: next.targetX,
+                    y: Math.round(next.y),
+                },
+                { button: 0, type: "pointerUp" },
+            ]);
+            const finalShare = await bidi.command("script.evaluate", {
+                awaitPromise: false,
+                expression: `document.querySelector("#workspace-divider")
+                    .getAttribute("aria-valuenow")`,
+                resultOwnership: "none",
+                target: { context: tab.context },
+            });
+            assert.equal(finalShare.type, "success");
+            assert.equal(finalShare.result.type, "string");
+            assert.equal(
+                finalShare.result.value,
+                String(next.expectedShare),
+            );
+            assert.notEqual(finalShare.result.value, "46");
             assert.equal(
                 requests.some((request) => request.startsWith("/api/")),
                 false,
