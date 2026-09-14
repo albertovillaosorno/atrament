@@ -1305,15 +1305,15 @@ candidate prompt or a targeted semantic-command prompt without adding frontend
 command parsing. Command-mode identity must include the accepted revision and
 bounded command context so stale copied requests cannot masquerade as current.
 
-A transport probe passed a command-like Unicode payload measuring 1,406,010
-UTF-8 bytes through the presented prompt, mocked clipboard `writeText`, and raw
-response surfaces with exact content equality and one write. A separate newline
-probe showed that Firefox textareas normalize `CRLF` and lone `CR` to `LF`, so
-the frozen browser text contract now requires backend prompts to present
-canonical `LF` and treats line-ending representation as non-semantic. A control
-probe with canonical `LF`, separate NFC/NFD accents, and emoji ZWJ sequences
-preserved every observed code point through prompt, mocked clipboard write, and
-raw response. These probes do not define a backend protocol limit or prove
+A checked-in real-Firefox fixture passes a command-like Unicode payload
+measuring exactly 1,406,010 UTF-8 bytes through the presented prompt, mocked
+clipboard `writeText`, and raw-response surfaces with exact content equality and
+one write. The same fixture proves Firefox textareas normalize `CRLF` and lone
+`CR` to `LF`, so the frozen browser text contract requires backend prompts to
+present canonical `LF` and treats line-ending representation as non-semantic.
+Its canonical control preserves separate NFC/NFD accents and an emoji ZWJ
+sequence by exact code point through prompt, mocked clipboard write, and raw
+response. This does not define a backend protocol limit or prove
 operating-system clipboard capacity.
 
 A checked-in real-Firefox hostile-text presentation fixture places script

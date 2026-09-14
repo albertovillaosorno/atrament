@@ -917,6 +917,183 @@ test(
 );
 
 test(
+    "Firefox preserves large Unicode prompt data and canonical line endings",
+    { skip: !FIREFOX_AVAILABLE, timeout: 30_000 },
+    async () => {
+        fs.mkdirSync(".temp", { recursive: true });
+        const profile = fs.mkdtempSync(".temp/workspace-prompt-text-");
+        const requests = [];
+        const server = createStaticWorkspaceServer(requests, true);
+        const children = [];
+        let bidi;
+        try {
+            server.listen(0, "127.0.0.1");
+            await once(server, "listening");
+            const address = server.address();
+            assert.notEqual(typeof address, "string");
+            assert.notEqual(address, null);
+            const origin = `http://127.0.0.1:${address.port}`;
+
+            bidi = await startBidiFirefox(profile, children);
+            const tab = await bidi.command("browsingContext.create", {
+                type: "tab",
+            });
+            await bidi.command("browsingContext.navigate", {
+                context: tab.context,
+                url: origin,
+                wait: "complete",
+            });
+
+            const response = await bidi.command("script.evaluate", {
+                awaitPromise: true,
+                expression: `(async () => {
+                    const prompt = document.querySelector("#prompt-output");
+                    const candidate = document.querySelector(
+                        "#candidate-input"
+                    );
+                    globalThis.__clipboardWrites = [];
+                    Object.defineProperty(navigator, "clipboard", {
+                        configurable: true,
+                        value: {
+                            writeText(text) {
+                                globalThis.__clipboardWrites.push(text);
+                                return Promise.resolve();
+                            }
+                        }
+                    });
+                    const encoder = new TextEncoder();
+                    const targetBytes = 1_406_010;
+                    const marker = [
+                        "semantic-command Apply revision=opaque",
+                        "á a\\u{301} 👩‍🔬 ¿listo?",
+                        "{\\\"intent\\\":\\\"copy-only\\\"}"
+                    ].join(" · ") + "\\n";
+                    const markerBytes = encoder.encode(marker).length;
+                    const repeats = Math.floor(targetBytes / markerBytes);
+                    let large = marker.repeat(repeats);
+                    large += "x".repeat(
+                        targetBytes - encoder.encode(large).length
+                    );
+                    prompt.value = large;
+                    prompt.dispatchEvent(
+                        new Event("input", { bubbles: true })
+                    );
+                    candidate.value = large;
+                    candidate.dispatchEvent(
+                        new Event("input", { bubbles: true })
+                    );
+                    document.querySelector("#copy-prompt").click();
+                    await new Promise((resolve) => setTimeout(resolve, 0));
+                    const largeState = {
+                        bytes: encoder.encode(large).length,
+                        candidateExact: candidate.value === large,
+                        clipboardExact:
+                            globalThis.__clipboardWrites.length === 1
+                            && globalThis.__clipboardWrites[0] === large,
+                        promptExact: prompt.value === large,
+                        responseChildren: candidate.childElementCount,
+                        promptChildren: prompt.childElementCount,
+                        status: document.querySelector("#copy-status")
+                            .textContent.trim()
+                    };
+
+                    globalThis.__clipboardWrites = [];
+                    const raw = [
+                        "first\\r\\nsecond\\rthird",
+                        "NFC=á",
+                        "NFD=a\\u{301}",
+                        "ZWJ=👩‍🔬"
+                    ].join("\\n");
+                    const canonical = [
+                        "first",
+                        "second",
+                        "third",
+                        "NFC=á",
+                        "NFD=a\\u{301}",
+                        "ZWJ=👩‍🔬"
+                    ].join("\\n");
+                    prompt.value = raw;
+                    prompt.dispatchEvent(
+                        new Event("input", { bubbles: true })
+                    );
+                    candidate.value = raw;
+                    candidate.dispatchEvent(
+                        new Event("input", { bubbles: true })
+                    );
+                    document.querySelector("#copy-prompt").click();
+                    await new Promise((resolve) => setTimeout(resolve, 0));
+                    const canonicalState = {
+                        candidateExact: candidate.value === canonical,
+                        clipboardExact:
+                            globalThis.__clipboardWrites.length === 1
+                            && globalThis.__clipboardWrites[0] === canonical,
+                        codePoints: Array.from(prompt.value).map((value) => {
+                            return value.codePointAt(0);
+                        }),
+                        promptExact: prompt.value === canonical,
+                        rawChanged: prompt.value !== raw,
+                        status: document.querySelector("#copy-status")
+                            .textContent.trim()
+                    };
+                    return JSON.stringify({
+                        canonicalState,
+                        largeState
+                    });
+                })()`,
+                resultOwnership: "none",
+                target: { context: tab.context },
+            });
+            assert.equal(response.type, "success");
+            assert.equal(response.result.type, "string");
+            const state = JSON.parse(response.result.value);
+            assert.deepEqual(state.largeState, {
+                bytes: 1_406_010,
+                candidateExact: true,
+                clipboardExact: true,
+                promptExact: true,
+                responseChildren: 0,
+                promptChildren: 0,
+                status: "Prompt copied.",
+            });
+            const canonical = [
+                "first",
+                "second",
+                "third",
+                "NFC=á",
+                "NFD=a\u{301}",
+                "ZWJ=👩‍🔬",
+            ].join("\n");
+            assert.deepEqual(state.canonicalState, {
+                candidateExact: true,
+                clipboardExact: true,
+                codePoints: Array.from(canonical).map((value) => {
+                    return value.codePointAt(0);
+                }),
+                promptExact: true,
+                rawChanged: true,
+                status: "Prompt copied.",
+            });
+            assert.equal(
+                requests.some((request) => request.startsWith("/api/")),
+                false,
+            );
+        } finally {
+            if (bidi?.socket != null) {
+                bidi.socket.end();
+            }
+            if (server.listening) {
+                server.close();
+                await once(server, "close");
+            }
+            for (const child of children.reverse()) {
+                await stopChild(child);
+            }
+            fs.rmSync(profile, { recursive: true, force: true });
+        }
+    },
+);
+
+test(
     "Firefox viewport matrix keeps both workspace surfaces reachable",
     { skip: !FIREFOX_AVAILABLE, timeout: 30_000 },
     async () => {
