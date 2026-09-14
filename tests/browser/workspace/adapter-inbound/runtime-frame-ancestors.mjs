@@ -1801,6 +1801,108 @@ test(
 );
 
 test(
+    "Firefox 200 percent text keeps compact skip links viewport bounded",
+    { skip: !FIREFOX_AVAILABLE, timeout: 30_000 },
+    async () => {
+        fs.mkdirSync(".temp", { recursive: true });
+        const profile = fs.mkdtempSync(".temp/workspace-text-zoom-");
+        const requests = [];
+        const server = createStaticWorkspaceServer(requests);
+        const children = [];
+        let bidi;
+        try {
+            server.listen(0, "127.0.0.1");
+            await once(server, "listening");
+            const address = server.address();
+            assert.notEqual(typeof address, "string");
+            assert.notEqual(address, null);
+            const origin = `http://127.0.0.1:${address.port}`;
+
+            bidi = await startBidiFirefox(profile, children);
+            const observed = [];
+            for (const width of [320, 480]) {
+                const tab = await bidi.command("browsingContext.create", {
+                    type: "tab",
+                });
+                await bidi.command("browsingContext.navigate", {
+                    context: tab.context,
+                    url: origin,
+                    wait: "complete",
+                });
+                await setFirefoxViewport(bidi, tab.context, width, 480);
+                await bidi.command("script.evaluate", {
+                    awaitPromise: false,
+                    expression: `(() => {
+                        document.documentElement.style.fontSize = "200%";
+                    })()`,
+                    resultOwnership: "none",
+                    target: { context: tab.context },
+                });
+                for (let index = 0; index < 2; index += 1) {
+                    await performTrustedKey(bidi, tab.context, "\uE004");
+                    const response = await bidi.command("script.evaluate", {
+                        awaitPromise: false,
+                        expression: `JSON.stringify((() => {
+                            const active = document.activeElement;
+                            const box = active.getBoundingClientRect();
+                            return {
+                                bottom: box.bottom,
+                                height: box.height,
+                                href: active.getAttribute("href"),
+                                left: box.left,
+                                right: box.right,
+                                scrollWidth:
+                                    document.documentElement.scrollWidth,
+                                top: box.top,
+                                width: window.innerWidth
+                            };
+                        })())`,
+                        resultOwnership: "none",
+                        target: { context: tab.context },
+                    });
+                    assert.equal(response.type, "success");
+                    assert.equal(response.result.type, "string");
+                    observed.push(JSON.parse(response.result.value));
+                }
+                await bidi.command("browsingContext.close", {
+                    context: tab.context,
+                });
+            }
+            const expected = [
+                { height: 104, href: "#llm-editor-title", width: 320 },
+                { height: 60, href: "#human-editor-title", width: 320 },
+                { height: 60, href: "#llm-editor-title", width: 480 },
+                { height: 60, href: "#human-editor-title", width: 480 },
+            ];
+            assert.equal(observed.length, expected.length);
+            for (let index = 0; index < observed.length; index += 1) {
+                const state = observed[index];
+                assert.equal(state.href, expected[index].href);
+                assert.equal(state.height, expected[index].height);
+                assert.equal(state.width, expected[index].width);
+                assert.equal(state.left, 8);
+                assert.equal(state.top, 8);
+                assert.ok(state.right <= state.width + 1);
+                assert.ok(state.bottom <= 480);
+                assert.ok(state.scrollWidth <= state.width);
+            }
+        } finally {
+            if (bidi?.socket != null) {
+                bidi.socket.end();
+            }
+            if (server.listening) {
+                server.close();
+                await once(server, "close");
+            }
+            for (const child of children.reverse()) {
+                await stopChild(child);
+            }
+            fs.rmSync(profile, { recursive: true, force: true });
+        }
+    },
+);
+
+test(
     "Firefox compaction moves focused divider to the visible source heading",
     { skip: !FIREFOX_AVAILABLE, timeout: 30_000 },
     async () => {

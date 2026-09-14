@@ -2953,9 +2953,11 @@ restores it exactly between source and preview; enabled zoom-out and zoom-in
 controls remain reachable before the page stage in both states.
 
 At a real 320-pixel viewport, both skip links still focus the expected heading
-and return that panel to its origin. Sharing their viewport anchor keeps the
-preview skip link 60 pixels tall at 200% text instead of the prior 104-pixel
-wrapped block, without horizontal overflow through 480 pixels.
+and return that panel to its origin. A checked-in real-Firefox 200% root-text
+fixture now measures both links at 320 and 480 pixels: the longer source link
+wraps to 104 pixels high only at 320, while preview remains 60 pixels high and
+both links are 60 pixels high at 480. All four focused states remain
+viewport-bounded without document horizontal overflow.
 
 A real-compact text-spacing override at 320 and 480 pixels, plus the 481-pixel
 wide boundary, keeps document overflow at zero. Task, Copy prompt, page stage,
