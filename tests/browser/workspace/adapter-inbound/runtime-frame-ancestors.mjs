@@ -1108,6 +1108,125 @@ test(
 );
 
 test(
+    "Firefox Copy prompt ignores stale writes and reports current failures",
+    { skip: !FIREFOX_AVAILABLE, timeout: 30_000 },
+    async () => {
+        fs.mkdirSync(".temp", { recursive: true });
+        const profile = fs.mkdtempSync(".temp/workspace-copy-lifecycle-");
+        const requests = [];
+        const server = createStaticWorkspaceServer(requests, true);
+        const children = [];
+        let bidi;
+        try {
+            server.listen(0, "127.0.0.1");
+            await once(server, "listening");
+            const address = server.address();
+            assert.notEqual(typeof address, "string");
+            assert.notEqual(address, null);
+            const origin = `http://127.0.0.1:${address.port}`;
+
+            bidi = await startBidiFirefox(profile, children);
+            const tab = await bidi.command("browsingContext.create", {
+                type: "tab",
+            });
+            await bidi.command("browsingContext.navigate", {
+                context: tab.context,
+                url: origin,
+                wait: "complete",
+            });
+
+            const response = await bidi.command("script.evaluate", {
+                awaitPromise: true,
+                expression: `(async () => {
+                    const prompt = document.querySelector("#prompt-output");
+                    const copy = document.querySelector("#copy-prompt");
+                    const status = document.querySelector("#copy-status");
+                    const writes = [];
+                    const pending = [];
+                    Object.defineProperty(navigator, "clipboard", {
+                        configurable: true,
+                        value: {
+                            writeText(text) {
+                                writes.push(text);
+                                return new Promise((resolve, reject) => {
+                                    pending.push({ reject, resolve });
+                                });
+                            }
+                        }
+                    });
+                    prompt.value = "first prompt";
+                    prompt.dispatchEvent(
+                        new Event("input", { bubbles: true })
+                    );
+                    copy.click();
+                    const firstPending = status.textContent.trim();
+                    prompt.value = "second prompt";
+                    prompt.dispatchEvent(
+                        new Event("input", { bubbles: true })
+                    );
+                    pending[0].resolve();
+                    await new Promise((resolve) => setTimeout(resolve, 0));
+                    const staleCompletion = status.textContent.trim();
+
+                    copy.click();
+                    const secondPending = status.textContent.trim();
+                    pending[1].reject(new Error("clipboard denied"));
+                    await new Promise((resolve) => setTimeout(resolve, 0));
+                    const currentFailure = status.textContent.trim();
+
+                    Object.defineProperty(navigator, "clipboard", {
+                        configurable: true,
+                        value: undefined
+                    });
+                    prompt.value = "third prompt";
+                    prompt.dispatchEvent(
+                        new Event("input", { bubbles: true })
+                    );
+                    copy.click();
+                    const unavailable = status.textContent.trim();
+                    return JSON.stringify({
+                        currentFailure,
+                        firstPending,
+                        secondPending,
+                        staleCompletion,
+                        unavailable,
+                        writes
+                    });
+                })()`,
+                resultOwnership: "none",
+                target: { context: tab.context },
+            });
+            assert.equal(response.type, "success");
+            assert.equal(response.result.type, "string");
+            assert.deepEqual(JSON.parse(response.result.value), {
+                currentFailure: "Clipboard write failed.",
+                firstPending: "Copying prompt…",
+                secondPending: "Copying prompt…",
+                staleCompletion: "",
+                unavailable: "Clipboard access is unavailable.",
+                writes: ["first prompt", "second prompt"],
+            });
+            assert.equal(
+                requests.some((request) => request.startsWith("/api/")),
+                false,
+            );
+        } finally {
+            if (bidi?.socket != null) {
+                bidi.socket.end();
+            }
+            if (server.listening) {
+                server.close();
+                await once(server, "close");
+            }
+            for (const child of children.reverse()) {
+                await stopChild(child);
+            }
+            fs.rmSync(profile, { recursive: true, force: true });
+        }
+    },
+);
+
+test(
     "Firefox viewport matrix keeps both workspace surfaces reachable",
     { skip: !FIREFOX_AVAILABLE, timeout: 30_000 },
     async () => {

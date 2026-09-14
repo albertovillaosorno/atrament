@@ -1299,8 +1299,10 @@ Current frontend evidence: the single Copy prompt control lives in a compact
 sticky toolbar. The checked-in 32-state Firefox layout matrix now scrolls the
 source panel to its end in every viewport/split/zoom state and requires that
 toolbar to remain fully visible inside the source panel. The control starts
-disabled until a backend-presented prompt exists and reports clipboard failure
-when enabled.
+disabled until a backend-presented prompt exists. A separate real-Firefox
+lifecycle fixture proves stale in-flight completion cannot report success after
+the prompt changes, current rejection reports clipboard failure, and absent
+clipboard capability is explicit without another write attempt.
 
 The same presentation surface is mode-neutral: the backend may provide a full
 candidate prompt or a targeted semantic-command prompt without adding frontend
