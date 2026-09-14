@@ -543,6 +543,29 @@ async function performTrustedKey(client, context, value) {
     });
 }
 
+async function performTrustedKeyChord(
+    client,
+    context,
+    modifier,
+    value,
+) {
+    await client.command("input.performActions", {
+        actions: [
+            {
+                actions: [
+                    { type: "keyDown", value: modifier },
+                    { type: "keyDown", value },
+                    { type: "keyUp", value },
+                    { type: "keyUp", value: modifier },
+                ],
+                id: "keyboard",
+                type: "key",
+            },
+        ],
+        context,
+    });
+}
+
 async function activeElementIdentity(client, context) {
     const response = await client.command("script.evaluate", {
         awaitPromise: false,
@@ -1555,6 +1578,208 @@ test(
                     context: tab.context,
                 });
             }
+            assert.equal(
+                requests.some((request) => request.startsWith("/api/")),
+                false,
+            );
+        } finally {
+            if (bidi?.socket != null) {
+                bidi.socket.end();
+            }
+            if (server.listening) {
+                server.close();
+                await once(server, "close");
+            }
+            for (const child of children.reverse()) {
+                await stopChild(child);
+            }
+            fs.rmSync(profile, { recursive: true, force: true });
+        }
+    },
+);
+
+test(
+    "Firefox trusted divider keys and zoom boundaries preserve keyboard focus",
+    { skip: !FIREFOX_AVAILABLE, timeout: 30_000 },
+    async () => {
+        fs.mkdirSync(".temp", { recursive: true });
+        const profile = fs.mkdtempSync(".temp/workspace-keyboard-controls-");
+        const requests = [];
+        const server = createStaticWorkspaceServer(requests, true);
+        const children = [];
+        let bidi;
+        try {
+            server.listen(0, "127.0.0.1");
+            await once(server, "listening");
+            const address = server.address();
+            assert.notEqual(typeof address, "string");
+            assert.notEqual(address, null);
+            const origin = `http://127.0.0.1:${address.port}`;
+
+            bidi = await startBidiFirefox(profile, children);
+            const tab = await bidi.command("browsingContext.create", {
+                type: "tab",
+            });
+            await bidi.command("browsingContext.navigate", {
+                context: tab.context,
+                url: origin,
+                wait: "complete",
+            });
+            await setFirefoxViewport(bidi, tab.context, 481, 480);
+            for (let index = 0; index < 4; index += 1) {
+                await performTrustedKey(bidi, tab.context, "\uE004");
+            }
+            assert.deepEqual(
+                await activeElementIdentity(bidi, tab.context),
+                { href: null, id: "workspace-divider", tag: "DIV" },
+            );
+            await bidi.command("script.evaluate", {
+                awaitPromise: false,
+                expression: `(() => {
+                    globalThis.__dividerKeyEvents = [];
+                    document.addEventListener("keydown", (event) => {
+                        const navigationKeys = new Set([
+                            "ArrowLeft",
+                            "ArrowRight",
+                            "Home",
+                            "End"
+                        ]);
+                        if (
+                            event.target?.id !== "workspace-divider"
+                            || !navigationKeys.has(event.key)
+                        ) {
+                            return;
+                        }
+                        queueMicrotask(() => {
+                            globalThis.__dividerKeyEvents.push({
+                                ctrl: event.ctrlKey,
+                                defaultPrevented: event.defaultPrevented,
+                                key: event.key,
+                                shift: event.shiftKey
+                            });
+                        });
+                    });
+                })()`,
+                resultOwnership: "none",
+                target: { context: tab.context },
+            });
+
+            await performTrustedKeyChord(
+                bidi,
+                tab.context,
+                "\uE009",
+                "\uE014",
+            );
+            await performTrustedKey(bidi, tab.context, "\uE014");
+            await performTrustedKey(bidi, tab.context, "\uE011");
+            await performTrustedKey(bidi, tab.context, "\uE010");
+            await performTrustedKeyChord(
+                bidi,
+                tab.context,
+                "\uE008",
+                "\uE011",
+            );
+            await new Promise((resolve) => setTimeout(resolve, 0));
+            const dividerResponse = await bidi.command("script.evaluate", {
+                awaitPromise: false,
+                expression: `JSON.stringify({
+                    events: globalThis.__dividerKeyEvents,
+                    now: document.querySelector("#workspace-divider")
+                        .getAttribute("aria-valuenow")
+                })`,
+                resultOwnership: "none",
+                target: { context: tab.context },
+            });
+            assert.equal(dividerResponse.type, "success");
+            assert.equal(dividerResponse.result.type, "string");
+            assert.deepEqual(JSON.parse(dividerResponse.result.value), {
+                events: [
+                    {
+                        ctrl: true,
+                        defaultPrevented: false,
+                        key: "ArrowRight",
+                        shift: false,
+                    },
+                    {
+                        ctrl: false,
+                        defaultPrevented: true,
+                        key: "ArrowRight",
+                        shift: false,
+                    },
+                    {
+                        ctrl: false,
+                        defaultPrevented: true,
+                        key: "Home",
+                        shift: false,
+                    },
+                    {
+                        ctrl: false,
+                        defaultPrevented: true,
+                        key: "End",
+                        shift: false,
+                    },
+                    {
+                        ctrl: false,
+                        defaultPrevented: false,
+                        key: "Home",
+                        shift: true,
+                    },
+                ],
+                now: "65",
+            });
+
+            await performTrustedKey(bidi, tab.context, "\uE004");
+            await performTrustedKey(bidi, tab.context, "\uE004");
+            assert.deepEqual(
+                await activeElementIdentity(bidi, tab.context),
+                { href: null, id: "zoom-out", tag: "BUTTON" },
+            );
+            for (let index = 0; index < 4; index += 1) {
+                await performTrustedKey(bidi, tab.context, "\uE007");
+            }
+            assert.deepEqual(
+                await activeElementIdentity(bidi, tab.context),
+                { href: null, id: "zoom-reset", tag: "BUTTON" },
+            );
+            const lowerBoundary = await bidi.command("script.evaluate", {
+                awaitPromise: false,
+                expression: `JSON.stringify({
+                    scale: document.querySelector("#preview-scale")
+                        .textContent.trim(),
+                    zoomOutDisabled:
+                        document.querySelector("#zoom-out").disabled
+                })`,
+                resultOwnership: "none",
+                target: { context: tab.context },
+            });
+            assert.equal(lowerBoundary.type, "success");
+            assert.equal(lowerBoundary.result.type, "string");
+            assert.deepEqual(JSON.parse(lowerBoundary.result.value), {
+                scale: "Preview · 60%",
+                zoomOutDisabled: true,
+            });
+            await performTrustedKey(bidi, tab.context, "\uE007");
+            assert.deepEqual(
+                await activeElementIdentity(bidi, tab.context),
+                { href: null, id: "zoom-out", tag: "BUTTON" },
+            );
+            const resetState = await bidi.command("script.evaluate", {
+                awaitPromise: false,
+                expression: `JSON.stringify({
+                    resetDisabled:
+                        document.querySelector("#zoom-reset").disabled,
+                    scale: document.querySelector("#preview-scale")
+                        .textContent.trim()
+                })`,
+                resultOwnership: "none",
+                target: { context: tab.context },
+            });
+            assert.equal(resetState.type, "success");
+            assert.equal(resetState.result.type, "string");
+            assert.deepEqual(JSON.parse(resetState.result.value), {
+                resetDisabled: true,
+                scale: "Preview · 100%",
+            });
             assert.equal(
                 requests.some((request) => request.startsWith("/api/")),
                 false,

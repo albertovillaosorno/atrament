@@ -2959,10 +2959,11 @@ wide boundary, keeps document overflow at zero. Task, Copy prompt, page stage,
 and Diagnostics all remain reachable through their owning scrollports at short
 225-pixel height.
 
-Modified divider navigation keys remain unconsumed while plain Arrow, Home, and
-End keys retain separator behavior. Zoom controls hand focus to an enabled
-sibling instead of the document body when a boundary or reset action disables
-the control that was activated.
+A checked-in trusted-key Firefox fixture observes modified divider navigation
+keys as unconsumed while plain Arrow, Home, and End keys retain separator
+behavior. The same fixture drives zoom to its 60% boundary and back to 100%;
+each
+disabling action hands focus to an enabled sibling instead of the document body.
 
 Divider pointer gestures preserve grab offsets and tenth-point ratios that match
 measured panel geometry, and are serialized and released on cancellation,
