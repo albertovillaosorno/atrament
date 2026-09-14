@@ -2940,9 +2940,12 @@ announcements remain available for session, clipboard, and zoom. Diagnostics
 remain ordinary unavailable text until a backend feed can update them.
 
 A visible-text sweep, explicit textarea placeholders, and ruled preview copy all
-measure at least 4.5:1 contrast. If a focused splitter becomes inert at the
-compact breakpoint, focus moves to a source heading whose full contextual header
-is scrolled into view.
+measure at least 4.5:1 contrast. A checked-in real-Firefox resize fixture
+scrolls
+the source header away, focuses the wide divider, then crosses 481 to 480
+pixels;
+the now-inert divider moves focus to the source heading and restores its full
+contextual header to the panel origin.
 
 A second checked-in trusted-key fixture pins the complete enabled Tab prefix at
 320 and 481 pixels. Compact order omits the inert divider, while the wide order

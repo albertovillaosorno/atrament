@@ -1801,6 +1801,120 @@ test(
 );
 
 test(
+    "Firefox compaction moves focused divider to the visible source heading",
+    { skip: !FIREFOX_AVAILABLE, timeout: 30_000 },
+    async () => {
+        fs.mkdirSync(".temp", { recursive: true });
+        const profile = fs.mkdtempSync(".temp/workspace-compact-focus-");
+        const requests = [];
+        const server = createStaticWorkspaceServer(requests, true);
+        const children = [];
+        let bidi;
+        try {
+            server.listen(0, "127.0.0.1");
+            await once(server, "listening");
+            const address = server.address();
+            assert.notEqual(typeof address, "string");
+            assert.notEqual(address, null);
+            const origin = `http://127.0.0.1:${address.port}`;
+
+            bidi = await startBidiFirefox(profile, children);
+            const tab = await bidi.command("browsingContext.create", {
+                type: "tab",
+            });
+            await bidi.command("browsingContext.navigate", {
+                context: tab.context,
+                url: origin,
+                wait: "complete",
+            });
+            await setFirefoxViewport(bidi, tab.context, 481, 225);
+            for (let index = 0; index < 4; index += 1) {
+                await performTrustedKey(bidi, tab.context, "\uE004");
+            }
+            assert.deepEqual(
+                await activeElementIdentity(bidi, tab.context),
+                { href: null, id: "workspace-divider", tag: "DIV" },
+            );
+            const scrolled = await bidi.command("script.evaluate", {
+                awaitPromise: false,
+                expression: `JSON.stringify((() => {
+                    const panel = document.querySelector("#source-panel");
+                    const header = document.querySelector(".editor-heading");
+                    panel.scrollTop = panel.scrollHeight;
+                    const panelBox = panel.getBoundingClientRect();
+                    const headerBox = header.getBoundingClientRect();
+                    return {
+                        headerAbovePanel:
+                            headerBox.bottom <= panelBox.top + 1,
+                        scrollTop: panel.scrollTop
+                    };
+                })())`,
+                resultOwnership: "none",
+                target: { context: tab.context },
+            });
+            assert.equal(scrolled.type, "success");
+            assert.equal(scrolled.result.type, "string");
+            const scrolledState = JSON.parse(scrolled.result.value);
+            assert.ok(scrolledState.scrollTop > 0);
+            assert.equal(scrolledState.headerAbovePanel, true);
+
+            await setFirefoxViewport(bidi, tab.context, 480, 225);
+            const compacted = await bidi.command("script.evaluate", {
+                awaitPromise: false,
+                expression: `JSON.stringify((() => {
+                    const active = document.activeElement;
+                    const panel = document.querySelector("#source-panel");
+                    const header = document.querySelector(".editor-heading");
+                    const divider = document.querySelector(
+                        "#workspace-divider"
+                    );
+                    const panelBox = panel.getBoundingClientRect();
+                    const headerBox = header.getBoundingClientRect();
+                    return {
+                        active: active.id,
+                        dividerDisabled:
+                            divider.getAttribute("aria-disabled"),
+                        dividerTabindex:
+                            divider.getAttribute("tabindex"),
+                        headerFullyVisible:
+                            headerBox.top >= panelBox.top - 1
+                            && headerBox.bottom <= panelBox.bottom + 1,
+                        scrollTop: panel.scrollTop
+                    };
+                })())`,
+                resultOwnership: "none",
+                target: { context: tab.context },
+            });
+            assert.equal(compacted.type, "success");
+            assert.equal(compacted.result.type, "string");
+            assert.deepEqual(JSON.parse(compacted.result.value), {
+                active: "llm-editor-title",
+                dividerDisabled: "true",
+                dividerTabindex: "-1",
+                headerFullyVisible: true,
+                scrollTop: 0,
+            });
+            assert.equal(
+                requests.some((request) => request.startsWith("/api/")),
+                false,
+            );
+        } finally {
+            if (bidi?.socket != null) {
+                bidi.socket.end();
+            }
+            if (server.listening) {
+                server.close();
+                await once(server, "close");
+            }
+            for (const child of children.reverse()) {
+                await stopChild(child);
+            }
+            fs.rmSync(profile, { recursive: true, force: true });
+        }
+    },
+);
+
+test(
     "Firefox compact breakpoint matches viewport CSS and divider state",
     { skip: !FIREFOX_AVAILABLE, timeout: 30_000 },
     async () => {
