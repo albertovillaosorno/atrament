@@ -1227,6 +1227,135 @@ test(
 );
 
 test(
+    "Firefox serializes repeated prompt copy requests without UI churn",
+    { skip: !FIREFOX_AVAILABLE, timeout: 30_000 },
+    async () => {
+        fs.mkdirSync(".temp", { recursive: true });
+        const profile = fs.mkdtempSync(".temp/workspace-copy-stress-");
+        const requests = [];
+        const server = createStaticWorkspaceServer(requests, true);
+        const children = [];
+        let bidi;
+        try {
+            server.listen(0, "127.0.0.1");
+            await once(server, "listening");
+            const address = server.address();
+            assert.notEqual(typeof address, "string");
+            assert.notEqual(address, null);
+            const origin = `http://127.0.0.1:${address.port}`;
+
+            bidi = await startBidiFirefox(profile, children);
+            const tab = await bidi.command("browsingContext.create", {
+                type: "tab",
+            });
+            await bidi.command("browsingContext.navigate", {
+                context: tab.context,
+                url: origin,
+                wait: "complete",
+            });
+
+            const response = await bidi.command("script.evaluate", {
+                awaitPromise: true,
+                expression: `(async () => {
+                    const prompt = document.querySelector("#prompt-output");
+                    const copy = document.querySelector("#copy-prompt");
+                    const status = document.querySelector("#copy-status");
+                    const writes = [];
+                    const pending = [];
+                    Object.defineProperty(navigator, "clipboard", {
+                        configurable: true,
+                        value: {
+                            writeText(text) {
+                                writes.push(text);
+                                return new Promise((resolve) => {
+                                    pending.push(resolve);
+                                });
+                            }
+                        }
+                    });
+                    prompt.value = "repeat-safe prompt";
+                    prompt.dispatchEvent(
+                        new Event("input", { bubbles: true })
+                    );
+                    let statusMutations = 0;
+                    let disabledMutations = 0;
+                    const statusObserver = new MutationObserver((records) => {
+                        statusMutations += records.length;
+                    });
+                    statusObserver.observe(status, {
+                        characterData: true,
+                        childList: true,
+                        subtree: true
+                    });
+                    const buttonObserver = new MutationObserver((records) => {
+                        disabledMutations += records.filter((record) => {
+                            return record.attributeName === "disabled";
+                        }).length;
+                    });
+                    buttonObserver.observe(copy, { attributes: true });
+                    for (let index = 0; index < 1_000; index += 1) {
+                        prompt.dispatchEvent(
+                            new Event("input", { bubbles: true })
+                        );
+                    }
+                    for (let index = 0; index < 1_000; index += 1) {
+                        copy.click();
+                    }
+                    await new Promise((resolve) => setTimeout(resolve, 0));
+                    const pendingState = {
+                        disabledMutations,
+                        pendingWrites: pending.length,
+                        status: status.textContent.trim(),
+                        statusMutations,
+                        writes: writes.length
+                    };
+                    pending[0]();
+                    await new Promise((resolve) => setTimeout(resolve, 0));
+                    statusObserver.disconnect();
+                    buttonObserver.disconnect();
+                    return JSON.stringify({
+                        finalStatus: status.textContent.trim(),
+                        pendingState,
+                        writes
+                    });
+                })()`,
+                resultOwnership: "none",
+                target: { context: tab.context },
+            });
+            assert.equal(response.type, "success");
+            assert.equal(response.result.type, "string");
+            assert.deepEqual(JSON.parse(response.result.value), {
+                finalStatus: "Prompt copied.",
+                pendingState: {
+                    disabledMutations: 0,
+                    pendingWrites: 1,
+                    status: "Copying prompt…",
+                    statusMutations: 1,
+                    writes: 1,
+                },
+                writes: ["repeat-safe prompt"],
+            });
+            assert.equal(
+                requests.some((request) => request.startsWith("/api/")),
+                false,
+            );
+        } finally {
+            if (bidi?.socket != null) {
+                bidi.socket.end();
+            }
+            if (server.listening) {
+                server.close();
+                await once(server, "close");
+            }
+            for (const child of children.reverse()) {
+                await stopChild(child);
+            }
+            fs.rmSync(profile, { recursive: true, force: true });
+        }
+    },
+);
+
+test(
     "Firefox viewport matrix keeps both workspace surfaces reachable",
     { skip: !FIREFOX_AVAILABLE, timeout: 30_000 },
     async () => {

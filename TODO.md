@@ -3148,9 +3148,11 @@ final secret-handling guarantee: authenticated startup must consume an admitted
 secret in memory and remove it from the visible URL.
 
 Malformed or rejecting clipboard promises fail closed, and stale duplicate
-completions cannot unlock a newer write. One thousand same-value prompt events
-plus one thousand concurrent repeat clicks retained one active clipboard write
-with no redundant status or disabled-state mutations before completion.
+completions cannot unlock a newer write. A checked-in real-Firefox stress
+fixture
+runs one thousand same-value prompt events plus one thousand concurrent repeat
+clicks and retains exactly one active clipboard write, one pending-status
+mutation, and no redundant disabled-state mutation before completion.
 
 Prompt changes and page exit discard pending work and scrub the frontend's
 prompt copy from an already-started request without claiming that the external
