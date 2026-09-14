@@ -3041,9 +3041,15 @@ trickle readers released queued health in 1.932-1.980 seconds instead of
 remaining blocked beyond eight seconds.
 
 The transport admits at most 16 KiB of request headers and 2 MiB of request
-body. Exact-limit fixtures pass while one byte over either ceiling rejects. The
-first-release authenticated handshake additionally admits no request body;
-absent or zero `Content-Length` is accepted only when no trailing bytes exist.
+body. Exact-limit fixtures pass while one byte over either ceiling rejects.
+
+All current `GET` routes are explicitly bodyless across public, private-draft,
+and missing targets. A nonzero `Content-Length`, transfer encoding, or bytes
+already trailing the parsed request head reject before route-specific handling.
+Absent or zero `Content-Length` is admitted.
+
+Every response closes its connection, so later bytes cannot become a second
+routed request. The authenticated handshake likewise admits no request body.
 Each of its six required version headers must appear exactly once: a 12-case
 missing/duplicate matrix rejects malformed multiplicity with `400` before the
 application compatibility service is invoked.

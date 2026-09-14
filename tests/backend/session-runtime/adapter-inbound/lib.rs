@@ -1610,6 +1610,68 @@ fn generated_authenticated_post_mutations_fail_closed_and_deterministic() {
 }
 
 #[test]
+fn every_get_route_requires_an_empty_request_body() {
+    let authorization = format!("Bearer {EXPECTED_SECRET}");
+    let routes = [
+        ("/health", None, "HTTP/1.1 200 OK"),
+        (
+            "/api/session/task",
+            Some(authorization.as_str()),
+            "HTTP/1.1 200 OK",
+        ),
+        ("/missing", None, "HTTP/1.1 404 Not Found"),
+    ];
+    let admitted_endings = ["\r\n", "Content-Length: 0\r\n\r\n"];
+    let rejected_endings = [
+        "Content-Length: 1\r\n\r\nx",
+        "\r\nx",
+        "Transfer-Encoding: chunked\r\n\r\n",
+    ];
+
+    for (target, credential, expected_status) in routes {
+        for ending in admitted_endings {
+            let mut request = format!(
+                "GET {target} HTTP/1.1\r\nHost: {EXPECTED_HOST}\r\n",
+            );
+            if let Some(value) = credential {
+                request.push_str(&format!("Authorization: {value}\r\n"));
+            }
+            request.push_str(ending);
+            let mut draft = seeded_private_draft();
+            let response = route_with_draft(
+                request.as_bytes(),
+                EXPECTED_HOST,
+                &mut draft,
+            );
+            assert_eq!(status_line(&response), expected_status, "{target}");
+            assert_private_draft_unchanged(&draft);
+        }
+
+        for ending in rejected_endings {
+            let mut request = format!(
+                "GET {target} HTTP/1.1\r\nHost: {EXPECTED_HOST}\r\n",
+            );
+            if let Some(value) = credential {
+                request.push_str(&format!("Authorization: {value}\r\n"));
+            }
+            request.push_str(ending);
+            let mut draft = seeded_private_draft();
+            let response = route_with_draft(
+                request.as_bytes(),
+                EXPECTED_HOST,
+                &mut draft,
+            );
+            assert_eq!(
+                status_line(&response),
+                "HTTP/1.1 400 Bad Request",
+                "{target} with {ending:?}",
+            );
+            assert_private_draft_unchanged(&draft);
+        }
+    }
+}
+
+#[test]
 fn protected_routes_do_not_decode_aliases_or_ignore_queries() {
     let authorization = format!("Bearer {EXPECTED_SECRET}");
     let get_cases = [

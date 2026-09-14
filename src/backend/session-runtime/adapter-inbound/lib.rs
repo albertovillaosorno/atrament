@@ -1115,6 +1115,12 @@ pub fn route_request(
             br#"{"error":"invalid_host"}"#,
         );
     }
+    if parsed.method == "GET" && !request_has_no_body(request) {
+        return json_response(
+            "400 Bad Request",
+            br#"{"error":"invalid_request"}"#,
+        );
+    }
     if parsed.method == "GET"
         && let Some(public_response) = public_get_response(parsed.target)
     {

@@ -225,10 +225,16 @@ budget expires; intermittent progress cannot hold the single-thread listener
 indefinitely.
 
 Authenticated `GET` requests to the same three field paths return the exact
-current UTF-8 field as uncached plain text. A read always requires the Bearer
-credential. When the browser or another admitted client supplies `Origin`, it
-must equal the startup origin. An absent `Origin` does not replace credential
-authentication with ambient trust.
+current UTF-8 field as uncached plain text. Every `GET` route is bodyless. A
+nonzero `Content-Length`, transfer encoding, or bytes already trailing the
+parsed request head reject as malformed input before route-specific handling.
+
+`Content-Length` may be absent or zero. Each response closes the connection, so
+bytes arriving after one complete request cannot become a second routed request.
+
+A read always requires the Bearer credential. When the browser or another
+admitted client supplies `Origin`, it must equal the startup origin. An absent
+`Origin` does not replace credential authentication with ambient trust.
 
 The browser coalesces rapid edits per field: it may skip obsolete intermediate
 values but sends only complete field values, never browser-authored patches.
