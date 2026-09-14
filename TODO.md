@@ -1296,9 +1296,11 @@ Generate one complete, versioned request from current task and constraints,
 copy it with one action, and confirm the exact prompt identity copied.
 
 Current frontend evidence: the single Copy prompt control lives in a compact
-sticky toolbar and remains visible while source and response content scroll.
-It starts disabled until a backend-presented prompt exists and reports clipboard
-failure when enabled.
+sticky toolbar. The checked-in 32-state Firefox layout matrix now scrolls the
+source panel to its end in every viewport/split/zoom state and requires that
+toolbar to remain fully visible inside the source panel. The control starts
+disabled until a backend-presented prompt exists and reports clipboard failure
+when enabled.
 
 The same presentation surface is mode-neutral: the backend may provide a full
 candidate prompt or a targeted semantic-command prompt without adding frontend

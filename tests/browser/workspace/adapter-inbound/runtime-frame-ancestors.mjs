@@ -597,8 +597,20 @@ async function evaluateWorkspaceLayout(client, context) {
                 };
             };
             const divider = document.querySelector("#workspace-divider");
+            const sourcePanel = document.querySelector("#source-panel");
             const stage = document.querySelector("#page-stage");
             const paper = document.querySelector(".paper-preview");
+            const sourceBox = sourcePanel.getBoundingClientRect();
+            const taskBox = rect("#task-input");
+            sourcePanel.scrollTop = sourcePanel.scrollHeight;
+            const copyBox = document
+                .querySelector(".copy-toolbar")
+                .getBoundingClientRect();
+            const copyStickyVisible =
+                copyBox.top >= sourceBox.top - 1
+                && copyBox.bottom <= sourceBox.bottom + 1;
+            const sourceScrolled = sourcePanel.scrollTop > 0;
+            sourcePanel.scrollTop = 0;
             const stageBox = stage.getBoundingClientRect();
             stage.scrollLeft = 0;
             stage.scrollTop = 0;
@@ -617,6 +629,7 @@ async function evaluateWorkspaceLayout(client, context) {
             stage.scrollLeft = 0;
             stage.scrollTop = 0;
             return {
+                copyStickyVisible,
                 divider: {
                     disabled: divider.getAttribute("aria-disabled"),
                     maximum: divider.getAttribute("aria-valuemax"),
@@ -632,6 +645,7 @@ async function evaluateWorkspaceLayout(client, context) {
                 paper: rect(".paper-preview"),
                 preview: rect("#preview-panel"),
                 source: rect("#source-panel"),
+                sourceScrolled,
                 stage: rect("#page-stage"),
                 stageSize: {
                     clientHeight: stage.clientHeight,
@@ -640,7 +654,7 @@ async function evaluateWorkspaceLayout(client, context) {
                     scrollWidth: stage.scrollWidth
                 },
                 startReachable,
-                task: rect("#task-input"),
+                task: taskBox,
                 viewport: {
                     height: window.innerHeight,
                     width: window.innerWidth
@@ -1179,6 +1193,16 @@ test(
                             state.source,
                             height,
                             `${label}: source panel`,
+                        );
+                        assert.equal(
+                            state.sourceScrolled,
+                            true,
+                            `${label}: source panel actually scrolls`,
+                        );
+                        assert.equal(
+                            state.copyStickyVisible,
+                            true,
+                            `${label}: Copy prompt stays visible after scroll`,
                         );
                         assertVisibleInViewport(
                             state.preview,
