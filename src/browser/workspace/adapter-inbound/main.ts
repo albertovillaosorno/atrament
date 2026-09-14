@@ -875,6 +875,22 @@ function shareFromPointer(clientX: number): number {
     return (sourceWidth / panelWidth) * 100;
 }
 
+function restoreFocusAfterUncapturedPointerDown(
+    previousFocus: Element | null,
+): void {
+    if (!(previousFocus instanceof HTMLElement) || previousFocus === divider) {
+        return;
+    }
+    window.setTimeout(() => {
+        if (
+            previousFocus.isConnected
+            && document.activeElement === divider
+        ) {
+            previousFocus.focus({ preventScroll: true });
+        }
+    }, 0);
+}
+
 divider.addEventListener("pointerdown", (event): void => {
     if (
         divider.getAttribute("aria-disabled") === "true"
@@ -884,7 +900,9 @@ divider.addEventListener("pointerdown", (event): void => {
     ) {
         return;
     }
+    const previousFocus = document.activeElement;
     if (!dividerPointerCaptureAvailable) {
+        restoreFocusAfterUncapturedPointerDown(previousFocus);
         return;
     }
     const dividerBounds = divider.getBoundingClientRect();
@@ -894,11 +912,13 @@ divider.addEventListener("pointerdown", (event): void => {
         divider.setPointerCapture(event.pointerId);
     } catch {
         disableDividerPointerCapture();
+        restoreFocusAfterUncapturedPointerDown(previousFocus);
         return;
     }
     if (!dividerHasPointerCapture(event.pointerId)) {
         disableDividerPointerCapture();
         activeDividerPointerOffsetX = 0;
+        restoreFocusAfterUncapturedPointerDown(previousFocus);
         return;
     }
     divider.focus();

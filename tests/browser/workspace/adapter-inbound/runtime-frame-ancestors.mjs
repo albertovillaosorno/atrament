@@ -2179,6 +2179,178 @@ test(
 );
 
 test(
+    "Firefox pointer-capture fallback preserves focus until completed click",
+    { skip: !FIREFOX_AVAILABLE, timeout: 30_000 },
+    async () => {
+        fs.mkdirSync(".temp", { recursive: true });
+        const profile = fs.mkdtempSync(".temp/workspace-pointer-fallback-");
+        const requests = [];
+        const server = createStaticWorkspaceServer(requests, true);
+        const children = [];
+        let bidi;
+        try {
+            server.listen(0, "127.0.0.1");
+            await once(server, "listening");
+            const address = server.address();
+            assert.notEqual(typeof address, "string");
+            assert.notEqual(address, null);
+            const origin = `http://127.0.0.1:${address.port}`;
+
+            bidi = await startBidiFirefox(profile, children);
+            for (const mode of ["throw", "silent"]) {
+                const tab = await bidi.command("browsingContext.create", {
+                    type: "tab",
+                });
+                await bidi.command("browsingContext.navigate", {
+                    context: tab.context,
+                    url: origin,
+                    wait: "complete",
+                });
+                await setFirefoxViewport(bidi, tab.context, 640, 480);
+                const setup = await bidi.command("script.evaluate", {
+                    awaitPromise: false,
+                    expression: `JSON.stringify((() => {
+                        const divider = document.querySelector(
+                            "#workspace-divider"
+                        );
+                        const source = document.querySelector("#source-panel");
+                        const workspace = document.querySelector(
+                            ".workspace-grid"
+                        );
+                        source.focus();
+                        if (${JSON.stringify(mode)} === "throw") {
+                            divider.setPointerCapture = () => {
+                                throw new DOMException("capture denied");
+                            };
+                        } else {
+                            divider.setPointerCapture = () => {};
+                            divider.hasPointerCapture = () => false;
+                        }
+                        globalThis.__fallbackPointerDown = null;
+                        divider.addEventListener("pointerdown", (event) => {
+                            queueMicrotask(() => {
+                                globalThis.__fallbackPointerDown = {
+                                    defaultPrevented: event.defaultPrevented,
+                                    pointerId: event.pointerId
+                                };
+                            });
+                        });
+                        const dividerBox = divider.getBoundingClientRect();
+                        const workspaceBox = workspace.getBoundingClientRect();
+                        const panelWidth =
+                            workspaceBox.width - dividerBox.width;
+                        const x = Math.round(
+                            dividerBox.left + dividerBox.width / 2 + 7
+                        );
+                        const sourceWidth =
+                            x
+                            - workspaceBox.left
+                            - dividerBox.width / 2;
+                        const expectedShare = Math.round(
+                            (sourceWidth / panelWidth) * 1_000
+                        ) / 10;
+                        return {
+                            expectedShare,
+                            x,
+                            y: Math.round(
+                                dividerBox.top + dividerBox.height / 2
+                            )
+                        };
+                    })())`,
+                    resultOwnership: "none",
+                    target: { context: tab.context },
+                });
+                assert.equal(setup.type, "success");
+                assert.equal(setup.result.type, "string");
+                const geometry = JSON.parse(setup.result.value);
+
+                await performTrustedPointer(bidi, tab.context, [
+                    {
+                        duration: 0,
+                        origin: "viewport",
+                        type: "pointerMove",
+                        x: geometry.x,
+                        y: geometry.y,
+                    },
+                    { button: 0, type: "pointerDown" },
+                ]);
+                const down = await bidi.command("script.evaluate", {
+                    awaitPromise: true,
+                    expression: `(async () => {
+                        await new Promise((resolve) => setTimeout(resolve, 0));
+                        const divider = document.querySelector(
+                            "#workspace-divider"
+                        );
+                        const evidence = globalThis.__fallbackPointerDown;
+                        return JSON.stringify({
+                            active: document.activeElement.id,
+                            dataPointerDrag:
+                                divider.hasAttribute("data-pointer-drag"),
+                            defaultPrevented: evidence.defaultPrevented,
+                            hasCapture:
+                                divider.hasPointerCapture(evidence.pointerId),
+                            now: divider.getAttribute("aria-valuenow"),
+                            touchAction:
+                                getComputedStyle(divider).touchAction
+                        });
+                    })()`,
+                    resultOwnership: "none",
+                    target: { context: tab.context },
+                });
+                assert.equal(down.type, "success");
+                assert.equal(down.result.type, "string");
+                assert.deepEqual(JSON.parse(down.result.value), {
+                    active: "source-panel",
+                    dataPointerDrag: false,
+                    defaultPrevented: false,
+                    hasCapture: false,
+                    now: "46",
+                    touchAction: "auto",
+                });
+
+                await performTrustedPointer(bidi, tab.context, [
+                    { button: 0, type: "pointerUp" },
+                ]);
+                const completed = await bidi.command("script.evaluate", {
+                    awaitPromise: false,
+                    expression: `document.querySelector("#workspace-divider")
+                        .getAttribute("aria-valuenow")`,
+                    resultOwnership: "none",
+                    target: { context: tab.context },
+                });
+                assert.equal(completed.type, "success");
+                assert.equal(completed.result.type, "string");
+                assert.equal(
+                    completed.result.value,
+                    String(geometry.expectedShare),
+                    `${mode} fallback click share`,
+                );
+                assert.notEqual(completed.result.value, "46");
+                await bidi.command("browsingContext.close", {
+                    context: tab.context,
+                });
+            }
+            assert.equal(
+                requests.some((request) => request.startsWith("/api/")),
+                false,
+            );
+        } finally {
+            if (bidi?.socket != null) {
+                bidi.socket.end();
+            }
+            if (server.listening) {
+                server.close();
+                await once(server, "close");
+            }
+            for (const child of children.reverse()) {
+                await stopChild(child);
+            }
+            fs.rmSync(profile, { recursive: true, force: true });
+        }
+    },
+);
+
+test(
     "Firefox resize interrupts pointer capture without poisoning the next drag",
     { skip: !FIREFOX_AVAILABLE, timeout: 30_000 },
     async () => {

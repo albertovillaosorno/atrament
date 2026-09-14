@@ -753,6 +753,17 @@ function shareFromPointer(clientX) {
     const sourceWidth = clientX - workspaceBounds.left - dividerWidth / 2;
     return (sourceWidth / panelWidth) * 100;
 }
+function restoreFocusAfterUncapturedPointerDown(previousFocus) {
+    if (!(previousFocus instanceof HTMLElement) || previousFocus === divider) {
+        return;
+    }
+    window.setTimeout(() => {
+        if (previousFocus.isConnected
+            && document.activeElement === divider) {
+            previousFocus.focus({ preventScroll: true });
+        }
+    }, 0);
+}
 divider.addEventListener("pointerdown", (event) => {
     if (divider.getAttribute("aria-disabled") === "true"
         || activeDividerPointerId !== null
@@ -760,7 +771,9 @@ divider.addEventListener("pointerdown", (event) => {
         || event.button !== 0) {
         return;
     }
+    const previousFocus = document.activeElement;
     if (!dividerPointerCaptureAvailable) {
+        restoreFocusAfterUncapturedPointerDown(previousFocus);
         return;
     }
     const dividerBounds = divider.getBoundingClientRect();
@@ -771,11 +784,13 @@ divider.addEventListener("pointerdown", (event) => {
     }
     catch {
         disableDividerPointerCapture();
+        restoreFocusAfterUncapturedPointerDown(previousFocus);
         return;
     }
     if (!dividerHasPointerCapture(event.pointerId)) {
         disableDividerPointerCapture();
         activeDividerPointerOffsetX = 0;
+        restoreFocusAfterUncapturedPointerDown(previousFocus);
         return;
     }
     divider.focus();

@@ -2973,12 +2973,15 @@ disabling action hands focus to an enabled sibling instead of the document body.
 Divider pointer gestures preserve grab offsets and tenth-point ratios that match
 measured panel geometry, and are serialized and released on cancellation,
 navigation, compacting, viewport resize, browser-window blur, or document
-hiding. If captured
-dragging is absent,
-throws, or silently fails to capture, native touch defaults remain available and
-only a completed click changes the split; an uncaptured pointerdown also
-preserves the prior keyboard focus. Compact state is derived from the same
-480-pixel viewport-width boundary as CSS
+hiding. A checked-in trusted-pointer Firefox fallback fixture forces both a
+throwing capture attempt and a silent non-capture. Firefox originally moved
+focus to the divider through its native pointer default even though capture had
+failed; the adapter now restores the prior keyboard focus on the next page task
+without preventing that pointer event, removes drag-only touch suppression, and
+allows only the completed fallback click to change the measured split. The same
+restoration path also covers an already-unavailable capture capability.
+
+Compact state is derived from the same 480-pixel viewport-width boundary as CSS
 and updates through one resize listener. A checked-in real-Firefox mutation
 oracle now proves wide-to-wide and compact-to-compact resizes do not rewrite the
 tracked separator ARIA/tabindex fields, while each real breakpoint transition
