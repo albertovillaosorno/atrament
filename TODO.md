@@ -2959,10 +2959,10 @@ wraps to 104 pixels high only at 320, while preview remains 60 pixels high and
 both links are 60 pixels high at 480. All four focused states remain
 viewport-bounded without document horizontal overflow.
 
-A real-compact text-spacing override at 320 and 480 pixels, plus the 481-pixel
-wide boundary, keeps document overflow at zero. Task, Copy prompt, page stage,
-and Diagnostics all remain reachable through their owning scrollports at short
-225-pixel height.
+A checked-in real-Firefox text-spacing override at 320 and 480 pixels, plus the
+481-pixel wide boundary, keeps the 225-pixel-high document exactly viewport
+bounded. Task, sticky Copy prompt, page stage, and Diagnostics all remain
+reachable through their owning source or preview scrollports.
 
 A checked-in trusted-key Firefox fixture observes modified divider navigation
 keys as unconsumed while plain Arrow, Home, and End keys retain separator

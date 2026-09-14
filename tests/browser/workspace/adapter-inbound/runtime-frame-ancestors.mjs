@@ -1801,6 +1801,154 @@ test(
 );
 
 test(
+    "Firefox text-spacing override keeps short workspace controls reachable",
+    { skip: !FIREFOX_AVAILABLE, timeout: 30_000 },
+    async () => {
+        fs.mkdirSync(".temp", { recursive: true });
+        const profile = fs.mkdtempSync(".temp/workspace-text-spacing-");
+        const requests = [];
+        const server = createStaticWorkspaceServer(requests, true);
+        const children = [];
+        let bidi;
+        try {
+            server.listen(0, "127.0.0.1");
+            await once(server, "listening");
+            const address = server.address();
+            assert.notEqual(typeof address, "string");
+            assert.notEqual(address, null);
+            const origin = `http://127.0.0.1:${address.port}`;
+
+            bidi = await startBidiFirefox(profile, children);
+            for (const width of [320, 480, 481]) {
+                const tab = await bidi.command("browsingContext.create", {
+                    type: "tab",
+                });
+                await bidi.command("browsingContext.navigate", {
+                    context: tab.context,
+                    url: origin,
+                    wait: "complete",
+                });
+                await setFirefoxViewport(bidi, tab.context, width, 225);
+                const response = await bidi.command("script.evaluate", {
+                    awaitPromise: false,
+                    expression: `JSON.stringify((() => {
+                        for (const element of document.querySelectorAll("*")) {
+                            element.style.setProperty(
+                                "line-height",
+                                "1.5",
+                                "important"
+                            );
+                            element.style.setProperty(
+                                "letter-spacing",
+                                "0.12em",
+                                "important"
+                            );
+                            element.style.setProperty(
+                                "word-spacing",
+                                "0.16em",
+                                "important"
+                            );
+                        }
+                        for (
+                            const paragraph of document.querySelectorAll("p")
+                        ) {
+                            paragraph.style.setProperty(
+                                "margin-bottom",
+                                "2em",
+                                "important"
+                            );
+                        }
+                        const inside = (element, owner) => {
+                            const box = element.getBoundingClientRect();
+                            const ownerBox = owner.getBoundingClientRect();
+                            return box.width > 0
+                                && box.height > 0
+                                && box.right > ownerBox.left
+                                && box.left < ownerBox.right
+                                && box.bottom > ownerBox.top
+                                && box.top < ownerBox.bottom;
+                        };
+                        const source = document.querySelector("#source-panel");
+                        const preview = document.querySelector(
+                            "#preview-panel"
+                        );
+                        const task = document.querySelector("#task-input");
+                        const copy = document.querySelector("#copy-prompt");
+                        const stage = document.querySelector("#page-stage");
+                        const diagnostics = document.querySelector(
+                            ".diagnostics"
+                        );
+                        task.scrollIntoView({ block: "nearest" });
+                        const taskReachable = inside(task, source);
+                        const copyReachable = inside(copy, source);
+                        stage.scrollIntoView({ block: "nearest" });
+                        const stageReachable = inside(stage, preview);
+                        diagnostics.scrollIntoView({ block: "nearest" });
+                        const diagnosticsReachable = inside(
+                            diagnostics,
+                            preview
+                        );
+                        return {
+                            copyReachable,
+                            diagnosticsReachable,
+                            document: {
+                                height: document.documentElement.scrollHeight,
+                                width: document.documentElement.scrollWidth,
+                                x: window.scrollX,
+                                y: window.scrollY
+                            },
+                            previewScrollTop: preview.scrollTop,
+                            sourceScrollTop: source.scrollTop,
+                            stageReachable,
+                            taskReachable,
+                            viewport: {
+                                height: window.innerHeight,
+                                width: window.innerWidth
+                            }
+                        };
+                    })())`,
+                    resultOwnership: "none",
+                    target: { context: tab.context },
+                });
+                assert.equal(response.type, "success");
+                assert.equal(response.result.type, "string");
+                const state = JSON.parse(response.result.value);
+                assert.deepEqual(state.viewport, { height: 225, width });
+                assert.equal(state.taskReachable, true);
+                assert.equal(state.copyReachable, true);
+                assert.equal(state.stageReachable, true);
+                assert.equal(state.diagnosticsReachable, true);
+                assert.ok(state.sourceScrollTop >= 0);
+                assert.ok(state.previewScrollTop > 0);
+                assert.deepEqual(
+                    state.document,
+                    { height: 225, width, x: 0, y: 0 },
+                );
+                await bidi.command("browsingContext.close", {
+                    context: tab.context,
+                });
+            }
+            assert.equal(
+                requests.some((request) => request.startsWith("/api/")),
+                false,
+            );
+        } finally {
+            if (bidi?.socket != null) {
+                bidi.socket.end();
+            }
+            if (server.listening) {
+                server.close();
+                await once(server, "close");
+            }
+            for (const child of children.reverse()) {
+                await stopChild(child);
+            }
+            fs.rmSync(profile, { recursive: true, force: true });
+        }
+    },
+);
+
+test(
     "Firefox 200 percent text keeps compact skip links viewport bounded",
     { skip: !FIREFOX_AVAILABLE, timeout: 30_000 },
     async () => {
