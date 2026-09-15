@@ -559,6 +559,9 @@ Candidate-to-accepted promotion is now iterative too: exact-boundary fixtures
 cover callout, freeform, list-item, table-cell, and mixed nesting, while the
 first block beyond the bound rejects before accepted-state mutation.
 
+Maximum-depth direct text, block-style, and block-provenance edits also remain
+usable after that promotion.
+
 The task remains open for the complete first-release semantic vocabulary,
 format parsing and canonical serialization, migrations and round-trip fixtures,
 adapter-level semantic command/history transport, measured layout/render

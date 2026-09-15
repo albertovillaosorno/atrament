@@ -1062,6 +1062,167 @@ fn maximum_nesting_direct_text_edit_remains_stack_safe() {
 }
 
 #[test]
+fn maximum_nesting_block_style_apply_remains_stack_safe() {
+    let families = [
+        CandidateNestingWrapper::Callout,
+        CandidateNestingWrapper::Freeform,
+        CandidateNestingWrapper::List,
+        CandidateNestingWrapper::Table,
+    ];
+    let wrapper_count = CANDIDATE_BLOCK_NESTING_LIMIT.saturating_sub(1);
+    let cases = families
+        .iter()
+        .map(|family| vec![*family; wrapper_count])
+        .chain(std::iter::once(
+            (0..wrapper_count)
+                .map(|index| families[index % families.len()])
+                .collect::<Vec<_>>(),
+        ))
+        .collect::<Vec<_>>();
+
+    for wrappers in cases {
+        let ids = IdentityAllocator::new();
+        let (mut candidate, candidate_block, _) =
+            candidate_nested_text_notebook_with_wrappers(&ids, &wrappers);
+        let candidate_style = candidate_id(&ids);
+        candidate.styles.push(Style {
+            id: candidate_style,
+            name: String::from("deep-style"),
+        });
+        let mut session = SemanticNotebookSessionService::default();
+        let AcceptanceOutcome::Accepted { mapping, revision: base } =
+            session.accept(candidate)
+        else {
+            panic!("maximum-depth style candidate must be accepted");
+        };
+        let block = accepted_for(&mapping, candidate_block);
+        let style = accepted_for(&mapping, candidate_style);
+        let batch = DirectEditBatchProposal {
+            base,
+            capability_version: CURRENT_COMMAND_BEHAVIOR_VERSION,
+            commands: vec![DirectEditBatchCommand {
+                dependencies: vec![],
+                id: 1_u32,
+                preconditions: CommandTargetPreconditions {
+                    expected_value: Some(EditableSemanticValue::StyleReference(
+                        None,
+                    )),
+                    identity: IdentityPrecondition {
+                        expected_kind: Some(SemanticIdentityKind::Block(
+                            SemanticBlockKind::Paragraph,
+                        )),
+                        expected_owner: IdentityOwnerExpectation::Any,
+                    },
+                    requested_family: SemanticCommandFamily::StyleRole,
+                },
+                requested: EditableSemanticValue::StyleReference(Some(style)),
+                target: block,
+            }],
+        };
+        let DirectEditBatchApplyOutcome::Applied { revision, .. } =
+            session.apply_direct_edit_batch(batch)
+        else {
+            panic!("maximum-depth style batch must apply");
+        };
+        let CommandTargetMaterialOutcome::Prepared { material } =
+            session.command_target_material_for_family(
+                revision,
+                block,
+                SemanticCommandFamily::StyleRole,
+            )
+        else {
+            panic!("maximum-depth style material must remain available");
+        };
+        assert_eq!(
+            material.editable_value,
+            Some(EditableSemanticValue::StyleReference(Some(style))),
+        );
+    }
+}
+
+#[test]
+fn maximum_nesting_block_provenance_apply_remains_stack_safe() {
+    let families = [
+        CandidateNestingWrapper::Callout,
+        CandidateNestingWrapper::Freeform,
+        CandidateNestingWrapper::List,
+        CandidateNestingWrapper::Table,
+    ];
+    let wrapper_count = CANDIDATE_BLOCK_NESTING_LIMIT.saturating_sub(1);
+    let cases = families
+        .iter()
+        .map(|family| vec![*family; wrapper_count])
+        .chain(std::iter::once(
+            (0..wrapper_count)
+                .map(|index| families[index % families.len()])
+                .collect::<Vec<_>>(),
+        ))
+        .collect::<Vec<_>>();
+
+    for wrappers in cases {
+        let ids = IdentityAllocator::new();
+        let (mut candidate, candidate_block, _) =
+            candidate_nested_text_notebook_with_wrappers(&ids, &wrappers);
+        let candidate_provenance = candidate_id(&ids);
+        candidate.provenance.push(Provenance {
+            id: candidate_provenance,
+            kind: ProvenanceKind::Supplied,
+            reference: Some(String::from("deep-source")),
+        });
+        let mut session = SemanticNotebookSessionService::default();
+        let AcceptanceOutcome::Accepted { mapping, revision: base } =
+            session.accept(candidate)
+        else {
+            panic!("maximum-depth provenance candidate must be accepted");
+        };
+        let block = accepted_for(&mapping, candidate_block);
+        let provenance = accepted_for(&mapping, candidate_provenance);
+        let batch = DirectEditBatchProposal {
+            base,
+            capability_version: CURRENT_COMMAND_BEHAVIOR_VERSION,
+            commands: vec![DirectEditBatchCommand {
+                dependencies: vec![],
+                id: 1_u32,
+                preconditions: CommandTargetPreconditions {
+                    expected_value: Some(
+                        EditableSemanticValue::ProvenanceReference(None),
+                    ),
+                    identity: IdentityPrecondition {
+                        expected_kind: Some(SemanticIdentityKind::Block(
+                            SemanticBlockKind::Paragraph,
+                        )),
+                        expected_owner: IdentityOwnerExpectation::Any,
+                    },
+                    requested_family: SemanticCommandFamily::Provenance,
+                },
+                requested: EditableSemanticValue::ProvenanceReference(Some(
+                    provenance,
+                )),
+                target: block,
+            }],
+        };
+        let DirectEditBatchApplyOutcome::Applied { revision, .. } =
+            session.apply_direct_edit_batch(batch)
+        else {
+            panic!("maximum-depth provenance batch must apply");
+        };
+        let CommandTargetMaterialOutcome::Prepared { material } =
+            session.command_target_material_for_family(
+                revision,
+                block,
+                SemanticCommandFamily::Provenance,
+            )
+        else {
+            panic!("maximum-depth provenance material must remain available");
+        };
+        assert_eq!(
+            material.editable_value,
+            Some(EditableSemanticValue::ProvenanceReference(Some(provenance))),
+        );
+    }
+}
+
+#[test]
 fn candidate_nesting_limit_rejects_before_mutation_and_drops_safely() {
     let ids = IdentityAllocator::new();
     let baseline = candidate_notebook(&ids, "accepted baseline");
