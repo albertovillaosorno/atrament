@@ -217,8 +217,7 @@ Bearer header.
 
 Bodies are UTF-8 text with one explicit `Content-Length`; transfer encoding,
 malformed framing, and invalid UTF-8 are rejected before mutation. Each field
-has a backend-owned one-mebibyte limit, and over-limit input returns `413`
-without
+has a backend-owned one-mebibyte limit. Over-limit input returns `413` without
 truncating or changing the current field. A successful whole-field replacement
 returns `204`.
 
@@ -242,7 +241,10 @@ admitted client supplies `Origin`, it must equal the startup origin. An absent
 `Origin` does not replace credential authentication with ambient trust.
 
 The browser coalesces rapid edits per field: it may skip obsolete intermediate
-values but sends only complete field values, never browser-authored patches.
+values but sends only complete field values, never browser-authored patches. If
+an older in-flight value fails after the field changed, that obsolete completion
+does not strand the newer value; the latest complete field is retried.
+
 Pending draft synchronization is invalidated when the page leaves the active
 session. Draft requests carry the in-memory Bearer credential and rely on the
 browser-provided exact `Origin`; rejected authentication or origin admission

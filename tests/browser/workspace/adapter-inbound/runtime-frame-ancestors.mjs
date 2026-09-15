@@ -30,7 +30,8 @@
 // - Description:
 //   - Uses Firefox's built-in WebDriver BiDi endpoint through a dependency-free
 //     RFC 6455 client. It checks responsive/scriptless layout, inert hostile
-//     text, framing, fragment-scrubbed refresh, and close-time cancellation.
+//     text, framing, draft coalescing, fragment-scrubbed refresh, and
+//     close-time cancellation.
 // - Usage:
 //   - Run through `pnpm test:browser-security` from the repository root.
 // - Defaults:
@@ -3295,6 +3296,150 @@ test(
                 "GET /api/session/candidate",
             ]);
         } finally {
+            if (bidi?.socket != null) {
+                bidi.socket.end();
+            }
+            if (server.listening) {
+                server.close();
+                await once(server, "close");
+            }
+            for (const child of children.reverse()) {
+                await stopChild(child);
+            }
+            fs.rmSync(profile, { recursive: true, force: true });
+        }
+    },
+);
+
+test(
+    "Firefox retries a newer draft after an obsolete resource limit",
+    { skip: !FIREFOX_AVAILABLE, timeout: 30_000 },
+    async () => {
+        fs.mkdirSync(".temp", { recursive: true });
+        const profile = fs.mkdtempSync(".temp/session-draft-coalesce-");
+        const apiRequests = [];
+        const mutationBodies = [];
+        let resolveFirstMutation;
+        const firstMutation = new Promise((resolve) => {
+            resolveFirstMutation = resolve;
+        });
+        let resolveSecondMutation;
+        const secondMutation = new Promise((resolve) => {
+            resolveSecondMutation = resolve;
+        });
+        let firstResponse = null;
+        const server = createSessionFixtureServer(
+            apiRequests,
+            (request, response, field) => {
+                const chunks = [];
+                request.on("data", (chunk) => chunks.push(chunk));
+                request.on("end", () => {
+                    const body = Buffer.concat(chunks).toString("utf8");
+                    mutationBodies.push({ body, field });
+                    if (mutationBodies.length === 1) {
+                        firstResponse = response;
+                        resolveFirstMutation(body);
+                        return;
+                    }
+                    response.writeHead(204, { "Cache-Control": "no-store" });
+                    response.end();
+                    resolveSecondMutation(body);
+                });
+            },
+        );
+        const children = [];
+        let bidi;
+        try {
+            server.listen(0, "127.0.0.1");
+            await once(server, "listening");
+            const address = server.address();
+            assert.notEqual(typeof address, "string");
+            assert.notEqual(address, null);
+            const origin = `http://127.0.0.1:${address.port}`;
+
+            bidi = await startBidiFirefox(profile, children);
+            const tab = await bidi.command("browsingContext.create", {
+                type: "tab",
+            });
+            await bidi.command("browsingContext.navigate", {
+                context: tab.context,
+                url: `${origin}/#session=${REFRESH_SECRET}`,
+                wait: "complete",
+            });
+            const ready = await waitForSessionStatus(
+                bidi,
+                tab.context,
+                "Session ready",
+            );
+            assert.equal(ready.task.disabled, false);
+
+            await bidi.command("script.evaluate", {
+                awaitPromise: false,
+                expression: `(() => {
+                    const input = document.querySelector("#task-input");
+                    input.value = "obsolete oversized value";
+                    input.dispatchEvent(new Event("input", { bubbles: true }));
+                })()`,
+                resultOwnership: "none",
+                target: { context: tab.context },
+            });
+            assert.equal(
+                await observedWithin(firstMutation, "first draft mutation"),
+                "obsolete oversized value",
+            );
+
+            await bidi.command("script.evaluate", {
+                awaitPromise: false,
+                expression: `(() => {
+                    const input = document.querySelector("#task-input");
+                    input.value = "current valid value";
+                    input.dispatchEvent(new Event("input", { bubbles: true }));
+                })()`,
+                resultOwnership: "none",
+                target: { context: tab.context },
+            });
+            assert.notEqual(firstResponse, null);
+            firstResponse.writeHead(413, {
+                "Cache-Control": "no-store",
+                "Content-Type": "application/json; charset=utf-8",
+            });
+            firstResponse.end(JSON.stringify({
+                diagnostics: {
+                    completeness: "complete",
+                    items: [{
+                        code: "atrament.session-draft.resource-limit",
+                    }],
+                    version: "atrament.diagnostic/1",
+                },
+                error: "resource_limit",
+            }));
+
+            assert.equal(
+                await observedWithin(secondMutation, "second draft mutation"),
+                "current valid value",
+            );
+            const settled = await waitForSessionStatus(
+                bidi,
+                tab.context,
+                "Session ready",
+            );
+            assert.equal(settled.task.value, "current valid value");
+            assert.deepEqual(mutationBodies, [
+                { body: "obsolete oversized value", field: "task" },
+                { body: "current valid value", field: "task" },
+            ]);
+            assert.deepEqual(apiRequests, [
+                "POST /api/handshake",
+                "GET /api/session/task",
+                "GET /api/session/source",
+                "GET /api/session/candidate",
+                "POST /api/session/task",
+                "POST /api/session/task",
+            ]);
+        } finally {
+            if (firstResponse !== null && !firstResponse.writableEnded) {
+                firstResponse.destroy();
+            }
             if (bidi?.socket != null) {
                 bidi.socket.end();
             }

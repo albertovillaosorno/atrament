@@ -187,8 +187,13 @@ scrubs all four session text surfaces before requiring restart.
 Aborted draft requests and stale `413` diagnostic-body completions cannot
 repopulate status text after invalidation. Concurrent field failures also remain
 visible until the failed field succeeds; another field cannot announce
-`Session ready` while work or failure remains. A real Firefox fixture now
-hydrates all three draft fields through a deterministic same-origin session,
+`Session ready` while work or failure remains. A real Firefox coalescing fixture
+now holds one task replacement, edits the field again, returns a valid `413` for
+the obsolete value, and requires the newer complete value to be posted next and
+restore `Session ready`.
+
+A separate real Firefox fixture hydrates all three draft fields through a
+deterministic same-origin session,
 confirms the launch fragment has been scrubbed, reloads that exact tab, and
 requires the refreshed document to expose blank disabled draft fields without
 issuing another handshake or draft request. Refresh therefore cannot recover the
