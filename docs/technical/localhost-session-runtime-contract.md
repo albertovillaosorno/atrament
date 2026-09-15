@@ -211,11 +211,16 @@ memory. Replacing one field cannot implicitly accept, parse, or apply another.
 
 The first-release browser replaces those fields with authenticated same-origin
 `POST` requests to `/api/session/task`, `/api/session/source`, and
-`/api/session/candidate`. Bodies are UTF-8 text with one explicit
-`Content-Length`; transfer encoding, malformed framing, and invalid UTF-8 are
-rejected before mutation. Each field has a backend-owned one-mebibyte limit, and
-over-limit input returns `413` without truncating or changing the current field.
-A successful whole-field replacement returns `204`.
+`/api/session/candidate`. The runtime parses request-line and header admission
+from the request head only; body bytes cannot erase a valid Host, Origin, or
+Bearer header.
+
+Bodies are UTF-8 text with one explicit `Content-Length`; transfer encoding,
+malformed framing, and invalid UTF-8 are rejected before mutation. Each field
+has a backend-owned one-mebibyte limit, and over-limit input returns `413`
+without
+truncating or changing the current field. A successful whole-field replacement
+returns `204`.
 
 Framing failures that can be classified after connection admission return `400`
 without invoking draft mutation. Request reads and response writes each use one

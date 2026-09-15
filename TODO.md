@@ -3139,6 +3139,13 @@ as equivalent. Exhaustive ASCII case-variant sweeps cover Host, Origin,
 Authorization, Content-Length, and Transfer-Encoding field names; alternate
 casing remains equivalent for admission, and case changes cannot hide duplicate
 Host, Origin, or Authorization values.
+
+Request-line, Host, Origin, and Bearer admission now decode only the complete
+HTTP request head rather than the body. A 256-byte draft-body oracle requires
+every possible single body byte to preserve valid security-header admission and
+wrong-Host `421` precedence; invalid UTF-8 still rejects at the body layer with
+`400` and cannot mutate draft state.
+
 Session-secret comparison executes all 64 admitted byte positions for every
 candidate length;
 0 through 128 byte candidates pin exact-length admission without claiming

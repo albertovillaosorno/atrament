@@ -450,11 +450,16 @@ fn trim_http_ows(value: &str) -> &str {
     value.trim_matches(|character| matches!(character, ' ' | '\t'))
 }
 
+fn request_head_text(request: &[u8]) -> Option<&str> {
+    let head_end = request_head_end(request)?;
+    str::from_utf8(request.get(..head_end)?).ok()
+}
+
 fn single_header_value<'request>(
     request: &'request [u8],
     expected_name: &str,
 ) -> Option<&'request str> {
-    let text = str::from_utf8(request).ok()?;
+    let text = request_head_text(request)?;
     let mut matched_value = None;
     for line in text.split("\r\n").skip(1) {
         if line.is_empty() {
@@ -1005,7 +1010,7 @@ fn is_origin_form_target(target: &str) -> bool {
 fn request_method_host_and_target(
     request: &[u8],
 ) -> Option<ParsedRequestTarget<'_>> {
-    let text = str::from_utf8(request).ok()?;
+    let text = request_head_text(request)?;
     let mut lines = text.split("\r\n");
     let request_line = lines.next()?;
     let (method, remainder) = request_line.split_once(' ')?;

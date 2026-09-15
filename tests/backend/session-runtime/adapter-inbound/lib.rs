@@ -2992,6 +2992,49 @@ fn content_length_case_variants_cannot_hide_duplicates() {
 }
 
 #[test]
+fn every_body_byte_preserves_request_head_admission() {
+    let authorization = format!("Bearer {EXPECTED_SECRET}");
+    for byte in 0_u8..=u8::MAX {
+        let request = draft_replace_request(
+            "/api/session/source",
+            Some(&authorization),
+            Some(EXPECTED_ORIGIN),
+            &[byte],
+        );
+        assert!(
+            runtime::request_has_session_credential(&request, EXPECTED_SECRET),
+            "credential disappeared for body byte {byte}",
+        );
+        assert!(
+            runtime::request_has_exact_origin(&request, EXPECTED_ORIGIN),
+            "origin disappeared for body byte {byte}",
+        );
+
+        let mut draft = seeded_private_draft();
+        let wrong_host =
+            route_with_draft(&request, "127.0.0.1:43124", &mut draft);
+        assert_eq!(
+            status_line(&wrong_host),
+            "HTTP/1.1 421 Misdirected Request",
+            "wrong Host classification changed for body byte {byte}",
+        );
+        assert_private_draft_unchanged(&draft);
+    }
+
+    let invalid_utf8 = draft_replace_request(
+        "/api/session/source",
+        Some(&authorization),
+        Some(EXPECTED_ORIGIN),
+        &[0xff, 0xfe],
+    );
+    let mut draft = seeded_private_draft();
+    let invalid_body =
+        route_with_draft(&invalid_utf8, EXPECTED_HOST, &mut draft);
+    assert_eq!(status_line(&invalid_body), "HTTP/1.1 400 Bad Request");
+    assert_private_draft_unchanged(&draft);
+}
+
+#[test]
 fn malformed_draft_body_framing_never_mutates_state() {
     let authorization = format!("Bearer {EXPECTED_SECRET}");
     let prefix = format!(
