@@ -3148,8 +3148,9 @@ Host, Origin, or Authorization values.
 Request-line, Host, Origin, and Bearer admission now decode only the complete
 HTTP request head rather than the body. A 256-byte draft-body oracle requires
 every possible single body byte to preserve valid security-header admission and
-wrong-Host `421` precedence; invalid UTF-8 still rejects at the body layer with
-`400` and cannot mutate draft state.
+wrong-Host `421` precedence. At the correct Host, all 128 ASCII bytes remain
+exact one-byte UTF-8 draft text while every isolated high-bit byte rejects with
+`400`; invalid multi-byte UTF-8 also rejects without draft mutation.
 
 Session-secret comparison executes all 64 admitted byte positions for every
 candidate length;

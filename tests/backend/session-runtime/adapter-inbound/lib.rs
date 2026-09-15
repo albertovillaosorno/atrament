@@ -3019,6 +3019,37 @@ fn every_body_byte_preserves_request_head_admission() {
             "wrong Host classification changed for body byte {byte}",
         );
         assert_private_draft_unchanged(&draft);
+
+        let mut admitted_draft = seeded_private_draft();
+        let admitted =
+            route_with_draft(&request, EXPECTED_HOST, &mut admitted_draft);
+        if byte.is_ascii() {
+            assert_eq!(
+                status_line(&admitted),
+                "HTTP/1.1 204 No Content",
+                "ASCII body byte {byte} must remain valid UTF-8 text",
+            );
+            assert_eq!(
+                admitted_draft.value(DraftField::Source).as_bytes(),
+                &[byte],
+                "ASCII body byte {byte} must be retained exactly",
+            );
+            assert_eq!(
+                admitted_draft.value(DraftField::Task),
+                "task-private-marker",
+            );
+            assert_eq!(
+                admitted_draft.value(DraftField::Candidate),
+                "candidate-private-marker",
+            );
+        } else {
+            assert_eq!(
+                status_line(&admitted),
+                "HTTP/1.1 400 Bad Request",
+                "isolated high-bit body byte {byte} must reject as UTF-8",
+            );
+            assert_private_draft_unchanged(&admitted_draft);
+        }
     }
 
     let invalid_utf8 = draft_replace_request(
