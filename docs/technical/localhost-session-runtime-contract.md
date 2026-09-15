@@ -116,6 +116,11 @@ Every runtime response also carries
 workspace directly while a distinct loopback origin fails to embed the same
 resource as a frame.
 
+Without a session credential, the active scripted workspace loads exactly the
+document, stylesheet, main module, and four generated support modules from the
+same loopback origin. No session API request is admitted from that state, and
+checked-in Firefox evidence rejects undeclared same-origin resource drift.
+
 Authentication and origin checks are separate. The secret protects the active
 session from unrelated local pages and processes that discover the port; exact
 origin admission reduces browser-based request-forgery and rebinding surfaces.

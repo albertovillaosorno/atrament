@@ -984,6 +984,15 @@ test(
                 requests.some((request) => request.startsWith("/api/")),
                 false,
             );
+            assert.deepEqual([...requests].sort(), [
+                "/",
+                "/generated/main.js",
+                "/generated/session-diagnostic.js",
+                "/generated/session-draft.js",
+                "/generated/session-fragment.js",
+                "/generated/session-handshake.js",
+                "/workspace.css",
+            ]);
         } finally {
             if (bidi?.socket != null) {
                 bidi.socket.end();

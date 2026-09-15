@@ -3029,6 +3029,12 @@ All three omit ambient credentials, reject redirects, use no-referrer and
 no-store behavior, and contain no absolute HTTP(S), beacon, XHR, WebSocket, or
 EventSource transport path.
 
+A checked-in scripted Firefox fixture without a session credential now observes
+exactly seven same-origin resource requests: the document, stylesheet, main
+module, and four generated support modules. It emits no session API or hostile
+text request, so the active shell's resource graph is executable evidence rather
+than source inspection alone.
+
 Malformed bare-LF or bare-CR header line endings reject while the peer remains
 connected instead of occupying the listener until the request timeout. EOF also
 cannot replace the required blank CRLF header terminator. Exhaustive prefix and
