@@ -505,6 +505,45 @@ fn candidate_nested_text_notebook_with_wrappers(
     (notebook, leaf, span)
 }
 
+fn candidate_nested_leaf_notebook_with_wrappers(
+    identities: &IdentityAllocator,
+    wrappers: &[CandidateNestingWrapper],
+    content: BlockContent<CandidateIdentity>,
+) -> (Notebook<CandidateIdentity>, CandidateIdentity) {
+    let (mut notebook, _) =
+        candidate_notebook_with_span(identities, "discarded nested leaf");
+    let mut block = notebook.pages[0].flows[0]
+        .blocks
+        .pop()
+        .expect("seed block");
+    block.content = content;
+    let leaf = block.id;
+    for wrapper in wrappers {
+        block = wrap_candidate_block(identities, block, *wrapper);
+    }
+    notebook.pages[0].flows[0].blocks.push(block);
+    (notebook, leaf)
+}
+
+fn maximum_nesting_wrapper_cases() -> Vec<Vec<CandidateNestingWrapper>> {
+    let families = [
+        CandidateNestingWrapper::Callout,
+        CandidateNestingWrapper::Freeform,
+        CandidateNestingWrapper::List,
+        CandidateNestingWrapper::Table,
+    ];
+    let wrapper_count = CANDIDATE_BLOCK_NESTING_LIMIT.saturating_sub(1);
+    families
+        .iter()
+        .map(|family| vec![*family; wrapper_count])
+        .chain(std::iter::once(
+            (0..wrapper_count)
+                .map(|index| families[index % families.len()])
+                .collect(),
+        ))
+        .collect()
+}
+
 fn candidate_nested_text_notebook(
     identities: &IdentityAllocator,
     wrappers: usize,
@@ -1218,6 +1257,272 @@ fn maximum_nesting_block_provenance_apply_remains_stack_safe() {
         assert_eq!(
             material.editable_value,
             Some(EditableSemanticValue::ProvenanceReference(Some(provenance))),
+        );
+    }
+}
+
+#[test]
+fn maximum_nesting_formula_edit_remains_stack_safe() {
+    for wrappers in maximum_nesting_wrapper_cases() {
+        let ids = IdentityAllocator::new();
+        let formula = candidate_id(&ids);
+        let (candidate, _) = candidate_nested_leaf_notebook_with_wrappers(
+            &ids,
+            &wrappers,
+            BlockContent::Mathematics(Formula {
+                id: formula,
+                mode: FormulaMode::Display,
+                source: String::from("x^2"),
+            }),
+        );
+        let mut session = SemanticNotebookSessionService::default();
+        let AcceptanceOutcome::Accepted { mapping, revision } =
+            session.accept(candidate)
+        else {
+            panic!("maximum-depth formula candidate must be accepted");
+        };
+        let formula = accepted_for(&mapping, formula);
+        let FormulaEditOutcome::Applied { revision: edited, .. } =
+            session.replace_formula(
+                revision,
+                formula,
+                FormulaReplacement {
+                    mode: FormulaMode::Inline,
+                    source: String::from("x^3 + 1"),
+                },
+            )
+        else {
+            panic!("maximum-depth formula edit must apply");
+        };
+        assert_eq!(
+            session.check_editable_value_precondition(
+                edited,
+                formula,
+                EditableSemanticValue::Formula {
+                    mode: FormulaMode::Inline,
+                    source: String::from("x^3 + 1"),
+                },
+            ),
+            EditableValuePreconditionOutcome::Satisfied {
+                actual: EditableSemanticValue::Formula {
+                    mode: FormulaMode::Inline,
+                    source: String::from("x^3 + 1"),
+                },
+                revision: edited,
+                target: formula,
+            },
+        );
+    }
+}
+
+#[test]
+fn maximum_nesting_figure_asset_apply_remains_stack_safe() {
+    for wrappers in maximum_nesting_wrapper_cases() {
+        let ids = IdentityAllocator::new();
+        let figure = candidate_id(&ids);
+        let first_asset = candidate_id(&ids);
+        let second_asset = candidate_id(&ids);
+        let (mut candidate, _) = candidate_nested_leaf_notebook_with_wrappers(
+            &ids,
+            &wrappers,
+            BlockContent::Figure(Figure {
+                asset: Some(first_asset),
+                caption: vec![],
+                id: figure,
+            }),
+        );
+        candidate.assets = vec![
+            Asset {
+                id: first_asset,
+                media_type: String::from("image/png"),
+            },
+            Asset {
+                id: second_asset,
+                media_type: String::from("image/jpeg"),
+            },
+        ];
+        let mut session = SemanticNotebookSessionService::default();
+        let AcceptanceOutcome::Accepted { mapping, revision: base } =
+            session.accept(candidate)
+        else {
+            panic!("maximum-depth figure candidate must be accepted");
+        };
+        let figure = accepted_for(&mapping, figure);
+        let first_asset = accepted_for(&mapping, first_asset);
+        let second_asset = accepted_for(&mapping, second_asset);
+        let batch = DirectEditBatchProposal {
+            base,
+            capability_version: CURRENT_COMMAND_BEHAVIOR_VERSION,
+            commands: vec![DirectEditBatchCommand {
+                dependencies: vec![],
+                id: 1_u32,
+                preconditions: CommandTargetPreconditions {
+                    expected_value: Some(EditableSemanticValue::AssetReference(
+                        Some(first_asset),
+                    )),
+                    identity: IdentityPrecondition {
+                        expected_kind: Some(SemanticIdentityKind::Figure),
+                        expected_owner: IdentityOwnerExpectation::Any,
+                    },
+                    requested_family: SemanticCommandFamily::AssetReference,
+                },
+                requested: EditableSemanticValue::AssetReference(Some(
+                    second_asset,
+                )),
+                target: figure,
+            }],
+        };
+        let DirectEditBatchApplyOutcome::Applied { revision, .. } =
+            session.apply_direct_edit_batch(batch)
+        else {
+            panic!("maximum-depth figure asset batch must apply");
+        };
+        assert_eq!(
+            session.check_editable_value_precondition(
+                revision,
+                figure,
+                EditableSemanticValue::AssetReference(Some(second_asset)),
+            ),
+            EditableValuePreconditionOutcome::Satisfied {
+                actual: EditableSemanticValue::AssetReference(Some(
+                    second_asset,
+                )),
+                revision,
+                target: figure,
+            },
+        );
+    }
+}
+
+#[test]
+fn maximum_nesting_list_ordering_apply_remains_stack_safe() {
+    for wrappers in maximum_nesting_wrapper_cases() {
+        let ids = IdentityAllocator::new();
+        let list = candidate_id(&ids);
+        let (candidate, _) = candidate_nested_leaf_notebook_with_wrappers(
+            &ids,
+            &wrappers,
+            BlockContent::List(List {
+                id: list,
+                items: vec![],
+                ordered: false,
+            }),
+        );
+        let mut session = SemanticNotebookSessionService::default();
+        let AcceptanceOutcome::Accepted { mapping, revision: base } =
+            session.accept(candidate)
+        else {
+            panic!("maximum-depth list candidate must be accepted");
+        };
+        let list = accepted_for(&mapping, list);
+        let batch = DirectEditBatchProposal {
+            base,
+            capability_version: CURRENT_COMMAND_BEHAVIOR_VERSION,
+            commands: vec![DirectEditBatchCommand {
+                dependencies: vec![],
+                id: 1_u32,
+                preconditions: CommandTargetPreconditions {
+                    expected_value: Some(EditableSemanticValue::ListOrdering(
+                        false,
+                    )),
+                    identity: IdentityPrecondition {
+                        expected_kind: Some(SemanticIdentityKind::List),
+                        expected_owner: IdentityOwnerExpectation::Any,
+                    },
+                    requested_family:
+                        SemanticCommandFamily::OrderingAndGrouping,
+                },
+                requested: EditableSemanticValue::ListOrdering(true),
+                target: list,
+            }],
+        };
+        let DirectEditBatchApplyOutcome::Applied { revision, .. } =
+            session.apply_direct_edit_batch(batch)
+        else {
+            panic!("maximum-depth list ordering batch must apply");
+        };
+        assert_eq!(
+            session.check_editable_value_precondition(
+                revision,
+                list,
+                EditableSemanticValue::ListOrdering(true),
+            ),
+            EditableValuePreconditionOutcome::Satisfied {
+                actual: EditableSemanticValue::ListOrdering(true),
+                revision,
+                target: list,
+            },
+        );
+    }
+}
+
+#[test]
+fn maximum_nesting_table_edits_remain_stack_safe() {
+    for wrappers in maximum_nesting_wrapper_cases() {
+        let ids = IdentityAllocator::new();
+        let table = candidate_id(&ids);
+        let row = candidate_id(&ids);
+        let cell = candidate_id(&ids);
+        let (candidate, _) = candidate_nested_leaf_notebook_with_wrappers(
+            &ids,
+            &wrappers,
+            BlockContent::Table(Table {
+                id: table,
+                rows: vec![TableRow {
+                    cells: vec![TableCell {
+                        blocks: vec![],
+                        id: cell,
+                        span: TableCellSpan::SINGLE,
+                    }],
+                    id: row,
+                    role: TableRowRole::Header,
+                }],
+            }),
+        );
+        let mut session = SemanticNotebookSessionService::default();
+        let AcceptanceOutcome::Accepted { mapping, revision } =
+            session.accept(candidate)
+        else {
+            panic!("maximum-depth table candidate must be accepted");
+        };
+        let row = accepted_for(&mapping, row);
+        let cell = accepted_for(&mapping, cell);
+        let TableRowRoleEditOutcome::Applied { revision, .. } =
+            session.replace_table_row_role(revision, row, TableRowRole::Body)
+        else {
+            panic!("maximum-depth table row edit must apply");
+        };
+        let requested_span = table_cell_span(2, 1);
+        let TableCellSpanEditOutcome::Applied { revision, .. } =
+            session.replace_table_cell_span(revision, cell, requested_span)
+        else {
+            panic!("maximum-depth table cell edit must apply");
+        };
+        assert_eq!(
+            session.check_editable_value_precondition(
+                revision,
+                row,
+                EditableSemanticValue::TableRowRole(TableRowRole::Body),
+            ),
+            EditableValuePreconditionOutcome::Satisfied {
+                actual: EditableSemanticValue::TableRowRole(
+                    TableRowRole::Body,
+                ),
+                revision,
+                target: row,
+            },
+        );
+        assert_eq!(
+            session.check_editable_value_precondition(
+                revision,
+                cell,
+                EditableSemanticValue::TableCellSpan(requested_span),
+            ),
+            EditableValuePreconditionOutcome::Satisfied {
+                actual: EditableSemanticValue::TableCellSpan(requested_span),
+                revision,
+                target: cell,
+            },
         );
     }
 }
