@@ -106,14 +106,21 @@ async function stopChild(child) {
     if (child.exitCode !== null || child.signalCode !== null) {
         return;
     }
+    const exit = once(child, "exit");
     child.kill("SIGTERM");
+    let timeout;
     const exited = await Promise.race([
-        once(child, "exit").then(() => true),
-        new Promise((resolve) => setTimeout(() => resolve(false), 2_000)),
+        exit.then(() => true),
+        new Promise((resolve) => {
+            timeout = setTimeout(() => resolve(false), 2_000);
+        }),
     ]);
+    clearTimeout(timeout);
     if (!exited) {
-        child.kill("SIGKILL");
-        await once(child, "exit");
+        if (child.exitCode === null && child.signalCode === null) {
+            child.kill("SIGKILL");
+        }
+        await exit;
     }
 }
 
