@@ -27,12 +27,12 @@
 //   - Prevents silent expansion of Atrament's backend network surface.
 // - Description:
 //   - Keeps standard-library networking confined to the loopback runtime and
-//     requires review when registry dependencies change.
+//     requires review when direct or resolved registry dependencies change.
 // - Usage:
 //   - Execute through the repository frontend test script.
 // - Defaults:
-//   - Only getrandom and unicode-segmentation are reviewed registry
-//     dependencies.
+//   - Direct declarations are getrandom and unicode-segmentation; the resolved
+//     registry set also includes their pinned transitive packages.
 //
 import assert from "node:assert/strict";
 import { readdir, readFile } from "node:fs/promises";
@@ -52,6 +52,22 @@ const LOOPBACK_RUNTIME = path.join(
     "lib.rs",
 );
 
+
+function usesStandardLibraryNetworking(source) {
+    if (/\bstd\s*::\s*net\b/u.test(source)) {
+        return true;
+    }
+    const groupedImports = source.matchAll(
+        /\buse\s+std\s*::\s*\{([\s\S]*?)\}\s*;/gu,
+    );
+    for (const importMatch of groupedImports) {
+        if (/\bnet\b\s*(?:::|,|$|\bas\b)/u.test(importMatch[1])) {
+            return true;
+        }
+    }
+    return false;
+}
+
 async function rustSources(directory) {
     const sources = [];
     for (const entry of await readdir(directory, { withFileTypes: true })) {
@@ -65,13 +81,32 @@ async function rustSources(directory) {
     return sources;
 }
 
+test("standard-library network detector covers equivalent imports", () => {
+    for (const source of [
+        "use std::net::TcpListener;",
+        "use std :: net :: TcpStream;",
+        "use std::{io, net::TcpListener};",
+        "use std::{io::{Read, Write}, net::{TcpListener, TcpStream}};",
+        "use std::{fmt, net as network};",
+    ]) {
+        assert.equal(usesStandardLibraryNetworking(source), true, source);
+    }
+    for (const source of [
+        "use std::{fmt, io};",
+        "use crate::net::LoopbackOnly;",
+        "let internet = false;",
+    ]) {
+        assert.equal(usesStandardLibraryNetworking(source), false, source);
+    }
+});
+
 test(
     "backend standard-library networking stays in loopback runtime",
     async () => {
     const networkFiles = [];
     for (const sourcePath of await rustSources(BACKEND_ROOT)) {
         const source = await readFile(sourcePath, "utf8");
-        if (/\bstd::net(?:::|\s*::|\s*\{)/u.test(source)) {
+        if (usesStandardLibraryNetworking(source)) {
             networkFiles.push(sourcePath);
         }
     }
@@ -90,7 +125,13 @@ test("backend registry dependencies remain explicitly reviewed", () => {
     );
     const result = spawnSync(
         cargo,
-        ["metadata", "--format-version", "1", "--no-deps"],
+        [
+            "metadata",
+            "--format-version",
+            "1",
+            "--locked",
+            "--offline",
+        ],
         {
             cwd: REPOSITORY_ROOT,
             encoding: "utf8",
@@ -98,33 +139,95 @@ test("backend registry dependencies remain explicitly reviewed", () => {
     );
     assert.equal(result.status, 0, result.stderr);
     const metadata = JSON.parse(result.stdout);
+    const workspaceIds = new Set(metadata.workspace_members);
     const registryDependencies = [];
+    const resolvedRegistryPackages = [];
     for (const packageValue of metadata.packages) {
+        if (packageValue.source !== null) {
+            resolvedRegistryPackages.push([
+                packageValue.name,
+                packageValue.version,
+                packageValue.source,
+            ]);
+        }
+        if (!workspaceIds.has(packageValue.id)) {
+            continue;
+        }
         for (const dependency of packageValue.dependencies) {
             if (dependency.source !== null) {
-                registryDependencies.push([
-                    packageValue.name,
-                    dependency.name,
-                    dependency.req,
-                    dependency.source,
-                ]);
+                registryDependencies.push({
+                    defaultFeatures: dependency.uses_default_features,
+                    features: dependency.features,
+                    kind: dependency.kind,
+                    name: dependency.name,
+                    optional: dependency.optional,
+                    owner: packageValue.name,
+                    rename: dependency.rename,
+                    requirement: dependency.req,
+                    source: dependency.source,
+                    target: dependency.target,
+                });
             }
         }
     }
+    const comparePackages = (left, right) =>
+        left.join("\0").localeCompare(right.join("\0"));
     registryDependencies.sort((left, right) =>
-        left.join("\0").localeCompare(right.join("\0")),
+        `${left.owner}\0${left.name}`.localeCompare(
+            `${right.owner}\0${right.name}`,
+        ),
     );
+    resolvedRegistryPackages.sort(comparePackages);
     assert.deepEqual(registryDependencies, [
+        {
+            defaultFeatures: true,
+            features: [],
+            kind: null,
+            name: "getrandom",
+            optional: false,
+            owner: "atrament_session_secret",
+            rename: null,
+            requirement: "=0.4.3",
+            source: "registry+https://github.com/rust-lang/crates.io-index",
+            target: null,
+        },
+        {
+            defaultFeatures: true,
+            features: [],
+            kind: null,
+            name: "unicode-segmentation",
+            optional: false,
+            owner: "atrament_unicode_grapheme_segmentation",
+            rename: null,
+            requirement: "=1.13.3",
+            source: "registry+https://github.com/rust-lang/crates.io-index",
+            target: null,
+        },
+    ]);
+    assert.deepEqual(resolvedRegistryPackages, [
         [
-            "atrament_session_secret",
-            "getrandom",
-            "=0.4.3",
+            "cfg-if",
+            "1.0.4",
             "registry+https://github.com/rust-lang/crates.io-index",
         ],
         [
-            "atrament_unicode_grapheme_segmentation",
+            "getrandom",
+            "0.4.3",
+            "registry+https://github.com/rust-lang/crates.io-index",
+        ],
+        [
+            "libc",
+            "0.2.189",
+            "registry+https://github.com/rust-lang/crates.io-index",
+        ],
+        [
+            "r-efi",
+            "6.0.0",
+            "registry+https://github.com/rust-lang/crates.io-index",
+        ],
+        [
             "unicode-segmentation",
-            "=1.13.3",
+            "1.13.3",
             "registry+https://github.com/rust-lang/crates.io-index",
         ],
     ]);

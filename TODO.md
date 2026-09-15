@@ -3043,11 +3043,13 @@ no-store behavior, and contain no absolute HTTP(S), beacon, XHR, WebSocket, or
 EventSource transport path.
 
 A source-level backend network-surface guard now requires every production
-`std::net` import to remain inside the loopback session runtime. Cargo metadata
-also pins each reviewed registry dependency's owning crate, exact version
-requirement, and crates.io source, so dependency changes require an explicit
-privacy-surface review. This does not replace packet-level offline execution
-evidence.
+`std::net` import to remain inside the loopback session runtime. Locked offline
+Cargo metadata pins each direct registry dependency's owner, exact version
+requirement, source, feature/default-feature, optional, target, kind, and rename
+metadata, plus the complete resolved registry package name/version/source set.
+Direct or transitive dependency changes therefore
+require explicit privacy-surface review. This does not replace packet-level
+offline execution evidence.
 
 A Linux process-composition fixture now admits a deterministic successful
 platform opener, waits for the live Atrament process to publish `ready`, and
