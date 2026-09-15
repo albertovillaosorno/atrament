@@ -52,7 +52,7 @@ use atrament_semantic_notebook::{
     PaperProfile, Provenance, ProvenanceKind, SemanticBlockKind,
     SemanticIdentityDescriptor, SemanticIdentityKind, Style, Table, TableCell,
     TableCellSpan, TableGridError, TableRow, TableRowRole, UnresolvedBlock,
-    UnresolvedReason,
+    UnresolvedReason, semantic_identity_path,
 };
 use atrament_semantic_notebook_port::{
     AcceptanceOutcome, CANDIDATE_BLOCK_NESTING_LIMIT, CandidateGraphError,
@@ -505,6 +505,202 @@ fn candidate_nested_text_notebook_with_wrappers(
     (notebook, leaf, span)
 }
 
+fn candidate_structural_block(
+    identities: &IdentityAllocator,
+    targets: &mut Vec<CandidateIdentity>,
+    content: BlockContent<CandidateIdentity>,
+) -> Block<CandidateIdentity> {
+    let id = candidate_id(identities);
+    targets.push(id);
+    Block {
+        content,
+        extensions: vec![],
+        id,
+        provenance: None,
+        style: None,
+    }
+}
+
+fn candidate_rule_block(
+    identities: &IdentityAllocator,
+    targets: &mut Vec<CandidateIdentity>,
+) -> Block<CandidateIdentity> {
+    candidate_structural_block(identities, targets, BlockContent::Rule)
+}
+
+fn block_identity_preorder<Identity: Copy>(
+    blocks: &[Block<Identity>],
+) -> Vec<Identity> {
+    let mut pending = blocks.iter().rev().collect::<Vec<_>>();
+    let mut identities = Vec::new();
+    while let Some(block) = pending.pop() {
+        identities.push(block.id);
+        match &block.content {
+            BlockContent::Callout(children)
+            | BlockContent::Freeform(children) => {
+                pending.extend(children.iter().rev());
+            },
+            BlockContent::List(list) => {
+                for item in list.items.iter().rev() {
+                    pending.extend(item.blocks.iter().rev());
+                }
+            },
+            BlockContent::Table(table) => {
+                for row in table.rows.iter().rev() {
+                    for cell in row.cells.iter().rev() {
+                        pending.extend(cell.blocks.iter().rev());
+                    }
+                }
+            },
+            BlockContent::Citation(_)
+            | BlockContent::Date(_)
+            | BlockContent::Definition(_)
+            | BlockContent::Figure(_)
+            | BlockContent::Footnote(_)
+            | BlockContent::Heading(_)
+            | BlockContent::Label(_)
+            | BlockContent::MarginNote(_)
+            | BlockContent::Mathematics(_)
+            | BlockContent::Paragraph(_)
+            | BlockContent::Quotation(_)
+            | BlockContent::Rule
+            | BlockContent::SourceNote(_)
+            | BlockContent::Unresolved(_) => {},
+        }
+    }
+    identities
+}
+
+fn candidate_branching_notebook(
+    identities: &IdentityAllocator,
+) -> (Notebook<CandidateIdentity>, Vec<CandidateIdentity>) {
+    let (mut notebook, _) =
+        candidate_notebook_with_span(identities, "discarded branching seed");
+    let mut targets = Vec::new();
+
+    let freeform_first = candidate_rule_block(identities, &mut targets);
+    let freeform_second = candidate_rule_block(identities, &mut targets);
+    let freeform = candidate_structural_block(
+        identities,
+        &mut targets,
+        BlockContent::Freeform(vec![freeform_first, freeform_second]),
+    );
+
+    let first_item = candidate_id(identities);
+    targets.push(first_item);
+    let second_item = candidate_id(identities);
+    targets.push(second_item);
+    let nested_callout_first = candidate_rule_block(identities, &mut targets);
+    let nested_callout_second = candidate_rule_block(identities, &mut targets);
+    let nested_callout = candidate_structural_block(
+        identities,
+        &mut targets,
+        BlockContent::Callout(vec![
+            nested_callout_first,
+            nested_callout_second,
+        ]),
+    );
+    let first_item_first = candidate_rule_block(identities, &mut targets);
+    let first_item_second = candidate_rule_block(identities, &mut targets);
+    let list = candidate_id(identities);
+    targets.push(list);
+    let list_block = candidate_structural_block(
+        identities,
+        &mut targets,
+        BlockContent::List(List {
+            id: list,
+            items: vec![
+                ListItem {
+                    blocks: vec![first_item_first, first_item_second],
+                    id: first_item,
+                },
+                ListItem {
+                    blocks: vec![nested_callout],
+                    id: second_item,
+                },
+            ],
+            ordered: true,
+        }),
+    );
+
+    let mut rows = Vec::new();
+    for row_index in 0..2 {
+        let row = candidate_id(identities);
+        targets.push(row);
+        let mut cells = Vec::new();
+        for cell_index in 0..2 {
+            let cell = candidate_id(identities);
+            targets.push(cell);
+            let mut blocks =
+                vec![candidate_rule_block(identities, &mut targets)];
+            if row_index == 0 && cell_index == 0 {
+                let nested_first =
+                    candidate_rule_block(identities, &mut targets);
+                let nested_second =
+                    candidate_rule_block(identities, &mut targets);
+                blocks.push(candidate_structural_block(
+                    identities,
+                    &mut targets,
+                    BlockContent::Freeform(vec![nested_first, nested_second]),
+                ));
+            }
+            cells.push(TableCell {
+                blocks,
+                id: cell,
+                span: TableCellSpan::SINGLE,
+            });
+        }
+        rows.push(TableRow {
+            cells,
+            id: row,
+            role: if row_index == 0 {
+                TableRowRole::Header
+            } else {
+                TableRowRole::Body
+            },
+        });
+    }
+    let table = candidate_id(identities);
+    targets.push(table);
+    let table_block = candidate_structural_block(
+        identities,
+        &mut targets,
+        BlockContent::Table(Table { id: table, rows }),
+    );
+
+    let callout_first = candidate_rule_block(identities, &mut targets);
+    let callout = candidate_structural_block(
+        identities,
+        &mut targets,
+        BlockContent::Callout(vec![
+            callout_first,
+            freeform,
+            list_block,
+            table_block,
+        ]),
+    );
+
+    let trailing_first = candidate_rule_block(identities, &mut targets);
+    let trailing_callout_first = candidate_rule_block(identities, &mut targets);
+    let trailing_callout_second =
+        candidate_rule_block(identities, &mut targets);
+    let trailing_callout = candidate_structural_block(
+        identities,
+        &mut targets,
+        BlockContent::Callout(vec![
+            trailing_callout_first,
+            trailing_callout_second,
+        ]),
+    );
+    let trailing = candidate_structural_block(
+        identities,
+        &mut targets,
+        BlockContent::Freeform(vec![trailing_first, trailing_callout]),
+    );
+    notebook.pages[0].flows[0].blocks = vec![callout, trailing];
+    (notebook, targets)
+}
+
 fn candidate_nested_leaf_notebook_with_wrappers(
     identities: &IdentityAllocator,
     wrappers: &[CandidateNestingWrapper],
@@ -929,6 +1125,66 @@ fn candidate_table_rows_must_cover_the_established_width() {
         },
     );
     assert!(session.current().is_none());
+}
+
+#[test]
+fn branching_candidate_promotion_preserves_structure_and_block_order() {
+    let ids = IdentityAllocator::new();
+    let (candidate, targets) = candidate_branching_notebook(&ids);
+    let candidate_block_order =
+        block_identity_preorder(&candidate.pages[0].flows[0].blocks);
+    let candidate_paths = targets
+        .iter()
+        .map(|target| {
+            (
+                *target,
+                semantic_identity_path(&candidate, *target)
+                    .expect("branching target must have a candidate path"),
+            )
+        })
+        .collect::<Vec<_>>();
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, .. } = session.accept(candidate)
+    else {
+        panic!("branching candidate must be accepted");
+    };
+    let current = session.current().expect("branching accepted revision");
+    let accepted_block_order =
+        block_identity_preorder(&current.notebook.pages[0].flows[0].blocks);
+    assert_eq!(
+        accepted_block_order,
+        candidate_block_order
+            .iter()
+            .map(|candidate| accepted_for(&mapping, *candidate))
+            .collect::<Vec<_>>(),
+    );
+
+    for (target, candidate_path) in candidate_paths {
+        let accepted_target = accepted_for(&mapping, target);
+        let accepted_path =
+            semantic_identity_path(&current.notebook, accepted_target)
+                .expect("mapped branching target must have an accepted path");
+        assert_eq!(accepted_path.len(), candidate_path.len());
+        for (candidate_entry, accepted_entry) in
+            candidate_path.iter().zip(&accepted_path)
+        {
+            assert_eq!(
+                accepted_entry.identity,
+                accepted_for(&mapping, candidate_entry.identity),
+            );
+            assert_eq!(
+                accepted_entry.descriptor.kind,
+                candidate_entry.descriptor.kind,
+            );
+            assert_eq!(
+                accepted_entry.descriptor.owner,
+                candidate_entry
+                    .descriptor
+                    .owner
+                    .map(|owner| accepted_for(&mapping, owner)),
+            );
+        }
+    }
 }
 
 #[test]

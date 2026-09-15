@@ -559,6 +559,9 @@ Candidate-to-accepted promotion is now iterative too: exact-boundary fixtures
 cover callout, freeform, list-item, table-cell, and mixed nesting, while the
 first block beyond the bound rejects before accepted-state mutation.
 
+A wide heterogeneous fixture also preserves mapped owner paths and block
+preorder across sibling blocks, list items, table rows, and table cells.
+
 Maximum-depth direct text, formula, figure-asset, list-ordering, table-row,
 table-cell-span, block-style, and block-provenance edits also remain usable
 after that promotion.
