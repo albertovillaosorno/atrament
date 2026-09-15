@@ -1,5 +1,7 @@
 # Atrament
 
+> Project started: August 31, 2026
+
 **An artificial penmanship atelier that alchemizes text, lectures, formulas,
 and photographs into uncannily human notebooks—PDF or real ink.**
 
@@ -13,10 +15,15 @@ semantic, layout is compiled against a physical page, handwriting comes from a
 calibrated personal profile, and every visual adjustment remains an explicit
 constraint.
 
-> [!IMPORTANT]
-> Atrament is under active implementation. The repository includes the thin
-> TypeScript browser workspace; backend-owned product behavior remains the
-> authoritative implementation boundary as the roadmap is completed.
+> **Status: paused.** Development was paused on September 15, 2026. For now,
+> this project will not receive new commits. The repository will remain
+> available and will not be archived.
+
+> The lightweight workspace flow described below is the intended final product.
+>
+> Parts are still pending. Every unfinished surface names its owning TODO so the
+>
+> README can describe the destination without pretending unfinished code exists.
 
 ## The workspace
 
