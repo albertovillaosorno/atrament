@@ -53,6 +53,9 @@ const FIREFOX_AVAILABLE = process.platform === "linux"
         ["--version"],
         { stdio: "ignore" },
     ).status === 0;
+const PINNED_CARGO = path.resolve(
+    ".dependencies/rust/1.97.1/bin/cargo",
+);
 const TARGET_DIR = path.resolve(".cache/cargo-target");
 const RUNTIME_BINARY = path.join(TARGET_DIR, "debug", "atrament");
 const WORKSPACE_DIR = path.resolve(
@@ -3008,7 +3011,7 @@ test(
         let bidi;
         try {
             const build = spawnSync(
-                "cargo",
+                PINNED_CARGO,
                 [
                     "build",
                     "--quiet",
