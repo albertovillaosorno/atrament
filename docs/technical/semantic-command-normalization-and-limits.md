@@ -239,6 +239,12 @@ context and never supplies a browser default. Serialized envelope bytes,
 readable-context bytes, structured depth, and family-specific payload bounds are
 not claimed by this count-only evidence.
 
+Parsed command protocol tokens use `SemanticCommandProtocolVersion`, distinct
+from `CommandBehaviorVersion`. Capability behavior, family behavior,
+normalization behavior, and typed-result behavior therefore cannot be supplied
+to protocol-membership checks without an explicit protocol-token value. This
+type separation does not choose a wire encoding or advertise a protocol.
+
 Ordered direct-edit simulation can enforce those same caller-supplied bounds
 before dependency-graph and semantic evaluation. Repeated explicit dependency
 edges remain structurally admissible but each still consumes one edge of the

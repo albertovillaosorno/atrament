@@ -492,8 +492,9 @@ no protocol or normalization version, no command-context, Validate, Apply, or
 selective-rebatch capability, and no guessed command/context numeric limits. A
 read-only compatibility check rejects an older capability behavior version
 independently from notebook revision changes. Separately, parsed protocol tokens
-can be checked by exact membership in the snapshot's advertised protocol set;
-an empty set rejects every token and never guesses a downgrade.
+use their own `SemanticCommandProtocolVersion` type and can be checked by exact
+membership in the snapshot's advertised protocol set. An empty set rejects every
+token and never guesses a downgrade.
 
 Application operations use the same exact-membership rule, while family
 compatibility checks the advertised family behavior version and distinguishes

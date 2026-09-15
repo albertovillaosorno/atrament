@@ -47,6 +47,7 @@ use atrament_semantic_notebook_port::{
     SemanticCommandEnvelopeContextAdmission,
     SemanticCommandEnvelopeResultClassFacts, SemanticCommandFamily,
     SemanticCommandFamilyBehaviorAdmission, SemanticCommandProtocolAdmission,
+    SemanticCommandProtocolVersion,
     SemanticCommandResourceAdmission, SemanticCommandResourceLimitAdmission,
     SemanticCommandResultClass,
     SemanticCommandScopeAdmission, SemanticCommandScopeLocation,
@@ -234,7 +235,7 @@ pub fn semantic_command_family_behavior_admission(
 #[must_use]
 pub fn semantic_command_protocol_admission(
     snapshot: &SemanticCommandCapabilitySnapshot,
-    requested: CommandBehaviorVersion,
+    requested: SemanticCommandProtocolVersion,
 ) -> SemanticCommandProtocolAdmission {
     if snapshot.protocol_versions.contains(&requested) {
         SemanticCommandProtocolAdmission::Admitted { version: requested }

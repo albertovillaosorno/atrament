@@ -57,6 +57,7 @@ use atrament_semantic_notebook_port::{
     SemanticCommandEnvelopeContextAdmission,
     SemanticCommandEnvelopeResultClassFacts, SemanticCommandFamily,
     SemanticCommandFamilyBehaviorAdmission, SemanticCommandProtocolAdmission,
+    SemanticCommandProtocolVersion,
     SemanticCommandResourceAdmission, SemanticCommandResourceLimitAdmission,
     SemanticCommandResultClass, SemanticCommandScopeAdmission,
     SemanticCommandScopeLocation,
@@ -367,10 +368,10 @@ fn parsed_envelope_retains_protocol_retry_binding_and_command_order() {
             command(3, SemanticCommandFamily::TextContent, target),
             command(1, SemanticCommandFamily::StyleRole, target),
         ],
-        protocol_version: CommandBehaviorVersion(7),
+        protocol_version: SemanticCommandProtocolVersion(7),
         retry_identity: String::from("retry-owned-9"),
     };
-    assert_eq!(envelope.protocol_version, CommandBehaviorVersion(7));
+    assert_eq!(envelope.protocol_version, SemanticCommandProtocolVersion(7));
     assert_eq!(envelope.retry_identity, "retry-owned-9");
     assert_eq!(envelope.commands[0].id, 3);
     assert_eq!(envelope.commands[1].id, 1);
@@ -411,7 +412,7 @@ fn envelope_context_review_preserves_order_and_all_scope_fact_combinations() {
             command(5, SemanticCommandFamily::TextContent, other),
             command(3, SemanticCommandFamily::StyleRole, other),
         ],
-        protocol_version: CommandBehaviorVersion(7),
+        protocol_version: SemanticCommandProtocolVersion(7),
         retry_identity: String::from("retry-1"),
     };
     let admission = semantic_command_envelope_context_admission(
@@ -519,7 +520,7 @@ fn all_27_count_resource_limit_states_are_independent() {
                         ),
                         second,
                     ],
-                    protocol_version: CommandBehaviorVersion(7),
+                    protocol_version: SemanticCommandProtocolVersion(7),
                     retry_identity: String::from("retry-resource"),
                 };
                 assert_eq!(
@@ -546,7 +547,7 @@ static TEST_PROTOCOL_LIMITS: CommandResourceLimits = CommandResourceLimits {
 };
 
 fn protocol_snapshot(
-    versions: &'static [CommandBehaviorVersion],
+    versions: &'static [SemanticCommandProtocolVersion],
 ) -> SemanticCommandCapabilitySnapshot {
     SemanticCommandCapabilitySnapshot {
         admitted_applications: &[] as &[CommandApplicationCapability],
@@ -561,28 +562,28 @@ fn protocol_snapshot(
 
 #[test]
 fn protocol_admission_is_exact_membership_without_downgrade_guessing() {
-    static VERSIONS: [CommandBehaviorVersion; 2] = [
-        CommandBehaviorVersion(7),
-        CommandBehaviorVersion(9),
+    static VERSIONS: [SemanticCommandProtocolVersion; 2] = [
+        SemanticCommandProtocolVersion(7),
+        SemanticCommandProtocolVersion(9),
     ];
     let snapshot = protocol_snapshot(&VERSIONS);
     assert_eq!(
         semantic_command_protocol_admission(
             &snapshot,
-            CommandBehaviorVersion(7),
+            SemanticCommandProtocolVersion(7),
         ),
         SemanticCommandProtocolAdmission::Admitted {
-            version: CommandBehaviorVersion(7),
+            version: SemanticCommandProtocolVersion(7),
         },
     );
     for requested in [6_u32, 8, 10] {
         assert_eq!(
             semantic_command_protocol_admission(
                 &snapshot,
-                CommandBehaviorVersion(requested),
+                SemanticCommandProtocolVersion(requested),
             ),
             SemanticCommandProtocolAdmission::Unsupported {
-                requested: CommandBehaviorVersion(requested),
+                requested: SemanticCommandProtocolVersion(requested),
             },
         );
     }
@@ -595,10 +596,10 @@ fn empty_protocol_snapshot_rejects_every_requested_version() {
         assert_eq!(
             semantic_command_protocol_admission(
                 &snapshot,
-                CommandBehaviorVersion(requested),
+                SemanticCommandProtocolVersion(requested),
             ),
             SemanticCommandProtocolAdmission::Unsupported {
-                requested: CommandBehaviorVersion(requested),
+                requested: SemanticCommandProtocolVersion(requested),
             },
         );
     }
@@ -699,7 +700,9 @@ fn envelope_preflight_composes_all_current_admission_facts() {
     static APPLICATIONS: [CommandApplicationCapability; 1] = [
         CommandApplicationCapability::Validate,
     ];
-    static PROTOCOLS: [CommandBehaviorVersion; 1] = [CommandBehaviorVersion(7)];
+    static PROTOCOLS: [SemanticCommandProtocolVersion; 1] = [
+        SemanticCommandProtocolVersion(7),
+    ];
     let identities = IdentityAllocator::new();
     let notebook = identities.allocate_accepted().expect("notebook identity");
     let target = identities.allocate_accepted().expect("target identity");
@@ -738,7 +741,7 @@ fn envelope_preflight_composes_all_current_admission_facts() {
             SemanticCommandFamily::TextContent,
             target,
         )],
-        protocol_version: CommandBehaviorVersion(7),
+        protocol_version: SemanticCommandProtocolVersion(7),
         retry_identity: String::from("retry-preflight"),
     };
     assert_eq!(
@@ -760,7 +763,7 @@ fn envelope_preflight_composes_all_current_admission_facts() {
                 &envelope,
             ),
             protocol: SemanticCommandProtocolAdmission::Admitted {
-                version: CommandBehaviorVersion(7),
+                version: SemanticCommandProtocolVersion(7),
             },
             resources: SemanticCommandResourceAdmission {
                 commands_per_batch:
@@ -830,7 +833,7 @@ fn envelope_preflight_preserves_simultaneous_independent_failures() {
             SemanticCommandFamily::StyleRole,
             other_target,
         )],
-        protocol_version: CommandBehaviorVersion(7),
+        protocol_version: SemanticCommandProtocolVersion(7),
         retry_identity: String::from("retry-stale"),
     };
     let admission = semantic_command_envelope_admission(
@@ -855,7 +858,7 @@ fn envelope_preflight_preserves_simultaneous_independent_failures() {
     assert_eq!(
         admission.protocol,
         SemanticCommandProtocolAdmission::Unsupported {
-            requested: CommandBehaviorVersion(7),
+            requested: SemanticCommandProtocolVersion(7),
         },
     );
     assert_eq!(
@@ -924,7 +927,9 @@ fn all_64_envelope_preflight_axis_masks_match_independent_oracle() {
     static APPLICATIONS: [CommandApplicationCapability; 1] = [
         CommandApplicationCapability::Validate,
     ];
-    static PROTOCOLS: [CommandBehaviorVersion; 1] = [CommandBehaviorVersion(7)];
+    static PROTOCOLS: [SemanticCommandProtocolVersion; 1] = [
+        SemanticCommandProtocolVersion(7),
+    ];
     let identities = IdentityAllocator::new();
     let notebook = identities.allocate_accepted().expect("notebook identity");
     let target = identities.allocate_accepted().expect("target identity");
@@ -996,7 +1001,7 @@ fn all_64_envelope_preflight_axis_masks_match_independent_oracle() {
                 SemanticCommandFamily::TextContent,
                 target,
             )],
-            protocol_version: CommandBehaviorVersion(7),
+            protocol_version: SemanticCommandProtocolVersion(7),
             retry_identity: String::from("retry-oracle"),
         };
         let admission = semantic_command_envelope_admission(
@@ -1078,11 +1083,11 @@ fn all_64_envelope_preflight_axis_masks_match_independent_oracle() {
             admission.protocol,
             if protocol_admitted {
                 SemanticCommandProtocolAdmission::Admitted {
-                    version: CommandBehaviorVersion(7),
+                    version: SemanticCommandProtocolVersion(7),
                 }
             } else {
                 SemanticCommandProtocolAdmission::Unsupported {
-                    requested: CommandBehaviorVersion(7),
+                    requested: SemanticCommandProtocolVersion(7),
                 }
             },
             "protocol mismatch for mask {mask:#08b}",
@@ -1139,7 +1144,9 @@ fn envelope_preflight_preserves_invalid_graph_for_graph_validator() {
     static APPLICATIONS: [CommandApplicationCapability; 1] = [
         CommandApplicationCapability::Validate,
     ];
-    static PROTOCOLS: [CommandBehaviorVersion; 1] = [CommandBehaviorVersion(7)];
+    static PROTOCOLS: [SemanticCommandProtocolVersion; 1] = [
+        SemanticCommandProtocolVersion(7),
+    ];
     let identities = IdentityAllocator::new();
     let notebook = identities.allocate_accepted().expect("notebook identity");
     let target = identities.allocate_accepted().expect("target identity");
@@ -1179,7 +1186,7 @@ fn envelope_preflight_preserves_invalid_graph_for_graph_validator() {
             first,
             command(5, SemanticCommandFamily::TextContent, target),
         ],
-        protocol_version: CommandBehaviorVersion(7),
+        protocol_version: SemanticCommandProtocolVersion(7),
         retry_identity: String::from("retry-graph-separation"),
     };
     let admission = semantic_command_envelope_admission(
@@ -1257,7 +1264,7 @@ fn envelope_result_class_facts_preserve_simultaneous_failures() {
             SemanticCommandFamily::StyleRole,
             other_target,
         )],
-        protocol_version: CommandBehaviorVersion(7),
+        protocol_version: SemanticCommandProtocolVersion(7),
         retry_identity: String::from("result-retry"),
     };
     let admission = semantic_command_envelope_admission(

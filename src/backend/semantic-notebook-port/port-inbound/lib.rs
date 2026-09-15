@@ -1270,6 +1270,14 @@ pub enum EditableValuePreconditionOutcome {
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub struct CommandBehaviorVersion(pub u32);
 
+/// Parsed semantic-command protocol version token.
+///
+/// This is intentionally distinct from capability behavior versions so callers
+/// cannot satisfy protocol admission by accidentally reusing behavior
+/// authority.
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub struct SemanticCommandProtocolVersion(pub u32);
+
 /// Application operations discoverable through semantic command capabilities.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum CommandApplicationCapability {
@@ -1357,12 +1365,12 @@ pub enum SemanticCommandProtocolAdmission {
     /// Requested protocol version is explicitly advertised by the snapshot.
     Admitted {
         /// Exact admitted protocol version.
-        version: CommandBehaviorVersion,
+        version: SemanticCommandProtocolVersion,
     },
     /// Requested protocol version is absent from the snapshot.
     Unsupported {
         /// Exact unsupported protocol version requested by the caller.
-        requested: CommandBehaviorVersion,
+        requested: SemanticCommandProtocolVersion,
     },
 }
 
@@ -1463,7 +1471,7 @@ pub struct SemanticCommandBatchEnvelope<
     /// Ordered semantic command sequence; order remains significant.
     pub commands: Vec<DirectEditBatchCommand<CommandIdentity>>,
     /// Parsed command protocol version token; admission remains external.
-    pub protocol_version: CommandBehaviorVersion,
+    pub protocol_version: SemanticCommandProtocolVersion,
     /// Apply retry identity scoped to this semantic command request.
     pub retry_identity: RetryIdentity,
 }
@@ -1609,8 +1617,8 @@ pub struct SemanticCommandCapabilitySnapshot {
     pub family_capabilities: &'static [CommandFamilyCapability],
     /// Versioned normalization behavior, absent until a protocol is admitted.
     pub normalization_version: Option<CommandBehaviorVersion>,
-    /// Admitted serialized command protocol behavior versions.
-    pub protocol_versions: &'static [CommandBehaviorVersion],
+    /// Admitted serialized command protocol versions.
+    pub protocol_versions: &'static [SemanticCommandProtocolVersion],
     /// Command-mode resource limits bound to admitted protocol operations.
     pub resource_limits: &'static CommandResourceLimits,
     /// Version of typed local command-target result behavior.

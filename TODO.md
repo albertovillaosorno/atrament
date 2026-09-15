@@ -2090,8 +2090,11 @@ need their owning representations before they can be measured here.
 
 Protocol-token membership can now be checked exactly against one capability
 snapshot without guessing a downgrade or conflating capability behavior with a
-wire protocol version. The production snapshot still advertises no protocol
-versions, so every serialized protocol token remains unsupported today.
+wire protocol version. Parsed protocol tokens now use a distinct
+`SemanticCommandProtocolVersion` type, so capability behavior authority cannot
+be passed to protocol admission accidentally. The production snapshot still
+advertises no protocol versions, so every serialized protocol token remains
+unsupported today.
 
 Application-operation membership and family behavior compatibility can likewise
 be checked exactly against one snapshot. Missing application operations reject
