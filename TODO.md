@@ -3042,6 +3042,13 @@ All three omit ambient credentials, reject redirects, use no-referrer and
 no-store behavior, and contain no absolute HTTP(S), beacon, XHR, WebSocket, or
 EventSource transport path.
 
+A source-level backend network-surface guard now requires every production
+`std::net` import to remain inside the loopback session runtime. Cargo metadata
+also pins each reviewed registry dependency's owning crate, exact version
+requirement, and crates.io source, so dependency changes require an explicit
+privacy-surface review. This does not replace packet-level offline execution
+evidence.
+
 A checked-in scripted Firefox fixture without a session credential now observes
 exactly seven same-origin resource requests: the document, stylesheet, main
 module, and four generated support modules. It emits no session API or hostile
