@@ -3049,6 +3049,14 @@ requirement, and crates.io source, so dependency changes require an explicit
 privacy-surface review. This does not replace packet-level offline execution
 evidence.
 
+A Linux process-composition fixture now admits a deterministic successful
+platform opener, waits for the live Atrament process to publish `ready`, and
+resolves only its `/proc/<pid>/fd` socket inodes through that process's kernel
+TCP/UDP tables. The ready process owns exactly one Internet socket: the
+published IPv4 `127.0.0.1` TCP listener, with no connected, UDP, IPv6, wildcard,
+or second Internet socket descriptor. This is live process evidence, not a
+packet-level proof that every future execution path is offline.
+
 A checked-in scripted Firefox fixture without a session credential now observes
 exactly seven same-origin resource requests: the document, stylesheet, main
 module, and four generated support modules. It emits no session API or hostile
