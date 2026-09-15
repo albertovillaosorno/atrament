@@ -3035,6 +3035,11 @@ cannot replace the required blank CRLF header terminator. Exhaustive prefix and
 two-write split fixtures cover every byte boundary of valid GET and body-bearing
 POST requests.
 
+A socket-level incomplete-body fixture now pins transport error classification:
+an early write-side EOF returns `400`, while the same incomplete body held open
+past its read budget returns `408`. Both responses retain the common no-store,
+frame, referrer, nosniff, and connection-close security headers.
+
 Configured request and response timeouts are total transport deadlines rather
 than per-read or per-write budgets. Trickle bytes cannot extend the production
 two-second request budget, and a slow response consumer cannot hold the

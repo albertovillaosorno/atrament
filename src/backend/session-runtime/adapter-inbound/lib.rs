@@ -1160,7 +1160,7 @@ pub fn route_request(
     }
 }
 
-fn serve_connection(
+pub(crate) fn serve_connection(
     stream: &mut TcpStream,
     context: &RouteRequestContext<'_>,
     draft: &mut dyn SessionDraft,

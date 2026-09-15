@@ -222,11 +222,12 @@ truncating or changing the current field. A successful whole-field replacement
 returns `204`.
 
 Framing failures that can be classified after connection admission return `400`
-without invoking draft mutation. Request reads and response writes each use one
-total transport deadline rather than a per-I/O budget. Incomplete request bodies
-return `408`, while a slow response consumer loses its connection when the write
-budget expires; intermittent progress cannot hold the single-thread listener
-indefinitely.
+without invoking draft mutation. An incomplete body whose peer closes its write
+side early is malformed and also returns `400`; an incomplete request that stays
+open until the total read deadline returns `408`. Request reads and response
+writes each use one total transport deadline rather than a per-I/O budget. A
+slow response consumer loses its connection when the write budget expires;
+intermittent progress cannot hold the single-thread listener indefinitely.
 
 Authenticated `GET` requests to the same three field paths return the exact
 current UTF-8 field as uncached plain text. Every `GET` route is bodyless. A

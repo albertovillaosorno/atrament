@@ -432,6 +432,67 @@ fn valid_crlf_may_arrive_split_across_socket_reads() {
     writer.join().expect("test writer joins");
 }
 
+fn response_for_incomplete_body(close_write: bool) -> Vec<u8> {
+    let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0))
+        .expect("test listener binds");
+    let address = listener.local_addr().expect("test listener address");
+    let host = format!("127.0.0.1:{}", address.port());
+    let client = thread::spawn(move || {
+        let mut stream = TcpStream::connect(address)
+            .expect("test client connects");
+        stream
+            .set_read_timeout(Some(Duration::from_secs(1)))
+            .expect("test client read timeout");
+        stream
+            .write_all(
+                concat!(
+                    "POST /api/session/task HTTP/1.1\r\n",
+                    "Host: 127.0.0.1:1\r\n",
+                    "Content-Length: 5\r\n\r\nhi",
+                )
+                .as_bytes(),
+            )
+            .expect("incomplete body writes");
+        if close_write {
+            stream
+                .shutdown(Shutdown::Write)
+                .expect("client write half closes");
+        }
+        let mut response = Vec::new();
+        stream.read_to_end(&mut response).expect("response reads");
+        response
+    });
+    let (mut server, _) = listener.accept().expect("test server accepts");
+    server
+        .set_read_timeout(Some(Duration::from_millis(80)))
+        .expect("server read timeout");
+    server
+        .set_write_timeout(Some(Duration::from_millis(500)))
+        .expect("server write timeout");
+    let context = runtime::RouteRequestContext::new(
+        &host,
+        "http://127.0.0.1:1",
+        EXPECTED_SECRET,
+        &HANDSHAKE,
+    );
+    let mut draft = SessionDraftService::default();
+    runtime::serve_connection(&mut server, &context, &mut draft)
+        .expect("incomplete request receives classified response");
+    drop(server);
+    client.join().expect("test client joins")
+}
+
+#[test]
+fn incomplete_body_distinguishes_early_eof_from_deadline() {
+    let eof_response = response_for_incomplete_body(true);
+    assert_eq!(status_line(&eof_response), "HTTP/1.1 400 Bad Request");
+    assert_security_headers(&eof_response);
+
+    let timeout_response = response_for_incomplete_body(false);
+    assert_eq!(status_line(&timeout_response), "HTTP/1.1 408 Request Timeout");
+    assert_security_headers(&timeout_response);
+}
+
 #[test]
 fn request_deadline_covers_slow_body_transfer() {
     let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0))
