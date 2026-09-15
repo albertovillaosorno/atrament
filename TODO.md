@@ -555,6 +555,9 @@ command context and writable scope, published limits, complete impact expansion,
 diagnostics, retry handling, and full Validate/Apply admission remain open.
 Candidate acceptance also enforces a public 256-level block nesting resource
 bound and iteratively dismantles rejected deep candidates before mutation.
+Candidate-to-accepted promotion is now iterative too: exact-boundary fixtures
+cover callout, freeform, list-item, table-cell, and mixed nesting, while the
+first block beyond the bound rejects before accepted-state mutation.
 
 The task remains open for the complete first-release semantic vocabulary,
 format parsing and canonical serialization, migrations and round-trip fixtures,

@@ -48,15 +48,15 @@ use atrament_semantic_command_graph::{
 };
 use atrament_semantic_notebook::{
     AcceptedIdentity, AcceptedRevision, Asset, Block, BlockContent,
-    CandidateIdentity, Constraint, ConstraintKind, Figure, Flow, Formula,
+    CandidateIdentity, Constraint, ConstraintKind, ExtensionData, Figure, Flow,
+    Formula,
     FormulaMode,
     IdentityAllocator, IdentityExhausted, InlineSpan, List, ListItem, Notebook,
     OutputProfile, Page, PaperProfile, Provenance, ProvenanceKind,
     SemanticBlockKind, SemanticIdentityDescriptor, SemanticIdentityKind, Style,
     Table, TableCell,
     TableCellSpan,
-    TableGridError, TableRow,
-    TableRowRole,
+    TableGridError, TableRow, TableRowRole, UnresolvedBlock,
     semantic_identity_descriptor, semantic_identity_path,
 };
 use atrament_semantic_notebook_port::{
@@ -1798,87 +1798,374 @@ fn accept_asset(
     })
 }
 
-fn accept_block(
-    block: Block<CandidateIdentity>,
-    identities: &BTreeMap<CandidateIdentity, AcceptedIdentity>,
-) -> Result<Block<AcceptedIdentity>, CandidateGraphError> {
-    Ok(Block {
-        content: accept_block_content(block.content, identities)?,
-        extensions: block.extensions,
-        id: accepted_id(block.id, identities)?,
-        provenance: accepted_reference(block.provenance, identities)?,
-        style: accepted_reference(block.style, identities)?,
-    })
+struct CandidateBlockPlan {
+    content: CandidateBlockContentPlan,
+    extensions: Vec<ExtensionData>,
+    id: CandidateIdentity,
+    provenance: Option<CandidateIdentity>,
+    style: Option<CandidateIdentity>,
 }
 
-fn accept_block_content(
+struct CandidateBlockSlot {
+    candidate: CandidateIdentity,
+    plan: Option<CandidateBlockPlan>,
+}
+
+enum CandidateBlockContentPlan {
+    Callout(Vec<usize>),
+    Freeform(Vec<usize>),
+    Leaf(CandidateLeafBlockContent),
+    List(CandidateListPlan),
+    Table(CandidateTablePlan),
+}
+
+enum CandidateLeafBlockContent {
+    Citation(Vec<InlineSpan<CandidateIdentity>>),
+    Date(Vec<InlineSpan<CandidateIdentity>>),
+    Definition(Vec<InlineSpan<CandidateIdentity>>),
+    Figure(Figure<CandidateIdentity>),
+    Footnote(Vec<InlineSpan<CandidateIdentity>>),
+    Heading(Vec<InlineSpan<CandidateIdentity>>),
+    Label(Vec<InlineSpan<CandidateIdentity>>),
+    MarginNote(Vec<InlineSpan<CandidateIdentity>>),
+    Mathematics(Formula<CandidateIdentity>),
+    Paragraph(Vec<InlineSpan<CandidateIdentity>>),
+    Quotation(Vec<InlineSpan<CandidateIdentity>>),
+    Rule,
+    SourceNote(Vec<InlineSpan<CandidateIdentity>>),
+    Unresolved(UnresolvedBlock),
+}
+
+struct CandidateListPlan {
+    id: CandidateIdentity,
+    items: Vec<CandidateListItemPlan>,
+    ordered: bool,
+}
+
+struct CandidateListItemPlan {
+    blocks: Vec<usize>,
+    id: CandidateIdentity,
+}
+
+struct CandidateTablePlan {
+    id: CandidateIdentity,
+    rows: Vec<CandidateTableRowPlan>,
+}
+
+struct CandidateTableCellPlan {
+    blocks: Vec<usize>,
+    id: CandidateIdentity,
+    span: TableCellSpan,
+}
+
+struct CandidateTableRowPlan {
+    cells: Vec<CandidateTableCellPlan>,
+    id: CandidateIdentity,
+    role: TableRowRole,
+}
+
+fn enqueue_candidate_blocks(
+    blocks: Vec<Block<CandidateIdentity>>,
+    slots: &mut Vec<CandidateBlockSlot>,
+    work: &mut Vec<(usize, Block<CandidateIdentity>)>,
+) -> Vec<usize> {
+    let mut indices = Vec::with_capacity(blocks.len());
+    for block in blocks {
+        let index = slots.len();
+        slots.push(CandidateBlockSlot {
+            candidate: block.id,
+            plan: None,
+        });
+        work.push((index, block));
+        indices.push(index);
+    }
+    indices
+}
+
+fn candidate_block_content_plan(
     content: BlockContent<CandidateIdentity>,
-    identities: &BTreeMap<CandidateIdentity, AcceptedIdentity>,
+    slots: &mut Vec<CandidateBlockSlot>,
+    work: &mut Vec<(usize, Block<CandidateIdentity>)>,
+) -> CandidateBlockContentPlan {
+    match content {
+        BlockContent::Callout(blocks) => CandidateBlockContentPlan::Callout(
+            enqueue_candidate_blocks(blocks, slots, work),
+        ),
+        BlockContent::Freeform(blocks) => CandidateBlockContentPlan::Freeform(
+            enqueue_candidate_blocks(blocks, slots, work),
+        ),
+        BlockContent::List(list) => {
+            let items = list
+                .items
+                .into_iter()
+                .map(|item| CandidateListItemPlan {
+                    blocks: enqueue_candidate_blocks(item.blocks, slots, work),
+                    id: item.id,
+                })
+                .collect();
+            CandidateBlockContentPlan::List(CandidateListPlan {
+                id: list.id,
+                items,
+                ordered: list.ordered,
+            })
+        },
+        BlockContent::Table(table) => {
+            let rows = table
+                .rows
+                .into_iter()
+                .map(|row| CandidateTableRowPlan {
+                    cells: row
+                        .cells
+                        .into_iter()
+                        .map(|cell| CandidateTableCellPlan {
+                            blocks: enqueue_candidate_blocks(
+                                cell.blocks,
+                                slots,
+                                work,
+                            ),
+                            id: cell.id,
+                            span: cell.span,
+                        })
+                        .collect(),
+                    id: row.id,
+                    role: row.role,
+                })
+                .collect();
+            CandidateBlockContentPlan::Table(CandidateTablePlan {
+                id: table.id,
+                rows,
+            })
+        },
+        BlockContent::Citation(spans) => CandidateBlockContentPlan::Leaf(
+            CandidateLeafBlockContent::Citation(spans),
+        ),
+        BlockContent::Date(spans) => CandidateBlockContentPlan::Leaf(
+            CandidateLeafBlockContent::Date(spans),
+        ),
+        BlockContent::Definition(spans) => CandidateBlockContentPlan::Leaf(
+            CandidateLeafBlockContent::Definition(spans),
+        ),
+        BlockContent::Figure(figure) => CandidateBlockContentPlan::Leaf(
+            CandidateLeafBlockContent::Figure(figure),
+        ),
+        BlockContent::Footnote(spans) => CandidateBlockContentPlan::Leaf(
+            CandidateLeafBlockContent::Footnote(spans),
+        ),
+        BlockContent::Heading(spans) => CandidateBlockContentPlan::Leaf(
+            CandidateLeafBlockContent::Heading(spans),
+        ),
+        BlockContent::Label(spans) => CandidateBlockContentPlan::Leaf(
+            CandidateLeafBlockContent::Label(spans),
+        ),
+        BlockContent::MarginNote(spans) => CandidateBlockContentPlan::Leaf(
+            CandidateLeafBlockContent::MarginNote(spans),
+        ),
+        BlockContent::Mathematics(formula) => CandidateBlockContentPlan::Leaf(
+            CandidateLeafBlockContent::Mathematics(formula),
+        ),
+        BlockContent::Paragraph(spans) => CandidateBlockContentPlan::Leaf(
+            CandidateLeafBlockContent::Paragraph(spans),
+        ),
+        BlockContent::Quotation(spans) => CandidateBlockContentPlan::Leaf(
+            CandidateLeafBlockContent::Quotation(spans),
+        ),
+        BlockContent::Rule => {
+            CandidateBlockContentPlan::Leaf(CandidateLeafBlockContent::Rule)
+        },
+        BlockContent::SourceNote(spans) => CandidateBlockContentPlan::Leaf(
+            CandidateLeafBlockContent::SourceNote(spans),
+        ),
+        BlockContent::Unresolved(unresolved) => CandidateBlockContentPlan::Leaf(
+            CandidateLeafBlockContent::Unresolved(unresolved),
+        ),
+    }
+}
+
+fn plan_candidate_blocks(
+    blocks: Vec<Block<CandidateIdentity>>,
+) -> (Vec<usize>, Vec<CandidateBlockSlot>) {
+    let mut slots = Vec::new();
+    let mut work = Vec::new();
+    let roots = enqueue_candidate_blocks(blocks, &mut slots, &mut work);
+    while let Some((index, block)) = work.pop() {
+        let Block {
+            content,
+            extensions,
+            id,
+            provenance,
+            style,
+        } = block;
+        let content =
+            candidate_block_content_plan(content, &mut slots, &mut work);
+        slots[index].plan = Some(CandidateBlockPlan {
+            content,
+            extensions,
+            id,
+            provenance,
+            style,
+        });
+    }
+    (roots, slots)
+}
+
+fn take_accepted_blocks(
+    indices: &[usize],
+    accepted: &mut [Option<Block<AcceptedIdentity>>],
+    slots: &[CandidateBlockSlot],
+) -> AcceptedBlocksResult {
+    let mut blocks = Vec::with_capacity(indices.len());
+    for index in indices {
+        let candidate = slots[*index].candidate;
+        let Some(block) = accepted.get_mut(*index).and_then(Option::take) else {
+            return Err(CandidateGraphError::MissingReference { candidate });
+        };
+        blocks.push(block);
+    }
+    Ok(blocks)
+}
+
+fn accept_candidate_leaf_block_content(
+    content: CandidateLeafBlockContent,
+    identities: &AcceptedIdentityMap,
 ) -> Result<BlockContent<AcceptedIdentity>, CandidateGraphError> {
     match content {
-        BlockContent::Callout(blocks) => {
-            Ok(BlockContent::Callout(accept_blocks(blocks, identities)?))
-        },
-        BlockContent::Citation(spans) => {
+        CandidateLeafBlockContent::Citation(spans) => {
             Ok(BlockContent::Citation(accept_spans(spans, identities)?))
         },
-        BlockContent::Date(spans) => {
+        CandidateLeafBlockContent::Date(spans) => {
             Ok(BlockContent::Date(accept_spans(spans, identities)?))
         },
-        BlockContent::Definition(spans) => {
+        CandidateLeafBlockContent::Definition(spans) => {
             Ok(BlockContent::Definition(accept_spans(spans, identities)?))
         },
-        BlockContent::Quotation(spans) => {
-            Ok(BlockContent::Quotation(accept_spans(spans, identities)?))
-        },
-        BlockContent::SourceNote(spans) => {
-            Ok(BlockContent::SourceNote(accept_spans(spans, identities)?))
-        },
-        BlockContent::Figure(figure) => {
+        CandidateLeafBlockContent::Figure(figure) => {
             Ok(BlockContent::Figure(accept_figure(figure, identities)?))
         },
-        BlockContent::Footnote(spans) => {
+        CandidateLeafBlockContent::Footnote(spans) => {
             Ok(BlockContent::Footnote(accept_spans(spans, identities)?))
         },
-        BlockContent::Freeform(blocks) => {
-            Ok(BlockContent::Freeform(accept_blocks(blocks, identities)?))
-        },
-        BlockContent::Heading(spans) => {
+        CandidateLeafBlockContent::Heading(spans) => {
             Ok(BlockContent::Heading(accept_spans(spans, identities)?))
         },
-        BlockContent::Label(spans) => {
+        CandidateLeafBlockContent::Label(spans) => {
             Ok(BlockContent::Label(accept_spans(spans, identities)?))
         },
-        BlockContent::List(list) => {
-            Ok(BlockContent::List(accept_list(list, identities)?))
-        },
-        BlockContent::MarginNote(spans) => {
+        CandidateLeafBlockContent::MarginNote(spans) => {
             Ok(BlockContent::MarginNote(accept_spans(spans, identities)?))
         },
-        BlockContent::Mathematics(formula) => Ok(BlockContent::Mathematics(
-            accept_formula(formula, identities)?,
-        )),
-        BlockContent::Paragraph(spans) => {
+        CandidateLeafBlockContent::Mathematics(formula) => {
+            Ok(BlockContent::Mathematics(accept_formula(formula, identities)?))
+        },
+        CandidateLeafBlockContent::Paragraph(spans) => {
             Ok(BlockContent::Paragraph(accept_spans(spans, identities)?))
         },
-        BlockContent::Rule => Ok(BlockContent::Rule),
-        BlockContent::Table(table) => {
-            Ok(BlockContent::Table(accept_table(table, identities)?))
+        CandidateLeafBlockContent::Quotation(spans) => {
+            Ok(BlockContent::Quotation(accept_spans(spans, identities)?))
         },
-        BlockContent::Unresolved(unresolved) => {
+        CandidateLeafBlockContent::Rule => Ok(BlockContent::Rule),
+        CandidateLeafBlockContent::SourceNote(spans) => {
+            Ok(BlockContent::SourceNote(accept_spans(spans, identities)?))
+        },
+        CandidateLeafBlockContent::Unresolved(unresolved) => {
             Ok(BlockContent::Unresolved(unresolved))
+        },
+    }
+}
+
+fn accept_candidate_block_content_plan(
+    plan: CandidateBlockContentPlan,
+    identities: &AcceptedIdentityMap,
+    accepted: &mut [Option<Block<AcceptedIdentity>>],
+    slots: &[CandidateBlockSlot],
+) -> Result<BlockContent<AcceptedIdentity>, CandidateGraphError> {
+    match plan {
+        CandidateBlockContentPlan::Callout(indices) => Ok(BlockContent::Callout(
+            take_accepted_blocks(&indices, accepted, slots)?,
+        )),
+        CandidateBlockContentPlan::Freeform(indices) => {
+            Ok(BlockContent::Freeform(take_accepted_blocks(
+                &indices, accepted, slots,
+            )?))
+        },
+        CandidateBlockContentPlan::Leaf(content) => {
+            accept_candidate_leaf_block_content(content, identities)
+        },
+        CandidateBlockContentPlan::List(list) => {
+            let mut items = Vec::with_capacity(list.items.len());
+            for item in list.items {
+                items.push(ListItem {
+                    blocks: take_accepted_blocks(
+                        &item.blocks,
+                        accepted,
+                        slots,
+                    )?,
+                    id: accepted_id(item.id, identities)?,
+                });
+            }
+            Ok(BlockContent::List(List {
+                id: accepted_id(list.id, identities)?,
+                items,
+                ordered: list.ordered,
+            }))
+        },
+        CandidateBlockContentPlan::Table(table) => {
+            let mut rows = Vec::with_capacity(table.rows.len());
+            for row in table.rows {
+                let mut cells = Vec::with_capacity(row.cells.len());
+                for cell in row.cells {
+                    cells.push(TableCell {
+                        blocks: take_accepted_blocks(
+                            &cell.blocks,
+                            accepted,
+                            slots,
+                        )?,
+                        id: accepted_id(cell.id, identities)?,
+                        span: cell.span,
+                    });
+                }
+                rows.push(TableRow {
+                    cells,
+                    id: accepted_id(row.id, identities)?,
+                    role: row.role,
+                });
+            }
+            Ok(BlockContent::Table(Table {
+                id: accepted_id(table.id, identities)?,
+                rows,
+            }))
         },
     }
 }
 
 fn accept_blocks(
     blocks: Vec<Block<CandidateIdentity>>,
-    identities: &BTreeMap<CandidateIdentity, AcceptedIdentity>,
+    identities: &AcceptedIdentityMap,
 ) -> AcceptedBlocksResult {
-    blocks
-        .into_iter()
-        .map(|block| accept_block(block, identities))
-        .collect()
+    if blocks.is_empty() {
+        return Ok(Vec::new());
+    }
+    let (roots, mut slots) = plan_candidate_blocks(blocks);
+    let mut accepted = (0..slots.len()).map(|_| None).collect::<Vec<_>>();
+    for index in (0..slots.len()).rev() {
+        let candidate = slots[index].candidate;
+        let Some(plan) = slots[index].plan.take() else {
+            return Err(CandidateGraphError::MissingReference { candidate });
+        };
+        let content = accept_candidate_block_content_plan(
+            plan.content,
+            identities,
+            &mut accepted,
+            &slots,
+        )?;
+        accepted[index] = Some(Block {
+            content,
+            extensions: plan.extensions,
+            id: accepted_id(plan.id, identities)?,
+            provenance: accepted_reference(plan.provenance, identities)?,
+            style: accepted_reference(plan.style, identities)?,
+        });
+    }
+    take_accepted_blocks(&roots, &mut accepted, &slots)
 }
 
 fn accept_constraint(
@@ -1921,32 +2208,6 @@ fn accept_formula(
         id: accepted_id(formula.id, identities)?,
         mode: formula.mode,
         source: formula.source,
-    })
-}
-
-fn accept_list(
-    list: List<CandidateIdentity>,
-    identities: &BTreeMap<CandidateIdentity, AcceptedIdentity>,
-) -> Result<List<AcceptedIdentity>, CandidateGraphError> {
-    let items = list
-        .items
-        .into_iter()
-        .map(|item| accept_list_item(item, identities))
-        .collect::<Result<Vec<_>, _>>()?;
-    Ok(List {
-        id: accepted_id(list.id, identities)?,
-        items,
-        ordered: list.ordered,
-    })
-}
-
-fn accept_list_item(
-    item: ListItem<CandidateIdentity>,
-    identities: &BTreeMap<CandidateIdentity, AcceptedIdentity>,
-) -> Result<ListItem<AcceptedIdentity>, CandidateGraphError> {
-    Ok(ListItem {
-        blocks: accept_blocks(item.blocks, identities)?,
-        id: accepted_id(item.id, identities)?,
     })
 }
 
@@ -2065,46 +2326,6 @@ fn accept_style(
     Ok(Style {
         id: accepted_id(style.id, identities)?,
         name: style.name,
-    })
-}
-
-fn accept_table(
-    table: Table<CandidateIdentity>,
-    identities: &BTreeMap<CandidateIdentity, AcceptedIdentity>,
-) -> Result<Table<AcceptedIdentity>, CandidateGraphError> {
-    Ok(Table {
-        id: accepted_id(table.id, identities)?,
-        rows: table
-            .rows
-            .into_iter()
-            .map(|row| accept_table_row(row, identities))
-            .collect::<Result<Vec<_>, _>>()?,
-    })
-}
-
-fn accept_table_cell(
-    cell: TableCell<CandidateIdentity>,
-    identities: &BTreeMap<CandidateIdentity, AcceptedIdentity>,
-) -> Result<TableCell<AcceptedIdentity>, CandidateGraphError> {
-    Ok(TableCell {
-        blocks: accept_blocks(cell.blocks, identities)?,
-        id: accepted_id(cell.id, identities)?,
-        span: cell.span,
-    })
-}
-
-fn accept_table_row(
-    row: TableRow<CandidateIdentity>,
-    identities: &BTreeMap<CandidateIdentity, AcceptedIdentity>,
-) -> Result<TableRow<AcceptedIdentity>, CandidateGraphError> {
-    Ok(TableRow {
-        cells: row
-            .cells
-            .into_iter()
-            .map(|cell| accept_table_cell(cell, identities))
-            .collect::<Result<Vec<_>, _>>()?,
-        id: accepted_id(row.id, identities)?,
-        role: row.role,
     })
 }
 

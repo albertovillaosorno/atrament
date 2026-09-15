@@ -435,6 +435,76 @@ fn span_batch_command(
     }
 }
 
+#[derive(Clone, Copy, Debug)]
+enum CandidateNestingWrapper {
+    Callout,
+    Freeform,
+    List,
+    Table,
+}
+
+fn wrap_candidate_block(
+    identities: &IdentityAllocator,
+    block: Block<CandidateIdentity>,
+    wrapper: CandidateNestingWrapper,
+) -> Block<CandidateIdentity> {
+    let content = match wrapper {
+        CandidateNestingWrapper::Callout => BlockContent::Callout(vec![block]),
+        CandidateNestingWrapper::Freeform => {
+            BlockContent::Freeform(vec![block])
+        },
+        CandidateNestingWrapper::List => BlockContent::List(List {
+            id: candidate_id(identities),
+            items: vec![ListItem {
+                blocks: vec![block],
+                id: candidate_id(identities),
+            }],
+            ordered: true,
+        }),
+        CandidateNestingWrapper::Table => BlockContent::Table(Table {
+            id: candidate_id(identities),
+            rows: vec![TableRow {
+                cells: vec![TableCell {
+                    blocks: vec![block],
+                    id: candidate_id(identities),
+                    span: TableCellSpan::SINGLE,
+                }],
+                id: candidate_id(identities),
+                role: TableRowRole::Body,
+            }],
+        }),
+    };
+    Block {
+        content,
+        extensions: vec![],
+        id: candidate_id(identities),
+        provenance: None,
+        style: None,
+    }
+}
+
+fn candidate_nested_text_notebook_with_wrappers(
+    identities: &IdentityAllocator,
+    wrappers: &[CandidateNestingWrapper],
+) -> (
+    Notebook<CandidateIdentity>,
+    CandidateIdentity,
+    CandidateIdentity,
+) {
+    let (mut notebook, span) =
+        candidate_notebook_with_span(identities, "nested text");
+    let mut block = notebook.pages[0].flows[0]
+        .blocks
+        .pop()
+        .expect("paragraph block");
+    let leaf = block.id;
+    for wrapper in wrappers {
+        block = wrap_candidate_block(identities, block, *wrapper);
+    }
+    notebook.pages[0].flows[0].blocks.push(block);
+    (notebook, leaf, span)
+}
+
 fn candidate_nested_text_notebook(
     identities: &IdentityAllocator,
     wrappers: usize,
@@ -849,6 +919,146 @@ fn candidate_nesting_limit_accepts_the_exact_boundary() {
             target: span,
         },
     );
+}
+
+#[test]
+fn candidate_nesting_limit_counts_every_child_bearing_block_family() {
+    let families = [
+        CandidateNestingWrapper::Callout,
+        CandidateNestingWrapper::Freeform,
+        CandidateNestingWrapper::List,
+        CandidateNestingWrapper::Table,
+    ];
+    let accepted_wrappers = CANDIDATE_BLOCK_NESTING_LIMIT.saturating_sub(1);
+
+    for family in families {
+        let ids = IdentityAllocator::new();
+        let wrappers = vec![family; accepted_wrappers];
+        let (candidate, _, span) =
+            candidate_nested_text_notebook_with_wrappers(&ids, &wrappers);
+        let mut session = SemanticNotebookSessionService::default();
+        let AcceptanceOutcome::Accepted { mapping, revision } =
+            session.accept(candidate)
+        else {
+            panic!("exact nesting boundary must admit {family:?}");
+        };
+        let span = accepted_for(&mapping, span);
+        let expected = EditableSemanticValue::Text(String::from("nested text"));
+        assert_eq!(
+            session.check_editable_value_precondition(
+                revision,
+                span,
+                expected.clone(),
+            ),
+            EditableValuePreconditionOutcome::Satisfied {
+                actual: expected,
+                revision,
+                target: span,
+            },
+            "deepest text must survive {family:?} promotion",
+        );
+        let before = session.current().expect("accepted boundary").clone();
+
+        let over_limit = vec![family; CANDIDATE_BLOCK_NESTING_LIMIT];
+        let (candidate, leaf, _) =
+            candidate_nested_text_notebook_with_wrappers(&ids, &over_limit);
+        assert_eq!(
+            session.accept(candidate),
+            AcceptanceOutcome::InvalidCandidate {
+                reason: CandidateGraphError::NestingLimitExceeded {
+                    candidate: leaf,
+                    limit: CANDIDATE_BLOCK_NESTING_LIMIT,
+                },
+            },
+            "first over-limit block must reject for {family:?}",
+        );
+        assert_eq!(session.current(), Some(&before));
+    }
+
+    for wrapper_count in [
+        CANDIDATE_BLOCK_NESTING_LIMIT.saturating_sub(1),
+        CANDIDATE_BLOCK_NESTING_LIMIT,
+    ] {
+        let ids = IdentityAllocator::new();
+        let wrappers = (0..wrapper_count)
+            .map(|index| families[index % families.len()])
+            .collect::<Vec<_>>();
+        let (candidate, leaf, _) =
+            candidate_nested_text_notebook_with_wrappers(&ids, &wrappers);
+        let mut session = SemanticNotebookSessionService::default();
+        if wrapper_count < CANDIDATE_BLOCK_NESTING_LIMIT {
+            assert!(matches!(
+                session.accept(candidate),
+                AcceptanceOutcome::Accepted { .. }
+            ));
+        } else {
+            assert_eq!(
+                session.accept(candidate),
+                AcceptanceOutcome::InvalidCandidate {
+                    reason: CandidateGraphError::NestingLimitExceeded {
+                        candidate: leaf,
+                        limit: CANDIDATE_BLOCK_NESTING_LIMIT,
+                    },
+                },
+            );
+        }
+    }
+}
+
+#[test]
+fn maximum_nesting_direct_text_edit_remains_stack_safe() {
+    let families = [
+        CandidateNestingWrapper::Callout,
+        CandidateNestingWrapper::Freeform,
+        CandidateNestingWrapper::List,
+        CandidateNestingWrapper::Table,
+    ];
+    let wrapper_count = CANDIDATE_BLOCK_NESTING_LIMIT.saturating_sub(1);
+    let cases = families
+        .iter()
+        .map(|family| vec![*family; wrapper_count])
+        .chain(std::iter::once(
+            (0..wrapper_count)
+                .map(|index| families[index % families.len()])
+                .collect::<Vec<_>>(),
+        ))
+        .collect::<Vec<_>>();
+
+    for wrappers in cases {
+        let ids = IdentityAllocator::new();
+        let (candidate, _, candidate_span) =
+            candidate_nested_text_notebook_with_wrappers(&ids, &wrappers);
+        let mut session = SemanticNotebookSessionService::default();
+        let AcceptanceOutcome::Accepted { mapping, revision } =
+            session.accept(candidate)
+        else {
+            panic!("maximum-depth candidate must be accepted");
+        };
+        let span = accepted_for(&mapping, candidate_span);
+        let TextEditOutcome::Applied { revision: edited, .. } =
+            session.replace_text(
+                revision,
+                span,
+                String::from("edited nested text"),
+            )
+        else {
+            panic!("maximum-depth text edit must apply");
+        };
+        assert_eq!(
+            session.check_editable_value_precondition(
+                edited,
+                span,
+                EditableSemanticValue::Text(String::from("edited nested text")),
+            ),
+            EditableValuePreconditionOutcome::Satisfied {
+                actual: EditableSemanticValue::Text(String::from(
+                    "edited nested text",
+                )),
+                revision: edited,
+                target: span,
+            },
+        );
+    }
 }
 
 #[test]
