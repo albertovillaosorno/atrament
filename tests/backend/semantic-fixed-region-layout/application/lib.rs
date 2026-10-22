@@ -32,6 +32,9 @@
 // - Defaults:
 //   - Uses deterministic A4-like portrait geometry in canonical micrometres.
 //
+
+//! Fixed-region semantic layout regression tests.
+
 use atrament_diagnostic::{
     BlockingDisposition, Completeness, DiagnosticCode, Evidence, LocationKind,
     LocationRole, Operation, OperationContextKind, PhysicalBoundaryEdge,

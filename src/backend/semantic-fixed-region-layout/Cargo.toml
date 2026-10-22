@@ -13,6 +13,15 @@ atrament_semantic_notebook = { workspace = true }
 
 [lib]
 path = "application/lib.rs"
+test = false
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+atrament_semantic_notebook_port = { workspace = true }
+atrament_semantic_notebook_session = { workspace = true }
+
+[[test]]
+name = "semantic_fixed_region_layout_application"
+path = "../../../tests/backend/semantic-fixed-region-layout/application/lib.rs"

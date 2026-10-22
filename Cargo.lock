@@ -553,6 +553,8 @@ dependencies = [
  "atrament_fixed_region_bounds",
  "atrament_physical_page_profile",
  "atrament_semantic_notebook",
+ "atrament_semantic_notebook_port",
+ "atrament_semantic_notebook_session",
 ]
 
 [[package]]
@@ -560,7 +562,10 @@ name = "atrament_semantic_flow_pagination"
 version = "0.1.0"
 dependencies = [
  "atrament_flow_pagination",
+ "atrament_physical_page_profile",
  "atrament_semantic_notebook",
+ "atrament_semantic_notebook_port",
+ "atrament_semantic_notebook_session",
 ]
 
 [[package]]

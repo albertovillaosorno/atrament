@@ -30,6 +30,9 @@
 // - Defaults:
 //   - The fixture uses A4-like portrait physical geometry in micrometres.
 //
+
+//! Semantic pagination regression tests.
+
 use std::collections::BTreeMap;
 
 use atrament_flow_pagination::{
