@@ -799,7 +799,9 @@ function setEditorShare(percent: number): void {
     const compact = isCompactWorkspace();
     const minimum = compact ? 50 : 35;
     const maximum = compact ? 50 : 65;
-    const clamped = Math.min(maximum, Math.max(minimum, percent));
+    // Never publish NaN or infinity into CSS grid tracks or accessible state.
+    const requested = Number.isFinite(percent) ? percent : wideEditorShare;
+    const clamped = Math.min(maximum, Math.max(minimum, requested));
     const share = Math.round(clamped * 10) / 10;
     const previewShare = Math.round((100 - share) * 10) / 10;
     if (!compact) {
@@ -872,6 +874,13 @@ function shareFromPointer(clientX: number): number {
     const dividerWidth = divider.getBoundingClientRect().width;
     const panelWidth = workspaceBounds.width - dividerWidth;
     const sourceWidth = clientX - workspaceBounds.left - dividerWidth / 2;
+    if (
+        !Number.isFinite(panelWidth)
+        || panelWidth <= 0
+        || !Number.isFinite(sourceWidth)
+    ) {
+        return wideEditorShare;
+    }
     return (sourceWidth / panelWidth) * 100;
 }
 

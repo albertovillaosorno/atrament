@@ -3602,3 +3602,105 @@ test(
         }
     },
 );
+
+test(
+    "Firefox divider never publishes nonfinite shares on missing geometry",
+    { skip: !FIREFOX_AVAILABLE, timeout: 30_000 },
+    async () => {
+        fs.mkdirSync(".temp", { recursive: true });
+        const profile = fs.mkdtempSync(".temp/workspace-degenerate-share-");
+        const requests = [];
+        const server = createStaticWorkspaceServer(requests, true);
+        const children = [];
+        let bidi;
+        try {
+            server.listen(0, "127.0.0.1");
+            await once(server, "listening");
+            const address = server.address();
+            assert.notEqual(typeof address, "string");
+            assert.notEqual(address, null);
+            const origin = `http://127.0.0.1:${address.port}`;
+            bidi = await startBidiFirefox(profile, children);
+            const tab = await bidi.command("browsingContext.create", {
+                type: "tab",
+            });
+            await bidi.command("browsingContext.navigate", {
+                context: tab.context,
+                url: origin,
+                wait: "complete",
+            });
+            await setFirefoxViewport(bidi, tab.context, 800, 600);
+            const state = await bidi.command("script.evaluate", {
+                awaitPromise: false,
+                expression: `JSON.stringify((() => {
+                    const divider = document.querySelector(
+                        "#workspace-divider"
+                    );
+                    const workspace = document.querySelector(
+                        ".workspace-grid"
+                    );
+                    const width = divider.getBoundingClientRect().width;
+                    workspace.getBoundingClientRect = () => ({
+                        left: 0,
+                        width
+                    });
+                    divider.setPointerCapture = () => {
+                        throw new Error("pointer capture unavailable");
+                    };
+                    divider.dispatchEvent(new PointerEvent("pointerdown", {
+                        bubbles: true,
+                        button: 0,
+                        isPrimary: true,
+                        pointerId: 6,
+                    }));
+                    divider.dispatchEvent(new MouseEvent("click", {
+                        bubbles: true,
+                        clientX: 120,
+                        detail: 1,
+                    }));
+                    const afterPointer = divider.getAttribute("aria-valuenow");
+                    divider.setAttribute("aria-valuenow", "NaN");
+                    divider.dispatchEvent(new KeyboardEvent("keydown", {
+                        bubbles: true,
+                        key: "ArrowRight",
+                    }));
+                    return {
+                        afterPointer,
+                        afterKeyboard: divider.getAttribute("aria-valuenow"),
+                        editor: document.documentElement.style.getPropertyValue(
+                            "--editor-track"
+                        ),
+                        preview: document.documentElement.style
+                            .getPropertyValue("--preview-track")
+                    };
+                })())`,
+                resultOwnership: "none",
+                target: { context: tab.context },
+            });
+            assert.equal(state.type, "success");
+            assert.equal(state.result.type, "string");
+            assert.deepEqual(JSON.parse(state.result.value), {
+                afterPointer: "46",
+                afterKeyboard: "46",
+                editor: "46fr",
+                preview: "54fr",
+            });
+            assert.equal(
+                requests.some((request) => request.startsWith("/api/")),
+                false,
+            );
+        } finally {
+            if (bidi?.socket != null) {
+                bidi.socket.end();
+            }
+            if (server.listening) {
+                server.close();
+                await once(server, "close");
+            }
+            for (const child of children.reverse()) {
+                await stopChild(child);
+            }
+            fs.rmSync(profile, { recursive: true, force: true });
+        }
+    },
+);

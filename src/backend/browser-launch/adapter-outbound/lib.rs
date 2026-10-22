@@ -213,6 +213,10 @@ pub(crate) fn launch_with_timeout(
     origin: &str,
     timeout: Duration,
 ) -> Result<(), LaunchError> {
+    // Admission precedes spawning: an exhausted budget cannot own a child.
+    if timeout.is_zero() {
+        return Err(LaunchError::TimedOut);
+    }
     let mut child = Command::new(program)
         .arg(origin)
         .stdin(Stdio::null())

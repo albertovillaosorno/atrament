@@ -83,6 +83,19 @@ fn missing_opener_is_typed_without_exposing_the_origin() {
 
 #[cfg(unix)]
 #[test]
+fn zero_launch_budget_rejects_before_spawning_any_opener() {
+    let error = browser_launch::launch_with_timeout(
+        OsStr::new("atrament-browser-opener-does-not-exist"),
+        PRIVATE_LAUNCH_URL,
+        Duration::ZERO,
+    )
+    .expect_err("no process may spawn without a positive launch budget");
+    assert!(matches!(error, browser_launch::LaunchError::TimedOut));
+    assert!(!error.to_string().contains(PRIVATE_LAUNCH_URL));
+}
+
+#[cfg(unix)]
+#[test]
 fn credential_echoing_stdout_opener_is_silenced_and_killed_at_deadline() {
     let started = Instant::now();
     let error = browser_launch::launch_with_timeout(
