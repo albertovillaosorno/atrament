@@ -12,6 +12,8 @@ atrament_session_handshake_port = { workspace = true }
 
 [lib]
 path = "adapter-inbound/lib.rs"
+# Tests live in the dedicated integration target, not this lib harness.
+test = false
 
 [lints]
 workspace = true
