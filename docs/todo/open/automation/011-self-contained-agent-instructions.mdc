@@ -5,8 +5,10 @@ title: "Package self-contained agent instructions"
 status: open
 priority: P6
 lane: automation-media
-dependencies: []
-dependencies_specified: false
+dependencies: ["ATR-P6-001", "ATR-P6-005"]
+dependencies_specified: true
+dependency_rationale: >-
+  Agent guidance must describe both frozen prompt envelopes.
 acceptance_criteria:
   - >-
       Allow a user to provide the repository or release bundle to an agent

@@ -5,8 +5,10 @@ title: "Implement fast and final CPU quality profiles"
 status: open
 priority: P5
 lane: cpu-rendering
-dependencies: []
-dependencies_specified: false
+dependencies: ["ATR-P5-001"]
+dependencies_specified: true
+dependency_rationale: >-
+  Preview and final quality share vector authority.
 acceptance_criteria:
   - >-
       Use the same vectors, seeds, blend order, and page geometry while

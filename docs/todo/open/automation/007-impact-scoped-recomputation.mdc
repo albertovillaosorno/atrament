@@ -5,8 +5,10 @@ title: "Implement impact-scoped recomputation"
 status: open
 priority: P6
 lane: automation-media
-dependencies: []
-dependencies_specified: false
+dependencies: ["ATR-P6-006"]
+dependencies_specified: true
+dependency_rationale: >-
+  Recomputation follows accepted atomic mutations.
 acceptance_criteria:
   - >-
       Compute changed semantic identities and dependency-expanded

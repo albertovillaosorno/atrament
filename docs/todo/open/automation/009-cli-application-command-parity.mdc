@@ -5,8 +5,10 @@ title: "Expose CLI parity for every application command"
 status: open
 priority: P6
 lane: automation-media
-dependencies: []
-dependencies_specified: false
+dependencies: ["ATR-P6-006"]
+dependencies_specified: true
+dependency_rationale: >-
+  CLI parity exposes existing admitted command operations.
 acceptance_criteria:
   - >-
       Create, inspect, validate, transform, render, export, and plan

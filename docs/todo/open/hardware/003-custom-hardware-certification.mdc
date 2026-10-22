@@ -5,8 +5,10 @@ title: "Build and physically certify the custom hardware"
 status: open
 priority: P9
 lane: optional-hardware
-dependencies: []
-dependencies_specified: false
+dependencies: ["ATR-P9-001", "ATR-P9-002"]
+dependencies_specified: true
+dependency_rationale: >-
+  Hardware certification requires mechanism and capability design.
 acceptance_criteria:
   - >-
       Treat the device as a separate product with its own electronics,

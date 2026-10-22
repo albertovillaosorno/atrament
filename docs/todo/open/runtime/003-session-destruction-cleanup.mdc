@@ -5,8 +5,10 @@ title: "Prove session destruction and temporary cleanup"
 status: open
 priority: P1
 lane: localhost-runtime
-dependencies: []
-dependencies_specified: false
+dependencies: ["ATR-P1-001", "ATR-P1-002"]
+dependencies_specified: true
+dependency_rationale: >-
+  Teardown must distinguish session state from explicit export.
 acceptance_criteria:
   - >-
       Close, refresh, cancel, crash, and restart fixtures must show that

@@ -19,16 +19,22 @@ Each open record defines the following fields:
 - `priority`: the governing P1–P9 horizon.
 - `lane`: workstream within that horizon.
 - `dependencies`: typed references to prerequisite task identities.
-- `dependencies_specified`: `false` means prerequisites were **not yet**
-  established by the previous monolithic TODO. An empty `dependencies` array
-  does **not** assert that no prerequisites exist. Set to `true` only after
-  reviewing and recording the dependencies.
+- `dependencies_specified`: `false` means prerequisites remain unknown;
+  an empty `dependencies` array does **not** mean no prerequisites exist.
+  `true` means the listed prerequisite edges have been reviewed against the
+  task's acceptance behavior.
+- `dependency_rationale`: when `dependencies_specified` is `true`, records
+  why the listed capabilities must be ready before accepting this task.
 - `acceptance_criteria`: the original task objective, kept as a typed first
   requirement; expand it with verifiable conditions before closing the task.
 - `evidence_status`: `not_independently_verified` for migrated historical
   statements; update only after checking the cited code, fixtures, visual, or
   physical evidence.
 - `migrated_from`: provenance of the original task body.
+
+The frontend regression suite checks that reviewed prerequisites reference
+existing tasks, do not duplicate edges, and form a cycle-free graph. It rejects
+unreviewed edges rather than silently treating them as authoritative.
 
 The `Scope and existing evidence` section preserves the task's original
 requirements, progress evidence, and limitations. It does **not** mean those

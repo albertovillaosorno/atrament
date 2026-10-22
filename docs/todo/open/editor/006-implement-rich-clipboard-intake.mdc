@@ -5,8 +5,10 @@ title: "Implement rich clipboard intake"
 status: open
 priority: P3
 lane: dual-editor
-dependencies: []
-dependencies_specified: false
+dependencies: ["ATR-P3-002"]
+dependencies_specified: true
+dependency_rationale: >-
+  Clipboard intake needs a structured source editor.
 acceptance_criteria:
   - >-
       Accept text, structured table fragments, formulas, PNG, JPEG, and WebP

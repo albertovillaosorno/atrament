@@ -5,8 +5,10 @@ title: "Meet CPU preview latency and memory budgets"
 status: open
 priority: P5
 lane: cpu-rendering
-dependencies: []
-dependencies_specified: false
+dependencies: ["ATR-P5-004"]
+dependencies_specified: true
+dependency_rationale: >-
+  Latency targets measure the fast and final CPU profiles.
 acceptance_criteria:
   - >-
       Benchmark long pages, many images, dense equations, zoom, rapid edits,

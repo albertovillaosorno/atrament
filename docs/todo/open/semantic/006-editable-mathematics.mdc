@@ -5,8 +5,10 @@ title: "Implement mathematics as editable structure"
 status: open
 priority: P2
 lane: semantic-layout
-dependencies: []
-dependencies_specified: false
+dependencies: ["ATR-P2-001"]
+dependencies_specified: true
+dependency_rationale: >-
+  Math nodes belong to the semantic notebook model.
 acceptance_criteria:
   - >-
       Parse and preserve TeX-compatible inline, displayed, aligned, matrix,

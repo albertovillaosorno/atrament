@@ -5,8 +5,10 @@ title: "Implement bounded correlated variation"
 status: open
 priority: P4
 lane: handwriting
-dependencies: []
-dependencies_specified: false
+dependencies: ["ATR-P4-006"]
+dependencies_specified: true
+dependency_rationale: >-
+  Variation operates on a contextual stroke plan.
 acceptance_criteria:
   - >-
       Support observed or authorized minimum, maximum, distribution, and

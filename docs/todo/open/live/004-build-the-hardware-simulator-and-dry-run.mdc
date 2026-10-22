@@ -5,8 +5,10 @@ title: "Build the hardware simulator and dry run"
 status: open
 priority: P7
 lane: live-output
-dependencies: []
-dependencies_specified: false
+dependencies: ["ATR-P7-002"]
+dependencies_specified: true
+dependency_rationale: >-
+  Dry-run simulation consumes the device-neutral motion plan.
 acceptance_criteria:
   - >-
       Visualize pen-up travel, pen-down paths, limits, time, pauses, and

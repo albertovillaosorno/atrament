@@ -92,6 +92,54 @@ function indexEntries() {
 
 const entries = indexEntries();
 
+function dependenciesFromRecord(content, taskId) {
+    const field = /^dependencies: (\[.*\])$/m.exec(content);
+    assert.ok(field, `${taskId}: typed prerequisites missing`);
+    const dependencies = JSON.parse(field[1]);
+    assert.ok(Array.isArray(dependencies), `${taskId}: array required`);
+    const specified = /^dependencies_specified: (true|false)$/m.exec(content);
+    assert.ok(specified, `${taskId}: dependency status missing`);
+    const reviewed = specified[1] === "true";
+    const rationale = /^dependency_rationale: >-\n  (.+)$/m.exec(content);
+    if (reviewed) {
+        assert.ok(rationale, `${taskId}: dependency rationale missing`);
+    } else {
+        assert.deepEqual(dependencies, [], `${taskId}: unreviewed edges`);
+        assert.equal(rationale, null, `${taskId}: unreviewed rationale`);
+    }
+    assert.equal(new Set(dependencies).size, dependencies.length);
+    for (const dependency of dependencies) {
+        assert.match(dependency, /^ATR-P[1-9]-[0-9]{3}$/);
+    }
+    return dependencies;
+}
+
+function checkDependencyGraph(graph) {
+    const active = new Set();
+    const complete = new Set();
+    function visit(taskId) {
+        if (active.has(taskId)) {
+            throw new Error(`dependency cycle through ${taskId}`);
+        }
+        if (complete.has(taskId)) {
+            return;
+        }
+        active.add(taskId);
+        for (const dependency of graph.get(taskId) ?? []) {
+            if (!graph.has(dependency)) {
+                throw new Error(`missing prerequisite: ${dependency}`);
+            }
+            visit(dependency);
+        }
+        active.delete(taskId);
+        complete.add(taskId);
+    }
+    for (const taskId of graph.keys()) {
+        visit(taskId);
+    }
+}
+
+
 test("every task links one typed record with matching identity", () => {
     assert.ok(entries.length > 0, "TODO must contain open records");
     const seen = new Set();
@@ -114,11 +162,37 @@ test("every task links one typed record with matching identity", () => {
         assert.match(content, /^status: open$/m);
         assert.match(content, new RegExp(`^priority: ${entry.horizon}$`, "m"));
         assert.match(content, /^lane: [a-z-]+$/m);
-        assert.match(content, /^dependencies: \[\]$/m);
-        assert.match(content, /^dependencies_specified: false$/m);
+        dependenciesFromRecord(content, id);
         assert.match(content, /^acceptance_criteria:\n  - >-$/m);
         assert.match(content, /^## Scope and existing evidence$/m);
     }
+});
+
+test("reviewed TODO prerequisites exist and form an acyclic graph", () => {
+    const graph = new Map();
+    let reviewed = 0;
+    for (const entry of entries) {
+        const suffix = String(entry.number).padStart(3, "0");
+        const taskId = `ATR-${entry.horizon}-${suffix}`;
+        const content = readFileSync(resolve(root, entry.path), "utf8");
+        const prerequisites = dependenciesFromRecord(content, taskId);
+        graph.set(taskId, prerequisites);
+        if (/^dependencies_specified: true$/m.test(content)) {
+            reviewed += 1;
+        }
+    }
+    assert.ok(reviewed > 0, "reviewed dependency authority missing");
+    checkDependencyGraph(graph);
+});
+
+test("dependency validation fails closed on orphan and cyclic edges", () => {
+    const unknown = new Map([["ATR-P1-001", ["ATR-P1-999"]]]);
+    assert.throws(() => checkDependencyGraph(unknown), /missing prerequisite/);
+    const cyclic = new Map([
+        ["ATR-P1-001", ["ATR-P1-002"]],
+        ["ATR-P1-002", ["ATR-P1-001"]],
+    ]);
+    assert.throws(() => checkDependencyGraph(cyclic), /dependency cycle/);
 });
 
 test("index contains no orphan or duplicated records", () => {

@@ -5,8 +5,10 @@ title: "Complete accessibility and keyboard operation"
 status: open
 priority: P8
 lane: release
-dependencies: []
-dependencies_specified: false
+dependencies: ["ATR-P3-003"]
+dependencies_specified: true
+dependency_rationale: >-
+  Keyboard support must operate the human editor.
 acceptance_criteria:
   - >-
       Make both editors, page navigation, diagnostics, drag alternatives,

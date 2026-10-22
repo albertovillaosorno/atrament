@@ -5,8 +5,10 @@ title: "Extract the personal stroke vocabulary"
 status: open
 priority: P4
 lane: handwriting
-dependencies: []
-dependencies_specified: false
+dependencies: ["ATR-P4-002", "ATR-P4-003"]
+dependencies_specified: true
+dependency_rationale: >-
+  Stroke extraction depends on corrected calibration samples.
 acceptance_criteria:
   - >-
       Derive centerlines, contours, entry and exit conditions, pen lifts,

@@ -5,8 +5,10 @@ title: "Freeze the semantic command-batch envelope"
 status: open
 priority: P6
 lane: automation-media
-dependencies: []
-dependencies_specified: false
+dependencies: ["ATR-P2-001"]
+dependencies_specified: true
+dependency_rationale: >-
+  Command batches address stable semantic identities.
 acceptance_criteria:
   - >-
       Version the batch, base notebook revision, command-context identity,

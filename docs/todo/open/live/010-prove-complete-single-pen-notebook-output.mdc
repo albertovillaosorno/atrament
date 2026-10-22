@@ -5,8 +5,10 @@ title: "Prove complete single-pen notebook output"
 status: open
 priority: P7
 lane: live-output
-dependencies: []
-dependencies_specified: false
+dependencies: ["ATR-P7-006", "ATR-P7-009"]
+dependencies_specified: true
+dependency_rationale: >-
+  Full physical output needs a driver and safe recovery.
 acceptance_criteria:
   - >-
       Write a multi-page English and Spanish fixture with titles, prose,

@@ -5,8 +5,10 @@ title: "Implement the NextDraw and AxiDraw CLI adapter"
 status: open
 priority: P7
 lane: live-output
-dependencies: []
-dependencies_specified: false
+dependencies: ["ATR-P7-002", "ATR-P7-005"]
+dependencies_specified: true
+dependency_rationale: >-
+  Vendor motion needs a plan and admitted coordinates.
 acceptance_criteria:
   - >-
       Use documented SVG or CLI control behind a managed process boundary

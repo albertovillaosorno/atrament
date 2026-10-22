@@ -5,8 +5,10 @@ title: "Produce vector-preserving PDF"
 status: open
 priority: P5
 lane: cpu-rendering
-dependencies: []
-dependencies_specified: false
+dependencies: ["ATR-P5-001"]
+dependencies_specified: true
+dependency_rationale: >-
+  PDF must preserve authoritative vector geometry.
 acceptance_criteria:
   - >-
       Embed bounded texture and image resources, preserve physical page

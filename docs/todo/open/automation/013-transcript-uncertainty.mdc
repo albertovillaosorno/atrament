@@ -5,8 +5,10 @@ title: "Structure transcripts without hiding uncertainty"
 status: open
 priority: P6
 lane: automation-media
-dependencies: []
-dependencies_specified: false
+dependencies: ["ATR-P6-012"]
+dependencies_specified: true
+dependency_rationale: >-
+  Transcript structuring depends on transcript intake.
 acceptance_criteria:
   - >-
       Turn reviewed transcript spans into sections, definitions, examples,

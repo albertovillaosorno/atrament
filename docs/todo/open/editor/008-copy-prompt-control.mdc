@@ -5,8 +5,10 @@ title: "Keep the Copy prompt control permanently available"
 status: open
 priority: P3
 lane: dual-editor
-dependencies: []
-dependencies_specified: false
+dependencies: ["ATR-P6-001"]
+dependencies_specified: true
+dependency_rationale: >-
+  The Copy prompt control needs the frozen prompt contract.
 acceptance_criteria:
   - >-
       Generate one complete, versioned request from current task and

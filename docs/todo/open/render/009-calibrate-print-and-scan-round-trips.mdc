@@ -5,8 +5,10 @@ title: "Calibrate print and scan round trips"
 status: open
 priority: P5
 lane: cpu-rendering
-dependencies: []
-dependencies_specified: false
+dependencies: ["ATR-P5-008"]
+dependencies_specified: true
+dependency_rationale: >-
+  Print and scan round trips require a PDF export artifact.
 acceptance_criteria:
   - >-
       Measure physical scale, clipping, margins, grid registration, color

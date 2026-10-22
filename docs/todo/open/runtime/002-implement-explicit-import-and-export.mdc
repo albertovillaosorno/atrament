@@ -5,8 +5,10 @@ title: "Implement explicit import and export"
 status: open
 priority: P1
 lane: localhost-runtime
-dependencies: []
-dependencies_specified: false
+dependencies: ["ATR-P4-001"]
+dependencies_specified: true
+dependency_rationale: >-
+  Profile import and export need the frozen container contract.
 acceptance_criteria:
   - >-
       Allow deliberate notebook bundle and `.atrament` profile reads or

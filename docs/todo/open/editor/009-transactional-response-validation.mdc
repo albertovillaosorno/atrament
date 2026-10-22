@@ -5,8 +5,10 @@ title: "Validate pasted model responses transactionally"
 status: open
 priority: P3
 lane: dual-editor
-dependencies: []
-dependencies_specified: false
+dependencies: ["ATR-P3-002", "ATR-P6-006"]
+dependencies_specified: true
+dependency_rationale: >-
+  Untrusted responses require an editor and atomic validation.
 acceptance_criteria:
   - >-
       Parse the complete response into a candidate notebook, show all

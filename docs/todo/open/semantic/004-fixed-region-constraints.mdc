@@ -5,8 +5,10 @@ title: "Implement fixed-region constraint solving"
 status: open
 priority: P2
 lane: semantic-layout
-dependencies: []
-dependencies_specified: false
+dependencies: ["ATR-P2-001"]
+dependencies_specified: true
+dependency_rationale: >-
+  Fixed constraints require typed semantic notebook objects.
 acceptance_criteria:
   - >-
       Place titles, figures, callouts, and freeform regions with anchors,

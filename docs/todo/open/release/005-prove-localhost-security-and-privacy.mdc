@@ -5,8 +5,10 @@ title: "Prove localhost security and privacy"
 status: open
 priority: P8
 lane: release
-dependencies: []
-dependencies_specified: false
+dependencies: ["ATR-P1-003"]
+dependencies_specified: true
+dependency_rationale: >-
+  Security and privacy include process-session cleanup.
 acceptance_criteria:
   - >-
       Test loopback binding, session token, hostile local pages, file-path

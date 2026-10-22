@@ -5,8 +5,10 @@ title: "Implement the device-neutral motion plan"
 status: open
 priority: P7
 lane: live-output
-dependencies: []
-dependencies_specified: false
+dependencies: ["ATR-P7-001"]
+dependencies_specified: true
+dependency_rationale: >-
+  A motion plan must satisfy the compiled live capability.
 acceptance_criteria:
   - >-
       Emit ordered pen-up and pen-down paths, speed, acceleration, optional

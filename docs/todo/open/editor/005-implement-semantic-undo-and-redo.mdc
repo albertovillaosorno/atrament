@@ -5,8 +5,10 @@ title: "Implement semantic undo and redo"
 status: open
 priority: P3
 lane: dual-editor
-dependencies: []
-dependencies_specified: false
+dependencies: ["ATR-P2-001"]
+dependencies_specified: true
+dependency_rationale: >-
+  History stores revisions of the semantic notebook.
 acceptance_criteria:
   - >-
       Record accepted command batches rather than DOM or canvas snapshots

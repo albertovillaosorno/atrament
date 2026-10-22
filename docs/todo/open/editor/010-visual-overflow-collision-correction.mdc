@@ -5,8 +5,10 @@ title: "Make overflow and collision correction visual"
 status: open
 priority: P3
 lane: dual-editor
-dependencies: []
-dependencies_specified: false
+dependencies: ["ATR-P2-005", "ATR-P3-003"]
+dependencies_specified: true
+dependency_rationale: >-
+  Visual correction needs overflow facts and page editing.
 acceptance_criteria:
   - >-
       Draw page-edge, collision, and unsupported-mode diagnostics on preview

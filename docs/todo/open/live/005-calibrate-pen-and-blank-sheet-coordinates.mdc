@@ -5,8 +5,10 @@ title: "Calibrate pen and blank-sheet coordinates"
 status: open
 priority: P7
 lane: live-output
-dependencies: []
-dependencies_specified: false
+dependencies: ["ATR-P7-004"]
+dependencies_specified: true
+dependency_rationale: >-
+  Calibration must be verified using a safe dry run.
 acceptance_criteria:
   - >-
       Measure usable area, origin, axis orientation, scale, skew, pen-up

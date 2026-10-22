@@ -5,8 +5,10 @@ title: "Optimize path order without changing handwriting"
 status: open
 priority: P7
 lane: live-output
-dependencies: []
-dependencies_specified: false
+dependencies: ["ATR-P7-002"]
+dependencies_specified: true
+dependency_rationale: >-
+  Path ordering optimizes an existing motion plan.
 acceptance_criteria:
   - >-
       Reduce pen-up travel and drying conflicts while preserving stroke
