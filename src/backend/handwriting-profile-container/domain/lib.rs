@@ -367,6 +367,8 @@ pub enum ProfileEntryKind {
 pub enum ProfileEntryPathError {
     /// Backslash separators are not canonical portable archive separators.
     BackslashSeparator,
+    /// An archive entry path contains a control character (including NUL).
+    ControlCharacter,
     /// One path segment is empty.
     EmptySegment,
     /// The root manifest cannot also appear as a declared non-manifest entry.
@@ -777,6 +779,11 @@ fn validate_profile_entry_path(
         path.starts_with("sections/") || path.starts_with("assets/");
     if !admitted_root {
         return Err(ProfileEntryPathError::UnsupportedRoot);
+    }
+    // ZIP entry names are portable text, not filesystem byte strings.
+    // Reject embedded NUL and control characters before archive extraction.
+    if path.chars().any(char::is_control) {
+        return Err(ProfileEntryPathError::ControlCharacter);
     }
     for segment in path.split('/') {
         if segment.is_empty() {

@@ -131,15 +131,18 @@ A declared non-manifest path is rejected when it:
 - equals `manifest.json`;
 - contains a backslash separator;
 - is outside `sections/` and `assets/`;
+- contains a control character, including NUL, CR, LF or TAB;
 - contains an empty segment;
 - contains a `.` or `..` segment.
 
 The domain treats path strings as archive-relative names. It does not URI-decode
 percent-like text and does not perform filesystem path resolution.
 
-The generated regression corpus currently exercises 162 combinations across
-both admitted roots with ordinary, Unicode, space-containing, percent-like,
-empty, traversal, and backslash-containing segments.
+The generated regression corpus now exercises 242 combinations across both
+admitted roots with ordinary, Unicode, space-containing, percent-like, empty,
+traversal, backslash-containing and control-bearing segments. Separate fixtures
+verify that malformed declared and observed archive entry names cannot reach
+section or asset decoding.
 
 ### Canonical archive evidence
 

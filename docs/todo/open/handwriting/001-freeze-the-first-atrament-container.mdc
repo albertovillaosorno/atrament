@@ -70,3 +70,10 @@ migrate versions, or expose the inspection command. Those adapter,
 canonical-encoding, migration, and inspection surfaces remain open together with
 golden byte-stable ZIP, fixed archive-metadata field values, truncation at the
 ZIP adapter boundary, and real digest fixtures.
+
+Control-bearing member names are now rejected before typed entry decoding:
+manifest declarations and observed archive inventories both return a distinct
+`ControlCharacter` path failure for embedded NUL, CR, LF, TAB and other Unicode
+control characters. The generated accepted/rejected member-path corpus expanded
+from 162 to 242 combinations while preserving valid Unicode and opaque asset
+paths. Actual ZIP parsing, canonical writing and migration remain open.

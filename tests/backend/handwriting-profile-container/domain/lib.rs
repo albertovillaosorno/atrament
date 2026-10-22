@@ -313,6 +313,9 @@ fn reference_inventory_path_error(path: &str) -> Option<ProfileEntryPathError> {
     if !path.starts_with("sections/") && !path.starts_with("assets/") {
         return Some(ProfileEntryPathError::UnsupportedRoot);
     }
+    if path.chars().any(char::is_control) {
+        return Some(ProfileEntryPathError::ControlCharacter);
+    }
     for segment in path.split('/') {
         if segment.is_empty() {
             return Some(ProfileEntryPathError::EmptySegment);
@@ -481,6 +484,9 @@ fn generated_archive_inventory_mutations_match_reference_oracle() {
                 match reason {
                     ProfileEntryPathError::BackslashSeparator => {
                         saw_inventory_backslash = true;
+                    },
+                    ProfileEntryPathError::ControlCharacter => {
+                        saw_invalid_observed_path = true;
                     },
                     ProfileEntryPathError::EmptySegment => {
                         saw_inventory_empty_segment = true;
@@ -703,6 +709,9 @@ fn generated_manifest_values_match_reference_admission_oracle() {
                 match reason {
                     ProfileEntryPathError::BackslashSeparator => {
                         saw_manifest_backslash = true;
+                    },
+                    ProfileEntryPathError::ControlCharacter => {
+                        saw_invalid_path = true;
                     },
                     ProfileEntryPathError::EmptySegment => {
                         saw_manifest_empty_segment = true;
@@ -972,6 +981,39 @@ fn canonical_order_is_path_sorted_without_rewriting_manifest() {
 }
 
 #[test]
+fn control_characters_in_entry_paths_fail_closed_before_decoding() {
+    for root in ["sections", "assets"] {
+        for character in ['\0', '\r', '\n', '\t', '\u{0085}'] {
+            let path = format!("{root}/prefix{character}suffix.json");
+            assert_eq!(
+                profile_entry_kind(&path),
+                Err(ProfileEntryPathError::ControlCharacter),
+            );
+            let value = manifest(vec![entry(&path, "application/json", 1)]);
+            assert_eq!(
+                validate_profile_manifest(&value, &["stroke-vocabulary"]),
+                Err(ProfileManifestError::InvalidEntryPath {
+                    path: path.clone(),
+                    reason: ProfileEntryPathError::ControlCharacter,
+                }),
+            );
+            let value = manifest(vec![]);
+            assert_eq!(
+                validate_profile_entry_inventory(
+                    &value,
+                    &["stroke-vocabulary"],
+                    &[PROFILE_MANIFEST_PATH, &path],
+                ),
+                Err(ProfileEntryInventoryError::InvalidObservedEntryPath {
+                    path,
+                    reason: ProfileEntryPathError::ControlCharacter,
+                }),
+            );
+        }
+    }
+}
+
+#[test]
 fn unsafe_duplicate_and_manifest_paths_reject_before_decoding() {
     for (path, reason) in [
         ("manifest.json", ProfileEntryPathError::ManifestReserved),
@@ -1046,12 +1088,15 @@ fn generated_profile_path_corpus_pins_safe_path_admission() {
         "café",
         "sample.json",
         "space name",
+        "x\0y",
+        "x\ny",
         r"x\y",
     ];
     let mut exercised = 0_usize;
     let mut saw_asset = false;
     let mut saw_section = false;
     let mut saw_backslash = false;
+    let mut saw_control = false;
     let mut saw_empty_segment = false;
     let mut saw_traversal = false;
     for (root, expected_kind) in [
@@ -1063,6 +1108,10 @@ fn generated_profile_path_corpus_pins_safe_path_admission() {
                 let path = format!("{root}/{left}/{right}");
                 let expected = if left.contains('\\') || right.contains('\\') {
                     Err(ProfileEntryPathError::BackslashSeparator)
+                } else if left.chars().any(char::is_control)
+                    || right.chars().any(char::is_control)
+                {
+                    Err(ProfileEntryPathError::ControlCharacter)
                 } else {
                     let first_segment_error = [left, right]
                         .into_iter()
@@ -1082,6 +1131,9 @@ fn generated_profile_path_corpus_pins_safe_path_admission() {
                     Ok(ProfileEntryKind::Section) => saw_section = true,
                     Err(ProfileEntryPathError::BackslashSeparator) => {
                         saw_backslash = true;
+                    },
+                    Err(ProfileEntryPathError::ControlCharacter) => {
+                        saw_control = true;
                     },
                     Err(ProfileEntryPathError::EmptySegment) => {
                         saw_empty_segment = true;
@@ -1103,7 +1155,8 @@ fn generated_profile_path_corpus_pins_safe_path_admission() {
             }
         }
     }
-    assert_eq!(exercised, 162);
+    assert_eq!(exercised, 242);
+    assert!(saw_control);
     assert!(saw_asset);
     assert!(saw_section);
     assert!(saw_backslash);
