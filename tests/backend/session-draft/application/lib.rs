@@ -28,19 +28,20 @@
 // - Description:
 //   - Proves replacements are whole-field and over-limit input is non-mutating.
 // - Usage:
-//   - Compile with the draft inbound-port crate available as an external crate.
+//   - Run this Cargo harness against the public draft crate.
 // - Defaults:
 //   - Starts from an empty disposable session draft.
 //
+
+//! Public session-draft regression tests.
+
 use atrament_diagnostic::{
     BlockingDisposition, Completeness, DiagnosticCode, Evidence, EvidenceUnit,
     LocationKind, LocationRole, Operation, Remediation, Severity,
 };
 use atrament_session_draft_port::{DraftField, DraftMutation, SessionDraft};
 
-#[allow(dead_code)]
-#[path = "../../../../src/backend/session-draft/application/lib.rs"]
-mod draft;
+use atrament_session_draft as draft;
 
 fn assert_resource_limit(
     result: DraftMutation,

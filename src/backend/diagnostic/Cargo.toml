@@ -10,3 +10,7 @@ path = "domain/lib.rs"
 
 [lints]
 workspace = true
+
+[[test]]
+name = "diagnostic_domain"
+path = "../../../tests/backend/diagnostic/domain/lib.rs"

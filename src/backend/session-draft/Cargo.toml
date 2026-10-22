@@ -14,3 +14,7 @@ path = "application/lib.rs"
 
 [lints]
 workspace = true
+
+[[test]]
+name = "session_draft_application"
+path = "../../../tests/backend/session-draft/application/lib.rs"

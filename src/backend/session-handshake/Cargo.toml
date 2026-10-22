@@ -18,3 +18,7 @@ path = "application/lib.rs"
 
 [lints]
 workspace = true
+
+[[test]]
+name = "session_handshake_application"
+path = "../../../tests/backend/session-handshake/application/lib.rs"

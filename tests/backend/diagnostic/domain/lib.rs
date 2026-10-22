@@ -27,10 +27,13 @@
 //   - Covers stable codes, operation context, relational locations, and
 //     evidence.
 // - Usage:
-//   - Compile this root harness directly against the diagnostic domain module.
+//   - Run this Cargo harness against the public diagnostic crate.
 // - Defaults:
 //   - Uses no adapter serialization or presentation strings.
 //
+
+//! Public diagnostic-domain regression tests.
+
 use diagnostic::{
     BlockingDisposition, Completeness, Diagnostic, DiagnosticCode,
     DiagnosticSet, Evidence, EvidenceUnit, LocationKind, LocationRole,
@@ -40,9 +43,7 @@ use diagnostic::{
     SemanticCommandPreconditionKind, SemanticLocation, Severity,
 };
 
-#[allow(dead_code)]
-#[path = "../../../../src/backend/diagnostic/domain/lib.rs"]
-mod diagnostic;
+use atrament_diagnostic as diagnostic;
 
 #[test]
 fn namespace_and_condition_codes_are_stable() {

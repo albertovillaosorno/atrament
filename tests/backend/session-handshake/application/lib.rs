@@ -25,22 +25,24 @@
 // - Description:
 //   - Mutates each required version independently against the current backend.
 // - Usage:
-//   - Compile against the handshake port and application components.
+//   - Run this Cargo harness against the public handshake crate.
 // - Defaults:
 //   - Requires exact equality across all six required version identities.
 //
+
+//! Public session-handshake regression tests.
+
 use atrament_diagnostic::{
     BlockingDisposition, Completeness, DiagnosticCode, Evidence, LocationKind,
     LocationRole, Operation, Remediation, Severity,
 };
+use atrament_handwriting_profile_container as _;
 use atrament_one_shot_formatting_prompt::FORMATTING_PROMPT_VERSION;
 use atrament_session_handshake_port::{
     HandshakeResult, SessionHandshake, VersionDimension, Versions,
 };
 
-#[allow(dead_code)]
-#[path = "../../../../src/backend/session-handshake/application/lib.rs"]
-mod handshake;
+use atrament_session_handshake as handshake;
 
 use handshake::HandshakeService;
 
