@@ -32,6 +32,7 @@
 // - Defaults:
 //   - Source normalization remains unchanged.
 //
+
 //! Unicode grapheme adapter regression tests.
 
 use unicode_segmentation as _;

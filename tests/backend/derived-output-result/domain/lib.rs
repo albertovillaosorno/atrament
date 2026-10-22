@@ -30,9 +30,11 @@
 // - Defaults:
 //   - Unknown transport outcome is absent because it is caller state.
 //
+
 //! Derived output result regression tests.
 
-use atrament_application_operation_lifecycle::ApplicationCancellationObservation;
+use atrament_application_operation_lifecycle as lifecycle;
+use lifecycle::ApplicationCancellationObservation;
 use atrament_derived_output_result::{
     DerivedOutputEffectDisposition, DerivedOutputOperation,
     DerivedOutputResultClass, classify_derived_output_cancellation_result,

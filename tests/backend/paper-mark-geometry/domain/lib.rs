@@ -32,6 +32,7 @@
 // - Defaults:
 //   - Region origin is the first nominal mark anchor in each active axis.
 //
+
 //! Paper mark geometry regression tests.
 
 use atrament_paper_mark_geometry::{

@@ -34,9 +34,6 @@
 
 //! `unicode-segmentation` adapter for Atrament grapheme-boundary queries.
 
-// The bilingual corpus is only linked into the integration test target.
-#[cfg(test)]
-use atrament_english_spanish_grapheme_inventory as _;
 use atrament_unicode_grapheme_boundary_port::GraphemeBoundaryProvider;
 use unicode_segmentation::UnicodeSegmentation as _;
 

@@ -30,6 +30,7 @@
 // - Defaults:
 //   - Unknown TeX commands are unsupported data, not syntax substitutions.
 //
+
 //! Mathematics source parser regression tests.
 
 use atrament_mathematics_source::{

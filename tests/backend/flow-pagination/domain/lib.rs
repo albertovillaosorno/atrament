@@ -30,6 +30,7 @@
 // - Defaults:
 //   - Test owners and pages are opaque integer stand-ins for stable identities.
 //
+
 //! Flow pagination regression tests.
 
 use atrament_flow_pagination::{

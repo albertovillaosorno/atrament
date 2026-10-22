@@ -29,6 +29,7 @@
 // - Defaults:
 //   - Large acyclic graphs validate iteratively without recursive traversal.
 //
+
 //! Semantic command graph regression tests.
 
 use std::cmp::Ordering;

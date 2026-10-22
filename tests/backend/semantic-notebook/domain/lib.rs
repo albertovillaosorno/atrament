@@ -29,6 +29,7 @@
 // - Defaults:
 //   - Treats serialization syntax as intentionally unspecified.
 //
+
 //! Semantic notebook model regression tests.
 
 use atrament_mathematics_source as _;
