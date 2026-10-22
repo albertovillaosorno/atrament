@@ -89,3 +89,23 @@ existing autonomous goal-source gate. A 24-case fixture proves that model
 text cannot authorize Export even if an independent path is selected, and
 that an Import-class path cannot be substituted for an Export target. This
 combination is still read-only and does not authorize a file effect.
+
+## Read-only composite Export prerequisite evidence
+
+An `atrament_export_prerequisite_projection` application now combines the
+existing independent autonomous Export-source gate, exact Import-versus-Export
+selected-path purpose, and revision-bound layout preflight. Its outcomes are
+`NoExportIntent`, `WrongPathPurpose`, `BlockedLayout`, `IncompleteLayout`, and
+`RequiresArtifactAndFileAdmission`: even the last outcome is **not** complete
+Export readiness and cannot authorize a file effect. Source and path selection
+remain claims that a future trusted transport must independently verify.
+
+The composition is also reachable through the process-owned
+`SessionApplication::preflight_explicit_export_prerequisites` method, which
+performs the existing layout-revision binding against current accepted state
+before projecting anything. Regression fixtures exercise the 72
+source/purpose/layout combinations, genuine empty/incomplete layout evidence,
+a genuine 6 mm fixed-region overflow, stale revision rejection after an
+accepted semantic edit, and fresh-session refusal. Output artifacts, path
+policy, serialization, atomic file commits, retries, and cancellation remain
+unimplemented. No persistent output is created by this work.

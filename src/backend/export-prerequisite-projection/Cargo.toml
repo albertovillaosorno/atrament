@@ -1,0 +1,26 @@
+[package]
+name = "atrament_export_prerequisite_projection"
+version = "0.1.0"
+edition = "2024"
+publish = false
+license = "MIT"
+
+[dependencies]
+atrament_autonomous_output_intent = { workspace = true }
+atrament_explicit_file_path_intent = { workspace = true }
+atrament_export_layout_preflight = { workspace = true }
+atrament_semantic_notebook = { workspace = true }
+
+[lib]
+path = "application/lib.rs"
+test = false
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+atrament_diagnostic = { workspace = true }
+
+[[test]]
+name = "export_prerequisite_projection_application"
+path = "../../../tests/backend/export-prerequisite-projection/application/lib.rs"

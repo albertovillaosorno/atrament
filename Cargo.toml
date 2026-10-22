@@ -43,6 +43,7 @@ members = [
     "src/backend/educational-coverage-evidence",
     "src/backend/explicit-file-path-intent",
     "src/backend/export-layout-preflight",
+    "src/backend/export-prerequisite-projection",
     "src/backend/fixed-region-bounds",
     "src/backend/flow-pagination",
     "src/backend/handwriting-calibration-evidence",
@@ -135,6 +136,7 @@ atrament_english_spanish_diacritic_rule = { path = "src/backend/english-spanish-
 atrament_english_spanish_grapheme_inventory = { path = "src/backend/english-spanish-grapheme-inventory" }
 atrament_explicit_file_path_intent = { path = "src/backend/explicit-file-path-intent" }
 atrament_export_layout_preflight = { path = "src/backend/export-layout-preflight" }
+atrament_export_prerequisite_projection = { path = "src/backend/export-prerequisite-projection" }
 atrament_fixed_region_bounds = { path = "src/backend/fixed-region-bounds" }
 atrament_flow_pagination = { path = "src/backend/flow-pagination" }
 atrament_handwriting_diacritic_composition = { path = "src/backend/handwriting-diacritic-composition" }

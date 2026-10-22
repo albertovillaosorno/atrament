@@ -44,6 +44,11 @@ use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
+use atrament_autonomous_output_intent::AutonomousOutputIntentSource;
+use atrament_explicit_file_path_intent::ExplicitFilePathIntent;
+use atrament_export_prerequisite_projection::{
+    ExportPrerequisiteDisposition, project_export_prerequisites,
+};
 use atrament_export_layout_preflight::{
     ExportLayoutPreflightError, ExportLayoutPreflightResult,
     RevisionLayoutDiagnostics, preflight_layout_for_export,
@@ -647,6 +652,31 @@ impl SessionApplication {
         };
         paginate_revision(revision, measurement)
             .map_err(SessionPaginationError::Pagination)
+    }
+
+    /// Inspect explicit Export source, path and layout prerequisites.
+    ///
+    /// This read-only operation binds layout evidence to the active session's
+    /// exact accepted revision. Passing this gate does not authorize file I/O:
+    /// serializers, output artifacts, path policy, overwrites and commits
+    /// remain separate. Source claims must be proven by a trusted caller.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed failure for absent, stale, or misbound revision/layout
+    /// authority before projecting any path or output intent result.
+    pub fn preflight_explicit_export_prerequisites(
+        &self,
+        source: AutonomousOutputIntentSource,
+        path: &ExplicitFilePathIntent,
+        requested: RevisionIdentity,
+        layout: RevisionLayoutDiagnostics<'_>,
+    ) -> Result<
+        ExportPrerequisiteDisposition,
+        SessionExportLayoutPreflightError,
+    > {
+        let bound = self.preflight_layout_for_export(requested, layout)?;
+        Ok(project_export_prerequisites(source, path, &bound))
     }
 
     /// Evaluate layout-only Export preflight through current session authority.

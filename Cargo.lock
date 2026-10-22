@@ -281,6 +281,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "atrament_export_prerequisite_projection"
+version = "0.1.0"
+dependencies = [
+ "atrament_autonomous_output_intent",
+ "atrament_diagnostic",
+ "atrament_explicit_file_path_intent",
+ "atrament_export_layout_preflight",
+ "atrament_semantic_notebook",
+]
+
+[[package]]
 name = "atrament_fixed_region_bounds"
 version = "0.1.0"
 dependencies = [
@@ -628,8 +639,12 @@ dependencies = [
 name = "atrament_session_application"
 version = "0.1.0"
 dependencies = [
+ "atrament_autonomous_output_intent",
+ "atrament_diagnostic",
  "atrament_english_spanish_grapheme_inventory",
+ "atrament_explicit_file_path_intent",
  "atrament_export_layout_preflight",
+ "atrament_export_prerequisite_projection",
  "atrament_flow_pagination",
  "atrament_media_job_session",
  "atrament_physical_page_profile",

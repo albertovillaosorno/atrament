@@ -134,6 +134,10 @@ depends_on = []
 # Concrete session implementation is used only in the integration fixture.
 depends_on = ["atrament_diagnostic", "atrament_physical_page_profile", "atrament_semantic_fixed_region_layout", "atrament_semantic_notebook", "atrament_semantic_notebook_port", "atrament_semantic_notebook_session"]
 
+[component.atrament_export_prerequisite_projection]
+# Diagnostic type is fixture-only; the projection inspects typed layout states.
+depends_on = ["atrament_autonomous_output_intent", "atrament_diagnostic", "atrament_explicit_file_path_intent", "atrament_export_layout_preflight", "atrament_semantic_notebook"]
+
 [component.atrament_fixed_region_bounds]
 depends_on = ["atrament_physical_page_profile"]
 
@@ -337,7 +341,7 @@ depends_on = ["atrament_browser_launch", "atrament_session_application", "atrame
 
 [component.atrament_session_application]
 # Additional direct imports are confined to the integration harness.
-depends_on = ["atrament_english_spanish_grapheme_inventory", "atrament_export_layout_preflight", "atrament_flow_pagination", "atrament_media_job_session", "atrament_physical_page_profile", "atrament_semantic_fixed_region_layout", "atrament_semantic_flow_pagination", "atrament_semantic_history_result", "atrament_semantic_notebook", "atrament_semantic_notebook_port", "atrament_semantic_notebook_session", "atrament_session_draft", "atrament_session_draft_port", "atrament_unicode_grapheme_boundary_port", "atrament_unicode_grapheme_cursor", "atrament_unicode_grapheme_edit", "atrament_unicode_grapheme_segmentation"]
+depends_on = ["atrament_autonomous_output_intent", "atrament_diagnostic", "atrament_explicit_file_path_intent", "atrament_export_prerequisite_projection", "atrament_english_spanish_grapheme_inventory", "atrament_export_layout_preflight", "atrament_flow_pagination", "atrament_media_job_session", "atrament_physical_page_profile", "atrament_semantic_fixed_region_layout", "atrament_semantic_flow_pagination", "atrament_semantic_history_result", "atrament_semantic_notebook", "atrament_semantic_notebook_port", "atrament_semantic_notebook_session", "atrament_session_draft", "atrament_session_draft_port", "atrament_unicode_grapheme_boundary_port", "atrament_unicode_grapheme_cursor", "atrament_unicode_grapheme_edit", "atrament_unicode_grapheme_segmentation"]
 
 [component.atrament_session_draft]
 depends_on = ["atrament_diagnostic", "atrament_session_draft_port"]

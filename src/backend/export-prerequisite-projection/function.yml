@@ -1,0 +1,9 @@
+identity:
+  id: function:export-prerequisite-projection
+  name: export-prerequisite-projection
+  path: src/backend/export-prerequisite-projection
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: application

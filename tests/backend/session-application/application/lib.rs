@@ -38,8 +38,16 @@
 use std::collections::BTreeSet;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::num::NonZeroU32;
+use std::path::PathBuf;
 use std::process::{Command, Stdio};
 
+use atrament_autonomous_output_intent::AutonomousOutputIntentSource;
+use atrament_diagnostic::{Completeness, DiagnosticSet};
+use atrament_explicit_file_path_intent::{
+    ExplicitFilePathSource, ExplicitFilePurpose, ExplicitOverwriteIntent,
+    classify_explicit_file_path_intent,
+};
+use atrament_export_prerequisite_projection::ExportPrerequisiteDisposition;
 use atrament_english_spanish_grapheme_inventory::REQUIRED_TEXT_GRAPHEMES;
 use atrament_export_layout_preflight::{
     ExportLayoutPreflightError, ExportLayoutPreflightResult,
@@ -1630,6 +1638,22 @@ fn application_routes_fixed_overflow_through_owned_revision() {
             revision,
         }),
     );
+    let output_intent = classify_explicit_file_path_intent(
+        ExplicitFilePurpose::ExportNotebook,
+        ExplicitFilePathSource::CallerSelection,
+        PathBuf::from("blocked-layout.atrament"),
+        ExplicitOverwriteIntent::PreserveExisting,
+    )
+    .expect("caller selected an explicit target");
+    assert_eq!(
+        session.preflight_explicit_export_prerequisites(
+            AutonomousOutputIntentSource::CallerExplicitGoal,
+            &output_intent,
+            revision,
+            bound,
+        ),
+        Ok(ExportPrerequisiteDisposition::BlockedLayout),
+    );
     let fresh = application::SessionApplication::default();
     assert_eq!(
         fresh.preflight_layout_for_export(revision, bound),
@@ -1660,6 +1684,20 @@ fn application_routes_fixed_overflow_through_owned_revision() {
         )),
     );
 
+    assert_eq!(
+        session.preflight_explicit_export_prerequisites(
+            AutonomousOutputIntentSource::CallerExplicitGoal,
+            &output_intent,
+            revision,
+            bound,
+        ),
+        Err(application::SessionExportLayoutPreflightError::Preflight(
+            ExportLayoutPreflightError::RequestedRevisionMismatch {
+                current,
+                requested: revision,
+            },
+        )),
+    );
     let HistoryTraversalOutcome::Traversed { revision: undone, .. } =
         session.traverse_history(current, HistoryDirection::Undo)
     else {
@@ -6664,6 +6702,78 @@ fn grapheme_capacity_failures_are_atomic_for_session_state() {
     );
     assert_eq!(session.history_availability(), before_history);
     assert_eq!(session.accepted_revision(), Some(&before_revision));
+}
+
+#[test]
+fn explicit_export_prerequisites_stay_revision_bound_and_read_only() {
+    let identities = IdentityAllocator::new();
+    let mut session = application::SessionApplication::default();
+    let AcceptanceOutcome::Accepted { revision, .. } =
+        session.accept_candidate(minimal_candidate(&identities))
+    else {
+        panic!("candidate must be accepted");
+    };
+    let diagnostics = DiagnosticSet {
+        completeness: Completeness::Complete,
+        diagnostics: vec![],
+    };
+    let binding = RevisionLayoutDiagnostics::bind(revision, &diagnostics)
+        .expect("layout evidence binds");
+    let export = classify_explicit_file_path_intent(
+        ExplicitFilePurpose::ExportNotebook,
+        ExplicitFilePathSource::CallerSelection,
+        PathBuf::from("notebook.atrament"),
+        ExplicitOverwriteIntent::PreserveExisting,
+    )
+    .expect("caller selection admits path intent only");
+    let imported = classify_explicit_file_path_intent(
+        ExplicitFilePurpose::ImportNotebook,
+        ExplicitFilePathSource::CallerSelection,
+        PathBuf::from("notebook.atrament"),
+        ExplicitOverwriteIntent::PreserveExisting,
+    )
+    .expect("caller selection admits an Import path");
+    let before = session.accepted_revision().cloned();
+    assert_eq!(
+        session.preflight_explicit_export_prerequisites(
+            AutonomousOutputIntentSource::CallerExplicitGoal,
+            &export,
+            revision,
+            binding,
+        ),
+        Ok(ExportPrerequisiteDisposition::RequiresArtifactAndFileAdmission {
+            revision,
+        }),
+    );
+    assert_eq!(
+        session.preflight_explicit_export_prerequisites(
+            AutonomousOutputIntentSource::UntrustedSemanticContent,
+            &export,
+            revision,
+            binding,
+        ),
+        Ok(ExportPrerequisiteDisposition::NoExportIntent),
+    );
+    assert_eq!(
+        session.preflight_explicit_export_prerequisites(
+            AutonomousOutputIntentSource::CallerExplicitGoal,
+            &imported,
+            revision,
+            binding,
+        ),
+        Ok(ExportPrerequisiteDisposition::WrongPathPurpose),
+    );
+    assert_eq!(session.accepted_revision(), before.as_ref());
+    let fresh = application::SessionApplication::default();
+    assert_eq!(
+        fresh.preflight_explicit_export_prerequisites(
+            AutonomousOutputIntentSource::CallerExplicitGoal,
+            &export,
+            revision,
+            binding,
+        ),
+        Err(application::SessionExportLayoutPreflightError::NoAcceptedRevision),
+    );
 }
 
 #[test]
