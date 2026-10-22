@@ -466,8 +466,8 @@ function createSessionFixtureServer(
                 response.end();
                 return;
             }
-            onSessionEnd?.();
-            response.writeHead(204, { "Cache-Control": "no-store" });
+            const status = onSessionEnd?.() ?? 204;
+            response.writeHead(status, { "Cache-Control": "no-store" });
             response.end();
             return;
         }
@@ -498,6 +498,15 @@ function createSessionFixtureServer(
             if (
                 request.headers.authorization !== `Bearer ${REFRESH_SECRET}`
                 || !(field in REFRESH_DRAFT)
+            ) {
+                response.writeHead(401);
+                response.end();
+                return;
+            }
+            if (
+                request.method === "POST"
+                && request.headers.origin
+                    !== `http://${request.headers.host}`
             ) {
                 response.writeHead(401);
                 response.end();
@@ -3781,7 +3790,54 @@ test(
             assert.ok(!apiRequests.includes("POST /api/session/end"));
             await bidi.command("script.evaluate", {
                 awaitPromise: false,
-                expression: `document.querySelector("#end-session").click()`,
+                expression: 'document.querySelector("#end-session").focus()',
+                resultOwnership: "none",
+                target: { context: tab.context },
+            });
+            await performTrustedKey(bidi, tab.context, "\uE00C");
+            const escapeCancelled = await bidi.command("script.evaluate", {
+                awaitPromise: false,
+                expression: `JSON.stringify([
+                    document.querySelector("#end-session").textContent,
+                    document.querySelector("#session-status").textContent
+                ])`,
+                resultOwnership: "none",
+                target: { context: tab.context },
+            });
+            assert.deepEqual(JSON.parse(escapeCancelled.result.value), [
+                "End session", "Session ready",
+            ]);
+            assert.ok(!apiRequests.includes("POST /api/session/end"));
+            await bidi.command("script.evaluate", {
+                awaitPromise: false,
+                expression: `(() => {
+                    const button = document.querySelector("#end-session");
+                    button.click();
+                    button.blur();
+                })()`,
+                resultOwnership: "none",
+                target: { context: tab.context },
+            });
+            const blurCancelled = await bidi.command("script.evaluate", {
+                awaitPromise: false,
+                expression: `JSON.stringify([
+                    document.querySelector("#end-session").textContent,
+                    document.querySelector("#session-status").textContent
+                ])`,
+                resultOwnership: "none",
+                target: { context: tab.context },
+            });
+            assert.deepEqual(JSON.parse(blurCancelled.result.value), [
+                "End session", "Session ready",
+            ]);
+            assert.ok(!apiRequests.includes("POST /api/session/end"));
+            await bidi.command("script.evaluate", {
+                awaitPromise: false,
+                expression: `(() => {
+                    const button = document.querySelector("#end-session");
+                    button.click();
+                    button.click();
+                })()`,
                 resultOwnership: "none",
                 target: { context: tab.context },
             });
@@ -3799,6 +3855,109 @@ test(
                 server.close();
                 await once(server, "close");
             }
+            for (const child of children.reverse()) await stopChild(child);
+            fs.rmSync(profile, { recursive: true, force: true });
+        }
+    },
+);
+
+test(
+    "Firefox end failures preserve retryability but revoke stale authority",
+    { skip: !FIREFOX_AVAILABLE, timeout: 30_000 },
+    async () => {
+        fs.mkdirSync(".temp", { recursive: true });
+        const profile = fs.mkdtempSync(".temp/session-end-rejections-");
+        const children = [];
+        let bidi;
+        try {
+            bidi = await startBidiFirefox(profile, children);
+            for (const status of [503, 401]) {
+                const apiRequests = [];
+                const attempts = [];
+                const server = createSessionFixtureServer(
+                    apiRequests, null, () => {
+                        attempts.push(status);
+                        return status === 503 && attempts.length > 1
+                            ? 204 : status;
+                    },
+                );
+                try {
+                    server.listen(0, "127.0.0.1");
+                    await once(server, "listening");
+                    const address = server.address();
+                    assert.notEqual(typeof address, "string");
+                    assert.notEqual(address, null);
+                    const tab = await bidi.command(
+                        "browsingContext.create", { type: "tab" },
+                    );
+                    await bidi.command("browsingContext.navigate", {
+                        context: tab.context,
+                        url: `http://127.0.0.1:${address.port}/` +
+                            `#session=${REFRESH_SECRET}`,
+                        wait: "complete",
+                    });
+                    await waitForSessionStatus(
+                        bidi, tab.context, "Session ready",
+                    );
+                    for (let click = 0; click < 2; click += 1) {
+                        await bidi.command("script.evaluate", {
+                            awaitPromise: false,
+                            expression:
+                                'document.querySelector(' +
+                                '"#end-session").click()',
+                            resultOwnership: "none",
+                            target: { context: tab.context },
+                        });
+                    }
+                    const failed = await waitForSessionStatus(
+                        bidi,
+                        tab.context,
+                        status === 401 ? "Authorization failed"
+                            : "End session failed · retry",
+                    );
+                    assert.equal(attempts.length, 1);
+                    assert.equal(
+                        apiRequests.at(-1), "POST /api/session/end",
+                    );
+                    if (status === 401) {
+                        for (const field of ["task", "source", "candidate"]) {
+                            assert.deepEqual(failed[field], {
+                                disabled: true, value: "",
+                            });
+                        }
+                    } else {
+                        assert.equal(failed.task.disabled, false);
+                        assert.equal(failed.task.value, REFRESH_DRAFT.task);
+                        for (let click = 0; click < 2; click += 1) {
+                            await bidi.command("script.evaluate", {
+                                awaitPromise: false,
+                                expression:
+                                    'document.querySelector(' +
+                                    '"#end-session").click()',
+                                resultOwnership: "none",
+                                target: { context: tab.context },
+                            });
+                        }
+                        const final = await waitForSessionStatus(
+                            bidi, tab.context, "Session ended",
+                        );
+                        assert.deepEqual(final.task, {
+                            disabled: true, value: "",
+                        });
+                        assert.equal(attempts.length, 2);
+                    }
+                    await bidi.command("browsingContext.close", {
+                        context: tab.context,
+                    });
+                } finally {
+                    if (server.listening) {
+                        server.close();
+                        await once(server, "close");
+                    }
+                }
+            }
+        } finally {
+            if (bidi?.socket != null) bidi.socket.end();
             for (const child of children.reverse()) await stopChild(child);
             fs.rmSync(profile, { recursive: true, force: true });
         }

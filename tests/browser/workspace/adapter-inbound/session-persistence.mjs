@@ -245,9 +245,9 @@ test(
             source.match(/invalidateUnauthorizedSession\(\);/gu) ?? [];
         assert.equal(
             calls.length,
-            3,
-            "handshake, hydration, and draft-write authorization loss "
-                + "must invalidate",
+            4,
+            "handshake, hydration, draft-write, and end authorization "
+                + "loss must invalidate",
         );
     },
 );

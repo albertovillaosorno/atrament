@@ -403,6 +403,8 @@ function clearSessionText(): void {
     candidateInput.disabled = true;
     copyPrompt.disabled = true;
     endSession.disabled = true;
+    endSessionConfirmed = false;
+    setTextIfChanged(endSession, "End session");
     setTextIfChanged(copyStatus, "Waiting for a prompt from the backend.");
     updateCharacterCount(taskInput, taskCount);
     updateCharacterCount(sourceInput, sourceCount);
@@ -504,6 +506,7 @@ function recordDraftSyncFailure(
 
 function invalidateUnauthorizedSession(): void {
     sessionSecret = null;
+    endSessionConfirmed = false;
     sessionRequests.abort();
     invalidateClipboardRequests();
     invalidateDraftSync();
@@ -737,6 +740,26 @@ bindDraftSync("source", sourceInput);
 bindDraftSync("candidate", candidateInput);
 
 let endSessionConfirmed = false;
+let endSessionPreviousStatus = "Session ready";
+
+function disarmEndSessionConfirmation(): void {
+    if (!endSessionConfirmed || endSession.disabled) {
+        return;
+    }
+    endSessionConfirmed = false;
+    setTextIfChanged(endSession, "End session");
+    if (sessionStatus.textContent === "Ending discards this notebook") {
+        setTextIfChanged(sessionStatus, endSessionPreviousStatus);
+    }
+}
+
+endSession.addEventListener("blur", disarmEndSessionConfirmation);
+endSession.addEventListener("keydown", (event: KeyboardEvent): void => {
+    if (event.key === "Escape" && endSessionConfirmed) {
+        event.preventDefault();
+        disarmEndSessionConfirmation();
+    }
+});
 
 endSession.addEventListener("click", (): void => {
     const secret = sessionSecret;
@@ -745,6 +768,7 @@ endSession.addEventListener("click", (): void => {
     }
     if (!endSessionConfirmed) {
         endSessionConfirmed = true;
+        endSessionPreviousStatus = sessionStatus.textContent ?? "Session ready";
         setTextIfChanged(endSession, "Confirm end session");
         setTextIfChanged(sessionStatus, "Ending discards this notebook");
         return;
@@ -762,6 +786,10 @@ endSession.addEventListener("click", (): void => {
                 referrerPolicy: "origin",
             });
             if (sessionSecret !== secret) {
+                return;
+            }
+            if (response.status === 401) {
+                invalidateUnauthorizedSession();
                 return;
             }
             if (response.status === 204) {

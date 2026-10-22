@@ -105,10 +105,18 @@ and immediate local draft erasure. Authenticated browser POST requests use an
 origin-only referrer policy so Firefox supplies the canonical Origin header
 without revealing a URL path or fragment.
 
-GET hydration still suppresses the
-referrer. Browser `pagehide` continues to wipe local state independently:
-network teardown is not promised for tabs that close without the explicit
-command, or for crashed or unresponsive processes.
+GET hydration still suppresses the referrer. Browser `pagehide` continues
+to wipe local state independently: network teardown is not promised for tabs
+that close without the explicit command, or for crashed or unresponsive
+processes.
+
+The end confirmation can be cancelled by Escape or by moving focus away from
+its button, preventing a stale armed action. An authenticated end returning
+`401` now invalidates browser authority and clears private draft fields. A
+transient `503` retains the draft and resets confirmation so the user can
+retry without falsely announcing successful destruction. The Firefox suite
+asserts both outcomes and a successful subsequent retry, in addition to
+confirmation cancellation and cleanup.
 
 The task remains open until temporary media exist and end-to-end fixtures also
 cover backend operation cancellation, media cleanup, and explicit-export
