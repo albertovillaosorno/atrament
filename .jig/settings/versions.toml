@@ -17,11 +17,11 @@ path = "Cargo.toml"
 selector = "workspace.dependencies.getrandom"
 template = "={version}"
 
-[authority.git-tool]
+[authority.git]
 current = "2.54.0"
 stable = "2.54.0"
 
-[authority.git-tool.projection.tool]
+[authority.git.projection.tool]
 kind = "tool"
 target = "git"
 template = "{version}"
@@ -60,11 +60,11 @@ kind = "tool"
 target = "python"
 template = "{version}"
 
-[authority.rust-stable-cargo]
+[authority.rust-stable]
 current = "1.97.1"
 stable = "1.97.1"
 
-[authority.rust-stable-cargo.projection.tool]
+[authority.rust-stable.projection.tool]
 kind = "tool"
 target = "rust_stable_cargo"
 template = "{version}"
@@ -75,7 +75,7 @@ stable = "7.0.2"
 
 [authority.typescript.freshness]
 integrity_kind = "provider-response-sha256"
-maximum_age_days = 30
+maximum_age_days = 1
 provider = "npm-registry"
 source = "https://registry.npmjs.org/typescript/latest"
 
