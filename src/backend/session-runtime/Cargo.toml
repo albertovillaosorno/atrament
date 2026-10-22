@@ -15,3 +15,11 @@ path = "adapter-inbound/lib.rs"
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+atrament_session_draft = { workspace = true }
+atrament_session_handshake = { workspace = true }
+
+[[test]]
+name = "session_runtime_adapter"
+path = "../../../tests/backend/session-runtime/adapter-inbound/lib.rs"

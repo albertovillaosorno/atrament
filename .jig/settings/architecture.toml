@@ -333,7 +333,8 @@ depends_on = ["atrament_diagnostic", "atrament_handwriting_profile_container", "
 depends_on = ["atrament_diagnostic"]
 
 [component.atrament_session_runtime]
-depends_on = ["atrament_diagnostic", "atrament_session_draft_port", "atrament_session_handshake_port"]
+# Concrete draft and handshake dependencies are confined to integration tests.
+depends_on = ["atrament_diagnostic", "atrament_session_draft", "atrament_session_draft_port", "atrament_session_handshake", "atrament_session_handshake_port"]
 
 [component.atrament_session_secret]
 depends_on = []

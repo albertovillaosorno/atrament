@@ -25,10 +25,13 @@
 // - Description:
 //   - Covers port allocation, canonical Host admission, and public routing.
 // - Usage:
-//   - Compile this root test harness against the session runtime adapter.
+//   - Run this Cargo harness against the session runtime adapter.
 // - Defaults:
 //   - Uses ephemeral loopback ports and deterministic request fixtures.
 //
+
+//! Loopback runtime transport regression tests.
+
 use std::io::{Read, Write};
 use std::net::{Ipv4Addr, Shutdown, SocketAddr, TcpListener, TcpStream};
 use std::sync::Arc;
@@ -47,6 +50,7 @@ use atrament_session_handshake::{
     CAPABILITY_VERSION, HandshakeService, PRODUCT_VERSION, PROFILE_VERSION,
     PROMPT_VERSION, PROTOCOL_VERSION, RENDERER_VERSION,
 };
+use atrament_session_runtime as _;
 use atrament_session_handshake_port::{
     HandshakeResult, SessionHandshake, VersionDimension, Versions,
 };
@@ -69,7 +73,7 @@ impl SessionHandshake for MustNotEvaluateHandshake {
     }
 }
 
-#[allow(dead_code)]
+#[allow(dead_code, unreachable_pub)]
 #[path = "../../../../src/backend/session-runtime/adapter-inbound/lib.rs"]
 mod runtime;
 
@@ -459,7 +463,7 @@ fn response_for_incomplete_body(close_write: bool) -> Vec<u8> {
                 .expect("client write half closes");
         }
         let mut response = Vec::new();
-        stream.read_to_end(&mut response).expect("response reads");
+        let _ = stream.read_to_end(&mut response).expect("response reads");
         response
     });
     let (mut server, _) = listener.accept().expect("test server accepts");
@@ -1955,7 +1959,7 @@ fn generated_draft_transport_matches_backend_routes() {
         );
         assert_eq!(
             draft.replace(field, String::from(initial)),
-            atrament_session_draft_port::DraftMutation::Applied,
+            DraftMutation::Applied,
         );
         let read = draft_read_request(
             target,
@@ -2408,10 +2412,11 @@ fn route_with_handshake(handshake: &dyn SessionHandshake) -> Vec<u8> {
 #[test]
 fn handshake_mismatch_binds_observed_to_presented_version() {
     const MISMATCH: &str = "atrament.prompt/client-old";
-    for handshake in [
-        &WrongObservedHandshake as &dyn SessionHandshake,
-        &EqualExpectedObservedHandshake as &dyn SessionHandshake,
-    ] {
+    let handshakes: [&dyn SessionHandshake; 2] = [
+        &WrongObservedHandshake,
+        &EqualExpectedObservedHandshake,
+    ];
+    for handshake in handshakes {
         let response = route_with_handshake_prompt(handshake, MISMATCH);
         assert_invalid_diagnostic_response(
             &response,
@@ -2582,7 +2587,7 @@ fn ascii_case_probe_variants(name: &str) -> std::collections::BTreeSet<String> {
         } else {
             byte.to_ascii_lowercase()
         };
-        variants.insert(
+        let _ = variants.insert(
             String::from_utf8(candidate)
                 .expect("ASCII field name remains UTF-8"),
         );
@@ -2811,7 +2816,7 @@ fn draft_mutation_requires_the_complete_admission_conjunction() {
                                 DraftField::Task,
                                 String::from("current"),
                             ),
-                            atrament_session_draft_port::DraftMutation::Applied,
+                            DraftMutation::Applied,
                         );
                         let response = route_with_draft(
                             &request,
@@ -2861,7 +2866,7 @@ fn browser_forgery_cannot_mutate_session_draft_state() {
     let mut draft = SessionDraftService::default();
     assert_eq!(
         draft.replace(DraftField::Task, String::from("trusted current")),
-        atrament_session_draft_port::DraftMutation::Applied,
+        DraftMutation::Applied,
     );
     let mut reference_response = None;
     for (credential, origin) in cases {
@@ -3173,7 +3178,7 @@ fn draft_resource_limit_rejects_without_truncating_current_value() {
     let mut draft = SessionDraftService::default();
     assert_eq!(
         draft.replace(DraftField::Candidate, String::from("current")),
-        atrament_session_draft_port::DraftMutation::Applied,
+        DraftMutation::Applied,
     );
     let body = vec![b'a'; MAX_DRAFT_FIELD_BYTES + 1];
     let request = draft_replace_request(
@@ -3225,7 +3230,7 @@ fn authenticated_draft_reads_return_exact_private_text() {
     for (_, field, value) in cases {
         assert_eq!(
             draft.replace(field, String::from(value)),
-            atrament_session_draft_port::DraftMutation::Applied,
+            DraftMutation::Applied,
         );
     }
     for (target, _, expected) in cases {
@@ -3251,7 +3256,7 @@ fn draft_read_admission_failure_is_uniform_and_private() {
     let mut draft = SessionDraftService::default();
     assert_eq!(
         draft.replace(DraftField::Task, String::from("private task")),
-        atrament_session_draft_port::DraftMutation::Applied,
+        DraftMutation::Applied,
     );
     let requests = [
         draft_read_request("/api/session/task", None, None),
@@ -3953,10 +3958,11 @@ fn adapter_requires_exactly_one_route_specific_application_diagnostic() {
     );
     assert!(!response_text.contains("atrament.handshake.version-mismatch"));
 
-    for handshake in [
-        &WrongEvidenceDiagnosticHandshake as &dyn SessionHandshake,
-        &ExtraEvidenceDiagnosticHandshake as &dyn SessionHandshake,
-    ] {
+    let handshakes: [&dyn SessionHandshake; 2] = [
+        &WrongEvidenceDiagnosticHandshake,
+        &ExtraEvidenceDiagnosticHandshake,
+    ];
+    for handshake in handshakes {
         let mut ordinary_draft = SessionDraftService::default();
         let response = runtime::route_request(
             handshake_request.as_bytes(),
