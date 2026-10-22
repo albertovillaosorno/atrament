@@ -25,15 +25,17 @@
 // - Description:
 //   - Exercises generation without writing the resulting credential anywhere.
 // - Usage:
-//   - Compile this root harness against the session-secret adapter.
+//   - Run this Cargo harness against the public secret adapter.
 // - Defaults:
 //   - Requires 64 lowercase hexadecimal transport characters.
 //
+
+//! Public session-secret regression tests.
+
+use getrandom as _;
 use session_secret::SessionSecret;
 
-#[allow(dead_code)]
-#[path = "../../../../src/backend/session-secret/adapter-outbound/lib.rs"]
-mod session_secret;
+use atrament_session_secret as session_secret;
 
 #[test]
 fn generated_secret_has_the_frozen_transport_shape() {

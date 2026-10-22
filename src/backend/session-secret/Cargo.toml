@@ -13,3 +13,7 @@ path = "adapter-outbound/lib.rs"
 
 [lints]
 workspace = true
+
+[[test]]
+name = "session_secret_adapter_outbound"
+path = "../../../tests/backend/session-secret/adapter-outbound/lib.rs"

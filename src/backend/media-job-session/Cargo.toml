@@ -13,3 +13,7 @@ path = "application/lib.rs"
 
 [lints]
 workspace = true
+
+[[test]]
+name = "media_job_session_application"
+path = "../../../tests/backend/media-job-session/application/lib.rs"

@@ -27,15 +27,16 @@
 //   - Covers terminal outcomes, retry-required cleanup, ownership mismatch,
 //     repeated completion, and fresh-service isolation.
 // - Usage:
-//   - Compile directly against the media-job session application service.
+//   - Run this Cargo harness against the public media-job service.
 // - Defaults:
 //   - A fresh service contains no jobs or waveform intermediates.
 //
+
+//! Public media-job-session regression tests.
+
 use atrament_media_job_lifecycle::{MediaJobCleanupStatus, MediaJobOutcome};
 
-#[allow(dead_code)]
-#[path = "../../../../src/backend/media-job-session/application/lib.rs"]
-mod application;
+use atrament_media_job_session as application;
 
 use application::{MediaJobSessionError, MediaJobSessionService};
 
