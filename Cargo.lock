@@ -55,6 +55,7 @@ version = "0.1.0"
 name = "atrament_autonomous_history_boundary_control"
 version = "0.1.0"
 dependencies = [
+ "atrament_semantic_notebook",
  "atrament_semantic_notebook_port",
 ]
 
@@ -243,6 +244,7 @@ name = "atrament_english_spanish_diacritic_composition"
 version = "0.1.0"
 dependencies = [
  "atrament_english_spanish_diacritic_rule",
+ "atrament_english_spanish_grapheme_inventory",
  "atrament_handwriting_diacritic_composition",
  "atrament_handwriting_glyph_coverage",
 ]
@@ -250,6 +252,10 @@ dependencies = [
 [[package]]
 name = "atrament_english_spanish_diacritic_rule"
 version = "0.1.0"
+dependencies = [
+ "atrament_english_spanish_grapheme_inventory",
+ "atrament_handwriting_glyph_coverage",
+]
 
 [[package]]
 name = "atrament_english_spanish_grapheme_inventory"
@@ -314,6 +320,9 @@ dependencies = [
 [[package]]
 name = "atrament_handwriting_glyph_coverage"
 version = "0.1.0"
+dependencies = [
+ "atrament_english_spanish_grapheme_inventory",
+]
 
 [[package]]
 name = "atrament_handwriting_profile_container"
@@ -382,6 +391,7 @@ dependencies = [
  "atrament_application_operation_lifecycle",
  "atrament_mcp_capability_effect",
  "atrament_semantic_history_result",
+ "atrament_semantic_notebook",
  "atrament_semantic_notebook_port",
 ]
 
@@ -440,6 +450,8 @@ dependencies = [
 name = "atrament_motion_plan_simulation_trace"
 version = "0.1.0"
 dependencies = [
+ "atrament_device_coordinate_calibration",
+ "atrament_device_neutral_motion_plan",
  "atrament_motion_plan_dry_run",
 ]
 
@@ -530,6 +542,7 @@ dependencies = [
 name = "atrament_semantic_command_context"
 version = "0.1.0"
 dependencies = [
+ "atrament_semantic_notebook",
  "atrament_semantic_notebook_port",
 ]
 
@@ -573,6 +586,7 @@ name = "atrament_semantic_history_result"
 version = "0.1.0"
 dependencies = [
  "atrament_application_operation_lifecycle",
+ "atrament_semantic_notebook",
  "atrament_semantic_notebook_port",
 ]
 

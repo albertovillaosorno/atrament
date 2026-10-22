@@ -6,6 +6,7 @@ publish = false
 license = "MIT"
 
 [lib]
+test = false
 path = "application/lib.rs"
 
 [dependencies.atrament_semantic_notebook_port]
@@ -13,3 +14,10 @@ workspace = true
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+atrament_semantic_notebook = { workspace = true }
+
+[[test]]
+name = "autonomous_history_boundary_control_application"
+path = "../../../tests/backend/autonomous-history-boundary-control/application/lib.rs"

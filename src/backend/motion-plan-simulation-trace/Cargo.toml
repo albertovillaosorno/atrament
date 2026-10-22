@@ -6,6 +6,7 @@ publish = false
 license = "MIT"
 
 [lib]
+test = false
 path = "domain/lib.rs"
 
 [dependencies]
@@ -13,3 +14,11 @@ atrament_motion_plan_dry_run = { workspace = true }
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+atrament_device_coordinate_calibration = { workspace = true }
+atrament_device_neutral_motion_plan = { workspace = true }
+
+[[test]]
+name = "motion_plan_simulation_trace_domain"
+path = "../../../tests/backend/motion-plan-simulation-trace/domain/lib.rs"

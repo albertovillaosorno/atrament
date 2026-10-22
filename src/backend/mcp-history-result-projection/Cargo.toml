@@ -12,7 +12,15 @@ atrament_semantic_history_result = { workspace = true }
 atrament_semantic_notebook_port = { workspace = true }
 
 [lib]
+test = false
 path = "application/lib.rs"
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+atrament_semantic_notebook = { workspace = true }
+
+[[test]]
+name = "mcp_history_result_projection_application"
+path = "../../../tests/backend/mcp-history-result-projection/application/lib.rs"

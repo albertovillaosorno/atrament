@@ -31,6 +31,9 @@
 // - Defaults:
 //   - Invalid dry runs cannot produce an inspectable trace.
 //
+
+//! Motion plan simulation trace test coverage.
+
 use atrament_device_coordinate_calibration::{
     CoordinateTransformCalibration, DeviceCoordinateCalibration,
     PenMotionCalibration, SheetRegistrationCalibration,

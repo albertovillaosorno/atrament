@@ -32,7 +32,8 @@
 
 //! Mcp semantic command result projection application regression tests.
 
-use atrament_application_operation_lifecycle::ApplicationCancellationObservation;
+use atrament_application_operation_lifecycle as lifecycle;
+use lifecycle::ApplicationCancellationObservation;
 use atrament_mcp_capability_effect::McpApplicationCapabilityClass;
 use atrament_mcp_semantic_command_result_projection::{
     mcp_semantic_apply_cancellation_result,

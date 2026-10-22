@@ -35,6 +35,9 @@
 // - Defaults:
 //   - Exact profile coverage still precedes compositional reuse.
 //
+
+//! English spanish diacritic composition test coverage.
+
 use atrament_english_spanish_diacritic_composition::{
     EnglishSpanishDiacriticCompositionError,
     admit_english_spanish_diacritic_composition,

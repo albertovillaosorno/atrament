@@ -31,6 +31,9 @@
 // - Defaults:
 //   - Precomposed spellings remain exact-coverage candidates, not rule matches.
 //
+
+//! English spanish diacritic rule test coverage.
+
 use atrament_english_spanish_diacritic_rule::{
     EnglishSpanishDiacriticRule, applicable_english_spanish_diacritic_rule,
 };

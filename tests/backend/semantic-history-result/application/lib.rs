@@ -30,9 +30,11 @@
 // - Defaults:
 //   - NoAcceptedRevision remains intentionally unclassified.
 //
-use atrament_application_operation_lifecycle::{
-    ApplicationCancellationObservation,
-};
+
+//! Semantic history result test coverage.
+
+use atrament_application_operation_lifecycle as lifecycle;
+use lifecycle::ApplicationCancellationObservation;
 use atrament_semantic_history_result::{
     SemanticHistoryCommitDisposition, SemanticHistoryResultClass,
     classify_history_cancellation_result, classify_history_traversal_result,

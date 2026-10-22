@@ -33,9 +33,10 @@
 // - Defaults:
 //   - Missing coverage has no implicit fallback.
 //
-use atrament_english_spanish_grapheme_inventory::{
-    REQUIRED_TEXT_GRAPHEMES,
-};
+
+//! Handwriting glyph coverage test coverage.
+
+use atrament_english_spanish_grapheme_inventory::REQUIRED_TEXT_GRAPHEMES;
 use atrament_handwriting_glyph_coverage::{
     HandwritingCoverage, HandwritingCoverageProfile, HandwritingCoverageQuery,
     MissingHandwritingCoverage, classify_handwriting_coverage,

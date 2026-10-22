@@ -29,6 +29,9 @@
 // - Defaults:
 //   - Non-boundary outcomes establish no direction-specific stop.
 //
+
+//! Autonomous history boundary control test coverage.
+
 use atrament_autonomous_history_boundary_control::{
     AutonomousHistoryDirectionControl,
     autonomous_history_boundary_stop_direction,

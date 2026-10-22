@@ -34,7 +34,8 @@
 
 //! Mcp derived output result projection domain regression tests.
 
-use atrament_application_operation_lifecycle::ApplicationCancellationObservation;
+use atrament_application_operation_lifecycle as lifecycle;
+use lifecycle::ApplicationCancellationObservation;
 use atrament_derived_output_result::{
     DerivedOutputEffectDisposition, DerivedOutputOperation,
     DerivedOutputResultClass,

@@ -6,7 +6,16 @@ publish = false
 license = "MIT"
 
 [lib]
+test = false
 path = "domain/lib.rs"
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+atrament_english_spanish_grapheme_inventory = { workspace = true }
+atrament_handwriting_glyph_coverage = { workspace = true }
+
+[[test]]
+name = "english_spanish_diacritic_rule_domain"
+path = "../../../tests/backend/english-spanish-diacritic-rule/domain/lib.rs"

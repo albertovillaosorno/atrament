@@ -35,7 +35,8 @@
 use atrament_autonomous_budget_admission::{
     AutonomousBudgetClass, autonomous_budget_admission,
 };
-use atrament_autonomous_budget_stop_projection::autonomous_budget_terminal_outcome;
+use atrament_autonomous_budget_stop_projection as budget_stop;
+use budget_stop::autonomous_budget_terminal_outcome;
 use atrament_autonomous_goal_outcome::AutonomousGoalTerminalClass;
 
 const BUDGETS: [AutonomousBudgetClass; 5] = [

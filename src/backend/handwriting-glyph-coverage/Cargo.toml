@@ -6,7 +6,15 @@ publish = false
 license = "MIT"
 
 [lib]
+test = false
 path = "domain/lib.rs"
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+atrament_english_spanish_grapheme_inventory = { workspace = true }
+
+[[test]]
+name = "handwriting_glyph_coverage_domain"
+path = "../../../tests/backend/handwriting-glyph-coverage/domain/lib.rs"

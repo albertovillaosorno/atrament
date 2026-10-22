@@ -30,6 +30,9 @@
 // - Defaults:
 //   - Missing capability, family, or location authority stays unadmitted.
 //
+
+//! Semantic command context test coverage.
+
 use atrament_semantic_command_context::{
     semantic_command_application_admission,
     semantic_command_capability_behavior_admission,
@@ -550,9 +553,9 @@ fn protocol_snapshot(
     versions: &'static [SemanticCommandProtocolVersion],
 ) -> SemanticCommandCapabilitySnapshot {
     SemanticCommandCapabilitySnapshot {
-        admitted_applications: &[] as &[CommandApplicationCapability],
+        admitted_applications: &[],
         behavior_version: CommandBehaviorVersion(94),
-        family_capabilities: &[] as &[CommandFamilyCapability],
+        family_capabilities: &[],
         normalization_version: None,
         protocol_versions: versions,
         resource_limits: &TEST_PROTOCOL_LIMITS,

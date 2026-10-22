@@ -29,9 +29,11 @@
 // - Defaults:
 //   - Non-history capabilities never acquire history authority by vocabulary.
 //
-use atrament_application_operation_lifecycle::{
-    ApplicationCancellationObservation,
-};
+
+//! Mcp history result projection test coverage.
+
+use atrament_application_operation_lifecycle as lifecycle;
+use lifecycle::ApplicationCancellationObservation;
 use atrament_mcp_capability_effect::McpApplicationCapabilityClass;
 use atrament_mcp_history_result_projection::{
     mcp_history_cancellation_result, mcp_history_commit_disposition,

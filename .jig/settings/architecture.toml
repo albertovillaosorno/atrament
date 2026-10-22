@@ -53,7 +53,8 @@ depends_on = []
 depends_on = ["atrament_semantic_history_result"]
 
 [component.atrament_autonomous_history_boundary_control]
-depends_on = ["atrament_semantic_notebook_port"]
+# Supplemental graph edges are fixture-only test dependencies.
+depends_on = ["atrament_semantic_notebook", "atrament_semantic_notebook_port"]
 
 [component.atrament_autonomous_history_progress_projection]
 depends_on = ["atrament_autonomous_progress_evidence", "atrament_semantic_history_result"]
@@ -110,10 +111,12 @@ depends_on = []
 depends_on = ["atrament_english_spanish_corpus_evidence", "atrament_english_spanish_grapheme_inventory"]
 
 [component.atrament_english_spanish_diacritic_composition]
-depends_on = ["atrament_english_spanish_diacritic_rule", "atrament_handwriting_diacritic_composition", "atrament_handwriting_glyph_coverage"]
+# Supplemental graph edges are fixture-only test dependencies.
+depends_on = ["atrament_english_spanish_diacritic_rule", "atrament_english_spanish_grapheme_inventory", "atrament_handwriting_diacritic_composition", "atrament_handwriting_glyph_coverage"]
 
 [component.atrament_english_spanish_diacritic_rule]
-depends_on = []
+# Supplemental graph edges are fixture-only test dependencies.
+depends_on = ["atrament_english_spanish_grapheme_inventory", "atrament_handwriting_glyph_coverage"]
 
 [component.atrament_english_spanish_grapheme_inventory]
 depends_on = []
@@ -153,7 +156,8 @@ depends_on = ["atrament_handwriting_glyph_coverage"]
 depends_on = ["atrament_handwriting_glyph_coverage"]
 
 [component.atrament_handwriting_glyph_coverage]
-depends_on = []
+# Supplemental graph edges are fixture-only test dependencies.
+depends_on = ["atrament_english_spanish_grapheme_inventory"]
 
 [component.atrament_handwriting_profile_container]
 depends_on = []
@@ -201,7 +205,8 @@ depends_on = ["atrament_application_operation_lifecycle", "atrament_derived_outp
 depends_on = ["atrament_mcp_capability_effect"]
 
 [component.atrament_mcp_history_result_projection]
-depends_on = ["atrament_application_operation_lifecycle", "atrament_mcp_capability_effect", "atrament_semantic_history_result", "atrament_semantic_notebook_port"]
+# Supplemental graph edges are fixture-only test dependencies.
+depends_on = ["atrament_application_operation_lifecycle", "atrament_mcp_capability_effect", "atrament_semantic_history_result", "atrament_semantic_notebook", "atrament_semantic_notebook_port"]
 
 [component.atrament_mcp_operation_lifecycle_projection]
 depends_on = ["atrament_application_operation_lifecycle", "atrament_mcp_capability_effect"]
@@ -231,7 +236,8 @@ depends_on = []
 depends_on = ["atrament_device_coordinate_calibration", "atrament_device_neutral_motion_plan"]
 
 [component.atrament_motion_plan_simulation_trace]
-depends_on = ["atrament_motion_plan_dry_run"]
+# Supplemental graph edges are fixture-only test dependencies.
+depends_on = ["atrament_device_coordinate_calibration", "atrament_device_neutral_motion_plan", "atrament_motion_plan_dry_run"]
 
 [component.atrament_one_shot_formatting_prompt]
 depends_on = []
@@ -252,7 +258,8 @@ depends_on = ["atrament_physical_page_profile"]
 depends_on = []
 
 [component.atrament_semantic_command_context]
-depends_on = ["atrament_semantic_notebook_port"]
+# Supplemental graph edges are fixture-only test dependencies.
+depends_on = ["atrament_semantic_notebook", "atrament_semantic_notebook_port"]
 
 [component.atrament_semantic_command_graph]
 depends_on = []
@@ -269,7 +276,8 @@ depends_on = ["atrament_flow_pagination", "atrament_physical_page_profile", "atr
 depends_on = ["atrament_diagnostic", "atrament_fixed_region_bounds", "atrament_physical_page_profile", "atrament_semantic_notebook", "atrament_semantic_notebook_port", "atrament_semantic_notebook_session"]
 
 [component.atrament_semantic_history_result]
-depends_on = ["atrament_application_operation_lifecycle", "atrament_semantic_notebook_port"]
+# Supplemental graph edges are fixture-only test dependencies.
+depends_on = ["atrament_application_operation_lifecycle", "atrament_semantic_notebook", "atrament_semantic_notebook_port"]
 
 [component.atrament_semantic_notebook]
 depends_on = ["atrament_mathematics_source", "atrament_physical_page_profile"]
