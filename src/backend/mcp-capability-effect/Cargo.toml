@@ -10,3 +10,7 @@ path = "domain/lib.rs"
 
 [lints]
 workspace = true
+
+[[test]]
+name = "mcp_capability_effect_domain"
+path = "../../../tests/backend/mcp-capability-effect/domain/lib.rs"

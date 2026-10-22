@@ -10,3 +10,7 @@ path = "domain/lib.rs"
 
 [lints]
 workspace = true
+
+[[test]]
+name = "image_placement_intent_domain"
+path = "../../../tests/backend/image-placement-intent/domain/lib.rs"

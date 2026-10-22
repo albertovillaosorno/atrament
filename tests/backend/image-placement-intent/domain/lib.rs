@@ -30,6 +30,9 @@
 // - Defaults:
 //   - No placement or appearance value is implicit.
 //
+
+//! Image placement intent domain regression tests.
+
 use atrament_image_placement_intent::{
     ImagePlacementGeometry, ImagePlacementIntent, ImagePlacementMode,
 };

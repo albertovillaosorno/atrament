@@ -32,6 +32,9 @@
 // - Defaults:
 //   - No accepted content disappears implicitly.
 //
+
+//! Pdf composition plan domain regression tests.
+
 use atrament_pdf_composition_plan::{
     PdfAssetDisposition, PdfAssetResource, PdfCompositionPlan, PdfPagePlan,
     SearchableSemanticText,

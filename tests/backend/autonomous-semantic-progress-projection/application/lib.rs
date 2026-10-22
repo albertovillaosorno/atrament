@@ -29,6 +29,9 @@
 // - Defaults:
 //   - Only Applied and Idempotent replay directly imply progress evidence.
 //
+
+//! Autonomous semantic progress projection application regression tests.
+
 use atrament_autonomous_progress_evidence::AutonomousProgressEvidenceClass;
 use atrament_autonomous_semantic_progress_projection::
     autonomous_semantic_result_progress_evidence;

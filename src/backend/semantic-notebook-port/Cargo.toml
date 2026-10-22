@@ -14,3 +14,7 @@ path = "port-inbound/lib.rs"
 
 [lints]
 workspace = true
+
+[[test]]
+name = "semantic_notebook_port_port_inbound"
+path = "../../../tests/backend/semantic-notebook-port/port-inbound/lib.rs"

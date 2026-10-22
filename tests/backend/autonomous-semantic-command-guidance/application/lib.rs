@@ -32,6 +32,9 @@
 //   - Cancellation, validation success, and internal no-commit stay
 //     unclassified.
 //
+
+//! Autonomous semantic command guidance application regression tests.
+
 use atrament_autonomous_semantic_command_guidance::{
     AutonomousSemanticCommandGuidance, autonomous_semantic_command_guidance,
 };

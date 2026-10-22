@@ -16,3 +16,7 @@ path = "application/lib.rs"
 
 [lints]
 workspace = true
+
+[[test]]
+name = "mcp_semantic_command_admission_projection_application"
+path = "../../../tests/backend/mcp-semantic-command-admission-projection/application/lib.rs"

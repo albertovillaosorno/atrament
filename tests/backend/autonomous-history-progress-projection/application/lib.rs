@@ -30,6 +30,9 @@
 // - Defaults:
 //   - Only Traversed and Idempotent replay directly imply progress evidence.
 //
+
+//! Autonomous history progress projection application regression tests.
+
 use atrament_autonomous_history_progress_projection::
     autonomous_history_result_progress_evidence;
 use atrament_autonomous_progress_evidence::AutonomousProgressEvidenceClass;

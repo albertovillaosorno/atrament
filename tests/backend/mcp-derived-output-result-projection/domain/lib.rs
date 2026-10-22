@@ -31,9 +31,10 @@
 // - Defaults:
 //   - Unsupported capability/result combinations produce no disposition.
 //
-use atrament_application_operation_lifecycle::{
-    ApplicationCancellationObservation,
-};
+
+//! Mcp derived output result projection domain regression tests.
+
+use atrament_application_operation_lifecycle::ApplicationCancellationObservation;
 use atrament_derived_output_result::{
     DerivedOutputEffectDisposition, DerivedOutputOperation,
     DerivedOutputResultClass,

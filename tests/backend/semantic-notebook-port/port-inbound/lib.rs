@@ -29,6 +29,11 @@
 // - Defaults:
 //   - No final wire enum name or status mapping is implied.
 //
+
+//! Semantic notebook port domain regression tests.
+
+use atrament_semantic_command_graph as _;
+use atrament_semantic_notebook as _;
 use atrament_semantic_notebook_port::SemanticCommandResultClass;
 
 const ALL_CORE_RESULT_CLASSES: [SemanticCommandResultClass; 15] = [

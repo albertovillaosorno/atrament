@@ -13,3 +13,7 @@ atrament_autonomous_goal_outcome = { workspace = true }
 
 [lints]
 workspace = true
+
+[[test]]
+name = "autonomous_completion_admission_domain"
+path = "../../../tests/backend/autonomous-completion-admission/domain/lib.rs"

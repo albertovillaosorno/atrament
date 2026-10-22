@@ -13,3 +13,7 @@ path = "application/lib.rs"
 
 [lints]
 workspace = true
+
+[[test]]
+name = "autonomous_history_guidance_application"
+path = "../../../tests/backend/autonomous-history-guidance/application/lib.rs"

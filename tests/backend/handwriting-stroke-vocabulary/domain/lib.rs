@@ -31,6 +31,9 @@
 // - Defaults:
 //   - No missing evidence family receives an implicit value.
 //
+
+//! Handwriting stroke vocabulary domain regression tests.
+
 use atrament_handwriting_stroke_vocabulary::{
     StrokeVocabularyConnection, StrokeVocabularyEntry, StrokeVocabularyForms,
     StrokeVocabularyGeometry, StrokeVocabularyProvenance,

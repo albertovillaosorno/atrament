@@ -10,3 +10,7 @@ path = "domain/lib.rs"
 
 [lints]
 workspace = true
+
+[[test]]
+name = "autonomous_session_boundary_domain"
+path = "../../../tests/backend/autonomous-session-boundary/domain/lib.rs"

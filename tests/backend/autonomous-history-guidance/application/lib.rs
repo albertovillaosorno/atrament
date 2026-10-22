@@ -31,6 +31,9 @@
 // - Defaults:
 //   - Cancellation and known-no-commit failure stay unclassified.
 //
+
+//! Autonomous history guidance application regression tests.
+
 use atrament_autonomous_history_guidance::{
     AutonomousHistoryGuidance, autonomous_history_guidance,
 };

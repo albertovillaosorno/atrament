@@ -10,3 +10,7 @@ path = "port-outbound/lib.rs"
 
 [lints]
 workspace = true
+
+[[test]]
+name = "unicode_grapheme_boundary_port_port_outbound"
+path = "../../../tests/backend/unicode-grapheme-boundary-port/port-outbound/lib.rs"

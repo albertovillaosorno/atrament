@@ -13,3 +13,7 @@ path = "application/lib.rs"
 
 [lints]
 workspace = true
+
+[[test]]
+name = "autonomous_semantic_command_guidance_application"
+path = "../../../tests/backend/autonomous-semantic-command-guidance/application/lib.rs"

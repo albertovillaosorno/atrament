@@ -16,3 +16,7 @@ workspace = true
 
 [dependencies.atrament_autonomous_progress_evidence]
 workspace = true
+
+[[test]]
+name = "autonomous_stable_blocking_stop_projection_application"
+path = "../../../tests/backend/autonomous-stable-blocking-stop-projection/application/lib.rs"

@@ -15,3 +15,7 @@ path = "domain/lib.rs"
 
 [lints]
 workspace = true
+
+[[test]]
+name = "mcp_derived_output_result_projection_domain"
+path = "../../../tests/backend/mcp-derived-output-result-projection/domain/lib.rs"

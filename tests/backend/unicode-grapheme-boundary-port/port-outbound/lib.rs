@@ -29,6 +29,9 @@
 // - Defaults:
 //   - No segmentation semantics are implied by the port itself.
 //
+
+//! Unicode grapheme boundary port domain regression tests.
+
 use atrament_unicode_grapheme_boundary_port::GraphemeBoundaryProvider;
 
 struct FixtureProvider;

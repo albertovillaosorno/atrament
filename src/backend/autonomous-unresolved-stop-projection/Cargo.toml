@@ -16,3 +16,7 @@ workspace = true
 
 [lints]
 workspace = true
+
+[[test]]
+name = "autonomous_unresolved_stop_projection_application"
+path = "../../../tests/backend/autonomous-unresolved-stop-projection/application/lib.rs"

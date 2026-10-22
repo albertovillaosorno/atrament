@@ -13,3 +13,7 @@ path = "application/lib.rs"
 
 [lints]
 workspace = true
+
+[[test]]
+name = "autonomous_derived_output_guidance_application"
+path = "../../../tests/backend/autonomous-derived-output-guidance/application/lib.rs"

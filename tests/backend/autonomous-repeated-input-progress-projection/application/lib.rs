@@ -30,6 +30,9 @@
 // - Defaults:
 //   - No evidence here grants continuation or selects a terminal outcome.
 //
+
+//! Autonomous repeated input progress projection application regression tests.
+
 use atrament_autonomous_progress_evidence::AutonomousProgressEvidenceClass;
 use atrament_autonomous_repeated_input_progress_projection::{
     AutonomousIterationInputs, autonomous_repeated_input_progress_evidence,

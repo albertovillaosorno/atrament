@@ -16,3 +16,7 @@ workspace = true
 
 [lints]
 workspace = true
+
+[[test]]
+name = "autonomous_repeated_no_op_control_application"
+path = "../../../tests/backend/autonomous-repeated-no-op-control/application/lib.rs"

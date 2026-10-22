@@ -29,6 +29,9 @@
 // - Defaults:
 //   - Host-policy, untrusted, failed, and invalid outputs stay unclassified.
 //
+
+//! Autonomous output progress projection application regression tests.
+
 use atrament_autonomous_output_intent::AutonomousOutputIntentSource;
 use atrament_autonomous_output_progress_projection::
     autonomous_requested_output_progress_evidence;

@@ -31,6 +31,9 @@
 //   - Missing timing/confidence/speaker evidence remains absent rather than
 //     fake.
 //
+
+//! Transcript evidence domain regression tests.
+
 use atrament_transcript_evidence::{
     TranscriptEvidence, TranscriptMediaKind, TranscriptOrigin, TranscriptWord,
     UnresolvedTranscriptFragment,

@@ -31,6 +31,9 @@
 // - Defaults:
 //   - No untested device or setup inherits compatibility implicitly.
 //
+
+//! Physical compatibility ledger domain regression tests.
+
 use atrament_physical_compatibility_ledger::{
     DeviceCompatibilityIdentity, PhysicalCompatibilityRecord,
     PhysicalCompatibilitySetup,

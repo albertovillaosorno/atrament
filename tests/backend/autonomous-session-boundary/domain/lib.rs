@@ -32,6 +32,9 @@
 // - Defaults:
 //   - Fresh sessions begin from capability discovery and Inspect.
 //
+
+//! Autonomous session boundary domain regression tests.
+
 use atrament_autonomous_session_boundary::{
     AUTONOMOUS_FRESH_SESSION_STEPS, AutonomousFreshSessionStep,
     AutonomousSessionEndDisposition, AutonomousSessionStateClass,

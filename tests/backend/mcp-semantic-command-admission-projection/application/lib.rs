@@ -29,6 +29,9 @@
 // - Defaults:
 //   - Unmapped MCP classes have no semantic-command admission result.
 //
+
+//! Mcp semantic command admission projection application regression tests.
+
 use atrament_mcp_capability_effect::{
     McpApplicationCapabilityClass, McpApplicationEffectClass,
 };
@@ -38,6 +41,7 @@ use atrament_mcp_semantic_command_admission_projection::{
     mcp_semantic_command_application_admission,
     mcp_semantic_command_application_capability,
 };
+use atrament_semantic_command_context as _;
 use atrament_semantic_notebook_port::{
     CommandApplicationCapability, CommandBehaviorVersion,
     CommandResourceLimits, SemanticCommandApplicationAdmission,

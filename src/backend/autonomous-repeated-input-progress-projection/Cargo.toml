@@ -13,3 +13,7 @@ workspace = true
 
 [lints]
 workspace = true
+
+[[test]]
+name = "autonomous_repeated_input_progress_projection_application"
+path = "../../../tests/backend/autonomous-repeated-input-progress-projection/application/lib.rs"

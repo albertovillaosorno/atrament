@@ -32,6 +32,9 @@
 // - Defaults:
 //   - Every case is not authorized.
 //
+
+//! Autonomous physical boundary domain regression tests.
+
 use atrament_autonomous_physical_boundary::{
     AutonomousGenericWorkflowClass, AutonomousPhysicalActionClass,
     AutonomousPhysicalAuthority, autonomous_generic_workflow_physical_authority,

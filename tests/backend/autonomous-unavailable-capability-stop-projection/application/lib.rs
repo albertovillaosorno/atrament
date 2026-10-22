@@ -30,6 +30,9 @@
 // - Defaults:
 //   - No unsupported-result interpretation is performed by this fixture.
 //
+
+//! Autonomous unavailable capability stop projection application regression tests.
+
 use atrament_autonomous_goal_outcome::AutonomousGoalTerminalClass;
 use atrament_autonomous_unavailable_capability_stop_projection::{
     AutonomousRequiredCapabilityAvailability,

@@ -10,3 +10,7 @@ path = "domain/lib.rs"
 
 [lints]
 workspace = true
+
+[[test]]
+name = "render_manifest_domain"
+path = "../../../tests/backend/render-manifest/domain/lib.rs"

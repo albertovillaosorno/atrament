@@ -31,6 +31,9 @@
 // - Defaults:
 //   - No asynchronous API or cancellation capability is implied.
 //
+
+//! Application operation lifecycle domain regression tests.
+
 use atrament_application_operation_lifecycle::{
     ApplicationCancellationDisposition, ApplicationCancellationObservation,
     ApplicationCancellationResolution, ApplicationOperationClass,

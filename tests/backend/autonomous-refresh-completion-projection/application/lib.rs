@@ -31,6 +31,9 @@
 // - Defaults:
 //   - Every unrelated result stays nonterminal on this projection.
 //
+
+//! Autonomous refresh completion projection application regression tests.
+
 use atrament_autonomous_completion_admission::{
     AutonomousRequestedOutputCompletion, AutonomousSemanticGoalCompletion,
 };

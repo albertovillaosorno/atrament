@@ -10,3 +10,7 @@ path = "domain/lib.rs"
 
 [lints]
 workspace = true
+
+[[test]]
+name = "digital_paper_note_plan_domain"
+path = "../../../tests/backend/digital-paper-note-plan/domain/lib.rs"

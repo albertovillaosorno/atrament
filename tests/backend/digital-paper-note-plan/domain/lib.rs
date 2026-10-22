@@ -30,6 +30,9 @@
 // - Defaults:
 //   - No style value, threshold, or live fallback is synthesized.
 //
+
+//! Digital paper note plan domain regression tests.
+
 use atrament_digital_paper_note_plan::{
     DigitalPaperNoteContrast, DigitalPaperNotePlan, DigitalPaperNotePlanError,
     validate_digital_paper_note_plan, validate_digital_paper_note_plan_view,

@@ -30,9 +30,10 @@
 // - Defaults:
 //   - Unknown transport outcome is absent because it is not a core result.
 //
-use atrament_application_operation_lifecycle::{
-    ApplicationCancellationObservation,
-};
+
+//! Semantic command result application regression tests.
+
+use atrament_application_operation_lifecycle::ApplicationCancellationObservation;
 use atrament_semantic_command_result::{
     SemanticCommandOperation, classify_semantic_apply_cancellation_result,
     semantic_command_commit_disposition, semantic_command_result_applies_to,

@@ -30,6 +30,9 @@
 // - Defaults:
 //   - Results with goal- or diagnostic-dependent next actions remain open.
 //
+
+//! Autonomous derived output guidance application regression tests.
+
 use atrament_autonomous_derived_output_guidance::{
     AutonomousDerivedOutputGuidance, autonomous_derived_output_guidance,
 };

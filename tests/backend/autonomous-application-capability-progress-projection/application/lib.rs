@@ -30,6 +30,9 @@
 // - Defaults:
 //   - No transition implies terminal unavailability or goal completion.
 //
+
+//! Autonomous application capability progress projection application regression tests.
+
 use atrament_autonomous_application_capability_progress_projection::
     autonomous_application_capability_progress_evidence;
 use atrament_autonomous_progress_evidence::AutonomousProgressEvidenceClass;

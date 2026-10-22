@@ -30,6 +30,9 @@
 // - Defaults:
 //   - Unrelated results remain outside this unresolved-specific projection.
 //
+
+//! Autonomous unresolved stop projection application regression tests.
+
 use atrament_autonomous_goal_outcome::AutonomousGoalTerminalClass;
 use atrament_autonomous_unresolved_stop_projection::{
     AutonomousUnresolvedResolution, autonomous_unresolved_terminal_outcome,

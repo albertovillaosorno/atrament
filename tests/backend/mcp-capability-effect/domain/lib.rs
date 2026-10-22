@@ -29,6 +29,9 @@
 // - Defaults:
 //   - The matrix does not imply that an MCP capability is implemented.
 //
+
+//! Mcp capability effect domain regression tests.
+
 use atrament_mcp_capability_effect::{
     McpApplicationCapabilityClass, McpApplicationEffectClass,
     mcp_application_capability_effect,

@@ -16,3 +16,7 @@ path = "domain/lib.rs"
 
 [lints]
 workspace = true
+
+[[test]]
+name = "mcp_operation_lifecycle_projection_domain"
+path = "../../../tests/backend/mcp-operation-lifecycle-projection/domain/lib.rs"

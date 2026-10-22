@@ -29,6 +29,9 @@
 // - Defaults:
 //   - The empty mask imposes no budget-only mutation stop.
 //
+
+//! Autonomous budget admission domain regression tests.
+
 use atrament_autonomous_budget_admission::{
     AutonomousBudgetAdmission, AutonomousBudgetClass,
     AutonomousBudgetExhaustion,

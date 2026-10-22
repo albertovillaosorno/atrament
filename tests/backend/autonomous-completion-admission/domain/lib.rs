@@ -30,6 +30,9 @@
 // - Defaults:
 //   - Only satisfied semantic state with complete or absent output completes.
 //
+
+//! Autonomous completion admission domain regression tests.
+
 use atrament_autonomous_completion_admission::{
     AutonomousRequestedOutputCompletion,
     AutonomousRequestedOutputItemCompletion, AutonomousSemanticGoalCompletion,

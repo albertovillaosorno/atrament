@@ -29,6 +29,9 @@
 // - Defaults:
 //   - No nonterminal state is represented by this terminal-only domain.
 //
+
+//! Autonomous goal outcome domain regression tests.
+
 use atrament_autonomous_goal_outcome::{
     AutonomousGoalTerminalClass, AutonomousGoalTerminalDisposition,
     autonomous_goal_terminal_disposition,

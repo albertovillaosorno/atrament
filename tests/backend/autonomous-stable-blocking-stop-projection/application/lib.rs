@@ -31,6 +31,9 @@
 // - Defaults:
 //   - Non-stable-blocking evidence remains nonterminal on this projection.
 //
+
+//! Autonomous stable blocking stop projection application regression tests.
+
 use atrament_autonomous_goal_outcome::AutonomousGoalTerminalClass;
 use atrament_autonomous_progress_evidence::AutonomousProgressEvidenceClass;
 use atrament_autonomous_stable_blocking_stop_projection::{

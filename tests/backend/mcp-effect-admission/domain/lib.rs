@@ -30,6 +30,9 @@
 // - Defaults:
 //   - The empty mask rejects every capability.
 //
+
+//! Mcp effect admission domain regression tests.
+
 use atrament_mcp_capability_effect::{
     McpApplicationCapabilityClass, McpApplicationEffectClass,
 };

@@ -31,6 +31,9 @@
 // - Defaults:
 //   - Findings are supplied by fixtures rather than calculated here.
 //
+
+//! Handwriting variation quality evidence domain regression tests.
+
 use atrament_handwriting_variation_quality_evidence::{
     HandwritingVariationQualityAxis, HandwritingVariationQualityEvidence,
     HandwritingVariationQualityEvidenceError,

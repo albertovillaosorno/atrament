@@ -31,6 +31,9 @@
 // - Defaults:
 //   - Caller-owned sequence order is preserved exactly.
 //
+
+//! Render manifest domain regression tests.
+
 use atrament_render_manifest::{
     RenderAppearanceInputs, RenderBehaviorInputs, RenderManifest,
     RenderSourceInputs,

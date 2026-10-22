@@ -29,12 +29,13 @@
 // - Defaults:
 //   - Empty exhaustion evidence cannot fabricate a terminal result.
 //
+
+//! Autonomous budget stop projection application regression tests.
+
 use atrament_autonomous_budget_admission::{
     AutonomousBudgetClass, autonomous_budget_admission,
 };
-use atrament_autonomous_budget_stop_projection::{
-    autonomous_budget_terminal_outcome,
-};
+use atrament_autonomous_budget_stop_projection::autonomous_budget_terminal_outcome;
 use atrament_autonomous_goal_outcome::AutonomousGoalTerminalClass;
 
 const BUDGETS: [AutonomousBudgetClass; 5] = [

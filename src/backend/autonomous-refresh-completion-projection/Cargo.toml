@@ -19,3 +19,7 @@ workspace = true
 
 [lints]
 workspace = true
+
+[[test]]
+name = "autonomous_refresh_completion_projection_application"
+path = "../../../tests/backend/autonomous-refresh-completion-projection/application/lib.rs"

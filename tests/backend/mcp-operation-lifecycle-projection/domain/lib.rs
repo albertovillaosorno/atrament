@@ -30,6 +30,9 @@
 // - Defaults:
 //   - No mapping means no shared application operation lifecycle is implied.
 //
+
+//! Mcp operation lifecycle projection domain regression tests.
+
 use atrament_application_operation_lifecycle::{
     ApplicationOperationClass, ApplicationOperationCompletionDisposition,
     ApplicationOperationCompletionObservation,

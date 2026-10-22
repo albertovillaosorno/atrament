@@ -31,6 +31,9 @@
 // - Defaults:
 //   - Artifact identities and supporting evidence remain caller-owned.
 //
+
+//! English spanish corpus evidence domain regression tests.
+
 use atrament_english_spanish_corpus_evidence::{
     EnglishSpanishCorpusEvidenceError, EnglishSpanishCorpusObservation,
     EnglishSpanishCorpusScenario, validate_english_spanish_corpus_evidence,

@@ -30,6 +30,9 @@
 // - Defaults:
 //   - Every non-No-op result stays nonterminal on this projection.
 //
+
+//! Autonomous no op completion projection application regression tests.
+
 use atrament_autonomous_completion_admission::{
     AutonomousRequestedOutputCompletion, AutonomousSemanticGoalCompletion,
 };

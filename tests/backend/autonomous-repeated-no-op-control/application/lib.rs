@@ -32,6 +32,9 @@
 // - Defaults:
 //   - False never means permission to continue.
 //
+
+//! Autonomous repeated no op control application regression tests.
+
 use atrament_autonomous_progress_evidence::AutonomousProgressEvidenceClass;
 use atrament_autonomous_repeated_no_op_control::{
     AutonomousNoOpObservation, autonomous_repeated_no_op_progress_evidence,

@@ -10,3 +10,7 @@ path = "domain/lib.rs"
 
 [lints]
 workspace = true
+
+[[test]]
+name = "autonomous_physical_boundary_domain"
+path = "../../../tests/backend/autonomous-physical-boundary/domain/lib.rs"

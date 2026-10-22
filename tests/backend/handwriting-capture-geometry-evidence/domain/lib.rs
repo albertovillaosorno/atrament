@@ -30,6 +30,9 @@
 // - Defaults:
 //   - Evidence values are supplied by fixtures rather than inferred.
 //
+
+//! Handwriting capture geometry evidence domain regression tests.
+
 use atrament_handwriting_capture_geometry_evidence::{
     PhotographedCalibrationGeometryAxis,
     PhotographedCalibrationGeometryEvidence,
@@ -107,7 +110,7 @@ fn every_duplicate_axis_rejects_before_missing_axis_evaluation() {
             .iter()
             .position(|item| item.axis != duplicate)
             .expect("seven-axis fixture always has another axis");
-        report.observations.remove(missing_index);
+        let _removed_observation = report.observations.remove(missing_index);
         report.observations.insert(2, duplicate_observation);
         assert_eq!(
             validate_photographed_calibration_geometry_evidence(&report),

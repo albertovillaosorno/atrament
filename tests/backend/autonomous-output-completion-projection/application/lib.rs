@@ -29,6 +29,9 @@
 // - Defaults:
 //   - Only successful projection/export/replay results count complete.
 //
+
+//! Autonomous output completion projection application regression tests.
+
 use atrament_autonomous_completion_admission::
     AutonomousRequestedOutputItemCompletion as OutputItemCompletion;
 use atrament_autonomous_output_completion_projection::

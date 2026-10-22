@@ -29,6 +29,9 @@
 // - Defaults:
 //   - Future evidence requires an explicit new contract decision.
 //
+
+//! Autonomous progress evidence domain regression tests.
+
 use atrament_autonomous_progress_evidence::{
     AutonomousProgressDisposition, AutonomousProgressEvidenceClass,
     autonomous_progress_disposition,
