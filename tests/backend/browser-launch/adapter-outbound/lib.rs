@@ -30,13 +30,21 @@
 //   - Uses standard Unix commands whose inherited output would expose the
 //     synthetic launch credential.
 //
+
+//! Fail-closed browser opener lifecycle regression tests.
+
 use std::ffi::OsStr;
 #[cfg(unix)]
 use std::time::{Duration, Instant};
 
-#[allow(dead_code)]
+#[allow(
+    dead_code,
+    unreachable_pub,
+    reason = "test-only module includes the public opener implementation",
+)]
 #[path = "../../../../src/backend/browser-launch/adapter-outbound/lib.rs"]
 mod browser_launch;
+use atrament_browser_launch as _;
 
 const ORIGIN: &str = "http://127.0.0.1:43123";
 const PRIVATE_LAUNCH_URL: &str = concat!(

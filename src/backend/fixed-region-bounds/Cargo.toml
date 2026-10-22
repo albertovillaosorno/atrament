@@ -13,3 +13,7 @@ path = "domain/lib.rs"
 
 [lints]
 workspace = true
+
+[[test]]
+name = "fixed_region_bounds_domain"
+path = "../../../tests/backend/fixed-region-bounds/domain/lib.rs"

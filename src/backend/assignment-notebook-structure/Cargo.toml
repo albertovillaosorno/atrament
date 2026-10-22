@@ -13,3 +13,7 @@ path = "domain/lib.rs"
 
 [lints]
 workspace = true
+
+[[test]]
+name = "assignment_notebook_structure_domain"
+path = "../../../tests/backend/assignment-notebook-structure/domain/lib.rs"

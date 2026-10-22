@@ -7,7 +7,8 @@
 // License-File:
 //   - LICENSE-MIT
 //
-// Boundary-Contract:
+
+//! Fail-closed device-neutral motion dry-run tests.// Boundary-Contract:
 // - Owns:
 //   - Regression evidence for exact-plan dry-run binding and limit refusal.
 // - Must-Not:
@@ -185,7 +186,7 @@ fn exact_plan_and_calibration_with_complete_limits_passes_dry_run() {
 fn operation_count_mismatch_rejects_before_limit_interpretation() {
     let mut evaluations = clean_evaluations();
     evaluations[0].state = DryRunLimitState::Violated;
-    evaluations.pop();
+    let _removed = evaluations.pop();
     let dry_run = MotionPlanDryRun {
         calibration: calibration(),
         limit_evaluations: evaluations,

@@ -7,7 +7,8 @@
 // License-File:
 //   - LICENSE-MIT
 //
-// Boundary-Contract:
+
+//! Writable-region bounds regression tests.// Boundary-Contract:
 // - Owns:
 //   - Regression evidence for exact post-placement fixed-region overflow.
 // - Must-Not:

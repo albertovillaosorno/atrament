@@ -7,7 +7,8 @@
 // License-File:
 //   - LICENSE-MIT
 //
-// Boundary-Contract:
+
+//! Source and claim citation linkage regression tests.// Boundary-Contract:
 // - Owns:
 //   - Regression evidence for exact cited-claim source review linkage.
 // - Must-Not:

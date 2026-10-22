@@ -7,7 +7,8 @@
 // License-File:
 //   - LICENSE-MIT
 //
-// Boundary-Contract:
+
+//! One-shot formatting prompt contract regression tests.// Boundary-Contract:
 // - Owns:
 //   - Regression evidence for self-contained initial formatting-prompt inputs.
 // - Must-Not:
@@ -156,7 +157,7 @@ fn every_single_ascii_version_edit_remains_unsupported() {
 
     for index in 0..current.len() {
         let mut deleted = current.to_vec();
-        deleted.remove(index);
+        let _removed = deleted.remove(index);
         assert_unsupported(String::from_utf8(deleted).expect("ASCII deletion"));
         cases += 1;
 

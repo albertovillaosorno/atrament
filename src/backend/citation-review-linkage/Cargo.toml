@@ -13,3 +13,7 @@ path = "domain/lib.rs"
 
 [lints]
 workspace = true
+
+[[test]]
+name = "citation_review_linkage_domain"
+path = "../../../tests/backend/citation-review-linkage/domain/lib.rs"

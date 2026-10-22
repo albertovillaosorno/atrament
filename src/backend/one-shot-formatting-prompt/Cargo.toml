@@ -10,3 +10,7 @@ path = "domain/lib.rs"
 
 [lints]
 workspace = true
+
+[[test]]
+name = "one_shot_formatting_prompt_domain"
+path = "../../../tests/backend/one-shot-formatting-prompt/domain/lib.rs"

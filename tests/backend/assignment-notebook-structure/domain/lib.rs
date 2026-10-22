@@ -7,7 +7,8 @@
 // License-File:
 //   - LICENSE-MIT
 //
-// Boundary-Contract:
+
+//! Assignment notebook semantic structure regression tests.// Boundary-Contract:
 // - Owns:
 //   - Regression evidence for assignment organization over semantic blocks.
 // - Must-Not:

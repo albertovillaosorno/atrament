@@ -10,3 +10,7 @@ path = "domain/lib.rs"
 
 [lints]
 workspace = true
+
+[[test]]
+name = "english_spanish_grapheme_inventory_domain"
+path = "../../../tests/backend/english-spanish-grapheme-inventory/domain/lib.rs"

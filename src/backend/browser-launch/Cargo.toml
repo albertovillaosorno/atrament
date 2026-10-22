@@ -10,3 +10,7 @@ path = "adapter-outbound/lib.rs"
 
 [lints]
 workspace = true
+
+[[test]]
+name = "browser_launch_adapter"
+path = "../../../tests/backend/browser-launch/adapter-outbound/lib.rs"

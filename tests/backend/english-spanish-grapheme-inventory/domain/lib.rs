@@ -7,7 +7,8 @@
 // License-File:
 //   - LICENSE-MIT
 //
-// Boundary-Contract:
+
+//! Bilingual grapheme inventory regression tests.// Boundary-Contract:
 // - Owns:
 //   - Regression evidence for the exact non-mathematical English/Spanish
 //     handwriting grapheme inventory.
@@ -69,12 +70,12 @@ fn inventory_has_exact_category_sizes_and_no_duplicate_spellings() {
             EnglishSpanishGraphemeCategory::BasicLatinLetter => {
                 basic_letters += 1;
             }
-            EnglishSpanishGraphemeCategory::Numeral => numerals += 1,
-            EnglishSpanishGraphemeCategory::Punctuation => punctuation += 1,
-            EnglishSpanishGraphemeCategory::SpanishDecomposedEquivalent => {
+            Numeral => numerals += 1,
+            Punctuation => punctuation += 1,
+            SpanishDecomposedEquivalent => {
                 decomposed += 1;
             }
-            EnglishSpanishGraphemeCategory::SpanishPrecomposedLetter => {
+            SpanishPrecomposedLetter => {
                 precomposed += 1;
             }
         }

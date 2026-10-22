@@ -14,3 +14,7 @@ atrament_device_neutral_motion_plan = { workspace = true }
 
 [lints]
 workspace = true
+
+[[test]]
+name = "motion_plan_dry_run_domain"
+path = "../../../tests/backend/motion-plan-dry-run/domain/lib.rs"
