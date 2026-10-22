@@ -29,12 +29,16 @@
 // - Defaults:
 //   - Rejected candidates leave the previously accepted revision unchanged.
 //
+
+//! Accepted semantic notebook and history regression tests.
+
 use std::cmp::Ordering;
 use std::collections::BTreeSet;
 use std::num::NonZeroU32;
 use std::sync::{Arc, Barrier, Mutex};
 use std::sync::atomic::{AtomicUsize, Ordering as AtomicOrdering};
 
+use atrament_mathematics_source as _;
 use atrament_physical_page_profile::{
     BindingEdge, BorderShape, Length, Orientation,
     PageProfile as PhysicalPageProfile, PageProfileError, PaperMarkAppearance,
@@ -3950,7 +3954,7 @@ fn unsupported_mathematics_rejects_atomically_instead_of_substituting() {
     let (unsupported, formula) =
         candidate_math_notebook(&ids, r"x + \mystery{y}", FormulaMode::Display);
     let mut session = SemanticNotebookSessionService::default();
-    let _ = session.accept(valid);
+    drop(session.accept(valid));
     let before = session.current().expect("accepted revision").clone();
     assert_eq!(
         session.accept(unsupported),
@@ -3971,7 +3975,7 @@ fn optional_math_environment_position_rejects_atomically() {
     let (unsupported, formula) =
         candidate_math_notebook(&ids, source, FormulaMode::Display);
     let mut session = SemanticNotebookSessionService::default();
-    let _ = session.accept(valid);
+    drop(session.accept(valid));
     let before = session.current().expect("accepted revision").clone();
     assert_eq!(
         session.accept(unsupported),
@@ -3992,7 +3996,7 @@ fn unescaped_math_special_rejects_candidate_atomically() {
     let (invalid, formula) =
         candidate_math_notebook(&ids, source, FormulaMode::Inline);
     let mut session = SemanticNotebookSessionService::default();
-    let _ = session.accept(valid);
+    drop(session.accept(valid));
     let before = session.current().expect("accepted revision").clone();
     assert_eq!(
         session.accept(invalid),
@@ -4016,7 +4020,7 @@ fn malformed_mathematics_rejects_atomically_with_typed_syntax_failure() {
     let (malformed, formula) =
         candidate_math_notebook(&ids, r"\frac{1}", FormulaMode::Display);
     let mut session = SemanticNotebookSessionService::default();
-    let _ = session.accept(valid);
+    drop(session.accept(valid));
     let before = session.current().expect("accepted revision").clone();
     assert_eq!(
         session.accept(malformed),
@@ -4041,7 +4045,7 @@ fn outer_environment_alignment_does_not_leak_into_substack_candidate() {
     let (invalid, formula) =
         candidate_math_notebook(&ids, source, FormulaMode::Display);
     let mut session = SemanticNotebookSessionService::default();
-    let _ = session.accept(valid);
+    drop(session.accept(valid));
     let before = session.current().expect("accepted revision").clone();
     assert_eq!(
         session.accept(invalid),
@@ -4067,7 +4071,7 @@ fn environment_closing_inside_group_rejects_candidate_atomically() {
     let (invalid, formula) =
         candidate_math_notebook(&ids, &source, FormulaMode::Display);
     let mut session = SemanticNotebookSessionService::default();
-    let _ = session.accept(valid);
+    drop(session.accept(valid));
     let before = session.current().expect("accepted revision").clone();
     assert_eq!(
         session.accept(invalid),
@@ -4093,7 +4097,7 @@ fn environment_crossing_group_close_rejects_candidate_atomically() {
     let (invalid, formula) =
         candidate_math_notebook(&ids, &source, FormulaMode::Display);
     let mut session = SemanticNotebookSessionService::default();
-    let _ = session.accept(valid);
+    drop(session.accept(valid));
     let before = session.current().expect("accepted revision").clone();
     assert_eq!(
         session.accept(invalid),
@@ -12673,7 +12677,7 @@ fn concurrent_history_undo_and_batch_apply_allow_one_commit_from_one_base() {
     let undo_service = Arc::clone(&service);
     let undo_barrier = Arc::clone(&barrier);
     let undo = std::thread::spawn(move || {
-        undo_barrier.wait();
+        drop(undo_barrier.wait());
         undo_service
             .lock()
             .expect("Undo race lock")
@@ -12682,13 +12686,13 @@ fn concurrent_history_undo_and_batch_apply_allow_one_commit_from_one_base() {
     let apply_service = Arc::clone(&service);
     let apply_barrier = Arc::clone(&barrier);
     let apply = std::thread::spawn(move || {
-        apply_barrier.wait();
+        drop(apply_barrier.wait());
         apply_service
             .lock()
             .expect("Apply race lock")
             .apply_direct_edit_batch(batch)
     });
-    barrier.wait();
+    drop(barrier.wait());
     let undo = undo.join().expect("Undo race thread");
     let apply = apply.join().expect("Apply race thread");
     let service = service.lock().expect("final race lock");
@@ -12800,7 +12804,7 @@ fn concurrent_direct_edit_batch_apply_allows_one_commit_from_one_base() {
     let first_service = Arc::clone(&service);
     let first_barrier = Arc::clone(&barrier);
     let first = std::thread::spawn(move || {
-        first_barrier.wait();
+        drop(first_barrier.wait());
         first_service
             .lock()
             .expect("first application lock")
@@ -12809,13 +12813,13 @@ fn concurrent_direct_edit_batch_apply_allows_one_commit_from_one_base() {
     let second_service = Arc::clone(&service);
     let second_barrier = Arc::clone(&barrier);
     let second = std::thread::spawn(move || {
-        second_barrier.wait();
+        drop(second_barrier.wait());
         second_service
             .lock()
             .expect("second application lock")
             .apply_direct_edit_batch(second_batch)
     });
-    barrier.wait();
+    drop(barrier.wait());
     let outcomes = [
         first.join().expect("first application thread"),
         second.join().expect("second application thread"),
@@ -15448,7 +15452,7 @@ fn duplicate_candidate_identity_rejects_without_changing_current_revision() {
     let mut invalid = candidate_notebook(&candidate_ids, "duplicate");
     invalid.pages[0].id = invalid.id;
     let mut session = SemanticNotebookSessionService::default();
-    let _ = session.accept(valid);
+    drop(session.accept(valid));
     let before = session.current().expect("accepted revision").clone();
 
     let outcome = session.accept(invalid);
@@ -15471,7 +15475,7 @@ fn dangling_candidate_reference_rejects_without_changing_current_revision() {
         target: missing,
     });
     let mut session = SemanticNotebookSessionService::default();
-    let _ = session.accept(valid);
+    drop(session.accept(valid));
     let before = session.current().expect("accepted revision").clone();
 
     let outcome = session.accept(invalid);
@@ -15489,7 +15493,7 @@ fn invalid_page_profile_rejects_without_changing_current_revision() {
     invalid.page_profiles[0].geometry.printable_region.width = Length::ZERO;
     let invalid_profile = invalid.page_profiles[0].id;
     let mut session = SemanticNotebookSessionService::default();
-    let _ = session.accept(valid);
+    drop(session.accept(valid));
     let before = session.current().expect("accepted revision").clone();
 
     let outcome = session.accept(invalid);
@@ -15510,7 +15514,7 @@ fn page_profile_reference_kind_rejects_without_changing_current_revision() {
     invalid.pages[0].paper_profile = invalid.pages[0].id;
     let wrong_owner = invalid.pages[0].id;
     let mut session = SemanticNotebookSessionService::default();
-    let _ = session.accept(valid);
+    drop(session.accept(valid));
     let before = session.current().expect("accepted revision").clone();
 
     let outcome = session.accept(invalid);
@@ -15531,7 +15535,7 @@ fn debug_output_never_exposes_accepted_notebook_text() {
         "private accepted notebook sentence",
     );
     let mut session = SemanticNotebookSessionService::default();
-    let _ = session.accept(candidate);
+    drop(session.accept(candidate));
 
     let debug = format!("{session:?}");
     assert!(!debug.contains("private accepted notebook sentence"));
@@ -15828,7 +15832,7 @@ fn specialized_candidate_references_reject_wrong_owned_classes() {
             _ => unreachable!("five specialized reference cases"),
         };
         let mut session = SemanticNotebookSessionService::default();
-        let _ = session.accept(valid);
+        drop(session.accept(valid));
         let before = session.current().expect("accepted revision").clone();
 
         assert_eq!(
@@ -15858,7 +15862,7 @@ fn wrong_reference_kind_rejects_without_changing_current_revision() {
     };
     spans[0].style = Some(page_id);
     let mut session = SemanticNotebookSessionService::default();
-    let _ = session.accept(valid);
+    drop(session.accept(valid));
     let before = session.current().expect("accepted revision").clone();
 
     let outcome = session.accept(invalid);
@@ -15919,7 +15923,7 @@ fn every_simple_inline_family_validates_span_reference_kinds() {
             invalid.pages[0].flows[0].blocks[0].content = constructor(spans);
 
             let mut session = SemanticNotebookSessionService::default();
-            let _ = session.accept(valid);
+            drop(session.accept(valid));
             let before = session.current().expect("accepted revision").clone();
             assert!(matches!(
                 session.accept(invalid),

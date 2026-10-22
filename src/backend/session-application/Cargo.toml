@@ -22,6 +22,17 @@ atrament_unicode_grapheme_edit = { workspace = true }
 
 [lib]
 path = "application/lib.rs"
+test = false
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+atrament_english_spanish_grapheme_inventory = { workspace = true }
+atrament_flow_pagination = { workspace = true }
+atrament_physical_page_profile = { workspace = true }
+atrament_unicode_grapheme_segmentation = { workspace = true }
+
+[[test]]
+name = "session_application_lifecycle"
+path = "../../../tests/backend/session-application/application/lib.rs"

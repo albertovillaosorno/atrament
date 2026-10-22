@@ -32,6 +32,9 @@
 // - Defaults:
 //   - Starts with empty draft fields, no accepted revision, and no asset bytes.
 //
+
+//! Disposable session application regression tests.
+
 use std::collections::BTreeSet;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::num::NonZeroU32;
@@ -101,9 +104,15 @@ use atrament_unicode_grapheme_cursor::{
 use atrament_unicode_grapheme_edit::{GraphemeRange, GraphemeRangeError};
 use atrament_unicode_grapheme_segmentation::UnicodeGraphemeSegmentation;
 
-#[allow(dead_code)]
+// This fixture includes the application implementation for test-only hooks.
+#[allow(
+    dead_code,
+    unreachable_pub,
+    reason = "test-only inclusion of public application implementation",
+)]
 #[path = "../../../../src/backend/session-application/application/lib.rs"]
 mod application;
+use atrament_session_application as _;
 
 const CURRENT_COMMAND_BEHAVIOR_VERSION: CommandBehaviorVersion =
     CommandBehaviorVersion(99);
@@ -1298,7 +1307,7 @@ fn run_process_fixture_child(mode: &str) {
     println!("{PROCESS_POPULATED_READY}");
     std::io::stdout().flush().expect("flush populated marker");
     let mut release = [0_u8; 1];
-    let _ = std::io::stdin().read(&mut release);
+    drop(std::io::stdin().read(&mut release));
 }
 
 fn spawn_process_fixture(mode: &str) -> std::process::Child {
@@ -1411,7 +1420,7 @@ fn process_restart_drops_session_state_and_derived_outputs() {
         .write_all(b"x")
         .expect("release orderly child");
     let mut orderly_tail = String::new();
-    orderly_stdout
+    let _orderly_bytes = orderly_stdout
         .read_to_string(&mut orderly_tail)
         .expect("drain orderly child stdout");
     assert!(orderly.wait().expect("wait orderly child").success());
@@ -1433,7 +1442,7 @@ fn process_restart_drops_session_state_and_derived_outputs() {
     }
     forced.kill().expect("force session child termination");
     let mut forced_tail = String::new();
-    forced_stdout
+    let _forced_bytes = forced_stdout
         .read_to_string(&mut forced_tail)
         .expect("drain forced child stdout");
     let status = forced.wait().expect("wait forced child");
@@ -3433,20 +3442,20 @@ fn application_routes_history_traversal_through_owned_semantic_authority() {
         panic!("second candidate must be accepted");
     };
 
-    let atrament_semantic_notebook_port::HistoryTraversalOutcome::Traversed {
+    let HistoryTraversalOutcome::Traversed {
         base,
         direction,
         revision: undone,
     } = session.traverse_history(
         second,
-        atrament_semantic_notebook_port::HistoryDirection::Undo,
+        HistoryDirection::Undo,
     ) else {
         panic!("live owner must route Undo");
     };
     assert_eq!(base, second);
     assert_eq!(
         direction,
-        atrament_semantic_notebook_port::HistoryDirection::Undo,
+        HistoryDirection::Undo,
     );
     assert_ne!(undone, first);
     assert_eq!(
@@ -3462,12 +3471,12 @@ fn application_routes_history_traversal_through_owned_semantic_authority() {
         }),
     );
 
-    let atrament_semantic_notebook_port::HistoryTraversalOutcome::Traversed {
+    let HistoryTraversalOutcome::Traversed {
         revision: redone,
         ..
     } = session.traverse_history(
         undone,
-        atrament_semantic_notebook_port::HistoryDirection::Redo,
+        HistoryDirection::Redo,
     ) else {
         panic!("live owner must route Redo");
     };

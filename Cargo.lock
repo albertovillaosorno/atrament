@@ -592,6 +592,7 @@ name = "atrament_semantic_notebook_session"
 version = "0.1.0"
 dependencies = [
  "atrament_mathematics_source",
+ "atrament_physical_page_profile",
  "atrament_semantic_command_graph",
  "atrament_semantic_notebook",
  "atrament_semantic_notebook_port",
@@ -601,8 +602,11 @@ dependencies = [
 name = "atrament_session_application"
 version = "0.1.0"
 dependencies = [
+ "atrament_english_spanish_grapheme_inventory",
  "atrament_export_layout_preflight",
+ "atrament_flow_pagination",
  "atrament_media_job_session",
+ "atrament_physical_page_profile",
  "atrament_semantic_fixed_region_layout",
  "atrament_semantic_flow_pagination",
  "atrament_semantic_history_result",
@@ -614,6 +618,7 @@ dependencies = [
  "atrament_unicode_grapheme_boundary_port",
  "atrament_unicode_grapheme_cursor",
  "atrament_unicode_grapheme_edit",
+ "atrament_unicode_grapheme_segmentation",
 ]
 
 [[package]]

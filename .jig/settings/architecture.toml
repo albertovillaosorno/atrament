@@ -276,7 +276,8 @@ depends_on = ["atrament_mathematics_source", "atrament_physical_page_profile"]
 depends_on = ["atrament_semantic_command_graph", "atrament_semantic_notebook"]
 
 [component.atrament_semantic_notebook_session]
-depends_on = ["atrament_mathematics_source", "atrament_semantic_command_graph", "atrament_semantic_notebook", "atrament_semantic_notebook_port"]
+# Physical page profile is used by the integration regression target only.
+depends_on = ["atrament_mathematics_source", "atrament_physical_page_profile", "atrament_semantic_command_graph", "atrament_semantic_notebook", "atrament_semantic_notebook_port"]
 
 [component.atrament_transcript_evidence]
 depends_on = []
@@ -320,7 +321,8 @@ depends_on = []
 depends_on = ["atrament_browser_launch", "atrament_session_application", "atrament_session_handshake", "atrament_session_runtime", "atrament_session_secret"]
 
 [component.atrament_session_application]
-depends_on = ["atrament_export_layout_preflight", "atrament_media_job_session", "atrament_semantic_fixed_region_layout", "atrament_semantic_flow_pagination", "atrament_semantic_history_result", "atrament_semantic_notebook", "atrament_semantic_notebook_port", "atrament_semantic_notebook_session", "atrament_session_draft", "atrament_session_draft_port", "atrament_unicode_grapheme_boundary_port", "atrament_unicode_grapheme_cursor", "atrament_unicode_grapheme_edit"]
+# Additional direct imports are confined to the integration harness.
+depends_on = ["atrament_english_spanish_grapheme_inventory", "atrament_export_layout_preflight", "atrament_flow_pagination", "atrament_media_job_session", "atrament_physical_page_profile", "atrament_semantic_fixed_region_layout", "atrament_semantic_flow_pagination", "atrament_semantic_history_result", "atrament_semantic_notebook", "atrament_semantic_notebook_port", "atrament_semantic_notebook_session", "atrament_session_draft", "atrament_session_draft_port", "atrament_unicode_grapheme_boundary_port", "atrament_unicode_grapheme_cursor", "atrament_unicode_grapheme_edit", "atrament_unicode_grapheme_segmentation"]
 
 [component.atrament_session_draft]
 depends_on = ["atrament_diagnostic", "atrament_session_draft_port"]

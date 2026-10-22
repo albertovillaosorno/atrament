@@ -169,6 +169,7 @@ atrament_transcript_evidence = { path = "src/backend/transcript-evidence" }
 atrament_unicode_grapheme_boundary_port = { path = "src/backend/unicode-grapheme-boundary-port" }
 atrament_unicode_grapheme_cursor = { path = "src/backend/unicode-grapheme-cursor" }
 atrament_unicode_grapheme_edit = { path = "src/backend/unicode-grapheme-edit" }
+atrament_unicode_grapheme_segmentation = { path = "src/backend/unicode-grapheme-segmentation" }
 getrandom = "=0.4.3"
 unicode-segmentation = "=1.13.3"
 

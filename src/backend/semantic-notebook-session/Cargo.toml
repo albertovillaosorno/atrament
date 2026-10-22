@@ -13,6 +13,14 @@ atrament_semantic_notebook_port = { workspace = true }
 
 [lib]
 path = "application/lib.rs"
+test = false
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+atrament_physical_page_profile = { workspace = true }
+
+[[test]]
+name = "semantic_notebook_session_application"
+path = "../../../tests/backend/semantic-notebook-session/application/lib.rs"
