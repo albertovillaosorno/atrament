@@ -133,3 +133,12 @@ read and parse real archive bytes, establish measurements and hashes, validate
 typed section schemas and resource bounds, and explicitly accept the resulting
 profile into session state. Preflight success **does not** import a file,
 persist anything, or claim an external path capability.
+
+A mandatory, caller-selected Import resource budget now rejects excessive
+manifest entry counts, oversized individual declared entries, aggregate declared
+bytes, and `u64` sum overflow. The gate also caps observed archive-name counts
+**before** allocating inventory membership sets. Tests cover exact bounds,
+zero budgets, wrong-purpose precedence, and declared/observed limit failures.
+These constraints operate on already-parsed declarations and name evidence:
+actual decompressed byte counts, compression expansion, parser allocation,
+media decoding and runtime memory ceilings must be enforced separately.

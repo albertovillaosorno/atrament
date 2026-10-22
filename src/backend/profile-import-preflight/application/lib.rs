@@ -15,8 +15,8 @@
 //   - Read ZIP files, synthesize provider evidence, decode sections, admit
 //     arbitrary path authority, mutate a profile, or persist imported bytes.
 // - Allows:
-//   - Inputs: A classified path, parsed manifest, supported feature names,
-//     observed archive names, and separately measured encoding evidence.
+//   - Inputs: Classified path, parsed manifest, selected resource budget,
+//     supported features, observed names, and measured encoding evidence.
 //   - Outputs: Typed rejection or sealed entry-verification prerequisites.
 //   - Side effects: None.
 // - Split-When:
@@ -47,11 +47,65 @@ use atrament_handwriting_profile_container::{
     validate_profile_manifest_view,
 };
 
+/// Caller-selected upper bounds for an admitted portable-profile archive.
+///
+/// These apply to manifest declarations, not yet verified ZIP payload bytes.
+/// The adapter must independently bound actual compressed/uncompressed bytes,
+/// expansion, and total resources while reading and parsing each member.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ProfileImportBudget {
+    /// Maximum cumulative declared uncompressed member bytes.
+    pub maximum_declared_bytes: u64,
+    /// Maximum number of declared non-manifest archive members.
+    pub maximum_entries: usize,
+    /// Maximum declared uncompressed bytes in one archive member.
+    pub maximum_entry_bytes: u64,
+}
+
+/// Explicit resource-budget failure before allocating an entry inventory.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ProfileImportBudgetError {
+    /// A member's declared size exceeds the configured individual limit.
+    EntryBytesExceeded {
+        /// Member's declared uncompressed byte length.
+        declared: u64,
+        /// Zero-based manifest entry index (no path strings are echoed).
+        index: usize,
+        /// Maximum declared bytes for any member.
+        limit: u64,
+    },
+    /// Too many archive members are declared by the manifest.
+    EntryCountExceeded {
+        /// Maximum permitted number of non-manifest members.
+        limit: usize,
+        /// Actual count declared by the manifest.
+        observed: usize,
+    },
+    /// The observed archive includes more member names than the budget allows.
+    ObservedCountExceeded {
+        /// Maximum permitted entry-name count including root manifest.
+        limit: usize,
+        /// Number of entry names observed by the archive adapter.
+        observed: usize,
+    },
+    /// Aggregate member sizes exceed the caller's declared-byte budget.
+    TotalBytesExceeded {
+        /// Sum of member byte lengths, when representable.
+        declared: u64,
+        /// Maximum cumulative declared byte count.
+        limit: u64,
+    },
+    /// Aggregate declared lengths overflow the `u64` counting authority.
+    TotalOverflow,
+}
+
 /// Typed Import preflight failure before any profile section can be decoded.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ProfileImportPreflightError {
     /// Canonical ZIP encoding validation rejected measured archive metadata.
     ArchiveEncoding(ProfileArchiveEncodingError),
+    /// Caller-supplied resource bounds reject unsafe declared member sizes.
+    Budget(ProfileImportBudgetError),
     /// Archive names do not exactly match the admitted manifest declarations.
     EntryInventory(ProfileEntryInventoryError),
     /// Manifest metadata or required features are invalid for this reader.
@@ -64,6 +118,7 @@ pub enum ProfileImportPreflightError {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ProfileImportPreflight<'path, 'manifest, 'observed> {
     archive_encoding: ValidatedProfileArchiveEncoding,
+    budget: ProfileImportBudget,
     inventory: ValidatedProfileEntryInventory<'manifest, 'observed>,
     path: &'path ExplicitFilePathIntent,
 }
@@ -75,6 +130,12 @@ impl<'path, 'manifest, 'observed>
     #[must_use]
     pub const fn archive_encoding(&self) -> ValidatedProfileArchiveEncoding {
         self.archive_encoding
+    }
+
+    /// Exact caller-selected budget admitted for this manifest declaration.
+    #[must_use]
+    pub const fn budget(&self) -> ProfileImportBudget {
+        self.budget
     }
 
     /// Exact validated manifest and observed archive entry-name inventory.
@@ -110,6 +171,46 @@ impl<'path, 'manifest, 'observed>
     }
 }
 
+/// Validate manifest-declared sizes before inventory and content work.
+///
+/// The budget is explicitly chosen by the caller, and zero bounds are valid
+/// fail-closed values. This does not inspect real file bytes or ZIP records.
+///
+/// # Errors
+///
+/// Returns count limit, then first oversized entry or running total failure.
+/// A sum that cannot be represented in `u64` is rejected without wrapping.
+pub fn validate_profile_import_budget(
+    manifest: &ProfileManifest,
+    budget: ProfileImportBudget,
+) -> Result<(), ProfileImportBudgetError> {
+    if manifest.entries.len() > budget.maximum_entries {
+        return Err(ProfileImportBudgetError::EntryCountExceeded {
+            limit: budget.maximum_entries,
+            observed: manifest.entries.len(),
+        });
+    }
+    let mut total: u64 = 0;
+    for (index, entry) in manifest.entries.iter().enumerate() {
+        if entry.byte_length > budget.maximum_entry_bytes {
+            return Err(ProfileImportBudgetError::EntryBytesExceeded {
+                declared: entry.byte_length,
+                index,
+                limit: budget.maximum_entry_bytes,
+            });
+        }
+        total = total.checked_add(entry.byte_length)
+            .ok_or(ProfileImportBudgetError::TotalOverflow)?;
+        if total > budget.maximum_declared_bytes {
+            return Err(ProfileImportBudgetError::TotalBytesExceeded {
+                declared: total,
+                limit: budget.maximum_declared_bytes,
+            });
+        }
+    }
+    Ok(())
+}
+
 /// Compose path intent, encoding, manifest, and exact member-name admission.
 ///
 /// This function does **not** read the file or prove that observations came
@@ -120,14 +221,15 @@ impl<'path, 'manifest, 'observed>
 ///
 /// # Errors
 ///
-/// Returns the first failure in path-purpose, encoding, manifest, then
-/// archive-entry-inventory order. No later phase executes after rejection.
+/// Returns the first failure in path-purpose, encoding, resource budget,
+/// manifest, then archive-entry-inventory order. Later phases do not execute.
 pub fn preflight_explicit_profile_import<'path, 'manifest, 'observed>(
     path: &'path ExplicitFilePathIntent,
     manifest: &'manifest ProfileManifest,
     supported_required_features: &[&str],
     observed_paths: &'observed [&'observed str],
     encoding: ProfileArchiveEncodingEvidence,
+    budget: ProfileImportBudget,
 ) -> Result<
     ProfileImportPreflight<'path, 'manifest, 'observed>,
     ProfileImportPreflightError,
@@ -137,6 +239,17 @@ pub fn preflight_explicit_profile_import<'path, 'manifest, 'observed>(
     }
     let archive_encoding = validate_profile_archive_encoding_view(encoding)
         .map_err(ProfileImportPreflightError::ArchiveEncoding)?;
+    validate_profile_import_budget(manifest, budget)
+        .map_err(ProfileImportPreflightError::Budget)?;
+    let observed_limit = budget.maximum_entries.saturating_add(1);
+    if observed_paths.len() > observed_limit {
+        return Err(ProfileImportPreflightError::Budget(
+            ProfileImportBudgetError::ObservedCountExceeded {
+                limit: observed_limit,
+                observed: observed_paths.len(),
+            },
+        ));
+    }
     let validated = validate_profile_manifest_view(
         manifest, supported_required_features,
     )
@@ -146,6 +259,7 @@ pub fn preflight_explicit_profile_import<'path, 'manifest, 'observed>(
         .map_err(ProfileImportPreflightError::EntryInventory)?;
     Ok(ProfileImportPreflight {
         archive_encoding,
+        budget,
         inventory,
         path,
     })

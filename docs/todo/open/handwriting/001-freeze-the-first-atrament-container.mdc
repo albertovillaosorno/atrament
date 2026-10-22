@@ -91,3 +91,12 @@ fixture and exact entry-evidence checks prohibit interpreting one successful
 container sub-check as completed Import. The actual ZIP and canonical JSON
 parsers, independent SHA-256 byte hashing, resource bounds, typed-section
 decoding, and accepted-profile mutation remain open.
+
+A mandatory, caller-selected Import resource budget now rejects excessive
+manifest entry counts, oversized individual declared entries, aggregate declared
+bytes, and `u64` sum overflow. The gate also caps observed archive-name counts
+**before** allocating inventory membership sets. Tests cover exact bounds,
+zero budgets, wrong-purpose precedence, and declared/observed limit failures.
+These constraints operate on already-parsed declarations and name evidence:
+actual decompressed byte counts, compression expansion, parser allocation,
+media decoding and runtime memory ceilings must be enforced separately.

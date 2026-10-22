@@ -48,7 +48,8 @@ use atrament_handwriting_profile_container::{
     ProfileZip64Requirement, ProfileZip64Use, Sha256Digest,
 };
 use atrament_profile_import_preflight::{
-    ProfileImportPreflightError, preflight_explicit_profile_import,
+    ProfileImportBudget, ProfileImportBudgetError, ProfileImportPreflightError,
+    preflight_explicit_profile_import, validate_profile_import_budget,
 };
 
 fn selected(purpose: ExplicitFilePurpose) -> ExplicitFilePathIntent {
@@ -67,6 +68,14 @@ const fn canonical_encoding() -> ProfileArchiveEncodingEvidence {
         platform_extras: ProfileArchivePlatformExtras::Absent,
         zip64_requirement: ProfileZip64Requirement::Ordinary,
         zip64_use: ProfileZip64Use::Absent,
+    }
+}
+
+const fn budget() -> ProfileImportBudget {
+    ProfileImportBudget {
+        maximum_declared_bytes: 128,
+        maximum_entry_bytes: 64,
+        maximum_entries: 4,
     }
 }
 
@@ -103,12 +112,14 @@ fn valid_explicit_import_seals_exact_entries_but_no_imported_profile() {
     let parsed = manifest();
     let admitted = preflight_explicit_profile_import(
         &path, &parsed, &["strokes"], OBSERVED, canonical_encoding(),
+        budget(),
     )
     .expect("all structural preflight checks accept");
     assert!(std::ptr::eq(admitted.path(), &path));
     assert!(std::ptr::eq(admitted.inventory().manifest(), &parsed));
     assert_eq!(admitted.inventory().observed_paths(), OBSERVED);
     assert_eq!(admitted.archive_encoding().evidence(), canonical_encoding());
+    assert_eq!(admitted.budget(), budget());
     assert_eq!(
         admitted.inventory().manifest().optional_features,
         ["future-optional"],
@@ -164,6 +175,7 @@ fn only_profile_import_purpose_can_reach_archive_preflight() {
             preflight_explicit_profile_import(
                 &path, &parsed, &["strokes"], OBSERVED,
                 malformed_encoding,
+                budget(),
             ),
             Err(ProfileImportPreflightError::WrongPathPurpose),
         );
@@ -173,6 +185,7 @@ fn only_profile_import_purpose_can_reach_archive_preflight() {
         preflight_explicit_profile_import(
             &path, &parsed, &["strokes"], OBSERVED,
             malformed_encoding,
+            budget(),
         ),
         Err(ProfileImportPreflightError::ArchiveEncoding(
             ProfileArchiveEncodingError::CompressedEntry
@@ -210,6 +223,7 @@ fn all_canonical_zip_encoding_cases_preserve_observation_failures() {
                     };
                     let result = preflight_explicit_profile_import(
                         &path, &parsed, &["strokes"], OBSERVED, evidence,
+                        budget(),
                     );
                     let expected =
                         atrament_handwriting_profile_container::
@@ -244,6 +258,7 @@ fn manifest_rejection_precedes_observed_inventory_mismatch() {
     parsed.required_features = vec![String::from("unsupported")];
     let outcome = preflight_explicit_profile_import(
         &path, &parsed, &[], &["other.json"], canonical_encoding(),
+        budget(),
     );
     assert_eq!(
         outcome,
@@ -258,6 +273,7 @@ fn manifest_rejection_precedes_observed_inventory_mismatch() {
         preflight_explicit_profile_import(
             &path, &parsed, &["strokes"], &["assets/source.webp"],
             canonical_encoding(),
+            budget(),
         ),
         Err(ProfileImportPreflightError::EntryInventory(
             ProfileEntryInventoryError::MissingManifest,
@@ -268,6 +284,7 @@ fn manifest_rejection_precedes_observed_inventory_mismatch() {
             &path, &parsed, &["strokes"],
             &[PROFILE_MANIFEST_PATH, "assets/source.webp"],
             canonical_encoding(),
+            budget(),
         ),
         Err(ProfileImportPreflightError::EntryInventory(
             ProfileEntryInventoryError::MissingDeclaredEntry {
@@ -292,4 +309,172 @@ fn notebook_model_and_clipboard_text_never_select_profile_import_paths() {
             ExplicitOverwriteIntent::PreserveExisting,
         ).is_err());
     }
+}
+
+#[test]
+fn resource_budget_admits_exact_boundaries_and_rejects_member_counts() {
+    let parsed = manifest();
+    assert_eq!(
+        validate_profile_import_budget(&parsed, budget()),
+        Ok(()),
+    );
+    let strict = ProfileImportBudget {
+        maximum_declared_bytes: 38,
+        maximum_entry_bytes: 29,
+        maximum_entries: 2,
+    };
+    assert_eq!(validate_profile_import_budget(&parsed, strict), Ok(()));
+    let count_limited = ProfileImportBudget {
+        maximum_entries: 1,
+        ..strict
+    };
+    assert_eq!(
+        validate_profile_import_budget(&parsed, count_limited),
+        Err(ProfileImportBudgetError::EntryCountExceeded {
+            limit: 1,
+            observed: 2,
+        }),
+    );
+    let path = selected(ExplicitFilePurpose::ImportProfile);
+    assert_eq!(
+        preflight_explicit_profile_import(
+            &path, &parsed, &["strokes"], OBSERVED,
+            canonical_encoding(), count_limited,
+        ),
+        Err(ProfileImportPreflightError::Budget(
+            ProfileImportBudgetError::EntryCountExceeded {
+                limit: 1,
+                observed: 2,
+            },
+        )),
+    );
+}
+
+#[test]
+fn resource_budget_rejects_individual_and_aggregate_bytes() {
+    let parsed = manifest();
+    let small_entry = ProfileImportBudget {
+        maximum_entry_bytes: 28,
+        ..budget()
+    };
+    assert_eq!(
+        validate_profile_import_budget(&parsed, small_entry),
+        Err(ProfileImportBudgetError::EntryBytesExceeded {
+            declared: 29,
+            index: 1,
+            limit: 28,
+        }),
+    );
+    let small_total = ProfileImportBudget {
+        maximum_declared_bytes: 37,
+        ..budget()
+    };
+    assert_eq!(
+        validate_profile_import_budget(&parsed, small_total),
+        Err(ProfileImportBudgetError::TotalBytesExceeded {
+            declared: 38,
+            limit: 37,
+        }),
+    );
+    let path = selected(ExplicitFilePurpose::ImportProfile);
+    assert_eq!(
+        preflight_explicit_profile_import(
+            &path, &parsed, &["strokes"], OBSERVED,
+            canonical_encoding(), small_total,
+        ),
+        Err(ProfileImportPreflightError::Budget(
+            ProfileImportBudgetError::TotalBytesExceeded {
+                declared: 38,
+                limit: 37,
+            },
+        )),
+    );
+}
+
+#[test]
+fn resource_budget_sum_overflow_fails_without_wraparound() {
+    let mut parsed = manifest();
+    parsed.entries[0].byte_length = u64::MAX;
+    parsed.entries[1].byte_length = 1;
+    let largest = ProfileImportBudget {
+        maximum_declared_bytes: u64::MAX,
+        maximum_entry_bytes: u64::MAX,
+        maximum_entries: 2,
+    };
+    assert_eq!(
+        validate_profile_import_budget(&parsed, largest),
+        Err(ProfileImportBudgetError::TotalOverflow),
+    );
+    let path = selected(ExplicitFilePurpose::ImportProfile);
+    assert_eq!(
+        preflight_explicit_profile_import(
+            &path, &parsed, &["strokes"], OBSERVED,
+            canonical_encoding(), largest,
+        ),
+        Err(ProfileImportPreflightError::Budget(
+            ProfileImportBudgetError::TotalOverflow,
+        )),
+    );
+}
+
+#[test]
+fn resource_budget_allows_zero_entries_but_zero_bytes_fail_closed() {
+    let mut parsed = manifest();
+    parsed.entries.clear();
+    let empty = ProfileImportBudget {
+        maximum_declared_bytes: 0,
+        maximum_entry_bytes: 0,
+        maximum_entries: 0,
+    };
+    assert_eq!(validate_profile_import_budget(&parsed, empty), Ok(()));
+    parsed.entries.push(ProfileManifestEntry {
+        byte_length: 1,
+        digest: Sha256Digest::from_bytes([1; 32]),
+        media_type: String::from("application/json"),
+        path: String::from("sections/empty.json"),
+    });
+    let one = ProfileImportBudget {
+        maximum_entries: 1,
+        ..empty
+    };
+    assert_eq!(
+        validate_profile_import_budget(&parsed, one),
+        Err(ProfileImportBudgetError::EntryBytesExceeded {
+            declared: 1,
+            index: 0,
+            limit: 0,
+        }),
+    );
+}
+
+#[test]
+fn resource_budget_checks_observed_archive_names_before_allocating_inventory() {
+    let path = selected(ExplicitFilePurpose::ImportProfile);
+    let parsed = manifest();
+    let exact = ProfileImportBudget {
+        maximum_entries: 2,
+        ..budget()
+    };
+    let too_many = [
+        PROFILE_MANIFEST_PATH,
+        "assets/source.webp",
+        "sections/strokes.json",
+        "assets/undeclared.bin",
+    ];
+    assert_eq!(
+        preflight_explicit_profile_import(
+            &path, &parsed, &["strokes"], &too_many,
+            canonical_encoding(), exact,
+        ),
+        Err(ProfileImportPreflightError::Budget(
+            ProfileImportBudgetError::ObservedCountExceeded {
+                limit: 3,
+                observed: 4,
+            },
+        )),
+    );
+    assert!(preflight_explicit_profile_import(
+        &path, &parsed, &["strokes"], OBSERVED,
+        canonical_encoding(), exact,
+    ).is_ok());
 }
