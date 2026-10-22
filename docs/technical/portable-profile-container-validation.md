@@ -7,9 +7,9 @@ Verified implementation guide for the current `.atrament` container boundary.
 ## Purpose
 
 This guide explains what Atrament currently validates after a `.atrament`
-manifest and archive metadata have been parsed by a future adapter. It connects
-the portable-profile ADR to the dependency-free container domain without
-claiming that ZIP or JSON parsing already exists.
+manifest and archive metadata have been parsed. It connects the portable-
+profile ADR to the dependency-free container domain and its new limited ZIP
+byte reader without claiming that manifest JSON parsing already exists.
 
 The authoritative design remains
 `docs/adr/handwriting/portable-atrament-profile.md`. This guide documents
@@ -19,7 +19,7 @@ executable behavior only.
 
 This guide covers the current transport-neutral profile-container domain and its
 checked-in regression evidence. It does not define a wire schema, archive
-adapter, migration, or inspection command.
+file-reading adapter, migration, or inspection command.
 
 The transport-neutral domain is
 `src/backend/handwriting-profile-container/domain/lib.rs`. It owns:
@@ -37,6 +37,37 @@ The transport-neutral domain is
 
 The domain performs no file I/O and has no ZIP, JSON, hashing, migration, or
 renderer dependency.
+
+### Bounded stored-ZIP byte reader
+
+`src/backend/profile-zip-reader/adapter-inbound/lib.rs` is a separate,
+read-only adapter. It parses **already-loaded** ZIP bytes rather than file
+paths. The caller supplies maximum archive bytes, member count, per-entry
+stored bytes, and cumulative stored bytes before the adapter allocates a
+member index. It supports only an ordinary, single-disk ZIP archive with
+stored (uncompressed) entries and a comment-free terminal directory.
+
+The byte reader validates both the ZIP central directory and every local entry
+header, requiring exact agreement of names, sizes, timestamps, CRC-32, flags,
+method and version, as well as contiguous nonoverlapping members, canonical
+lexicographic order, a supported UTF-8 name interpretation, and no prefixes or
+unclaimed trailers. It rejects encrypted, compressed, descriptor-based, ZIP64,
+extra-field, archive-comment, foreign-platform and other unsupported encodings
+rather than trying alternate decoders. Unsafe paths are passed through the
+shared portable-profile path validator before member bytes are exposed.
+
+The reader recomputes ZIP CRC-32 over each bounded stored entry. This checks
+transport framing only: **CRC-32 does not establish manifest SHA-256
+integrity**.
+The typed manifest must still be parsed, checked and matched against those
+observations, and SHA-256 must be independently measured before any section
+interpretation or profile acceptance. ZIP64, archive-file I/O, canonical JSON,
+real digest computation, and section decoding remain unimplemented.
+
+The integration fixture proves that the reader's exact observed entry names
+can be passed to the existing explicitly authorized `ImportProfile` preflight.
+It intentionally uses a synthetic, unverified manifest digest to demonstrate
+that a successful archive framing check is not a completed import.
 
 ## Contract
 

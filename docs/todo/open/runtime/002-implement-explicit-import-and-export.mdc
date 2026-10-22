@@ -142,3 +142,11 @@ zero budgets, wrong-purpose precedence, and declared/observed limit failures.
 These constraints operate on already-parsed declarations and name evidence:
 actual decompressed byte counts, compression expansion, parser allocation,
 media decoding and runtime memory ceilings must be enforced separately.
+
+The separate in-memory `atrament_profile_zip_reader` now obtains ordinary
+stored-only ZIP member names and byte slices from actual bounded ZIP framing,
+including independently checked CRC-32. Its integration regression feeds
+those observed names into this task's existing typed `ImportProfile` gate.
+Actual filesystem admission, bounded file reading, manifest JSON decoding,
+cryptographic digest recomputation, ZIP64, and user-controlled session profile
+acceptance are still required before this TODO can close.

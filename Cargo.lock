@@ -535,6 +535,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "atrament_profile_zip_reader"
+version = "0.1.0"
+dependencies = [
+ "atrament_explicit_file_path_intent",
+ "atrament_handwriting_profile_container",
+ "atrament_profile_import_preflight",
+]
+
+[[package]]
 name = "atrament_render_manifest"
 version = "0.1.0"
 

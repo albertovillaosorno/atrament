@@ -100,3 +100,19 @@ zero budgets, wrong-purpose precedence, and declared/observed limit failures.
 These constraints operate on already-parsed declarations and name evidence:
 actual decompressed byte counts, compression expansion, parser allocation,
 media decoding and runtime memory ceilings must be enforced separately.
+
+A separate `atrament_profile_zip_reader` inbound adapter now parses real,
+caller-bounded **ordinary stored-only ZIP bytes** in memory. It rejects
+ambiguous local-versus-central headers, unsafe member names, malformed or
+truncated directories, unsorted members, non-contiguous offsets, comments,
+extra fields, platform metadata, compression, data descriptors, encryption,
+and ZIP64. It verifies CRC-32 framing without confusing that weak checksum
+with the still-unimplemented SHA-256 integrity check.
+
+Mutation fixtures cover
+truncation at each byte, corruption of payload and header fields, unsafe Unicode
+and traversal names, archive limits, and deterministic panic-free mutations.
+A cross-component test passes those observed ZIP member names to the typed
+profile Import preflight but deliberately does not claim decoded profile data.
+Full profile ZIP64, manifest JSON, exact independent hashes, canonical writer,
+real file transport, and accepted-profile state changes remain open.

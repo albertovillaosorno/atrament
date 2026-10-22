@@ -1,0 +1,9 @@
+identity:
+  id: function:profile-zip-reader
+  name: profile-zip-reader
+  path: src/backend/profile-zip-reader
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: adapter-inbound

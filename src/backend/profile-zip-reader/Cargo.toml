@@ -1,0 +1,24 @@
+[package]
+name = "atrament_profile_zip_reader"
+version = "0.1.0"
+edition = "2024"
+publish = false
+license = "MIT"
+
+[dependencies]
+atrament_handwriting_profile_container = { workspace = true }
+
+[dev-dependencies]
+atrament_explicit_file_path_intent = { workspace = true }
+atrament_profile_import_preflight = { workspace = true }
+
+[lib]
+path = "adapter-inbound/lib.rs"
+test = false
+
+[lints]
+workspace = true
+
+[[test]]
+name = "profile_zip_reader_adapter_inbound"
+path = "../../../tests/backend/profile-zip-reader/adapter-inbound/lib.rs"
