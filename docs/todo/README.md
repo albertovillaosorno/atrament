@@ -5,8 +5,9 @@ canonical `.mdc` file in `docs/todo/open/<lane>/`; closed task records move to
 `docs/todo/completed/`. Do not copy a task's evidence back into the index.
 
 Each entry in `TODO.md` contains a `### TODO - ...` heading, a single synthesis
-paragraph, and one direct link to its typed record. The first-release horizons
-are P1–P8; P9 is optional hardware research.
+paragraph, and one direct link whose visible label is the exact typed record
+path, for example `[docs/todo/open/runtime/task.mdc](docs/todo/open/runtime/task.mdc)`.
+The first-release horizons are P1–P8; P9 is optional hardware research.
 
 ## Typed frontmatter
 

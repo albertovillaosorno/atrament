@@ -73,10 +73,12 @@ function indexEntries() {
             number += 1;
         } else if (title !== null) {
             const link =
-                /^\[Record\]\((docs\/todo\/open\/[^)]+\.mdc)\)$/.exec(line);
+                /^\[(docs\/todo\/open\/[^)]+\.mdc)\]\((docs\/todo\/open\/[^)]+\.mdc)\)$/.exec(line);
             if (link) {
                 const summary = paragraph.join(" ").trim();
                 assert.ok(summary, `${title}: synthesis paragraph missing`);
+                assert.equal(link[1], link[2],
+                    `${title}: link label must be its exact record path`);
                 entries.push({
                     horizon, title, summary, path: link[1], number,
                 });
@@ -165,6 +167,8 @@ test("every task links one typed record with matching identity", () => {
         dependenciesFromRecord(content, id);
         assert.match(content, /^acceptance_criteria:\n  - >-$/m);
         assert.match(content, /^## Scope and existing evidence$/m);
+        assert.ok(!/^\s*(?:status|priority|lane|dependencies|acceptance_criteria):/m
+            .test(entry.summary), `${id}: field labels belong in typed record`);
     }
 });
 
