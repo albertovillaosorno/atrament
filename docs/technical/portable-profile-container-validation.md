@@ -144,6 +144,13 @@ traversal, backslash-containing and control-bearing segments. Separate fixtures
 verify that malformed declared and observed archive entry names cannot reach
 section or asset decoding.
 
+Manifest entry media-type identifiers also fail before decoding if the value
+is empty or whitespace-only, or if it embeds a Unicode control character.
+The typed `InvalidMediaType` failure preserves the affected entry path but does
+not echo potentially unsafe media-type text. Printable parameterized values
+such as `text/plain; charset=utf-8` remain accepted pending the eventual wire
+schema and adapter MIME checks.
+
 ### Canonical archive evidence
 
 The domain does not write ZIP bytes, but it validates adapter-observed canonical

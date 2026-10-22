@@ -91,6 +91,8 @@ pub enum ExplicitFilePathIntentError {
     ImportCannotOverwrite,
     /// A directory-marked or nameless target cannot identify a file.
     NoSelectedFile,
+    /// An operating-system path contains a forbidden embedded NUL byte.
+    NulByteInPath,
     /// A document, model, clipboard, or diagnostic cannot select a path.
     UntrustedSource,
 }
@@ -140,8 +142,8 @@ impl ExplicitFilePathIntent {
 ///
 /// # Errors
 ///
-/// Rejects untrusted sources, paths without a selected file name, and import
-/// requests that incorrectly attempt to authorize overwriting a file.
+/// Rejects untrusted sources, NUL-containing or directory-marked paths, and
+/// import requests that incorrectly attempt to authorize overwriting a file.
 pub fn classify_explicit_file_path_intent(
     purpose: ExplicitFilePurpose,
     source: ExplicitFilePathSource,
@@ -156,6 +158,9 @@ pub fn classify_explicit_file_path_intent(
         return Err(ExplicitFilePathIntentError::UntrustedSource);
     }
     let path_bytes = path.as_os_str().as_encoded_bytes();
+    if path_bytes.contains(&0) {
+        return Err(ExplicitFilePathIntentError::NulByteInPath);
+    }
     let selected_directory = path_bytes.ends_with(
         MAIN_SEPARATOR_STR.as_bytes(),
     ) || cfg!(windows) && path_bytes.ends_with(b"/");

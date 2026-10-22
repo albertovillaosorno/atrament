@@ -590,8 +590,13 @@ fn reference_manifest(
                 reason,
             });
         }
-        if item.media_type.is_empty() {
+        if item.media_type.trim().is_empty() {
             return Err(ProfileManifestError::EmptyMediaType {
+                path: item.path.clone(),
+            });
+        }
+        if item.media_type.chars().any(char::is_control) {
+            return Err(ProfileManifestError::InvalidMediaType {
                 path: item.path.clone(),
             });
         }
@@ -634,17 +639,21 @@ fn generated_manifest_values_match_reference_admission_oracle() {
         "other/value.bin",
         "",
     ];
-    let media_types = ["application/json", "image/webp", "", "opaque/type"];
+    let media_types = [
+        "application/json", "image/webp", "", "opaque/type",
+        " ", "text/plain\r\ninjected", "image/\0webp",
+    ];
     let supported = ["stroke-vocabulary", "future-supported"];
     let mut seed = 0x5eed_4d41_2026_u64;
     let mut seen_versions = [false; 4];
     let mut seen_feature_sets = [false; 5];
     let mut seen_entry_counts = [false; 5];
     let mut seen_paths = [false; 11];
-    let mut seen_media_types = [false; 4];
+    let mut seen_media_types = [false; 7];
     let mut saw_valid = false;
     let mut saw_duplicate_path = false;
     let mut saw_empty_media_type = false;
+    let mut saw_invalid_media_type = false;
     let mut saw_invalid_path = false;
     let mut saw_manifest_backslash = false;
     let mut saw_manifest_empty_segment = false;
@@ -703,6 +712,9 @@ fn generated_manifest_values_match_reference_admission_oracle() {
             },
             Err(ProfileManifestError::EmptyMediaType { .. }) => {
                 saw_empty_media_type = true;
+            },
+            Err(ProfileManifestError::InvalidMediaType { .. }) => {
+                saw_invalid_media_type = true;
             },
             Err(ProfileManifestError::InvalidEntryPath { reason, .. }) => {
                 saw_invalid_path = true;
@@ -769,6 +781,7 @@ fn generated_manifest_values_match_reference_admission_oracle() {
     assert!(saw_valid);
     assert!(saw_duplicate_path);
     assert!(saw_empty_media_type);
+    assert!(saw_invalid_media_type);
     assert!(saw_invalid_path);
     assert!(saw_manifest_backslash);
     assert!(saw_manifest_empty_segment);
@@ -1054,6 +1067,42 @@ fn empty_media_type_rejects_before_entry_decoding() {
         Err(ProfileManifestError::EmptyMediaType {
             path: String::from("sections/a.json"),
         }),
+    );
+}
+
+#[test]
+fn profile_media_type_controls_and_empty_whitespace_reject_before_decoding() {
+    let entry_path = "sections/media.json";
+    for media_type in [" ", "   ", "\t", "\n"] {
+        let value = manifest(vec![entry(entry_path, media_type, 1)]);
+        assert_eq!(
+            validate_profile_manifest(&value, &["stroke-vocabulary"]),
+            Err(ProfileManifestError::EmptyMediaType {
+                path: String::from(entry_path),
+            }),
+            "media_type={media_type:?}",
+        );
+    }
+    for media_type in [
+        "image/\0webp", "text/plain\r\ninjected", "image/\u{0085}x",
+    ] {
+        let value = manifest(vec![entry(entry_path, media_type, 1)]);
+        assert_eq!(
+            validate_profile_manifest(&value, &["stroke-vocabulary"]),
+            Err(ProfileManifestError::InvalidMediaType {
+                path: String::from(entry_path),
+            }),
+            "media_type={media_type:?}",
+        );
+    }
+    let value = manifest(vec![entry(
+        entry_path,
+        "text/plain; charset=utf-8",
+        1,
+    )]);
+    assert_eq!(
+        validate_profile_manifest(&value, &["stroke-vocabulary"]),
+        Ok(()),
     );
 }
 

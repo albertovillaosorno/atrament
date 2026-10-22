@@ -77,3 +77,9 @@ manifest declarations and observed archive inventories both return a distinct
 control characters. The generated accepted/rejected member-path corpus expanded
 from 162 to 242 combinations while preserving valid Unicode and opaque asset
 paths. Actual ZIP parsing, canonical writing and migration remain open.
+
+Media-type admission additionally distinguishes whitespace-only missing
+identities from embedded-control invalid identities without reflecting unsafe
+media-type bytes into diagnostics. The 4,096-case deterministic manifest oracle
+now samples both classes, and executable tests retain parameterized printable
+media types. No archive parser or file writer is claimed by this validation.

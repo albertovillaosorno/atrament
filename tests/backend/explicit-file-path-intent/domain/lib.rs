@@ -131,6 +131,30 @@ fn selection_requires_a_nonempty_file_name_component() {
 }
 
 #[test]
+fn embedded_nul_never_reaches_file_target_classification() {
+    for value in ["\0", "target\0.atrament", "dir/\0name", "/tmp/a\0b"] {
+        for source in [
+            ExplicitFilePathSource::CallerSelection,
+            ExplicitFilePathSource::AdmittedHostPolicy,
+        ] {
+            for purpose in PURPOSES {
+                let result = classify_explicit_file_path_intent(
+                    purpose,
+                    source,
+                    PathBuf::from(value),
+                    ExplicitOverwriteIntent::PreserveExisting,
+                );
+                assert_eq!(
+                    result,
+                    Err(ExplicitFilePathIntentError::NulByteInPath),
+                    "value={value:?} purpose={purpose:?}",
+                );
+            }
+        }
+    }
+}
+
+#[test]
 fn selected_paths_remain_opaque_without_normalization() {
     let selected = PathBuf::from("./données/cuaderno ñ/plan🖋.atrament");
     let intent = classify_explicit_file_path_intent(

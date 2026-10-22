@@ -109,3 +109,8 @@ a genuine 6 mm fixed-region overflow, stale revision rejection after an
 accepted semantic edit, and fresh-session refusal. Output artifacts, path
 policy, serialization, atomic file commits, retries, and cancellation remain
 unimplemented. No persistent output is created by this work.
+
+The selected-file classifier now also rejects embedded NUL bytes before any
+future file adapter can interpret the path, while retaining exact non-UTF-8
+names and refusing directory-marker paths. The caller/host selection provenance
+rule remains unchanged and no file effect is introduced.

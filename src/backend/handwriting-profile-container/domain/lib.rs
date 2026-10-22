@@ -399,6 +399,11 @@ pub enum ProfileManifestError {
         /// Exact canonical-path rule that rejected the path.
         reason: ProfileEntryPathError,
     },
+    /// A media-type identity contains unsafe control characters.
+    InvalidMediaType {
+        /// Manifest entry path associated with the unsafe media type.
+        path: String,
+    },
     /// The manifest uses another portable container behavior version.
     UnsupportedContainerVersion {
         /// Version supplied by the parsed manifest.
@@ -628,8 +633,13 @@ pub fn validate_profile_manifest(
                 reason,
             });
         }
-        if entry.media_type.is_empty() {
+        if entry.media_type.trim().is_empty() {
             return Err(ProfileManifestError::EmptyMediaType {
+                path: entry.path.clone(),
+            });
+        }
+        if entry.media_type.chars().any(char::is_control) {
+            return Err(ProfileManifestError::InvalidMediaType {
                 path: entry.path.clone(),
             });
         }
