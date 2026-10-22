@@ -11,6 +11,17 @@ atrament_semantic_notebook = { workspace = true }
 
 [lib]
 path = "application/lib.rs"
+test = false
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+atrament_physical_page_profile = { workspace = true }
+atrament_semantic_fixed_region_layout = { workspace = true }
+atrament_semantic_notebook_port = { workspace = true }
+atrament_semantic_notebook_session = { workspace = true }
+
+[[test]]
+name = "export_layout_preflight_application"
+path = "../../../tests/backend/export-layout-preflight/application/lib.rs"

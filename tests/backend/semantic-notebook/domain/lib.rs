@@ -29,6 +29,9 @@
 // - Defaults:
 //   - Treats serialization syntax as intentionally unspecified.
 //
+//! Semantic notebook model regression tests.
+
+use atrament_mathematics_source as _;
 use atrament_physical_page_profile::{
     BindingEdge, BorderShape, Length, Orientation,
     PageProfile as PhysicalPageProfile, PaperMarkAppearance, PaperMarkJoin,
@@ -153,7 +156,7 @@ fn grid_oracle_result(
 fn grid_oracle_column_count(
     table: &Table<u32>,
 ) -> Result<u64, TableGridError<u32>> {
-    grid_oracle_placements(table)?;
+    drop(grid_oracle_placements(table)?);
     let count = table.rows.first().map_or(0, |row| {
         row.cells.iter().map(|cell| u64::from(cell.span.columns.get())).sum()
     });

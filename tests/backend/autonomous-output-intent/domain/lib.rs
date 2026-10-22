@@ -29,6 +29,8 @@
 // - Defaults:
 //   - Untrusted semantic content never establishes output intent.
 //
+//! Autonomous output-intent regression tests.
+
 use atrament_autonomous_output_intent::{
     AutonomousOutputClass, AutonomousOutputIntentAdmission,
     AutonomousOutputIntentSource, autonomous_output_intent_admission,

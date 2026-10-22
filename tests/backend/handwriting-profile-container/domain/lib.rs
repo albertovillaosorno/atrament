@@ -31,6 +31,8 @@
 // - Defaults:
 //   - No filesystem, archive, or renderer behavior is exercised.
 //
+//! Portable handwriting-profile container regression tests.
+
 use atrament_handwriting_profile_container::{
     PROFILE_CONTAINER_VERSION, PROFILE_MANIFEST_PATH,
     ProfileArchiveEncodingError, ProfileArchiveEncodingEvidence,

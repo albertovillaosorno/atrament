@@ -260,7 +260,11 @@ name = "atrament_export_layout_preflight"
 version = "0.1.0"
 dependencies = [
  "atrament_diagnostic",
+ "atrament_physical_page_profile",
+ "atrament_semantic_fixed_region_layout",
  "atrament_semantic_notebook",
+ "atrament_semantic_notebook_port",
+ "atrament_semantic_notebook_session",
 ]
 
 [[package]]

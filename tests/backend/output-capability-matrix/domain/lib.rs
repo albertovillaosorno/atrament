@@ -29,6 +29,8 @@
 // - Defaults:
 //   - Future and Convert are never treated as Accept.
 //
+//! Output capability matrix regression tests.
+
 use atrament_output_capability_matrix::{
     CapabilityDisposition,
     OutputMode,

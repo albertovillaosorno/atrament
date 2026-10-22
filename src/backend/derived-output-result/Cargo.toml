@@ -13,3 +13,7 @@ path = "domain/lib.rs"
 
 [lints]
 workspace = true
+
+[[test]]
+name = "derived_output_result_domain"
+path = "../../../tests/backend/derived-output-result/domain/lib.rs"

@@ -10,3 +10,7 @@ path = "domain/lib.rs"
 
 [lints]
 workspace = true
+
+[[test]]
+name = "autonomous_output_intent_domain"
+path = "../../../tests/backend/autonomous-output-intent/domain/lib.rs"

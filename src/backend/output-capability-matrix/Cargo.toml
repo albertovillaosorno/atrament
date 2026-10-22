@@ -10,3 +10,7 @@ path = "domain/lib.rs"
 
 [lints]
 workspace = true
+
+[[test]]
+name = "output_capability_matrix_domain"
+path = "../../../tests/backend/output-capability-matrix/domain/lib.rs"
