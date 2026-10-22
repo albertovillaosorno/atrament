@@ -13,3 +13,7 @@ path = "domain/lib.rs"
 
 [lints]
 workspace = true
+
+[[test]]
+name = "paper_mark_geometry_domain"
+path = "../../../tests/backend/paper-mark-geometry/domain/lib.rs"

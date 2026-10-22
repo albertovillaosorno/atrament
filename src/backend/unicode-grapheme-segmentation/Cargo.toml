@@ -11,6 +11,14 @@ unicode-segmentation = { workspace = true }
 
 [lib]
 path = "adapter-outbound/lib.rs"
+test = false
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+atrament_english_spanish_grapheme_inventory = { workspace = true }
+
+[[test]]
+name = "unicode_grapheme_segmentation_adapter"
+path = "../../../tests/backend/unicode-grapheme-segmentation/adapter-outbound/lib.rs"

@@ -293,7 +293,8 @@ depends_on = ["atrament_unicode_grapheme_boundary_port"]
 depends_on = ["atrament_unicode_grapheme_boundary_port"]
 
 [component.atrament_unicode_grapheme_segmentation]
-depends_on = ["atrament_unicode_grapheme_boundary_port"]
+# Bilingual inventory is a test-only fixture for grapheme coverage.
+depends_on = ["atrament_english_spanish_grapheme_inventory", "atrament_unicode_grapheme_boundary_port"]
 
 
 [component.atrament_vector_geometry]

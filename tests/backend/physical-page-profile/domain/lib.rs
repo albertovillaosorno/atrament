@@ -29,6 +29,8 @@
 // - Defaults:
 //   - Uses canonical micrometres and no visual approximation.
 //
+//! Physical page geometry regression tests.
+
 use atrament_physical_page_profile::{
     BindingEdge, BorderShape, Length, Orientation, PageProfile,
     PageProfileError, PaperMarkAppearance, PaperMarkJoin, PaperMarkLayer,

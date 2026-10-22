@@ -10,3 +10,7 @@ path = "domain/lib.rs"
 
 [lints]
 workspace = true
+
+[[test]]
+name = "physical_page_profile_domain"
+path = "../../../tests/backend/physical-page-profile/domain/lib.rs"

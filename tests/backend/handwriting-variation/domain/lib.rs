@@ -31,6 +31,8 @@
 // - Defaults:
 //   - No distribution or correlation algorithm is assumed.
 //
+//! Handwriting variation regression tests.
+
 use atrament_handwriting_variation::{
     VariationBound, VariationBoundBasis, VariationParameter,
     VariationParameterError, VariationParameterIdentityError,

@@ -703,6 +703,7 @@ dependencies = [
 name = "atrament_unicode_grapheme_segmentation"
 version = "0.1.0"
 dependencies = [
+ "atrament_english_spanish_grapheme_inventory",
  "atrament_unicode_grapheme_boundary_port",
  "unicode-segmentation",
 ]

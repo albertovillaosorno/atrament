@@ -29,6 +29,8 @@
 // - Defaults:
 //   - Large acyclic graphs validate iteratively without recursive traversal.
 //
+//! Semantic command graph regression tests.
+
 use std::cmp::Ordering;
 use std::collections::BTreeSet;
 use std::sync::atomic::{AtomicUsize, Ordering as AtomicOrdering};

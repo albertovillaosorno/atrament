@@ -10,3 +10,7 @@ path = "domain/lib.rs"
 
 [lints]
 workspace = true
+
+[[test]]
+name = "semantic_command_graph_domain"
+path = "../../../tests/backend/semantic-command-graph/domain/lib.rs"

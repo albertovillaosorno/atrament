@@ -13,3 +13,7 @@ path = "domain/lib.rs"
 
 [lints]
 workspace = true
+
+[[test]]
+name = "flow_pagination_domain"
+path = "../../../tests/backend/flow-pagination/domain/lib.rs"

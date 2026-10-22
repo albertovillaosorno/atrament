@@ -32,6 +32,9 @@
 // - Defaults:
 //   - Source normalization remains unchanged.
 //
+//! Unicode grapheme adapter regression tests.
+
+use unicode_segmentation as _;
 use atrament_english_spanish_grapheme_inventory::REQUIRED_TEXT_GRAPHEMES;
 use atrament_unicode_grapheme_boundary_port::GraphemeBoundaryProvider;
 use atrament_unicode_grapheme_segmentation::UnicodeGraphemeSegmentation;
