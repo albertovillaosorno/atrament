@@ -7,8 +7,7 @@
 // License-File:
 //   - LICENSE-MIT
 //
-
-//! One-shot formatting prompt contract regression tests.// Boundary-Contract:
+// Boundary-Contract:
 // - Owns:
 //   - Regression evidence for self-contained initial formatting-prompt inputs.
 // - Must-Not:
@@ -31,6 +30,9 @@
 // - Defaults:
 //   - No hidden chat state or browser state participates in the value.
 //
+
+//! One-shot formatting prompt contract regression tests.
+
 use atrament_one_shot_formatting_prompt::{
     FORMATTING_PROMPT_VERSION, FormattingPromptConstraintInputs,
     FormattingPromptProtocolInputs, FormattingPromptSourceInputs,

@@ -7,8 +7,7 @@
 // License-File:
 //   - LICENSE-MIT
 //
-
-//! Assignment notebook fixture regression tests.// Boundary-Contract:
+// Boundary-Contract:
 // - Owns:
 //   - Regression evidence for the six checked-in bilingual assignment fixtures.
 // - Must-Not:
@@ -33,6 +32,9 @@
 // - Defaults:
 //   - Coverage statuses remain explicit checked-in declarations.
 //
+
+//! Assignment notebook fixture regression tests.
+
 use atrament_educational_assignment_fixture::{
     REQUIRED_ASSIGNMENT_FIXTURES, declared_educational_coverage_observations,
     validate_checked_in_educational_assignment_fixtures,

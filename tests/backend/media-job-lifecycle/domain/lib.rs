@@ -7,8 +7,7 @@
 // License-File:
 //   - LICENSE-MIT
 //
-
-//! Process-local media cleanup lifecycle regression tests.// Boundary-Contract:
+// Boundary-Contract:
 // - Owns:
 //   - Regression evidence for terminal media-job cleanup and ownership.
 // - Must-Not:
@@ -32,6 +31,9 @@
 // - Defaults:
 //   - No retry count or storage behavior is invented.
 //
+
+//! Process-local media cleanup lifecycle regression tests.
+
 use atrament_media_job_lifecycle::{
     MediaJobCleanupStatus, MediaJobLifecycleError, MediaJobOutcome,
     OwnedWaveformIntermediate, TerminalMediaJob, WaveformCleanupState,

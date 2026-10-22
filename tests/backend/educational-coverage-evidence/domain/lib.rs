@@ -7,8 +7,7 @@
 // License-File:
 //   - LICENSE-MIT
 //
-
-//! Educational content coverage evidence regression tests.// Boundary-Contract:
+// Boundary-Contract:
 // - Owns:
 //   - Regression evidence for first-release educational exercise coverage.
 // - Must-Not:
@@ -30,6 +29,9 @@
 // - Defaults:
 //   - No evidence state is synthesized from an artifact identity.
 //
+
+//! Educational content coverage evidence regression tests.
+
 use atrament_educational_coverage_evidence::{
     EducationalCoverageError, EducationalCoverageObservation,
     EducationalEvidenceStatus, EducationalSubject,

@@ -7,8 +7,7 @@
 // License-File:
 //   - LICENSE-MIT
 //
-
-//! Physical motion interruption and recovery regression tests.// Boundary-Contract:
+// Boundary-Contract:
 // - Owns:
 //   - Regression evidence for fail-closed physical recovery admission.
 // - Must-Not:
@@ -32,6 +31,9 @@
 // - Defaults:
 //   - Operator recovery is required for every unresolved physical uncertainty.
 //
+
+//! Physical motion interruption and recovery regression tests.
+
 use atrament_physical_recovery_state::{
     PhysicalBoundaryState, PhysicalFeedbackState, PhysicalInterruptionKind,
     PhysicalPositionState, PhysicalRecoverySnapshot, PhysicalResumeDisposition,

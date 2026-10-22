@@ -7,8 +7,7 @@
 // License-File:
 //   - LICENSE-MIT
 //
-
-//! Path ordering and safe motion constraints regression tests.// Boundary-Contract:
+// Boundary-Contract:
 // - Owns:
 //   - Regression evidence for exact-plan path-order preservation constraints.
 // - Must-Not:
@@ -31,6 +30,9 @@
 // - Defaults:
 //   - Only explicitly declared original-order relations are protected.
 //
+
+//! Path ordering and safe motion constraints regression tests.
+
 use atrament_motion_path_order_constraints::{
     MotionOrderConstraint, MotionOrderConstraintSet,
     MotionOrderPreservationReason, MotionOrderValidationError,

@@ -7,8 +7,7 @@
 // License-File:
 //   - LICENSE-MIT
 //
-
-//! CPU render performance evidence regression tests.// Boundary-Contract:
+// Boundary-Contract:
 // - Owns:
 //   - Regression evidence for CPU render-performance observations.
 // - Must-Not:
@@ -31,6 +30,9 @@
 // - Defaults:
 //   - No performance threshold is implicit.
 //
+
+//! CPU render performance evidence regression tests.
+
 use atrament_render_performance_evidence::{
     NoDiscreteGpuMachine, RenderPerformanceCoverageError,
     RenderPerformanceObservation, RenderPerformanceScenario,

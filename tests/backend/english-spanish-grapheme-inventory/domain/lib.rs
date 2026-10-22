@@ -7,8 +7,7 @@
 // License-File:
 //   - LICENSE-MIT
 //
-
-//! Bilingual grapheme inventory regression tests.// Boundary-Contract:
+// Boundary-Contract:
 // - Owns:
 //   - Regression evidence for the exact non-mathematical English/Spanish
 //     handwriting grapheme inventory.
@@ -34,6 +33,9 @@
 // - Defaults:
 //   - NFC and NFD forms remain distinct entries.
 //
+
+//! Bilingual grapheme inventory regression tests.
+
 use std::collections::BTreeSet;
 
 use EnglishSpanishGraphemeCategory::{

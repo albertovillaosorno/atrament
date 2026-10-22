@@ -7,8 +7,7 @@
 // License-File:
 //   - LICENSE-MIT
 //
-
-//! Fail-closed device-neutral motion dry-run tests.// Boundary-Contract:
+// Boundary-Contract:
 // - Owns:
 //   - Regression evidence for exact-plan dry-run binding and limit refusal.
 // - Must-Not:
@@ -32,6 +31,9 @@
 // - Defaults:
 //   - Unknown, violated, or absent motion-limit evidence always rejects.
 //
+
+//! Fail-closed device-neutral motion dry-run tests.
+
 use atrament_device_coordinate_calibration::{
     CoordinateTransformCalibration, DeviceCoordinateCalibration,
     PenMotionCalibration, SheetRegistrationCalibration,

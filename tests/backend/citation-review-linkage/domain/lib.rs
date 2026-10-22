@@ -7,8 +7,7 @@
 // License-File:
 //   - LICENSE-MIT
 //
-
-//! Source and claim citation linkage regression tests.// Boundary-Contract:
+// Boundary-Contract:
 // - Owns:
 //   - Regression evidence for exact cited-claim source review linkage.
 // - Must-Not:
@@ -30,6 +29,9 @@
 // - Defaults:
 //   - No source relationship is synthesized by a fixture helper.
 //
+
+//! Source and claim citation linkage regression tests.
+
 use atrament_citation_review_linkage::{
     CitationClaimLink, CitationReviewLinkage, CitationReviewLinkageError,
     CitationSource, ClaimProvenance, citation_provenance_for_claim,

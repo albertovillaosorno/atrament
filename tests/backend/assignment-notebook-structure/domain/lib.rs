@@ -7,8 +7,7 @@
 // License-File:
 //   - LICENSE-MIT
 //
-
-//! Assignment notebook semantic structure regression tests.// Boundary-Contract:
+// Boundary-Contract:
 // - Owns:
 //   - Regression evidence for assignment organization over semantic blocks.
 // - Must-Not:
@@ -30,6 +29,9 @@
 // - Defaults:
 //   - Empty and repeated organizational roles remain caller-owned choices.
 //
+
+//! Assignment notebook semantic structure regression tests.
+
 use atrament_assignment_notebook_structure::{
     ASSIGNMENT_NOTEBOOK_ROLES, AssignmentNotebookDisposition,
     AssignmentNotebookRole, AssignmentNotebookStructureEntry,

@@ -7,8 +7,7 @@
 // License-File:
 //   - LICENSE-MIT
 //
-
-//! Writable-region bounds regression tests.// Boundary-Contract:
+// Boundary-Contract:
 // - Owns:
 //   - Regression evidence for exact post-placement fixed-region overflow.
 // - Must-Not:
@@ -30,6 +29,9 @@
 // - Defaults:
 //   - Rectangles use canonical micrometres and may have zero extent.
 //
+
+//! Writable-region bounds regression tests.
+
 use atrament_fixed_region_bounds::{
     BoundaryEdge, BoundaryViolation, BoundsError, check_bounds,
 };

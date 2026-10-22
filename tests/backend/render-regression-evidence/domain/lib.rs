@@ -7,8 +7,7 @@
 // License-File:
 //   - LICENSE-MIT
 //
-
-//! Visual render regression evidence contract tests.// Boundary-Contract:
+// Boundary-Contract:
 // - Owns:
 //   - Regression evidence for complete independent visual-regression axes.
 // - Must-Not:
@@ -31,6 +30,9 @@
 // - Defaults:
 //   - Comparison outcomes are supplied, not calculated, by this fixture.
 //
+
+//! Visual render regression evidence contract tests.
+
 use atrament_render_regression_evidence::{
     RenderRegressionAxis, RenderRegressionComparison, RenderRegressionEvidence,
     RenderRegressionEvidenceError, render_regression_mismatches,

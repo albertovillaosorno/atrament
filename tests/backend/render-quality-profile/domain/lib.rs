@@ -7,8 +7,7 @@
 // License-File:
 //   - LICENSE-MIT
 //
-
-//! CPU render quality profile regression tests.// Boundary-Contract:
+// Boundary-Contract:
 // - Owns:
 //   - Regression evidence for deterministic preview/final quality differences.
 // - Must-Not:
@@ -32,6 +31,9 @@
 // - Defaults:
 //   - No quality value or performance budget is inferred.
 //
+
+//! CPU render quality profile regression tests.
+
 use atrament_render_quality_profile::{
     RenderQualityCost, RenderQualityMode, RenderQualityPairError,
     RenderQualityProfile, SharedRenderAuthority, validate_preview_final_pair,
