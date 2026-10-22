@@ -7,7 +7,8 @@
 // License-File:
 //   - LICENSE-MIT
 //
-// Boundary-Contract:
+
+//! Visual render regression evidence contract tests.// Boundary-Contract:
 // - Owns:
 //   - Regression evidence for complete independent visual-regression axes.
 // - Must-Not:

@@ -7,7 +7,8 @@
 // License-File:
 //   - LICENSE-MIT
 //
-// Boundary-Contract:
+
+//! CPU render quality profile regression tests.// Boundary-Contract:
 // - Owns:
 //   - Regression evidence for deterministic preview/final quality differences.
 // - Must-Not:

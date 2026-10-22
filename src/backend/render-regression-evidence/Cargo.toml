@@ -10,3 +10,7 @@ path = "domain/lib.rs"
 
 [lints]
 workspace = true
+
+[[test]]
+name = "render_regression_evidence_domain"
+path = "../../../tests/backend/render-regression-evidence/domain/lib.rs"

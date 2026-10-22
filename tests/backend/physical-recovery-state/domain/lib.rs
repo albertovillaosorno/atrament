@@ -7,7 +7,8 @@
 // License-File:
 //   - LICENSE-MIT
 //
-// Boundary-Contract:
+
+//! Physical motion interruption and recovery regression tests.// Boundary-Contract:
 // - Owns:
 //   - Regression evidence for fail-closed physical recovery admission.
 // - Must-Not:

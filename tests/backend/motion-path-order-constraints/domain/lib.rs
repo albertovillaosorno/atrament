@@ -7,7 +7,8 @@
 // License-File:
 //   - LICENSE-MIT
 //
-// Boundary-Contract:
+
+//! Path ordering and safe motion constraints regression tests.// Boundary-Contract:
 // - Owns:
 //   - Regression evidence for exact-plan path-order preservation constraints.
 // - Must-Not:

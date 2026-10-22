@@ -7,7 +7,8 @@
 // License-File:
 //   - LICENSE-MIT
 //
-// Boundary-Contract:
+
+//! Process-local media cleanup lifecycle regression tests.// Boundary-Contract:
 // - Owns:
 //   - Regression evidence for terminal media-job cleanup and ownership.
 // - Must-Not:

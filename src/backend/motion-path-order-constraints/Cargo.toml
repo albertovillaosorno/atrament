@@ -10,3 +10,7 @@ path = "domain/lib.rs"
 
 [lints]
 workspace = true
+
+[[test]]
+name = "motion_path_order_constraints_domain"
+path = "../../../tests/backend/motion-path-order-constraints/domain/lib.rs"

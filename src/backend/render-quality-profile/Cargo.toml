@@ -10,3 +10,7 @@ path = "domain/lib.rs"
 
 [lints]
 workspace = true
+
+[[test]]
+name = "render_quality_profile_domain"
+path = "../../../tests/backend/render-quality-profile/domain/lib.rs"
