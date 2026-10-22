@@ -35,7 +35,7 @@
 
 //! Read-only intent classification for explicit file import and export paths.
 
-use std::path::{Path, PathBuf};
+use std::path::{MAIN_SEPARATOR_STR, Path, PathBuf};
 
 /// Operation and file family for an explicitly selected local path.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -89,7 +89,7 @@ pub enum ExplicitOverwriteIntent {
 pub enum ExplicitFilePathIntentError {
     /// Import has no file-overwrite effect to authorize.
     ImportCannotOverwrite,
-    /// A target without a file-name component cannot identify a file.
+    /// A directory-marked or nameless target cannot identify a file.
     NoSelectedFile,
     /// A document, model, clipboard, or diagnostic cannot select a path.
     UntrustedSource,
@@ -155,7 +155,11 @@ pub fn classify_explicit_file_path_intent(
     ) {
         return Err(ExplicitFilePathIntentError::UntrustedSource);
     }
-    if path.file_name().is_none() {
+    let path_bytes = path.as_os_str().as_encoded_bytes();
+    let selected_directory = path_bytes.ends_with(
+        MAIN_SEPARATOR_STR.as_bytes(),
+    ) || cfg!(windows) && path_bytes.ends_with(b"/");
+    if path.file_name().is_none() || selected_directory {
         return Err(ExplicitFilePathIntentError::NoSelectedFile);
     }
     if !purpose.is_export()
