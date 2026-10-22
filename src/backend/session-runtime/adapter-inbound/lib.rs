@@ -265,6 +265,14 @@ fn header_is_present(request_head: &[u8], expected_name: &str) -> bool {
 }
 
 fn declared_content_length(request_head: &[u8]) -> io::Result<usize> {
+    // This runtime never emits 100 Continue. Reject the expectation before
+    // waiting for a body that an HTTP client may intentionally withhold.
+    if header_is_present(request_head, "expect") {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "request expectations are not admitted",
+        ));
+    }
     if header_is_present(request_head, "transfer-encoding") {
         return Err(io::Error::new(
             io::ErrorKind::InvalidData,

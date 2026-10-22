@@ -487,6 +487,37 @@ fn response_for_incomplete_body(close_write: bool) -> Vec<u8> {
 }
 
 #[test]
+fn expect_continue_cannot_stall_the_loopback_transport() {
+    for field_name in ["Expect", "expect", "EXPECT", "ExPeCt"] {
+        let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0))
+            .expect("test listener binds");
+        let address = listener.local_addr().expect("test listener address");
+        let mut client = TcpStream::connect(address)
+            .expect("test client connects");
+        let (mut server, _) = listener.accept().expect("test server accepts");
+        server
+            .set_read_timeout(Some(Duration::from_millis(400)))
+            .expect("test read timeout configures");
+        let request = format!(
+            concat!(
+                "POST /api/session/task HTTP/1.1\r\n",
+                "Host: 127.0.0.1:43123\r\n",
+                "{}: 100-continue\r\n",
+                "Content-Length: 5\r\n\r\n",
+            ),
+            field_name,
+        );
+        client.write_all(request.as_bytes())
+            .expect("header-only expectation writes");
+        let started = Instant::now();
+        let error = runtime::read_request(&mut server)
+            .expect_err("unsupported Expect handshake rejects immediately");
+        assert_eq!(error.kind(), std::io::ErrorKind::InvalidData);
+        assert!(started.elapsed() < Duration::from_millis(300));
+    }
+}
+
+#[test]
 fn incomplete_body_distinguishes_early_eof_from_deadline() {
     let eof_response = response_for_incomplete_body(true);
     assert_eq!(status_line(&eof_response), "HTTP/1.1 400 Bad Request");
