@@ -9,13 +9,15 @@
 //
 // Boundary-Contract:
 // - Owns:
-//   - Transport-neutral autonomous output-intent source semantics.
+//   - Transport-neutral autonomous output-intent source semantics and the
+//     independent explicit file-path intent prerequisite for Export.
 // - Must-Not:
 //   - Execute output, grant capability/path/overwrite/file/device authority,
 //     parse notebook prose as authority, persist policy, or schedule work.
 // - Allows:
-//   - Inputs: One frozen output class and one explicit intent source class.
-//   - Outputs: Whether that source can establish intent for that output class.
+//   - Inputs: A frozen output class, intent source, and optional classified
+//     import/export path intent from a separately trusted adapter.
+//   - Outputs: Whether a source can establish output or selected-path intent.
 //   - Side effects: None.
 // - Split-When:
 //   - Host-policy admission or output execution gains independent authority.
@@ -32,6 +34,8 @@
 //
 
 //! Explicit output-intent source semantics for autonomous workflows.
+
+use atrament_explicit_file_path_intent::ExplicitFilePathIntent;
 
 /// Output class that can be chained after autonomous semantic work.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
@@ -62,6 +66,30 @@ pub enum AutonomousOutputIntentAdmission {
     Admitted,
     /// This source cannot establish intent for the named output class.
     NotAdmitted,
+}
+
+/// Combine independent autonomous Export intent with one selected path.
+///
+/// Only an already-classified Export path can complete the path-intent axis.
+/// The caller must still prove the path source independently and perform the
+/// ordinary file admission, serialization, overwrite, and commit checks.
+///
+/// A model-generated goal never authorizes Export, even with a caller path.
+#[must_use]
+pub const fn autonomous_export_path_intent_admission(
+    source: AutonomousOutputIntentSource,
+    path: &ExplicitFilePathIntent,
+) -> AutonomousOutputIntentAdmission {
+    let goal = autonomous_output_intent_admission(
+        AutonomousOutputClass::Export, source,
+    );
+    if path.purpose().is_export()
+        && matches!(goal, AutonomousOutputIntentAdmission::Admitted)
+    {
+        AutonomousOutputIntentAdmission::Admitted
+    } else {
+        AutonomousOutputIntentAdmission::NotAdmitted
+    }
 }
 
 /// Check output-intent authority without performing output admission or

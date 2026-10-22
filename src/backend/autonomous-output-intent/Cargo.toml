@@ -5,6 +5,9 @@ edition = "2024"
 publish = false
 license = "MIT"
 
+[dependencies]
+atrament_explicit_file_path_intent = { workspace = true }
+
 [lib]
 path = "domain/lib.rs"
 

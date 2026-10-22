@@ -20,7 +20,7 @@ depends_on = ["atrament_autonomous_budget_admission", "atrament_autonomous_goal_
 depends_on = ["atrament_autonomous_goal_outcome"]
 
 [component.atrament_autonomous_output_intent]
-depends_on = []
+depends_on = ["atrament_explicit_file_path_intent"]
 
 [component.atrament_autonomous_output_progress_projection]
 depends_on = ["atrament_autonomous_output_intent", "atrament_autonomous_progress_evidence", "atrament_derived_output_result"]

@@ -34,7 +34,15 @@
 
 use atrament_autonomous_output_intent::{
     AutonomousOutputClass, AutonomousOutputIntentAdmission,
-    AutonomousOutputIntentSource, autonomous_output_intent_admission,
+    AutonomousOutputIntentSource, autonomous_export_path_intent_admission,
+    autonomous_output_intent_admission,
+};
+
+use std::path::PathBuf;
+
+use atrament_explicit_file_path_intent::{
+    ExplicitFilePathSource, ExplicitFilePurpose, ExplicitOverwriteIntent,
+    classify_explicit_file_path_intent,
 };
 
 const OUTPUTS: [AutonomousOutputClass; 3] = [
@@ -83,4 +91,51 @@ fn all_nine_source_output_pairs_match_frozen_intent_authority() {
         }
     }
     assert_eq!(cases, 9);
+}
+
+#[test]
+fn autonomous_export_requires_independent_goal_and_selected_path_intent() {
+    let purposes = [
+        ExplicitFilePurpose::ExportNotebook,
+        ExplicitFilePurpose::ExportProfile,
+        ExplicitFilePurpose::ImportNotebook,
+        ExplicitFilePurpose::ImportProfile,
+    ];
+    let origins = [
+        ExplicitFilePathSource::CallerSelection,
+        ExplicitFilePathSource::AdmittedHostPolicy,
+    ];
+    let mut cases = 0usize;
+    for goal_source in SOURCES {
+        for purpose in purposes {
+            for origin in origins {
+                let intent = classify_explicit_file_path_intent(
+                    purpose,
+                    origin,
+                    PathBuf::from("one-explicit-file.atrament"),
+                    ExplicitOverwriteIntent::PreserveExisting,
+                )
+                .expect("independently selected file classifies");
+                let expected = if purpose.is_export()
+                    && !matches!(
+                        goal_source,
+                        AutonomousOutputIntentSource::UntrustedSemanticContent
+                    )
+                {
+                    AutonomousOutputIntentAdmission::Admitted
+                } else {
+                    AutonomousOutputIntentAdmission::NotAdmitted
+                };
+                assert_eq!(
+                    autonomous_export_path_intent_admission(
+                        goal_source, &intent,
+                    ),
+                    expected,
+                    "goal={goal_source:?} file={purpose:?} origin={origin:?}",
+                );
+                cases += 1;
+            }
+        }
+    }
+    assert_eq!(cases, 24);
 }

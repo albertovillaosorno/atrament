@@ -133,6 +133,7 @@ atrament_educational_coverage_evidence = { path = "src/backend/educational-cover
 atrament_english_spanish_corpus_evidence = { path = "src/backend/english-spanish-corpus-evidence" }
 atrament_english_spanish_diacritic_rule = { path = "src/backend/english-spanish-diacritic-rule" }
 atrament_english_spanish_grapheme_inventory = { path = "src/backend/english-spanish-grapheme-inventory" }
+atrament_explicit_file_path_intent = { path = "src/backend/explicit-file-path-intent" }
 atrament_export_layout_preflight = { path = "src/backend/export-layout-preflight" }
 atrament_fixed_region_bounds = { path = "src/backend/fixed-region-bounds" }
 atrament_flow_pagination = { path = "src/backend/flow-pagination" }

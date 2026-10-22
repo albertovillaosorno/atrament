@@ -83,3 +83,9 @@ must establish that source independently before invoking this contract and
 still enforce path policy, symlink safety, serializer provenance, export
 preflight, atomic commits, retry identity, and cancellation. No file has
 been imported or exported by this work; the task remains open.
+
+Autonomous Export intent now composes that source-classified path with the
+existing autonomous goal-source gate. A 24-case fixture proves that model
+text cannot authorize Export even if an independent path is selected, and
+that an Import-class path cannot be substituted for an Export target. This
+combination is still read-only and does not authorize a file effect.

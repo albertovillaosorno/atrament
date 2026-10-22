@@ -94,6 +94,9 @@ dependencies = [
 [[package]]
 name = "atrament_autonomous_output_intent"
 version = "0.1.0"
+dependencies = [
+ "atrament_explicit_file_path_intent",
+]
 
 [[package]]
 name = "atrament_autonomous_output_progress_projection"
