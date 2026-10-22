@@ -10,6 +10,15 @@ atrament_unicode_grapheme_boundary_port = { workspace = true }
 
 [lib]
 path = "application/lib.rs"
+test = false
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+atrament_english_spanish_grapheme_inventory = { workspace = true }
+atrament_unicode_grapheme_segmentation = { workspace = true }
+
+[[test]]
+name = "unicode_grapheme_edit_application"
+path = "../../../tests/backend/unicode-grapheme-edit/application/lib.rs"

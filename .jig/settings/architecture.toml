@@ -291,10 +291,12 @@ depends_on = ["atrament_transcript_evidence"]
 depends_on = []
 
 [component.atrament_unicode_grapheme_cursor]
-depends_on = ["atrament_unicode_grapheme_boundary_port"]
+# Bilingual corpus and provider implementation belong to integration tests.
+depends_on = ["atrament_english_spanish_grapheme_inventory", "atrament_unicode_grapheme_boundary_port", "atrament_unicode_grapheme_segmentation"]
 
 [component.atrament_unicode_grapheme_edit]
-depends_on = ["atrament_unicode_grapheme_boundary_port"]
+# Bilingual corpus and provider implementation belong to integration tests.
+depends_on = ["atrament_english_spanish_grapheme_inventory", "atrament_unicode_grapheme_boundary_port", "atrament_unicode_grapheme_segmentation"]
 
 [component.atrament_unicode_grapheme_segmentation]
 # Bilingual inventory is a test-only fixture for grapheme coverage.

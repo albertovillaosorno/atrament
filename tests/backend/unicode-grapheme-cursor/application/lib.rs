@@ -33,6 +33,9 @@
 // - Defaults:
 //   - Start and final boundaries are valid positions.
 //
+
+//! Exact cursor-position regression tests.
+
 use std::cell::Cell;
 
 use atrament_english_spanish_grapheme_inventory::REQUIRED_TEXT_GRAPHEMES;

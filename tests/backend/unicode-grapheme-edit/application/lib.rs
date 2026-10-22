@@ -31,6 +31,9 @@
 // - Defaults:
 //   - NFC and NFD source spellings remain distinct.
 //
+
+//! Exact grapheme-range regression tests.
+
 use std::cell::Cell;
 
 use atrament_english_spanish_grapheme_inventory::REQUIRED_TEXT_GRAPHEMES;

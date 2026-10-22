@@ -699,14 +699,18 @@ version = "0.1.0"
 name = "atrament_unicode_grapheme_cursor"
 version = "0.1.0"
 dependencies = [
+ "atrament_english_spanish_grapheme_inventory",
  "atrament_unicode_grapheme_boundary_port",
+ "atrament_unicode_grapheme_segmentation",
 ]
 
 [[package]]
 name = "atrament_unicode_grapheme_edit"
 version = "0.1.0"
 dependencies = [
+ "atrament_english_spanish_grapheme_inventory",
  "atrament_unicode_grapheme_boundary_port",
+ "atrament_unicode_grapheme_segmentation",
 ]
 
 [[package]]
