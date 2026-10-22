@@ -5,8 +5,10 @@ title: "Implement English and Spanish text behavior"
 status: open
 priority: P2
 lane: semantic-layout
-dependencies: []
-dependencies_specified: false
+dependencies: ["ATR-P2-001"]
+dependencies_specified: true
+dependency_rationale: >-
+  Text rules operate over the semantic notebook model.
 acceptance_criteria:
   - >-
       Normalize Unicode, edit by grapheme, apply language-aware punctuation

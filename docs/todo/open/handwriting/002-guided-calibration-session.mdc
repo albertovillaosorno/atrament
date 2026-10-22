@@ -6,7 +6,9 @@ status: open
 priority: P4
 lane: handwriting
 dependencies: []
-dependencies_specified: false
+dependencies_specified: true
+dependency_rationale: >-
+  Calibration capture can run before downstream stroke extraction.
 acceptance_criteria:
   - >-
       Collect isolated characters, joins, words, numerals, punctuation,

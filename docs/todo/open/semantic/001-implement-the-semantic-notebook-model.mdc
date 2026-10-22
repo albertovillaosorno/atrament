@@ -6,7 +6,9 @@ status: open
 priority: P2
 lane: semantic-layout
 dependencies: []
-dependencies_specified: false
+dependencies_specified: true
+dependency_rationale: >-
+  The semantic notebook model is a foundational data contract.
 acceptance_criteria:
   - >-
       Represent notebooks, pages, flows, blocks, spans, formulas, tables,

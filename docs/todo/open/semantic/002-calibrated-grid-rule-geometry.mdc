@@ -5,8 +5,10 @@ title: "Implement calibrated grid and rule geometry"
 status: open
 priority: P2
 lane: semantic-layout
-dependencies: []
-dependencies_specified: false
+dependencies: ["ATR-P2-001"]
+dependencies_specified: true
+dependency_rationale: >-
+  Grid geometry is attached to semantic page objects.
 acceptance_criteria:
   - >-
       Preserve nominal spacing and square cells while allowing bounded ruler

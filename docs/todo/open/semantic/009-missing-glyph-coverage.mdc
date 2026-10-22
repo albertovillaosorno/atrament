@@ -5,8 +5,10 @@ title: "Make missing glyph coverage impossible to miss"
 status: open
 priority: P2
 lane: semantic-layout
-dependencies: []
-dependencies_specified: false
+dependencies: ["ATR-P4-004"]
+dependencies_specified: true
+dependency_rationale: >-
+  Glyph coverage requires the extracted profile vocabulary.
 acceptance_criteria:
   - >-
       Report every unsupported grapheme by profile and offer only a visible

@@ -6,7 +6,9 @@ status: open
 priority: P9
 lane: optional-hardware
 dependencies: []
-dependencies_specified: false
+dependencies_specified: true
+dependency_rationale: >-
+  Optional hardware research has no first-release prerequisites.
 acceptance_criteria:
   - >-
       Evaluate pen carousels, independent tool heads, registration,

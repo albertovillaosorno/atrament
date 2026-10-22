@@ -6,7 +6,9 @@ status: open
 priority: P1
 lane: localhost-runtime
 dependencies: []
-dependencies_specified: false
+dependencies_specified: true
+dependency_rationale: >-
+  Session-local ownership is an independent runtime invariant.
 acceptance_criteria:
   - >-
       Hold documents, assets, undo history, previews, and derived plans only

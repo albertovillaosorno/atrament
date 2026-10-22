@@ -5,8 +5,10 @@ title: "Prove complex educational coverage"
 status: open
 priority: P6
 lane: automation-media
-dependencies: []
-dependencies_specified: false
+dependencies: ["ATR-P2-001", "ATR-P6-002"]
+dependencies_specified: true
+dependency_rationale: >-
+  Coverage tests require a model and assignment structuring.
 acceptance_criteria:
   - >-
       Exercise bilingual mathematics, physics, chemistry, biology, history,

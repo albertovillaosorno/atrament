@@ -6,7 +6,9 @@ status: open
 priority: P1
 lane: localhost-runtime
 dependencies: []
-dependencies_specified: false
+dependencies_specified: true
+dependency_rationale: >-
+  The typed diagnostic contract can be frozen independently.
 acceptance_criteria:
   - >-
       Represent field, object, page, source, glyph, collision, capability,

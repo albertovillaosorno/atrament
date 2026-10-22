@@ -5,8 +5,10 @@ title: "Implement authoritative vector geometry"
 status: open
 priority: P5
 lane: cpu-rendering
-dependencies: []
-dependencies_specified: false
+dependencies: ["ATR-P2-001"]
+dependencies_specified: true
+dependency_rationale: >-
+  Vector geometry is derived from semantic page state.
 acceptance_criteria:
   - >-
       Generate layout boxes, stroke centerlines, expanded ink contours,
