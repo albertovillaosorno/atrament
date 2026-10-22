@@ -48,6 +48,7 @@ test("static workspace starts session controls disabled", async () => {
     const source = await readFile(INDEX_HTML, "utf8");
     for (const id of [
         "copy-prompt",
+        "end-session",
         "task-input",
         "source-input",
         "profile-select",
@@ -81,8 +82,8 @@ test(
     const fetchCalls = source.match(/\bfetch\(/gu) ?? [];
     assert.equal(
         fetchCalls.length,
-        3,
-        "only handshake and draft fetches exist",
+        4,
+        "only handshake, draft, and session end fetches exist",
     );
 
     for (const required of [
@@ -90,15 +91,28 @@ test(
         'credentials: "omit"',
         'mode: "same-origin"',
         'redirect: "error"',
-        'referrerPolicy: "no-referrer"',
     ]) {
         const occurrences = source.split(required).length - 1;
         assert.equal(
             occurrences,
-            3,
+            4,
             `all admitted fetches must retain ${required}`,
         );
     }
+
+    assert.ok(source.includes('fetch("./api/session/end"'),
+        "session end remains same-origin and explicit");
+    assert.equal(source.includes('keepalive: true'), false,
+        "session end must require live document authority");
+
+    assert.equal(
+        source.split('referrerPolicy: "origin"').length - 1, 3,
+        "all credentialed POST requests disclose only the loopback origin",
+    );
+    assert.equal(
+        source.split('referrerPolicy: "no-referrer"').length - 1, 1,
+        "read-only hydration never sends a referrer",
+    );
 
     for (const forbidden of [
         "http://",

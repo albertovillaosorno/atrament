@@ -206,7 +206,11 @@ impl Runtime {
             if configure_connection_deadline(&connection).is_err() {
                 continue;
             }
-            drop(serve_connection(&mut connection, &context, draft));
+            if serve_connection(&mut connection, &context, draft)
+                .is_ok_and(|end_session| end_session)
+            {
+                break;
+            }
         }
     }
 }
@@ -1139,6 +1143,29 @@ pub fn route_request(
     {
         return public_response;
     }
+    if parsed.target == "/api/session/end" {
+        if parsed.method != "POST" {
+            return json_response(
+                "400 Bad Request",
+                br#"{"error":"invalid_request"}"#,
+            );
+        }
+        if !request_has_session_credential(request, context.expected_secret)
+            || !request_has_exact_origin(request, context.expected_origin)
+        {
+            return json_response(
+                "401 Unauthorized",
+                br#"{"error":"unauthenticated"}"#,
+            );
+        }
+        if !request_has_no_body(request) {
+            return json_response(
+                "400 Bad Request",
+                br#"{"error":"invalid_request"}"#,
+            );
+        }
+        return empty_response("204 No Content");
+    }
     if let Some(field) = draft_field_for_target(parsed.target) {
         return match parsed.method {
             "GET" => route_draft_read(request, field, context, draft),
@@ -1172,7 +1199,7 @@ pub(crate) fn serve_connection(
     stream: &mut TcpStream,
     context: &RouteRequestContext<'_>,
     draft: &mut dyn SessionDraft,
-) -> io::Result<()> {
+) -> io::Result<bool> {
     let request = match read_request(stream) {
         Ok(request) => request,
         Err(error)
@@ -1185,7 +1212,7 @@ pub(crate) fn serve_connection(
                 "400 Bad Request",
                 br#"{"error":"invalid_request"}"#,
             );
-            return write_response(stream, &response);
+            return write_response(stream, &response).map(|()| false);
         },
         Err(error)
             if matches!(
@@ -1197,10 +1224,26 @@ pub(crate) fn serve_connection(
                 "408 Request Timeout",
                 br#"{"error":"request_timeout"}"#,
             );
-            return write_response(stream, &response);
+            return write_response(stream, &response).map(|()| false);
         },
         Err(error) => return Err(error),
     };
     let response = route_request(&request, context, draft);
-    write_response(stream, &response)
+    let session_end = request_method_host_and_target(&request).is_some_and(
+        |parsed| {
+            parsed.host == context.expected_host
+                && parsed.method == "POST"
+                && parsed.target == "/api/session/end"
+                && response.starts_with(b"HTTP/1.1 204 No Content\r\n")
+        },
+    );
+    let written = write_response(stream, &response);
+    if session_end {
+        // The credential has been invalidated regardless of whether the
+        // closing tab still accepts the acknowledgement.
+        drop(written);
+        Ok(true)
+    } else {
+        written.map(|()| false)
+    }
 }

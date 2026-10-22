@@ -150,6 +150,11 @@ button:focus-visible {
   text-transform: uppercase;
 }
 
+#end-session {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
 .session-note {
   display: flex;
   align-items: center;

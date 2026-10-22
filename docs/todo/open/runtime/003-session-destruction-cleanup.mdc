@@ -92,6 +92,24 @@ The localhost adapter also JSON-escapes compatible and required backend version
 identities, so application-owned quotes, backslashes, controls, and Unicode
 cannot corrupt the handshake response syntax.
 
+An explicit, confirmation-gated **End session** control now sends an
+exact-origin Bearer-authenticated, empty-body POST while the page remains
+active. The backend rejects missing or incorrect origin/credential and
+nonempty bodies; on acceptance it acknowledges closure, leaves its loopback
+accept loop, releases the listener, and drops the process application owner.
+
+A real socket regression verifies that an unauthorized attempt cannot end the
+session and that an authorized request releases the exact endpoint. Firefox
+coverage verifies confirmation before any mutation, authenticated termination,
+and immediate local draft erasure. Authenticated browser POST requests use an
+origin-only referrer policy so Firefox supplies the canonical Origin header
+without revealing a URL path or fragment.
+
+GET hydration still suppresses the
+referrer. Browser `pagehide` continues to wipe local state independently:
+network teardown is not promised for tabs that close without the explicit
+command, or for crashed or unresponsive processes.
+
 The task remains open until temporary media exist and end-to-end fixtures also
 cover backend operation cancellation, media cleanup, and explicit-export
 survival.

@@ -126,6 +126,7 @@ const promptOutput = requireElement("#prompt-output");
 const copyPrompt = requireElement("#copy-prompt");
 const copyStatus = requireElement("#copy-status");
 const sessionStatus = requireElement("#session-status");
+const endSession = requireElement("#end-session");
 let copyGeneration = 0;
 let clipboardWriteInFlight = false;
 let activeClipboardWrite = null;
@@ -336,12 +337,14 @@ function clearSessionText() {
     promptOutput.disabled = true;
     candidateInput.disabled = true;
     copyPrompt.disabled = true;
+    endSession.disabled = true;
     setTextIfChanged(copyStatus, "Waiting for a prompt from the backend.");
     updateCharacterCount(taskInput, taskCount);
     updateCharacterCount(sourceInput, sourceCount);
     updateCharacterCount(candidateInput, candidateCount);
 }
 function enableCompatibleEditing() {
+    endSession.disabled = false;
     taskInput.disabled = false;
     sourceInput.disabled = false;
     candidateInput.disabled = false;
@@ -357,7 +360,7 @@ async function completeSessionHandshake(secret) {
             credentials: "omit",
             mode: "same-origin",
             redirect: "error",
-            referrerPolicy: "no-referrer",
+            referrerPolicy: "origin",
             signal: sessionRequests.signal,
         });
     }
@@ -542,7 +545,7 @@ async function syncDraftField(field, input, secret) {
                     credentials: "omit",
                     mode: "same-origin",
                     redirect: "error",
-                    referrerPolicy: "no-referrer",
+                    referrerPolicy: "origin",
                     signal: sessionRequests.signal,
                 });
             }
@@ -619,6 +622,54 @@ function bindDraftSync(field, input) {
 bindDraftSync("task", taskInput);
 bindDraftSync("source", sourceInput);
 bindDraftSync("candidate", candidateInput);
+let endSessionConfirmed = false;
+endSession.addEventListener("click", () => {
+    const secret = sessionSecret;
+    if (secret === null || endSession.disabled) {
+        return;
+    }
+    if (!endSessionConfirmed) {
+        endSessionConfirmed = true;
+        setTextIfChanged(endSession, "Confirm end session");
+        setTextIfChanged(sessionStatus, "Ending discards this notebook");
+        return;
+    }
+    endSession.disabled = true;
+    void (async () => {
+        try {
+            const response = await fetch("./api/session/end", {
+                method: "POST",
+                headers: sessionDraft.draftReadHeaders(secret),
+                cache: "no-store",
+                credentials: "omit",
+                mode: "same-origin",
+                redirect: "error",
+                referrerPolicy: "origin",
+            });
+            if (sessionSecret !== secret) {
+                return;
+            }
+            if (response.status === 204) {
+                sessionSecret = null;
+                sessionRequests.abort();
+                invalidateClipboardRequests();
+                invalidateDraftSync();
+                clearSessionText();
+                setTextIfChanged(sessionStatus, "Session ended");
+                return;
+            }
+        }
+        catch {
+            // The session may still exist. Never announce successful erasure.
+        }
+        if (sessionSecret === secret) {
+            endSession.disabled = false;
+            endSessionConfirmed = false;
+            setTextIfChanged(endSession, "End session");
+            setTextIfChanged(sessionStatus, "End session failed · retry");
+        }
+    })();
+});
 window.addEventListener("pagehide", (event) => {
     sessionSecret = null;
     sessionRequests.abort();

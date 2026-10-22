@@ -407,7 +407,11 @@ function createStaticWorkspaceServer(requests, serveScripts = false) {
     });
 }
 
-function createSessionFixtureServer(apiRequests, onDraftMutation = null) {
+function createSessionFixtureServer(
+    apiRequests,
+    onDraftMutation = null,
+    onSessionEnd = null,
+) {
     const generated = new Set([
         "main.js",
         "session-diagnostic.js",
@@ -447,12 +451,35 @@ function createSessionFixtureServer(apiRequests, onDraftMutation = null) {
                 return;
             }
         }
-        if (pathname === "/api/handshake") {
+        if (pathname === "/api/session/end") {
             apiRequests.push(`${request.method} ${pathname}`);
+
             if (
                 request.method !== "POST"
                 || request.headers.authorization
                     !== `Bearer ${REFRESH_SECRET}`
+                || request.headers.origin
+                    !== `http://${request.headers.host}`
+                || Number(request.headers["content-length"] ?? 0) !== 0
+            ) {
+                response.writeHead(401);
+                response.end();
+                return;
+            }
+            onSessionEnd?.();
+            response.writeHead(204, { "Cache-Control": "no-store" });
+            response.end();
+            return;
+        }
+        if (pathname === "/api/handshake") {
+            apiRequests.push(`${request.method} ${pathname}`);
+
+            if (
+                request.method !== "POST"
+                || request.headers.authorization
+                    !== `Bearer ${REFRESH_SECRET}`
+                || request.headers.origin
+                    !== `http://${request.headers.host}`
             ) {
                 response.writeHead(401);
                 response.end();
@@ -3700,6 +3727,79 @@ test(
             for (const child of children.reverse()) {
                 await stopChild(child);
             }
+            fs.rmSync(profile, { recursive: true, force: true });
+        }
+    },
+);
+
+test(
+    "Firefox explicit end requires confirmation and clears session state",
+    { skip: !FIREFOX_AVAILABLE, timeout: 30_000 },
+    async () => {
+        fs.mkdirSync(".temp", { recursive: true });
+        const profile = fs.mkdtempSync(".temp/session-end-control-");
+        const apiRequests = [];
+        let signalEnd;
+        const ended = new Promise((resolve) => { signalEnd = resolve; });
+        const server = createSessionFixtureServer(
+            apiRequests, null, () => signalEnd(),
+        );
+        const children = [];
+        let bidi;
+        try {
+            server.listen(0, "127.0.0.1");
+            await once(server, "listening");
+            const address = server.address();
+            assert.notEqual(address, null);
+            assert.notEqual(typeof address, "string");
+            bidi = await startBidiFirefox(profile, children);
+            const tab = await bidi.command("browsingContext.create", {
+                type: "tab",
+            });
+            await bidi.command("browsingContext.navigate", {
+                context: tab.context,
+                url: `http://127.0.0.1:${address.port}/` +
+                    `#session=${REFRESH_SECRET}`,
+                wait: "complete",
+            });
+            await waitForSessionStatus(bidi, tab.context, "Session ready");
+            const first = await bidi.command("script.evaluate", {
+                awaitPromise: false,
+                expression: `JSON.stringify((() => {
+                    const button = document.querySelector("#end-session");
+                    button.click();
+                    return [button.disabled, button.textContent,
+                        document.querySelector("#session-status").textContent];
+                })())`,
+                resultOwnership: "none",
+                target: { context: tab.context },
+            });
+            assert.equal(first.type, "success");
+            assert.deepEqual(JSON.parse(first.result.value), [
+                false, "Confirm end session", "Ending discards this notebook",
+            ]);
+            assert.ok(!apiRequests.includes("POST /api/session/end"));
+            await bidi.command("script.evaluate", {
+                awaitPromise: false,
+                expression: `document.querySelector("#end-session").click()`,
+                resultOwnership: "none",
+                target: { context: tab.context },
+            });
+            await observedWithin(ended, "explicit session close");
+            const state = await waitForSessionStatus(
+                bidi, tab.context, "Session ended",
+            );
+            for (const field of ["task", "source", "candidate"]) {
+                assert.deepEqual(state[field], { disabled: true, value: "" });
+            }
+            assert.equal(apiRequests.at(-1), "POST /api/session/end");
+        } finally {
+            if (bidi?.socket != null) bidi.socket.end();
+            if (server.listening) {
+                server.close();
+                await once(server, "close");
+            }
+            for (const child of children.reverse()) await stopChild(child);
             fs.rmSync(profile, { recursive: true, force: true });
         }
     },

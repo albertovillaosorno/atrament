@@ -480,8 +480,8 @@ fn response_for_incomplete_body(close_write: bool) -> Vec<u8> {
         &HANDSHAKE,
     );
     let mut draft = SessionDraftService::default();
-    runtime::serve_connection(&mut server, &context, &mut draft)
-        .expect("incomplete request receives classified response");
+    assert!(!runtime::serve_connection(&mut server, &context, &mut draft)
+        .expect("incomplete request receives classified response"));
     drop(server);
     client.join().expect("test client joins")
 }
@@ -2194,6 +2194,163 @@ fn runtime_responses_never_reflect_the_session_credential() {
                 .any(|window| window == PRIVATE_SECRET.as_bytes()),
         );
     }
+}
+
+#[test]
+fn session_end_terminates_listener_and_destroys_process_owned_draft() {
+    let runtime = runtime::Runtime::bind().expect("runtime binds");
+    let address = runtime.local_addr().expect("loopback address exists");
+    let host = runtime.expected_host().to_owned();
+    let origin = runtime.origin().to_owned();
+    let server = thread::spawn(move || {
+        let mut draft = seeded_private_draft();
+        runtime.serve(EXPECTED_SECRET, &HANDSHAKE, &mut draft);
+        assert_private_draft_unchanged(&draft);
+        // Draft bytes are dropped after the listener returns.
+    });
+    let exchange = |credential: &str| {
+        let mut stream = TcpStream::connect(address)
+            .expect("loopback listener accepts request");
+        stream.set_read_timeout(Some(Duration::from_secs(2)))
+            .expect("client timeout configures");
+        let request = format!(
+            concat!(
+                "POST /api/session/end HTTP/1.1\r\n",
+                "Host: {}\r\nOrigin: {}\r\n",
+                "Authorization: Bearer {}\r\n",
+                "Content-Length: 0\r\n\r\n",
+            ),
+            host,
+            origin,
+            credential,
+        );
+        stream.write_all(request.as_bytes())
+            .expect("bounded end request writes");
+        let mut response = Vec::new();
+        let _response_bytes = stream.read_to_end(&mut response)
+            .expect("response ends with server connection");
+        response
+    };
+    assert_eq!(
+        status_line(&exchange("invalid")),
+        "HTTP/1.1 401 Unauthorized",
+    );
+    assert_eq!(
+        status_line(&exchange(EXPECTED_SECRET)),
+        "HTTP/1.1 204 No Content",
+    );
+    server.join().expect("approved termination closes listener");
+    let new_listener = TcpListener::bind(address)
+        .expect("terminated runtime releases exact loopback endpoint");
+    assert_eq!(new_listener.local_addr().expect("rebound address"), address);
+}
+
+#[test]
+fn explicit_session_end_requires_current_credential_origin_and_empty_body() {
+    let authorization = format!("Bearer {EXPECTED_SECRET}");
+    let end_request = |method: &str,
+                       host: &str,
+                       origin: Option<&str>,
+                       credential: Option<&str>,
+                       body: &[u8]| {
+        let origin_line = origin
+            .map_or_else(String::new, |value| format!("Origin: {value}\r\n"));
+        let auth_line = credential.map_or_else(String::new, |value| {
+            format!("Authorization: {value}\r\n")
+        });
+        let mut bytes = format!(
+            concat!(
+                "{} /api/session/end HTTP/1.1\r\n",
+                "Host: {}\r\n{}{}Content-Length: {}\r\n\r\n",
+            ),
+            method,
+            host,
+            origin_line,
+            auth_line,
+            body.len(),
+        )
+        .into_bytes();
+        bytes.extend_from_slice(body);
+        bytes
+    };
+    let admitted = end_request(
+        "POST",
+        EXPECTED_HOST,
+        Some(EXPECTED_ORIGIN),
+        Some(&authorization),
+        b"",
+    );
+    let mut draft = seeded_private_draft();
+    assert_eq!(
+        status_line(&route_with_draft(
+            &admitted,
+            EXPECTED_HOST,
+            &mut draft,
+        )),
+        "HTTP/1.1 204 No Content",
+    );
+    assert_private_draft_unchanged(&draft);
+
+    let denied = [
+        end_request("POST", EXPECTED_HOST, None, Some(&authorization), b""),
+        end_request("POST", EXPECTED_HOST, Some(EXPECTED_ORIGIN), None, b""),
+        end_request(
+            "POST", EXPECTED_HOST, Some(EXPECTED_ORIGIN),
+            Some("Bearer invalid"), b"",
+        ),
+        end_request(
+            "POST", EXPECTED_HOST, Some("null"),
+            Some(&authorization), b"",
+        ),
+    ];
+    for request in denied {
+        let mut draft = seeded_private_draft();
+        assert_eq!(
+            status_line(&route_with_draft(
+                &request,
+                EXPECTED_HOST,
+                &mut draft,
+            )),
+            "HTTP/1.1 401 Unauthorized",
+        );
+        assert_private_draft_unchanged(&draft);
+    }
+    for (method, body) in [("GET", b"".as_slice()), ("POST", b"x".as_slice())] {
+        let request = end_request(
+            method,
+            EXPECTED_HOST,
+            Some(EXPECTED_ORIGIN),
+            Some(&authorization),
+            body,
+        );
+        let mut draft = seeded_private_draft();
+        assert_eq!(
+            status_line(&route_with_draft(
+                &request,
+                EXPECTED_HOST,
+                &mut draft,
+            )),
+            "HTTP/1.1 400 Bad Request",
+        );
+        assert_private_draft_unchanged(&draft);
+    }
+    let mut draft = seeded_private_draft();
+    let wrong_host = end_request(
+        "POST",
+        "127.0.0.1:43124",
+        Some(EXPECTED_ORIGIN),
+        Some(&authorization),
+        b"",
+    );
+    assert_eq!(
+        status_line(&route_with_draft(
+            &wrong_host,
+            EXPECTED_HOST,
+            &mut draft,
+        )),
+        "HTTP/1.1 421 Misdirected Request",
+    );
+    assert_private_draft_unchanged(&draft);
 }
 
 #[test]
