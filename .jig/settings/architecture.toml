@@ -127,6 +127,9 @@ depends_on = ["atrament_educational_coverage_evidence"]
 [component.atrament_educational_coverage_evidence]
 depends_on = []
 
+[component.atrament_explicit_file_path_intent]
+depends_on = []
+
 [component.atrament_export_layout_preflight]
 # Concrete session implementation is used only in the integration fixture.
 depends_on = ["atrament_diagnostic", "atrament_physical_page_profile", "atrament_semantic_fixed_region_layout", "atrament_semantic_notebook", "atrament_semantic_notebook_port", "atrament_semantic_notebook_session"]

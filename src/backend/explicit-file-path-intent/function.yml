@@ -1,0 +1,9 @@
+identity:
+  id: function:explicit-file-path-intent
+  name: explicit-file-path-intent
+  path: src/backend/explicit-file-path-intent
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: domain

@@ -41,6 +41,7 @@ members = [
     "src/backend/english-spanish-grapheme-inventory",
     "src/backend/educational-assignment-fixture",
     "src/backend/educational-coverage-evidence",
+    "src/backend/explicit-file-path-intent",
     "src/backend/export-layout-preflight",
     "src/backend/fixed-region-bounds",
     "src/backend/flow-pagination",

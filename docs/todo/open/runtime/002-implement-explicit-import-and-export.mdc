@@ -63,3 +63,23 @@ to Cancelled before result or effect; a crossed Render/Plan completion remains
 Completed projection; and a crossed Export file commit remains Exported. A
 request alone produces no final result. Cancellation signaling, adapter
 execution, receipt normalization, and retry storage remain open.
+
+## Explicit path-intent classification evidence
+
+A transport-neutral `atrament_explicit_file_path_intent` domain now
+classifies notebook and handwriting-profile imports and exports before any
+file effect. It distinguishes caller selection and independently admitted
+host policy from untrusted notebook/source, model, clipboard, and diagnostic
+text; all content-derived sources are rejected as path intent.
+
+The contract also rejects missing file-name components, disallows overwrite
+requests for Import, preserves opaque non-UTF-8 selected paths, and retains
+an explicit preserve-or-replace choice for Export. Integration fixtures cover
+all 48 source/purpose/overwrite combinations plus invalid and opaque paths.
+
+The classification is not a filesystem capability and does not check the
+truthfulness of its claimed source. The future trusted caller or host adapter
+must establish that source independently before invoking this contract and
+still enforce path policy, symlink safety, serializer provenance, export
+preflight, atomic commits, retry identity, and cancellation. No file has
+been imported or exported by this work; the task remains open.
