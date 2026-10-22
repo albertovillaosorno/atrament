@@ -7,7 +7,8 @@
 // License-File:
 //   - LICENSE-MIT
 //
-// Boundary-Contract:
+
+//! CPU render performance evidence regression tests.// Boundary-Contract:
 // - Owns:
 //   - Regression evidence for CPU render-performance observations.
 // - Must-Not:

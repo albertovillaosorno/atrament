@@ -7,7 +7,8 @@
 // License-File:
 //   - LICENSE-MIT
 //
-// Boundary-Contract:
+
+//! Assignment notebook fixture regression tests.// Boundary-Contract:
 // - Owns:
 //   - Regression evidence for the six checked-in bilingual assignment fixtures.
 // - Must-Not:

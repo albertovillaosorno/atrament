@@ -7,7 +7,8 @@
 // License-File:
 //   - LICENSE-MIT
 //
-// Boundary-Contract:
+
+//! Educational content coverage evidence regression tests.// Boundary-Contract:
 // - Owns:
 //   - Regression evidence for first-release educational exercise coverage.
 // - Must-Not:

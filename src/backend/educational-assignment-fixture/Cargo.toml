@@ -13,3 +13,7 @@ path = "domain/lib.rs"
 
 [lints]
 workspace = true
+
+[[test]]
+name = "educational_assignment_fixture_domain"
+path = "../../../tests/backend/educational-assignment-fixture/domain/lib.rs"
