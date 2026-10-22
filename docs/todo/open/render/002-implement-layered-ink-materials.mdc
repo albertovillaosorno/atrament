@@ -1,0 +1,58 @@
+---
+record_type: task
+id: "ATR-P5-002"
+title: "Implement layered ink materials"
+status: open
+priority: P5
+lane: cpu-rendering
+dependencies: []
+dependencies_specified: false
+acceptance_criteria:
+  - >-
+      Compose base deposition, edges, starvation, pooling, paper
+      interaction, color, and highlight layers without altering vector
+      authority.
+evidence_status: not_independently_verified
+migrated_from: TODO.md
+---
+
+# Implement layered ink materials
+
+## Scope and existing evidence
+
+Compose base deposition, edges, starvation, pooling, paper interaction, color,
+and highlight layers without altering vector authority.
+
+Current executable evidence now also freezes the six accepted material-layer
+families: base ink, edge variation, deposition texture, paper interaction,
+highlight, and color. Layer plans preserve caller-owned clip geometry, material
+inputs, physical bounds, and blend order without evaluation. Every layer marked
+stochastic carries the complete document-seed, semantic-identity, profile, and
+material-preset replay key.
+
+A 46,080-state exhaustive oracle crosses all 720 six-family blend orders with
+all 64 deterministic/stochastic masks and requires
+exact order, clipping, material inputs, and replay tuples to survive unchanged.
+Required-layer policy, transfer equations, blending, texture sampling, color
+spaces, rasterization, and output formats remain open.
+
+Current executable evidence now freezes transport-neutral empirical
+contact-model inputs before material evaluation. Force-calibrated pressure and
+named dimensionless proxies are distinct, fitted parameter evidence retains
+caller-owned units, provenance, confidence, error measures, and calibrated input
+range, and out-of-range inputs require explicit extrapolation.
+
+The same boundary now retains the six accepted observable output families:
+trace width, coverage, starvation, pooling, edge displacement, and absorption or
+drying response. A caller-owned inclusive output envelope can classify observed
+values as bounded or outside the declared range and rejects inverted
+envelopes. Preset evidence also retains caller-owned pen, ink, paper,
+conditions, calibrated input ranges, bounded output-range evidence, error
+measures, and known failure modes.
+
+Two exhaustive 343-case compact integer oracles cross every
+minimum/maximum/value triple in `[-3, 3]` for calibrated inputs and observable
+outputs. They require inverted-range rejection before classification, inclusive
+boundaries, and explicit extrapolation/outside-envelope outcomes. Transfer
+functions, concrete output units/ranges, preset vocabularies, force units, proxy
+scales, and rendering remain open.

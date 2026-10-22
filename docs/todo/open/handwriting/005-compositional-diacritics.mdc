@@ -1,0 +1,52 @@
+---
+record_type: task
+id: "ATR-P4-005"
+title: "Implement compositional diacritics safely"
+status: open
+priority: P4
+lane: handwriting
+dependencies: []
+dependencies_specified: false
+acceptance_criteria:
+  - >-
+      Reuse accents only when profile evidence admits the composition and
+      preserve placement, scale, collision, and language-specific forms.
+evidence_status: not_independently_verified
+migrated_from: TODO.md
+---
+
+# Implement compositional diacritics safely
+
+## Scope and existing evidence
+
+Reuse accents only when profile evidence admits the composition and preserve
+placement, scale, collision, and language-specific forms.
+
+Current executable evidence now admits one compositional diacritic intent only
+when the exact handwriting profile classifies its externally matched rule as
+`Compositional`. The admitted value retains the exact admitting profile
+identity and profile-declared rule together with caller-owned placement, scale,
+collision evidence, and language-specific form.
+
+That admitted output is constructor-owned and read-only, so callers cannot
+fabricate a successful profile/rule admission. Exact-covered graphemes and
+missing or undeclared composition rules reject
+instead of silently switching to accent reuse. Unicode decomposition, rule
+applicability, placement/scale geometry, collision evaluation, language-form
+selection, stroke planning, rendering, and fallback remain open.
+
+Exact coverage remains the first classification even when the supplied
+compositional rule is also undeclared.
+
+A separate English/Spanish composition boundary now performs the frozen
+language-rule lookup before generic profile admission. All 14 decomposed
+bilingual requirements reach their exact Acute, Diaeresis, or Tilde rule when
+the profile declares it; all other 100 textual requirements and deterministic
+near misses reject before generic composition instead of gaining inferred
+Unicode decomposition. A 56-state profile-admission matrix crosses every one of
+the 14 decomposed spellings with exact coverage present/absent and its required
+rule declared/absent. Exact profile coverage still wins after a language rule
+matches, and a matched rule still requires declaration by the selected profile.
+
+Unicode normalization, placement/scale geometry, collision evaluation,
+language-form selection, stroke planning, rendering, and fallback remain open.

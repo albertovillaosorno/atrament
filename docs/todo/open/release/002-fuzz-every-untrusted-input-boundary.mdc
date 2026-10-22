@@ -1,0 +1,158 @@
+---
+record_type: task
+id: "ATR-P8-002"
+title: "Fuzz every untrusted input boundary"
+status: open
+priority: P8
+lane: release
+dependencies: []
+dependencies_specified: false
+acceptance_criteria:
+  - >-
+      Cover notebook bundles, `.atrament` profiles, clipboard HTML, images,
+      TeX, model responses, media metadata, CLI, MCP, and hardware status
+      messages.
+evidence_status: not_independently_verified
+migrated_from: TODO.md
+---
+
+# Fuzz every untrusted input boundary
+
+## Scope and existing evidence
+
+Cover notebook bundles, `.atrament` profiles, clipboard HTML, images, TeX,
+model responses, media metadata, CLI, MCP, and hardware status messages.
+
+The `.atrament` profile path boundary now also has a deterministic generated
+162-case Cartesian corpus across both admitted roots and safe, empty, traversal,
+backslash, Unicode, space-containing, and percent-like path segments. It pins
+validation precedence and exact admission without treating percent-like text as
+URI decoding. This is targeted boundary hardening only; full coverage-guided
+fuzzing of profiles and the other listed untrusted inputs remains open.
+The Cartesian corpus explicitly requires both admitted entry kinds plus
+backslash, empty-segment, and traversal failures; unsupported-root and reserved
+manifest paths remain pinned by dedicated cases.
+
+
+Archive inventory admission now adds a deterministic 4,096-case mutation corpus
+against an independent reference oracle. Replacement, insertion, deletion, and
+duplication of observed member names exercise duplicate detection, missing
+manifest and declared members, unsafe separators and traversal, undeclared
+members, Unicode, spaces, and percent-like names with exact first-error
+precedence.
+The observed-member corpus now also requires valid admission and every inventory
+outcome it owns: duplicate, invalid observed path, missing manifest, missing
+declared member, and undeclared observed member.
+
+
+Typed profile-manifest admission now adds another deterministic 4,096-case
+reference corpus. Generated values combine current/prior/future version strings,
+supported and unsupported required-feature sets, safe and unsafe entry paths,
+duplicate declarations, empty media types, Unicode, spaces, and percent-like
+names while preserving exact validation precedence.
+The corpus also requires valid admission and every typed manifest failure class
+to occur, so selector coverage cannot hide a precedence branch that is never
+observed.
+
+
+Canonical archive-encoding evidence now exhausts all 16 stored/compressed,
+platform-extra, ZIP64-required, and ZIP64-present combinations against an
+independent precedence model through direct and sealed admission. Entry
+verification adds 4,096 full-range `u64`
+length and digest combinations, retaining byte-length mismatch precedence before
+digest comparison.
+
+The TeX-compatible mathematics boundary now also runs a deterministic generated
+4,096-source corpus in inline, display, and aligned modes. Generated mixtures
+cover supported and unsupported commands, malformed groups/environments,
+control symbols, whitespace, NUL, Unicode, alignment, scripts, and root syntax.
+Repeated analysis must agree exactly; successful parses retain complete source
+and span invariants, while typed syntax failures must point to a UTF-8 boundary
+within the original source. This remains generated regression coverage rather
+than coverage-guided fuzzing.
+
+The localhost HTTP router now also runs 4,096 deterministic raw-byte mutation
+cases derived from a canonical public request. Replacement, insertion, deletion,
+and duplication mutations span arbitrary byte values and request positions.
+Repeated routing must return identical HTTP bytes, cannot reflect the session
+secret or seeded private draft markers, and cannot change task, source, or
+candidate draft state. Socket-level timing/resource fuzzing and coverage-guided
+request generation remain open.
+
+The deterministic HTTP and TeX generators now also assert that every declared
+mutation operation, mutation/fragment-count bucket, and TeX fragment token is
+actually exercised, preventing a passing corpus from silently starving one of
+its advertised selector classes.
+
+TeX fragment selection uses upper LCG bits and requires every ordered adjacent
+fragment pair, including the current fixed AMS aliases and LaTeX math sterling
+symbol, to occur in the generated corpus. The TeX corpus also requires success
+and syntax-error outcomes in Inline,
+Display, and Aligned modes, with both fully supported and unsupported-preserving
+successful analyses.
+Its malformed-source coverage also pins group open/close, matrix/cases
+open/close,
+missing required groups, incomplete root indexes, and out-of-structure alignment
+as observed syntax classes.
+HTTP corpus guards additionally require both public health success/rejection and
+authenticated draft apply/reject outcomes, so the mutation checks cannot pass by
+exercising only one routing disposition.
+
+The profile manifest/evidence and browser fragment/draft generators likewise
+assert their declared selector and result classes, so deterministic P8 coverage
+fails when a generator loses a promised branch even if its sampled assertions
+would otherwise remain green. The generated manifest corpus now also requires
+all five declared-path failure reasons, while the observed-inventory corpus
+requires all four non-manifest path failures it can produce; aggregate invalid
+path coverage alone is no longer sufficient.
+
+A second 4,096-case corpus mutates only post-request-line bytes of one
+canonical
+authenticated Task replacement, so generated inputs cannot turn into private GET
+reads. Host, authorization, origin, framing, and body mutations must route
+deterministically. Any non-204 outcome leaves all seeded drafts unchanged; a
+successful replacement may change only Task and must agree across repeated runs.
+Responses never reflect the session secret.
+
+
+The production Unicode grapheme-segmentation adapter now adds a deterministic
+4,096-case mixed-Unicode invariant corpus. Generated sources combine combining
+marks, emoji ZWJ/modifier sequences, regional indicators, CR/LF, variation
+selectors, English/Spanish punctuation, precomposed/decomposed text, and
+non-Latin scalars. It asserts every declared fragment/count bucket is exercised
+and that all returned boundaries are deterministic, strictly advancing UTF-8
+boundaries with exact anchors and fail-closed out-of-range lookup.
+
+The browser session-fragment parser now also runs a deterministic 4,096-case
+mutation corpus against an independent ASCII oracle. Replacement, insertion,
+deletion, and duplication mutations cover credential-prefix bytes, lowercase and
+uppercase hexadecimal, delimiters, percent-like text, NUL, Unicode, and emoji.
+Upper LCG bits drive mutation selection, and the corpus requires every
+operation/token and operation/position pair. Repeated parsing must agree
+exactly,
+and only 64 lowercase hexadecimal characters after the exact `#session=` prefix
+are admitted.
+
+
+Browser handshake response admission now adds a deterministic 4,096-case corpus
+against an independent fail-closed oracle. Generated compatible, incompatible,
+and invalid payloads vary all six version dimensions, diagnostic namespace and
+completeness, item count, code, dimension, and expected version without enabling
+compatibility on malformed values.
+The generator explicitly fails if any declared dimension, metadata selector,
+diagnostic item-count shape, or compatible/incompatible/invalid result class is
+starved.
+
+
+Browser draft resource-limit classification now adds a deterministic 4,096-case
+corpus against an independent fail-closed oracle. Generated error kinds,
+diagnostic versions and completeness, item counts, and stable codes must
+preserve the known resource-limit condition without accepting malformed
+metadata.
+
+
+Shared browser diagnostic-set admission now adds a deterministic 4,096-case
+reference corpus across namespace versions, completeness states, zero through
+three items, valid and invalid item/code shapes, and ignored opaque fields. The
+generator asserts every declared selector class is exercised while malformed
+metadata remains unadmitted.

@@ -1,0 +1,44 @@
+---
+record_type: task
+id: "ATR-P5-004"
+title: "Implement fast and final CPU quality profiles"
+status: open
+priority: P5
+lane: cpu-rendering
+dependencies: []
+dependencies_specified: false
+acceptance_criteria:
+  - >-
+      Use the same vectors, seeds, blend order, and page geometry while
+      varying only declared texture resolution and sampling cost.
+evidence_status: not_independently_verified
+migrated_from: TODO.md
+---
+
+# Implement fast and final CPU quality profiles
+
+## Scope and existing evidence
+
+Use the same vectors, seeds, blend order, and page geometry while varying only
+declared texture resolution and sampling cost.
+
+Current executable evidence now makes Preview and Final explicit quality roles.
+A pair validates only when vector geometry, calibrated material authority,
+physical noise scale, render seed, material blend order, and physical bounds
+remain exactly shared; caller-owned texture resolution and sampling cost may
+differ. Successful comparison now returns constructor-sealed evidence borrowing
+the exact preview and final profiles.
+
+An exhaustive 256-mask oracle crosses both wrong-role states with independent
+drift in all six shared-authority fields. It requires direct and sealed
+admission to preserve preview-role, final-role, then authority-mismatch
+precedence while quality-only costs differ. Rendering, concrete quality values,
+performance budgets, scheduling, and sampling algorithms remain open.
+
+Current design evidence freezes Render as a read-only application capability
+bound to one accepted revision and deterministic vector/material inputs. Preview
+and final profiles share geometry, seeds, physical dimensions, and blend order;
+quality-only sampling may differ. Render identity, retry safety, invalidation,
+read-only cancellation/progress semantics, typed projection results, no-file
+behavior, and browser/CLI/MCP parity are frozen while implementation remains
+open.

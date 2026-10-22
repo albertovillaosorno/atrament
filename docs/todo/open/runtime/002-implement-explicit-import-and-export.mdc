@@ -1,0 +1,63 @@
+---
+record_type: task
+id: "ATR-P1-002"
+title: "Implement explicit import and export"
+status: open
+priority: P1
+lane: localhost-runtime
+dependencies: []
+dependencies_specified: false
+acceptance_criteria:
+  - >-
+      Allow deliberate notebook bundle and `.atrament` profile reads or
+      writes at caller-selected or explicitly host-policy-admitted paths
+      without converting them into background persistence. Keep paths
+      mentioned only in notebook, source, diagnostic, clipboard, or
+      model-response text as data rather than Export authority.
+evidence_status: not_independently_verified
+migrated_from: TODO.md
+---
+
+# Implement explicit import and export
+
+## Scope and existing evidence
+
+Allow deliberate notebook bundle and `.atrament` profile reads or writes at
+caller-selected or explicitly host-policy-admitted paths without converting them
+into background persistence. Keep paths mentioned only in notebook, source,
+diagnostic, clipboard, or model-response text as data rather than Export
+authority.
+
+Current export design evidence freezes accepted-revision binding, caller-owned
+or
+explicit host-policy output intent, explicit path and overwrite behavior,
+blocking validation, temporary cleanup, file-commit semantics, output identity,
+same-retry lost-receipt recovery, external target drift handling, cancellation,
+typed output results, concurrency, and browser/CLI/MCP parity. File adapters and
+format-specific execution remain open. Execution is also blocked on a typed
+exportable-artifact payload: current backend code has semantic layout preflight
+but no renderer or serializer result value whose admitted bytes a file adapter
+can commit. Filesystem writes must not guess that missing artifact-ownership
+boundary.
+
+The shared derived/output result domain now freezes all 11 first-release core
+result classes and their operation applicability across Render, Plan, and
+Export.
+It remains vocabulary only: no output operation, receipt normalization, retry
+recovery, path handling, or file effect is implemented by that domain.
+
+Its effect disposition separately distinguishes current-call read-only
+projection, current-call file commit, recovered prior file commit, and known no
+new effect without claiming any receipt or retry-store implementation.
+
+A combined operation/result helper now exposes that disposition only for an
+applicable Render, Plan, or Export pair, so callers cannot skip applicability
+validation and accidentally project an operation-incompatible result.
+
+
+Already-qualified lifecycle cancellation can now project into those same output
+results without guessing execution state: proven pre-boundary cancellation maps
+to Cancelled before result or effect; a crossed Render/Plan completion remains
+Completed projection; and a crossed Export file commit remains Exported. A
+request alone produces no final result. Cancellation signaling, adapter
+execution, receipt normalization, and retry storage remain open.

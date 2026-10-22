@@ -1,0 +1,76 @@
+---
+record_type: task
+id: "ATR-P8-007"
+title: "Complete operator and developer documentation"
+status: open
+priority: P8
+lane: release
+dependencies: []
+dependencies_specified: false
+acceptance_criteria:
+  - >-
+      Document calibration, composition, one-shot LLM use, PDF, live safety,
+      supported hardware, profile internals, schemas, adapters, validation,
+      and troubleshooting.
+evidence_status: not_independently_verified
+migrated_from: TODO.md
+---
+
+# Complete operator and developer documentation
+
+## Scope and existing evidence
+
+Document calibration, composition, one-shot LLM use, PDF, live safety, supported
+hardware, profile internals, schemas, adapters, validation, and troubleshooting.
+
+Current developer documentation now includes a verified portable-profile
+container guide mapping the accepted `.atrament` design to executable manifest,
+path, inventory, entry-evidence, ZIP-canonicality, rewrite, and compatibility
+behavior. The guide also marks the Rust values as non-wire-schema authority and
+lists the still-missing ZIP/JSON adapters, migrations, real digest computation,
+resource limits, typed section schemas, golden files, and inspection command.
+
+A verified PDF/print composition guide now maps the accepted output ADR to
+executable vector authority, pre-serialization PDF page/resource intent, render
+manifest inputs, preview/final invariants, print/scan evidence, and independent
+visual-regression axes. It explicitly keeps PDF serialization, image/resource
+adapters, manifest identity, visual comparators, and physical tolerances open.
+
+A verified calibration-evidence guide now documents observed/inferred parameter
+evidence, source/unit/confidence/correction retention, held-out separation,
+resumable prompt plans, underdetermination, and downstream bounded-variation
+invariants. It keeps capture geometry, extraction, minimum sample sets, quality
+metrics, confidence policy, and persistence explicitly open.
+
+A verified live physical-safety guide now documents capability disposition,
+device-neutral plan intent, coordinate-calibration evidence, fail-closed dry
+runs, offline traces, interruption recovery, and exact compatibility records.
+It explicitly states that none of those types arm hardware or establish generic
+device support. Vendor adapters, operator recovery, physical certification,
+and compatibility admission/recertification policy remain open.
+
+A verified one-shot formatting-prompt guide now documents complete initial
+request inputs, prompt identity/version, explicit clipboard egress, untrusted
+raw
+response handling, and the separation from later command-mode refinement. It
+keeps prompt serialization/identity computation, response parsing, candidate
+validation, provider guidance, and end-to-end execution explicitly open.
+
+A verified adapter-boundary guide now maps browser, localhost, clipboard, MCP,
+Render, Export, and Plan contracts to their separate admission, effect, retry,
+identity, persistence, and physical-safety boundaries. It also distinguishes
+implemented browser/runtime behavior from contract-only CLI, MCP, file, model,
+media, and hardware adapters.
+
+A verified first-release troubleshooting guide now maps current startup,
+handshake, draft, HTTP, clipboard, profile-integrity, capability, dry-run, and
+recovery outcomes to fail-closed operator/developer actions. It explicitly
+marks Export, CLI, MCP transport, model/media, encoders, and hardware adapters
+as unavailable rather than inventing recovery procedures.
+
+A verified documentation-coverage record now maps every category named by this
+task to its current guide and marks design-only adapters, schemas, packaging,
+and hardware controls unavailable until their owning implementation tasks add
+real operator surfaces. This closes the documentation task for the executable
+first-release surface; future implementation tasks own the documentation they
+introduce.

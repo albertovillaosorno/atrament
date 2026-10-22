@@ -1,0 +1,24 @@
+---
+record_type: task
+id: "ATR-P8-006"
+title: "Package reproducible desktop releases"
+status: open
+priority: P8
+lane: release
+dependencies: []
+dependencies_specified: false
+acceptance_criteria:
+  - >-
+      Ship the Rust backend and TypeScript frontend as one verifiable
+      installation with checksums, licenses, offline startup, diagnostics,
+      and clean uninstall.
+evidence_status: not_independently_verified
+migrated_from: TODO.md
+---
+
+# Package reproducible desktop releases
+
+## Scope and existing evidence
+
+Ship the Rust backend and TypeScript frontend as one verifiable installation
+with checksums, licenses, offline startup, diagnostics, and clean uninstall.

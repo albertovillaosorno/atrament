@@ -1,0 +1,54 @@
+---
+record_type: task
+id: "ATR-P6-008"
+title: "Add clipboard command-mode round trips"
+status: open
+priority: P6
+lane: automation-media
+dependencies: []
+dependencies_specified: false
+acceptance_criteria:
+  - >-
+      Let the backend present a self-contained command-mode prompt for an
+      accepted revision and parse the pasted command envelope through the
+      same untrusted raw response boundary. Delimit notebook/task/source
+      material as data, exclude session credentials and internal paths, and
+      treat prompt-injection-like source prose as untrusted content rather
+      than application authority. Show the semantic diff and diagnostics
+      before interactive acceptance rather than parsing commands in
+      TypeScript.
+evidence_status: not_independently_verified
+migrated_from: TODO.md
+---
+
+# Add clipboard command-mode round trips
+
+## Scope and existing evidence
+
+Let the backend present a self-contained command-mode prompt for an accepted
+revision and parse the pasted command envelope through the same untrusted raw
+response boundary. Delimit notebook/task/source material as data, exclude
+session
+credentials and internal paths, and treat prompt-injection-like source prose as
+untrusted content rather than application authority. Show the semantic diff and
+diagnostics before interactive acceptance rather than parsing commands in
+TypeScript.
+
+If review permits selecting only some returned commands, submit that selection
+to the backend as a new dependency-checked batch and revalidate it. Never splice
+or partially apply the old validated envelope in TypeScript.
+
+Current clipboard transport design evidence freezes explicit Copy, exact text
+transport, prompt/context correlation, intentional external-data egress,
+operating-system clipboard lifetime, failure behavior, untrusted Paste, inert
+browser presentation, no hidden clipboard archive, and MCP parity.
+
+Current frontend evidence has one `writeText` path and no clipboard-read API,
+command parser, HTML sink, domain request, or browser storage path. A lifecycle
+fixture produced zero writes before Copy, exactly one blocked write after Copy,
+kept hostile markup and command-like prose inert, and on `pagehide` scrubbed the
+prompt/response without issuing a second clipboard write to simulate revocation.
+The static Copy description also states that system clipboard data can outlive
+the Atrament session and remains available with JavaScript disabled.
+
+Browser/backend wiring for real command responses remains open.

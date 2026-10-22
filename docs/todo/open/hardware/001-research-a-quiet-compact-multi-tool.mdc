@@ -1,0 +1,24 @@
+---
+record_type: task
+id: "ATR-P9-001"
+title: "Research a quiet compact multi-tool mechanism"
+status: open
+priority: P9
+lane: optional-hardware
+dependencies: []
+dependencies_specified: false
+acceptance_criteria:
+  - >-
+      Evaluate pen carousels, independent tool heads, registration,
+      vibration, noise, desk footprint, serviceability, and safe
+      color-change recovery.
+evidence_status: not_independently_verified
+migrated_from: TODO.md
+---
+
+# Research a quiet compact multi-tool mechanism
+
+## Scope and existing evidence
+
+Evaluate pen carousels, independent tool heads, registration, vibration, noise,
+desk footprint, serviceability, and safe color-change recovery.

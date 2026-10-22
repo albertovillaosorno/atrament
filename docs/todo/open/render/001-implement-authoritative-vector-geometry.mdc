@@ -1,0 +1,38 @@
+---
+record_type: task
+id: "ATR-P5-001"
+title: "Implement authoritative vector geometry"
+status: open
+priority: P5
+lane: cpu-rendering
+dependencies: []
+dependencies_specified: false
+acceptance_criteria:
+  - >-
+      Generate layout boxes, stroke centerlines, expanded ink contours,
+      equations, rules, tables, and diagram paths with physical units and
+      semantic provenance.
+evidence_status: not_independently_verified
+migrated_from: TODO.md
+---
+
+# Implement authoritative vector geometry
+
+## Scope and existing evidence
+
+Generate layout boxes, stroke centerlines, expanded ink contours, equations,
+rules, tables, and diagram paths with physical units and semantic provenance.
+
+Current executable evidence now centralizes those seven authoritative vector
+primitive families. Every primitive structurally carries caller-owned geometry
+and semantic provenance, while page geometry retains caller-owned physical
+bounds and composition order. A read-only provenance projection returns the
+exact composition-order primitive indices owned by one semantic origin without
+interpreting or mutating geometry.
+
+An exhaustive 4,096-mask oracle crosses semantic-origin membership over twelve
+ordered primitives while cycling all seven primitive families. It requires exact
+composition-order indices, an empty result for an absent origin, and byte-for-
+byte-equivalent page value semantics before and after projection. Geometry
+generation, physical unit vocabulary, contour expansion, tessellation,
+rasterization, material behavior, PDF, and live-motion projection remain open.

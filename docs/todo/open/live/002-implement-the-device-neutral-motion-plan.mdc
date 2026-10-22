@@ -1,0 +1,45 @@
+---
+record_type: task
+id: "ATR-P7-002"
+title: "Implement the device-neutral motion plan"
+status: open
+priority: P7
+lane: live-output
+dependencies: []
+dependencies_specified: false
+acceptance_criteria:
+  - >-
+      Emit ordered pen-up and pen-down paths, speed, acceleration, optional
+      pressure, safe bounds, pauses, checkpoints, semantic origin, and
+      estimated duration.
+evidence_status: not_independently_verified
+migrated_from: TODO.md
+---
+
+# Implement the device-neutral motion plan
+
+## Scope and existing evidence
+
+Emit ordered pen-up and pen-down paths, speed, acceleration, optional pressure,
+safe bounds, pauses, checkpoints, semantic origin, and estimated duration.
+
+Current executable evidence now freezes the transport-neutral motion-plan
+content
+boundary without hardware authority. Ordered operations retain pen-up/pen-down
+physical geometry, semantic origin, speed/acceleration intent, optional
+pressure,
+pauses/checkpoints, physical/writable-bound evidence, calibrated pen and live
+capability assumptions, accepted revision identity, backend plan identity, and
+optional estimated duration. The plan domain also owns the exact structural
+operation kind (checkpoint, pause, pen-up, or pen-down) so downstream dry-run
+validation does not redefine plan semantics. Path optimization, coordinate
+calibration, plan identity computation, capability compilation, simulation,
+vendor command projection, device I/O, and physical authorization remain open.
+
+Current design evidence freezes Plan as a read-only derived application
+capability bound to one accepted revision and live capability profile, with
+deterministic inputs, blocking diagnostics, plan identity, read-only
+cancellation/progress semantics, typed projection results, no file or device
+side
+effect, safe retry, derived invalidation, and browser/CLI/MCP parity. Backend
+plan compilation remains open.

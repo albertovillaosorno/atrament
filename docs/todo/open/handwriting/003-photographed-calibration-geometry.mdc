@@ -1,0 +1,39 @@
+---
+record_type: task
+id: "ATR-P4-003"
+title: "Correct photographed calibration geometry"
+status: open
+priority: P4
+lane: handwriting
+dependencies: []
+dependencies_specified: false
+acceptance_criteria:
+  - >-
+      Detect reference marks, perspective, lens distortion, scale, grid,
+      baseline, and capture quality before treating any observed stroke as
+      evidence.
+evidence_status: not_independently_verified
+migrated_from: TODO.md
+---
+
+# Correct photographed calibration geometry
+
+## Scope and existing evidence
+
+Detect reference marks, perspective, lens distortion, scale, grid, baseline,
+and capture quality before treating any observed stroke as evidence.
+
+Current executable evidence now requires one caller-produced observation for
+each of those seven photographed-capture geometry families and binds the report
+to one stable capture identity. Duplicate families reject in report order and
+missing families reject in canonical requirement order; a 128-mask compact
+oracle exhausts every presence subset. Successful completeness now also returns
+constructor-sealed evidence borrowing the exact report, so later extraction can
+require all seven families without treating structural completeness as a quality
+pass.
+
+A separate 2,801-sequence oracle covers every axis sequence through length four
+and requires the sealed path to preserve duplicate-before-missing precedence
+independently. Detection, image decoding, transform
+fitting, distortion correction, units/tolerances, capture-quality scoring,
+geometry acceptance, and handwriting extraction remain open.

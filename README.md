@@ -15,16 +15,6 @@ semantic, layout is compiled against a physical page, handwriting comes from a
 calibrated personal profile, and every visual adjustment remains an explicit
 constraint.
 
-> **Status: paused.** Development was paused on September 15, 2026. For now,
-> this project will not receive new commits. The repository will remain
-> available and will not be archived.
-
-> The lightweight workspace flow described below is the intended final product.
->
-> Parts are still pending. Every unfinished surface names its owning TODO so the
->
-> README can describe the destination without pretending unfinished code exists.
-
 ## The workspace
 
 The primary interface is a 16:9 split workspace with both editors visible:

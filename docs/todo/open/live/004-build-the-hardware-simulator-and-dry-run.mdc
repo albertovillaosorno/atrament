@@ -1,0 +1,51 @@
+---
+record_type: task
+id: "ATR-P7-004"
+title: "Build the hardware simulator and dry run"
+status: open
+priority: P7
+lane: live-output
+dependencies: []
+dependencies_specified: false
+acceptance_criteria:
+  - >-
+      Visualize pen-up travel, pen-down paths, limits, time, pauses, and
+      checkpoints without connecting to a physical machine.
+evidence_status: not_independently_verified
+migrated_from: TODO.md
+---
+
+# Build the hardware simulator and dry run
+
+## Scope and existing evidence
+
+Visualize pen-up travel, pen-down paths, limits, time, pauses, and checkpoints
+without connecting to a physical machine.
+
+Current executable dry-run evidence now binds one exact device-neutral plan to
+one concrete coordinate-calibration record and one ordered limit-evidence entry
+per plan operation. It reuses the plan domain's structural operation kind rather
+than defining a second pen-up/pen-down/pause/checkpoint vocabulary.
+
+Motion cannot mark limit checking inapplicable, and unknown or violated limits
+reject at the exact operation index. A 16-case matrix covers all four limit
+states at pen-up, pause, checkpoint, and pen-down operations. Coordinate
+transforms, limit geometry, visual rendering, timing simulation beyond plan
+evidence, and hardware contact remain open.
+
+Offline simulation now also produces a borrowed inspection trace only after the
+complete dry run validates. Trace construction runs the same 16-state matrix and
+must either return the identical typed dry-run failure or borrow the exact
+admitted package with aligned limit evidence. Six compact under/over-count
+fixtures additionally preserve evaluation-count mismatch before limit-state
+inspection. The trace retains the exact plan
+and calibration, operation order, pen-up/down geometry, pause/checkpoint
+payloads, per-operation limit evidence, plan/revision identities, physical
+bounds, and admitted total estimated duration without copying or rewriting plan
+authority.
+
+The validated trace is constructor-owned and exposes only read-only dry-run and
+step views, so callers cannot fabricate a successful trace around an invalid
+dry run.
+Pixel/vector visualization, coordinate transforms, limit geometry, and derived
+per-operation timing remain open.

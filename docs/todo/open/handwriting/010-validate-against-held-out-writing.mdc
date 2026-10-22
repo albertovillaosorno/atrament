@@ -1,0 +1,42 @@
+---
+record_type: task
+id: "ATR-P4-010"
+title: "Validate against held-out writing"
+status: open
+priority: P4
+lane: handwriting
+dependencies: []
+dependencies_specified: false
+acceptance_criteria:
+  - >-
+      Measure geometry, rhythm, joins, spacing, punctuation, and perceptual
+      fidelity against samples excluded from extraction and publish known
+      failure modes.
+evidence_status: not_independently_verified
+migrated_from: TODO.md
+---
+
+# Validate against held-out writing
+
+## Scope and existing evidence
+
+Measure geometry, rhythm, joins, spacing, punctuation, and perceptual fidelity
+against samples excluded from extraction and publish known failure modes.
+
+Current executable evidence now freezes a transport-neutral held-out quality
+report with those six required dimensions, caller-owned measured values and
+supporting evidence, and caller-owned known failure modes. Structural admission
+first rejects conflicting calibration sample roles, then rejects measurements
+that reference training or unknown samples in report order, and finally requires
+all six quality dimensions. Repeated held-out measurements and an empty known-
+failure list remain valid because aggregation and failure discovery are not
+inferred here. Successful structural admission now also produces
+constructor-sealed evidence borrowing the exact sample declarations and report.
+
+A 793-case compact oracle exhausts all 64 required-dimension subsets plus all
+729 six-measurement held-out/training/unknown sample-reference sequences. Both
+the direct and sealed paths pin role-conflict, first invalid-reference, then
+missing-dimension precedence without declaring any quality score.
+
+Metric units, thresholds, scoring, statistical/perceptual models, sample
+sufficiency, quality-report generation, and pass/fail policy remain open.

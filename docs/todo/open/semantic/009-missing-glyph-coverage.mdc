@@ -1,0 +1,96 @@
+---
+record_type: task
+id: "ATR-P2-009"
+title: "Make missing glyph coverage impossible to miss"
+status: open
+priority: P2
+lane: semantic-layout
+dependencies: []
+dependencies_specified: false
+acceptance_criteria:
+  - >-
+      Report every unsupported grapheme by profile and offer only a visible
+      declared fallback, profile repair, content replacement, or export
+      refusal.
+evidence_status: not_independently_verified
+migrated_from: TODO.md
+---
+
+# Make missing glyph coverage impossible to miss
+
+## Scope and existing evidence
+
+Report every unsupported grapheme by profile and offer only a visible declared
+fallback, profile repair, content replacement, or export refusal.
+
+Current executable evidence now gives one handwriting profile explicit exact
+grapheme declarations and compositional-rule identities. Coverage classification
+admits an exact grapheme first, otherwise accepts only caller-supplied rule
+evidence that names a rule declared by the same profile; absent or undeclared
+rule evidence remains `Missing`. A 12-case compact oracle exhausts exact
+presence, declared-rule presence, and absent/declared/undeclared matched-rule
+states across Exact, Compositional, and Missing outcomes.
+
+A caller-ordered report returns every missing query with its original index and
+exact grapheme value without Unicode normalization or deduplication. All 64
+six-query missing masks prove that covered and missing occurrences preserve
+exact caller order and duplicate positions.
+
+The frozen 114-entry bilingual text inventory now drives that same report in
+cross-component regression evidence. An empty profile returns all 114 exact
+requirements in order, while a profile declaring all 114 exact graphemes returns
+no missing entries.
+
+A language-owned rule matcher now recognizes exactly the 14 decomposed Spanish
+requirements: ten acute forms, two diaereses, and two tildes. Non-decomposed
+requirements and deterministic near misses receive no language rule. A profile
+with the other 100 requirements declared exactly plus those three rules covers
+all 114 with no missing result; arbitrary profile-specific rule semantics remain
+outside this baseline authority.
+
+A separate language-owned inventory now freezes 114 visible textual grapheme
+requirements before profile coverage: 52 ASCII Latin letters, 14 precomposed
+Spanish diacritic letters, their 14 exact decomposed Unicode equivalents, 10
+numerals, and 24 core prose punctuation forms. The punctuation set includes
+ordinary sentence punctuation, Spanish opening punctuation, straight and curly
+quotation/apostrophe forms, guillemets, ellipsis, en/em dash, hyphen,
+parentheses, and square brackets. Precomposed and decomposed spellings remain
+distinct requirements rather than being normalized into one another.
+
+The inventory deliberately excludes whitespace/layout separators and
+mathematical symbols. Whitespace remains text measurement/layout behavior; the
+language ADR delegates mathematical glyph requirements to the separately
+admitted mathematical symbol authority. Arbitrary profile-specific
+compositional rules, that concrete mathematical grapheme inventory, semantic
+locations, diagnostics, measurement, rendering, and portable section schema
+remain open.
+Glyph validation must not infer support from an installed font, renderer
+behavior, or successful text acceptance.
+
+A separate corpus-evidence boundary now freezes the ADR verification checklist:
+English prose, Spanish prose, names, quotations, questions, exclamations, en and
+em dashes, combining marks, normalized equivalents, and mixed mathematics. It
+requires caller-owned evidence for all eleven scenarios, permits extra evidence,
+and returns constructor-sealed evidence borrowing the exact admitted set. All
+2,048 scenario-presence masks require direct and sealed admission to preserve
+the same first missing scenario.
+
+A checked-in corpus fixture now authors exact UTF-8 text for all eleven
+scenarios and a whitespace-delimited sweep whose 114 tokens must match the
+frozen textual grapheme inventory in exact order. The fixture keeps
+precomposed/decomposed pairs
+visible together and retains mixed mathematical source as uninterpreted text.
+It does not claim normalization, render/measure/wrap/edit/serialize behavior, or
+CLI/MCP round-trip verification.
+
+A separate fallback-admission boundary now keeps missing handwriting coverage
+blocked unless caller evidence identifies one declared fallback style, proves
+its use remains visible, and records explicit user acceptance. Exact and
+Compositional admission retain the original profile coverage, including the
+profile-declared rule reference, without requiring fallback. All eight
+declaration/visibility/acceptance combinations are covered independently.
+A separate 27-state oracle crosses Exact/Compositional/Missing with absent and
+all eight fallback evidence states.
+
+Style selection, consent UI, semantic locations, diagnostics, and rendering
+remain open.

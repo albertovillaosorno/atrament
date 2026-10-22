@@ -1,0 +1,292 @@
+---
+record_type: task
+id: "ATR-P8-005"
+title: "Prove localhost security and privacy"
+status: open
+priority: P8
+lane: release
+dependencies: []
+dependencies_specified: false
+acceptance_criteria:
+  - >-
+      Test loopback binding, session token, hostile local pages, file-path
+      confinement, temporary cleanup, no telemetry, no autosave, and no
+      undeclared network access.
+evidence_status: not_independently_verified
+migrated_from: TODO.md
+---
+
+# Prove localhost security and privacy
+
+## Scope and existing evidence
+
+Test loopback binding, session token, hostile local pages, file-path
+confinement, temporary cleanup, no telemetry, no autosave, and no undeclared
+network access.
+
+Current loopback-runtime evidence requires the exact canonical Host, browser
+Origin, and Bearer credential before protected draft mutation. The request line
+requires exactly one ASCII space between method, target, and HTTP/1.1; full
+0–255 byte sweeps now pin both separators to that one byte and reject every byte
+after the HTTP version. An independent 2,048-case byte-substitution matrix pins
+all eight `HTTP/1.1` bytes exactly.
+
+GET and POST are case-sensitive across every ASCII case variant. A separate
+1,792-case byte-substitution matrix pins every byte of both admitted method
+names. Tabs, repeated spaces, trailing whitespace, and other methods or versions
+reject before routing.
+
+Browser privacy regression evidence also pins the generated workspace to exactly
+three admitted same-origin `fetch` call sites for handshake and draft transport.
+All three omit ambient credentials, reject redirects, use no-referrer and
+no-store behavior, and contain no absolute HTTP(S), beacon, XHR, WebSocket, or
+EventSource transport path.
+
+A source-level backend network-surface guard now requires every production
+`std::net` import to remain inside the loopback session runtime. Locked offline
+Cargo metadata pins each direct registry dependency's owner, exact version
+requirement, source, feature/default-feature, optional, target, kind, and rename
+metadata, plus the complete resolved registry package name/version/source set.
+Direct or transitive dependency changes therefore
+require explicit privacy-surface review. This does not replace packet-level
+offline execution evidence.
+
+A Linux process-composition fixture now admits a deterministic successful
+platform opener, waits for the live Atrament process to publish `ready`, and
+resolves only its `/proc/<pid>/fd` socket inodes through that process's kernel
+TCP/UDP tables. The ready process owns exactly one Internet socket: the
+published IPv4 `127.0.0.1` TCP listener, with no connected, UDP, IPv6, wildcard,
+or second Internet socket descriptor. This is live process evidence, not a
+packet-level proof that every future execution path is offline.
+
+A checked-in scripted Firefox fixture without a session credential now observes
+exactly seven same-origin resource requests: the document, stylesheet, main
+module, and four generated support modules. It emits no session API or hostile
+text request, so the active shell's resource graph is executable evidence rather
+than source inspection alone.
+
+Malformed bare-LF or bare-CR header line endings reject while the peer remains
+connected instead of occupying the listener until the request timeout. EOF also
+cannot replace the required blank CRLF header terminator. Exhaustive prefix and
+two-write split fixtures cover every byte boundary of valid GET and body-bearing
+POST requests.
+
+A socket-level incomplete-body fixture now pins transport error classification:
+an early write-side EOF returns `400`, while the same incomplete body held open
+past its read budget returns `408`. Both responses retain the common no-store,
+frame, referrer, nosniff, and connection-close security headers.
+
+Configured request and response timeouts are total transport deadlines rather
+than per-read or per-write budgets. Trickle bytes cannot extend the production
+two-second request budget, and a slow response consumer cannot hold the
+single-thread listener open by making intermittent write progress. The reader
+and writer both refuse to run without their configured deadline; accepted
+connections receive both deadlines before request handling begins. Five
+production trials with a one-mebibyte authenticated draft and tiny-window
+trickle readers released queued health in 1.932-1.980 seconds instead of
+remaining blocked beyond eight seconds.
+
+The transport admits at most 16 KiB of request headers and 2 MiB of request
+body. Exact-limit fixtures pass while one byte over either ceiling rejects.
+
+All current `GET` routes are explicitly bodyless across public, private-draft,
+and missing targets. A nonzero `Content-Length`, transfer encoding, or bytes
+already trailing the parsed request head reject before route-specific handling.
+Absent or zero `Content-Length` is admitted.
+
+Every response closes its connection, so later bytes cannot become a second
+routed request. The authenticated handshake likewise admits no request body.
+Each of its six required version headers must appear exactly once: a 12-case
+missing/duplicate matrix rejects malformed multiplicity with `400` before the
+application compatibility service is invoked.
+
+Header-name admission also probes canonical, all-lowercase, all-uppercase, and
+every single-letter case flip for all six names. Each variant is equivalent when
+unique and still rejects as a duplicate before application compatibility when
+paired with the canonical name.
+
+Automatic browser launch now fails startup closed before `ready`: the bound
+loopback listener and fresh credential are released instead of leaving an
+unreachable authenticated session running. The opener itself has one five-second
+completion budget, so a hung platform helper is killed rather than holding the
+process forever in `listening`. Recovery text is secret-free and directs a
+restart after browser launch is fixed; it does not present the bare origin as an
+authenticated continuation URL.
+
+A real process fixture now records startup publication rather than inferring it
+from source order: successful launch emits exactly `starting`, `listening`, then
+`ready`, with no origin until the listener exists and no credential field in any
+record. A deterministic failing opener emits only `starting` and `listening`,
+exits nonzero, and keeps both the fragment and bound origin out of recovery
+stderr. On Linux, absent or empty `DISPLAY` and `WAYLAND_DISPLAY` markers are
+unavailable; an empty-marker process fixture still fails before `ready` even
+when its fake opener would succeed.
+
+The opener process now receives null stdin, stdout, and stderr. Before that
+change, a synthetic opener that echoed its URL copied the credential-bearing
+fragment into both Atrament output streams; the same probe is now silent. A live
+Linux `/proc` check also observed file descriptors 0, 1, and 2 all bound to
+`/dev/null`.
+
+Three hung-opener production trials failed closed in 5.003-5.007 seconds and
+left no matching helper process. This closes child-output reflection and
+unbounded launch waiting without claiming to solve the separate argv exposure
+below.
+
+The current automatic-launch handoff still passes the fragment-bearing URL as a
+platform-opener command-line argument. A synthetic Linux probe observed that
+argument, including its marker credential, through both `/proc/<pid>/cmdline`
+and `ps` while the opener was alive. This violates the intended protection from
+unrelated same-user local processes even though the fragment never enters an
+HTTP request, log, query string, or persistent product file. P1 remains open
+until the platform launcher uses a credential handoff that is not exposed via
+child argv, environment, temporary files, or shell history; moving the same
+secret between those surfaces is not an acceptable fix.
+
+Request targets must use RFC 3986 origin-form path/query characters beginning
+with `/`; absolute proxy form, `*`, fragments, controls, raw Unicode, and URI-
+invalid visible punctuation reject before routing. Any `%` escape must carry
+exactly two ASCII hexadecimal digits before routing.
+
+An exhaustive raw graphic-ASCII oracle pins the admitted URI character classes,
+and a 256-byte raw-target oracle additionally rejects every control and isolated
+non-UTF-8 byte while admitting only the raw origin-form alphabet. A separate
+16,384-pair ASCII oracle crosses every possible two-byte suffix after `%` and
+admits exactly the 484 hexadecimal pairs, so percent-escape grammar no longer
+depends on representative upper/lowercase examples.
+
+Every header field name must also use the HTTP token grammar; whitespace,
+Unicode, control characters, and other non-token names reject even when the
+header is unrelated to Atrament. Header values reject control bytes other than
+HTTP tab whitespace, including NUL and DEL, before routing. Exhaustive 128-byte
+ASCII oracles independently pin both the complete field-name token alphabet and
+the field-value control rule instead of relying only on sampled malformed
+headers or generated request mutation.
+
+Request framing rejects transfer encoding,
+duplicate content lengths,
+body-length mismatch, and non-digit Content-Length syntax such as a leading plus
+sign before draft state can change. A complete 128-byte single-character
+`Content-Length` oracle admits exactly the ten ASCII decimal digits with
+matching body lengths and proves every other ASCII byte rejects without draft
+mutation. A second full-ASCII composition oracle permits outer SP/HTAB or
+another decimal digit around an existing zero while matching the resulting body
+length; every other byte rejects. Same or conflicting duplicate lengths reject
+regardless of header-name casing, including every ASCII case variant of the
+second `Content-Length` field name.
+
+Security-sensitive header values trim only HTTP space/tab OWS;
+Unicode whitespace remains part of the value and therefore cannot normalize a
+malformed Host, Origin, or Bearer credential into an admitted one. Full-ASCII
+boundary oracles now verify outer Host, Origin, and Authorization normalization
+byte by byte, and a separate 128-byte Bearer-separator oracle requires the
+scheme's literal single ASCII space rather than treating tab or other whitespace
+as equivalent. Exhaustive ASCII case-variant sweeps cover Host, Origin,
+Authorization, Content-Length, and Transfer-Encoding field names; alternate
+casing remains equivalent for admission, and case changes cannot hide duplicate
+Host, Origin, or Authorization values.
+
+Request-line, Host, Origin, and Bearer admission now decode only the complete
+HTTP request head rather than the body. A 256-byte draft-body oracle requires
+every possible single body byte to preserve valid security-header admission and
+wrong-Host `421` precedence. At the correct Host, all 128 ASCII bytes remain
+exact one-byte UTF-8 draft text while every isolated high-bit byte rejects with
+`400`; invalid multi-byte UTF-8 also rejects without draft mutation.
+
+Session-secret comparison executes all 64 admitted byte positions for every
+candidate length;
+0 through 128 byte candidates pin exact-length admission without claiming
+platform-level constant-time execution.
+
+Public, missing-route, unauthenticated, and authenticated empty responses are
+also checked against exact session-credential reflection.
+
+Current frontend evidence has no runtime dependencies, network client,
+persistent browser storage, domain parser, external assets, referrer, autofill,
+or browser spellcheck on session text. Its CSP blocks cross-origin script,
+style, image, and fetch attempts before a second loopback origin receives a
+request and denies unused frame, font, manifest, media, object, and worker
+classes. Text, selection, and dynamic enabled-state restoration are disabled.
+With the browser adapter active, every page exit clears all four session text
+surfaces and their local enabled/count/copy state before navigation continues.
+
+Fresh loads discard only URL fragments that resolve to local document IDs and
+reset all three nested scrollports to their static origin. A 70-reload mixed
+stress covered plain and percent-encoded local IDs plus unknown and malformed
+fragments without a viewport-restoration failure.
+
+Unknown fragments remain untouched by the presentation adapter. This avoids
+preempting the runtime contract's in-memory session-secret handoff before the
+authenticated startup adapter exists. It is an interim shell behavior, not the
+final secret-handling guarantee: authenticated startup must consume an admitted
+secret in memory and remove it from the visible URL.
+
+Malformed or rejecting clipboard promises fail closed, and stale duplicate
+completions cannot unlock a newer write. A checked-in real-Firefox stress
+fixture
+runs one thousand same-value prompt events plus one thousand concurrent repeat
+clicks and retains exactly one active clipboard write, one pending-status
+mutation, and no redundant disabled-state mutation before completion.
+
+Prompt changes and page exit discard pending work and scrub the frontend's
+prompt copy from an already-started request without claiming that the external
+clipboard operation itself can be cancelled.
+
+Before a bfcache snapshot, all four session text live values, default values,
+and textarea text nodes are cleared. The disposable workspace then scrubs
+retained descendant text and comment payloads plus detached attribute-node
+values before removing its element tree.
+
+A fixture retaining source, preview, page-stage, paper, diagnostic, textarea,
+Text, Comment, and Attr references observed empty text and attribute payloads
+after `pagehide(persisted=true)`. The textarea references also remained empty in
+both live and default value state.
+
+A real workspace → second-page → Back flow produced no intermediate workspace
+request, then forced one fresh reload where those controls, counters, copy
+status, and the three nested scrollports returned to their static pre-session
+state. A 30-cycle bfcache stress repeated retained Text/Attr scrubbing and the
+forced fresh reload without a scrub or restoration failure.
+
+With bfcache disabled, the equivalent Back navigation performed a fresh
+`back_forward` document load and again restored all four text surfaces empty and
+all three nested scrollports to their static origin.
+
+A Firefox crash-recovery fixture created live sessionstore recovery files, used
+trusted keyboard input for task, source, and candidate text, presented a prompt,
+then terminated Firefox with `SIGKILL`. Restarting the same profile restored the
+workspace with all four surfaces empty and disabled and no plaintext secret hit
+in the profile files.
+
+Disposable viewport state follows the same rule. Reload, bfcache Back,
+non-bfcache `back_forward`, and same-profile crash recovery all reset a 65/35
+split, 160% preview zoom, and available nested scroll offsets to the static
+46/54, 100%, and zero-origin state.
+
+A control copy with `autocomplete="off"` removed only from Task restored its
+secret after the same crash cycle, confirming that the fixture detects Firefox
+form-state persistence rather than merely reopening a blank page.
+
+The localhost runtime now emits response-level
+`Content-Security-Policy: frame-ancestors 'none'` and
+`Referrer-Policy: no-referrer` on every response. The former cannot be enforced
+from the document-level meta CSP, while the latter reinforces the shell's own
+no-referrer declaration. Backend fixtures pin both headers on every served
+workspace resource and across representative success, empty, authentication,
+conflict, routing, and malformed-request response classes.
+
+A real Firefox BiDi fixture now launches Atrament plus a hostile second loopback
+origin. Direct top-level loading commits the workspace document, while framing
+the same Atrament URL from that hostile origin commits Firefox's blocked
+document instead. A permissive third loopback origin frames successfully from
+the same attacker page, isolating Atrament's response policy rather than generic
+cross-origin framing behavior. This proves browser enforcement of
+`frame-ancestors 'none'`, not only header emission.
+
+The same fixture performs document-initiated navigation from Atrament to a
+hostile loopback recorder and observes no `Referer`, while a permissive control
+document sends its ordinary origin referrer to that recorder. This proves
+browser enforcement of `no-referrer`, not only header emission.
+
+These browser constraints do not replace backend socket, token, host, path,
+cleanup, framing, or hostile-origin acceptance tests.

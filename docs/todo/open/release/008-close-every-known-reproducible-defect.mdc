@@ -1,0 +1,24 @@
+---
+record_type: task
+id: "ATR-P8-008"
+title: "Close every known reproducible defect"
+status: open
+priority: P8
+lane: release
+dependencies: []
+dependencies_specified: false
+acceptance_criteria:
+  - >-
+      Declare the first release complete only when P1 through P8 are closed,
+      Jig is clean, physical evidence is current, and no known product work
+      remains.
+evidence_status: not_independently_verified
+migrated_from: TODO.md
+---
+
+# Close every known reproducible defect
+
+## Scope and existing evidence
+
+Declare the first release complete only when P1 through P8 are closed, Jig is
+clean, physical evidence is current, and no known product work remains.

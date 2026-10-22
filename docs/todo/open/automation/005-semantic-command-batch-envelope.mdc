@@ -1,0 +1,142 @@
+---
+record_type: task
+id: "ATR-P6-005"
+title: "Freeze the semantic command-batch envelope"
+status: open
+priority: P6
+lane: automation-media
+dependencies: []
+dependencies_specified: false
+acceptance_criteria:
+  - >-
+      Version the batch, base notebook revision, command-context identity,
+      readable context, writable targets or insertion anchors,
+      preconditions, retry identity, and normalized application receipt
+      without exposing storage paths as document semantics.
+evidence_status: not_independently_verified
+migrated_from: TODO.md
+---
+
+# Freeze the semantic command-batch envelope
+
+## Scope and existing evidence
+
+Version the batch, base notebook revision, command-context identity, readable
+context, writable targets or insertion anchors, preconditions, retry identity,
+and normalized application receipt without exposing storage paths as document
+semantics.
+
+Current design evidence freezes those semantics, revision-owned command
+families, acceptance fixtures, semantic normalization, command ordering,
+dependency validity, retry-safe batch-local insertion handles, and backend-owned
+resource limits without choosing final wire field names or JSON Schema.
+
+The inbound semantic application contract now also carries one backend-owned
+command context with behavior identity, notebook/base revision, context
+identity, readable context, explicit writable targets and insertion anchors,
+admitted families, relevant constraints, local precondition material, edit
+intent, and resource limits. A separate application boundary checks family and
+location admission independently, so readable-only identities never become
+writable by echoing them. Returned batch authority can also be checked against
+that context's notebook, base revision, behavior identity, and context identity
+without accepting partial matches as equivalent context. A parsed
+transport-neutral batch envelope now retains its protocol-version token, retry
+identity, exact context binding, and ordered direct-edit commands; context
+review
+preserves command identities while checking every existing target and requested
+family against that same bounded context.
+
+Batch-local insertion-handle structure now also has transport-neutral graph
+evidence: one unique declared handle maps to one producing command, a consumer
+must name a declared handle and carry an explicit dependency on that producer,
+and missing producer/consumer commands reject before any accepted mutation. The
+validator does not decide which command family may produce a handle or allocate
+accepted identities.
+
+Command-context resource admission now enforces every count that current typed
+structures can measure without serialization: ordered commands, explicit
+dependency edges, and the combined writable target plus insertion-anchor count.
+Each axis is checked independently against its optional context-owned limit, and
+an absent limit remains unspecified rather than becoming a frontend default.
+Envelope/readable-context bytes, structured depth, and family payload sizes
+still
+need their owning representations before they can be measured here.
+
+Protocol-token membership can now be checked exactly against one capability
+snapshot without guessing a downgrade or conflating capability behavior with a
+wire protocol version. Parsed protocol tokens now use a distinct
+`SemanticCommandProtocolVersion` type, so capability behavior authority cannot
+be passed to protocol admission accidentally. The production snapshot still
+advertises no protocol versions, so every serialized protocol token remains
+unsupported today.
+
+Application-operation membership and family behavior compatibility can likewise
+be checked exactly against one snapshot. Missing application operations reject
+without becoming executable, while family checks distinguish an absent family
+from behavior-version drift. These read-only checks do not widen target-specific
+family admission or populate the production snapshot's empty application list.
+
+A transport-neutral envelope preflight now composes the currently representable
+facts without choosing one rejection precedence: current snapshot behavior
+against the context, requested application and protocol membership, exact
+batch-to-context binding, ordered family/target scope, and count-based resource
+admission. Simultaneous failures remain independently inspectable. Dependency
+graph validation, normalization, retry equality, and mutation stay outside this
+preflight. A 64-case mask oracle crosses snapshot behavior, application and
+protocol membership, family and target scope, and command-count admission to
+prove those preflight axes remain independent; the existing 16-state context
+binding and 27-state resource oracles cover their own internal combinations.
+
+A separate fixture supplies duplicate command identities plus a missing
+dependency and proves preflight preserves both ordered commands while counting
+the explicit edge; dependency-graph rejection remains solely graph-validator
+work.
+
+Preflight failures can now also be projected into frozen result-class facts
+without collapsing them to one batch result: unsupported application,
+capability, protocol, or family authority; command-context mismatch, writable
+scope escape, and measured resource rejection remain independently visible.
+Command identities and order are retained, so later precedence policy need not
+reconstruct evidence.
+
+A transport-neutral core result taxonomy now names the 15 frozen application
+classes required across Validate and Apply without assigning final wire names or
+transport statuses. Its exact operation applicability is now executable:
+Successful validation is Validate-only; Applied, No-op, Idempotent replay, Retry
+conflict, and pre-commit cancellation are Apply-only; the other nine classes are
+shared by both operations. `Unknown transport outcome` is intentionally
+absent because
+the frozen contract defines it as caller state when no valid core response was
+received, not as an application result.
+
+The semantic-command-result application now exposes each core result class's
+frozen commit disposition. Applied is the sole class that guarantees a new
+accepted revision from the current call.
+Idempotent replay reports recovery of an earlier completed Apply without
+applying again, and every other core class guarantees no new commit from the
+current call. Replay deliberately does not guess whether the recovered earlier
+result was a mutation or no-op.
+
+The internal direct-edit simulation and Apply foundations now project only their
+unambiguous outcomes into that taxonomy. Simulation prediction maps to
+Successful validation; Apply mutation/no-op and shared capability, graph,
+resource, semantic, and stale-base failures map directly. Candidate replay
+failure mutates only an isolated clone, while revision allocation fails before
+the commit point; both therefore map to Internal failure with known no-commit.
+Missing accepted state remains explicitly unclassified rather than being
+assigned invented final result semantics.
+
+Qualified Apply cancellation observations now use the shared operation lifecycle
+boundary: proven cancellation before accepted semantic commit maps to Cancelled
+before commit, a crossed commit remains Applied, and a request alone remains
+unclassified. Cancellation signaling/scheduling and adapter execution remain
+open.
+
+Actual protocol-version implementation/admission, context identity computation,
+context construction/completeness policy, normalization and normalized batch
+identity, retry equality/recovery, receipt normalization, concrete
+insertion-command payload behavior and accepted-ID mapping, and serialized
+compatibility remain open.
+The exhaustive three-node dependency-mask oracle requires valid, self, missing,
+cyclic, and forward-dependency outcomes to occur. Duplicate identities remain a
+separate fixture because that Cartesian graph uses fixed-unique command IDs.

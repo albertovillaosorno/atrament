@@ -1,0 +1,37 @@
+---
+record_type: task
+id: "ATR-P3-002"
+title: "Build the structured LLM editor"
+status: open
+priority: P3
+lane: dual-editor
+dependencies: []
+dependencies_specified: false
+acceptance_criteria:
+  - >-
+      Edit task instructions and notebook source with structured completion,
+      formatting, object navigation, diagnostics, and a safe raw-response
+      inspection boundary.
+evidence_status: not_independently_verified
+migrated_from: TODO.md
+---
+
+# Build the structured LLM editor
+
+## Scope and existing evidence
+
+Edit task instructions and notebook source with structured completion,
+formatting,
+object navigation, diagnostics, and a safe raw-response inspection boundary.
+
+Current frontend evidence includes task, source, permanent prompt, backend-owned
+options, and a visually isolated raw model-response boundary that explicitly
+remains untrusted until backend validation. After a compatible authenticated
+handshake, task, source, and raw-response draft fields are read from
+backend-owned session state, staged without partial DOM updates, then committed
+to the UI together before editing is enabled. Complete edits replace those same
+backend draft fields, while page exit aborts both reads and writes and clears
+browser text.
+
+Structured completion, object navigation, candidate diagnostics, semantic
+acceptance, and semantic-command transport remain unfinished.

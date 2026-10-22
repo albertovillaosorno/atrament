@@ -1,0 +1,24 @@
+---
+record_type: task
+id: "ATR-P7-006"
+title: "Implement the NextDraw and AxiDraw CLI adapter"
+status: open
+priority: P7
+lane: live-output
+dependencies: []
+dependencies_specified: false
+acceptance_criteria:
+  - >-
+      Use documented SVG or CLI control behind a managed process boundary
+      and prove preview, plot, pause, resume, cancellation, and failure
+      diagnostics.
+evidence_status: not_independently_verified
+migrated_from: TODO.md
+---
+
+# Implement the NextDraw and AxiDraw CLI adapter
+
+## Scope and existing evidence
+
+Use documented SVG or CLI control behind a managed process boundary and prove
+preview, plot, pause, resume, cancellation, and failure diagnostics.

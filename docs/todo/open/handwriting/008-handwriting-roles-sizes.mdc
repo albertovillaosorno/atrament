@@ -1,0 +1,40 @@
+---
+record_type: task
+id: "ATR-P4-008"
+title: "Implement handwriting roles and sizes"
+status: open
+priority: P4
+lane: handwriting
+dependencies: []
+dependencies_specified: false
+acceptance_criteria:
+  - >-
+      Allow one profile to expose body, title, subtitle, label, caption,
+      formula, margin, and annotation roles without pretending they are
+      unrelated writers.
+evidence_status: not_independently_verified
+migrated_from: TODO.md
+---
+
+# Implement handwriting roles and sizes
+
+## Scope and existing evidence
+
+Allow one profile to expose body, title, subtitle, label, caption, formula,
+margin, and annotation roles without pretending they are unrelated writers.
+
+Current executable evidence now centralizes those eight handwriting roles and
+stores the profile identity once around caller-supplied role presentations. Role
+entries therefore carry size/style metadata but cannot independently claim a
+different writer identity. A read-only role lookup returns `None` for a missing
+role and refuses an ambiguous duplicate claim instead of silently choosing one.
+
+A complete read-only audit now walks the canonical eight-role order and reports
+each role as Missing, Unique, or Ambiguous together with every caller-order
+presentation index. It does not synthesize defaults or declare any global
+validity policy. A 4,681-case exhaustive oracle covers every sequence through
+four supplied presentations over all eight roles and cross-checks exact lookup,
+duplicate indices, and complete audit evidence against an independent oracle.
+
+Size units, role defaults, style vocabulary, global duplicate/missing-role
+policy, glyph behavior, and semantic document-style mappings remain open.

@@ -1,0 +1,119 @@
+---
+record_type: task
+id: "ATR-P2-006"
+title: "Implement mathematics as editable structure"
+status: open
+priority: P2
+lane: semantic-layout
+dependencies: []
+dependencies_specified: false
+acceptance_criteria:
+  - >-
+      Parse and preserve TeX-compatible inline, displayed, aligned, matrix,
+      unit, and derivation content while exposing unsupported constructs
+      without rewriting.
+evidence_status: not_independently_verified
+migrated_from: TODO.md
+---
+
+# Implement mathematics as editable structure
+
+## Scope and existing evidence
+
+Parse and preserve TeX-compatible inline, displayed, aligned, matrix, unit, and
+derivation content while exposing unsupported constructs without rewriting.
+
+Current executable evidence preserves exact UTF-8 mathematical source while
+structurally recognizing ordinary Unicode notation, groups, scripts, plain and
+styled fractions, plain and styled binomial coefficients, square and indexed
+roots, grouped
+mathematical
+alphabets, common one-group, triple/quadruple-dot, and wide accents, upright
+unit or label groups,
+explicit `\text{...}` fragments, grouped custom operator names with the exact
+starred limits variant, stacked annotations and relations, vector, directional
+over- and under-arrows, overline, and underline decorations, escaped TeX
+special characters, with unescaped `%`, `#`, and `$` rejected as typed syntax
+failures rather than literal content,
+standard and variant Greek control-sequence notation including italic capital
+Greek forms, complete AMS ordinary, letter-like, geometric, and standalone
+special symbols including the large box/diamond aliases, checkmark, registered
+mark, maltese cross, and yen sign, common named and delimiter symbols including
+bracket, backslash, AMS corner delimiters and fixed symbol aliases, paired
+vertical-bar spellings,
+parallel control-symbol,
+foundational set/logic forms, and the core plain-TeX surd glyph,
+real/imaginary-part and derivative-prime symbols, geometry/proof and
+ordering/set relations including AMS order, equality, approximation, triangle,
+and strong-containment forms,
+binary-operator symbols including the AMS boxed, circled, wedge, and product
+forms plus square/lattice forms, large
+n-ary operators including coproduct and logical joins/meets, card-suit and
+musical symbols, mathematical punctuation atoms, LaTeX-base paragraph, section,
+dollar, math sterling, pound, paragraph, section, and dagger aliases, the
+remaining `latexsym` join and triangle relation aliases, and variant
+large-triangle symbols,
+arrow and ellipsis
+symbols including the LaTeX-base fixed `\mathellipsis` alias and
+AMS paired, loop, curve, tail, squiggle, and multimap arrows, harpoons, and
+mapped arrows, positive AMS relation and logic symbols, negated AMS arrows and
+order/equality, containment, divisibility, turnstile, and triangle relations,
+modular arithmetic
+including grouped `\pod{...}` operands,
+single, multiple including fourfold, contour, and explicit integral-operator
+atoms, direct/inverse and decorated limit operators, set notation, aligned row
+and
+column separators,
+and ordered aligned, brace-delimited-matrix, bracketed-matrix, cases,
+double-vertical-bar-matrix, gathered, matrix, parenthesized-matrix,
+small-matrix, split, and vertical-bar-matrix environments. Paired and fixed
+delimiter-sizing controls, standalone extensible delimiter components, and
+base-LaTeX construction/fill helpers remain explicit unsupported input rather
+than being inferred from admitted delimiter glyph names. Context-sensitive
+ellipsis forms,
+the dotted multi-integral form, explicit limit-placement controls,
+document-level equation/alignment/gather/multline environments, inner
+`alignedat`/`subarray` layout environments, equation reference, tag,
+intertext, display-break, primitive fraction/root, explicit positive/negative
+spacing, and advanced layout controls likewise remain unsupported until their
+presentation,
+expression-grammar, or document-reference semantics have an owning model.
+
+Optional vertical-position arguments on admitted `aligned` and `gathered`
+environments remain explicit unsupported presentation semantics rather than
+being accepted as literal formula content. Matrix and small-matrix leading
+brackets remain ordinary content because those admitted environments own no such
+optional argument.
+
+Math-only alignment, script, and row-break markers remain literal inside grouped
+text. Row breaks are structural inside grouped substacks without admitting
+column alignment there, including when a column-capable environment surrounds
+the substack; an environment opened inside the substack owns its own columns.
+Inline, display, and aligned presentation modes are semantic values rather than
+renderer guesses. Unknown control words remain explicit unsupported
+constructs; malformed groups, required arguments,
+alignment use, environment ordering, either direction of group/environment
+crossing, indexed-root optional-argument closure, and aligned,
+brace-delimited-matrix, bracketed-matrix, cases, double-vertical-bar-matrix,
+gathered, matrix, parenthesized-matrix, small-matrix, split, or
+vertical-bar-matrix boundaries return typed syntax failures.
+
+Gathered rows do not admit column alignment unless a column-capable environment
+is explicitly nested inside.
+
+Semantic candidate acceptance analyzes every `Mathematics` block before accepted
+identity allocation. Unsupported or malformed mathematical candidates reject
+atomically without replacing the current revision, and the same exact bytes can
+instead remain admitted through the typed unresolved-block path. Supported
+formula source and mode survive candidate-to-accepted identity promotion without
+rewriting.
+
+Direct accepted formula replacement uses the same analyzer against an exact base
+revision. A real supported edit preserves the formula identity and creates one
+new revision; no-op, malformed, unsupported, stale, absent, non-formula, and
+empty-session requests are typed no-effects.
+
+The task remains open for a broader TeX-compatible expression vocabulary,
+component-level edits such as numerator or matrix-cell operations, canonical
+serialization and migration round trips, formula measurement and glyph geometry,
+math-specific diagnostics, and render/live-output consumption.

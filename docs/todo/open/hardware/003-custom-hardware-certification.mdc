@@ -1,0 +1,24 @@
+---
+record_type: task
+id: "ATR-P9-003"
+title: "Build and physically certify the custom hardware"
+status: open
+priority: P9
+lane: optional-hardware
+dependencies: []
+dependencies_specified: false
+acceptance_criteria:
+  - >-
+      Treat the device as a separate product with its own electronics,
+      firmware, enclosure, safety, calibration, endurance, and manufacturing
+      evidence.
+evidence_status: not_independently_verified
+migrated_from: TODO.md
+---
+
+# Build and physically certify the custom hardware
+
+## Scope and existing evidence
+
+Treat the device as a separate product with its own electronics, firmware,
+enclosure, safety, calibration, endurance, and manufacturing evidence.

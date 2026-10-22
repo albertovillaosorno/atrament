@@ -1,0 +1,24 @@
+---
+record_type: task
+id: "ATR-P9-002"
+title: "Define a multi-tool capability profile"
+status: open
+priority: P9
+lane: optional-hardware
+dependencies: []
+dependencies_specified: false
+acceptance_criteria:
+  - >-
+      Add colors, highlighters, automatic tool changes, cleaning,
+      verification, and resume rules without changing the accepted
+      single-pen plan contract.
+evidence_status: not_independently_verified
+migrated_from: TODO.md
+---
+
+# Define a multi-tool capability profile
+
+## Scope and existing evidence
+
+Add colors, highlighters, automatic tool changes, cleaning, verification, and
+resume rules without changing the accepted single-pen plan contract.

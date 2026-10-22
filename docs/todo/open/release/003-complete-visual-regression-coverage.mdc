@@ -1,0 +1,44 @@
+---
+record_type: task
+id: "ATR-P8-003"
+title: "Complete visual regression coverage"
+status: open
+priority: P8
+lane: release
+dependencies: []
+dependencies_specified: false
+acceptance_criteria:
+  - >-
+      Compare semantic layout, vector topology, layer composition, final
+      pixels, digital themes, live themes, and overflow overlays
+      independently.
+evidence_status: not_independently_verified
+migrated_from: TODO.md
+---
+
+# Complete visual regression coverage
+
+## Scope and existing evidence
+
+Compare semantic layout, vector topology, layer composition, final pixels,
+digital themes, live themes, and overflow overlays independently.
+
+Current executable evidence now requires one independently computed result for
+semantic layout, vector topology, layer composition, render seeds, physical
+bounds, final pixels, digital theme, live theme, and overflow overlays before a
+render-regression report is structurally complete. Duplicate or missing axes
+reject, while mismatches remain explicit per axis instead of being hidden by a
+passing final-pixel result. Leave-one-out and
+one-duplicate-at-a-time matrices prove every axis independently participates in
+both completeness checks. Axis-specific comparators, pixel tolerances, golden
+artifact storage, renderer output, and visual acceptance policy remain open.
+
+Reversed all-mismatch evidence also proves every axis is surfaced in canonical
+mismatch order. Complete reports now return constructor-sealed evidence
+borrowing the exact caller sequence, and canonical mismatch projection can run
+from that admitted view without repeating structural interpretation.
+
+A 512-state exhaustive match/mismatch oracle covers every combination of the
+nine axes, reverses caller evidence order, and requires the exact direct and
+sealed canonical mismatch projection for each mask. Missing- and duplicate-axis
+fixtures also require direct/sealed error parity.

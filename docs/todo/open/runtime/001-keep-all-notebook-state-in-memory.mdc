@@ -1,0 +1,105 @@
+---
+record_type: task
+id: "ATR-P1-001"
+title: "Keep all notebook state in memory"
+status: open
+priority: P1
+lane: localhost-runtime
+dependencies: []
+dependencies_specified: false
+acceptance_criteria:
+  - >-
+      Hold documents, assets, undo history, previews, and derived plans only
+      for the active session with no database, autosave, hidden recovery
+      file, or cloud copy.
+evidence_status: not_independently_verified
+migrated_from: TODO.md
+---
+
+# Keep all notebook state in memory
+
+## Scope and existing evidence
+
+Hold documents, assets, undo history, previews, and derived plans only for the
+active session with no database, autosave, hidden recovery file, or cloud copy.
+
+Current executable evidence composes source-preparation draft text, accepted
+semantic notebook revisions, and semantic Undo/Redo history under one
+`SessionApplication` instance owned by the live process. Transport-neutral
+command review, exact and caller-bounded batch analysis and simulation,
+selection analysis, and atomic batch application also route through that owner
+without exposing the concrete semantic service.
+
+The localhost runtime still consumes only the established draft inbound port,
+while the same application owner retains accepted semantic and history
+authority for later admitted routes. `SessionApplication` is the only production
+consumer of the concrete semantic-session service. No command transport or
+writable scope is published by this composition evidence.
+
+Dropping that owner and creating a fresh application yields empty draft fields,
+no accepted revision, no history position, and no retained asset bytes; its
+Debug projection does not expose private draft text or raw media. The active
+application can retain already-validated raw bytes only after an accepted
+semantic asset identity exists. It preserves the first retained byte sequence
+for that identity and keeps those bytes process-local across semantic Undo/Redo.
+
+After Undo followed by a new candidate branch, abandoned asset bytes cannot
+reattach: the old accepted asset identity is absent from the new revision, Redo
+is discarded, and newly accepted assets receive distinct identities with no
+retained bytes. The process owner now also prunes retained bytes whose accepted
+asset identities are unreachable from current, Undo, and Redo semantic state.
+No-op batches, rejected candidates, bounded command rejection, and stale direct
+edits preserve both Redo and its reachable bytes. Branch cleanup is selective:
+bytes still reachable through current or Undo state remain retained.
+
+All semantic mutation entry points in `SessionApplication` now share one private
+branch-cleanup gate so this lifecycle rule is not duplicated per operation.
+
+Formula, physical-page-profile, table-cell-span, and table-row-role replacements
+are exercised through that same gate after Undo with Redo-only asset bytes:
+successful changes prune the discarded branch, while exact-value no-ops preserve
+Redo and its retained bytes. Malformed mathematics, invalid page geometry, and
+invalid table grids also reject without dropping that branch or its bytes.
+Direct text and bounded-batch branches are covered separately. Grapheme-range
+editing now also preserves Redo and its reachable bytes on provider rejection
+or semantic no-op, while an applied grapheme mutation prunes the abandoned
+Redo-only bytes through the same gate.
+
+Read-only grapheme position, signed-step, and selection inspection also route
+through `SessionApplication`; semantic revision/target rejection occurs before
+the boundary provider is consulted and cannot mutate history. Edit, Undo, and
+Redo each invalidate older query revision identities.
+
+A 256-state asset-history fixture undoes halfway, then branches: cleanup removes
+exactly 128 Redo-only retained byte entries and preserves all 128 identities
+still reachable through older history, including their exact byte sequences.
+
+A process fixture now retains all three private draft fields, rejects one
+oversized draft replacement with the shared resource-limit diagnostic,
+retains bytes for two semantic assets, commits text and asset-reference history,
+computes default and family-specific command-target material, bounded
+identity inspection, constituent success/rejection and combined precondition
+review, direct-edit
+simulation and preview, version-bound direct-edit proposal, ordered and
+caller-bounded batch review with graph-resource and dependency-selection
+analysis, grapheme cursor and selection inspection, measured pagination,
+fixed-region overflow diagnostics,
+and layout-only Export preflight. It also
+owns one terminal media job whose registered waveform has a recorded cleanup
+failure and remains retry-required. Both
+orderly and forced
+termination leave a fresh process with empty draft fields, no accepted revision,
+history, bytes, or prior media-job authority; derived results and cleanup
+bookkeeping exist only in the terminated process. On Linux, both populated
+variants add zero writable regular-file descriptors beyond descriptors
+inherited from the test harness while all of that state is live.
+
+Browser edits send complete authenticated replacements and use no browser
+persistence API.
+
+This evidence establishes raw-byte ownership after a separate ingestion
+boundary and several semantic review lifecycles; it does not implement
+media decoding, format validation, clipboard or file intake, or temporary
+conversion files. The task remains open until the remaining preview and
+diagnostic producers, renders, plans, and media operations join the same
+lifecycle invariant.

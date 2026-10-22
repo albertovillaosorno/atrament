@@ -1,0 +1,23 @@
+---
+record_type: task
+id: "ATR-P3-004"
+title: "Synchronize selection between both editors"
+status: open
+priority: P3
+lane: dual-editor
+dependencies: []
+dependencies_specified: false
+acceptance_criteria:
+  - >-
+      Selecting source, a diagnostic, a page object, or a table cell must
+      focus the same stable semantic identity in the other surface.
+evidence_status: not_independently_verified
+migrated_from: TODO.md
+---
+
+# Synchronize selection between both editors
+
+## Scope and existing evidence
+
+Selecting source, a diagnostic, a page object, or a table cell must focus the
+same stable semantic identity in the other surface.

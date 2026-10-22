@@ -1,0 +1,124 @@
+---
+record_type: task
+id: "ATR-P2-008"
+title: "Implement English and Spanish text behavior"
+status: open
+priority: P2
+lane: semantic-layout
+dependencies: []
+dependencies_specified: false
+acceptance_criteria:
+  - >-
+      Normalize Unicode, edit by grapheme, apply language-aware punctuation
+      and wrapping, and preserve curly quotes, guillemets, accents, and en
+      or em dashes.
+evidence_status: not_independently_verified
+migrated_from: TODO.md
+---
+
+# Implement English and Spanish text behavior
+
+## Scope and existing evidence
+
+Normalize Unicode, edit by grapheme, apply language-aware punctuation and
+wrapping, and preserve curly quotes, guillemets, accents, and en or em dashes.
+
+Current executable evidence preserves exact authored Unicode through
+candidate acceptance, exact-base text replacement, ordered batch Apply, and
+Undo, including English and Spanish punctuation, curly quotes, guillemets,
+accents, en/em dashes, a decomposed accent sequence, and multi-code-point emoji.
+Existing precondition fixtures also keep NFC and NFD spellings distinct rather
+than inventing a normalization form. A hexagonal grapheme-edit boundary now
+uses pinned Unicode extended-grapheme segmentation behind an outbound port;
+`SessionApplication` can replace an exact grapheme range through the existing
+atomic whole-text edit authority, and Undo restores the exact authored bytes.
+Invalid ranges reject before revision or history mutation.
+
+The frozen 114-entry English/Spanish visible-text inventory now runs through the
+same pinned segmentation adapter. Every entry reports exactly one extended
+grapheme cluster, boundary zero at byte zero, boundary one at the exact UTF-8
+length, and no second cluster boundary, including every decomposed diacritic.
+
+The same inventory now exercises the generic grapheme-edit boundary directly.
+Every required entry can be replaced as one exact grapheme unit and inserted at
+an internal boundary with its authored UTF-8 bytes unchanged; this adds no
+normalization or punctuation-generation policy.
+
+A 114-entry application sweep also inserts each exact requirement through
+`SessionApplication`, verifies the accepted semantic text byte-for-byte, and
+Undo restores the original text under a fresh revision identity.
+
+Missing, invalid, non-advancing, reversed, inconsistent source-anchor, or
+impossible byte-capacity boundaries from an injected segmentation provider
+remain typed failures and do not mutate accepted state. Active-session range
+edits propagate both single-boundary and multi-boundary capacity failures before
+semantic mutation. Source-anchor validation runs before caller range
+bounds, so an underreported provider count cannot masquerade as a user error.
+Zero-length insertion resolves an internal provider
+boundary once, so a changing repeated answer cannot turn insertion into byte
+replacement.
+
+A provider that reports zero graphemes also resolves boundary zero once, so
+changing answers cannot make nonempty authored text masquerade as an empty
+source.
+
+Provider grapheme counts larger than the source UTF-8 byte length reject before
+any boundary lookup or caller range/position check because such a count is
+impossible for non-overlapping extended grapheme clusters. Multi-boundary
+selection, step, and edit queries likewise reject a claimed grapheme distance
+that is larger than the resolved UTF-8 byte distance.
+
+A compact anchored-provider oracle enumerates all 125 internal-boundary maps for
+a four-grapheme ASCII source. It compares 750 cursor positions, 3,125
+selections, 6,875 signed steps, and 4,500 range edits against independent
+precedence models without requiring a full-source provider scan.
+
+A separate transport-neutral cursor-position boundary now resolves one caller
+extended-grapheme boundary index to its exact UTF-8 byte offset. It validates
+provider start/end anchors before caller bounds, resolves an internal boundary
+once, admits both endpoints including empty text, and returns typed failures for
+missing, invalid, or out-of-range positions.
+
+Internal provider indexes cannot alias byte zero or the final source byte, and
+each internal index must leave enough UTF-8 bytes on both sides for the
+advertised prefix and suffix grapheme counts. An internal cursor or insertion
+therefore cannot silently jump to an impossible source position. All 114 frozen
+bilingual visible-text graphemes admit exactly start and end cursor positions
+under the pinned segmentation adapter.
+
+The pinned production segmentation adapter also runs a deterministic 4,096-case
+mixed-Unicode corpus spanning ASCII, precomposed and decomposed Spanish text,
+isolated combining marks, emoji ZWJ/modifier sequences, regional indicators,
+CR/LF, variation selectors, punctuation, and non-Latin text. Every generated
+source must expose deterministic, strictly advancing UTF-8 boundaries with exact
+zero/final anchors, a grapheme count no larger than source bytes, and explicit
+out-of-range rejection. This checks the outbound port invariants without
+reimplementing Unicode segmentation or adding locale tailoring.
+
+A same-source selection resolver validates provider
+anchors once, preserves caller anchor/focus order for forward and reverse
+selections, and reuses one internal boundary for a collapsed selection.
+
+Noncollapsed selections reject provider byte offsets whose order contradicts
+the caller's grapheme boundary indexes, without confusing a legitimate reverse
+selection with broken provider ordering.
+
+A caller-supplied signed-step resolver advances only by extended-grapheme
+boundaries, rejects out-of-range steps without clamping, and covers both
+directions for all 114 frozen visible-text requirements. Nonzero steps also
+reject individually valid provider boundaries whose UTF-8 order contradicts the
+requested direction, so a broken provider cannot make `+1` move backward or
+stay in place.
+
+`SessionApplication` exposes position, signed-step, and selection queries
+against one exact current Text-content target without mutation; no-session,
+stale-base, missing-target, and non-text outcomes are resolved before provider
+access.
+
+The application owner also sweeps all 114 frozen visible-text requirements:
+exact end position, forward/backward signed steps, and forward/reverse selection
+all preserve the same accepted revision and leave history unchanged.
+
+Normalization policy, punctuation generation, language-aware wrapping, cursor
+direction/step-size/clamping, selection-extension/visual-affinity policy, and
+browser, CLI, or MCP grapheme-range transport remain open.

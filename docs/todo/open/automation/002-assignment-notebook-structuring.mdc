@@ -1,0 +1,47 @@
+---
+record_type: task
+id: "ATR-P6-002"
+title: "Implement assignment-to-notebook structuring"
+status: open
+priority: P6
+lane: automation-media
+dependencies: []
+dependencies_specified: false
+acceptance_criteria:
+  - >-
+      Support titles, explanations, derivations, tables, equations,
+      diagrams, citations, examples, and conclusions without inventing
+      missing task facts.
+evidence_status: not_independently_verified
+migrated_from: TODO.md
+---
+
+# Implement assignment-to-notebook structuring
+
+## Scope and existing evidence
+
+Support titles, explanations, derivations, tables, equations, diagrams,
+citations, examples, and conclusions without inventing missing task facts.
+
+Current executable evidence now freezes those nine assignment-organization roles
+without creating parallel semantic block kinds. An ordered structure plan points
+to existing notebook blocks; represented entries must resolve to non-Unresolved
+blocks, while explicitly missing or ambiguous task facts must point to typed
+Unresolved blocks. Empty plans and repeated roles remain valid because source
+content, not this boundary, decides which organizational roles are needed. A
+54-case role/disposition oracle proves all nine roles obey only that block
+resolution authority instead of gaining hidden role-to-kind mappings.
+
+After complete structural validation, a read-only projection returns the exact
+referenced semantic blocks in caller plan order. Repeated entries remain
+repeated references, unresolved entries remain typed unresolved blocks, and a
+failing plan exposes no partial projection. A constructor-sealed view now binds
+the exact notebook snapshot, caller plan, and projected block sequence after the
+same admission succeeds.
+
+An exhaustive 216-case three-entry disposition oracle proves the first invalid
+entry wins in caller order and requires direct validation, projection, and
+sealed admission to agree without exposing a valid prefix. Content generation,
+role
+selection, source/provenance inference, candidate construction, layout,
+rendering, and assignment-quality policy remain open.

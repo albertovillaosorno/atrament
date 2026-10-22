@@ -1,0 +1,91 @@
+---
+record_type: task
+id: "ATR-P2-005"
+title: "Prevent invisible page overflow"
+status: open
+priority: P2
+lane: semantic-layout
+dependencies: []
+dependencies_specified: false
+acceptance_criteria:
+  - >-
+      Block export while fixed content crosses the writable region and
+      identify the object, violated edge, amount, and valid move, crop,
+      resize, or reflow choices.
+evidence_status: not_independently_verified
+migrated_from: TODO.md
+---
+
+# Prevent invisible page overflow
+
+## Scope and existing evidence
+
+Block export while fixed content crosses the writable region and identify the
+object, violated edge, amount, and valid move, crop, resize, or reflow choices.
+
+Current executable evidence checks solver-derived fixed rectangles only after
+binding them to an exact accepted revision, page, and semantic block. Writable
+bounds come only from the accepted page's referenced physical profile. Every
+crossed edge produces one complete blocking layout diagnostic with the semantic
+object and page locations plus exact physical overflow evidence; the frozen
+first-journey 6 mm bottom overflow is exercised directly. A 20,000-case
+deterministic rectangle oracle independently verifies crossed-edge combinations,
+stable edge order, and exact overflow amounts.
+
+That pure bounds corpus and the accepted-layout diagnostic projection corpus now
+both assert all 16 possible four-edge violation masks are represented, including
+the no-overflow case.
+
+A second 200,000-case oracle uses `u128` reference arithmetic over full-range
+`u64` rectangles to verify writable and object coordinate-overflow precedence
+plus exact surviving edge amounts.
+Its representable surviving cases also assert all 16 edge masks, preventing the
+full-range corpus from degenerating into overflow-only coverage.
+
+A second 20,000-case accepted placement oracle verifies those reports project
+one
+complete blocking diagnostic per violation with matching typed edge and physical
+amount.
+
+Stale placements, wrong page ownership, missing or invalid profiles, and
+unrepresentable coordinates fail before a diagnostic can be presented as
+current. The live `SessionApplication` owner routes this same read-only
+placement validation against its current accepted revision without admitting
+solver or transport authority. Live page-profile geometry and page-to-profile
+reference edits now have integration evidence that prior placements become stale
+while fresh placements use the current referenced writable geometry; fresh
+Undo/Redo placements follow restored profile content and assignments under new
+revision identities. Edited overflow diagnostics block layout-only Export for
+that revision, then remain stale after Undo/Redo; fresh Redo overflow evidence
+must bind to the new revision before it can block Export again.
+
+Nested semantic blocks retain their accepted page ownership, and overflow
+amounts retain the full physical `u64` range without diagnostic truncation.
+
+Fixed block/page ownership now reuses the semantic model's iterative structural
+lookup instead of maintaining a recursive fixed-layout traversal. Fixtures keep
+same-page non-block identities rejected and cover the maximum accepted 256-level
+block nesting boundary.
+
+Undo and Redo restore semantic content under fresh accepted revision identities.
+Old fixed placements and their revision-bound layout-only Export evidence remain
+stale after either traversal instead of being reactivated by restored content.
+
+A read-only layout-only Export preflight now consumes revision-bound layout
+diagnostics and refuses layout readiness when evidence is blocking or explicitly
+incomplete. The live `SessionApplication` routes that gate against its current
+accepted revision, so post-placement overflow evidence can be checked without
+creating file authority.
+
+Complete empty evidence remains Ready, while an incomplete set remains
+Incomplete even when it already contains a blocking diagnostic. The sole current
+layout code is fixed-region overflow, so callers cannot downgrade its backend-
+owned blocking disposition to advisory. Stale revisions, evidence from another
+revision, and non-layout diagnostic codes or operations cannot be smuggled
+through that gate. It accepts no path, overwrite, retry, format, or file-commit
+input and therefore cannot report `Exported`.
+
+The task remains open until full Export preflight combines layout with semantic,
+source, asset, capability, and format validation before file commit. Move, crop,
+resize, and reflow remediation classes also remain open until the owning fixed
+placement and asset semantics can prove which choices are valid.

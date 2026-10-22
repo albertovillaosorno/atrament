@@ -1,0 +1,69 @@
+---
+record_type: task
+id: "ATR-P4-007"
+title: "Implement bounded correlated variation"
+status: open
+priority: P4
+lane: handwriting
+dependencies: []
+dependencies_specified: false
+acceptance_criteria:
+  - >-
+      Support observed or authorized minimum, maximum, distribution, and
+      correlation for size, slant, roundness, flattening, spacing, drift,
+      speed, and pressure.
+evidence_status: not_independently_verified
+migrated_from: TODO.md
+---
+
+# Implement bounded correlated variation
+
+## Scope and existing evidence
+
+Support observed or authorized minimum, maximum, distribution, and correlation
+for size, slant, roundness, flattening, spacing, drift, speed, and pressure.
+
+Current executable evidence now preserves independently observed or authorized
+minimum and maximum bounds, validates central tendency inside the envelope, and
+retains caller-owned typed units, distribution metadata, correlation groups,
+context rules, and the profile/document/page/line/word/character/stroke scale. A
+caller-owned parameter identity plus document seed and stable semantic
+identity forms the typed replay key. A caller-produced sample can now be checked
+against the parameter's inclusive
+minimum/maximum envelope while retaining those exact replay inputs. Repeated
+caller-produced observations carrying the same exact replay key must also carry
+the same sampled value; the first disagreement reports both observation indices
+without choosing how the sample was generated.
+
+A compact 341-case replay oracle exhausts every sequence through length four
+over two semantic keys and two values. Separate fixtures prove that changing
+only the parameter identity, document seed, or semantic identity yields a
+distinct replay key.
+
+Parameter identities are also required to be unique within a supplied parameter
+collection. The first duplicate reports both its caller-order index and the
+earliest prior owner. Successful identity admission seals the exact parameter
+collection for later read-only use. A 31-case compact oracle exhausts every
+two-identity sequence through length four with direct/sealed parity, without
+assigning meaning to either identity.
+
+A separate 1,099-case integer oracle exhausts all 343
+minimum/central/maximum triples in `[-3, 3]` and all 756 sample checks over
+`[-4, 4]` for valid envelopes, reaching every parameter and sample validation
+outcome.
+
+A complete sample-set gate now composes those invariants in one deterministic
+order: parameter validity, caller-order parameter identity, caller-order sample
+bounds, then exact replay consistency. Successful admission seals the exact
+parameter and caller-produced sample slice without choosing how values were
+generated.
+
+A 2,700-case compact oracle crosses all parameter triples in `[-1, 1]`, both
+match/mismatch states for each sample's parameter identity, and every two-sample
+value pair in `[-2, 2]`. It reaches parameter, identity, bound, replay-conflict,
+and accepted outcomes while pinning direct/sealed parity and the first identity
+mismatch in caller order.
+
+This does not choose parameter vocabularies, distribution families,
+correlations, context semantics, random generators, fitting policy, or a
+sampling algorithm.

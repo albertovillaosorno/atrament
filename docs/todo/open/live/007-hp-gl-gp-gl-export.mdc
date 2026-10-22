@@ -1,0 +1,24 @@
+---
+record_type: task
+id: "ATR-P7-007"
+title: "Implement documented HP-GL and GP-GL export"
+status: open
+priority: P7
+lane: live-output
+dependencies: []
+dependencies_specified: false
+acceptance_criteria:
+  - >-
+      Map admitted motion capabilities to each command language without
+      claiming direct-device support for untested transports, firmware, or
+      model behavior.
+evidence_status: not_independently_verified
+migrated_from: TODO.md
+---
+
+# Implement documented HP-GL and GP-GL export
+
+## Scope and existing evidence
+
+Map admitted motion capabilities to each command language without claiming
+direct-device support for untested transports, firmware, or model behavior.

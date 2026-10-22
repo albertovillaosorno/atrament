@@ -1,0 +1,23 @@
+---
+record_type: task
+id: "ATR-P6-009"
+title: "Expose CLI parity for every application command"
+status: open
+priority: P6
+lane: automation-media
+dependencies: []
+dependencies_specified: false
+acceptance_criteria:
+  - >-
+      Create, inspect, validate, transform, render, export, and plan
+      hardware without requiring a browser or changing domain behavior.
+evidence_status: not_independently_verified
+migrated_from: TODO.md
+---
+
+# Expose CLI parity for every application command
+
+## Scope and existing evidence
+
+Create, inspect, validate, transform, render, export, and plan hardware without
+requiring a browser or changing domain behavior.

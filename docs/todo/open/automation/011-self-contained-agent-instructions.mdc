@@ -1,0 +1,37 @@
+---
+record_type: task
+id: "ATR-P6-011"
+title: "Package self-contained agent instructions"
+status: open
+priority: P6
+lane: automation-media
+dependencies: []
+dependencies_specified: false
+acceptance_criteria:
+  - >-
+      Allow a user to provide the repository or release bundle to an agent
+      and have it discover the exact CLI, schemas, examples, and validation
+      workflow locally. Command-mode instructions must distinguish readable
+      context from writable scope, forbid agent-allocated accepted IDs and
+      embedded adapter effects, and use an admitted unresolved response when
+      the requested edit cannot be represented.
+evidence_status: not_independently_verified
+migrated_from: TODO.md
+---
+
+# Package self-contained agent instructions
+
+## Scope and existing evidence
+
+Allow a user to provide the repository or release bundle to an agent and have
+it discover the exact CLI, schemas, examples, and validation workflow locally.
+Command-mode instructions must distinguish readable context from writable scope,
+forbid agent-allocated accepted IDs and embedded adapter effects, and use an
+admitted unresolved response when the requested edit cannot be represented.
+
+Current design evidence freezes offline release discovery, truthful implemented
+versus design-only capability status, live capability-snapshot negotiation,
+local schema/contract/example discovery, typed result and diagnostic handling,
+clipboard/native automation separation, credential exclusion, version mismatch,
+and physical-safety boundaries. The concrete discovery filename, generated
+schemas, CLI/MCP executables, and packaging integration remain open.

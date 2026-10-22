@@ -1,0 +1,24 @@
+---
+record_type: task
+id: "ATR-P3-003"
+title: "Build the human page editor"
+status: open
+priority: P3
+lane: dual-editor
+dependencies: []
+dependencies_specified: false
+acceptance_criteria:
+  - >-
+      Support selection, text correction, drag, resize, crop, align, group,
+      layer, duplicate, delete, and style changes through typed semantic
+      commands.
+evidence_status: not_independently_verified
+migrated_from: TODO.md
+---
+
+# Build the human page editor
+
+## Scope and existing evidence
+
+Support selection, text correction, drag, resize, crop, align, group, layer,
+duplicate, delete, and style changes through typed semantic commands.

@@ -1,0 +1,24 @@
+---
+record_type: task
+id: "ATR-P3-010"
+title: "Make overflow and collision correction visual"
+status: open
+priority: P3
+lane: dual-editor
+dependencies: []
+dependencies_specified: false
+acceptance_criteria:
+  - >-
+      Draw page-edge, collision, and unsupported-mode diagnostics on preview
+      and link each overlay to the owning source object and correction
+      actions.
+evidence_status: not_independently_verified
+migrated_from: TODO.md
+---
+
+# Make overflow and collision correction visual
+
+## Scope and existing evidence
+
+Draw page-edge, collision, and unsupported-mode diagnostics on preview and link
+each overlay to the owning source object and correction actions.

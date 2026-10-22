@@ -1,0 +1,37 @@
+---
+record_type: task
+id: "ATR-P6-001"
+title: "Freeze the one-shot formatting prompt"
+status: open
+priority: P6
+lane: automation-media
+dependencies: []
+dependencies_specified: false
+acceptance_criteria:
+  - >-
+      Include the complete backend-owned return format, allowed styles,
+      output mode, source rules, ambiguity behavior, and exact return
+      envelope in one copy action.
+evidence_status: not_independently_verified
+migrated_from: TODO.md
+---
+
+# Freeze the one-shot formatting prompt
+
+## Scope and existing evidence
+
+Include the complete backend-owned return format, allowed styles, output mode,
+source rules, ambiguity behavior, and exact return envelope in one copy action.
+
+Current executable evidence now freezes the transport-neutral initial formatting
+request as one self-contained value. It retains task, complete source material,
+paper/style constraints, output targets, backend-owned semantic format, source
+and provenance rules, diagnostic/ambiguity expectations, required return
+envelope, prompt identity, and prompt version. Exact current-version admission
+now returns constructor-sealed evidence borrowing the whole prompt.
+
+A generated mutation corpus rejects every one-byte ASCII deletion, substitution,
+and insertion around `atrament.prompt/1`, plus whitespace/newline/NUL aliases,
+through both direct and sealed admission. Prompt text wording/serialization,
+identity computation, clipboard presentation, response parsing, and semantic
+command refinement remain separate open authorities.

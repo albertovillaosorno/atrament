@@ -1,0 +1,95 @@
+---
+record_type: task
+id: "ATR-P8-004"
+title: "Complete accessibility and keyboard operation"
+status: open
+priority: P8
+lane: release
+dependencies: []
+dependencies_specified: false
+acceptance_criteria:
+  - >-
+      Make both editors, page navigation, diagnostics, drag alternatives,
+      prompt copy, import, export, and hardware arming usable without a
+      pointer.
+evidence_status: not_independently_verified
+migrated_from: TODO.md
+---
+
+# Complete accessibility and keyboard operation
+
+## Scope and existing evidence
+
+Make both editors, page navigation, diagnostics, drag alternatives, prompt copy,
+import, export, and hardware arming usable without a pointer.
+
+Current frontend evidence includes skip links, labeled text areas and counters,
+a keyboard-operable splitter, button-based zoom, and focusable source, preview,
+and page-stage scroll regions with explicit focus indicators measuring at least
+7.08:1 contrast. A checked-in real-Firefox trusted-key fixture activates both
+skip links with native Tab/Enter behavior while workspace JavaScript is absent;
+each link focuses and reveals its exact panel heading. Session text follows its
+presented LTR or RTL direction without changing clipboard content; status
+announcements remain available for session, clipboard, and zoom. Diagnostics
+remain ordinary unavailable text until a backend feed can update them.
+
+A visible-text sweep, explicit textarea placeholders, and ruled preview copy all
+measure at least 4.5:1 contrast. A checked-in real-Firefox resize fixture
+scrolls
+the source header away, focuses the wide divider, then crosses 481 to 480
+pixels;
+the now-inert divider moves focus to the source heading and restores its full
+contextual header to the panel origin.
+
+A second checked-in trusted-key fixture pins the complete enabled Tab prefix at
+320 and 481 pixels. Compact order omits the inert divider, while the wide order
+restores it exactly between source and preview; enabled zoom-out and zoom-in
+controls remain reachable before the page stage in both states.
+
+At a real 320-pixel viewport, both skip links still focus the expected heading
+and return that panel to its origin. A checked-in real-Firefox 200% root-text
+fixture now measures both links at 320 and 480 pixels: the longer source link
+wraps to 104 pixels high only at 320, while preview remains 60 pixels high and
+both links are 60 pixels high at 480. All four focused states remain
+viewport-bounded without document horizontal overflow.
+
+A checked-in real-Firefox text-spacing override at 320 and 480 pixels, plus the
+481-pixel wide boundary, keeps the 225-pixel-high document exactly viewport
+bounded. Task, sticky Copy prompt, page stage, and Diagnostics all remain
+reachable through their owning source or preview scrollports.
+
+A checked-in trusted-key Firefox fixture observes modified divider navigation
+keys as unconsumed while plain Arrow, Home, and End keys retain separator
+behavior. The same fixture drives zoom to its 60% boundary and back to 100%;
+each
+disabling action hands focus to an enabled sibling instead of the document body.
+
+Divider pointer gestures preserve grab offsets and tenth-point ratios that match
+measured panel geometry, and are serialized and released on cancellation,
+navigation, compacting, viewport resize, browser-window blur, or document
+hiding. A checked-in trusted-pointer Firefox fallback fixture forces both a
+throwing capture attempt and a silent non-capture. Firefox originally moved
+focus to the divider through its native pointer default even though capture had
+failed; the adapter now restores the prior keyboard focus on the next page task
+without preventing that pointer event, removes drag-only touch suppression, and
+allows only the completed fallback click to change the measured split. The same
+restoration path also covers an already-unavailable capture capability.
+
+Compact state is derived from the same 480-pixel viewport-width boundary as CSS
+and updates through one resize listener. A checked-in real-Firefox mutation
+oracle now proves wide-to-wide and compact-to-compact resizes do not rewrite the
+tracked separator ARIA/tabindex fields, while each real breakpoint transition
+changes every required field exactly once.
+
+A checked-in Firefox BiDi breakpoint oracle now covers 320, 479, 480, 481,
+482, 640, and 1024 pixels. Exact `innerWidth`, the CSS max-480 media query,
+divider enablement, ARIA range, tabindex, and restored 46/54 wide split all
+change at the same boundary. A checked-in trusted-pointer fixture starts an
+active captured drag, crosses a wide-to-wide viewport resize, and requires
+capture to be released before a late move can affect the 46/54 split. Its next
+off-center drag remains usable and must produce the independently computed
+tenth-point ratio from measured workspace geometry and the retained grab offset.
+
+The inert compact divider restores native touch behavior without an overlapping
+hit target. Backend-owned editing, import, export, diagnostic actions, and
+hardware actions still need complete no-pointer paths before this task closes.

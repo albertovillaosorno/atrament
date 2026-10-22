@@ -1,0 +1,31 @@
+---
+record_type: task
+id: "ATR-P3-006"
+title: "Implement rich clipboard intake"
+status: open
+priority: P3
+lane: dual-editor
+dependencies: []
+dependencies_specified: false
+acceptance_criteria:
+  - >-
+      Accept text, structured table fragments, formulas, PNG, JPEG, and WebP
+      while reporting exactly which source structure or metadata cannot be
+      retained.
+evidence_status: not_independently_verified
+migrated_from: TODO.md
+---
+
+# Implement rich clipboard intake
+
+## Scope and existing evidence
+
+Accept text, structured table fragments, formulas, PNG, JPEG, and WebP while
+reporting exactly which source structure or metadata cannot be retained.
+
+Current executable evidence now freezes those six first-release clipboard
+content families before adapter parsing. One intake value keeps caller-owned
+content separate from source provenance, preserves unresolved fragments, and
+retains ordered typed metadata-versus-structure loss details without inventing
+MIME parsing or retention policy. Clipboard access, decoding, semantic candidate
+construction, diagnostics, and notebook mutation remain open.

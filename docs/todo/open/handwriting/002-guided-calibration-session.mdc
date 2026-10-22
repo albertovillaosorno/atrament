@@ -1,0 +1,64 @@
+---
+record_type: task
+id: "ATR-P4-002"
+title: "Build the guided calibration session"
+status: open
+priority: P4
+lane: handwriting
+dependencies: []
+dependencies_specified: false
+acceptance_criteria:
+  - >-
+      Collect isolated characters, joins, words, numerals, punctuation,
+      mathematics, titles, labels, sizes, speeds, pressure proxies, and free
+      writing on known paper.
+evidence_status: not_independently_verified
+migrated_from: TODO.md
+---
+
+# Build the guided calibration session
+
+## Scope and existing evidence
+
+Collect isolated characters, joins, words, numerals, punctuation, mathematics,
+titles, labels, sizes, speeds, pressure proxies, and free writing on known
+paper.
+
+Current executable evidence now freezes transport-neutral calibration
+provenance. Parameter evidence retains caller-owned source region, units,
+confidence, and accepted correction history; observed evidence remains distinct
+from inferred extremes. Training and held-out sample identities cannot cross
+roles, and an underdetermined required behavior explicitly requests another
+sample.
+
+A 5,461-case exhaustive compact oracle covers every declaration sequence through
+six samples over two identities and both roles. Repeated same-role declarations
+remain valid while the first cross-role reuse rejects in declaration order.
+Successful separation now returns constructor-sealed evidence borrowing the
+exact sample declaration slice, and the same oracle requires direct/sealed
+parity.
+
+This does not choose a minimum sample set, confidence scale, unit vocabulary,
+source-region syntax, capture geometry, extraction algorithm, or calibration
+workflow.
+
+Guided-session evidence now also preserves a caller-supplied ordered prompt plan
+across resumptions, rejects duplicate prompt identities, derives completion from
+accepted prompt progress, and covers the ADR's isolated-character, join, word,
+sentence, numeral, punctuation, mathematical-symbol, heading, and free-writing
+categories. Successful identity admission now seals the exact session so
+completed prompts, completion, and next-pending position can be projected
+without rescanning identities.
+
+An exhaustive 511-state compact corpus covers every pending/completed mask from
+zero through eight prompts and cross-checks direct and sealed completion,
+next-pending position, and completed-prompt inspection against an independent
+bit-mask oracle. One
+exact-precondition edit can replace a completed prompt's sample link while
+preserving all unrelated prompt state; stale, pending, missing, ambiguous, and
+no-op cases cannot alter the session. A second exhaustive 3,076-case compact
+oracle crosses prompt counts through six with every progress mask, target or
+missing target, current/stale expectation, and equal/different replacement.
+
+Minimum counts, wording, sufficiency, weak-sample classification and workflow
+policy, capture UI, persistence/history, and geometry semantics remain open.

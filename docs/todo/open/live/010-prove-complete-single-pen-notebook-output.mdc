@@ -1,0 +1,24 @@
+---
+record_type: task
+id: "ATR-P7-010"
+title: "Prove complete single-pen notebook output"
+status: open
+priority: P7
+lane: live-output
+dependencies: []
+dependencies_specified: false
+acceptance_criteria:
+  - >-
+      Write a multi-page English and Spanish fixture with titles, prose,
+      equations, tables, and line art on calibrated blank sheets with no
+      manual content repair.
+evidence_status: not_independently_verified
+migrated_from: TODO.md
+---
+
+# Prove complete single-pen notebook output
+
+## Scope and existing evidence
+
+Write a multi-page English and Spanish fixture with titles, prose, equations,
+tables, and line art on calibrated blank sheets with no manual content repair.

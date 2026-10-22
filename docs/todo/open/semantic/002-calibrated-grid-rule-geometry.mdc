@@ -1,0 +1,53 @@
+---
+record_type: task
+id: "ATR-P2-002"
+title: "Implement calibrated grid and rule geometry"
+status: open
+priority: P2
+lane: semantic-layout
+dependencies: []
+dependencies_specified: false
+acceptance_criteria:
+  - >-
+      Preserve nominal spacing and square cells while allowing bounded ruler
+      error, rounded joins, layer order, and profile-specific appearance.
+evidence_status: not_independently_verified
+migrated_from: TODO.md
+---
+
+# Implement calibrated grid and rule geometry
+
+## Scope and existing evidence
+
+Preserve nominal spacing and square cells while allowing bounded ruler error,
+rounded joins, layer order, and profile-specific appearance.
+
+Current executable evidence compiles blank, ruled, dotted, and squared paper
+into compact exact physical anchor series without allocating one object per
+mark. Squared grids keep identical nominal spacing on both axes. One 20,000-
+case deterministic oracle verifies repeated-mark counts, first and last anchors,
+and full rule spans across dotted, ruled, and squared regions. A second 20,000-
+case oracle verifies signed ruler-sample span and error-bound classification.
+
+Those generated geometry oracles assert every paper pattern, every ruler result
+class, both sheet orientations, and all four binding edges are actually reached.
+
+Accepted page profiles own the maximum ruler-error envelope, rounded or sharp
+join treatment, and mark layer.
+
+Validated ruler samples cannot move nominal anchors. Overflow, zero spacing,
+invalid rounded joins, and unspecified custom geometry fail with typed results.
+Standalone ruler-sample validation now reuses the physical-profile appearance
+validator, so a zero-radius rounded join rejects before sample span or error
+checks instead of bypassing profile-owned appearance authority. A
+constructor-sealed ruler-sample view retains the exact admitted sample, nominal
+line length, and appearance envelope; the 20,000-case ruler oracle requires
+identical direct/sealed outcomes, and all four typed rejection classes retain
+exact parity.
+
+The task remains open for seeded calibrated ruler-path synthesis, additional
+profile-specific visual appearance, and renderer or live-output consumption.
+Seeded path synthesis is blocked on an executable calibrated variation model:
+the accepted contracts define a maximum ruler-error envelope and deterministic
+seed, but not the profile-derived distribution or correlation behavior inside
+that envelope. Independent point jitter must not be invented as a substitute.

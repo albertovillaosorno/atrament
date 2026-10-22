@@ -1,0 +1,31 @@
+---
+record_type: task
+id: "ATR-P2-004"
+title: "Implement fixed-region constraint solving"
+status: open
+priority: P2
+lane: semantic-layout
+dependencies: []
+dependencies_specified: false
+acceptance_criteria:
+  - >-
+      Place titles, figures, callouts, and freeform regions with anchors,
+      alignment, minimum size, collision policy, and explicit infeasibility
+      diagnostics.
+evidence_status: not_independently_verified
+migrated_from: TODO.md
+---
+
+# Implement fixed-region constraint solving
+
+## Scope and existing evidence
+
+Place titles, figures, callouts, and freeform regions with anchors, alignment,
+minimum size, collision policy, and explicit infeasibility diagnostics.
+
+The current semantic `Constraint` owns only the broad
+`ConstraintKind::Placement` classification; it has no typed anchor, alignment,
+minimum-size, or collision fields. The fixed-region bounds and accepted-layout
+components explicitly must not choose those semantics. Solver implementation is
+therefore blocked until an executable placement authority owns the typed
+constraint values and infeasibility policy.

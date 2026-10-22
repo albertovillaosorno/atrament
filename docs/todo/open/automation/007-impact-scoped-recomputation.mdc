@@ -1,0 +1,38 @@
+---
+record_type: task
+id: "ATR-P6-007"
+title: "Implement impact-scoped recomputation"
+status: open
+priority: P6
+lane: automation-media
+dependencies: []
+dependencies_specified: false
+acceptance_criteria:
+  - >-
+      Compute changed semantic identities and dependency-expanded
+      invalidation so a small command does not regenerate unrelated notebook
+      content, while every derived layout, handwriting, diagnostic, preview,
+      export, or motion result that can change is recomputed.
+evidence_status: not_independently_verified
+migrated_from: TODO.md
+---
+
+# Implement impact-scoped recomputation
+
+## Scope and existing evidence
+
+Compute changed semantic identities and dependency-expanded invalidation so a
+small command does not regenerate unrelated notebook content, while every
+derived layout, handwriting, diagnostic, preview, export, or motion result that
+can change is recomputed.
+
+Current executable direct-edit simulation separates semantic changes from
+conservative derived-impact seeds for text, structured content, and page-profile
+edits. Those seeds identify safe starting scopes and authority families, but the
+frozen command contract explicitly treats them as inputs to later expansion.
+
+No executable dependency graph currently relates those seeds to downstream flow
+regions or layout, handwriting, diagnostic, preview, export, and motion
+producers. Full impact expansion and incremental recomputation are blocked on
+that derived-dependency authority; seeds must not be relabeled as the final
+impact set.

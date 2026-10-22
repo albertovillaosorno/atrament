@@ -1,0 +1,24 @@
+---
+record_type: task
+id: "ATR-P3-009"
+title: "Validate pasted model responses transactionally"
+status: open
+priority: P3
+lane: dual-editor
+dependencies: []
+dependencies_specified: false
+acceptance_criteria:
+  - >-
+      Parse the complete response into a candidate notebook, show all
+      differences and errors, and change the accepted session only after
+      explicit acceptance.
+evidence_status: not_independently_verified
+migrated_from: TODO.md
+---
+
+# Validate pasted model responses transactionally
+
+## Scope and existing evidence
+
+Parse the complete response into a candidate notebook, show all differences and
+errors, and change the accepted session only after explicit acceptance.

@@ -1,0 +1,51 @@
+---
+record_type: task
+id: "ATR-P6-004"
+title: "Prove complex educational coverage"
+status: open
+priority: P6
+lane: automation-media
+dependencies: []
+dependencies_specified: false
+acceptance_criteria:
+  - >-
+      Exercise bilingual mathematics, physics, chemistry, biology, history,
+      and language assignments with dense but readable page organization.
+evidence_status: not_independently_verified
+migrated_from: TODO.md
+---
+
+# Prove complex educational coverage
+
+## Scope and existing evidence
+
+Exercise bilingual mathematics, physics, chemistry, biology, history, and
+language assignments with dense but readable page organization.
+
+Current executable evidence now names all six required subject families in one
+canonical completeness-check order and requires every admitted exercise
+observation to carry caller-established
+bilingual, dense-organization, and readable-organization evidence. Complete
+coverage requires at least one fully evidenced observation for mathematics,
+physics, chemistry, biology, history, and language while permitting additional
+subject observations and preserving their caller-owned artifact identities.
+A 64-case subject-presence oracle proves every subset rejects at the first
+missing subject, while 48 single-position property cases pin local
+bilingual/dense/readable precedence. An exhaustive 262,144-case six-observation
+Cartesian oracle now crosses all three evidence bits at every subject position
+and requires validation/projection parity for the first caller-order property
+failure.
+
+After complete validation, a constructor-owned read-only projection groups the
+exact caller observations in canonical required-subject order while preserving
+all observations and their relative order inside each subject; it does not pick
+a representative artifact or score quality.
+
+A checked-in fixture set now supplies concrete bilingual assignment prompts for
+all six subjects. Each prompt has three compact authored modules and links its
+stable artifact identity to the existing caller-declared coverage observation;
+fixture validation does not infer those evidence statuses from prose.
+
+Curriculum/source correctness, natural-language verification, language
+selection, density/readability measurement and thresholds, page layout,
+rendering, and pedagogical quality policy remain open.

@@ -1,0 +1,320 @@
+---
+record_type: task
+id: "ATR-P2-001"
+title: "Implement the semantic notebook model"
+status: open
+priority: P2
+lane: semantic-layout
+dependencies: []
+dependencies_specified: false
+acceptance_criteria:
+  - >-
+      Represent notebooks, pages, flows, blocks, spans, formulas, tables,
+      figures, styles, assets, constraints, output profiles, and provenance
+      with stable IDs.
+evidence_status: not_independently_verified
+migrated_from: TODO.md
+---
+
+# Implement the semantic notebook model
+
+## Scope and existing evidence
+
+Represent notebooks, pages, flows, blocks, spans, formulas, tables, figures,
+styles, assets, constraints, output profiles, and provenance with stable IDs.
+
+Current executable evidence defines transport-independent typed values for those
+semantic families, separate opaque candidate, accepted, and revision identities,
+non-recycling active-session allocation, unresolved semantic blocks, and exact
+extension-data preservation. Citations, definitions, footnotes, quotations,
+source notes, margin notes, and labels are now distinct semantic block kinds
+whose editable inline spans retain their own identities, style references, and
+provenance references rather than being flattened into paragraph text.
+
+Label text remains semantic authority without inventing diagram-node or arrow
+geometry. Explicit candidate acceptance validates
+duplicate, dangling, and wrong-kind references before mutation, promotes
+candidate-local identities through one backend-owned mapping, and commits one
+new accepted revision atomically while preserving nested semantic references.
+A specialized-reference matrix now pins wrong-kind rejection for figure assets,
+block provenance/style, and figure-caption provenance/style without changing the
+current accepted revision.
+
+A direct accepted-text edit now preconditions the exact current revision,
+preserves all semantic identities while replacing one admitted inline text
+identity, creates one new revision only for a real change, and rejects no-op,
+stale, unavailable, or non-text targets without mutating accepted state.
+Mathematical blocks now carry an explicit inline, display, or aligned mode and
+exact authored source; candidate acceptance validates that source before
+allocating accepted authority.
+
+A read-only semantic descriptor now classifies stable identities and their
+direct structural owners without exposing storage or wire shape. Exact-revision
+inspection returns that kind-and-owner descriptor with typed stale, missing, and
+empty-session outcomes and no mutation. Caller-bounded owner ancestry can also
+walk target-first structural owners with explicit complete/incomplete status; it
+does not invent a continuation token or writable scope. A local-precondition
+check can require an exact semantic kind and direct owner, including explicit
+notebook-root ownership, before a future command family may mutate that target.
+
+A second read-only precondition compares exact accepted base values for twelve
+generic editable value shapes: an existing figure's optional admitted asset
+reference, revision-owned constraint kind, one list's ordering-significance
+flag, block or inline-span style reference, inline text, formula mode and
+source, provenance-record kind and source reference, block or inline-span
+provenance reference, table-row role, table-cell span, physical page-profile
+geometry, and one page's admitted page-profile identity.
+Text and formula checks preserve exact authored source because no Unicode
+normalization form is yet frozen. Default command-target material preserves the
+canonical value for one exact revision and target, while a family-specific
+read-only projection can expose another admitted family on the same stable
+identity without changing that default review surface.
+
+The frozen command-family taxonomy is represented without choosing final wire
+operation names. Current executable targets admit Asset reference for a figure's
+existing optional asset identity, Text content for inline text, Structured
+content for formulas, table-row roles, and table-cell spans, Provenance for
+revision-owned source records and block/inline-span provenance references,
+Ordering and grouping for one existing list's ordering-significance flag, Style
+role for block- and inline-span admitted style references, and Document
+constraint for page-profile geometry, per-page page-profile assignment, and
+broad revision-owned constraint kinds. A combined local checker validates
+family, kind, owner, and an optional exact base value in one read-only snapshot
+with stale-base precedence.
+
+Deterministic capability discovery reports only those seven family behaviors and
+supports read-only behavior-version drift checks. It deliberately advertises no
+command protocol, normalizer, command context, Validate, Apply, rebatching, or
+numeric command/context limits yet.
+
+Aggregate command behavior and typed-result behavior are version 99 after
+rejecting unescaped TeX special characters that require literal escapes. Asset
+reference, Ordering and grouping, and Text content retain family behavior
+version 1; Provenance and Style role are version 2, Document constraint is
+version 3, and Structured content is version 86. The immediately previous
+aggregate version 98 rejects instead of being reinterpreted.
+
+A version-bound single-target proposal combines capability, exact local
+preconditions, and direct-edit simulation read-only. All five dedicated direct
+mutation paths consume that simulator before commit.
+
+A separate generic command-graph domain validates duplicate command identities,
+self-dependencies, missing dependencies, cycles, and dependency direction
+without choosing command-ID syntax or changing command order. A
+constructor-sealed valid-graph view retains the exact ordered node slice and its
+validated identity-position index so repeated selection and batch-local handle
+analysis does not revalidate graph structure. Interactive command-ID selections
+can report their
+complete transitive omitted dependency requirements without silently changing
+the caller's selection.
+
+A 20,000-case valid-DAG oracle cross-checks exact graph size, dependency
+closure, omitted-edge requirements, summaries, bounded reporting, and
+closed-selection results through both direct and sealed graph paths. The
+exhaustive 4,096-state three-node dependency-mask oracle also requires direct
+and sealed validation to preserve identical valid, self, missing, cycle, and
+forward-dependency precedence. The existing 16-state batch-local handle oracle
+requires direct/sealed parity too. The graph corpus asserts coverage of every
+generated node-count bucket, duplicate edges, empty/full/partial selections, and
+both closed and missing-requirement outcomes.
+
+Session-level selection analysis binds those requirements to capability behavior
+and the exact accepted base revision, but does not construct a replacement
+batch. A non-materializing summary reports selected-command, required-command,
+and omitted-edge counts before identity-pair review data is requested. Session
+analysis uses lightweight read-only graph-node views and can bound detailed
+requirement materialization without cloning omitted pairs first or allocating a
+dependency-reference vector per command. Exact graph counts and report size can
+be checked against caller-supplied bounds without choosing product limits.
+
+Session graph-resource preflight also binds exact command/dependency counts to
+capability behavior and the accepted base revision before candidate simulation;
+passing those bounds does not validate graph structure. Ordered simulation can
+apply the same caller-supplied bounds before graph and semantic work. Coarse
+resource sizing reads command/dependency counts directly without graph-node
+views or command-ID ordering. All batch read-only APIs share one capability,
+accepted-state, and exact-base authority gate.
+
+The active-process application owner now delegates these exact graph size and
+caller-bounded preflight checks, exact and bounded simulation, selection
+requirements and summaries, local target review, and bounded or unbounded Apply
+to the same semantic authority. This adds no backend product limit, command
+context identity, writable scope, or transport admission.
+
+Direct-edit simulation now also projects exact before/after semantic changes. An
+ordered in-memory direct-edit batch validates the generic dependency graph,
+then consumes valid command payloads through a private targeted value overlay.
+Targeted table cells additionally clone their owning table once so ordered span
+commands validate the complete candidate grid. Caller command IDs and requested
+values move into result/candidate evidence;
+local preconditions are borrowed, and only additional typed failure evidence is
+cloned.
+
+The simulation stops atomically on the first failure and coalesces accepted-base
+to final-candidate net changes. Net coalescing stores first/last mutating
+prediction indexes instead of cloning every intermediate semantic change. The
+same per-target-and-family index state enforces prior-writer dependencies
+without coupling independent fields on one identity.
+
+Figure asset-reference commands can only carry `None` or an accepted semantic
+identity already classified as `Asset` in the same current revision. Missing or
+wrong-kind identities reject before mutation; raw bytes, base64 payloads, local
+paths, and remote URLs are not representable by this value. Asset ingestion
+remains a separate open capability; the application owner can retain opaque raw
+bytes only after an accepted asset identity already exists.
+Executable fixtures now cover attach from no reference, replacement between two
+admitted assets, removal to no reference, a dependent replace-then-remove chain,
+and a figure nested through callout, list, table-cell, and freeform containers.
+
+The pre-asset-reference aggregate behavior version 2 remains incompatible. A
+wrong-kind reference in a later mixed-batch command leaves earlier valid
+predictions and history uncommitted.
+
+Provenance commands now distinguish record metadata from semantic linkage. One
+value replaces an existing revision-owned provenance record's kind and optional
+caller-visible source reference. A separate `ProvenanceReference` value can
+attach, replace, or remove the admitted provenance identity on an existing block
+or inline span while preserving that target's identity and authored text.
+Wrong-kind or no-longer-current references reject before mutation, and Undo
+restores either prior value.
+
+The Provenance family remains behavior version 2; later admissions advance the
+aggregate command behavior independently.
+
+Revision-owned semantic constraints now expose their broad `ConstraintKind` as a
+Document-constraint editable value. The constraint identity and semantic target
+remain stable, a changed kind seeds notebook-wide `AllDerived`, and one Undo
+restores the prior kind. Reassigning a constraint target and editing detailed
+paper, style, placement, or output values remain outside this broad constraint
+model. The pre-constraint aggregate behavior version 4 remains incompatible.
+
+Block and inline-span identities now expose their optional admitted `Style`
+reference through the Style-role family. Replacement may attach, replace, or
+remove that reference; non-Style or no-longer-current identities reject before
+mutation. A span keeps Text content as its default command-target material, but
+family-specific material exposes Style role without replacing the text review
+surface.
+
+Same-span Text, Style, and Provenance batch changes are tracked independently by
+target and family. Style-role behavior version remains 2; later admissions
+advance the aggregate command behavior independently.
+
+Existing semantic `List` identities now expose only their boolean ordering
+significance through Ordering and grouping. The edit can switch ordered versus
+unordered semantics while preserving list identity, item order, item identities,
+and child content. Item moves, new grouping relationships, insertion/deletion,
+and anchor semantics remain open.
+
+Changed lists seed their containing block/flow/page region with `AllDerived`.
+The pre-list-ordering aggregate behavior version 6 remains incompatible.
+
+Existing semantic `Page` identities now expose only the accepted page-profile
+identity they reference through Document constraint. Replacement must name a
+`PageProfile` identity admitted in the same current revision; missing,
+wrong-kind, or prior-revision identities reject before mutation.
+
+Retargeting preserves page identity, flows, and the page-profile catalog while
+changing only `Page.paper_profile`. It seeds that exact page with `AllDerived`;
+downstream reflow remains derived work outside this semantic mutation service.
+Profile creation/deletion and serialized command syntax remain open.
+
+An empty batch returns the frozen NoOp prediction before semantic target
+indexing. Explicit dependencies are required before a later command can observe
+an earlier same-target candidate change; prior no-ops do not manufacture
+dependencies.
+
+Successful direct-edit predictions classify their net effect as Mutation or
+NoOp and derive conservative impact seeds from backend-owned semantic ownership.
+Text seeds identify the owning flow/page dependency region. Structured edits,
+figure asset references, block style references, and list ordering-significance
+edits seed the nearest block/flow/page. Page-profile geometry changes seed
+referencing pages, page-profile assignment seeds the exact changed page, and
+semantic constraint-kind changes seed the notebook.
+
+Asset-reference seeds conservatively require all derived authorities.
+Provenance-record edits seed the notebook for only diagnostic and output
+authorities because reverse claim/source dependency expansion is not yet
+implemented. Provenance-reference edits use those same authorities at the
+owning block/flow region. Single-target review and ordered batches share the
+same seed projection; net semantic no-ops emit no seed.
+
+Ordered simulation consumes indexed target material and impact scopes instead of
+cloning them for each evaluation. The index request is keyed by exact target and
+requested family rather than unique target alone, so same-target Text, Style,
+and Provenance material is collected in one document-order traversal. Block,
+list, and table traversal uses borrowed slice continuation frames and stops once
+every requested target/family material pair is indexed. Constraint-, page-,
+profile-, and revision-owned provenance-record-only batches resolve before block
+traversal.
+
+Single-target provenance-record material also resolves before the generic
+page/block descriptor walk. Family-qualified block/span material retains its
+local impact scope; figure-caption references use the containing figure block as
+impact owner rather than the nested Figure identity.
+
+A release probe over 20,000 unrelated rule blocks measured 500 single-target
+provenance-material reads at about 94-95 microseconds each before that fast path
+and about 0.05 microseconds each after it. These measurements are implementation
+evidence rather than a latency promise.
+
+Valid root-owned semantic references now check their admitted Asset,
+PageProfile,
+Provenance, or Style collections before requesting generic wrong-kind evidence.
+With a first-block target and 100,000 unrelated sibling blocks, 500 valid
+Provenance-reference simulations measured about 302 milliseconds before this
+shortcut and 0.066 milliseconds after it. This is implementation evidence, not
+a product latency guarantee.
+
+A pinned release probe with the target first measured about 20 microseconds with
+100,000 unrelated top-level blocks versus 1,099 microseconds before traversal
+hardening. A nested first-child probe measured about 19 microseconds with
+100,000 siblings versus 186 microseconds before slice frames. These are
+implementation measurements, not product latency or resource guarantees.
+
+Single-target change preview now reuses the ordered-batch material index for its
+impact scope instead of walking the semantic owner chain through repeated root
+lookups. A session-local release probe at the maximum accepted 255 block
+wrappers measured 2,000 Text-content previews at about 396-400 milliseconds
+before indexed impact reuse and 12.4-12.9 milliseconds after it. This is
+implementation evidence, not a product latency guarantee.
+
+Bounded identity ancestry now resolves one iterative structural path instead of
+rescanning the notebook for every owner hop. A 5,000-tree deterministic oracle
+checks branching callout, freeform, list, and table paths against an independent
+descriptor-owner walk; root-owned semantic families also pin exact two-entry
+paths to the notebook. At 255 block wrappers, the same
+20,000 complete release reads measured 4,206 milliseconds before this change and
+about 79-88 milliseconds after it; a 2,000,000-read stress completed in about
+7.81 seconds. These are implementation measurements, not latency guarantees.
+
+The same transport-neutral direct-edit batch can now be applied atomically after
+re-running its validation and simulation. Net mutations replay only the
+coalesced final semantic changes into a cloned accepted notebook. Coalesced
+cell-span changes are overlaid before each affected table is validated once,
+then the batch commits exactly one revision and enters Undo history as one
+transaction.
+
+Net no-ops keep the current revision and history position, while middle-command
+failure and stale base remain no-effects. The discoverable `Apply` capability
+remains disabled.
+
+This is still not an admitted normalized command batch. Protocol normalization,
+command context and writable scope, published limits, complete impact expansion,
+diagnostics, retry handling, and full Validate/Apply admission remain open.
+Candidate acceptance also enforces a public 256-level block nesting resource
+bound and iteratively dismantles rejected deep candidates before mutation.
+Candidate-to-accepted promotion is now iterative too: exact-boundary fixtures
+cover callout, freeform, list-item, table-cell, and mixed nesting, while the
+first block beyond the bound rejects before accepted-state mutation.
+
+A wide heterogeneous fixture also preserves mapped owner paths and block
+preorder across sibling blocks, list items, table rows, and table cells.
+
+Maximum-depth direct text, formula, figure-asset, list-ordering, table-row,
+table-cell-span, block-style, and block-provenance edits also remain usable
+after that promotion.
+
+The task remains open for the complete first-release semantic vocabulary,
+format parsing and canonical serialization, migrations and round-trip fixtures,
+adapter-level semantic command/history transport, measured layout/render
+consumers, and format-compatible import/export.

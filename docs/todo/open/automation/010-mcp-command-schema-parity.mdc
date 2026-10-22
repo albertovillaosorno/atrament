@@ -1,0 +1,252 @@
+---
+record_type: task
+id: "ATR-P6-010"
+title: "Expose MCP from the same command schemas"
+status: open
+priority: P6
+lane: automation-media
+dependencies: []
+dependencies_specified: false
+acceptance_criteria:
+  - >-
+      Project bounded capability discovery, inspect, validate, apply,
+      render, export, and plan capabilities for agents and prove normalized
+      receipts match CLI and interactive application. Keep physical `arm`
+      and `start` behind their separate device-safety boundary.
+evidence_status: not_independently_verified
+migrated_from: TODO.md
+---
+
+# Expose MCP from the same command schemas
+
+## Scope and existing evidence
+
+Project bounded capability discovery, inspect, validate, apply, render, export,
+and plan capabilities for agents and prove normalized receipts match CLI and
+interactive application. Keep physical `arm` and `start` behind their separate
+device-safety boundary.
+
+Current design evidence freezes MCP effect classes, capability discovery,
+revision-bound Inspect semantics, explicit completeness and continuation,
+backend-owned command-context derivation, bounded read/write scope, receipt
+chaining, lost-receipt recovery, command and output result classes, optional
+operation lifecycle semantics, autonomous-loop progress/stop conditions, local
+per-session adapter admission, effect-class authorization, session-scoped
+recovery, no internal-file authority, and browser/CLI/MCP parity targets. Tool
+schemas, concrete stdio/loopback mechanism, and backend implementation remain
+open.
+
+
+The dependency-free `mcp-capability-effect` domain now freezes the eight generic
+application capability classes and their declared effect classes without naming
+MCP tools or implementing adapter admission, transport, schemas, receipts, or
+execution. Undo and Redo remain grouped as History traversal at this vocabulary
+layer.
+The same vocabulary also reports that none of those generic application
+capabilities grants physical-device authority; connect, home, arm, start, pause,
+resume, cancel, and safe-stop remain outside this MCP application layer.
+
+
+A separate dependency-light MCP effect-admission domain now applies exact
+membership over the seven frozen application effect classes. It authorizes only
+that axis; session identity, transport, packaged/live capability presence, and
+all capability-specific revision/scope/path/retry/output checks remain open.
+
+For MCP Command context, Validate, and Apply, a composed read-only projection
+retains that effect authorization beside exact semantic-command snapshot
+membership without collapsing either axis. It still does not authenticate a
+session, choose rejection precedence, normalize commands, or execute work.
+
+
+The shared application-operation-lifecycle domain now freezes the six
+first-release operation classes and maps Apply, history traversal, Export, and
+the three read-only operations to their authoritative effect boundaries. It also
+resolves already-qualified cancellation observations without treating a request
+as proof: proven pre-boundary cancellation means no effect, while a crossed
+boundary remains authoritative. Completion authority is also explicit:
+progress,
+cancellation requests, and transport termination never complete work; final
+typed
+results do, and same-retry recovery is completion authority only for
+Apply,
+history traversal, and Export. Cancellation admission/execution, progress
+production, operation identity, scheduling, and retry storage remain open.
+
+Current design evidence freezes autonomous-agent loop stop conditions, typed
+progress versus non-progress, same-retry recovery, bounded automation budgets,
+and the separation between semantic completion, explicit output, and physical
+authority. Concrete MCP tools and backend execution remain open.
+
+Autonomous budget admission now preserves all five frozen budget axes and stops
+further mutation on this axis when any caller/backend-supplied exhaustion
+fact is present. Numeric limits, budget accounting, scheduling, and overall
+mutation authority remain outside this domain.
+
+Budget-stop projection now maps exhausted-budget admission to the frozen
+terminal stop class and returns no terminal outcome when the budget axis does
+not require a stop. Merging it with other stop/completion conditions remains
+coordinator work.
+
+Autonomous output intent now distinguishes caller-explicit goals, independently
+admitted host policy, and untrusted semantic content. Caller goals can establish
+Render, Plan, or Export intent; host policy is an alternate source only for
+persistent Export, and edited/model-provided content grants none.
+
+Autonomous progress evidence now distinguishes five frozen authoritative
+progress conditions from four explicit non-progress conditions without
+inspecting raw state or model prose. Fingerprint construction,
+blocker-resolution progress comparison, and loop orchestration remain open
+application work.
+
+Application-capability progress projection now treats a transition from
+Unsupported to Admitted as new authority only for the exact same capability. It
+does not infer goal requirement, blocker resolution, or terminal unavailability.
+
+Repeated-input progress projection now recognizes unchanged qualified revision,
+blocking evidence, and bounded intent with no new admission as frozen
+non-progress. Fingerprint construction and owning loop policy remain open.
+
+Repeated-No-op control now derives qualified repeated No-op evidence only when
+two consecutive semantic results are No-op for the same owner-qualified bounded
+intent and no new relevant evidence is supplied, then maps that evidence to a
+local requirement to stop equivalent mutation attempts. Intent-fingerprint and
+relevant-evidence qualification remain caller-owned; the control does not choose
+a terminal goal class or grant continuation on other evidence.
+
+Semantic-result progress projection now maps Applied directly to accepted
+revision progress and Idempotent replay to replay-recovery non-progress.
+Repeated-No-op qualification now has its separate stateful control;
+stale-state comparison and diagnostic-resolution progress still require owning
+stateful evidence.
+
+History-result progress projection now maps Traversed directly to accepted
+revision progress and Idempotent replay to replay-recovery non-progress.
+Boundary and stale handling remain separate from progress evidence.
+
+History-boundary control now preserves the exact Undo or Redo direction from a
+typed Boundary outcome and stops blind retry only in that direction. Stateful
+scheduling and terminal-goal decisions remain open coordinator work.
+Read-only history availability now projects each requested direction as
+admitted, boundary, or no accepted revision before mutation. This does not
+implement scheduling, traversal, retry, or terminal-goal policy.
+
+Stable-blocking stop projection now compares consecutive owner-qualified
+blocking
+observations and derives repeated-blocking evidence only when diagnostic
+fingerprint, accepted revision, and bounded intent all remain unchanged with no
+new admission. Only that evidence maps to the frozen stable-blocking terminal
+outcome. Diagnostic fingerprint construction and all other stop/completion
+composition remain open.
+
+Unresolved-stop projection now requires an explicit owning-caller choice before
+Unrepresentable or unresolved can become the frozen unresolved terminal class.
+Requesting broader workflow remains nonterminal and grants no authority itself.
+
+Autonomous terminal outcomes now distinguish successful goal completion from
+stopping for unresolved evidence, exhausted budget, stable blocking failure, or
+unavailable capability. An unavailable-capability stop projection now maps only
+owner-qualified unavailability of a capability required by the admitted bounded
+goal to that terminal class; admitted required capability remains nonterminal.
+Goal-requirement detection, capability discovery comparison, compatibility
+negotiation, and completion receipts remain open coordinator work.
+
+Autonomous completion admission now requires qualified semantic satisfaction
+and complete explicitly requested output work before producing the successful
+terminal class. It also aggregates already-qualified requested-output items so
+empty means not requested, any incomplete item blocks completion, and only
+all-complete items satisfy the aggregate. Revision comparison, identities, and
+completion receipt construction remain open coordinator work.
+
+Satisfied-No-op projection now maps No-op to successful completion only when the
+separate completion-admission gate already proves semantic and requested-output
+satisfaction. Stateful equivalence and satisfaction detection remain open.
+
+Refreshed-state completion projection now allows Stale base or Command-context
+mismatch to complete only after independently qualified fresh semantic/output
+evidence already satisfies the goal. Refresh and satisfaction detection remain
+open coordinator work.
+
+Derived-output completion projection now classifies all 33 operation/result
+pairs so only successful projection, Export commit, or recovered Export can
+satisfy one requested output. The completion boundary aggregates those qualified
+items; receipt and output-identity construction remain open.
+
+Requested-output progress projection now crosses all 99 operation/result/intent
+combinations. Only caller-requested successful projection or fresh Export counts
+as new progress; recovered Export is replay-recovery non-progress, and host
+policy does not become caller-goal progress.
+
+Autonomous session-boundary evidence now invalidates prior command context,
+retry/recovery state, and session admission while keeping explicit external
+caller workflow state outside Atrament ownership. Fresh-session bootstrap starts
+from capability discovery and Inspect; reconnection/reattachment remains open.
+
+Generic autonomous physical-boundary evidence now proves that no sequence of
+successful Apply, Render, Export, or Plan steps accumulates authority for the
+eight frozen hardware actions. Physical admission and execution remain separate.
+
+A partial autonomous semantic-result classifier now encodes the twelve
+next-step branches that the frozen contracts define exactly. Successful
+validation, pre-commit cancellation, and internal known-no-commit failure remain
+unclassified rather than receiving invented retry or escalation policy.
+No-op guidance now requires inspecting accepted state and deciding whether the
+bounded intent is already satisfied; it no longer shares Applied continuation.
+
+History automation now separately classifies Traversed, Idempotent replay,
+History boundary, and Stale current revision into their frozen continuation,
+recovery, stop, or reinspection guidance. Cancellation and known-no-commit
+failure remain intentionally unclassified.
+
+Derived/output automation now separately classifies five explicit remediation
+branches for stale revision, overwrite conflict, Export retry conflict, external
+target drift, and idempotent Export recovery. Output successes and outcomes
+whose next action depends on diagnostics, cancellation intent, or caller
+authority remain unclassified.
+
+A shared MCP/lifecycle projection now maps the six operational MCP capability
+classes to the frozen application operation lifecycle and leaves Inspect and
+Command context outside that lifecycle. It does not imply those capabilities
+are packaged, admitted, running, cancellable, or exposed as tools.
+
+The same projection now preserves completion authority for all 40 MCP
+capability/observation pairs. Final typed results complete all six mapped
+operations; progress, cancellation requests, and transport termination do not;
+and same-retry recovery completes only Apply, Export, and History traversal.
+Inspect and Command context remain outside this lifecycle rather than acquiring
+completion meaning implicitly.
+
+MCP Render, Plan, and Export cancellation projection now reuses the same shared
+output result boundary: pre-boundary cancellation, crossed read-only completion,
+and crossed file commit retain their frozen meanings only for those three
+capability classes. This adds no tool or cancellation execution authority.
+
+
+A separate MCP/output-result projection now admits derived/output result meaning
+only for Render, Plan, and Export and preserves the result-class applicability
+check for all 11 frozen outcomes. The other five capability classes receive no
+output-result disposition, and no output execution is implied.
+
+MCP Command context, Validate, and Apply now have a separate read-only
+projection
+onto semantic-command application admission. Exact backend snapshot membership
+remains authoritative across all four command application bits; MCP vocabulary
+alone never turns an omitted operation into an admitted one.
+
+
+MCP Validate and Apply now also have a separate read-only semantic-result
+projection. It preserves the shared 15-class Validate/Apply applicability gate
+before exposing commit disposition. Qualified Apply cancellation is projected
+only through Apply.
+
+The other six MCP capability classes receive no semantic command-result meaning.
+No command execution, retry storage, tool schema, or transport admission is
+implied.
+
+MCP History traversal now has a separate read-only projection for all six frozen
+history result dispositions and backend-owned Undo/Redo availability. Qualified
+history cancellation also reuses the shared lifecycle mapping only through that
+capability: request-only remains unresolved, pre-commit cancellation stays a
+known no-commit result, and crossed traversal commit stays Traversed. The other
+seven MCP capability classes receive no history projection, and retry,
+cancellation execution, traversal execution, and concrete MCP tooling remain
+open.

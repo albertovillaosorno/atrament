@@ -1,0 +1,47 @@
+---
+record_type: task
+id: "ATR-P6-006"
+title: "Implement atomic command validation and apply"
+status: open
+priority: P6
+lane: automation-media
+dependencies: []
+dependencies_specified: false
+acceptance_criteria:
+  - >-
+      Validate the whole batch against one accepted snapshot, reject stale
+      or invalid commands without partial mutation, and make retry behavior
+      idempotent enough for CLI and MCP automation.
+evidence_status: not_independently_verified
+migrated_from: TODO.md
+---
+
+# Implement atomic command validation and apply
+
+## Scope and existing evidence
+
+Validate the whole batch against one accepted snapshot, reject stale or invalid
+commands without partial mutation, and make retry behavior idempotent enough for
+CLI and MCP automation.
+
+Current executable foundation applies the transport-neutral ordered direct-edit
+batch through the same semantic simulation used for review. A successful net
+mutation commits exactly one accepted revision and one Undo transaction; a net
+no-op creates no revision, and stale or middle-command failure remains atomic.
+Validate/Apply semantic change and impact-seed evidence match for unchanged
+inputs.
+
+An in-process synchronized race fixture now releases two Apply calls sharing one
+base; exactly one commits and the other returns the winning revision as stale.
+The task remains open for the normalized protocol/envelope, command-context and
+writable-scope admission, retry identity and lost-receipt recovery, published
+resource limits, complete dependency-expanded impact, diagnostics, transaction
+provenance, cancellation and adapter-level concurrency fixtures, and
+browser/CLI/MCP parity.
+
+Retry recovery is specifically blocked on normalized batch identity: the current
+`DirectEditBatchProposal` is deliberately pre-normalization, while the frozen
+retry contract compares one retry identity against the normalized batch. Raw
+proposal equality must not stand in for that missing normalization authority.
+Until these boundaries exist, capability discovery intentionally does not
+advertise `Apply`.

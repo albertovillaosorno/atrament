@@ -1,0 +1,90 @@
+---
+record_type: task
+id: "ATR-P3-005"
+title: "Implement semantic undo and redo"
+status: open
+priority: P3
+lane: dual-editor
+dependencies: []
+dependencies_specified: false
+acceptance_criteria:
+  - >-
+      Record accepted command batches rather than DOM or canvas snapshots
+      and preserve stable semantic identities plus deterministic
+      recomputation across history. Expose undo and redo as
+      application-history commands, not semantic operations embedded in a
+      new batch.
+evidence_status: not_independently_verified
+migrated_from: TODO.md
+---
+
+# Implement semantic undo and redo
+
+## Scope and existing evidence
+
+Record accepted command batches rather than DOM or canvas snapshots and preserve
+stable semantic identities plus deterministic recomputation across history.
+Expose undo and redo as application-history commands, not semantic operations
+embedded in a new batch.
+
+Current executable evidence now stores semantic history only in the active
+backend session. Accepted candidate replacement and direct semantic edits append
+in-memory prior snapshots, Undo and Redo require the exact current revision and
+allocate fresh revision identities, restored semantic identities remain stable,
+read-only availability exposes traversal boundaries, and a new edit after Undo
+discards the old redo branch. Dropping the session destroys populated history.
+
+Transport-neutral direct-edit batch application now enters this same semantic
+history as one transaction, including multi-command batches. All five
+established exact-base direct mutation families also route through the active
+`SessionApplication` owner; a live text edit proves commit, stale review, Undo
+availability, and exact restoration share that authority.
+
+A synchronized in-process fixture races Undo against Apply from one shared
+current revision; exactly one commits and the loser reports the winner's fresh
+revision as stale.
+
+No-op, semantic-rejected, and resource-rejected batch attempts preserve an
+existing Redo branch after Undo. Candidate replacement on a new branch clears
+Redo while never reusing semantic identities still stored in the abandoned
+branch.
+
+Repeating a completed traversal against its old exact base now returns stale and
+cannot advance history twice. That is a duplicate-effect safety property, not
+lost-receipt recovery: the history protocol still owns no retry-identity type,
+and base plus direction cannot distinguish a retry from a genuinely new caller.
+
+
+The semantic-history-result application now freezes the six history result
+classes and their commit dispositions independently from traversal execution.
+A seven-outcome fixture requires both Undo and Redo Boundary/Traversed results,
+plus StaleBase, revision-allocation exhaustion, and missing accepted state, to
+project only to their unambiguous frozen meanings; missing accepted state
+remains unclassified. An already-qualified lifecycle cancellation observation
+now maps pre-commit cancellation to Cancelled before commit and a crossed
+traversal boundary to Traversed, while a request alone remains unclassified.
+
+Retry replay and actual cancellation execution are not implemented. Read-only
+direction availability is now centralized over the existing
+`HistoryAvailabilityOutcome`, and `SessionApplication` uses it for Redo-aware
+asset-byte pruning instead of reinterpreting `can_redo` independently. A
+four-state precondition matrix also requires both Undo and Redo to return the
+same empty-session or stale-base rejection without moving accepted state or
+history position.
+
+Bounded history storage is also blocked on policy rather than mechanics. The
+frozen history contract explicitly leaves depth limits and storage structure
+unfrozen, so the application must not silently choose eviction semantics that
+change which Undo/Redo steps remain admitted. Cancellation signaling and
+scheduling remain open even though the shared lifecycle boundary now gives
+qualified pre/post-commit observations exact history-result meaning.
+
+Transaction provenance has frozen origin classes for direct human,
+clipboard-assisted model, CLI, and MCP mutations, but no trusted application
+entry-path authority currently reaches the semantic history service. The batch
+payload must not self-attest that origin, so provenance recording remains
+blocked until an admitted adapter/application boundary supplies it.
+
+The task remains open for transaction provenance, dependency-expanded derived
+impact, bounded history resource policy, retry/lost-receipt recovery,
+cancellation, and browser/CLI/MCP parity.
