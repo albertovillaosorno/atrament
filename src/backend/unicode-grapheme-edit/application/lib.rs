@@ -91,6 +91,13 @@ pub enum GraphemeRangeError {
         /// Exact UTF-8 byte length of the unchanged source.
         source_bytes: usize,
     },
+    /// Provider mapped an internal grapheme index to a source endpoint.
+    InternalBoundaryAtSourceEdge {
+        /// Source-edge UTF-8 byte offset returned for the internal index.
+        byte_offset: usize,
+        /// Internal grapheme boundary index that aliased the source edge.
+        grapheme_index: usize,
+    },
     /// Provider internal index cannot fit in the bytes on both source sides.
     InternalBoundaryCapacityMismatch {
         /// UTF-8 byte offset returned for the internal boundary.
@@ -101,13 +108,6 @@ pub enum GraphemeRangeError {
         grapheme_index: usize,
         /// Exact UTF-8 byte length of the unchanged source.
         source_bytes: usize,
-    },
-    /// Provider mapped an internal grapheme index to a source endpoint.
-    InternalBoundaryAtSourceEdge {
-        /// Source-edge UTF-8 byte offset returned for the internal index.
-        byte_offset: usize,
-        /// Internal grapheme boundary index that aliased the source edge.
-        grapheme_index: usize,
     },
     /// Provider returned a byte offset that is not a valid source boundary.
     InvalidBoundary {

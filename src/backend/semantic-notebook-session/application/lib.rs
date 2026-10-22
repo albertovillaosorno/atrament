@@ -115,6 +115,72 @@ type DirectEditBatchMaterialResult<CommandIdentity> = Result<
     DirectEditBatchCommandRejection<CommandIdentity>,
 >;
 
+struct CandidateBlockPlan {
+    content: CandidateBlockContentPlan,
+    extensions: Vec<ExtensionData>,
+    id: CandidateIdentity,
+    provenance: Option<CandidateIdentity>,
+    style: Option<CandidateIdentity>,
+}
+
+struct CandidateBlockSlot {
+    candidate: CandidateIdentity,
+    plan: Option<CandidateBlockPlan>,
+}
+
+enum CandidateBlockContentPlan {
+    Callout(Vec<(usize, CandidateIdentity)>),
+    Freeform(Vec<(usize, CandidateIdentity)>),
+    Leaf(CandidateLeafBlockContent),
+    List(CandidateListPlan),
+    Table(CandidateTablePlan),
+}
+
+enum CandidateLeafBlockContent {
+    Citation(Vec<InlineSpan<CandidateIdentity>>),
+    Date(Vec<InlineSpan<CandidateIdentity>>),
+    Definition(Vec<InlineSpan<CandidateIdentity>>),
+    Figure(Figure<CandidateIdentity>),
+    Footnote(Vec<InlineSpan<CandidateIdentity>>),
+    Heading(Vec<InlineSpan<CandidateIdentity>>),
+    Label(Vec<InlineSpan<CandidateIdentity>>),
+    MarginNote(Vec<InlineSpan<CandidateIdentity>>),
+    Mathematics(Formula<CandidateIdentity>),
+    Paragraph(Vec<InlineSpan<CandidateIdentity>>),
+    Quotation(Vec<InlineSpan<CandidateIdentity>>),
+    Rule,
+    SourceNote(Vec<InlineSpan<CandidateIdentity>>),
+    Unresolved(UnresolvedBlock),
+}
+
+struct CandidateListPlan {
+    id: CandidateIdentity,
+    items: Vec<CandidateListItemPlan>,
+    ordered: bool,
+}
+
+struct CandidateListItemPlan {
+    blocks: Vec<(usize, CandidateIdentity)>,
+    id: CandidateIdentity,
+}
+
+struct CandidateTablePlan {
+    id: CandidateIdentity,
+    rows: Vec<CandidateTableRowPlan>,
+}
+
+struct CandidateTableCellPlan {
+    blocks: Vec<(usize, CandidateIdentity)>,
+    id: CandidateIdentity,
+    span: TableCellSpan,
+}
+
+struct CandidateTableRowPlan {
+    cells: Vec<CandidateTableCellPlan>,
+    id: CandidateIdentity,
+    role: TableRowRole,
+}
+
 #[derive(Default)]
 struct DirectEditBatchIndex {
     impacts: BTreeMap<DirectEditMaterialKey, DirectEditImpactScope>,
@@ -1788,6 +1854,8 @@ pub const fn classify_direct_edit_batch_simulation_result<CommandIdentity>(
     }
 }
 
+
+
 fn accept_asset(
     asset: Asset<CandidateIdentity>,
     identities: &BTreeMap<CandidateIdentity, AcceptedIdentity>,
@@ -1798,77 +1866,11 @@ fn accept_asset(
     })
 }
 
-struct CandidateBlockPlan {
-    content: CandidateBlockContentPlan,
-    extensions: Vec<ExtensionData>,
-    id: CandidateIdentity,
-    provenance: Option<CandidateIdentity>,
-    style: Option<CandidateIdentity>,
-}
-
-struct CandidateBlockSlot {
-    candidate: CandidateIdentity,
-    plan: Option<CandidateBlockPlan>,
-}
-
-enum CandidateBlockContentPlan {
-    Callout(Vec<usize>),
-    Freeform(Vec<usize>),
-    Leaf(CandidateLeafBlockContent),
-    List(CandidateListPlan),
-    Table(CandidateTablePlan),
-}
-
-enum CandidateLeafBlockContent {
-    Citation(Vec<InlineSpan<CandidateIdentity>>),
-    Date(Vec<InlineSpan<CandidateIdentity>>),
-    Definition(Vec<InlineSpan<CandidateIdentity>>),
-    Figure(Figure<CandidateIdentity>),
-    Footnote(Vec<InlineSpan<CandidateIdentity>>),
-    Heading(Vec<InlineSpan<CandidateIdentity>>),
-    Label(Vec<InlineSpan<CandidateIdentity>>),
-    MarginNote(Vec<InlineSpan<CandidateIdentity>>),
-    Mathematics(Formula<CandidateIdentity>),
-    Paragraph(Vec<InlineSpan<CandidateIdentity>>),
-    Quotation(Vec<InlineSpan<CandidateIdentity>>),
-    Rule,
-    SourceNote(Vec<InlineSpan<CandidateIdentity>>),
-    Unresolved(UnresolvedBlock),
-}
-
-struct CandidateListPlan {
-    id: CandidateIdentity,
-    items: Vec<CandidateListItemPlan>,
-    ordered: bool,
-}
-
-struct CandidateListItemPlan {
-    blocks: Vec<usize>,
-    id: CandidateIdentity,
-}
-
-struct CandidateTablePlan {
-    id: CandidateIdentity,
-    rows: Vec<CandidateTableRowPlan>,
-}
-
-struct CandidateTableCellPlan {
-    blocks: Vec<usize>,
-    id: CandidateIdentity,
-    span: TableCellSpan,
-}
-
-struct CandidateTableRowPlan {
-    cells: Vec<CandidateTableCellPlan>,
-    id: CandidateIdentity,
-    role: TableRowRole,
-}
-
 fn enqueue_candidate_blocks(
     blocks: Vec<Block<CandidateIdentity>>,
     slots: &mut Vec<CandidateBlockSlot>,
     work: &mut Vec<(usize, Block<CandidateIdentity>)>,
-) -> Vec<usize> {
+) -> Vec<(usize, CandidateIdentity)> {
     let mut indices = Vec::with_capacity(blocks.len());
     for block in blocks {
         let index = slots.len();
@@ -1876,8 +1878,9 @@ fn enqueue_candidate_blocks(
             candidate: block.id,
             plan: None,
         });
+        let candidate = block.id;
         work.push((index, block));
-        indices.push(index);
+        indices.push((index, candidate));
     }
     indices
 }
@@ -1983,7 +1986,7 @@ fn candidate_block_content_plan(
 
 fn plan_candidate_blocks(
     blocks: Vec<Block<CandidateIdentity>>,
-) -> (Vec<usize>, Vec<CandidateBlockSlot>) {
+) -> (Vec<(usize, CandidateIdentity)>, Vec<CandidateBlockSlot>) {
     let mut slots = Vec::new();
     let mut work = Vec::new();
     let roots = enqueue_candidate_blocks(blocks, &mut slots, &mut work);
@@ -1995,29 +1998,31 @@ fn plan_candidate_blocks(
             provenance,
             style,
         } = block;
-        let content =
+        let planned_content =
             candidate_block_content_plan(content, &mut slots, &mut work);
-        slots[index].plan = Some(CandidateBlockPlan {
-            content,
-            extensions,
-            id,
-            provenance,
-            style,
-        });
+        if let Some(slot) = slots.get_mut(index) {
+            slot.plan = Some(CandidateBlockPlan {
+                content: planned_content,
+                extensions,
+                id,
+                provenance,
+                style,
+            });
+        }
     }
     (roots, slots)
 }
 
 fn take_accepted_blocks(
-    indices: &[usize],
+    indices: &[(usize, CandidateIdentity)],
     accepted: &mut [Option<Block<AcceptedIdentity>>],
-    slots: &[CandidateBlockSlot],
 ) -> AcceptedBlocksResult {
     let mut blocks = Vec::with_capacity(indices.len());
-    for index in indices {
-        let candidate = slots[*index].candidate;
+    for (index, candidate) in indices {
         let Some(block) = accepted.get_mut(*index).and_then(Option::take) else {
-            return Err(CandidateGraphError::MissingReference { candidate });
+            return Err(CandidateGraphError::MissingReference {
+                candidate: *candidate,
+            });
         };
         blocks.push(block);
     }
@@ -2076,15 +2081,14 @@ fn accept_candidate_block_content_plan(
     plan: CandidateBlockContentPlan,
     identities: &AcceptedIdentityMap,
     accepted: &mut [Option<Block<AcceptedIdentity>>],
-    slots: &[CandidateBlockSlot],
 ) -> Result<BlockContent<AcceptedIdentity>, CandidateGraphError> {
     match plan {
         CandidateBlockContentPlan::Callout(indices) => Ok(BlockContent::Callout(
-            take_accepted_blocks(&indices, accepted, slots)?,
+            take_accepted_blocks(&indices, accepted)?,
         )),
         CandidateBlockContentPlan::Freeform(indices) => {
             Ok(BlockContent::Freeform(take_accepted_blocks(
-                &indices, accepted, slots,
+                &indices, accepted,
             )?))
         },
         CandidateBlockContentPlan::Leaf(content) => {
@@ -2097,7 +2101,6 @@ fn accept_candidate_block_content_plan(
                     blocks: take_accepted_blocks(
                         &item.blocks,
                         accepted,
-                        slots,
                     )?,
                     id: accepted_id(item.id, identities)?,
                 });
@@ -2117,7 +2120,6 @@ fn accept_candidate_block_content_plan(
                         blocks: take_accepted_blocks(
                             &cell.blocks,
                             accepted,
-                            slots,
                         )?,
                         id: accepted_id(cell.id, identities)?,
                         span: cell.span,
@@ -2145,19 +2147,22 @@ fn accept_blocks(
         return Ok(Vec::new());
     }
     let (roots, mut slots) = plan_candidate_blocks(blocks);
-    let mut accepted = (0..slots.len()).map(|_| None).collect::<Vec<_>>();
-    for index in (0..slots.len()).rev() {
-        let candidate = slots[index].candidate;
-        let Some(plan) = slots[index].plan.take() else {
+    let mut accepted = Vec::new();
+    accepted.resize_with(slots.len(), || None);
+    for (index, slot) in slots.iter_mut().enumerate().rev() {
+        let candidate = slot.candidate;
+        let Some(plan) = slot.plan.take() else {
             return Err(CandidateGraphError::MissingReference { candidate });
         };
         let content = accept_candidate_block_content_plan(
             plan.content,
             identities,
             &mut accepted,
-            &slots,
         )?;
-        accepted[index] = Some(Block {
+        let Some(accepted_slot) = accepted.get_mut(index) else {
+            return Err(CandidateGraphError::MissingReference { candidate });
+        };
+        *accepted_slot = Some(Block {
             content,
             extensions: plan.extensions,
             id: accepted_id(plan.id, identities)?,
@@ -2165,9 +2170,8 @@ fn accept_blocks(
             style: accepted_reference(plan.style, identities)?,
         });
     }
-    take_accepted_blocks(&roots, &mut accepted, &slots)
+    take_accepted_blocks(&roots, &mut accepted)
 }
-
 fn accept_constraint(
     constraint: &Constraint<CandidateIdentity>,
     identities: &BTreeMap<CandidateIdentity, AcceptedIdentity>,

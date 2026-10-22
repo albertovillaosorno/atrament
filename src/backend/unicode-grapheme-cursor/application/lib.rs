@@ -38,6 +38,8 @@
 //! Exact Unicode grapheme cursor/selection resolution without UI movement
 //! policy.
 
+use std::cmp::Ordering;
+
 use atrament_unicode_grapheme_boundary_port::GraphemeBoundaryProvider;
 
 /// One validated cursor position at a Unicode extended-grapheme boundary.
@@ -70,6 +72,13 @@ pub enum GraphemeCursorError {
         /// UTF-8 byte offset reported by the provider.
         observed: usize,
     },
+    /// Provider byte distance cannot contain the claimed grapheme distance.
+    BoundaryDistanceTooSmall {
+        /// Absolute UTF-8 byte distance between the resolved boundaries.
+        byte_distance: usize,
+        /// Absolute grapheme-index distance between those boundaries.
+        grapheme_distance: usize,
+    },
     /// Provider omitted a boundary that its grapheme count advertised.
     BoundaryUnavailable {
         /// Grapheme boundary index whose byte offset was unavailable.
@@ -82,12 +91,46 @@ pub enum GraphemeCursorError {
         /// Requested grapheme boundary index.
         grapheme_index: usize,
     },
-    /// Provider byte distance cannot contain the claimed grapheme distance.
-    BoundaryDistanceTooSmall {
-        /// Absolute UTF-8 byte distance between the resolved boundaries.
-        byte_distance: usize,
-        /// Absolute grapheme-index distance between those boundaries.
-        grapheme_distance: usize,
+    /// Caller-supplied signed step would leave the source boundary range.
+    CursorStepOutOfBounds {
+        /// Number of grapheme clusters in the source text.
+        grapheme_count: usize,
+        /// Current grapheme boundary index supplied by the caller.
+        origin_index: usize,
+        /// Caller-supplied signed grapheme step.
+        step: isize,
+    },
+    /// Provider advertised more grapheme clusters than source UTF-8 bytes.
+    GraphemeCountExceedsSourceBytes {
+        /// Grapheme-cluster count reported by the provider.
+        grapheme_count: usize,
+        /// Exact UTF-8 byte length of the unchanged source.
+        source_bytes: usize,
+    },
+    /// Provider mapped an internal grapheme index to a source endpoint.
+    InternalBoundaryAtSourceEdge {
+        /// Source-edge UTF-8 byte offset returned for the internal index.
+        byte_offset: usize,
+        /// Internal grapheme boundary index that aliased the source edge.
+        grapheme_index: usize,
+    },
+    /// Provider internal index cannot fit in the bytes on both source sides.
+    InternalBoundaryCapacityMismatch {
+        /// UTF-8 byte offset returned for the internal boundary.
+        byte_offset: usize,
+        /// Total grapheme-cluster count advertised for the source.
+        grapheme_count: usize,
+        /// Internal grapheme boundary index being resolved.
+        grapheme_index: usize,
+        /// Exact UTF-8 byte length of the unchanged source.
+        source_bytes: usize,
+    },
+    /// Provider returned a byte offset that is not a valid source boundary.
+    InvalidBoundary {
+        /// Invalid UTF-8 byte offset returned by the provider.
+        byte_offset: usize,
+        /// Grapheme boundary index that produced the invalid byte offset.
+        grapheme_index: usize,
     },
     /// Provider byte order contradicts caller grapheme selection index order.
     SelectionBoundaryOrderMismatch {
@@ -110,47 +153,6 @@ pub enum GraphemeCursorError {
         target_byte: usize,
         /// Grapheme boundary index reached by the signed step.
         target_index: usize,
-    },
-    /// Caller-supplied signed step would leave the source boundary range.
-    CursorStepOutOfBounds {
-        /// Number of grapheme clusters in the source text.
-        grapheme_count: usize,
-        /// Current grapheme boundary index supplied by the caller.
-        origin_index: usize,
-        /// Caller-supplied signed grapheme step.
-        step: isize,
-    },
-    /// Provider advertised more grapheme clusters than source UTF-8 bytes.
-    GraphemeCountExceedsSourceBytes {
-        /// Grapheme-cluster count reported by the provider.
-        grapheme_count: usize,
-        /// Exact UTF-8 byte length of the unchanged source.
-        source_bytes: usize,
-    },
-    /// Provider internal index cannot fit in the bytes on both source sides.
-    InternalBoundaryCapacityMismatch {
-        /// UTF-8 byte offset returned for the internal boundary.
-        byte_offset: usize,
-        /// Total grapheme-cluster count advertised for the source.
-        grapheme_count: usize,
-        /// Internal grapheme boundary index being resolved.
-        grapheme_index: usize,
-        /// Exact UTF-8 byte length of the unchanged source.
-        source_bytes: usize,
-    },
-    /// Provider mapped an internal grapheme index to a source endpoint.
-    InternalBoundaryAtSourceEdge {
-        /// Source-edge UTF-8 byte offset returned for the internal index.
-        byte_offset: usize,
-        /// Internal grapheme boundary index that aliased the source edge.
-        grapheme_index: usize,
-    },
-    /// Provider returned a byte offset that is not a valid source boundary.
-    InvalidBoundary {
-        /// Invalid UTF-8 byte offset returned by the provider.
-        byte_offset: usize,
-        /// Grapheme boundary index that produced the invalid byte offset.
-        grapheme_index: usize,
     },
 }
 
@@ -212,12 +214,10 @@ pub fn resolve_grapheme_cursor_selection(
     } else {
         resolve_position(boundaries, source, focus_index, anchors)?
     };
-    let ordered = if focus_index > anchor_index {
-        focus.byte_offset > anchor.byte_offset
-    } else if focus_index < anchor_index {
-        focus.byte_offset < anchor.byte_offset
-    } else {
-        true
+    let ordered = match focus_index.cmp(&anchor_index) {
+        Ordering::Greater => focus.byte_offset > anchor.byte_offset,
+        Ordering::Less => focus.byte_offset < anchor.byte_offset,
+        Ordering::Equal => true,
     };
     if !ordered {
         return Err(GraphemeCursorError::SelectionBoundaryOrderMismatch {
