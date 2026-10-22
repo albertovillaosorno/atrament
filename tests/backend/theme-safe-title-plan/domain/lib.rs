@@ -30,6 +30,9 @@
 // - Defaults:
 //   - No title style, hierarchy mapping, or conversion is synthesized.
 //
+
+//! Theme safe title plan domain regression tests.
+
 use atrament_theme_safe_title_plan::{
     DigitalTitleTreatment, ThemeSafeTitlePlan, ThemeSafeTitlePlanError,
     TitleProjection, validate_theme_safe_title_plan,

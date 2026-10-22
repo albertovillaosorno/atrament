@@ -30,6 +30,9 @@
 // - Defaults:
 //   - NFC and NFD spellings remain distinct authored corpus content.
 //
+
+//! English spanish corpus fixture domain regression tests.
+
 use atrament_english_spanish_corpus_evidence::EnglishSpanishCorpusScenario;
 use atrament_english_spanish_corpus_fixture::{
     REQUIRED_SCENARIO_FIXTURES, REQUIRED_TEXT_INVENTORY_SWEEP,

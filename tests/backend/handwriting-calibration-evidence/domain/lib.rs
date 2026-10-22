@@ -32,6 +32,9 @@
 // - Defaults:
 //   - Underdetermined required behavior requests another sample.
 //
+
+//! Handwriting calibration evidence domain regression tests.
+
 use atrament_handwriting_calibration_evidence::{
     CalibrationDetermination, CalibrationEvidenceBasis,
     CalibrationParameterEvidence, CalibrationSample, CalibrationSampleRole,
@@ -373,7 +376,7 @@ fn held_out_report_requires_every_dimension_without_metric_thresholds() {
     ];
     for (index, missing) in required.into_iter().enumerate() {
         let mut report = complete_quality_report();
-        report.measurements.remove(index);
+        let _removed_measurement = report.measurements.remove(index);
         assert_eq!(
             validate_held_out_quality_report(&held_out_samples(), &report),
             Err(HeldOutQualityReportError::MissingDimension {

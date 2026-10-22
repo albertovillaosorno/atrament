@@ -10,3 +10,7 @@ path = "domain/lib.rs"
 
 [lints]
 workspace = true
+
+[[test]]
+name = "device_neutral_motion_plan_domain"
+path = "../../../tests/backend/device-neutral-motion-plan/domain/lib.rs"

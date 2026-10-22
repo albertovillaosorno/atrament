@@ -10,3 +10,7 @@ path = "domain/lib.rs"
 
 [lints]
 workspace = true
+
+[[test]]
+name = "pen_contact_model_domain"
+path = "../../../tests/backend/pen-contact-model/domain/lib.rs"

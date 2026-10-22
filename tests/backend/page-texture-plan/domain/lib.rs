@@ -31,6 +31,10 @@
 // - Defaults:
 //   - No visual interpretation is inferred from caller-owned values.
 //
+
+//! Page texture plan domain regression tests.
+
+use atrament_material_layer_plan as _;
 use atrament_page_texture_plan::{
     BoundedTextureStrength, PageTexturePlan, PageTexturePlanError,
     StochasticLayerReplayKey, validate_page_texture_plan_view,

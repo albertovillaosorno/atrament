@@ -33,6 +33,9 @@
 // - Defaults:
 //   - No plan value authorizes physical execution.
 //
+
+//! Device neutral motion plan domain regression tests.
+
 use atrament_device_neutral_motion_plan::{
     DeviceNeutralMotionPlan, MotionBoundsEvidence, MotionCapabilityAssumptions,
     MotionContactState, MotionPlanOperation, MotionPlanOperationKind,

@@ -31,6 +31,9 @@
 // - Defaults:
 //   - No geometry, language form, or fallback is synthesized.
 //
+
+//! Handwriting diacritic composition domain regression tests.
+
 use atrament_handwriting_diacritic_composition::{
     DiacriticCompositionError, DiacriticCompositionIntent,
     DiacriticPresentation, admit_diacritic_composition,

@@ -31,6 +31,9 @@
 // - Defaults:
 //   - No material or renderer semantics are inferred from primitive kinds.
 //
+
+//! Vector geometry domain regression tests.
+
 use atrament_vector_geometry::{
     VectorGeometryPage, VectorPrimitive, VectorPrimitiveKind,
     semantic_origin_primitive_indices,

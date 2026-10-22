@@ -13,3 +13,7 @@ atrament_output_capability_matrix = { workspace = true }
 
 [lints]
 workspace = true
+
+[[test]]
+name = "output_capability_projection_domain"
+path = "../../../tests/backend/output-capability-projection/domain/lib.rs"

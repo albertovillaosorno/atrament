@@ -13,3 +13,7 @@ path = "domain/lib.rs"
 
 [lints]
 workspace = true
+
+[[test]]
+name = "page_texture_plan_domain"
+path = "../../../tests/backend/page-texture-plan/domain/lib.rs"

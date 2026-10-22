@@ -31,6 +31,9 @@
 // - Defaults:
 //   - No continuity or physical interpretation is inferred.
 //
+
+//! Handwriting stroke plan domain regression tests.
+
 use atrament_handwriting_stroke_plan::{
     PlannedStroke, StrokeContactState, StrokePlan, StrokePlanError,
     StrokeSample, semantic_origin_stroke_indices, validate_stroke_plan,

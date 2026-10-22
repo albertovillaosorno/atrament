@@ -32,6 +32,9 @@
 // - Defaults:
 //   - No empty issue list is interpreted as proof of adapter correctness.
 //
+
+//! Clipboard intake evidence domain regression tests.
+
 use atrament_clipboard_intake_evidence::{
     ClipboardContentKind, ClipboardIntakeEvidence, ClipboardRetentionIssue,
     ClipboardRetentionIssueKind,

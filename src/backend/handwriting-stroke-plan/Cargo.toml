@@ -10,3 +10,7 @@ path = "domain/lib.rs"
 
 [lints]
 workspace = true
+
+[[test]]
+name = "handwriting_stroke_plan_domain"
+path = "../../../tests/backend/handwriting-stroke-plan/domain/lib.rs"

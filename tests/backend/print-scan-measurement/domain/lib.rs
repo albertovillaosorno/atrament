@@ -31,6 +31,9 @@
 // - Defaults:
 //   - No observation implies a calibration conclusion by itself.
 //
+
+//! Print scan measurement domain regression tests.
+
 use atrament_print_scan_measurement::{
     PrintScanEvidence, PrintScanEvidenceError, PrintScanMeasurement,
     PrintScanMeasurementKind, validate_print_scan_evidence,

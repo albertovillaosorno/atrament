@@ -30,6 +30,9 @@
 // - Defaults:
 //   - No candidate is preferred implicitly.
 //
+
+//! Handwriting contextual stroke candidates domain regression tests.
+
 use atrament_handwriting_contextual_stroke_candidates::{
     ContextualStrokeCandidate, ContextualStrokeCandidateIdentityError,
     ContextualStrokePlanningInput, StrokePlanningContext,

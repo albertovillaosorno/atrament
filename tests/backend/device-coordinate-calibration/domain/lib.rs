@@ -31,6 +31,9 @@
 // - Defaults:
 //   - Caller-owned values remain uninterpreted by this evidence layer.
 //
+
+//! Device coordinate calibration domain regression tests.
+
 use atrament_device_coordinate_calibration::{
     CoordinateTransformCalibration, DeviceCoordinateCalibration,
     PenMotionCalibration, SheetRegistrationCalibration,

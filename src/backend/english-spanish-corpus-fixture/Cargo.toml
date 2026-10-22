@@ -14,3 +14,7 @@ path = "domain/lib.rs"
 
 [lints]
 workspace = true
+
+[[test]]
+name = "english_spanish_corpus_fixture_domain"
+path = "../../../tests/backend/english-spanish-corpus-fixture/domain/lib.rs"

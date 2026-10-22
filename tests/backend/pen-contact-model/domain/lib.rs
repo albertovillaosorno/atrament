@@ -32,6 +32,9 @@
 // - Defaults:
 //   - Out-of-range inputs are never silently admitted as calibrated.
 //
+
+//! Pen contact model domain regression tests.
+
 use atrament_pen_contact_model::{
     CalibratedInputRange, CalibratedInputRangeError, ContactInputAdmission,
     ContactModelInput, ContactModelOutput, ContactOutputAdmission,

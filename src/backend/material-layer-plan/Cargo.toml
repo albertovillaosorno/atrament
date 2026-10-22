@@ -10,3 +10,7 @@ path = "domain/lib.rs"
 
 [lints]
 workspace = true
+
+[[test]]
+name = "material_layer_plan_domain"
+path = "../../../tests/backend/material-layer-plan/domain/lib.rs"

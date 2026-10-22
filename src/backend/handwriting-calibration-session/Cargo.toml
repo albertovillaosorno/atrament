@@ -10,3 +10,7 @@ path = "domain/lib.rs"
 
 [lints]
 workspace = true
+
+[[test]]
+name = "handwriting_calibration_session_domain"
+path = "../../../tests/backend/handwriting-calibration-session/domain/lib.rs"

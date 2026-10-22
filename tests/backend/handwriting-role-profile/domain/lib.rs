@@ -30,6 +30,9 @@
 // - Defaults:
 //   - Missing roles remain absent instead of receiving implicit defaults.
 //
+
+//! Handwriting role profile domain regression tests.
+
 use atrament_handwriting_role_profile::{
     HandwritingRole, HandwritingRoleAudit, HandwritingRoleLookupError,
     HandwritingRoleMultiplicity, HandwritingRolePresentation,

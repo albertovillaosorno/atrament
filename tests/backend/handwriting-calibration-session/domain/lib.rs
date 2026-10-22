@@ -32,6 +32,9 @@
 // - Defaults:
 //   - The workflow owns prompt count, wording, speed, size, and sufficiency.
 //
+
+//! Handwriting calibration session domain regression tests.
+
 use atrament_handwriting_calibration_session::{
     CalibrationPrompt, CalibrationPromptKind, CalibrationPromptProgress,
     CalibrationSampleReplacement, CalibrationSampleReplacementError,

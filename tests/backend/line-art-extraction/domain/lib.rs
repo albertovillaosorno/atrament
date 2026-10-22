@@ -30,6 +30,9 @@
 // - Defaults:
 //   - No control value or path is synthesized implicitly.
 //
+
+//! Line art extraction domain regression tests.
+
 use atrament_line_art_extraction::{
     LineArtAppearance, LineArtExtractionControls, LineArtExtractionPairError,
     LineArtExtractionRequest, LineArtExtractionResult,

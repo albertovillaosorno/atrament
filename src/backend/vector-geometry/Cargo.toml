@@ -10,3 +10,7 @@ path = "domain/lib.rs"
 
 [lints]
 workspace = true
+
+[[test]]
+name = "vector_geometry_domain"
+path = "../../../tests/backend/vector-geometry/domain/lib.rs"

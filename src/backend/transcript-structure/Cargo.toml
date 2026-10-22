@@ -13,3 +13,7 @@ atrament_transcript_evidence = { workspace = true }
 
 [lints]
 workspace = true
+
+[[test]]
+name = "transcript_structure_domain"
+path = "../../../tests/backend/transcript-structure/domain/lib.rs"

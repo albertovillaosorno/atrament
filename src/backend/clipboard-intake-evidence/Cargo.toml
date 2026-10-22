@@ -10,3 +10,7 @@ path = "domain/lib.rs"
 
 [lints]
 workspace = true
+
+[[test]]
+name = "clipboard_intake_evidence_domain"
+path = "../../../tests/backend/clipboard-intake-evidence/domain/lib.rs"

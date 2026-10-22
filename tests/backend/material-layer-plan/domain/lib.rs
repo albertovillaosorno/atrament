@@ -32,6 +32,9 @@
 // - Defaults:
 //   - No implicit layer requirement or visual behavior is asserted.
 //
+
+//! Material layer plan domain regression tests.
+
 use atrament_material_layer_plan::{
     MaterialLayer, MaterialLayerKind, MaterialLayerPlan,
     MaterialLayerRandomness,

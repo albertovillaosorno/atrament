@@ -31,6 +31,9 @@
 // - Defaults:
 //   - No conversion, omission, or Future fallback is inferred.
 //
+
+//! Output capability projection domain regression tests.
+
 use atrament_output_capability_matrix::CapabilityDisposition;
 use atrament_output_capability_matrix::{
     ColorCapability, HandwritingDecorationCapability, HardwareActionCapability,

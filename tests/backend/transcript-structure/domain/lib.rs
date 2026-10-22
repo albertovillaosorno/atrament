@@ -31,6 +31,9 @@
 // - Defaults:
 //   - Explicit unresolved fragments remain unresolved without correction.
 //
+
+//! Transcript structure domain regression tests.
+
 use atrament_transcript_evidence::{
     TranscriptEvidence, TranscriptMediaKind, TranscriptOrigin, TranscriptWord,
     UnresolvedTranscriptFragment,

@@ -30,6 +30,9 @@
 // - Defaults:
 //   - Missing coverage stays blocked without complete explicit evidence.
 //
+
+//! Handwriting fallback admission domain regression tests.
+
 use atrament_handwriting_fallback_admission::{
     FallbackStyleDeclaration, FallbackStyleVisibility, FallbackUserAcceptance,
     HandwritingCoverageAdmission, HandwritingFallbackAdmissionError,

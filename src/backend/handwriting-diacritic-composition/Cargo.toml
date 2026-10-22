@@ -13,3 +13,7 @@ path = "domain/lib.rs"
 
 [lints]
 workspace = true
+
+[[test]]
+name = "handwriting_diacritic_composition_domain"
+path = "../../../tests/backend/handwriting-diacritic-composition/domain/lib.rs"
