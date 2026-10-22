@@ -452,3 +452,58 @@ fn trailing_or_unclaimed_local_bytes_never_hide_a_second_payload() {
         Err(ProfileZipReadError::NonCanonical),
     );
 }
+
+#[test]
+fn root_manifest_utf8_has_a_separate_byte_limit_before_json_parsing() {
+    let bytes = make_zip(&ENTRIES);
+    let archive = read_stored_profile_zip(&bytes, limits())
+        .expect("frame must be valid");
+    assert_eq!(archive.manifest_utf8(2), Ok("{}"));
+    assert_eq!(
+        archive.manifest_utf8(1),
+        Err(ProfileZipReadError::ManifestTooLarge),
+    );
+    let missing = make_zip(&[]);
+    let empty = read_stored_profile_zip(&missing, limits())
+        .expect("empty ZIP framing is valid without Import authority");
+    assert_eq!(
+        empty.manifest_utf8(10),
+        Err(ProfileZipReadError::MissingManifest),
+    );
+}
+
+#[test]
+fn invalid_manifest_utf8_is_not_reinterpreted_as_an_opaque_encoding() {
+    let bytes = make_zip(&[("manifest.json", &[0xff], 0xff00_0000)]);
+    let archive = read_stored_profile_zip(&bytes, limits())
+        .expect("CRC checks independently of manifest text encoding");
+    assert_eq!(
+        archive.manifest_utf8(1),
+        Err(ProfileZipReadError::InvalidManifestUtf8),
+    );
+    assert_eq!(
+        archive.manifest_utf8(0),
+        Err(ProfileZipReadError::ManifestTooLarge),
+    );
+}
+
+#[test]
+fn forged_large_entry_count_is_rejected_before_allocating_entry_index() {
+    let original = make_zip(&[]);
+    let trailer = original.len() - 22;
+    for bogus_count in [1u16, 10u16, 30_000u16] {
+        let mut bytes = original.clone();
+        let count = bogus_count.to_le_bytes();
+        bytes[trailer + 8..trailer + 10].copy_from_slice(&count);
+        bytes[trailer + 10..trailer + 12].copy_from_slice(&count);
+        let generous = ProfileZipReadLimits {
+            maximum_entries: 60_000,
+            ..limits()
+        };
+        assert_eq!(
+            read_stored_profile_zip(&bytes, generous),
+            Err(ProfileZipReadError::InvalidStructure),
+            "bogus declared entries={bogus_count}",
+        );
+    }
+}

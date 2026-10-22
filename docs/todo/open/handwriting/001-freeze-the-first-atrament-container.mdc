@@ -116,3 +116,11 @@ A cross-component test passes those observed ZIP member names to the typed
 profile Import preflight but deliberately does not claim decoded profile data.
 Full profile ZIP64, manifest JSON, exact independent hashes, canonical writer,
 real file transport, and accepted-profile state changes remain open.
+
+The stored-ZIP reader now also validates a caller-supplied UTF-8 root manifest
+byte ceiling before any future JSON decoder can consume that text. Missing
+manifest, oversized manifest, and invalid UTF-8 each return a distinct typed
+failure. Its ZIP central-directory entry-count claim must fit inside the actual
+central-directory byte length before member index allocation, preventing tiny
+forged end records from requesting oversized vectors. ZIP64 and typed JSON
+admission remain separate, unfinished milestones.

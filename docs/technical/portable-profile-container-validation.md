@@ -58,7 +58,13 @@ shared portable-profile path validator before member bytes are exposed.
 
 The reader recomputes ZIP CRC-32 over each bounded stored entry. This checks
 transport framing only: **CRC-32 does not establish manifest SHA-256
-integrity**.
+integrity**. An additional root-manifest accessor checks a caller-chosen byte
+limit and strict UTF-8 before yielding borrowed text; it does not parse JSON.
+
+Before allocating member indices, the parser also verifies that declared
+entry counts fit within the measured central-directory byte length. This
+prevents a tiny forged trailer from triggering large index allocations.
+
 The typed manifest must still be parsed, checked and matched against those
 observations, and SHA-256 must be independently measured before any section
 interpretation or profile acceptance. ZIP64, archive-file I/O, canonical JSON,

@@ -67,10 +67,16 @@ pub enum ProfileZipReadError {
     ArchiveTooLarge,
     /// Stored CRC-32 disagrees with independently checked member bytes.
     BadCrc32,
+    /// Root manifest member bytes cannot be interpreted as UTF-8.
+    InvalidManifestUtf8,
     /// Archive member name is empty, a directory, or not UTF-8.
     InvalidName,
     /// End record, central directory, or local header is inconsistent.
     InvalidStructure,
+    /// The root manifest exceeds its independently specified byte budget.
+    ManifestTooLarge,
+    /// No exact root `manifest.json` member exists in the ZIP.
+    MissingManifest,
     /// File ordering, trailing bytes, or foreign platform metadata is present.
     NonCanonical,
     /// Declared entries or member sizes exceed an explicit caller limit.
@@ -122,6 +128,29 @@ impl<'bytes> ProfileZipArchive<'bytes> {
     #[must_use]
     pub fn entries(&self) -> &[ProfileZipEntry<'bytes>] {
         &self.entries
+    }
+
+    /// Borrow exact root manifest UTF-8 without attempting JSON decoding.
+    ///
+    /// This limit is independent of the complete archive resource budget:
+    /// downstream JSON parsing must still implement its own depth and
+    /// allocation ceilings and validate typed manifest schema and digests.
+    ///
+    /// # Errors
+    ///
+    /// Fails if the root is absent, too large, or not valid UTF-8.
+    pub fn manifest_utf8(
+        &self,
+        maximum_bytes: usize,
+    ) -> Result<&'bytes str, ProfileZipReadError> {
+        let entry = self.entries.iter()
+            .find(|entry| entry.name == PROFILE_MANIFEST_PATH)
+            .ok_or(ProfileZipReadError::MissingManifest)?;
+        if entry.bytes.len() > maximum_bytes {
+            return Err(ProfileZipReadError::ManifestTooLarge);
+        }
+        from_utf8(entry.bytes).ok()
+            .ok_or(ProfileZipReadError::InvalidManifestUtf8)
     }
 
     /// Extract borrowed exact archive names for manifest inventory preflight.
@@ -360,6 +389,13 @@ pub fn read_stored_profile_zip(
     let central_size = usize::try_from(directory_size).ok()
         .ok_or(ProfileZipReadError::ResourceLimit)?;
     if directory_start.checked_add(central_size) != Some(trailer) {
+        return Err(ProfileZipReadError::InvalidStructure);
+    }
+    // Do not let a tiny forged EOCD allocate thousands of phantom entries.
+    let minimum_directory_bytes = usize::from(all_entries)
+        .checked_mul(CENTRAL_SIZE)
+        .ok_or(ProfileZipReadError::ResourceLimit)?;
+    if minimum_directory_bytes > central_size {
         return Err(ProfileZipReadError::InvalidStructure);
     }
     let mut cursor = directory_start;
