@@ -6,3 +6,6 @@ path = ".dependencies/git/2.54.0/bin/git"
 
 [entry.rust_stable_cargo.linux]
 path = ".dependencies/rust/1.97.1/bin/cargo"
+
+[entry.python.linux]
+path = ".dependencies/python/3.14.8/bin/python"

@@ -1,0 +1,10 @@
+{
+  "authority": "unicode-segmentation",
+  "integrity_kind": "provider-response-sha256",
+  "integrity_sha256": "f7916a82872aa2ee4635a158dd02e6d73c3783be3a57763be2eee5b2279bd736",
+  "observed_on": "2026-10-22",
+  "provider": "crates-io",
+  "schema_version": 1,
+  "source": "https://crates.io/api/v1/crates/unicode-segmentation",
+  "stable": "1.13.3"
+}

@@ -1,0 +1,10 @@
+{
+  "authority": "pnpm",
+  "integrity_kind": "provider-response-sha256",
+  "integrity_sha256": "f3355080120bced66e104cd941997af285b73cd7570f3499c85205c6a482e600",
+  "observed_on": "2026-10-22",
+  "provider": "npm-registry",
+  "schema_version": 1,
+  "source": "https://registry.npmjs.org/pnpm/latest",
+  "stable": "12.15.0"
+}

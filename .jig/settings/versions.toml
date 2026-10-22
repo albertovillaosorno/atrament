@@ -1,6 +1,22 @@
 domain = "versions"
 schema_version = 1
 
+[authority.getrandom]
+current = "0.4.3"
+stable = "0.4.3"
+
+[authority.getrandom.freshness]
+integrity_kind = "provider-response-sha256"
+maximum_age_days = 30
+provider = "crates-io"
+source = "https://crates.io/api/v1/crates/getrandom"
+
+[authority.getrandom.projection.manifest]
+kind = "toml"
+path = "Cargo.toml"
+selector = "workspace.dependencies.getrandom"
+template = "={version}"
+
 [authority.git-tool]
 current = "2.54.0"
 stable = "2.54.0"
@@ -21,21 +37,27 @@ selector = "jig.version"
 template = "{version}"
 
 [authority.pnpm]
-current = "11.22.0"
-stable = "11.22.0"
+current = "12.15.0"
+stable = "12.15.0"
+
+[authority.pnpm.freshness]
+integrity_kind = "provider-response-sha256"
+maximum_age_days = 30
+provider = "npm-registry"
+source = "https://registry.npmjs.org/pnpm/latest"
 
 [authority.pnpm.projection.package_manager]
 kind = "package-manager"
 target = "pnpm"
 template = "pnpm@{version}"
 
-[authority.typescript]
-current = "7.0.2"
-stable = "7.0.2"
+[authority.python]
+current = "3.14.8"
+stable = "3.14.8"
 
-[authority.typescript.projection.package]
-kind = "package"
-target = "typescript"
+[authority.python.projection.tool]
+kind = "tool"
+target = "python"
 template = "{version}"
 
 [authority.rust-stable-cargo]
@@ -46,3 +68,34 @@ stable = "1.97.1"
 kind = "tool"
 target = "rust_stable_cargo"
 template = "{version}"
+
+[authority.typescript]
+current = "7.0.2"
+stable = "7.0.2"
+
+[authority.typescript.freshness]
+integrity_kind = "provider-response-sha256"
+maximum_age_days = 30
+provider = "npm-registry"
+source = "https://registry.npmjs.org/typescript/latest"
+
+[authority.typescript.projection.package]
+kind = "package"
+target = "typescript"
+template = "{version}"
+
+[authority.unicode-segmentation]
+current = "1.13.3"
+stable = "1.13.3"
+
+[authority.unicode-segmentation.freshness]
+integrity_kind = "provider-response-sha256"
+maximum_age_days = 30
+provider = "crates-io"
+source = "https://crates.io/api/v1/crates/unicode-segmentation"
+
+[authority.unicode-segmentation.projection.manifest]
+kind = "toml"
+path = "Cargo.toml"
+selector = "workspace.dependencies.unicode-segmentation"
+template = "={version}"
