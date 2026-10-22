@@ -333,6 +333,9 @@ depends_on = ["atrament_render_quality_profile"]
 [component.atrament_render_regression_evidence]
 depends_on = []
 
+[component.atrament_profile_import_preflight]
+depends_on = ["atrament_explicit_file_path_intent", "atrament_handwriting_profile_container"]
+
 [component.atrament_render_quality_profile]
 depends_on = []
 

@@ -114,3 +114,22 @@ The selected-file classifier now also rejects embedded NUL bytes before any
 future file adapter can interpret the path, while retaining exact non-UTF-8
 names and refusing directory-marker paths. The caller/host selection provenance
 rule remains unchanged and no file effect is introduced.
+
+## Explicit portable-profile Import preflight evidence
+
+The new read-only `atrament_profile_import_preflight` application composes
+trusted-source-classified `ImportProfile` file intent with canonical stored ZIP
+encoding, admitted manifest features, and an exact declared-versus-observed
+member-name inventory. Other import or export purposes reject **before** any
+archive evidence is considered. Only after all gates pass does it return
+borrowed, constructor-sealed evidence from which separately observed entry
+lengths and SHA-256 digests may be checked before a future decoder sees bytes.
+
+The Import fixture covers all 16 stored/compressed, extras, and ZIP64
+combinations, rejected source/path purposes, unknown required features, missing
+archive members, exact entry lookup without percent decoding, and length-before-
+digest failure precedence. The caller must still prove the source provenance,
+read and parse real archive bytes, establish measurements and hashes, validate
+typed section schemas and resource bounds, and explicitly accept the resulting
+profile into session state. Preflight success **does not** import a file,
+persist anything, or claim an external path capability.

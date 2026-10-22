@@ -1,0 +1,9 @@
+identity:
+  id: function:profile-import-preflight
+  name: profile-import-preflight
+  path: src/backend/profile-import-preflight
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: application

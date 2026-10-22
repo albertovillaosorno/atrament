@@ -83,3 +83,11 @@ identities from embedded-control invalid identities without reflecting unsafe
 media-type bytes into diagnostics. The 4,096-case deterministic manifest oracle
 now samples both classes, and executable tests retain parameterized printable
 media types. No archive parser or file writer is claimed by this validation.
+
+The independent `atrament_profile_import_preflight` application now composes
+constructor-sealed container encoding, manifest, and archive inventory views
+behind explicitly selected profile Import intent. Its 16-encoding-state
+fixture and exact entry-evidence checks prohibit interpreting one successful
+container sub-check as completed Import. The actual ZIP and canonical JSON
+parsers, independent SHA-256 byte hashing, resource bounds, typed-section
+decoding, and accepted-profile mutation remain open.

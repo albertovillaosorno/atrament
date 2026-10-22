@@ -6,7 +6,8 @@ canonical `.mdc` file in `docs/todo/open/<lane>/`; closed task records move to
 
 Each entry in `TODO.md` contains a `### TODO - ...` heading, a single synthesis
 paragraph, and one direct link whose visible label is the exact typed record
-path, for example `[docs/todo/open/runtime/task.mdc](docs/todo/open/runtime/task.mdc)`.
+path, for example:
+`[docs/todo/open/runtime/task.mdc](docs/todo/open/runtime/task.mdc)`.
 The first-release horizons are P1–P8; P9 is optional hardware research.
 
 ## Typed frontmatter
