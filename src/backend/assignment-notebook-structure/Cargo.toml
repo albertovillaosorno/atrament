@@ -6,7 +6,7 @@ publish = false
 license = "MIT"
 
 [dependencies]
-atrament_semantic_notebook = { path = "../semantic-notebook" }
+atrament_semantic_notebook = { workspace = true }
 
 [lib]
 path = "domain/lib.rs"

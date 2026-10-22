@@ -9,10 +9,10 @@ license = "MIT"
 path = "application/lib.rs"
 
 [dependencies.atrament_autonomous_completion_admission]
-path = "../autonomous-completion-admission"
+workspace = true
 
 [dependencies.atrament_derived_output_result]
-path = "../derived-output-result"
+workspace = true
 
 [lints]
 workspace = true

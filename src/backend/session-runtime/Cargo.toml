@@ -6,9 +6,9 @@ publish = false
 license = "MIT"
 
 [dependencies]
-atrament_diagnostic = { path = "../diagnostic" }
-atrament_session_draft_port = { path = "../session-draft-port" }
-atrament_session_handshake_port = { path = "../session-handshake-port" }
+atrament_diagnostic = { workspace = true }
+atrament_session_draft_port = { workspace = true }
+atrament_session_handshake_port = { workspace = true }
 
 [lib]
 path = "adapter-inbound/lib.rs"

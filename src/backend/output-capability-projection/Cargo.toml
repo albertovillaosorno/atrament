@@ -9,7 +9,7 @@ license = "MIT"
 path = "domain/lib.rs"
 
 [dependencies]
-atrament_output_capability_matrix = { path = "../output-capability-matrix" }
+atrament_output_capability_matrix = { workspace = true }
 
 [lints]
 workspace = true

@@ -9,13 +9,13 @@ license = "MIT"
 path = "application/lib.rs"
 
 [dependencies.atrament_autonomous_output_intent]
-path = "../autonomous-output-intent"
+workspace = true
 
 [dependencies.atrament_autonomous_progress_evidence]
-path = "../autonomous-progress-evidence"
+workspace = true
 
 [dependencies.atrament_derived_output_result]
-path = "../derived-output-result"
+workspace = true
 
 [lints]
 workspace = true

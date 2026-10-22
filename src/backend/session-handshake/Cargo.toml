@@ -6,12 +6,12 @@ publish = false
 license = "MIT"
 
 [dependencies]
-atrament_diagnostic = { path = "../diagnostic" }
-atrament_one_shot_formatting_prompt = { path = "../one-shot-formatting-prompt" }
-atrament_session_handshake_port = { path = "../session-handshake-port" }
+atrament_diagnostic = { workspace = true }
+atrament_one_shot_formatting_prompt = { workspace = true }
+atrament_session_handshake_port = { workspace = true }
 
 [dependencies.atrament_handwriting_profile_container]
-path = "../handwriting-profile-container"
+workspace = true
 
 [lib]
 path = "application/lib.rs"

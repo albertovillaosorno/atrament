@@ -9,8 +9,8 @@ license = "MIT"
 path = "domain/lib.rs"
 
 [dependencies]
-atrament_device_coordinate_calibration = { path = "../device-coordinate-calibration" }
-atrament_device_neutral_motion_plan = { path = "../device-neutral-motion-plan" }
+atrament_device_coordinate_calibration = { workspace = true }
+atrament_device_neutral_motion_plan = { workspace = true }
 
 [lints]
 workspace = true

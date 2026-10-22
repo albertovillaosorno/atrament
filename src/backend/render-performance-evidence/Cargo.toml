@@ -6,7 +6,7 @@ publish = false
 license = "MIT"
 
 [dependencies]
-atrament_render_quality_profile = { path = "../render-quality-profile" }
+atrament_render_quality_profile = { workspace = true }
 
 [lib]
 path = "domain/lib.rs"

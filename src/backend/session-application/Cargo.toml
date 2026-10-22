@@ -6,19 +6,19 @@ publish = false
 license = "MIT"
 
 [dependencies]
-atrament_export_layout_preflight = { path = "../export-layout-preflight" }
-atrament_media_job_session = { path = "../media-job-session" }
-atrament_semantic_flow_pagination = { path = "../semantic-flow-pagination" }
-atrament_semantic_fixed_region_layout = { path = "../semantic-fixed-region-layout" }
-atrament_semantic_history_result = { path = "../semantic-history-result" }
-atrament_semantic_notebook = { path = "../semantic-notebook" }
-atrament_semantic_notebook_port = { path = "../semantic-notebook-port" }
-atrament_semantic_notebook_session = { path = "../semantic-notebook-session" }
-atrament_session_draft = { path = "../session-draft" }
-atrament_session_draft_port = { path = "../session-draft-port" }
-atrament_unicode_grapheme_boundary_port = { path = "../unicode-grapheme-boundary-port" }
-atrament_unicode_grapheme_cursor = { path = "../unicode-grapheme-cursor" }
-atrament_unicode_grapheme_edit = { path = "../unicode-grapheme-edit" }
+atrament_export_layout_preflight = { workspace = true }
+atrament_media_job_session = { workspace = true }
+atrament_semantic_flow_pagination = { workspace = true }
+atrament_semantic_fixed_region_layout = { workspace = true }
+atrament_semantic_history_result = { workspace = true }
+atrament_semantic_notebook = { workspace = true }
+atrament_semantic_notebook_port = { workspace = true }
+atrament_semantic_notebook_session = { workspace = true }
+atrament_session_draft = { workspace = true }
+atrament_session_draft_port = { workspace = true }
+atrament_unicode_grapheme_boundary_port = { workspace = true }
+atrament_unicode_grapheme_cursor = { workspace = true }
+atrament_unicode_grapheme_edit = { workspace = true }
 
 [lib]
 path = "application/lib.rs"

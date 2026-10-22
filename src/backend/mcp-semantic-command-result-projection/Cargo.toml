@@ -6,10 +6,10 @@ publish = false
 license = "MIT"
 
 [dependencies]
-atrament_application_operation_lifecycle = { path = "../application-operation-lifecycle" }
-atrament_mcp_capability_effect = { path = "../mcp-capability-effect" }
-atrament_semantic_command_result = { path = "../semantic-command-result" }
-atrament_semantic_notebook_port = { path = "../semantic-notebook-port" }
+atrament_application_operation_lifecycle = { workspace = true }
+atrament_mcp_capability_effect = { workspace = true }
+atrament_semantic_command_result = { workspace = true }
+atrament_semantic_notebook_port = { workspace = true }
 
 [lib]
 path = "application/lib.rs"

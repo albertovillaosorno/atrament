@@ -6,7 +6,7 @@ publish = false
 license = "MIT"
 
 [dependencies]
-getrandom = "=0.4.3"
+getrandom = { workspace = true }
 
 [lib]
 path = "adapter-outbound/lib.rs"

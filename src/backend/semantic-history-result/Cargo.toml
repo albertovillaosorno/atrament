@@ -6,8 +6,8 @@ publish = false
 license = "MIT"
 
 [dependencies]
-atrament_application_operation_lifecycle = { path = "../application-operation-lifecycle" }
-atrament_semantic_notebook_port = { path = "../semantic-notebook-port" }
+atrament_application_operation_lifecycle = { workspace = true }
+atrament_semantic_notebook_port = { workspace = true }
 
 [lib]
 path = "application/lib.rs"

@@ -116,6 +116,62 @@ members = [
 ]
 resolver = "3"
 
+[workspace.dependencies]
+atrament_application_operation_lifecycle = { path = "src/backend/application-operation-lifecycle" }
+atrament_autonomous_budget_admission = { path = "src/backend/autonomous-budget-admission" }
+atrament_autonomous_completion_admission = { path = "src/backend/autonomous-completion-admission" }
+atrament_autonomous_goal_outcome = { path = "src/backend/autonomous-goal-outcome" }
+atrament_autonomous_output_intent = { path = "src/backend/autonomous-output-intent" }
+atrament_autonomous_progress_evidence = { path = "src/backend/autonomous-progress-evidence" }
+atrament_browser_launch = { path = "src/backend/browser-launch" }
+atrament_derived_output_result = { path = "src/backend/derived-output-result" }
+atrament_device_coordinate_calibration = { path = "src/backend/device-coordinate-calibration" }
+atrament_device_neutral_motion_plan = { path = "src/backend/device-neutral-motion-plan" }
+atrament_diagnostic = { path = "src/backend/diagnostic" }
+atrament_educational_coverage_evidence = { path = "src/backend/educational-coverage-evidence" }
+atrament_english_spanish_corpus_evidence = { path = "src/backend/english-spanish-corpus-evidence" }
+atrament_english_spanish_diacritic_rule = { path = "src/backend/english-spanish-diacritic-rule" }
+atrament_english_spanish_grapheme_inventory = { path = "src/backend/english-spanish-grapheme-inventory" }
+atrament_export_layout_preflight = { path = "src/backend/export-layout-preflight" }
+atrament_fixed_region_bounds = { path = "src/backend/fixed-region-bounds" }
+atrament_flow_pagination = { path = "src/backend/flow-pagination" }
+atrament_handwriting_diacritic_composition = { path = "src/backend/handwriting-diacritic-composition" }
+atrament_handwriting_glyph_coverage = { path = "src/backend/handwriting-glyph-coverage" }
+atrament_handwriting_profile_container = { path = "src/backend/handwriting-profile-container" }
+atrament_material_layer_plan = { path = "src/backend/material-layer-plan" }
+atrament_mathematics_source = { path = "src/backend/mathematics-source" }
+atrament_mcp_capability_effect = { path = "src/backend/mcp-capability-effect" }
+atrament_mcp_effect_admission = { path = "src/backend/mcp-effect-admission" }
+atrament_media_job_lifecycle = { path = "src/backend/media-job-lifecycle" }
+atrament_media_job_session = { path = "src/backend/media-job-session" }
+atrament_motion_plan_dry_run = { path = "src/backend/motion-plan-dry-run" }
+atrament_one_shot_formatting_prompt = { path = "src/backend/one-shot-formatting-prompt" }
+atrament_output_capability_matrix = { path = "src/backend/output-capability-matrix" }
+atrament_physical_page_profile = { path = "src/backend/physical-page-profile" }
+atrament_render_quality_profile = { path = "src/backend/render-quality-profile" }
+atrament_semantic_command_context = { path = "src/backend/semantic-command-context" }
+atrament_semantic_command_graph = { path = "src/backend/semantic-command-graph" }
+atrament_semantic_command_result = { path = "src/backend/semantic-command-result" }
+atrament_semantic_fixed_region_layout = { path = "src/backend/semantic-fixed-region-layout" }
+atrament_semantic_flow_pagination = { path = "src/backend/semantic-flow-pagination" }
+atrament_semantic_history_result = { path = "src/backend/semantic-history-result" }
+atrament_semantic_notebook = { path = "src/backend/semantic-notebook" }
+atrament_semantic_notebook_port = { path = "src/backend/semantic-notebook-port" }
+atrament_semantic_notebook_session = { path = "src/backend/semantic-notebook-session" }
+atrament_session_application = { path = "src/backend/session-application" }
+atrament_session_draft = { path = "src/backend/session-draft" }
+atrament_session_draft_port = { path = "src/backend/session-draft-port" }
+atrament_session_handshake = { path = "src/backend/session-handshake" }
+atrament_session_handshake_port = { path = "src/backend/session-handshake-port" }
+atrament_session_runtime = { path = "src/backend/session-runtime" }
+atrament_session_secret = { path = "src/backend/session-secret" }
+atrament_transcript_evidence = { path = "src/backend/transcript-evidence" }
+atrament_unicode_grapheme_boundary_port = { path = "src/backend/unicode-grapheme-boundary-port" }
+atrament_unicode_grapheme_cursor = { path = "src/backend/unicode-grapheme-cursor" }
+atrament_unicode_grapheme_edit = { path = "src/backend/unicode-grapheme-edit" }
+getrandom = "=0.4.3"
+unicode-segmentation = "=1.13.3"
+
 [workspace.lints.rust]
 absolute_paths_not_starting_with_crate = "deny"
 ambiguous_negative_literals = "deny"

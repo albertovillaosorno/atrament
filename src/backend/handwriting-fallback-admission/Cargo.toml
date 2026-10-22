@@ -6,7 +6,7 @@ publish = false
 license = "MIT"
 
 [dependencies]
-atrament_handwriting_glyph_coverage = { path = "../handwriting-glyph-coverage" }
+atrament_handwriting_glyph_coverage = { workspace = true }
 
 [lib]
 path = "domain/lib.rs"

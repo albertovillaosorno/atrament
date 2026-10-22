@@ -6,7 +6,7 @@ publish = false
 license = "MIT"
 
 [dependencies]
-atrament_diagnostic = { path = "../diagnostic" }
+atrament_diagnostic = { workspace = true }
 
 [lib]
 path = "port-inbound/lib.rs"

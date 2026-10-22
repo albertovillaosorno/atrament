@@ -6,7 +6,7 @@ publish = false
 license = "MIT"
 
 [dependencies]
-atrament_physical_page_profile = { path = "../physical-page-profile" }
+atrament_physical_page_profile = { workspace = true }
 
 [lib]
 path = "domain/lib.rs"

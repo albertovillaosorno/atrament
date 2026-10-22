@@ -6,11 +6,11 @@ publish = false
 license = "MIT"
 
 [dependencies]
-atrament_browser_launch = { path = "../browser-launch" }
-atrament_session_application = { path = "../session-application" }
-atrament_session_handshake = { path = "../session-handshake" }
-atrament_session_runtime = { path = "../session-runtime" }
-atrament_session_secret = { path = "../session-secret" }
+atrament_browser_launch = { workspace = true }
+atrament_session_application = { workspace = true }
+atrament_session_handshake = { workspace = true }
+atrament_session_runtime = { workspace = true }
+atrament_session_secret = { workspace = true }
 
 [[bin]]
 name = "atrament"

@@ -6,8 +6,8 @@ publish = false
 license = "MIT"
 
 [dependencies]
-atrament_english_spanish_corpus_evidence = { path = "../english-spanish-corpus-evidence" }
-atrament_english_spanish_grapheme_inventory = { path = "../english-spanish-grapheme-inventory" }
+atrament_english_spanish_corpus_evidence = { workspace = true }
+atrament_english_spanish_grapheme_inventory = { workspace = true }
 
 [lib]
 path = "domain/lib.rs"

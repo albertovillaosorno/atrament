@@ -6,7 +6,7 @@ publish = false
 license = "MIT"
 
 [dependencies]
-atrament_mcp_capability_effect = { path = "../mcp-capability-effect" }
+atrament_mcp_capability_effect = { workspace = true }
 
 [lib]
 path = "domain/lib.rs"

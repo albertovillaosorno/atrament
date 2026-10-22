@@ -9,7 +9,7 @@ license = "MIT"
 path = "domain/lib.rs"
 
 [dependencies]
-atrament_motion_plan_dry_run = { path = "../motion-plan-dry-run" }
+atrament_motion_plan_dry_run = { workspace = true }
 
 [lints]
 workspace = true

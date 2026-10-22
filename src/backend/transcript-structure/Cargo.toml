@@ -9,7 +9,7 @@ license = "MIT"
 path = "domain/lib.rs"
 
 [dependencies]
-atrament_transcript_evidence = { path = "../transcript-evidence" }
+atrament_transcript_evidence = { workspace = true }
 
 [lints]
 workspace = true

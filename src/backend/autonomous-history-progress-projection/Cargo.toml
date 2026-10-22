@@ -9,10 +9,10 @@ license = "MIT"
 path = "application/lib.rs"
 
 [dependencies.atrament_autonomous_progress_evidence]
-path = "../autonomous-progress-evidence"
+workspace = true
 
 [dependencies.atrament_semantic_history_result]
-path = "../semantic-history-result"
+workspace = true
 
 [lints]
 workspace = true

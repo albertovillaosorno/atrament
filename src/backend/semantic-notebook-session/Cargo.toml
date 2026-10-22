@@ -6,10 +6,10 @@ publish = false
 license = "MIT"
 
 [dependencies]
-atrament_mathematics_source = { path = "../mathematics-source" }
-atrament_semantic_command_graph = { path = "../semantic-command-graph" }
-atrament_semantic_notebook = { path = "../semantic-notebook" }
-atrament_semantic_notebook_port = { path = "../semantic-notebook-port" }
+atrament_mathematics_source = { workspace = true }
+atrament_semantic_command_graph = { workspace = true }
+atrament_semantic_notebook = { workspace = true }
+atrament_semantic_notebook_port = { workspace = true }
 
 [lib]
 path = "application/lib.rs"

@@ -6,7 +6,7 @@ publish = false
 license = "MIT"
 
 [dependencies]
-atrament_semantic_history_result = { path = "../semantic-history-result" }
+atrament_semantic_history_result = { workspace = true }
 
 [lib]
 path = "application/lib.rs"

@@ -9,7 +9,7 @@ license = "MIT"
 path = "application/lib.rs"
 
 [dependencies.atrament_autonomous_goal_outcome]
-path = "../autonomous-goal-outcome"
+workspace = true
 
 [lints]
 workspace = true

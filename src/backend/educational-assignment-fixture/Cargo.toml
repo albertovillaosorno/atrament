@@ -6,7 +6,7 @@ publish = false
 license = "MIT"
 
 [dependencies]
-atrament_educational_coverage_evidence = { path = "../educational-coverage-evidence" }
+atrament_educational_coverage_evidence = { workspace = true }
 
 [lib]
 path = "domain/lib.rs"

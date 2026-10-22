@@ -12,7 +12,7 @@ path = "application/lib.rs"
 workspace = true
 
 [dependencies.atrament_autonomous_goal_outcome]
-path = "../autonomous-goal-outcome"
+workspace = true
 
 [dependencies.atrament_autonomous_progress_evidence]
-path = "../autonomous-progress-evidence"
+workspace = true

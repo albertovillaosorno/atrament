@@ -6,7 +6,7 @@ publish = false
 license = "MIT"
 
 [dependencies]
-atrament_derived_output_result = { path = "../derived-output-result" }
+atrament_derived_output_result = { workspace = true }
 
 [lib]
 path = "application/lib.rs"
