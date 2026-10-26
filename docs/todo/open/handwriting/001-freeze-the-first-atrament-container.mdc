@@ -130,8 +130,8 @@ over exact, caller-bounded member byte slices with fixed working memory. It
 checks actual length before hashing, then verifies the typed manifest digest
 using the existing ProfileEntryVerificationError variants.
 
-Independent SHA-256 reference vectors cover empty, short, padding-boundary,
-multi-block, and million-byte inputs; failure fixtures reject mutations
-and preserve length-before-digest precedence. This does not parse a manifest, integrate
-import admission, or authorize a file or session effect. The container task
-remains open.
+Independent SHA-256 reference vectors cover empty, short, padding-
+boundary, multi-block, and million-byte inputs; failure fixtures reject
+mutations and preserve length-before-digest precedence. This does not
+parse a manifest, integrate import admission, or authorize a file or
+session effect. The container task remains open.
