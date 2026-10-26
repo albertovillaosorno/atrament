@@ -804,3 +804,90 @@ fn verified_member_lookup_preserves_exact_unicode_and_prefixes() {
             "exact name={near_miss:?}");
     }
 }
+
+#[test]
+fn empty_verified_asset_remains_distinct_from_absent_member() {
+    let members = [
+        ("assets/empty.webp", b"".as_slice(), 0u32),
+        ENTRIES[0],
+    ];
+    let bytes = make_zip(&members);
+    let archive = read_stored_profile_zip(&bytes, limits())
+        .expect("empty stored asset has valid CRC-32");
+    let manifest = ProfileManifest {
+        container_version: PROFILE_CONTAINER_VERSION.into(),
+        entries: vec![ProfileManifestEntry {
+            byte_length: 0,
+            digest: sha256_profile_bytes(b""),
+            media_type: "image/webp".into(),
+            path: "assets/empty.webp".into(),
+        }],
+        optional_features: vec![],
+        profile_identity: "empty-asset".into(),
+        required_features: vec![],
+    };
+    let names = archive.observed_paths();
+    let admission = atrament_handwriting_profile_container::
+        validate_profile_manifest_view(&manifest, &[])
+        .expect("valid zero-length declaration");
+    let inventory = admission.admit_entry_inventory(&names)
+        .expect("root and empty asset agree");
+    let verified = verify_admitted_profile_zip_payloads(&archive, inventory)
+        .expect("empty SHA-256 must match its declaration");
+    assert_eq!(verified.verified_entry_count(), 1);
+    assert_eq!(
+        verified.verified_entry_bytes("assets/empty.webp"),
+        Some(&b""[..]),
+    );
+    assert_eq!(verified.verified_entry_bytes("assets/absent.webp"), None);
+    assert_eq!(verified.verified_entry_bytes("manifest.json"), None);
+}
+
+#[test]
+fn later_member_length_mismatch_precedes_its_invalid_digest() {
+    let members = [
+        ("assets/source.webp", b"x".as_slice(), 0x8cdc_1683),
+        ENTRIES[0],
+        ENTRIES[1],
+    ];
+    let bytes = make_zip(&members);
+    let archive = read_stored_profile_zip(&bytes, limits())
+        .expect("CRC-correct stored ZIP");
+    let manifest = ProfileManifest {
+        container_version: PROFILE_CONTAINER_VERSION.into(),
+        entries: vec![
+            ProfileManifestEntry {
+                byte_length: 1,
+                digest: sha256_profile_bytes(b"x"),
+                media_type: "image/webp".into(),
+                path: "assets/source.webp".into(),
+            },
+            ProfileManifestEntry {
+                byte_length: 8,
+                digest: Sha256Digest::from_bytes([0u8; 32]),
+                media_type: "application/json".into(),
+                path: "sections/strokes.json".into(),
+            },
+        ],
+        optional_features: vec![],
+        profile_identity: "length-first".into(),
+        required_features: vec![],
+    };
+    let names = archive.observed_paths();
+    let admission = atrament_handwriting_profile_container::
+        validate_profile_manifest_view(&manifest, &[])
+        .expect("valid manifest fields");
+    let inventory = admission.admit_entry_inventory(&names)
+        .expect("exact ZIP names are admitted");
+    assert_eq!(
+        verify_admitted_profile_zip_payloads(&archive, inventory).err(),
+        Some(ProfileZipPayloadVerificationError::Entry {
+            index: 1,
+            reason: atrament_handwriting_profile_container::
+                ProfileEntryVerificationError::ByteLengthMismatch {
+                    declared: 8,
+                    observed: 9,
+                },
+        }),
+    );
+}
