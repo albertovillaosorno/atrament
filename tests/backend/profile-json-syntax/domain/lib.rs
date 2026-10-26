@@ -540,3 +540,37 @@ fn sealed_root_lookup_matches_escaped_astral_unicode_and_empty_names() {
     assert_eq!(admitted.root_member_json("\u{1f601}"), None);
     assert_eq!(admitted.root_member_json("B"), None);
 }
+
+#[test]
+fn sealed_root_lookup_handles_maximum_members_with_nested_values() {
+    let fields = (0usize..MAXIMUM_JSON_OBJECT_MEMBERS)
+        .map(|index| format!(r#""f{index}":[{index},{{"v":{index}}}]"#))
+        .collect::<Vec<_>>()
+        .join(",");
+    let source = format!("{{{fields}}}");
+    let caps = ProfileJsonSyntaxLimits {
+        maximum_bytes: 8_192,
+        maximum_nesting: 4,
+        maximum_object_members: MAXIMUM_JSON_OBJECT_MEMBERS,
+        maximum_values: usize::MAX,
+    };
+    let admitted = validate_profile_json_object(source.as_bytes(), caps)
+        .expect("the exact member ceiling includes all nested values");
+    assert_eq!(
+        admitted.value_count(),
+        MAXIMUM_JSON_OBJECT_MEMBERS
+            .saturating_mul(4)
+            .saturating_add(1),
+    );
+    for index in [0usize, 1, 32, 64, 127] {
+        let key = format!("f{index}");
+        let expected = format!(r#"[{index},{{"v":{index}}}]"#);
+        assert_eq!(
+            admitted.root_member_json(&key),
+            Some(expected.as_bytes()),
+            "key={key}"
+        );
+    }
+    assert_eq!(admitted.root_member_json("v"), None);
+    assert_eq!(admitted.root_member_json("f128"), None);
+}
