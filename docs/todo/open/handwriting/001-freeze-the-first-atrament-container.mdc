@@ -142,3 +142,10 @@ exact ZIP member-name sequence before hashing all non-manifest entries, then
 exposes only verified declared paths without decoding section content.
 An admitted typed manifest is not yet proven to have been decoded from the
 same ZIP root JSON, so this is not full profile-container acceptance.
+
+A dependency-free, allocation-free JSON syntax gate now rejects malformed or
+oversized root objects, invalid Unicode escapes and excessive nesting or
+JSON values. The ZIP reader applies this gate to its exact CRC-verified root
+member bytes while preserving independent UTF-8 and manifest size errors.
+Typed schema decoding, duplicate decoded JSON keys and canonical JSON writer
+rules remain open, so valid syntax is not yet an accepted portable profile.

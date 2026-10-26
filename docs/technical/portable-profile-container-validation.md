@@ -71,6 +71,31 @@ interpretation or profile acceptance. ZIP64, archive-file I/O, canonical JSON,
 integration of digest evidence into actual Import, and section decoding remain
 unimplemented.
 
+### Bounded root JSON syntax admission
+
+The independent `profile-json-syntax` domain now validates one complete
+UTF-8 JSON root object with no heap allocations or field interpretation.
+Callers set byte, value and container-nesting budgets, and the domain also
+imposes a fixed 64-container maximum to bound parser stack depth.
+
+Its grammar rejects malformed JSON strings, escapes, surrogate pairs,
+noncanonical number syntax, missing separators, trailing tokens and root
+arrays or primitives. It preserves a borrowed view of the **exact** admitted
+bytes, including whitespace and original character escapes, plus the number
+of syntactic values encountered.
+
+The ZIP inbound adapter exposes `manifest_json_object` to bind these syntax
+checks to the actual root `manifest.json` entry after ordinary ZIP and CRC
+validation. Missing or invalid UTF-8 roots and root byte-budget excess retain
+the existing ZIP errors; malformed JSON and node/depth excess return separate
+syntax errors. Real ZIP fixtures prove that valid CRC-32 framing cannot imply
+valid JSON syntax or typed profile acceptance.
+
+**This gate does not parse manifest fields, reject duplicate decoded JSON
+object keys, enforce canonical wire encoding or prove correspondence between
+an independently supplied typed manifest and these root bytes.** Those
+requirements remain blocking work for the future typed profile JSON codec.
+
 ### Exact entry SHA-256 verifier
 
 The separate profile-entry-sha256 domain computes NIST FIPS 180-4 SHA-256 over

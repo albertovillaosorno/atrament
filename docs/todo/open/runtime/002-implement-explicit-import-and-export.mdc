@@ -166,3 +166,10 @@ member succeeds. Cross-archive substitution, valid-CRC digest corruption,
 and near-match entry lookup are regression-tested. The typed manifest still
 needs to be parsed and bound to this ZIP's own root JSON; no file is opened
 and no profile is accepted by this byte-level step.
+
+A separate resource-bounded JSON syntax domain now validates one complete
+UTF-8 root object and retains borrowed source bytes without allocating typed
+values. The ZIP inbound adapter binds that syntax gate to the actual CRC-
+checked `manifest.json` bytes and checks root byte, value and nesting limits.
+This still does not decode a typed manifest, reject semantic duplicate JSON
+keys, or authorize Import from any caller-selected filesystem path.

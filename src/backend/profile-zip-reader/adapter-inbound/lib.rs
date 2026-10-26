@@ -41,6 +41,10 @@ use atrament_handwriting_profile_container::{
     ProfileManifest, ValidatedProfileEntryInventory, profile_entry_kind,
 };
 use atrament_profile_entry_sha256::verify_profile_entry_bytes;
+use atrament_profile_json_syntax::{
+    ProfileJsonSyntaxError, ProfileJsonSyntaxLimits,
+    ValidatedProfileJsonObject, validate_profile_json_object,
+};
 
 const END_SIGNATURE: u32 = 0x0605_4b50;
 const CENTRAL_SIGNATURE: u32 = 0x0201_4b50;
@@ -91,6 +95,15 @@ pub enum ProfileZipReadError {
     UnsupportedZip64,
 }
 
+/// Root JSON syntax failure after ordinary stored-ZIP framing.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ProfileZipManifestSyntaxError {
+    /// Root JSON is not one complete bounded UTF-8 object.
+    Json(ProfileJsonSyntaxError),
+    /// ZIP root manifest is absent, not UTF-8, or exceeds its own byte bound.
+    Zip(ProfileZipReadError),
+}
+
 /// One borrowed member with verified local/central size and CRC evidence.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ProfileZipEntry<'bytes> {
@@ -130,6 +143,29 @@ impl<'bytes> ProfileZipArchive<'bytes> {
     #[must_use]
     pub fn entries(&self) -> &[ProfileZipEntry<'bytes>] {
         &self.entries
+    }
+
+    /// Admit exact root manifest JSON object syntax from this ZIP's bytes.
+    ///
+    /// Checks the independent manifest byte budget first, then strict JSON
+    /// grammar, nesting, and value ceilings before any typed field decoding.
+    /// This does not bind arbitrary typed manifest data to the root JSON.
+    ///
+    /// # Errors
+    ///
+    /// Rejects missing, excessive or invalid UTF-8 root bytes and malformed
+    /// or over-budget JSON syntax without exposing any typed manifest.
+    pub fn manifest_json_object(
+        &self,
+        limits: ProfileJsonSyntaxLimits,
+    ) -> Result<
+        ValidatedProfileJsonObject<'bytes>,
+        ProfileZipManifestSyntaxError,
+    > {
+        let root = self.manifest_utf8(limits.maximum_bytes)
+            .map_err(ProfileZipManifestSyntaxError::Zip)?;
+        validate_profile_json_object(root.as_bytes(), limits)
+            .map_err(ProfileZipManifestSyntaxError::Json)
     }
 
     /// Borrow exact root manifest UTF-8 without attempting JSON decoding.

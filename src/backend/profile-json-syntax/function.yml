@@ -1,0 +1,9 @@
+identity:
+  id: function:profile-json-syntax
+  name: profile-json-syntax
+  path: src/backend/profile-json-syntax
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: domain

@@ -339,9 +339,12 @@ depends_on = ["atrament_handwriting_profile_container"]
 [component.atrament_profile_import_preflight]
 depends_on = ["atrament_explicit_file_path_intent", "atrament_handwriting_profile_container"]
 
+[component.atrament_profile_json_syntax]
+depends_on = []
+
 [component.atrament_profile_zip_reader]
 # Import and intent adapters are consumed only by its integration fixture.
-depends_on = ["atrament_explicit_file_path_intent", "atrament_handwriting_profile_container", "atrament_profile_import_preflight", "atrament_profile_entry_sha256"]
+depends_on = ["atrament_explicit_file_path_intent", "atrament_handwriting_profile_container", "atrament_profile_import_preflight", "atrament_profile_entry_sha256", "atrament_profile_json_syntax"]
 
 [component.atrament_render_quality_profile]
 depends_on = []

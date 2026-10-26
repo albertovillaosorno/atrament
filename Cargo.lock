@@ -542,6 +542,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "atrament_profile_json_syntax"
+version = "0.1.0"
+
+[[package]]
 name = "atrament_profile_zip_reader"
 version = "0.1.0"
 dependencies = [
@@ -549,6 +553,7 @@ dependencies = [
  "atrament_handwriting_profile_container",
  "atrament_profile_entry_sha256",
  "atrament_profile_import_preflight",
+ "atrament_profile_json_syntax",
 ]
 
 [[package]]

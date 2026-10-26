@@ -51,7 +51,11 @@ use atrament_profile_import_preflight::{
 use atrament_profile_entry_sha256::{
     sha256_profile_bytes, verify_profile_entry_bytes,
 };
+use atrament_profile_json_syntax::{
+    ProfileJsonSyntaxError, ProfileJsonSyntaxLimits,
+};
 use atrament_profile_zip_reader::{
+    ProfileZipManifestSyntaxError,
     ProfileZipPayloadVerificationError, ProfileZipReadError,
     ProfileZipReadLimits, read_stored_profile_zip,
     verify_admitted_profile_zip_payloads,
@@ -889,5 +893,71 @@ fn later_member_length_mismatch_precedes_its_invalid_digest() {
                     observed: 9,
                 },
         }),
+    );
+}
+
+#[test]
+fn root_json_syntax_is_checked_on_real_crc_valid_zip_bytes() {
+    let manifest = b"{\"entry\":1,\"items\":[true,null]}";
+    let bytes = make_zip(&[("manifest.json", manifest, 0x3a80_dd76)]);
+    let archive = read_stored_profile_zip(&bytes, limits())
+        .expect("correct stored ZIP frame and CRC");
+    let caps = ProfileJsonSyntaxLimits {
+        maximum_bytes: manifest.len(),
+        maximum_nesting: 3,
+        maximum_values: 5,
+    };
+    let valid = archive.manifest_json_object(caps)
+        .expect("JSON grammar succeeds");
+    assert_eq!(valid.bytes(), manifest);
+    assert_eq!(valid.value_count(), 5);
+    assert_eq!(
+        archive.manifest_json_object(ProfileJsonSyntaxLimits {
+            maximum_values: 4, ..caps
+        }),
+        Err(ProfileZipManifestSyntaxError::Json(
+            ProfileJsonSyntaxError::MaximumValuesExceeded,
+        )),
+    );
+    assert_eq!(
+        archive.manifest_json_object(ProfileJsonSyntaxLimits {
+            maximum_bytes: manifest.len().saturating_sub(1), ..caps
+        }),
+        Err(ProfileZipManifestSyntaxError::Zip(
+            ProfileZipReadError::ManifestTooLarge,
+        )),
+    );
+}
+
+#[test]
+fn crc_valid_but_malformed_or_nonobject_root_is_not_admitted() {
+    let caps = ProfileJsonSyntaxLimits {
+        maximum_bytes: 128,
+        maximum_nesting: 8,
+        maximum_values: 16,
+    };
+    let fixtures = [
+        (b"{\"entry\":}".as_slice(), 0x37e4_7743,
+            ProfileJsonSyntaxError::Malformed),
+        (b"[]".as_slice(), 0x0d4c_bb29,
+            ProfileJsonSyntaxError::RootNotObject),
+    ];
+    for (root, crc, expected) in fixtures {
+        let bytes = make_zip(&[("manifest.json", root, crc)]);
+        let archive = read_stored_profile_zip(&bytes, limits())
+            .expect("malformed JSON bytes have a valid ZIP CRC");
+        assert_eq!(
+            archive.manifest_json_object(caps),
+            Err(ProfileZipManifestSyntaxError::Json(expected)),
+        );
+    }
+    let missing_bytes = make_zip(&[]);
+    let missing = read_stored_profile_zip(&missing_bytes, limits())
+        .expect("empty ZIP framing is valid");
+    assert_eq!(
+        missing.manifest_json_object(caps),
+        Err(ProfileZipManifestSyntaxError::Zip(
+            ProfileZipReadError::MissingManifest,
+        )),
     );
 }

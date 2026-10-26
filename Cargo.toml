@@ -78,6 +78,7 @@ members = [
     "src/backend/physical-page-profile",
     "src/backend/profile-entry-sha256",
     "src/backend/profile-import-preflight",
+    "src/backend/profile-json-syntax",
     "src/backend/profile-zip-reader",
     "src/backend/motion-path-order-constraints",
     "src/backend/motion-plan-dry-run",
@@ -157,6 +158,7 @@ atrament_output_capability_matrix = { path = "src/backend/output-capability-matr
 atrament_physical_page_profile = { path = "src/backend/physical-page-profile" }
 atrament_profile_entry_sha256 = { path = "src/backend/profile-entry-sha256" }
 atrament_profile_import_preflight = { path = "src/backend/profile-import-preflight" }
+atrament_profile_json_syntax = { path = "src/backend/profile-json-syntax" }
 atrament_render_quality_profile = { path = "src/backend/render-quality-profile" }
 atrament_semantic_command_context = { path = "src/backend/semantic-command-context" }
 atrament_semantic_command_graph = { path = "src/backend/semantic-command-graph" }
