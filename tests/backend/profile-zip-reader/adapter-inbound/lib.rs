@@ -1033,3 +1033,33 @@ fn crc_correct_zip_root_enforces_caller_object_member_limit() {
     }).expect("exact number of unique members is admitted");
     assert_eq!(valid.bytes(), root);
 }
+
+#[test]
+fn sealed_zip_root_lookup_borrows_raw_nested_json_values() {
+    let root = concat!(
+        r#"{"header":{"tags":["x","y"]},"sample":"\u0061","#,
+        r#""count":1e+1}"#,
+    ).as_bytes();
+    let bytes = make_zip(&[("manifest.json", root, 0x0eba_2758)]);
+    let archive = read_stored_profile_zip(&bytes, limits())
+        .expect("root JSON bytes remain CRC-verifiable ZIP payload");
+    let caps = ProfileJsonSyntaxLimits {
+        maximum_bytes: root.len(),
+        maximum_nesting: 4,
+        maximum_object_members: 5,
+        maximum_values: 12,
+    };
+    let admitted = archive.manifest_json_object(caps)
+        .expect("the exact root JSON is unambiguous");
+    assert_eq!(
+        admitted.root_member_json("header"),
+        Some(br#"{"tags":["x","y"]}"#.as_slice()),
+    );
+    assert_eq!(
+        admitted.root_member_json("sample"),
+        Some(br#""\u0061""#.as_slice()),
+    );
+    assert_eq!(admitted.root_member_json("count"), Some(b"1e+1".as_slice()));
+    assert_eq!(admitted.root_member_json("tags"), None);
+    assert_eq!(admitted.root_member_json("Sample"), None);
+}

@@ -476,3 +476,67 @@ fn generated_escape_positions_preserve_duplicate_key_identity() {
     }
     assert!(observed > 4_000);
 }
+
+#[test]
+fn sealed_root_member_lookup_preserves_exact_json_value_bytes() {
+    let bytes = concat!(
+        r#" { "\u0061" : [ 1 , {"nested": [false, null]} ] , "#,
+        r#""empty": "" , "literal": "\u0000", "last": 1e+2 } "#,
+    )
+    .as_bytes();
+    let admitted = validate_profile_json_object(bytes, limits())
+        .expect("every nested value is syntactically valid");
+    assert_eq!(
+        admitted.root_member_json("a"),
+        Some(br#"[ 1 , {"nested": [false, null]} ]"#.as_slice()),
+    );
+    assert_eq!(
+        admitted.root_member_json("empty"),
+        Some(br#""""#.as_slice())
+    );
+    assert_eq!(
+        admitted.root_member_json("literal"),
+        Some(br#""\u0000""#.as_slice()),
+    );
+    assert_eq!(admitted.root_member_json("last"), Some(b"1e+2".as_slice()));
+    for missing in ["\u{00e1}", "nested", "LAsT", "", "a/", "%61"] {
+        assert_eq!(admitted.root_member_json(missing), None);
+    }
+    let first = admitted.root_member_json("a").expect("admitted member");
+    assert!(
+        bytes.windows(first.len()).any(|candidate| {
+            std::ptr::eq(candidate.as_ptr(), first.as_ptr())
+        })
+    );
+}
+
+#[test]
+fn sealed_lookup_only_matches_root_decoded_unicode_scalars() {
+    let bytes = r#"{"😀":true,"ñ":0,"ñ":1,"outer":{"id":2},"id":3}"#;
+    let admitted = validate_profile_json_object(bytes.as_bytes(), limits())
+        .expect("composed and decomposed names are distinct");
+    assert_eq!(admitted.root_member_json("😀"), Some(b"true".as_slice()));
+    assert_eq!(admitted.root_member_json("ñ"), Some(b"0".as_slice()));
+    assert_eq!(admitted.root_member_json("ñ"), Some(b"1".as_slice()));
+    assert_eq!(admitted.root_member_json("id"), Some(b"3".as_slice()));
+    assert_eq!(
+        admitted.root_member_json("outer"),
+        Some(br#"{"id":2}"#.as_slice())
+    );
+    assert_eq!(admitted.root_member_json("ID"), None);
+    let empty = validate_profile_json_object(b"{}", limits())
+        .expect("empty object is valid");
+    assert_eq!(empty.root_member_json("id"), None);
+}
+
+#[test]
+fn sealed_root_lookup_matches_escaped_astral_unicode_and_empty_names() {
+    let encoded = r#"{"\uD83D\uDE00":[1,2],"":null,"\u0062":false}"#;
+    let admitted = validate_profile_json_object(encoded.as_bytes(), limits())
+        .expect("escaped astral and empty keys are valid JSON");
+    assert_eq!(admitted.root_member_json("😀"), Some(b"[1,2]".as_slice()));
+    assert_eq!(admitted.root_member_json(""), Some(b"null".as_slice()));
+    assert_eq!(admitted.root_member_json("b"), Some(b"false".as_slice()));
+    assert_eq!(admitted.root_member_json("\u{1f601}"), None);
+    assert_eq!(admitted.root_member_json("B"), None);
+}

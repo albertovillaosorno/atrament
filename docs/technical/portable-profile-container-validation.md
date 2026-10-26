@@ -107,6 +107,25 @@ encoding, or prove correspondence between an independently supplied typed
 manifest and this archive's root bytes.** Those remaining obligations belong
 to the future typed profile JSON codec and canonical writer.
 
+### Read-only root JSON value projection
+
+A constructor-sealed `ValidatedProfileJsonObject` now exposes
+`root_member_json` for exact caller-selected top-level JSON member names.
+The lookup compares decoded Unicode scalars, including surrogate-pair and
+escaped aliases, after the complete document has passed all syntax and
+unique-key checks. It cannot select a nested key as a root member.
+
+The result is a borrowed source-byte slice of the original JSON value, not
+a decoded or normalized JSON value. Whitespace inside containers, original
+string escapes, and numeric spelling remain unchanged; missing names return
+`None`. An empty string key is valid when explicitly requested.
+
+The ZIP reader's `manifest_json_object` result can make that same projection
+from the actual CRC-checked root bytes, without allocating values or reading
+from a filesystem. Neither this generic lookup nor the sample fixture names
+freeze manifest wire fields, prove a typed manifest's provenance, or authorize
+profile acceptance. A future typed codec still owns those responsibilities.
+
 ### Exact entry SHA-256 verifier
 
 The separate profile-entry-sha256 domain computes NIST FIPS 180-4 SHA-256 over

@@ -156,3 +156,10 @@ A caller-set member budget and fixed 128-member ceiling bound the no-heap key
 index, with a fingerprint followed by exact decoded Unicode scalar comparison.
 Case folding and Unicode normalization are never silently applied; complete
 typed manifest parsing and canonical serialization remain separate TODO work.
+
+The sealed syntax result now offers read-only root-member lookup by exact
+decoded Unicode key without choosing any manifest field names. It borrows the
+original JSON value bytes, retaining escapes, whitespace and numeric spelling,
+while refusing nested or absent names. ZIP fixtures prove that the projection
+comes from the CRC-checked root entry. Typed schema admission, semantic field
+identity and canonical writing still remain open.

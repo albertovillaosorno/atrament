@@ -175,3 +175,9 @@ The gate now rejects duplicate decoded keys in every object, even across
 Unicode escapes and surrogate-pair aliases, using bounded fixed-size storage.
 It still does not decode a typed manifest, establish the manifest's wire schema,
 or authorize Import from any caller-selected filesystem path.
+
+The constructor-sealed root JSON syntax result can now borrow a chosen
+root-member value's exact byte slice from the checked ZIP manifest entry.
+Lookup is Unicode-scalar exact and cannot turn nested fields or near-match
+names into top-level values. The caller still cannot treat this generic byte
+view as a typed import or a verified caller-authorized filesystem read.

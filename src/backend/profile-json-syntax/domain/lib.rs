@@ -93,6 +93,51 @@ impl<'bytes> ValidatedProfileJsonObject<'bytes> {
         self.bytes
     }
 
+    /// Borrow the exact JSON bytes of one unique top-level member by its
+    /// decoded key name, without interpreting the member's value.
+    ///
+    /// The complete object was already admitted, so this lookup cannot
+    /// bypass duplicate-key rejection or resource limits. Unicode scalar
+    /// equality is exact, without URI decoding, case folding or NFC.
+    /// Returned bytes include the original JSON escapes and internal spacing.
+    #[must_use]
+    pub fn root_member_json(self, key: &str) -> Option<&'bytes [u8]> {
+        let mut reader = SyntaxCursor {
+            bytes: self.bytes,
+            cursor: 0,
+            maximum_nesting: MAXIMUM_JSON_NESTING,
+            maximum_object_members: MAXIMUM_JSON_OBJECT_MEMBERS,
+            remaining_values: self.values,
+            values: 0,
+        };
+        reader.whitespace();
+        reader.required(b'{').ok()?;
+        reader.whitespace();
+        if reader.consume(b'}') {
+            return None;
+        }
+        loop {
+            let key_start = reader.cursor;
+            reader.string().ok()?;
+            let key_end = reader.cursor;
+            reader.whitespace();
+            reader.required(b':').ok()?;
+            reader.whitespace();
+            let value_start = reader.cursor;
+            reader.value(1).ok()?;
+            let value_end = reader.cursor;
+            if reader.key_matches((key_start, key_end), key) {
+                return reader.bytes.get(value_start..value_end);
+            }
+            reader.whitespace();
+            if reader.consume(b'}') {
+                return None;
+            }
+            reader.required(b',').ok()?;
+            reader.whitespace();
+        }
+    }
+
     /// Number of syntactic JSON values consumed including the root object.
     #[must_use]
     pub const fn value_count(self) -> usize {
@@ -187,6 +232,22 @@ impl SyntaxCursor<'_> {
             fingerprint = fingerprint.wrapping_mul(0x100_0000_01b3u64);
         }
         Ok(fingerprint)
+    }
+
+    fn key_matches(&self, key: (usize, usize), target: &str) -> bool {
+        let Some(source) = self
+            .bytes
+            .get(key.0.saturating_add(1)..key.1.saturating_sub(1))
+        else {
+            return false;
+        };
+        let mut position = 0usize;
+        for expected in target.chars() {
+            if decoded_key_scalar(source, &mut position) != Some(expected) {
+                return false;
+            }
+        }
+        position == source.len()
     }
 
     fn keys_equal(
