@@ -714,4 +714,23 @@ fn all_member_hashes_must_pass_even_in_non_zip_manifest_order() {
                 ProfileEntryVerificationError::DigestMismatch,
         }),
     );
+
+    // A valid replacement CRC-32 on the later asset cannot bypass its hash.
+    let changed_bytes = make_zip(&[
+        ("assets/source.webp", b"z", 0x62d2_77af),
+        ENTRIES[0],
+        ENTRIES[1],
+    ]);
+    let changed_archive = read_stored_profile_zip(&changed_bytes, limits())
+        .expect("CRC-correct replacement must still parse");
+    assert_eq!(
+        verify_admitted_profile_zip_payloads(
+            &changed_archive, inventory,
+        ).err(),
+        Some(ProfileZipPayloadVerificationError::Entry {
+            index: 1,
+            reason: atrament_handwriting_profile_container::
+                ProfileEntryVerificationError::DigestMismatch,
+        }),
+    );
 }
