@@ -100,8 +100,9 @@ using a quadratic name scan. Failure of one entry blocks the complete
 projection. The root manifest is deliberately excluded from the verified
 section/asset accessor. This accessor now also uses the sorted ZIP index for
 exact logarithmic-time member lookup, including Unicode names, while refusing
-missing names, prefixes, percent-encoded aliases, and case changes. The
-regression suite additionally proves that an admitted zero-byte asset
+missing names, prefixes, percent-encoded aliases, and case changes.
+
+The regression suite additionally proves that an admitted zero-byte asset
 returns an actual empty byte slice rather than being confused with absence,
 and that a later member's length mismatch precedes its incorrect digest.
 
