@@ -203,12 +203,17 @@ impl<'manifest, 'bytes> VerifiedProfileZipPayloads<'manifest, '_, 'bytes> {
     /// No name normalization, percent decoding or filesystem lookup occurs.
     #[must_use]
     pub fn verified_entry_bytes(&self, path: &str) -> Option<&'bytes [u8]> {
-        if !self.manifest.entries.iter().any(|entry| entry.path == path) {
+        // Admission proved that every non-manifest archive member is
+        // declared, and verification checked all those exact bytes.
+        // The ZIP index is strictly sorted, so no second linear name scan
+        // or independently mutable declaration cache is required.
+        if path == PROFILE_MANIFEST_PATH {
             return None;
         }
-        self.archive.entries.iter()
-            .find(|entry| entry.name() == path)
-            .map(|entry| entry.bytes())
+        let index = self.archive.entries.binary_search_by(
+            |entry| entry.name().cmp(path)
+        ).ok()?;
+        self.archive.entries.get(index).map(|entry| entry.bytes())
     }
 
     /// Number of non-manifest member payloads verified.

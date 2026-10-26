@@ -98,7 +98,9 @@ prevent substituting a different archive after preflight.
 Each entry is resolved against the ZIP reader's sorted index, rather than
 using a quadratic name scan. Failure of one entry blocks the complete
 projection. The root manifest is deliberately excluded from the verified
-section/asset accessor.
+section/asset accessor. This accessor now also uses the sorted ZIP index for
+exact logarithmic-time member lookup, including Unicode names, while refusing
+missing names, prefixes, percent-encoded aliases, and case changes.
 
 The caller still must prove the supplied typed manifest originated in
 this archive's root JSON, enforce caller or host path authority, and decode

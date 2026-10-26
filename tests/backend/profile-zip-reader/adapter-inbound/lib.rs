@@ -734,3 +734,73 @@ fn all_member_hashes_must_pass_even_in_non_zip_manifest_order() {
         }),
     );
 }
+
+#[test]
+fn verified_member_lookup_preserves_exact_unicode_and_prefixes() {
+    let entries = [
+        ("assets/source.webp", b"x".as_slice(), 0x8cdc_1683),
+        ENTRIES[0],
+        ("sections/cuaderno ñ.json", b"123456789", 0xcbf4_3926),
+        ENTRIES[1],
+    ];
+    let bytes = make_zip(&entries);
+    let archive = read_stored_profile_zip(&bytes, limits())
+        .expect("canonical UTF-8 member names");
+    let manifest = ProfileManifest {
+        container_version: PROFILE_CONTAINER_VERSION.into(),
+        entries: vec![
+            ProfileManifestEntry {
+                byte_length: 9,
+                digest: sha256_profile_bytes(b"123456789"),
+                media_type: "application/json".into(),
+                path: "sections/strokes.json".into(),
+            },
+            ProfileManifestEntry {
+                byte_length: 1,
+                digest: sha256_profile_bytes(b"x"),
+                media_type: "image/webp".into(),
+                path: "assets/source.webp".into(),
+            },
+            ProfileManifestEntry {
+                byte_length: 9,
+                digest: sha256_profile_bytes(b"123456789"),
+                media_type: "application/json".into(),
+                path: "sections/cuaderno ñ.json".into(),
+            },
+        ],
+        optional_features: vec![],
+        profile_identity: "unicode-lookup".into(),
+        required_features: vec![],
+    };
+    let names = archive.observed_paths();
+    let admission = atrament_handwriting_profile_container::
+        validate_profile_manifest_view(&manifest, &[])
+        .expect("valid typed declaration");
+    let inventory = admission.admit_entry_inventory(&names)
+        .expect("exact declared ZIP names");
+    let verified = verify_admitted_profile_zip_payloads(&archive, inventory)
+        .expect("all member digests are valid");
+    assert_eq!(verified.verified_entry_count(), 3);
+    assert_eq!(
+        verified.verified_entry_bytes("sections/cuaderno ñ.json"),
+        Some(&b"123456789"[..]),
+    );
+    assert_eq!(
+        verified.verified_entry_bytes("sections/strokes.json"),
+        Some(&b"123456789"[..]),
+    );
+    assert_eq!(
+        verified.verified_entry_bytes("assets/source.webp"),
+        Some(&b"x"[..]),
+    );
+    for near_miss in [
+        "manifest.json", "", "sections/cuaderno n.json",
+        "sections/cuaderno ñ.JSON", "sections/cuaderno ñ",
+        "sections/cuaderno %C3%B1.json", "sections/cuaderno ñ.json/",
+        "sections/strokes.json ", "sections/strokes.json/other",
+        "assets/source.web", "assets/source.webp.bak",
+    ] {
+        assert_eq!(verified.verified_entry_bytes(near_miss), None,
+            "exact name={near_miss:?}");
+    }
+}
