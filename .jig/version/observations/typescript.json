@@ -2,7 +2,7 @@
   "authority": "typescript",
   "integrity_kind": "provider-response-sha256",
   "integrity_sha256": "28a8ef314c6bbc3fddb831088f80eb2fcac6351cb618c8ac029f7229f587b8aa",
-  "observed_on": "2026-10-22",
+  "observed_on": "2026-10-26",
   "provider": "npm-registry",
   "schema_version": 1,
   "source": "https://registry.npmjs.org/typescript/latest",
