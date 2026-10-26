@@ -124,3 +124,14 @@ failure. Its ZIP central-directory entry-count claim must fit inside the actual
 central-directory byte length before member index allocation, preventing tiny
 forged end records from requesting oversized vectors. ZIP64 and typed JSON
 admission remain separate, unfinished milestones.
+
+The independent profile-entry-sha256 domain now computes FIPS 180-4 SHA-256
+over exact, caller-bounded member byte slices with fixed working memory. It
+checks actual length before hashing, then verifies the typed manifest digest
+using the existing ProfileEntryVerificationError variants.
+
+Independent SHA-256 reference vectors cover empty, short, padding-boundary, multi-block,
+and million-byte inputs; failure fixtures reject mutations and preserve
+length-before-digest precedence. This does not parse a manifest, integrate
+import admission, or authorize a file or session effect. The container task
+remains open.

@@ -527,6 +527,13 @@ name = "atrament_print_scan_measurement"
 version = "0.1.0"
 
 [[package]]
+name = "atrament_profile_entry_sha256"
+version = "0.1.0"
+dependencies = [
+ "atrament_handwriting_profile_container",
+]
+
+[[package]]
 name = "atrament_profile_import_preflight"
 version = "0.1.0"
 dependencies = [

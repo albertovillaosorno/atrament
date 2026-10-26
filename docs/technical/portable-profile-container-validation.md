@@ -68,7 +68,21 @@ prevents a tiny forged trailer from triggering large index allocations.
 The typed manifest must still be parsed, checked and matched against those
 observations, and SHA-256 must be independently measured before any section
 interpretation or profile acceptance. ZIP64, archive-file I/O, canonical JSON,
-real digest computation, and section decoding remain unimplemented.
+integration of digest evidence into actual Import, and section decoding remain
+unimplemented.
+
+### Exact entry SHA-256 verifier
+
+The separate profile-entry-sha256 domain computes NIST FIPS 180-4 SHA-256 over
+caller-bounded in-memory member bytes, with fixed-size working arrays and no
+ZIP, JSON, filesystem, or session effects. Its verifier checks observed byte
+length before computing the digest, then checks the exact digest against one
+typed manifest entry.
+
+The verifier does not grant path authority, parse the manifest, or accept an
+import. Its regression suite checks known SHA-256 vectors (including one
+million bytes), block and padding boundaries against independent reference
+digests, unchanged bytes, changed bytes, and failure precedence.
 
 The integration fixture proves that the reader's exact observed entry names
 can be passed to the existing explicitly authorized `ImportProfile` preflight.
@@ -144,8 +158,9 @@ length/digest facts; it does not carry or decode entry bytes. Missing or
 near-match paths remain absent rather than being normalized, URI-decoded, or
 resolved through filesystem rules.
 
-The current domain compares a supplied 256-bit digest value. It does not compute
-SHA-256 itself.
+The container domain compares a supplied 256-bit digest value; it does not
+compute SHA-256 itself. The separate verifier above can supply the independently
+computed digest, but callers still must bind it to the exact admitted member.
 
 ### 5. Classify section and asset paths
 
@@ -280,9 +295,10 @@ These failures do not decode a typed section or mutate the supplied manifest.
 Unsupported prior/future versions are rejected rather than silently migrated.
 Unknown optional feature identifiers and opaque assets remain preserved data.
 
-ZIP/JSON parse failures, archive resource limits, hash-computation failures,
-section-schema failures, and migration failures belong to future adapters or
-section owners and are not manufactured by this pure domain.
+ZIP/JSON parse failures, archive resource limits, section-schema failures,
+and migration failures belong to adapters or section owners and are not
+manufactured by the pure container domain. SHA-256 computation is now available
+as a separate byte-slice primitive, not as a complete Import adapter.
 
 ## Verification
 
@@ -331,7 +347,7 @@ The profile-container TODO remains open for:
 - actual ZIP parsing and deterministic writing;
 - fixed canonical ZIP metadata values;
 - canonical JSON encoding and parsing;
-- SHA-256 computation over real entry bytes;
+- wiring verified SHA-256 bytes to a parsed, admitted profile manifest;
 - numeric archive and section resource limits;
 - typed section schemas and decoders;
 - supported migrations and loss reporting;

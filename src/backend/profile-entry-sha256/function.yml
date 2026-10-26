@@ -1,0 +1,9 @@
+identity:
+  id: function:profile-entry-sha256
+  name: profile-entry-sha256
+  path: src/backend/profile-entry-sha256
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: domain

@@ -150,3 +150,10 @@ those observed names into this task's existing typed `ImportProfile` gate.
 Actual filesystem admission, bounded file reading, manifest JSON decoding,
 cryptographic digest recomputation, ZIP64, and user-controlled session profile
 acceptance are still required before this TODO can close.
+
+The separate profile-entry-sha256 primitive now provides exact SHA-256
+computation and byte-length-first verification over admitted in-memory
+member bytes. It has no file path, ZIP/JSON parsing, or accepted-profile
+mutation. A future Import adapter must still establish genuine caller-owned
+source authority, decode and validate the manifest, connect the archive's
+exact byte slices to declarations, and explicitly commit an accepted profile.
