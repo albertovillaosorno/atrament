@@ -961,3 +961,22 @@ fn crc_valid_but_malformed_or_nonobject_root_is_not_admitted() {
         )),
     );
 }
+
+#[test]
+fn crc_valid_manifest_syntax_preserves_utf8_failure() {
+    let invalid_utf8 = [123u8, 255u8, 125u8];
+    let bytes = make_zip(&[("manifest.json", &invalid_utf8, 0x1a75_ae50)]);
+    let archive = read_stored_profile_zip(&bytes, limits())
+        .expect("the ZIP CRC covers the malformed UTF-8 bytes");
+    let caps = ProfileJsonSyntaxLimits {
+        maximum_bytes: 10,
+        maximum_nesting: 4,
+        maximum_values: 16,
+    };
+    assert_eq!(
+        archive.manifest_json_object(caps),
+        Err(ProfileZipManifestSyntaxError::Zip(
+            ProfileZipReadError::InvalidManifestUtf8,
+        )),
+    );
+}
