@@ -375,6 +375,27 @@ test("WebSocket upgrade rejects missing or oversized response headers",
     },
 );
 
+// A successful HTTP status alone does not establish a WebSocket peer.
+function validateWebSocketUpgrade(head, key) {
+    const lines = head.split("\r\n");
+    assert.match(lines[0], /^HTTP\/1\.1 101(?:\s|$)/);
+    const headers = new Map();
+    for (const line of lines.slice(1)) {
+        const colon = line.indexOf(":");
+        assert.ok(colon > 0, "invalid WebSocket upgrade header syntax");
+        const name = line.slice(0, colon).trim().toLowerCase();
+        assert.ok(!headers.has(name), "duplicate WebSocket upgrade header");
+        headers.set(name, line.slice(colon + 1).trim());
+    }
+    assert.equal(headers.get("upgrade")?.toLowerCase(), "websocket");
+    assert.ok(headers.get("connection")?.toLowerCase()
+        .split(",").some((token) => token.trim() === "upgrade"));
+    const expected = crypto.createHash("sha1")
+        .update(`${key}258EAFA5-E914-47DA-95CA-C5AB0DC85B11`)
+        .digest("base64");
+    assert.equal(headers.get("sec-websocket-accept"), expected);
+}
+
 class BidiClient {
     constructor(url) {
         this.buffer = Buffer.alloc(0);
@@ -411,8 +432,7 @@ class BidiClient {
         let response;
         try {
             response = await upgrade;
-            assert.ok(response.head.startsWith("HTTP/1.1 101"),
-                response.head);
+            validateWebSocketUpgrade(response.head, key);
         } catch (error) {
             this.socket.destroy();
             throw error;
@@ -519,6 +539,32 @@ class BidiClient {
         return Buffer.concat([header, mask, masked]);
     }
 }
+
+test("WebSocket upgrade rejects false status and forged accept headers",
+    () => {
+        const key = "dGhlIHNhbXBsZSBub25jZQ==";
+        const accepted = [
+            "HTTP/1.1 101 Switching Protocols",
+            "Upgrade: websocket",
+            "Connection: keep-alive, Upgrade",
+            "Sec-WebSocket-Accept: s3pPLMBiTxaQ9kYGzzhZRbK+xOo=",
+        ].join("\r\n");
+        assert.doesNotThrow(() => validateWebSocketUpgrade(accepted, key));
+        assert.throws(() => validateWebSocketUpgrade(
+            accepted.replace("101 Switching", "1010 Switching"), key,
+        ));
+        assert.throws(() => validateWebSocketUpgrade(
+            accepted.replace("Connection: keep-alive, Upgrade",
+                "Connection: keep-alive"), key,
+        ));
+        assert.throws(() => validateWebSocketUpgrade(
+            accepted.replace("s3pPLMBiTxaQ9kYGzzhZRbK+xOo=", "invalid"), key,
+        ));
+        assert.throws(() => validateWebSocketUpgrade(
+            `${accepted}\r\nUpgrade: websocket`, key,
+        ));
+    },
+);
 
 test(
     "WebDriver client rejects invalid upgrade status and closes its socket",

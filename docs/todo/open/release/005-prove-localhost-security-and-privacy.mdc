@@ -313,3 +313,10 @@ successful responses, explicit protocol rejections, and finite unanswered
 command deadlines without leaking pending-command map entries. These tests
 bound automation state; they do not weaken or replace the backend's HTTP
 request-admission or session-secret checks.
+
+BiDi upgrade acceptance now checks the exact `101` status, `Upgrade` and
+`Connection` header values, unique header names, and the RFC 6455
+`Sec-WebSocket-Accept` challenge response. It rejects a false `1010` status,
+forged accept hashes, missing upgrade tokens and duplicate response headers.
+The SHA-1 challenge is the standard WebSocket handshake proof, not application
+request authentication and not an alternative to Atrament's session secret.
