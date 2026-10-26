@@ -170,6 +170,24 @@ manifest codec must choose which properties allow strings, booleans, null, or
 numbers, plus canonical writer rules. CRC-checked ZIP integration fixtures
 show the decoded value still borrows its source from the real manifest entry.
 
+### Lossless object-member enumeration
+
+Constructor-sealed JSON object views also support ordered member iteration,
+including root fields and fields nested inside array elements or objects.
+Each member exposes the exact source JSON key token, an allocation-free stream
+of its decoded Unicode scalars, and a borrowed, sealed JSON value. Names are
+compared without case folding, Unicode normalization, or URI-decoding.
+
+The iterator does not prescribe required or optional wire fields. Its original
+key spelling and associated value bytes can be inspected without discarding
+unknown keys or pretending they match known names. Nested siblings remain
+separate objects, empty objects exhaust safely, and 128-member boundary tests
+preserve original order. A CRC-checked ZIP fixture checks that member key and
+value bytes come from the admitted ZIP root, not independent reference text.
+
+Unknown-field retention semantics, canonical JSON rewriting, manifest schema
+admission, and complete profile import remain tasks for a future typed codec.
+
 ### Exact entry SHA-256 verifier
 
 The separate profile-entry-sha256 domain computes NIST FIPS 180-4 SHA-256 over

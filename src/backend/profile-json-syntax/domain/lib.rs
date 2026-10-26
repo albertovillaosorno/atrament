@@ -201,6 +201,135 @@ impl Iterator for ValidatedProfileJsonStringChars<'_> {
 
 impl FusedIterator for ValidatedProfileJsonStringChars<'_> {}
 
+/// Borrowed key and value of one already validated JSON object member.
+///
+/// The original key spelling remains available for opaque preservation;
+/// decoded scalar comparison is exact, with no implicit normalization.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ValidatedProfileJsonField<'bytes> {
+    key_bytes: &'bytes [u8],
+    value: ValidatedProfileJsonValue<'bytes>,
+}
+
+impl<'bytes> ValidatedProfileJsonField<'bytes> {
+    /// Iterate decoded Unicode scalars of the admitted member name.
+    #[must_use]
+    pub fn decoded_key_chars(self) -> ValidatedProfileJsonStringChars<'bytes> {
+        ValidatedProfileJsonStringChars {
+            cursor: 0,
+            interior: self
+                .key_bytes
+                .get(1..self.key_bytes.len().saturating_sub(1))
+                .unwrap_or_default(),
+        }
+    }
+
+    /// Exact original JSON key token including quotes and character escapes.
+    #[must_use]
+    pub const fn key_json(self) -> &'bytes [u8] {
+        self.key_bytes
+    }
+
+    /// Compare one name without allocation, case folding or normalization.
+    #[must_use]
+    pub fn key_matches(self, expected: &str) -> bool {
+        self.decoded_key_chars().eq(expected.chars())
+    }
+
+    /// Return the source-byte value associated with this original key token.
+    #[must_use]
+    pub const fn value(self) -> ValidatedProfileJsonValue<'bytes> {
+        self.value
+    }
+}
+
+/// Fused one-pass member iterator from a syntax-admitted JSON object.
+///
+/// Member names and values remain borrowed and unchanged in source order.
+#[derive(Clone, Debug)]
+pub struct ValidatedProfileJsonObjectFields<'bytes> {
+    bytes: &'bytes [u8],
+    cursor: usize,
+    document_values: usize,
+    finished: bool,
+    started: bool,
+}
+
+impl<'bytes> ValidatedProfileJsonObjectFields<'bytes> {
+    const fn for_object(bytes: &'bytes [u8], document_values: usize) -> Self {
+        Self {
+            bytes,
+            cursor: 0,
+            document_values,
+            finished: false,
+            started: false,
+        }
+    }
+}
+
+// Preserve standard iterator semantics instead of reimplementing combinators.
+#[expect(
+    clippy::missing_trait_methods,
+    reason = "standard Iterator combinators retain their default behavior"
+)]
+impl<'bytes> Iterator for ValidatedProfileJsonObjectFields<'bytes> {
+    type Item = ValidatedProfileJsonField<'bytes>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.finished {
+            return None;
+        }
+        let mut reader =
+            SyntaxCursor::for_admitted(self.bytes, self.document_values);
+        reader.cursor = self.cursor;
+        if !self.started {
+            reader.whitespace();
+            reader.required(b'{').ok()?;
+            self.started = true;
+        }
+        reader.whitespace();
+        if reader.consume(b'}') {
+            self.finished = true;
+            return None;
+        }
+        let key_start = reader.cursor;
+        if reader.string().is_err() {
+            self.finished = true;
+            return None;
+        }
+        let key_end = reader.cursor;
+        reader.whitespace();
+        if reader.required(b':').is_err() {
+            self.finished = true;
+            return None;
+        }
+        reader.whitespace();
+        let value_start = reader.cursor;
+        if reader.value(0).is_err() {
+            self.finished = true;
+            return None;
+        }
+        let value_end = reader.cursor;
+        let key_bytes = self.bytes.get(key_start..key_end)?;
+        let value_bytes = self.bytes.get(value_start..value_end)?;
+        reader.whitespace();
+        if reader.consume(b',') {
+            self.cursor = reader.cursor;
+        } else {
+            self.finished = true;
+        }
+        Some(ValidatedProfileJsonField {
+            key_bytes,
+            value: ValidatedProfileJsonValue {
+                bytes: value_bytes,
+                document_values: self.document_values,
+            },
+        })
+    }
+}
+
+impl FusedIterator for ValidatedProfileJsonObjectFields<'_> {}
+
 impl<'bytes> ValidatedProfileJsonValue<'bytes> {
     /// Select a zero-based array element without copying or normalizing it.
     ///
@@ -270,6 +399,22 @@ impl<'bytes> ValidatedProfileJsonValue<'bytes> {
         }
     }
 
+    /// Traverse admitted object members in their original source order.
+    ///
+    /// The iterator preserves both key spelling and value source bytes.
+    #[must_use]
+    pub fn object_fields(
+        self,
+    ) -> Option<ValidatedProfileJsonObjectFields<'bytes>> {
+        if self.kind() != Some(ProfileJsonValueKind::Object) {
+            return None;
+        }
+        Some(ValidatedProfileJsonObjectFields::for_object(
+            self.bytes,
+            self.document_values,
+        ))
+    }
+
     /// Select one decoded member name only when this value is an object.
     #[must_use]
     pub fn object_member(self, key: &str) -> Option<Self> {
@@ -323,6 +468,15 @@ impl<'bytes> ValidatedProfileJsonObject<'bytes> {
     #[must_use]
     pub const fn bytes(self) -> &'bytes [u8] {
         self.bytes
+    }
+
+    /// Traverse unique decoded root fields in their original JSON order.
+    ///
+    /// Unknown fields can be inspected and their raw names retained without
+    /// choosing or accepting any portable-profile wire schema.
+    #[must_use]
+    pub const fn root_fields(self) -> ValidatedProfileJsonObjectFields<'bytes> {
+        ValidatedProfileJsonObjectFields::for_object(self.bytes, self.values)
     }
 
     /// Borrow the exact JSON bytes of one unique top-level member by its

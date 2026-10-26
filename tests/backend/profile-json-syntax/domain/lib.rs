@@ -990,3 +990,114 @@ fn generated_escaped_json_string_values_decode_exact_unicode_scalars() {
         assert_eq!(output, expected.to_string());
     }
 }
+
+#[test]
+fn sealed_object_field_stream_preserves_order_and_raw_names() {
+    let document = concat!(
+        r#" { "\u0061" : [ 0 ] , "😀" : { "inner" : false }, "#,
+        r#""ñ":3 , "ñ":null , "": "\u0061" } "#,
+    );
+    let root = validate_profile_json_object(document.as_bytes(), limits())
+        .expect("composed and decomposed keys are distinct");
+    let mut fields = root.root_fields();
+    for (expected_name, expected_json_key, expected_value) in [
+        ("a", r#""\u0061""#, "[ 0 ]"),
+        ("😀", r#""😀""#, r#"{ "inner" : false }"#),
+        ("ñ", r#""ñ""#, "3"),
+        ("ñ", r#""ñ""#, "null"),
+        ("", r#""""#, r#""\u0061""#),
+    ] {
+        let field = fields.next().expect("next admitted source member");
+        assert_eq!(field.key_json(), expected_json_key.as_bytes());
+        assert_eq!(field.value().bytes(), expected_value.as_bytes());
+        assert_eq!(
+            field.decoded_key_chars().collect::<String>(),
+            expected_name
+        );
+        assert!(field.key_matches(expected_name));
+        assert!(!field.key_matches(&format!("{expected_name}x")));
+        let original_key = field.key_json();
+        assert!(document.as_bytes().windows(original_key.len()).any(
+            |candidate| std::ptr::eq(candidate.as_ptr(), original_key.as_ptr())
+        ));
+    }
+    for _ in 0..3 {
+        assert_eq!(fields.next(), None);
+    }
+}
+
+#[test]
+fn nested_object_fields_do_not_steal_sibling_or_root_members() {
+    let source = br#"{"x":{"one":1,"two":2},"y":[{"one":3},{}]}"#;
+    let root = validate_profile_json_object(source, limits()).expect("valid");
+    let outer = root
+        .root_fields()
+        .map(|field| field.decoded_key_chars().collect::<String>())
+        .collect::<Vec<_>>();
+    assert_eq!(outer, ["x", "y"]);
+    let x = root.root_member_value("x").expect("object");
+    let children = x
+        .object_fields()
+        .expect("fields")
+        .map(|field| {
+            (
+                field.decoded_key_chars().collect::<String>(),
+                field.value().bytes(),
+            )
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(
+        children,
+        [
+            (String::from("one"), b"1".as_slice()),
+            (String::from("two"), b"2".as_slice())
+        ]
+    );
+    let y = root.root_member_value("y").expect("array");
+    assert!(y.object_fields().is_none());
+    let inner = y
+        .array_element(0)
+        .expect("first object")
+        .object_fields()
+        .expect("nested fields")
+        .collect::<Vec<_>>();
+    assert_eq!(inner.len(), 1);
+    assert!(inner[0].key_matches("one"));
+    assert_eq!(inner[0].value().bytes(), b"3");
+    let mut empty = y
+        .array_element(1)
+        .expect("second object")
+        .object_fields()
+        .expect("empty member iterator");
+    assert_eq!(empty.next(), None);
+    assert_eq!(empty.next(), None);
+    let empty_root = validate_profile_json_object(b" { } ", limits())
+        .expect("valid empty root");
+    assert_eq!(empty_root.root_fields().next(), None);
+}
+
+#[test]
+fn maximum_object_members_can_be_streamed_without_field_name_policy() {
+    let entries = (0..MAXIMUM_JSON_OBJECT_MEMBERS)
+        .map(|index| format!(r#""key{index}":{index}"#))
+        .collect::<Vec<_>>()
+        .join(",");
+    let document = format!("{{{entries}}}");
+    let root = validate_profile_json_object(
+        document.as_bytes(),
+        ProfileJsonSyntaxLimits {
+            maximum_bytes: 8_192,
+            maximum_nesting: 2,
+            maximum_object_members: usize::MAX,
+            maximum_values: usize::MAX,
+        },
+    )
+    .expect("exact member ceiling supported");
+    let mut count = 0usize;
+    for (index, field) in root.root_fields().enumerate() {
+        assert!(field.key_matches(&format!("key{index}")));
+        assert_eq!(field.value().unsigned_integer(), Some(index as u64));
+        count = count.saturating_add(1);
+    }
+    assert_eq!(count, MAXIMUM_JSON_OBJECT_MEMBERS);
+}

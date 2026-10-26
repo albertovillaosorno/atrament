@@ -1078,6 +1078,17 @@ fn sealed_crc_checked_zip_root_exposes_nested_read_only_json_values() {
             maximum_values: 12,
         })
         .expect("ZIP root grammar and unique object keys verified");
+    let root_fields = admitted.root_fields().collect::<Vec<_>>();
+    assert_eq!(root_fields.len(), 2);
+    assert!(root_fields[0].key_matches("nested"));
+    assert_eq!(root_fields[0].key_json(), br#""nested""#);
+    assert!(root_fields[1].key_matches("id"));
+    assert_eq!(root_fields[1].value().unsigned_integer(), Some(3));
+    assert!(
+        admitted.bytes().windows(root_fields[0].key_json().len())
+            .any(|slice| std::ptr::eq(slice.as_ptr(),
+                root_fields[0].key_json().as_ptr()))
+    );
     let nested = admitted
         .root_member_value("nested")
         .expect("root object projection");

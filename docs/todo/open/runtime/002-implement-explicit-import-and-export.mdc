@@ -193,3 +193,8 @@ non-coercing bool/null/plain `u64` helpers from an admitted ZIP root. The typed
 manifest parser still must bind every required field to the actual root bytes,
 refuse schema mismatches and unknown required features, and preserve optional
 wire data before any Import/session effects.
+
+Source-order sealed JSON member enumeration now retains original key spelling
+and exact selected values without constructing a typed manifest. The future
+codec must decide required versus optional keys and reject incompatible fields
+before verified inventory, explicitly selected path and session Import effects.

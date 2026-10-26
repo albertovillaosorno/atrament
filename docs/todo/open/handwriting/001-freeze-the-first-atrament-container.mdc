@@ -176,3 +176,10 @@ string chars, exact boolean/null checks and strictly nonnegative base-10 `u64`
 values without exponent, fractional, negative or overflow coercion. These are
 optional helper operations on admitted JSON syntax, not an implicit choice of
 portable-profile manifest field names or canonical encoding policy.
+
+The syntax-admitted JSON object now exposes a one-pass ordered member stream,
+retaining each original key token and exact value bytes while permitting
+allocation-free decoded Unicode name comparison. Nested and root members
+remain independently scoped, including in real CRC-checked ZIP payloads.
+This supplies read-only evidence needed for eventual unknown-field handling;
+unknown-field preservation and canonical rewrites are not yet specified.
