@@ -86,6 +86,25 @@ digests, unchanged bytes, changed bytes, and failure precedence. A
 cross-component ZIP fixture additionally proves that a matching CRC-32 over
 altered bytes cannot satisfy an unchanged manifest SHA-256 digest.
 
+### Complete stored member SHA-256 projection
+
+The ZIP inbound adapter can now take a constructor-sealed declared-versus-
+observed inventory and verify every stored, CRC-checked member against its
+declared byte length and SHA-256 before exposing any non-manifest payload
+bytes through a separate borrowed, sealed result. It rechecks the exact ZIP
+member-name sequence against the admitted inventory, including order, to
+prevent substituting a different archive after preflight.
+
+Each entry is resolved against the ZIP reader's sorted index, rather than
+using a quadratic name scan. Failure of one entry blocks the complete
+projection. The root manifest is deliberately excluded from the verified
+section/asset accessor.
+
+The caller still must prove the supplied typed manifest originated in
+this archive's root JSON, enforce caller or host path authority, and decode
+the typed sections before session acceptance. The adapter has no filesystem
+or session effect and the profile Import TODO remains open.
+
 The integration fixture proves that the reader's exact observed entry names
 can be passed to the existing explicitly authorized `ImportProfile` preflight.
 It intentionally uses a synthetic, unverified manifest digest to demonstrate

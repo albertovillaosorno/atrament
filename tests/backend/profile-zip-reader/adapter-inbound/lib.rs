@@ -48,9 +48,13 @@ use atrament_profile_import_preflight::{
     preflight_explicit_profile_import,
 };
 
-use atrament_profile_entry_sha256::verify_profile_entry_bytes;
+use atrament_profile_entry_sha256::{
+    sha256_profile_bytes, verify_profile_entry_bytes,
+};
 use atrament_profile_zip_reader::{
-    ProfileZipReadError, ProfileZipReadLimits, read_stored_profile_zip,
+    ProfileZipPayloadVerificationError, ProfileZipReadError,
+    ProfileZipReadLimits, read_stored_profile_zip,
+    verify_admitted_profile_zip_payloads,
 };
 
 const ENTRIES: [(&str, &[u8], u32); 2] = [
@@ -546,5 +550,168 @@ fn valid_crc32_cannot_replace_manifest_sha256_verification() {
             atrament_handwriting_profile_container::
                 ProfileEntryVerificationError::DigestMismatch,
         ),
+    );
+}
+
+#[test]
+fn admitted_zip_payloads_require_all_exact_member_hashes() {
+    let bytes = make_zip(&ENTRIES);
+    let archive = read_stored_profile_zip(&bytes, limits())
+        .expect("known stored ZIP framing");
+    let names = archive.observed_paths();
+    let selected = classify_explicit_file_path_intent(
+        ExplicitFilePurpose::ImportProfile,
+        ExplicitFilePathSource::CallerSelection,
+        PathBuf::from("selected/profile.atrament"),
+        ExplicitOverwriteIntent::PreserveExisting,
+    ).expect("independent Import selection");
+    let manifest = ProfileManifest {
+        container_version: PROFILE_CONTAINER_VERSION.into(),
+        entries: vec![ProfileManifestEntry {
+            byte_length: 9,
+            digest: Sha256Digest::from_bytes([
+                0x15, 0xe2, 0xb0, 0xd3, 0xc3, 0x38, 0x91, 0xeb,
+                0xb0, 0xf1, 0xef, 0x60, 0x9e, 0xc4, 0x19, 0x42,
+                0x0c, 0x20, 0xe3, 0x20, 0xce, 0x94, 0xc6, 0x5f,
+                0xbc, 0x8c, 0x33, 0x12, 0x44, 0x8e, 0xb2, 0x25,
+            ]),
+            media_type: "application/json".into(),
+            path: "sections/strokes.json".into(),
+        }],
+        optional_features: vec![],
+        profile_identity: "typed-unbound-to-root".into(),
+        required_features: vec!["strokes".into()],
+    };
+    let encoding =
+        atrament_handwriting_profile_container::ProfileArchiveEncodingEvidence {
+            entry_encoding:
+                atrament_handwriting_profile_container::
+                    ProfileArchiveEntryEncoding::Stored,
+            platform_extras:
+                atrament_handwriting_profile_container::
+                    ProfileArchivePlatformExtras::Absent,
+            zip64_requirement:
+                atrament_handwriting_profile_container::
+                    ProfileZip64Requirement::Ordinary,
+            zip64_use:
+                atrament_handwriting_profile_container::ProfileZip64Use::Absent,
+        };
+    let budget = ProfileImportBudget {
+        maximum_declared_bytes: 9,
+        maximum_entries: 1,
+        maximum_entry_bytes: 9,
+    };
+    let admitted = preflight_explicit_profile_import(
+        &selected, &manifest, &["strokes"], &names, encoding, budget,
+    ).expect("manifest and ZIP member names preflight");
+    let verified = verify_admitted_profile_zip_payloads(
+        &archive, admitted.inventory(),
+    ).expect("known entry SHA-256 matches its declared digest");
+    assert_eq!(verified.verified_entry_count(), 1);
+    assert_eq!(
+        verified.verified_entry_bytes("sections/strokes.json"),
+        Some(&b"123456789"[..]),
+    );
+    assert_eq!(verified.verified_entry_bytes("manifest.json"), None);
+    assert_eq!(verified.verified_entry_bytes("sections/%73trokes.json"), None);
+
+    let tampered_bytes = make_zip(&[
+        ENTRIES[0],
+        ("sections/strokes.json", b"123456788", 0xbcf3_09b0),
+    ]);
+    let tampered = read_stored_profile_zip(&tampered_bytes, limits())
+        .expect("CRC-correct altered ZIP");
+    assert_eq!(
+        verify_admitted_profile_zip_payloads(
+            &tampered, admitted.inventory(),
+        ).err(),
+        Some(ProfileZipPayloadVerificationError::Entry {
+            index: 0,
+            reason: atrament_handwriting_profile_container::
+                ProfileEntryVerificationError::DigestMismatch,
+        }),
+    );
+
+    let changed_name_bytes = make_zip(&[
+        ENTRIES[0],
+        ("sections/other.json", b"123456789", 0xcbf4_3926),
+    ]);
+    let changed_names = read_stored_profile_zip(&changed_name_bytes, limits())
+        .expect("different canonical ZIP names");
+    assert_eq!(
+        verify_admitted_profile_zip_payloads(
+            &changed_names, admitted.inventory(),
+        ).err(),
+        Some(ProfileZipPayloadVerificationError::InventoryMismatch),
+    );
+}
+
+#[test]
+fn all_member_hashes_must_pass_even_in_non_zip_manifest_order() {
+    let entries = [
+        ("assets/source.webp", b"x".as_slice(), 0x8cdc_1683),
+        ENTRIES[0],
+        ENTRIES[1],
+    ];
+    let bytes = make_zip(&entries);
+    let archive = read_stored_profile_zip(&bytes, limits())
+        .expect("all three ZIP entries are CRC-correct");
+    let manifest = ProfileManifest {
+        container_version: PROFILE_CONTAINER_VERSION.into(),
+        entries: vec![
+            ProfileManifestEntry {
+                byte_length: 9,
+                digest: sha256_profile_bytes(b"123456789"),
+                media_type: "application/json".into(),
+                path: "sections/strokes.json".into(),
+            },
+            ProfileManifestEntry {
+                byte_length: 1,
+                digest: sha256_profile_bytes(b"x"),
+                media_type: "image/webp".into(),
+                path: "assets/source.webp".into(),
+            },
+        ],
+        optional_features: vec![],
+        profile_identity: "supplied-typed-manifest".into(),
+        required_features: vec![],
+    };
+    let names = archive.observed_paths();
+    let admitted = atrament_handwriting_profile_container::
+        validate_profile_manifest_view(&manifest, &[])
+        .expect("manifest metadata structurally valid");
+    let inventory = admitted.admit_entry_inventory(&names)
+        .expect("same exact ZIP entries");
+    let verified = verify_admitted_profile_zip_payloads(
+        &archive, inventory,
+    ).expect("both cryptographic hashes match");
+    assert_eq!(verified.verified_entry_count(), 2);
+    assert_eq!(
+        verified.verified_entry_bytes("assets/source.webp"),
+        Some(&b"x"[..]),
+    );
+    assert_eq!(
+        verified.verified_entry_bytes("sections/strokes.json"),
+        Some(&b"123456789"[..]),
+    );
+
+    let mut corrupt_declaration = manifest.clone();
+    if let Some(asset) = corrupt_declaration.entries.get_mut(1) {
+        asset.digest = Sha256Digest::from_bytes([0; 32]);
+    }
+    let changed_admission = atrament_handwriting_profile_container::
+        validate_profile_manifest_view(&corrupt_declaration, &[])
+        .expect("metadata is still structurally valid");
+    let changed_inventory = changed_admission.admit_entry_inventory(&names)
+        .expect("member names still match");
+    assert_eq!(
+        verify_admitted_profile_zip_payloads(
+            &archive, changed_inventory,
+        ).err(),
+        Some(ProfileZipPayloadVerificationError::Entry {
+            index: 1,
+            reason: atrament_handwriting_profile_container::
+                ProfileEntryVerificationError::DigestMismatch,
+        }),
     );
 }

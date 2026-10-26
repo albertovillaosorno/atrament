@@ -135,3 +135,10 @@ boundary, multi-block, and million-byte inputs; failure fixtures reject
 mutations and preserve length-before-digest precedence. This does not
 parse a manifest, integrate import admission, or authorize a file or
 session effect. The container task remains open.
+
+The stored-ZIP reader now also seals a complete digest-verified member-byte
+view against an independently admitted typed inventory. It compares the
+exact ZIP member-name sequence before hashing all non-manifest entries, then
+exposes only verified declared paths without decoding section content.
+An admitted typed manifest is not yet proven to have been decoded from the
+same ZIP root JSON, so this is not full profile-container acceptance.

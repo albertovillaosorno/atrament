@@ -157,3 +157,12 @@ member bytes. It has no file path, ZIP/JSON parsing, or accepted-profile
 mutation. A future Import adapter must still establish genuine caller-owned
 source authority, decode and validate the manifest, connect the archive's
 exact byte slices to declarations, and explicitly commit an accepted profile.
+
+The stored-ZIP inbound adapter now verifies **every** declared non-manifest
+member against its exact bytes and SHA-256 after independently sealed
+inventory preflight. It rechecks ZIP member names against that admitted
+inventory before hashing, and returns borrowed entry bytes only after every
+member succeeds. Cross-archive substitution, valid-CRC digest corruption,
+and near-match entry lookup are regression-tested. The typed manifest still
+needs to be parsed and bound to this ZIP's own root JSON; no file is opened
+and no profile is accepted by this byte-level step.

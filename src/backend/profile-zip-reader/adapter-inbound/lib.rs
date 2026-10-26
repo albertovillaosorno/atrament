@@ -37,8 +37,10 @@
 use std::str::from_utf8;
 
 use atrament_handwriting_profile_container::{
-    PROFILE_MANIFEST_PATH, profile_entry_kind,
+    PROFILE_MANIFEST_PATH, ProfileEntryVerificationError,
+    ProfileManifest, ValidatedProfileEntryInventory, profile_entry_kind,
 };
+use atrament_profile_entry_sha256::verify_profile_entry_bytes;
 
 const END_SIGNATURE: u32 = 0x0605_4b50;
 const CENTRAL_SIGNATURE: u32 = 0x0201_4b50;
@@ -157,6 +159,62 @@ impl<'bytes> ProfileZipArchive<'bytes> {
     #[must_use]
     pub fn observed_paths(&self) -> Vec<&'bytes str> {
         self.entries.iter().map(|entry| entry.name).collect()
+    }
+}
+
+/// Failed binding of admitted names or exact member bytes to a stored ZIP.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ProfileZipPayloadVerificationError {
+    /// One non-manifest member's bytes fail their declared size or SHA-256.
+    Entry {
+        /// Zero-based index in the admitted manifest entry sequence.
+        index: usize,
+        /// Byte-length checks precede digest checks.
+        reason: ProfileEntryVerificationError,
+    },
+    /// The admitted inventory is not the exact member-name sequence here.
+    InventoryMismatch,
+    /// A declared member cannot be found after exact inventory comparison.
+    MissingAfterAdmission {
+        /// Zero-based index in the admitted manifest.
+        index: usize,
+    },
+}
+
+/// Constructor-sealed, borrowed verified ZIP member bytes.
+///
+/// This does not prove the supplied manifest was parsed from this ZIP root,
+/// nor grant path authority, decode sections or commit an imported profile.
+#[derive(Debug)]
+pub struct VerifiedProfileZipPayloads<'manifest, 'archive, 'bytes> {
+    archive: &'archive ProfileZipArchive<'bytes>,
+    manifest: &'manifest ProfileManifest,
+}
+
+impl<'manifest, 'bytes> VerifiedProfileZipPayloads<'manifest, '_, 'bytes> {
+    /// Borrow the exact manifest whose entry declarations were checked.
+    #[must_use]
+    pub const fn manifest(&self) -> &'manifest ProfileManifest {
+        self.manifest
+    }
+
+    /// Return a declared, SHA-256-checked non-manifest entry's exact bytes.
+    ///
+    /// No name normalization, percent decoding or filesystem lookup occurs.
+    #[must_use]
+    pub fn verified_entry_bytes(&self, path: &str) -> Option<&'bytes [u8]> {
+        if !self.manifest.entries.iter().any(|entry| entry.path == path) {
+            return None;
+        }
+        self.archive.entries.iter()
+            .find(|entry| entry.name() == path)
+            .map(|entry| entry.bytes())
+    }
+
+    /// Number of non-manifest member payloads verified.
+    #[must_use]
+    pub const fn verified_entry_count(&self) -> usize {
+        self.manifest.entries.len()
     }
 }
 
@@ -435,4 +493,59 @@ pub fn read_stored_profile_zip(
         return Err(ProfileZipReadError::InvalidStructure);
     }
     Ok(ProfileZipArchive { entries })
+}
+
+/// Verify all admitted member bytes against one exact ZIP archive.
+///
+/// The already sealed inventory comes from independent manifest admission.
+/// Names must match this archive again before any digest is computed, so an
+/// admission from a different ZIP cannot be substituted. All entries must
+/// verify before the result exposes even one byte to a future decoder.
+///
+/// The source of the typed manifest and file path remains unproven here.
+///
+/// # Errors
+///
+/// Returns an inventory mismatch before any member verification, followed by
+/// the first declaration-order member byte-length or SHA-256 failure.
+pub fn verify_admitted_profile_zip_payloads<'manifest, 'archive, 'bytes>(
+    archive: &'archive ProfileZipArchive<'bytes>,
+    inventory: ValidatedProfileEntryInventory<'manifest, '_>,
+) -> Result<
+    VerifiedProfileZipPayloads<'manifest, 'archive, 'bytes>,
+    ProfileZipPayloadVerificationError,
+> {
+    if archive.entries.len() != inventory.observed_paths().len() {
+        return Err(ProfileZipPayloadVerificationError::InventoryMismatch);
+    }
+    for (entry, name) in
+        archive.entries.iter().zip(inventory.observed_paths())
+    {
+        if entry.name() != *name {
+            return Err(ProfileZipPayloadVerificationError::InventoryMismatch);
+        }
+    }
+    for (index, declaration) in
+        inventory.manifest().entries.iter().enumerate()
+    {
+        let member_index = archive.entries.binary_search_by(
+            |entry| entry.name().cmp(declaration.path.as_str())
+        ).map_err(|_position| {
+            ProfileZipPayloadVerificationError::MissingAfterAdmission { index }
+        })?;
+        let member = archive.entries.get(member_index)
+            .ok_or(
+                ProfileZipPayloadVerificationError::MissingAfterAdmission {
+                    index,
+                },
+            )?;
+        let _evidence = verify_profile_entry_bytes(declaration, member.bytes())
+            .map_err(|reason| ProfileZipPayloadVerificationError::Entry {
+                index, reason,
+            })?;
+    }
+    Ok(VerifiedProfileZipPayloads {
+        archive,
+        manifest: inventory.manifest(),
+    })
 }
