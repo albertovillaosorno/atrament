@@ -171,5 +171,7 @@ A separate resource-bounded JSON syntax domain now validates one complete
 UTF-8 root object and retains borrowed source bytes without allocating typed
 values. The ZIP inbound adapter binds that syntax gate to the actual CRC-
 checked `manifest.json` bytes and checks root byte, value and nesting limits.
-This still does not decode a typed manifest, reject semantic duplicate JSON
-keys, or authorize Import from any caller-selected filesystem path.
+The gate now rejects duplicate decoded keys in every object, even across
+Unicode escapes and surrogate-pair aliases, using bounded fixed-size storage.
+It still does not decode a typed manifest, establish the manifest's wire schema,
+or authorize Import from any caller-selected filesystem path.

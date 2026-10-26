@@ -33,14 +33,15 @@
 //! Strict and independently bounded JSON grammar regression checks.
 
 use atrament_profile_json_syntax::{
-    MAXIMUM_JSON_NESTING, ProfileJsonSyntaxError, ProfileJsonSyntaxLimits,
-    validate_profile_json_object,
+    MAXIMUM_JSON_NESTING, MAXIMUM_JSON_OBJECT_MEMBERS, ProfileJsonSyntaxError,
+    ProfileJsonSyntaxLimits, validate_profile_json_object,
 };
 
 const fn limits() -> ProfileJsonSyntaxLimits {
     ProfileJsonSyntaxLimits {
         maximum_bytes: 1_024,
         maximum_nesting: 12,
+        maximum_object_members: 16,
         maximum_values: 64,
     }
 }
@@ -70,7 +71,6 @@ fn valid_json_objects_keep_exact_source_bytes() {
         "{\"ñ\":\"明日📓\"}",
         "{\"combining\":\"ñ\"}",
         "{\"a\":{\"a\":{\"a\":{\"a\":{}}}}}",
-        "{\"a\":1,\"a\":2}",
     ];
     for text in valid {
         let admitted = validate_profile_json_object(text.as_bytes(), limits())
@@ -202,6 +202,7 @@ fn syntax_budgets_count_values_and_nesting() {
             ProfileJsonSyntaxLimits {
                 maximum_bytes: 4_096,
                 maximum_nesting: usize::MAX,
+                maximum_object_members: usize::MAX,
                 maximum_values: usize::MAX,
             }
         ),
@@ -265,6 +266,7 @@ fn exactly_the_hard_nesting_ceiling_is_accepted_but_one_more_rejects() {
         let budget = ProfileJsonSyntaxLimits {
             maximum_bytes: 1_024,
             maximum_nesting: usize::MAX,
+            maximum_object_members: usize::MAX,
             maximum_values: usize::MAX,
         };
         let observed = validate_profile_json_object(input.as_bytes(), budget);
@@ -307,9 +309,170 @@ fn zero_value_and_exact_byte_budgets_fail_with_stable_precedence() {
         ProfileJsonSyntaxLimits {
             maximum_bytes: input.len(),
             maximum_values: 2,
+            maximum_object_members: 1,
             maximum_nesting: 1,
         },
     )
     .expect("exact byte, two-value, single-object bounds succeed");
     assert_eq!(accepted.value_count(), 2);
+}
+
+#[test]
+fn duplicate_decoded_keys_fail_at_every_object_depth() {
+    let duplicates = [
+        r#"{"a":1,"a":2}"#,
+        r#"{"":1,"":2}"#,
+        r#"{"a":1,"\u0061":2}"#,
+        r#"{"f\u006fo":1,"foo":2}"#,
+        r#"{"ñ":1,"\u00f1":2}"#,
+        r#"{"N":1,"\u004e":2}"#,
+        r#"{"/":1,"\/":2}"#,
+        r#"{"\n":0,"\u000a":1}"#,
+        r#"{"\\":0,"\u005c":1}"#,
+        r#"{"😀":1,"\uD83D\uDE00":2}"#,
+        r#"{"\uD83d\ude00":1,"😀":2}"#,
+        r#"{"a":{"x":1,"x":2}}"#,
+        r#"{"a":[{"x":1,"\u0078":2}]}"#,
+        r#"{"a":{"b":{"c":1,"c":2}}}"#,
+    ];
+    for bytes in duplicates {
+        assert_eq!(
+            validate_profile_json_object(bytes.as_bytes(), limits()),
+            Err(ProfileJsonSyntaxError::DuplicateObjectKey),
+            "duplicates={bytes:?}",
+        );
+    }
+}
+
+#[test]
+fn unicode_scalar_equality_is_not_casefolding_or_normalization() {
+    for accepted in [
+        r#"{"A":1,"a":2}"#,
+        r#"{"ñ":1,"ñ":2}"#,
+        r#"{"\u0061":1,"b":2}"#,
+        r#"{"a":{"x":1},"b":{"x":2}}"#,
+        r#"{"a":[{"x":1},{"x":2}]}"#,
+        r#"{"\\":1,"/":2}"#,
+    ] {
+        assert!(
+            validate_profile_json_object(accepted.as_bytes(), limits()).is_ok(),
+            "distinct={accepted:?}"
+        );
+    }
+}
+
+#[test]
+fn object_member_budget_has_an_exact_bound_and_hard_ceiling() {
+    let source = r#"{"a":1,"b":2}"#;
+    assert_eq!(
+        validate_profile_json_object(
+            source.as_bytes(),
+            ProfileJsonSyntaxLimits {
+                maximum_object_members: 1,
+                ..limits()
+            }
+        ),
+        Err(ProfileJsonSyntaxError::MaximumObjectMembersExceeded),
+    );
+    assert!(
+        validate_profile_json_object(
+            source.as_bytes(),
+            ProfileJsonSyntaxLimits {
+                maximum_object_members: 2,
+                ..limits()
+            }
+        )
+        .is_ok()
+    );
+    assert!(
+        validate_profile_json_object(
+            b"{}",
+            ProfileJsonSyntaxLimits {
+                maximum_object_members: 0,
+                ..limits()
+            }
+        )
+        .is_ok()
+    );
+    assert_eq!(
+        validate_profile_json_object(
+            br#"{"a":1}"#,
+            ProfileJsonSyntaxLimits {
+                maximum_object_members: 0,
+                ..limits()
+            }
+        ),
+        Err(ProfileJsonSyntaxError::MaximumObjectMembersExceeded),
+    );
+}
+
+#[test]
+fn fixed_object_member_cap_rejects_the_next_key_without_heap_growth() {
+    let build = |members: usize| -> String {
+        let items = (0..members)
+            .map(|index| format!("\"entry{index}\":0"))
+            .collect::<Vec<_>>()
+            .join(",");
+        format!("{{{items}}}")
+    };
+    let permissive = ProfileJsonSyntaxLimits {
+        maximum_bytes: 8_192,
+        maximum_nesting: 4,
+        maximum_object_members: usize::MAX,
+        maximum_values: usize::MAX,
+    };
+    let admitted = build(MAXIMUM_JSON_OBJECT_MEMBERS);
+    assert_eq!(
+        validate_profile_json_object(admitted.as_bytes(), permissive)
+            .expect("exact maximum member count must be supported")
+            .value_count(),
+        MAXIMUM_JSON_OBJECT_MEMBERS.saturating_add(1),
+    );
+    let over = build(MAXIMUM_JSON_OBJECT_MEMBERS.saturating_add(1));
+    assert_eq!(
+        validate_profile_json_object(over.as_bytes(), permissive),
+        Err(ProfileJsonSyntaxError::MaximumObjectMembersExceeded),
+    );
+}
+
+#[test]
+fn nested_object_keys_are_scoped_to_each_individual_object() {
+    let distinct = r#"{"a":{"id":1},"b":{"id":2},"id":3}"#;
+    assert!(
+        validate_profile_json_object(distinct.as_bytes(), limits()).is_ok()
+    );
+    let collision = r#"{"a":{"id":1},"b":{"id":2,"\u0069d":3}}"#;
+    assert_eq!(
+        validate_profile_json_object(collision.as_bytes(), limits()),
+        Err(ProfileJsonSyntaxError::DuplicateObjectKey),
+    );
+}
+
+#[test]
+fn generated_escape_positions_preserve_duplicate_key_identity() {
+    let mut observed = 0usize;
+    for length in 1usize..=64usize {
+        for position in 0usize..length {
+            let before = "n".repeat(position);
+            let after =
+                "n".repeat(length.saturating_sub(position).saturating_sub(1));
+            let plain = format!("{before}A{after}");
+            let alias = format!(r"{before}\u0041{after}");
+            let duplicate = format!(r#"{{"{plain}":0,"{alias}":1}}"#);
+            assert_eq!(
+                validate_profile_json_object(duplicate.as_bytes(), limits()),
+                Err(ProfileJsonSyntaxError::DuplicateObjectKey),
+                "length={length},position={position}",
+            );
+            let different = format!(r"{before}\u0042{after}");
+            let distinct = format!(r#"{{"{plain}":0,"{different}":1}}"#);
+            assert!(
+                validate_profile_json_object(distinct.as_bytes(), limits())
+                    .is_ok(),
+                "length={length},position={position}",
+            );
+            observed = observed.saturating_add(2);
+        }
+    }
+    assert!(observed > 4_000);
 }

@@ -147,5 +147,12 @@ A dependency-free, allocation-free JSON syntax gate now rejects malformed or
 oversized root objects, invalid Unicode escapes and excessive nesting or
 JSON values. The ZIP reader applies this gate to its exact CRC-verified root
 member bytes while preserving independent UTF-8 and manifest size errors.
-Typed schema decoding, duplicate decoded JSON keys and canonical JSON writer
-rules remain open, so valid syntax is not yet an accepted portable profile.
+Typed schema decoding and canonical JSON writer rules remain open, so valid
+syntax is not yet an accepted portable profile.
+
+The JSON gate now also refuses duplicate decoded keys within each nested object,
+including unescaped-versus-escaped Unicode aliases and surrogate-pair spellings.
+A caller-set member budget and fixed 128-member ceiling bound the no-heap key
+index, with a fingerprint followed by exact decoded Unicode scalar comparison.
+Case folding and Unicode normalization are never silently applied; complete
+typed manifest parsing and canonical serialization remain separate TODO work.

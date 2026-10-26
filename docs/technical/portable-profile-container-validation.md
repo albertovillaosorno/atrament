@@ -75,26 +75,37 @@ unimplemented.
 
 The independent `profile-json-syntax` domain now validates one complete
 UTF-8 JSON root object with no heap allocations or field interpretation.
-Callers set byte, value and container-nesting budgets, and the domain also
-imposes a fixed 64-container maximum to bound parser stack depth.
+Callers set byte, value, per-object member, and container-nesting budgets.
+Fixed ceilings of 128 keys per object and 64 containers bound key storage and
+parser stack depth even when the caller requests higher limits.
 
 Its grammar rejects malformed JSON strings, escapes, surrogate pairs,
-noncanonical number syntax, missing separators, trailing tokens and root
-arrays or primitives. It preserves a borrowed view of the **exact** admitted
-bytes, including whitespace and original character escapes, plus the number
-of syntactic values encountered.
+invalid number syntax, missing separators, trailing tokens and root
+arrays or primitives. It rejects duplicate **decoded** object keys at any
+nesting depth, comparing scalar values so escapes cannot hide collisions.
+The reader preserves the **exact** admitted byte slice and value count.
 
 The ZIP inbound adapter exposes `manifest_json_object` to bind these syntax
 checks to the actual root `manifest.json` entry after ordinary ZIP and CRC
 validation. Missing or invalid UTF-8 roots and root byte-budget excess retain
 the existing ZIP errors; malformed JSON and node/depth excess return separate
-syntax errors. Real ZIP fixtures prove that valid CRC-32 framing cannot imply
-valid JSON syntax or typed profile acceptance.
+syntax errors. Real ZIP fixtures prove that valid CRC-32 cannot establish
+JSON syntax, object-key uniqueness or typed profile acceptance.
 
-**This gate does not parse manifest fields, reject duplicate decoded JSON
-object keys, enforce canonical wire encoding or prove correspondence between
-an independently supplied typed manifest and these root bytes.** Those
-requirements remain blocking work for the future typed profile JSON codec.
+Decoded-key comparison never case-folds or normalizes Unicode; raw and escaped
+spellings compare by exact Unicode scalars. The fixed-size key index holds
+source ranges and a fast fingerprint, always checking actual decoded names
+when fingerprints match. No object member text is copied to the heap.
+
+A generated regression checks more than 4,000 escaped-versus-plain name
+pairs across varied key lengths and character positions. Independent real-ZIP
+fixtures prove that valid CRC-32 framing cannot hide duplicate names or evade
+caller object-member limits.
+
+**This gate still does not parse manifest fields, enforce canonical JSON wire
+encoding, or prove correspondence between an independently supplied typed
+manifest and this archive's root bytes.** Those remaining obligations belong
+to the future typed profile JSON codec and canonical writer.
 
 ### Exact entry SHA-256 verifier
 

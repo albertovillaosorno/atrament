@@ -148,7 +148,8 @@ impl<'bytes> ProfileZipArchive<'bytes> {
     /// Admit exact root manifest JSON object syntax from this ZIP's bytes.
     ///
     /// Checks the independent manifest byte budget first, then strict JSON
-    /// grammar, nesting, and value ceilings before any typed field decoding.
+    /// grammar, unique decoded keys, nesting, and value/member ceilings
+    /// before any typed field decoding.
     /// This does not bind arbitrary typed manifest data to the root JSON.
     ///
     /// # Errors

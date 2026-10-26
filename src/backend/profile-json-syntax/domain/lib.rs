@@ -10,8 +10,9 @@
 // Boundary-Contract:
 // - Owns:
 //   - Allocation-free, bounded UTF-8 and JSON object syntax admission.
+//   - Exact duplicate decoded-key rejection for every nested object.
 // - Must-Not:
-//   - Choose manifest field names, accept duplicate-key semantics, construct
+//   - Choose manifest field names, normalize Unicode, construct
 //     typed manifests, read files, parse ZIP, or mutate session state.
 // - Allows:
 //   - Inputs: A byte slice and caller-selected structural resource limits.
@@ -22,7 +23,7 @@
 // - Merge-When:
 //   - Trusted bounded manifest decoding subsumes syntax admission.
 // - Summary:
-//   - Rejects invalid JSON grammar, Unicode escapes, depth and token excess.
+//   - Rejects bad JSON grammar, ambiguous keys, depth and token excess.
 // - Description:
 //   - Valid JSON alone cannot bind typed values to source bytes.
 // - Usage:
@@ -38,6 +39,9 @@ use std::str::from_utf8;
 /// Maximum container nesting allowed, even if a caller requests more.
 pub const MAXIMUM_JSON_NESTING: usize = 64;
 
+/// Maximum keys admitted in each JSON object without a heap allocation.
+pub const MAXIMUM_JSON_OBJECT_MEMBERS: usize = 128;
+
 /// Caller resource limits, applied before and during JSON parsing.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ProfileJsonSyntaxLimits {
@@ -45,6 +49,8 @@ pub struct ProfileJsonSyntaxLimits {
     pub maximum_bytes: usize,
     /// Maximum object and array nesting, counting the root object as one.
     pub maximum_nesting: usize,
+    /// Maximum keys in each JSON object (also subject to a fixed ceiling).
+    pub maximum_object_members: usize,
     /// Maximum JSON values including the root; object keys do not count.
     pub maximum_values: usize,
 }
@@ -52,6 +58,8 @@ pub struct ProfileJsonSyntaxLimits {
 /// Failure before any typed manifest field interpretation is permitted.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ProfileJsonSyntaxError {
+    /// Two keys in one object decode to the exact same Unicode scalar stream.
+    DuplicateObjectKey,
     /// Input is not valid UTF-8.
     InvalidUtf8,
     /// A JSON string or numeric/literal/object/array grammar rule failed.
@@ -60,6 +68,8 @@ pub enum ProfileJsonSyntaxError {
     MaximumBytesExceeded,
     /// Caller limit or fixed stack-safe nesting ceiling is exceeded.
     MaximumNestingExceeded,
+    /// Caller or fixed per-object key limit is exceeded.
+    MaximumObjectMembersExceeded,
     /// Caller JSON-value limit is exceeded.
     MaximumValuesExceeded,
     /// The root is a primitive or array, not a JSON object.
@@ -68,8 +78,8 @@ pub enum ProfileJsonSyntaxError {
 
 /// Borrowed evidence that exact input bytes contain one JSON object.
 ///
-/// Object member semantics, duplicate decoded names, wire field mapping,
-/// digest decoding and a typed manifest's provenance are not checked here.
+/// Duplicate decoded keys have been rejected in every object. Wire field
+/// mapping, digest decoding and a typed manifest's provenance are not checked.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ValidatedProfileJsonObject<'bytes> {
     bytes: &'bytes [u8],
@@ -94,6 +104,7 @@ struct SyntaxCursor<'bytes> {
     bytes: &'bytes [u8],
     cursor: usize,
     maximum_nesting: usize,
+    maximum_object_members: usize,
     remaining_values: usize,
     values: usize,
 }
@@ -159,6 +170,54 @@ impl SyntaxCursor<'_> {
         Ok(code)
     }
 
+    fn key_fingerprint(
+        &self,
+        key: (usize, usize),
+    ) -> Result<u64, ProfileJsonSyntaxError> {
+        let interior = self
+            .bytes
+            .get(key.0.saturating_add(1)..key.1.saturating_sub(1))
+            .ok_or(ProfileJsonSyntaxError::Malformed)?;
+        let mut position = 0usize;
+        let mut fingerprint = 0xcbf2_9ce4_8422_2325u64;
+        while position < interior.len() {
+            let scalar = decoded_key_scalar(interior, &mut position)
+                .ok_or(ProfileJsonSyntaxError::Malformed)?;
+            fingerprint ^= u64::from(u32::from(scalar));
+            fingerprint = fingerprint.wrapping_mul(0x100_0000_01b3u64);
+        }
+        Ok(fingerprint)
+    }
+
+    fn keys_equal(
+        &self,
+        previous: (usize, usize),
+        current: (usize, usize),
+    ) -> bool {
+        let first_candidate = self
+            .bytes
+            .get(previous.0.saturating_add(1)..previous.1.saturating_sub(1));
+        let second_candidate = self
+            .bytes
+            .get(current.0.saturating_add(1)..current.1.saturating_sub(1));
+        let (Some(first), Some(second)) = (first_candidate, second_candidate)
+        else {
+            return false;
+        };
+        let (mut left, mut right) = (0usize, 0usize);
+        while left < first.len() && right < second.len() {
+            match (
+                decoded_key_scalar(first, &mut left),
+                decoded_key_scalar(second, &mut right),
+            ) {
+                (Some(left_scalar), Some(right_scalar))
+                    if left_scalar == right_scalar => {}
+                _ => return false,
+            }
+        }
+        left == first.len() && right == second.len()
+    }
+
     fn literal(
         &mut self,
         literal: &[u8],
@@ -213,8 +272,32 @@ impl SyntaxCursor<'_> {
         if self.consume(b'}') {
             return Ok(());
         }
+        // Only source spans are retained; no key is copied or normalized.
+        let mut keys = [(0usize, 0usize, 0u64); MAXIMUM_JSON_OBJECT_MEMBERS];
+        let mut count = 0usize;
         loop {
+            if count >= self.maximum_object_members
+                || count >= MAXIMUM_JSON_OBJECT_MEMBERS
+            {
+                return Err(
+                    ProfileJsonSyntaxError::MaximumObjectMembersExceeded,
+                );
+            }
+            let start = self.cursor;
             self.string()?;
+            let key = (start, self.cursor);
+            let fingerprint = self.key_fingerprint(key)?;
+            for previous in keys.iter().take(count) {
+                if previous.2 == fingerprint
+                    && self.keys_equal((previous.0, previous.1), key)
+                {
+                    return Err(ProfileJsonSyntaxError::DuplicateObjectKey);
+                }
+            }
+            if let Some(slot) = keys.get_mut(count) {
+                *slot = (start, self.cursor, fingerprint);
+            }
+            count = count.saturating_add(1);
             self.whitespace();
             self.required(b':')?;
             self.whitespace();
@@ -304,16 +387,85 @@ impl SyntaxCursor<'_> {
     }
 }
 
+// Decode one scalar from a previously validated JSON string interior.
+// Comparing scalars avoids treating escape spellings as different object keys.
+fn decoded_key_scalar(bytes: &[u8], cursor: &mut usize) -> Option<char> {
+    let byte = *bytes.get(*cursor)?;
+    if byte != b'\\' {
+        let width = match byte {
+            0..=0x7f => 1usize,
+            0xc0..=0xdf => 2,
+            0xe0..=0xef => 3,
+            _ => 4,
+        };
+        let end = cursor.checked_add(width)?;
+        let scalar =
+            from_utf8(bytes.get(*cursor..end)?).ok()?.chars().next()?;
+        *cursor = end;
+        return Some(scalar);
+    }
+    *cursor = cursor.saturating_add(1);
+    let escape = *bytes.get(*cursor)?;
+    *cursor = cursor.saturating_add(1);
+    match escape {
+        b'"' => Some('"'),
+        b'\\' => Some('\\'),
+        b'/' => Some('/'),
+        b'b' => Some('\u{0008}'),
+        b'f' => Some('\u{000c}'),
+        b'n' => Some('\n'),
+        b'r' => Some('\r'),
+        b't' => Some('\t'),
+        b'u' => {
+            let high = hexadecimal_key_quad(bytes, cursor)?;
+            let scalar = if (0xd800..=0xdbff).contains(&high) {
+                let slash_u = bytes.get(*cursor..cursor.saturating_add(2))?;
+                if slash_u != b"\\u" {
+                    return None;
+                }
+                *cursor = cursor.saturating_add(2);
+                let low = hexadecimal_key_quad(bytes, cursor)?;
+                if !(0xdc00..=0xdfff).contains(&low) {
+                    return None;
+                }
+                0x1_0000u32
+                    .saturating_add(
+                        u32::from(high.saturating_sub(0xd800))
+                            .saturating_mul(1024),
+                    )
+                    .saturating_add(u32::from(low.saturating_sub(0xdc00)))
+            } else {
+                u32::from(high)
+            };
+            char::from_u32(scalar)
+        }
+        _ => None,
+    }
+}
+
+fn hexadecimal_key_quad(bytes: &[u8], cursor: &mut usize) -> Option<u16> {
+    let mut code = 0u16;
+    for _ in 0u8..4u8 {
+        let digit = char::from(*bytes.get(*cursor)?).to_digit(16)?;
+        code = code
+            .saturating_mul(16)
+            .saturating_add(u16::try_from(digit).ok()?);
+        *cursor = cursor.saturating_add(1);
+    }
+    Some(code)
+}
+
 /// Validate a bounded UTF-8 JSON root object without allocating or decoding.
 ///
-/// This is a grammar gate only. It does not reject duplicate *decoded* keys,
-/// establish canonical JSON encoding, or map keys into a profile manifest.
-/// The eventual typed codec must enforce those checks independently.
+/// This gate also rejects duplicate decoded keys in each JSON object, even
+/// when escaped and unescaped names differ in their source spelling.
+/// It does not normalize Unicode, establish canonical JSON encoding, or map
+/// keys into a typed profile manifest.
 ///
 /// # Errors
 ///
-/// Rejects invalid UTF-8, excess bytes, nesting or values, malformed JSON,
-/// or a root value other than a complete object.
+/// Rejects invalid UTF-8, excess bytes, nesting, values, or object keys,
+/// duplicate decoded keys, malformed JSON, or a non-object root.
 pub fn validate_profile_json_object(
     bytes: &[u8],
     limits: ProfileJsonSyntaxLimits,
@@ -328,6 +480,7 @@ pub fn validate_profile_json_object(
         bytes,
         cursor: 0,
         maximum_nesting: limits.maximum_nesting,
+        maximum_object_members: limits.maximum_object_members,
         remaining_values: limits.maximum_values,
         values: 0,
     };

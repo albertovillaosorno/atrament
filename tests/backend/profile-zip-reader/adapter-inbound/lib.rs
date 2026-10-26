@@ -905,6 +905,7 @@ fn root_json_syntax_is_checked_on_real_crc_valid_zip_bytes() {
     let caps = ProfileJsonSyntaxLimits {
         maximum_bytes: manifest.len(),
         maximum_nesting: 3,
+        maximum_object_members: 8,
         maximum_values: 5,
     };
     let valid = archive.manifest_json_object(caps)
@@ -934,6 +935,7 @@ fn crc_valid_but_malformed_or_nonobject_root_is_not_admitted() {
     let caps = ProfileJsonSyntaxLimits {
         maximum_bytes: 128,
         maximum_nesting: 8,
+        maximum_object_members: 8,
         maximum_values: 16,
     };
     let fixtures = [
@@ -971,6 +973,7 @@ fn crc_valid_manifest_syntax_preserves_utf8_failure() {
     let caps = ProfileJsonSyntaxLimits {
         maximum_bytes: 10,
         maximum_nesting: 4,
+        maximum_object_members: 8,
         maximum_values: 16,
     };
     assert_eq!(
@@ -979,4 +982,54 @@ fn crc_valid_manifest_syntax_preserves_utf8_failure() {
             ProfileZipReadError::InvalidManifestUtf8,
         )),
     );
+}
+
+#[test]
+fn crc_correct_zip_root_rejects_duplicate_decoded_json_keys() {
+    let fixtures = [
+        (br#"{"a":1,"\u0061":2}"#.as_slice(), 0xe447_2e53),
+        (br#"{"a":{"x":1,"\u0078":2}}"#.as_slice(), 0xc9bd_7a9b),
+        (br#"{"a":1,"a":2}"#.as_slice(), 0x88e1_b453),
+    ];
+    let caps = ProfileJsonSyntaxLimits {
+        maximum_bytes: 128,
+        maximum_nesting: 4,
+        maximum_object_members: 8,
+        maximum_values: 16,
+    };
+    for (root, crc32) in fixtures {
+        let bytes = make_zip(&[("manifest.json", root, crc32)]);
+        let archive = read_stored_profile_zip(&bytes, limits())
+            .expect("correct CRC-32 cannot prove key uniqueness");
+        assert_eq!(
+            archive.manifest_json_object(caps),
+            Err(ProfileZipManifestSyntaxError::Json(
+                ProfileJsonSyntaxError::DuplicateObjectKey,
+            )),
+        );
+    }
+}
+
+#[test]
+fn crc_correct_zip_root_enforces_caller_object_member_limit() {
+    let root = br#"{"a":1,"b":2,"c":3}"#;
+    let bytes = make_zip(&[("manifest.json", root, 0x2ed4_5bab)]);
+    let archive = read_stored_profile_zip(&bytes, limits())
+        .expect("well-formed ZIP with three unique keys");
+    let caps = ProfileJsonSyntaxLimits {
+        maximum_bytes: root.len(),
+        maximum_nesting: 2,
+        maximum_object_members: 2,
+        maximum_values: 8,
+    };
+    assert_eq!(
+        archive.manifest_json_object(caps),
+        Err(ProfileZipManifestSyntaxError::Json(
+            ProfileJsonSyntaxError::MaximumObjectMembersExceeded,
+        )),
+    );
+    let valid = archive.manifest_json_object(ProfileJsonSyntaxLimits {
+        maximum_object_members: 3, ..caps
+    }).expect("exact number of unique members is admitted");
+    assert_eq!(valid.bytes(), root);
 }
