@@ -180,8 +180,14 @@ compared without case folding, Unicode normalization, or URI-decoding.
 
 The iterator does not prescribe required or optional wire fields. Its original
 key spelling and associated value bytes can be inspected without discarding
-unknown keys or pretending they match known names. Nested siblings remain
-separate objects, empty objects exhaust safely, and 128-member boundary tests
+unknown keys or pretending they match known names. A sealed field can
+also borrow the exact source span from the original key opening quote through
+its value end, retaining the colon and intervening whitespace but excluding
+neighboring commas and trailing object whitespace. This evidence is still not
+a canonical output writer or an accepted optional-field preservation policy.
+
+Nested siblings remain separate objects, empty objects exhaust safely, and
+128-member boundary tests
 preserve original order. A CRC-checked ZIP fixture checks that member key and
 value bytes come from the admitted ZIP root, not independent reference text.
 

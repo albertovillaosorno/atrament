@@ -208,6 +208,7 @@ impl FusedIterator for ValidatedProfileJsonStringChars<'_> {}
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ValidatedProfileJsonField<'bytes> {
     key_bytes: &'bytes [u8],
+    member_bytes: &'bytes [u8],
     value: ValidatedProfileJsonValue<'bytes>,
 }
 
@@ -234,6 +235,16 @@ impl<'bytes> ValidatedProfileJsonField<'bytes> {
     #[must_use]
     pub fn key_matches(self, expected: &str) -> bool {
         self.decoded_key_chars().eq(expected.chars())
+    }
+
+    /// Return the exact source span from key opening quote through the
+    /// member value, including the original colon and intervening whitespace.
+    ///
+    /// Excludes separators between members and surrounding object whitespace.
+    /// This is preservation evidence, not canonical JSON re-encoding.
+    #[must_use]
+    pub const fn source_member_json(self) -> &'bytes [u8] {
+        self.member_bytes
     }
 
     /// Return the source-byte value associated with this original key token.
@@ -311,6 +322,7 @@ impl<'bytes> Iterator for ValidatedProfileJsonObjectFields<'bytes> {
         }
         let value_end = reader.cursor;
         let key_bytes = self.bytes.get(key_start..key_end)?;
+        let member_bytes = self.bytes.get(key_start..value_end)?;
         let value_bytes = self.bytes.get(value_start..value_end)?;
         reader.whitespace();
         if reader.consume(b',') {
@@ -320,6 +332,7 @@ impl<'bytes> Iterator for ValidatedProfileJsonObjectFields<'bytes> {
         }
         Some(ValidatedProfileJsonField {
             key_bytes,
+            member_bytes,
             value: ValidatedProfileJsonValue {
                 bytes: value_bytes,
                 document_values: self.document_values,

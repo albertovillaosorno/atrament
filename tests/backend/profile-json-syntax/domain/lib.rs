@@ -1192,3 +1192,76 @@ fn admitted_byte_mutations_never_project_values_outside_original_input() {
     }
     assert!(checked > 300);
 }
+
+#[test]
+fn sealed_member_source_spans_include_colon_spacing_not_sibling_delimiters() {
+    let source = concat!(
+        " \n {  ",
+        r#""\u0061" : [ 1 , 2 ] , "#,
+        "\n\t",
+        r#""plain": { "id" : null },"#,
+        "   ",
+        r#""empty" : "" } "#,
+    );
+    let admitted = validate_profile_json_object(source.as_bytes(), limits())
+        .expect("root with mixed insignificant spacing is valid");
+    let expected = [
+        (r#""\u0061" : [ 1 , 2 ]"#, "a", b"[ 1 , 2 ]".as_slice()),
+        (
+            r#""plain": { "id" : null }"#,
+            "plain",
+            br#"{ "id" : null }"#.as_slice(),
+        ),
+        (r#""empty" : """#, "empty", br#""""#.as_slice()),
+    ];
+    for (field, (original, name, value)) in admitted.root_fields().zip(expected)
+    {
+        assert_eq!(field.source_member_json(), original.as_bytes());
+        assert!(field.key_matches(name));
+        assert_eq!(field.value().bytes(), value);
+        let source_span = field.source_member_json();
+        assert!(admitted.bytes().windows(source_span.len()).any(|bytes| {
+            std::ptr::eq(bytes.as_ptr(), source_span.as_ptr())
+        }));
+        assert!(source_span.starts_with(field.key_json()));
+        assert!(source_span.ends_with(value));
+    }
+    let inside = admitted.root_member_value("plain").expect("nested object");
+    let child = inside
+        .object_fields()
+        .expect("nested fields")
+        .next()
+        .expect("nested member");
+    assert_eq!(child.source_member_json(), br#""id" : null"#);
+    assert!(
+        inside
+            .bytes()
+            .windows(child.source_member_json().len())
+            .any(|bytes| std::ptr::eq(
+                bytes.as_ptr(),
+                child.source_member_json().as_ptr()
+            ))
+    );
+}
+
+#[test]
+fn sealed_member_source_spans_remain_distinct_for_aliasing_key_values() {
+    let input = br#"{"\u0061" : "a", "a\u0062":"\u0061", "key": {"\u0061":1}}"#;
+    let admitted = validate_profile_json_object(input, limits())
+        .expect("all decoded keys at one scope are distinct");
+    let fields = admitted.root_fields().collect::<Vec<_>>();
+    assert_eq!(fields.len(), 3);
+    assert_eq!(fields[0].source_member_json(), br#""\u0061" : "a""#);
+    assert_eq!(fields[1].source_member_json(), br#""a\u0062":"\u0061""#);
+    assert_eq!(fields[2].source_member_json(), br#""key": {"\u0061":1}"#);
+    assert_eq!(fields[0].value().bytes(), br#""a""#);
+    assert_eq!(fields[1].value().bytes(), br#""\u0061""#);
+    let nested = fields[2]
+        .value()
+        .object_fields()
+        .expect("object")
+        .next()
+        .expect("member");
+    assert_eq!(nested.source_member_json(), br#""\u0061":1"#);
+    assert!(nested.key_matches("a"));
+}

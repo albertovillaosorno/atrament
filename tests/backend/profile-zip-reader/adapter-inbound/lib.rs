@@ -1084,6 +1084,12 @@ fn sealed_crc_checked_zip_root_exposes_nested_read_only_json_values() {
     assert_eq!(root_fields[0].key_json(), br#""nested""#);
     assert!(root_fields[1].key_matches("id"));
     assert_eq!(root_fields[1].value().unsigned_integer(), Some(3));
+    assert_eq!(root_fields[0].source_member_json(),
+        br#""nested":{"rows":[{"id":1},[true,false],"\u0061"]}"#);
+    assert_eq!(root_fields[1].source_member_json(), br#""id":3"#);
+    assert!(admitted.bytes().windows(root_fields[0].source_member_json().len())
+        .any(|candidate| std::ptr::eq(
+            candidate.as_ptr(), root_fields[0].source_member_json().as_ptr())));
     assert!(
         admitted.bytes().windows(root_fields[0].key_json().len())
             .any(|slice| std::ptr::eq(slice.as_ptr(),

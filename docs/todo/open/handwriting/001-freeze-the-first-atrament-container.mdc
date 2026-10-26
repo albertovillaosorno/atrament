@@ -183,3 +183,9 @@ allocation-free decoded Unicode name comparison. Nested and root members
 remain independently scoped, including in real CRC-checked ZIP payloads.
 This supplies read-only evidence needed for eventual unknown-field handling;
 unknown-field preservation and canonical rewrites are not yet specified.
+
+Field enumeration now also exposes the exact borrowed source span from each
+original JSON name through its value, retaining the colon and any inner
+whitespace while excluding delimiters between fields. CRC-checked ZIP tests
+prove the span points into actual admitted root bytes, not reconstructed
+text. This adds unknown-field evidence but cannot confer canonical writer rules.
