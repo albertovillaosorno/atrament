@@ -48,6 +48,7 @@ use atrament_profile_import_preflight::{
     preflight_explicit_profile_import,
 };
 
+use atrament_profile_entry_sha256::verify_profile_entry_bytes;
 use atrament_profile_zip_reader::{
     ProfileZipReadError, ProfileZipReadLimits, read_stored_profile_zip,
 };
@@ -506,4 +507,44 @@ fn forged_large_entry_count_is_rejected_before_allocating_entry_index() {
             "bogus declared entries={bogus_count}",
         );
     }
+}
+
+#[test]
+fn valid_crc32_cannot_replace_manifest_sha256_verification() {
+    // The declared digest is the independently known SHA-256 of "123456789".
+    let declaration = ProfileManifestEntry {
+        byte_length: 9,
+        digest: Sha256Digest::from_bytes([
+            0x15, 0xe2, 0xb0, 0xd3, 0xc3, 0x38, 0x91, 0xeb,
+            0xb0, 0xf1, 0xef, 0x60, 0x9e, 0xc4, 0x19, 0x42,
+            0x0c, 0x20, 0xe3, 0x20, 0xce, 0x94, 0xc6, 0x5f,
+            0xbc, 0x8c, 0x33, 0x12, 0x44, 0x8e, 0xb2, 0x25,
+        ]),
+        media_type: "application/json".into(),
+        path: "sections/strokes.json".into(),
+    };
+    let original_bytes = make_zip(&ENTRIES);
+    let original = read_stored_profile_zip(&original_bytes, limits())
+        .expect("stored ZIP with matching CRC-32");
+    assert!(
+        verify_profile_entry_bytes(&declaration, original.entries()[1].bytes())
+            .is_ok(),
+    );
+
+    // An attacker can replace bytes and supply a matching CRC-32 in both
+    // ZIP headers; this is not proof of the original manifest content.
+    let tampered = make_zip(&[
+        ("manifest.json", b"{}", 0xa3a6_bf43),
+        ("sections/strokes.json", b"123456788", 0xbcf3_09b0),
+    ]);
+    let observed = read_stored_profile_zip(&tampered, limits())
+        .expect("changed payload has valid ZIP CRC-32");
+    assert_eq!(observed.entries()[1].crc32(), 0xbcf3_09b0);
+    assert_eq!(
+        verify_profile_entry_bytes(&declaration, observed.entries()[1].bytes()),
+        Err(
+            atrament_handwriting_profile_container::
+                ProfileEntryVerificationError::DigestMismatch,
+        ),
+    );
 }

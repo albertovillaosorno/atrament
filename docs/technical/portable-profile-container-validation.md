@@ -82,7 +82,9 @@ typed manifest entry.
 The verifier does not grant path authority, parse the manifest, or accept an
 import. Its regression suite checks known SHA-256 vectors (including one
 million bytes), block and padding boundaries against independent reference
-digests, unchanged bytes, changed bytes, and failure precedence.
+digests, unchanged bytes, changed bytes, and failure precedence. A
+cross-component ZIP fixture additionally proves that a matching CRC-32 over
+altered bytes cannot satisfy an unchanged manifest SHA-256 digest.
 
 The integration fixture proves that the reader's exact observed entry names
 can be passed to the existing explicitly authorized `ImportProfile` preflight.
