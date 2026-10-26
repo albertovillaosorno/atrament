@@ -293,10 +293,11 @@ browser enforcement of `no-referrer`, not only header emission.
 These browser constraints do not replace backend socket, token, host, path,
 cleanup, framing, or hostile-origin acceptance tests.
 
-The real-Firefox BiDi test harness now bounds startup-readiness output and
-WebSocket upgrade-header reads. Both reject early stream close and timeouts
-without leaving stale listeners. Upgrade headers are capped at 16 KiB and
-fragmented responses preserve trailing WebSocket frame bytes. A refused
+The real-Firefox BiDi test harness now bounds startup-readiness output, TCP
+socket establishment, and WebSocket upgrade-header reads. Each rejects early
+stream close and timeouts without leaving stale listeners. Upgrade headers
+are capped at 16 KiB, and fragmented responses preserve trailing WebSocket
+frame bytes. A refused
 upgrade explicitly destroys the client socket.
 
 The harness also closes active HTTP fixture connections before awaiting server
@@ -305,3 +306,10 @@ pending request. Independent Node fixtures exercise this shutdown against an
 unfinished HTTP response and cover split upgrade headers and rejected
 responses. These are reliability checks for the test harness, not changes to
 the runtime's actual origin, credential, or frame-admission rules.
+
+The BiDi command harness also clears each command deadline on both success
+and protocol error, not only success. Focused framing fixtures exercise
+successful responses, explicit protocol rejections, and finite unanswered
+command deadlines without leaking pending-command map entries. These tests
+bound automation state; they do not weaken or replace the backend's HTTP
+request-admission or session-secret checks.

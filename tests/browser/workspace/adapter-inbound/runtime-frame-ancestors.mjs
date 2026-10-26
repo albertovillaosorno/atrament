@@ -234,6 +234,36 @@ test(
     },
 );
 
+// A dead local Firefox endpoint must never leave a pending TCP connect with
+// no deadline. The socket owner destroys the failed connection before exit.
+function waitForSocketConnection(socket, timeoutMs = 10_000) {
+    return new Promise((resolve, reject) => {
+        const finish = (error) => {
+            clearTimeout(timer);
+            socket.off("connect", onConnect);
+            socket.off("close", onClose);
+            socket.off("error", onError);
+            if (error === null) {
+                resolve();
+            } else {
+                reject(error);
+            }
+        };
+        const onConnect = () => finish(null);
+        const onClose = () => finish(new Error(
+            "remote debugging socket closed before TCP connect",
+        ));
+        const onError = (error) => finish(error);
+        const timer = setTimeout(() => {
+            socket.destroy();
+            finish(new Error("timed out connecting to WebDriver socket"));
+        }, timeoutMs);
+        socket.once("connect", onConnect);
+        socket.once("close", onClose);
+        socket.once("error", onError);
+    });
+}
+
 // Read one complete WebSocket upgrade header without dropping split TCP chunks
 // or waiting indefinitely when a remote debugging endpoint stops responding.
 function readWebSocketUpgrade(socket, timeoutMs = 10_000) {
@@ -281,6 +311,27 @@ function readWebSocketUpgrade(socket, timeoutMs = 10_000) {
         socket.once("close", onEnd);
     });
 }
+
+test("TCP debugging connection fails closed on early close and timeout",
+    async () => {
+        const connected = new PassThrough();
+        const accepted = waitForSocketConnection(connected, 500);
+        connected.emit("connect");
+        await accepted;
+        assert.equal(connected.listenerCount("connect"), 0);
+        connected.destroy();
+        const closed = new PassThrough();
+        const premature = waitForSocketConnection(closed, 500);
+        closed.destroy();
+        await assert.rejects(premature, /closed before TCP connect/);
+        assert.equal(closed.listenerCount("close"), 0);
+        const silent = new PassThrough();
+        await assert.rejects(waitForSocketConnection(silent, 20),
+            /timed out connecting to WebDriver socket/);
+        assert.equal(silent.destroyed, true);
+        assert.equal(silent.listenerCount("connect"), 0);
+    },
+);
 
 test(
     "WebSocket upgrade collects fragmented headers and retains frame bytes",
@@ -339,7 +390,12 @@ class BidiClient {
             host: this.url.hostname,
             port: Number(this.url.port),
         });
-        await once(this.socket, "connect");
+        try {
+            await waitForSocketConnection(this.socket);
+        } catch (error) {
+            this.socket.destroy();
+            throw error;
+        }
         const key = crypto.randomBytes(16).toString("base64");
         const upgrade = readWebSocketUpgrade(this.socket);
         this.socket.write([
@@ -380,7 +436,10 @@ class BidiClient {
                 }
             }, timeoutMs);
             this.pending.set(id, {
-                reject,
+                reject: (error) => {
+                    clearTimeout(timer);
+                    reject(error);
+                },
                 resolve: (result) => {
                     clearTimeout(timer);
                     resolve(result);
@@ -488,6 +547,43 @@ test(
             client.socket?.destroy();
             await new Promise((resolve) => server.close(resolve));
         }
+    },
+);
+
+test("WebDriver errors and timeouts release their pending command slots",
+    async () => {
+        const client = new BidiClient("ws://127.0.0.1:1234/session");
+        const requests = [];
+        client.socket = { write: (frame) => requests.push(frame) };
+        const rejected = client.command("script.evaluate", {}, 100);
+        assert.equal(client.pending.size, 1);
+        const result = Buffer.from(JSON.stringify({
+            id: 1,
+            type: "error",
+            error: "invalid argument",
+        }));
+        client.buffer = Buffer.concat([
+            Buffer.from([0x81, result.length]), result,
+        ]);
+        client.drain();
+        await assert.rejects(rejected, /invalid argument/);
+        assert.equal(client.pending.size, 0);
+        const accepted = client.command("session.status", {}, 100);
+        const success = Buffer.from(JSON.stringify({
+            id: 2,
+            type: "success",
+            result: { ready: true },
+        }));
+        client.buffer = Buffer.concat([
+            Buffer.from([0x81, success.length]), success,
+        ]);
+        client.drain();
+        assert.deepEqual(await accepted, { ready: true });
+        assert.equal(client.pending.size, 0);
+        assert.equal(requests.length, 2);
+        await assert.rejects(client.command("never.responds", {}, 20),
+            /never.responds timed out/);
+        assert.equal(client.pending.size, 0);
     },
 );
 
