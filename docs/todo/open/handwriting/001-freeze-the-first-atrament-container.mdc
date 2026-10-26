@@ -170,3 +170,9 @@ All views borrow their exact payload bytes; a real CRC-correct ZIP root proves
 nested slices stay bound to the actual ZIP entry. Missing keys and out-of-range
 indices cannot substitute a value. This enables future schema decoding without
 inventing manifest wire names or granting Import authority today.
+
+Sealed scalar interpretation now includes allocation-free decoded Unicode
+string chars, exact boolean/null checks and strictly nonnegative base-10 `u64`
+values without exponent, fractional, negative or overflow coercion. These are
+optional helper operations on admitted JSON syntax, not an implicit choice of
+portable-profile manifest field names or canonical encoding policy.

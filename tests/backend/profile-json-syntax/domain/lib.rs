@@ -832,3 +832,161 @@ fn bounded_large_arrays_traverse_once_without_hidden_field_mapping() {
     );
     assert_eq!(rows.array_element(256), None);
 }
+
+#[test]
+fn sealed_scalar_projection_decodes_json_strings_without_rewriting_source() {
+    let input = concat!(
+        r#"{"escaped":"\"\\\/\b\f\n\r\t\u0061\uD83D\uDE00","#,
+        r#""raw":"mañana 📓","empty":"","combined":"ñ","composed":"ñ"}"#,
+    );
+    let root = validate_profile_json_object(input.as_bytes(), limits())
+        .expect("escaped and raw UTF-8 are valid JSON");
+    let escaped = root.root_member_value("escaped").expect("escaped string");
+    let decoded = escaped
+        .string_chars()
+        .expect("string iterator")
+        .collect::<String>();
+    assert_eq!(decoded, "\"\\/\u{0008}\u{000c}\n\r\ta😀");
+    assert_eq!(escaped.bytes(), br#""\"\\\/\b\f\n\r\t\u0061\uD83D\uDE00""#);
+    for (field, expected) in [
+        ("raw", "mañana 📓"),
+        ("empty", ""),
+        ("combined", "ñ"),
+        ("composed", "ñ"),
+    ] {
+        let got = root
+            .root_member_value(field)
+            .expect("field")
+            .string_chars()
+            .expect("string")
+            .collect::<String>();
+        assert_eq!(got, expected);
+    }
+    assert_ne!(
+        root.root_member_value("combined")
+            .expect("combined")
+            .string_chars()
+            .expect("string")
+            .collect::<String>(),
+        root.root_member_value("composed")
+            .expect("composed")
+            .string_chars()
+            .expect("string")
+            .collect::<String>(),
+    );
+    let mut empty = root
+        .root_member_value("empty")
+        .expect("empty")
+        .string_chars()
+        .expect("iterator");
+    assert_eq!(empty.next(), None);
+    assert_eq!(empty.next(), None);
+    assert!(
+        root.root_member_value("empty")
+            .expect("string")
+            .array_elements()
+            .is_none()
+    );
+}
+
+#[test]
+fn sealed_plain_unsigned_integer_never_coerces_numeric_spellings() {
+    let input = concat!(
+        r#"{"zero":0,"max":18446744073709551615,"#,
+        r#""too_large":18446744073709551616,"#,
+        r#""negative":-1,"negative_zero":-0,"decimal":1.0,"exponent":1e2,"#,
+        r#""big_exp":1e9999,"word":"123","boolean":true,"nil":null}"#,
+    );
+    let root = validate_profile_json_object(
+        input.as_bytes(),
+        ProfileJsonSyntaxLimits {
+            maximum_bytes: 2_048,
+            ..limits()
+        },
+    )
+    .expect("large exponents are valid syntax but not integer values");
+    assert_eq!(
+        root.root_member_value("zero")
+            .expect("zero")
+            .unsigned_integer(),
+        Some(0)
+    );
+    assert_eq!(
+        root.root_member_value("max")
+            .expect("u64 max")
+            .unsigned_integer(),
+        Some(u64::MAX)
+    );
+    for field in [
+        "too_large",
+        "negative",
+        "negative_zero",
+        "decimal",
+        "exponent",
+        "big_exp",
+        "word",
+        "boolean",
+        "nil",
+    ] {
+        assert_eq!(
+            root.root_member_value(field)
+                .expect("member")
+                .unsigned_integer(),
+            None,
+            "field={field}"
+        );
+    }
+    assert_eq!(
+        root.root_member_value("boolean")
+            .expect("boolean")
+            .boolean(),
+        Some(true)
+    );
+    assert_eq!(
+        root.root_member_value("zero").expect("zero").boolean(),
+        None
+    );
+    assert!(root.root_member_value("nil").expect("nil").is_null());
+    assert!(!root.root_member_value("zero").expect("zero").is_null());
+    assert!(
+        root.root_member_value("boolean")
+            .expect("boolean")
+            .string_chars()
+            .is_none()
+    );
+}
+
+#[test]
+fn generated_escaped_json_string_values_decode_exact_unicode_scalars() {
+    for code in [
+        0x0u32, 0x1, 0x7f, 0x80, 0x7ff, 0x800, 0x2603, 0xd7ff, 0xe000, 0xffff,
+    ] {
+        let source = format!(r#"{{"field":"\u{code:04x}"}}"#);
+        let root = validate_profile_json_object(source.as_bytes(), limits())
+            .expect("valid encoded BMP scalar");
+        let observed = root
+            .root_member_value("field")
+            .expect("field")
+            .string_chars()
+            .expect("string")
+            .collect::<String>();
+        let expected = char::from_u32(code).expect("not a surrogate");
+        assert_eq!(observed, expected.to_string(), "scalar={code:x}");
+    }
+    for (high, low, expected) in [
+        (0xd800, 0xdc00, '\u{10000}'),
+        (0xd83d, 0xde00, '😀'),
+        (0xdbff, 0xdfff, '\u{10ffff}'),
+    ] {
+        let source = format!(r#"{{"field":"\u{high:04X}\u{low:04X}"}}"#);
+        let root = validate_profile_json_object(source.as_bytes(), limits())
+            .expect("valid surrogate pair in JSON string");
+        let output = root
+            .root_member_value("field")
+            .expect("field")
+            .string_chars()
+            .expect("string")
+            .collect::<String>();
+        assert_eq!(output, expected.to_string());
+    }
+}

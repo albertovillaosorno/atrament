@@ -172,6 +172,35 @@ impl<'bytes> Iterator for ValidatedProfileJsonArrayElements<'bytes> {
 
 impl FusedIterator for ValidatedProfileJsonArrayElements<'_> {}
 
+/// Allocation-free Unicode scalar iterator over a validated JSON string.
+///
+/// This includes decoded escapes and surrogate pairs without normalizing
+/// Unicode, reading files, or creating a heap-backed string.
+#[derive(Clone, Debug)]
+pub struct ValidatedProfileJsonStringChars<'bytes> {
+    cursor: usize,
+    interior: &'bytes [u8],
+}
+
+// Retaining Iterator's standard combinators avoids introducing custom
+// character-ordering, exhaustion, or numeric conversion semantics.
+#[expect(
+    clippy::missing_trait_methods,
+    reason = "standard Iterator combinators retain their default behavior"
+)]
+impl Iterator for ValidatedProfileJsonStringChars<'_> {
+    type Item = char;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.cursor >= self.interior.len() {
+            return None;
+        }
+        decoded_key_scalar(self.interior, &mut self.cursor)
+    }
+}
+
+impl FusedIterator for ValidatedProfileJsonStringChars<'_> {}
+
 impl<'bytes> ValidatedProfileJsonValue<'bytes> {
     /// Select a zero-based array element without copying or normalizing it.
     ///
@@ -200,10 +229,28 @@ impl<'bytes> ValidatedProfileJsonValue<'bytes> {
         })
     }
 
+    /// Interpret an admitted JSON `true` or `false` token without coercion.
+    ///
+    /// Wrong kinds return `None`, including strings containing `"true"`.
+    #[must_use]
+    pub const fn boolean(self) -> Option<bool> {
+        match self.bytes {
+            b"true" => Some(true),
+            b"false" => Some(false),
+            _ => None,
+        }
+    }
+
     /// Exact original bytes of this selected JSON value, without outer spaces.
     #[must_use]
     pub const fn bytes(self) -> &'bytes [u8] {
         self.bytes
+    }
+
+    /// Return whether the admitted token is exactly JSON `null`.
+    #[must_use]
+    pub fn is_null(self) -> bool {
+        self.bytes == b"null"
     }
 
     /// Syntactic kind, not an admitted typed profile field.
@@ -234,6 +281,40 @@ impl<'bytes> ValidatedProfileJsonValue<'bytes> {
             bytes,
             document_values: self.document_values,
         })
+    }
+    /// Iterate the Unicode scalar values of one admitted JSON string.
+    ///
+    /// The original escape spelling stays available through `bytes`.
+    /// This does not choose manifest character normalization or identity rules.
+    #[must_use]
+    pub fn string_chars(
+        self,
+    ) -> Option<ValidatedProfileJsonStringChars<'bytes>> {
+        if self.kind() != Some(ProfileJsonValueKind::String) {
+            return None;
+        }
+        let interior = self.bytes.get(1..self.bytes.len().checked_sub(1)?)?;
+        Some(ValidatedProfileJsonStringChars {
+            cursor: 0,
+            interior,
+        })
+    }
+
+    /// Interpret a JSON number only if its entire spelling is a plain,
+    /// nonnegative base-10 integer fitting `u64` with no sign or exponent.
+    ///
+    /// Decimal and exponent spellings remain valid JSON but are not silently
+    /// rounded, coerced or normalized into integer metadata here.
+    #[must_use]
+    pub fn unsigned_integer(self) -> Option<u64> {
+        if self.kind() != Some(ProfileJsonValueKind::Number) {
+            return None;
+        }
+        let spelling = from_utf8(self.bytes).ok()?;
+        if spelling.bytes().any(|byte| !byte.is_ascii_digit()) {
+            return None;
+        }
+        spelling.parse::<u64>().ok()
     }
 }
 

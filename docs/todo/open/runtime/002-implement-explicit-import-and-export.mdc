@@ -187,3 +187,9 @@ support exact-key object lookup, ordered array traversal and bounded indexed
 array selection from one admitted ZIP manifest root. Structural selection is
 not yet a typed profile manifest, a declared-entry digest proof, or authorized
 filesystem Import; those checks remain mandatory before session mutation.
+
+The JSON syntax evidence can now expose a decoded string scalar iterator and
+non-coercing bool/null/plain `u64` helpers from an admitted ZIP root. The typed
+manifest parser still must bind every required field to the actual root bytes,
+refuse schema mismatches and unknown required features, and preserve optional
+wire data before any Import/session effects.

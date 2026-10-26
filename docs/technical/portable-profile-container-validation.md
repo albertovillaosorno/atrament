@@ -152,6 +152,24 @@ are borrowed directly from the actual ZIP root, not from reference literals.
 is no canonical JSON writer, selection of manifest field names, semantics for
 unknown fields or numbers, or proof connecting a typed manifest to the ZIP root.
 
+### Field-neutral scalar JSON interpretation
+
+One sealed JSON value additionally offers allocation-free Unicode-scalar
+iteration for string contents, distinguishing escaped characters, control
+escapes and valid UTF-16 surrogate pairs from their unchanged source spelling.
+The iterator never case-folds or normalizes distinct Unicode sequences.
+
+The same sealed value can read exact JSON booleans and null, or interpret a
+plain nonnegative decimal integer only if every byte is a digit and the
+result fits `u64`. A negative, fractional, exponent-form, or overflowing
+number remains valid JSON syntax but cannot silently become integer metadata.
+A string containing digits cannot be coerced into a JSON number, either.
+
+These helpers are deliberately not field-level validators: the future typed
+manifest codec must choose which properties allow strings, booleans, null, or
+numbers, plus canonical writer rules. CRC-checked ZIP integration fixtures
+show the decoded value still borrows its source from the real manifest entry.
+
 ### Exact entry SHA-256 verifier
 
 The separate profile-entry-sha256 domain computes NIST FIPS 180-4 SHA-256 over

@@ -1098,16 +1098,19 @@ fn sealed_crc_checked_zip_root_exposes_nested_read_only_json_values() {
         b"false"
     );
     assert_eq!(row1.array_element(2), None);
+    assert_eq!(row1.array_element(0).expect("true").boolean(), Some(true));
+    assert_eq!(row1.array_element(1).expect("false").boolean(), Some(false));
+    let escaped = rows.array_element(2).expect("escaped string");
+    assert_eq!(escaped.bytes(), br#""\u0061""#);
     assert_eq!(
-        rows.array_element(2).expect("escaped string").bytes(),
-        br#""\u0061""#
+        escaped.string_chars().expect("Unicode string").collect::<String>(),
+        "a",
     );
     assert_eq!(rows.array_element(3), None);
     assert_eq!(nested.object_member("id"), None);
-    assert_eq!(
-        admitted.root_member_value("id").expect("root id").bytes(),
-        b"3"
-    );
+    let root_id = admitted.root_member_value("id").expect("root id");
+    assert_eq!(root_id.bytes(), b"3");
+    assert_eq!(root_id.unsigned_integer(), Some(3));
     assert_eq!(admitted.root_member_value("\u{0072}ows"), None);
     let selected = row0.object_member("id").expect("borrowed value").bytes();
     assert!(
