@@ -45,6 +45,7 @@ import fs from "node:fs";
 import http from "node:http";
 import net from "node:net";
 import path from "node:path";
+import { PassThrough } from "node:stream";
 import test from "node:test";
 
 const FIREFOX_AVAILABLE = process.platform === "linux"
@@ -81,24 +82,49 @@ const COMPATIBLE_HANDSHAKE = JSON.stringify({
 
 function waitForLine(stream, select, timeoutMs = 15_000) {
     return new Promise((resolve, reject) => {
-        let text = "";
-        const timer = setTimeout(() => {
-            reject(new Error(`timed out waiting for process output: ${text}`));
-        }, timeoutMs);
-        stream.setEncoding("utf8");
-        stream.on("data", (chunk) => {
-            text += chunk;
-            const lines = text.split("\n");
-            text = lines.pop() ?? "";
+        let buffered = "";
+        const finish = (error, value) => {
+            clearTimeout(timer);
+            stream.off("data", onData);
+            stream.off("error", onError);
+            stream.off("end", onEnd);
+            stream.off("close", onEnd);
+            if (error === null) {
+                resolve(value);
+            } else {
+                reject(error);
+            }
+        };
+        const onError = (error) => finish(error);
+        const onEnd = () => finish(new Error(
+            `process output ended before readiness: ${buffered}`,
+        ));
+        const onData = (chunk) => {
+            buffered += chunk;
+            const lines = buffered.split("\n");
+            buffered = lines.pop() ?? "";
             for (const line of lines) {
-                const value = select(line);
-                if (value !== null) {
-                    clearTimeout(timer);
-                    resolve(value);
+                let selected;
+                try {
+                    selected = select(line);
+                } catch (error) {
+                    finish(error);
+                    return;
+                }
+                if (selected !== null) {
+                    finish(null, selected);
                     return;
                 }
             }
-        });
+        };
+        const timer = setTimeout(() => finish(new Error(
+            `timed out waiting for process output: ${buffered}`,
+        )), timeoutMs);
+        stream.setEncoding("utf8");
+        stream.on("data", onData);
+        stream.once("error", onError);
+        stream.once("end", onEnd);
+        stream.once("close", onEnd);
     });
 }
 
@@ -123,6 +149,90 @@ async function stopChild(child) {
         await exit;
     }
 }
+
+// Fixture shutdown must not wait for a browser that still owns an HTTP
+// request. Close the listening socket first, then active HTTP connections.
+async function closeFixtureServer(server) {
+    if (server === undefined || !server.listening) {
+        return;
+    }
+    const closed = new Promise((resolve, reject) => {
+        server.close((error) => {
+            if (error) {
+                reject(error);
+            } else {
+                resolve();
+            }
+        });
+    });
+    server.closeAllConnections();
+    await closed;
+}
+
+test(
+    "readiness output handles fragmented lines and removes observers",
+    async () => {
+        const stream = new PassThrough();
+        const readiness = waitForLine(stream, (line) => (
+            line.startsWith("ready: ") ? line.slice(7) : null
+        ));
+        stream.write("noise\nrea");
+        stream.write("dy: ws://127.0.0.1:1234\n");
+        assert.equal(await readiness, "ws://127.0.0.1:1234");
+        assert.equal(stream.listenerCount("data"), 0);
+        assert.equal(stream.listenerCount("error"), 0);
+        assert.equal(stream.listenerCount("close"), 0);
+        stream.end();
+    },
+);
+
+test(
+    "readiness output fails promptly on closed or silent streams",
+    async () => {
+        const closed = new PassThrough();
+        const pendingClose = waitForLine(closed, () => null);
+        closed.end("partial output");
+        await assert.rejects(pendingClose, /ended before readiness/);
+        assert.equal(closed.listenerCount("data"), 0);
+        const silent = new PassThrough();
+        await assert.rejects(
+            waitForLine(silent, () => null, 20),
+            /timed out waiting for process output/,
+        );
+        assert.equal(silent.listenerCount("data"), 0);
+        silent.destroy();
+    },
+);
+
+test(
+    "fixture shutdown aborts a pending HTTP request without browser exit",
+    { timeout: 5_000 },
+    async () => {
+        let signalRequest;
+        const observed = new Promise((resolve) => {
+            signalRequest = resolve;
+        });
+        const server = http.createServer((_request, _response) => {
+            signalRequest();
+            // Deliberately leave this fixture request unfinished.
+        });
+        server.listen(0, "127.0.0.1");
+        await once(server, "listening");
+        const address = server.address();
+        assert.notEqual(address, null);
+        assert.notEqual(typeof address, "string");
+        const request = http.get(`http://127.0.0.1:${address.port}/`);
+        request.on("error", () => {});
+        try {
+            await observed;
+            await closeFixtureServer(server);
+            assert.equal(server.listening, false);
+        } finally {
+            request.destroy();
+            await closeFixtureServer(server);
+        }
+    },
+);
 
 class BidiClient {
     constructor(url) {
@@ -924,10 +1034,7 @@ test(
             if (bidi?.socket != null) {
                 bidi.socket.end();
             }
-            if (server.listening) {
-                server.close();
-                await once(server, "close");
-            }
+            await closeFixtureServer(server);
             for (const child of children.reverse()) {
                 await stopChild(child);
             }
@@ -1043,10 +1150,7 @@ test(
             if (bidi?.socket != null) {
                 bidi.socket.end();
             }
-            if (server.listening) {
-                server.close();
-                await once(server, "close");
-            }
+            await closeFixtureServer(server);
             for (const child of children.reverse()) {
                 await stopChild(child);
             }
@@ -1220,10 +1324,7 @@ test(
             if (bidi?.socket != null) {
                 bidi.socket.end();
             }
-            if (server.listening) {
-                server.close();
-                await once(server, "close");
-            }
+            await closeFixtureServer(server);
             for (const child of children.reverse()) {
                 await stopChild(child);
             }
@@ -1339,10 +1440,7 @@ test(
             if (bidi?.socket != null) {
                 bidi.socket.end();
             }
-            if (server.listening) {
-                server.close();
-                await once(server, "close");
-            }
+            await closeFixtureServer(server);
             for (const child of children.reverse()) {
                 await stopChild(child);
             }
@@ -1468,10 +1566,7 @@ test(
             if (bidi?.socket != null) {
                 bidi.socket.end();
             }
-            if (server.listening) {
-                server.close();
-                await once(server, "close");
-            }
+            await closeFixtureServer(server);
             for (const child of children.reverse()) {
                 await stopChild(child);
             }
@@ -1557,10 +1652,7 @@ test(
             if (bidi?.socket != null) {
                 bidi.socket.end();
             }
-            if (server.listening) {
-                server.close();
-                await once(server, "close");
-            }
+            await closeFixtureServer(server);
             for (const child of children.reverse()) {
                 await stopChild(child);
             }
@@ -1656,10 +1748,7 @@ test(
             if (bidi?.socket != null) {
                 bidi.socket.end();
             }
-            if (server.listening) {
-                server.close();
-                await once(server, "close");
-            }
+            await closeFixtureServer(server);
             for (const child of children.reverse()) {
                 await stopChild(child);
             }
@@ -1858,10 +1947,7 @@ test(
             if (bidi?.socket != null) {
                 bidi.socket.end();
             }
-            if (server.listening) {
-                server.close();
-                await once(server, "close");
-            }
+            await closeFixtureServer(server);
             for (const child of children.reverse()) {
                 await stopChild(child);
             }
@@ -2006,10 +2092,7 @@ test(
             if (bidi?.socket != null) {
                 bidi.socket.end();
             }
-            if (server.listening) {
-                server.close();
-                await once(server, "close");
-            }
+            await closeFixtureServer(server);
             for (const child of children.reverse()) {
                 await stopChild(child);
             }
@@ -2108,10 +2191,7 @@ test(
             if (bidi?.socket != null) {
                 bidi.socket.end();
             }
-            if (server.listening) {
-                server.close();
-                await once(server, "close");
-            }
+            await closeFixtureServer(server);
             for (const child of children.reverse()) {
                 await stopChild(child);
             }
@@ -2222,10 +2302,7 @@ test(
             if (bidi?.socket != null) {
                 bidi.socket.end();
             }
-            if (server.listening) {
-                server.close();
-                await once(server, "close");
-            }
+            await closeFixtureServer(server);
             for (const child of children.reverse()) {
                 await stopChild(child);
             }
@@ -2394,10 +2471,7 @@ test(
             if (bidi?.socket != null) {
                 bidi.socket.end();
             }
-            if (server.listening) {
-                server.close();
-                await once(server, "close");
-            }
+            await closeFixtureServer(server);
             for (const child of children.reverse()) {
                 await stopChild(child);
             }
@@ -2630,10 +2704,7 @@ test(
             if (bidi?.socket != null) {
                 bidi.socket.end();
             }
-            if (server.listening) {
-                server.close();
-                await once(server, "close");
-            }
+            await closeFixtureServer(server);
             for (const child of children.reverse()) {
                 await stopChild(child);
             }
@@ -2760,10 +2831,7 @@ test(
             if (bidi?.socket != null) {
                 bidi.socket.end();
             }
-            if (server.listening) {
-                server.close();
-                await once(server, "close");
-            }
+            await closeFixtureServer(server);
             for (const child of children.reverse()) {
                 await stopChild(child);
             }
@@ -2851,10 +2919,7 @@ test(
             if (bidi?.socket != null) {
                 bidi.socket.end();
             }
-            if (server.listening) {
-                server.close();
-                await once(server, "close");
-            }
+            await closeFixtureServer(server);
             for (const child of children.reverse()) {
                 await stopChild(child);
             }
@@ -3030,10 +3095,7 @@ test(
             if (bidi?.socket != null) {
                 bidi.socket.end();
             }
-            if (server.listening) {
-                server.close();
-                await once(server, "close");
-            }
+            await closeFixtureServer(server);
             for (const child of children.reverse()) {
                 await stopChild(child);
             }
@@ -3262,10 +3324,7 @@ test(
                 bidi.socket.end();
             }
             for (const server of [hostile, permissive]) {
-                if (server !== undefined) {
-                    server.close();
-                    await once(server, "close");
-                }
+                await closeFixtureServer(server);
             }
             for (const child of children.reverse()) {
                 await stopChild(child);
@@ -3354,10 +3413,7 @@ test(
             if (bidi?.socket != null) {
                 bidi.socket.end();
             }
-            if (server.listening) {
-                server.close();
-                await once(server, "close");
-            }
+            await closeFixtureServer(server);
             for (const child of children.reverse()) {
                 await stopChild(child);
             }
@@ -3498,10 +3554,7 @@ test(
             if (bidi?.socket != null) {
                 bidi.socket.end();
             }
-            if (server.listening) {
-                server.close();
-                await once(server, "close");
-            }
+            await closeFixtureServer(server);
             for (const child of children.reverse()) {
                 await stopChild(child);
             }
@@ -3627,10 +3680,7 @@ test(
             if (bidi?.socket != null) {
                 bidi.socket.end();
             }
-            if (server.listening) {
-                server.close();
-                await once(server, "close");
-            }
+            await closeFixtureServer(server);
             for (const child of children.reverse()) {
                 await stopChild(child);
             }
@@ -3729,10 +3779,7 @@ test(
             if (bidi?.socket != null) {
                 bidi.socket.end();
             }
-            if (server.listening) {
-                server.close();
-                await once(server, "close");
-            }
+            await closeFixtureServer(server);
             for (const child of children.reverse()) {
                 await stopChild(child);
             }
@@ -3851,10 +3898,7 @@ test(
             assert.equal(apiRequests.at(-1), "POST /api/session/end");
         } finally {
             if (bidi?.socket != null) bidi.socket.end();
-            if (server.listening) {
-                server.close();
-                await once(server, "close");
-            }
+            await closeFixtureServer(server);
             for (const child of children.reverse()) await stopChild(child);
             fs.rmSync(profile, { recursive: true, force: true });
         }
@@ -3950,10 +3994,7 @@ test(
                         context: tab.context,
                     });
                 } finally {
-                    if (server.listening) {
-                        server.close();
-                        await once(server, "close");
-                    }
+                    await closeFixtureServer(server);
                 }
             }
         } finally {
