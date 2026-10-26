@@ -234,6 +234,96 @@ test(
     },
 );
 
+// Read one complete WebSocket upgrade header without dropping split TCP chunks
+// or waiting indefinitely when a remote debugging endpoint stops responding.
+function readWebSocketUpgrade(socket, timeoutMs = 10_000) {
+    return new Promise((resolve, reject) => {
+        let received = Buffer.alloc(0);
+        const finish = (error, result) => {
+            clearTimeout(timer);
+            socket.off("data", onData);
+            socket.off("error", onError);
+            socket.off("end", onEnd);
+            socket.off("close", onEnd);
+            if (error === null) {
+                resolve(result);
+            } else {
+                reject(error);
+            }
+        };
+        const onError = (error) => finish(error);
+        const onEnd = () => finish(new Error(
+            "remote WebSocket endpoint closed before its upgrade response",
+        ));
+        const onData = (chunk) => {
+            received = Buffer.concat([received, chunk]);
+            const boundary = received.indexOf("\r\n\r\n");
+            if (boundary > 16_384 ||
+                (boundary < 0 && received.length > 16_384)) {
+                finish(new Error("WebSocket upgrade headers exceed limit"));
+                return;
+            }
+            if (boundary < 0) {
+                return;
+            }
+            socket.pause();
+            finish(null, {
+                head: received.subarray(0, boundary).toString("latin1"),
+                remainder: received.subarray(boundary + 4),
+            });
+        };
+        const timer = setTimeout(() => finish(new Error(
+            "timed out waiting for WebSocket upgrade headers",
+        )), timeoutMs);
+        socket.on("data", onData);
+        socket.once("error", onError);
+        socket.once("end", onEnd);
+        socket.once("close", onEnd);
+    });
+}
+
+test(
+    "WebSocket upgrade collects fragmented headers and retains frame bytes",
+    async () => {
+        const stream = new PassThrough();
+        const response = readWebSocketUpgrade(stream, 500);
+        stream.write("HTTP/1.1 101 Switching Protocols\r\nUp");
+        stream.write("grade: websocket\r\nConnection: Upgrade\r\n");
+        stream.write(Buffer.concat([
+            Buffer.from("\r\n"),
+            Buffer.from([0x81, 0x02, 0x6f, 0x6b]),
+        ]));
+        const result = await response;
+        assert.ok(result.head.startsWith("HTTP/1.1 101"));
+        assert.deepEqual(result.remainder,
+            Buffer.from([0x81, 0x02, 0x6f, 0x6b]));
+        assert.equal(stream.listenerCount("data"), 0);
+        assert.equal(stream.listenerCount("error"), 0);
+        assert.equal(stream.listenerCount("close"), 0);
+        stream.destroy();
+    },
+);
+
+test("WebSocket upgrade rejects missing or oversized response headers",
+    async () => {
+        const closed = new PassThrough();
+        const closedResponse = readWebSocketUpgrade(closed, 500);
+        closed.end("HTTP/1.1 101\r\n");
+        await assert.rejects(closedResponse, /closed before its upgrade/);
+        const oversized = new PassThrough();
+        const oversizedResponse = readWebSocketUpgrade(oversized, 500);
+        oversized.write("X".repeat(16_385));
+        await assert.rejects(oversizedResponse, /exceed limit/);
+        assert.equal(oversized.listenerCount("data"), 0);
+        oversized.destroy();
+        const silent = new PassThrough();
+        await assert.rejects(readWebSocketUpgrade(silent, 20),
+            /timed out waiting for WebSocket upgrade/);
+        assert.equal(silent.listenerCount("data"), 0);
+        silent.destroy();
+    },
+);
+
 class BidiClient {
     constructor(url) {
         this.buffer = Buffer.alloc(0);
@@ -251,6 +341,7 @@ class BidiClient {
         });
         await once(this.socket, "connect");
         const key = crypto.randomBytes(16).toString("base64");
+        const upgrade = readWebSocketUpgrade(this.socket);
         this.socket.write([
             `GET ${this.url.pathname} HTTP/1.1`,
             `Host: ${this.url.host}`,
@@ -261,20 +352,22 @@ class BidiClient {
             "",
             "",
         ].join("\r\n"));
-        let handshake = Buffer.alloc(0);
-        while (handshake.indexOf("\r\n\r\n") < 0) {
-            const [chunk] = await once(this.socket, "data");
-            handshake = Buffer.concat([handshake, chunk]);
+        let response;
+        try {
+            response = await upgrade;
+            assert.ok(response.head.startsWith("HTTP/1.1 101"),
+                response.head);
+        } catch (error) {
+            this.socket.destroy();
+            throw error;
         }
-        const boundary = handshake.indexOf("\r\n\r\n");
-        const head = handshake.subarray(0, boundary).toString("latin1");
-        assert.ok(head.startsWith("HTTP/1.1 101"), head);
-        this.buffer = handshake.subarray(boundary + 4);
+        this.buffer = response.remainder;
         this.socket.on("data", (chunk) => {
             this.buffer = Buffer.concat([this.buffer, chunk]);
             this.drain();
         });
         this.drain();
+        this.socket.resume();
     }
 
     command(method, params = {}, timeoutMs = 10_000) {
@@ -367,6 +460,36 @@ class BidiClient {
         return Buffer.concat([header, mask, masked]);
     }
 }
+
+test(
+    "WebDriver client rejects invalid upgrade status and closes its socket",
+    { timeout: 5_000 },
+    async () => {
+        const server = net.createServer((peer) => {
+            peer.once("data", () => {
+                peer.write([
+                    "HTTP/1.1 403 Forbidden",
+                    "Content-Length: 0",
+                    "",
+                    "",
+                ].join("\r\n"));
+            });
+        });
+        server.listen(0, "127.0.0.1");
+        await once(server, "listening");
+        const address = server.address();
+        assert.notEqual(address, null);
+        assert.notEqual(typeof address, "string");
+        const client = new BidiClient(`ws://127.0.0.1:${address.port}/session`);
+        try {
+            await assert.rejects(client.connect(), /HTTP\/1\.1 403/);
+            assert.equal(client.socket.destroyed, true);
+        } finally {
+            client.socket?.destroy();
+            await new Promise((resolve) => server.close(resolve));
+        }
+    },
+);
 
 async function evaluateDocument(client, context) {
     const response = await client.command("script.evaluate", {

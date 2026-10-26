@@ -292,3 +292,16 @@ browser enforcement of `no-referrer`, not only header emission.
 
 These browser constraints do not replace backend socket, token, host, path,
 cleanup, framing, or hostile-origin acceptance tests.
+
+The real-Firefox BiDi test harness now bounds startup-readiness output and
+WebSocket upgrade-header reads. Both reject early stream close and timeouts
+without leaving stale listeners. Upgrade headers are capped at 16 KiB and
+fragmented responses preserve trailing WebSocket frame bytes. A refused
+upgrade explicitly destroys the client socket.
+
+The harness also closes active HTTP fixture connections before awaiting server
+shutdown, avoiding a test-cleanup dependency on a browser that still owns a
+pending request. Independent Node fixtures exercise this shutdown against an
+unfinished HTTP response and cover split upgrade headers and rejected
+responses. These are reliability checks for the test harness, not changes to
+the runtime's actual origin, credential, or frame-admission rules.
