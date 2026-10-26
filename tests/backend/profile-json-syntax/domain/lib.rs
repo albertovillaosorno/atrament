@@ -574,3 +574,41 @@ fn sealed_root_lookup_handles_maximum_members_with_nested_values() {
     assert_eq!(admitted.root_member_json("v"), None);
     assert_eq!(admitted.root_member_json("f128"), None);
 }
+
+#[test]
+fn root_lookup_distinguishes_literal_backslash_u_from_unicode_escape() {
+    let source = r#"{"\\u0061":0,"\u0061":1}"#;
+    let admitted = validate_profile_json_object(source.as_bytes(), limits())
+        .expect("literal slash-u and escaped Unicode are separate keys");
+    assert_eq!(admitted.root_member_json(r"\u0061"), Some(b"0".as_slice()));
+    assert_eq!(admitted.root_member_json("a"), Some(b"1".as_slice()));
+    assert_eq!(admitted.root_member_json("\\\\u0061"), None);
+}
+
+#[test]
+fn generated_escaped_root_lookup_matches_exact_decoded_names() {
+    let mut cases = 0usize;
+    for length in 1usize..=48usize {
+        for position in 0usize..length {
+            let before = "n".repeat(position);
+            let after =
+                "n".repeat(length.saturating_sub(position).saturating_sub(1));
+            let plain = format!("{before}A{after}");
+            let escaped = format!(r"{before}\u0041{after}");
+            let source = format!(r#"{{"{escaped}":true}}"#);
+            let admitted =
+                validate_profile_json_object(source.as_bytes(), limits())
+                    .expect("escaped name has valid JSON syntax");
+            assert_eq!(
+                admitted.root_member_json(&plain),
+                Some(b"true".as_slice())
+            );
+            assert_eq!(
+                admitted.root_member_json(&format!("{before}B{after}")),
+                None,
+            );
+            cases = cases.saturating_add(1);
+        }
+    }
+    assert!(cases > 1_000);
+}
