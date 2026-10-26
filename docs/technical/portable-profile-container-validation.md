@@ -191,6 +191,13 @@ Nested siblings remain separate objects, empty objects exhaust safely, and
 preserve original order. A CRC-checked ZIP fixture checks that member key and
 value bytes come from the admitted ZIP root, not independent reference text.
 
+A named object field can now be selected as a complete sealed key/member/value
+triple (`root_field` or `object_field`). Both lookups share the source-order
+iterator's decoded-name comparison and eliminate the previous independent
+object-member scanner. Existing value-only projection delegates to the same
+field evidence, ensuring raw member spans and extracted values cannot choose
+different keys.
+
 Unknown-field retention semantics, canonical JSON rewriting, manifest schema
 admission, and complete profile import remain tasks for a future typed codec.
 A deterministic 128-field corpus alternates raw and Unicode-escaped key tokens,
@@ -198,6 +205,16 @@ then compares every streamed member with exact decoded-name lookup and verifies
 that all key and value slices point back into the original input bytes.
 A separate single-byte mutation corpus exercises safe traversal only when the
 complete changed document still passes strict syntax admission.
+
+Unicode scalar boundaries receive an additional deterministic matrix covering
+all 1,024 possible high-surrogate code units combined with six representative
+low-surrogate boundaries, decoded as both object keys and string values.
+Invalid high-surrogate followers and every isolated low-surrogate code unit
+are rejected in both key and value positions. A separate temporary
+differential run compared 13,784 bounded inputs with Python's independent
+JSON decoder, configured for strict duplicate-key and surrogate admission,
+and found no disagreements. This is corroborating test evidence, not an
+additional runtime dependency or a frozen manifest wire schema.
 
 ### Exact entry SHA-256 verifier
 

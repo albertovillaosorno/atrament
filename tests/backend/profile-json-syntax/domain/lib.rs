@@ -1265,3 +1265,190 @@ fn sealed_member_source_spans_remain_distinct_for_aliasing_key_values() {
     assert_eq!(nested.source_member_json(), br#""\u0061":1"#);
     assert!(nested.key_matches("a"));
 }
+
+#[test]
+fn sealed_named_field_lookup_retains_member_bytes_at_every_scope() {
+    let source = concat!(
+        r#" { "\u0061" : { "path" : [{ "a" : 1 }, {"a":2}] },"#,
+        r#" "path" : false, "ñ": 0, "ñ": 1 } "#,
+    );
+    let document = validate_profile_json_object(source.as_bytes(), limits())
+        .expect("distinct Unicode field names and inner aliases");
+    let field = document.root_field("a").expect("root escaped name");
+    assert_eq!(field.key_json(), br#""\u0061""#);
+    assert_eq!(
+        field.source_member_json(),
+        br#""\u0061" : { "path" : [{ "a" : 1 }, {"a":2}] }"#
+    );
+    let array = field
+        .value()
+        .object_field("path")
+        .expect("nested field retaining punctuation");
+    assert_eq!(
+        array.source_member_json(),
+        br#""path" : [{ "a" : 1 }, {"a":2}]"#
+    );
+    let items = array.value();
+    assert_eq!(
+        items
+            .array_element(0)
+            .expect("first object")
+            .object_field("a")
+            .expect("first field")
+            .source_member_json(),
+        br#""a" : 1"#
+    );
+    assert_eq!(
+        items
+            .array_element(1)
+            .expect("second object")
+            .object_field("a")
+            .expect("second field")
+            .source_member_json(),
+        br#""a":2"#
+    );
+    assert_eq!(
+        document
+            .root_field("path")
+            .expect("root path")
+            .value()
+            .boolean(),
+        Some(false)
+    );
+    assert_eq!(
+        document
+            .root_field("ñ")
+            .expect("composed")
+            .value()
+            .unsigned_integer(),
+        Some(0)
+    );
+    assert_eq!(
+        document
+            .root_field("ñ")
+            .expect("decomposed")
+            .value()
+            .unsigned_integer(),
+        Some(1)
+    );
+    assert_eq!(document.root_field("PATH"), None);
+    assert_eq!(field.value().object_field("PATH"), None);
+    assert_eq!(array.value().object_field("a"), None);
+    assert_eq!(
+        document
+            .root_member_value("a")
+            .expect("compatibility")
+            .bytes(),
+        field.value().bytes()
+    );
+    assert_eq!(
+        field
+            .value()
+            .object_member("path")
+            .expect("legacy lookup")
+            .bytes(),
+        array.value().bytes()
+    );
+    let original = array.source_member_json();
+    assert!(
+        document
+            .bytes()
+            .windows(original.len())
+            .any(|candidate| std::ptr::eq(
+                candidate.as_ptr(),
+                original.as_ptr()
+            ))
+    );
+}
+
+#[test]
+fn sealed_named_lookup_fails_without_reinterpreting_other_value_kinds() {
+    let doc = validate_profile_json_object(
+        br#"{"object":{},"array":[],"string":"key","nil":null}"#,
+        limits(),
+    )
+    .expect("valid root");
+    for name in ["array", "string", "nil"] {
+        let value = doc.root_field(name).expect("root field").value();
+        assert_eq!(value.object_field("key"), None);
+        assert_eq!(value.object_member("key"), None);
+    }
+    assert_eq!(
+        doc.root_field("object")
+            .expect("empty object")
+            .value()
+            .object_field("key"),
+        None
+    );
+    assert_eq!(doc.root_field(""), None);
+    assert_eq!(doc.root_field("Object"), None);
+}
+
+#[test]
+fn all_high_surrogates_preserve_scalar_identity_at_low_code_unit_boundaries() {
+    let mut checked = 0usize;
+    for high in 0xd800u32..=0xdbffu32 {
+        for low in [0xdc00u32, 0xdc01, 0xdc7f, 0xde00, 0xdffe, 0xdfff] {
+            let scalar = 0x10000u32 + ((high - 0xd800) << 10) + (low - 0xdc00);
+            let expected = char::from_u32(scalar).expect("admitted scalar");
+            let input = format!(
+                r#"{{"\u{high:04X}\u{low:04X}":"\u{high:04x}\u{low:04x}"}}"#,
+            );
+            let root = validate_profile_json_object(input.as_bytes(), limits())
+                .expect("every valid surrogate pair is accepted");
+            let field = root
+                .root_field(&expected.to_string())
+                .expect("escaped field decoded exactly");
+            assert!(field.key_matches(&expected.to_string()));
+            assert_eq!(
+                field.decoded_key_chars().collect::<String>(),
+                expected.to_string()
+            );
+            assert_eq!(
+                field
+                    .value()
+                    .string_chars()
+                    .expect("string")
+                    .collect::<String>(),
+                expected.to_string()
+            );
+            checked = checked.saturating_add(1);
+        }
+    }
+    assert_eq!(checked, 6 * 1_024);
+}
+
+#[test]
+fn all_high_surrogates_reject_non_low_followers_in_keys_and_values() {
+    let mut checked = 0usize;
+    for high in 0xd800u32..=0xdbffu32 {
+        for invalid in [0x0000u32, 0x0041, 0xd7ff, 0xd800, 0xdbff, 0xe000] {
+            let value = format!(r#"{{"k":"\u{high:04X}\u{invalid:04X}"}}"#);
+            let key = format!(r#"{{"\u{high:04X}\u{invalid:04X}":0}}"#);
+            for input in [value, key] {
+                assert_eq!(
+                    validate_profile_json_object(input.as_bytes(), limits()),
+                    Err(ProfileJsonSyntaxError::Malformed),
+                    "high={high:04X}, follower={invalid:04X}"
+                );
+                checked = checked.saturating_add(1);
+            }
+        }
+    }
+    assert_eq!(checked, 12 * 1_024);
+}
+
+#[test]
+fn low_surrogates_alone_never_become_unicode_scalars() {
+    for low in 0xdc00u32..=0xdfffu32 {
+        let value = format!(r#"{{"value":"\u{low:04X}"}}"#);
+        let key = format!(r#"{{"\u{low:04X}":0}}"#);
+        for input in [value, key] {
+            assert_eq!(
+                validate_profile_json_object(input.as_bytes(), limits()),
+                Err(ProfileJsonSyntaxError::Malformed),
+                "isolated low surrogate {low:04X}"
+            );
+        }
+    }
+}

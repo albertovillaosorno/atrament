@@ -1087,6 +1087,11 @@ fn sealed_crc_checked_zip_root_exposes_nested_read_only_json_values() {
     assert_eq!(root_fields[0].source_member_json(),
         br#""nested":{"rows":[{"id":1},[true,false],"\u0061"]}"#);
     assert_eq!(root_fields[1].source_member_json(), br#""id":3"#);
+    assert_eq!(admitted.root_field("nested").expect("source-backed root")
+        .source_member_json(), root_fields[0].source_member_json());
+    assert_eq!(admitted.root_field("id").expect("root ID")
+        .value().unsigned_integer(), Some(3));
+    assert_eq!(admitted.root_field("ID"), None);
     assert!(admitted.bytes().windows(root_fields[0].source_member_json().len())
         .any(|candidate| std::ptr::eq(
             candidate.as_ptr(), root_fields[0].source_member_json().as_ptr())));
@@ -1099,7 +1104,11 @@ fn sealed_crc_checked_zip_root_exposes_nested_read_only_json_values() {
         .root_member_value("nested")
         .expect("root object projection");
     assert_eq!(nested.kind(), Some(ProfileJsonValueKind::Object));
+    let rows_field = nested.object_field("rows").expect("nested field");
+    assert_eq!(rows_field.source_member_json(),
+        br#""rows":[{"id":1},[true,false],"\u0061"]"#);
     let rows = nested.object_member("rows").expect("nested array");
+    assert_eq!(rows_field.value().bytes(), rows.bytes());
     let row0 = rows.array_element(0).expect("object row");
     assert_eq!(
         row0.object_member("id").expect("integer row value").bytes(),

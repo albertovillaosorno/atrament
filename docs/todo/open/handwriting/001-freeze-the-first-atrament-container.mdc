@@ -189,3 +189,16 @@ original JSON name through its value, retaining the colon and any inner
 whitespace while excluding delimiters between fields. CRC-checked ZIP tests
 prove the span points into actual admitted root bytes, not reconstructed
 text. This adds unknown-field evidence but cannot confer canonical writer rules.
+
+Named root and nested JSON field lookup now return the same constructor-sealed
+key/member/value evidence as ordered field enumeration. Value-only accessors
+delegate to that single decoded-name lookup path rather than maintaining an
+independent source scanner. Future field schemas still own recognition,
+required-field validation, optional-field treatment and export canonicality.
+
+A deterministic Unicode regression matrix now checks all 1,024 high UTF-16
+surrogates with representative valid low boundaries, all isolated low
+surrogates, and invalid high followers in both key and value positions.
+An independent Python JSON decoder cross-check agreed with the admitted
+bounded grammar on 13,784 generated cases. The runtime parser still carries
+no Python dependency or manifest schema interpretation.

@@ -412,6 +412,18 @@ impl<'bytes> ValidatedProfileJsonValue<'bytes> {
         }
     }
 
+    /// Select a named field while retaining its exact source member syntax.
+    ///
+    /// Lookup compares decoded Unicode scalars and never treats two distinct
+    /// member spellings as separate fields after duplicate-key validation.
+    #[must_use]
+    pub fn object_field(
+        self,
+        key: &str,
+    ) -> Option<ValidatedProfileJsonField<'bytes>> {
+        self.object_fields()?.find(|field| field.key_matches(key))
+    }
+
     /// Traverse admitted object members in their original source order.
     ///
     /// The iterator preserves both key spelling and value source bytes.
@@ -431,14 +443,7 @@ impl<'bytes> ValidatedProfileJsonValue<'bytes> {
     /// Select one decoded member name only when this value is an object.
     #[must_use]
     pub fn object_member(self, key: &str) -> Option<Self> {
-        if self.kind() != Some(ProfileJsonValueKind::Object) {
-            return None;
-        }
-        let bytes = object_member_slice(self.bytes, self.document_values, key)?;
-        Some(Self {
-            bytes,
-            document_values: self.document_values,
-        })
+        Some(self.object_field(key)?.value())
     }
     /// Iterate the Unicode scalar values of one admitted JSON string.
     ///
@@ -483,6 +488,17 @@ impl<'bytes> ValidatedProfileJsonObject<'bytes> {
         self.bytes
     }
 
+    /// Select one decoded root field with its original key and member span.
+    ///
+    /// Missing names return `None`; no required wire field is assumed here.
+    #[must_use]
+    pub fn root_field(
+        self,
+        key: &str,
+    ) -> Option<ValidatedProfileJsonField<'bytes>> {
+        self.root_fields().find(|field| field.key_matches(key))
+    }
+
     /// Traverse unique decoded root fields in their original JSON order.
     ///
     /// Unknown fields can be inspected and their raw names retained without
@@ -514,11 +530,7 @@ impl<'bytes> ValidatedProfileJsonObject<'bytes> {
         self,
         key: &str,
     ) -> Option<ValidatedProfileJsonValue<'bytes>> {
-        let bytes = object_member_slice(self.bytes, self.values, key)?;
-        Some(ValidatedProfileJsonValue {
-            bytes,
-            document_values: self.values,
-        })
+        Some(self.root_field(key)?.value())
     }
 
     /// Number of syntactic JSON values consumed including the root object.
@@ -628,22 +640,6 @@ impl SyntaxCursor<'_> {
             fingerprint = fingerprint.wrapping_mul(0x100_0000_01b3u64);
         }
         Ok(fingerprint)
-    }
-
-    fn key_matches(&self, key: (usize, usize), target: &str) -> bool {
-        let Some(source) = self
-            .bytes
-            .get(key.0.saturating_add(1)..key.1.saturating_sub(1))
-        else {
-            return false;
-        };
-        let mut position = 0usize;
-        for expected in target.chars() {
-            if decoded_key_scalar(source, &mut position) != Some(expected) {
-                return false;
-            }
-        }
-        position == source.len()
     }
 
     fn keys_equal(
@@ -841,42 +837,6 @@ impl SyntaxCursor<'_> {
         while matches!(self.byte(), Some(b' ' | b'\t' | b'\r' | b'\n')) {
             self.cursor = self.cursor.saturating_add(1);
         }
-    }
-}
-
-// Scan a sealed object without changing or interpreting its source bytes.
-// Every nested value and decoded member name was already syntax-admitted.
-fn object_member_slice<'bytes>(
-    bytes: &'bytes [u8],
-    values: usize,
-    key: &str,
-) -> Option<&'bytes [u8]> {
-    let mut reader = SyntaxCursor::for_admitted(bytes, values);
-    reader.whitespace();
-    reader.required(b'{').ok()?;
-    reader.whitespace();
-    if reader.consume(b'}') {
-        return None;
-    }
-    loop {
-        let key_start = reader.cursor;
-        reader.string().ok()?;
-        let key_end = reader.cursor;
-        reader.whitespace();
-        reader.required(b':').ok()?;
-        reader.whitespace();
-        let value_start = reader.cursor;
-        reader.value(0).ok()?;
-        let value_end = reader.cursor;
-        if reader.key_matches((key_start, key_end), key) {
-            return reader.bytes.get(value_start..value_end);
-        }
-        reader.whitespace();
-        if reader.consume(b'}') {
-            return None;
-        }
-        reader.required(b',').ok()?;
-        reader.whitespace();
     }
 }
 
