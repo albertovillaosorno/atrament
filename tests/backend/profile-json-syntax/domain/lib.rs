@@ -1101,3 +1101,94 @@ fn maximum_object_members_can_be_streamed_without_field_name_policy() {
     }
     assert_eq!(count, MAXIMUM_JSON_OBJECT_MEMBERS);
 }
+
+#[test]
+fn generated_object_fields_preserve_decoded_names_and_source_provenance() {
+    let fields = (0..MAXIMUM_JSON_OBJECT_MEMBERS)
+        .map(|index| {
+            let key = if index % 2 == 0 {
+                format!(r#""\u0061{index}""#)
+            } else {
+                format!("\"a{index}\"")
+            };
+            format!(r#"{key}:[{index},{{"n":{index}}}]"#)
+        })
+        .collect::<Vec<_>>()
+        .join(",");
+    let source = format!("{{{fields}}}");
+    let admitted = validate_profile_json_object(
+        source.as_bytes(),
+        ProfileJsonSyntaxLimits {
+            maximum_bytes: 16_384,
+            maximum_nesting: 3,
+            maximum_object_members: MAXIMUM_JSON_OBJECT_MEMBERS,
+            maximum_values: 1_024,
+        },
+    )
+    .expect("all 128 decoded names are unique");
+    let mut visited = 0usize;
+    for (index, field) in admitted.root_fields().enumerate() {
+        let name = format!("a{index}");
+        assert!(field.key_matches(&name));
+        assert_eq!(field.decoded_key_chars().collect::<String>(), name);
+        let selected = admitted.root_member_value(&name).expect("same value");
+        assert_eq!(selected.bytes(), field.value().bytes());
+        let child = field.value().array_element(1).expect("object in array");
+        assert_eq!(
+            child.object_member("n").expect("number").unsigned_integer(),
+            Some(index as u64)
+        );
+        let raw = field.value().bytes();
+        assert!(
+            admitted
+                .bytes()
+                .windows(raw.len())
+                .any(|part| std::ptr::eq(part.as_ptr(), raw.as_ptr()))
+        );
+        let key_raw = field.key_json();
+        assert!(
+            admitted
+                .bytes()
+                .windows(key_raw.len())
+                .any(|part| std::ptr::eq(part.as_ptr(), key_raw.as_ptr()))
+        );
+        visited = visited.saturating_add(1);
+    }
+    assert_eq!(visited, MAXIMUM_JSON_OBJECT_MEMBERS);
+}
+
+#[test]
+fn admitted_byte_mutations_never_project_values_outside_original_input() {
+    let original = br#"{"items":[1,{"x":2},true],"s":"\u0061"}"#;
+    let mut checked = 0usize;
+    for position in 0..original.len() {
+        for byte in [0u8, 9, 10, 34, 44, 58, 92, 123, 125, 255] {
+            let mut changed = original.to_vec();
+            changed[position] = byte;
+            if let Ok(root) = validate_profile_json_object(&changed, limits()) {
+                let mut elements = 0usize;
+                for field in root.root_fields() {
+                    let raw = field.value().bytes();
+                    assert!(root.bytes().windows(raw.len()).any(|part| {
+                        std::ptr::eq(part.as_ptr(), raw.as_ptr())
+                    }));
+                    if let Some(items) = field.value().array_elements() {
+                        for element in items {
+                            let raw = element.bytes();
+                            assert!(root.bytes().windows(raw.len()).any(
+                                |part| std::ptr::eq(
+                                    part.as_ptr(),
+                                    raw.as_ptr()
+                                )
+                            ));
+                            elements = elements.saturating_add(1);
+                        }
+                    }
+                }
+                assert!(elements <= 3);
+            }
+            checked = checked.saturating_add(1);
+        }
+    }
+    assert!(checked > 300);
+}

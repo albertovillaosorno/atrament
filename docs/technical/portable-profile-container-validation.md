@@ -187,6 +187,11 @@ value bytes come from the admitted ZIP root, not independent reference text.
 
 Unknown-field retention semantics, canonical JSON rewriting, manifest schema
 admission, and complete profile import remain tasks for a future typed codec.
+A deterministic 128-field corpus alternates raw and Unicode-escaped key tokens,
+then compares every streamed member with exact decoded-name lookup and verifies
+that all key and value slices point back into the original input bytes.
+A separate single-byte mutation corpus exercises safe traversal only when the
+complete changed document still passes strict syntax admission.
 
 ### Exact entry SHA-256 verifier
 
