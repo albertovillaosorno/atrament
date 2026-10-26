@@ -181,3 +181,9 @@ root-member value's exact byte slice from the checked ZIP manifest entry.
 Lookup is Unicode-scalar exact and cannot turn nested fields or near-match
 names into top-level values. The caller still cannot treat this generic byte
 view as a typed import or a verified caller-authorized filesystem read.
+
+Nested sealed JSON value views now distinguish six syntactic JSON kinds and
+support exact-key object lookup, ordered array traversal and bounded indexed
+array selection from one admitted ZIP manifest root. Structural selection is
+not yet a typed profile manifest, a declared-entry digest proof, or authorized
+filesystem Import; those checks remain mandatory before session mutation.

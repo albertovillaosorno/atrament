@@ -34,6 +34,7 @@
 
 //! Resource-bounded JSON object syntax checks for profile manifest bytes.
 
+use std::iter::FusedIterator;
 use std::str::from_utf8;
 
 /// Maximum container nesting allowed, even if a caller requests more.
@@ -86,6 +87,156 @@ pub struct ValidatedProfileJsonObject<'bytes> {
     values: usize,
 }
 
+/// The syntactic kind of one already validated JSON value.
+///
+/// Type admission alone cannot decide a profile manifest field's semantics.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ProfileJsonValueKind {
+    /// Ordered values, possibly empty.
+    Array,
+    /// `true` or `false`.
+    Boolean,
+    /// JSON `null`.
+    Null,
+    /// A JSON numeric token with its original decimal notation retained.
+    Number,
+    /// An object with unique decoded member names.
+    Object,
+    /// A JSON string including its original escape notation.
+    String,
+}
+
+/// Constructor-sealed borrowed view into an already admitted JSON document.
+///
+/// Traversal never confers manifest field names, canonical encoding, or
+/// Import authority. The original document had its complete grammar, Unicode,
+/// duplicate-key, byte, member, depth, and value budgets checked first.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ValidatedProfileJsonValue<'bytes> {
+    bytes: &'bytes [u8],
+    document_values: usize,
+}
+
+/// One-pass ordered iterator over a constructor-sealed JSON array.
+///
+/// The iterator borrows source bytes and keeps no collection of JSON values.
+/// It is available only after the complete parent JSON root was validated.
+#[derive(Clone, Debug)]
+pub struct ValidatedProfileJsonArrayElements<'bytes> {
+    bytes: &'bytes [u8],
+    cursor: usize,
+    document_values: usize,
+    finished: bool,
+}
+
+// Iterator has many default combinators; implementing those individually
+// would replace the standard semantics rather than strengthen the boundary.
+#[expect(
+    clippy::missing_trait_methods,
+    reason = "standard Iterator combinators retain their default behavior"
+)]
+impl<'bytes> Iterator for ValidatedProfileJsonArrayElements<'bytes> {
+    type Item = ValidatedProfileJsonValue<'bytes>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.finished {
+            return None;
+        }
+        let mut reader =
+            SyntaxCursor::for_admitted(self.bytes, self.document_values);
+        reader.cursor = self.cursor;
+        reader.whitespace();
+        if reader.consume(b']') {
+            self.finished = true;
+            return None;
+        }
+        let start = reader.cursor;
+        if reader.value(0).is_err() {
+            self.finished = true;
+            return None;
+        }
+        let selected = self.bytes.get(start..reader.cursor)?;
+        reader.whitespace();
+        if reader.consume(b',') {
+            reader.whitespace();
+            self.cursor = reader.cursor;
+        } else {
+            self.finished = true;
+        }
+        Some(ValidatedProfileJsonValue {
+            bytes: selected,
+            document_values: self.document_values,
+        })
+    }
+}
+
+impl FusedIterator for ValidatedProfileJsonArrayElements<'_> {}
+
+impl<'bytes> ValidatedProfileJsonValue<'bytes> {
+    /// Select a zero-based array element without copying or normalizing it.
+    ///
+    /// Missing indices and non-array values return `None`.
+    #[must_use]
+    pub fn array_element(self, index: usize) -> Option<Self> {
+        self.array_elements()?.nth(index)
+    }
+
+    /// Traverse all items of one admitted array in their exact source order.
+    ///
+    /// The iterator yields borrowed views without storing items on the heap.
+    /// This remains syntactic projection, not typed manifest admission.
+    #[must_use]
+    pub fn array_elements(
+        self,
+    ) -> Option<ValidatedProfileJsonArrayElements<'bytes>> {
+        if self.kind() != Some(ProfileJsonValueKind::Array) {
+            return None;
+        }
+        Some(ValidatedProfileJsonArrayElements {
+            bytes: self.bytes,
+            cursor: 1,
+            document_values: self.document_values,
+            finished: false,
+        })
+    }
+
+    /// Exact original bytes of this selected JSON value, without outer spaces.
+    #[must_use]
+    pub const fn bytes(self) -> &'bytes [u8] {
+        self.bytes
+    }
+
+    /// Syntactic kind, not an admitted typed profile field.
+    ///
+    /// Returns `Some` for every constructor-sealed valid value; `None` would
+    /// indicate a failed internal invariant, never a new manifest field kind.
+    #[must_use]
+    pub const fn kind(self) -> Option<ProfileJsonValueKind> {
+        match self.bytes.first() {
+            Some(b'[') => Some(ProfileJsonValueKind::Array),
+            Some(b't' | b'f') => Some(ProfileJsonValueKind::Boolean),
+            Some(b'n') => Some(ProfileJsonValueKind::Null),
+            Some(b'-' | b'0'..=b'9') => Some(ProfileJsonValueKind::Number),
+            Some(b'{') => Some(ProfileJsonValueKind::Object),
+            Some(b'"') => Some(ProfileJsonValueKind::String),
+            _ => None,
+        }
+    }
+
+    /// Select one decoded member name only when this value is an object.
+    #[must_use]
+    pub fn object_member(self, key: &str) -> Option<Self> {
+        if self.kind() != Some(ProfileJsonValueKind::Object) {
+            return None;
+        }
+        let bytes = object_member_slice(self.bytes, self.document_values, key)?;
+        Some(Self {
+            bytes,
+            document_values: self.document_values,
+        })
+    }
+}
+
 impl<'bytes> ValidatedProfileJsonObject<'bytes> {
     /// Exact original UTF-8 bytes, including any insignificant whitespace.
     #[must_use]
@@ -102,40 +253,24 @@ impl<'bytes> ValidatedProfileJsonObject<'bytes> {
     /// Returned bytes include the original JSON escapes and internal spacing.
     #[must_use]
     pub fn root_member_json(self, key: &str) -> Option<&'bytes [u8]> {
-        let mut reader = SyntaxCursor {
-            bytes: self.bytes,
-            cursor: 0,
-            maximum_nesting: MAXIMUM_JSON_NESTING,
-            maximum_object_members: MAXIMUM_JSON_OBJECT_MEMBERS,
-            remaining_values: self.values,
-            values: 0,
-        };
-        reader.whitespace();
-        reader.required(b'{').ok()?;
-        reader.whitespace();
-        if reader.consume(b'}') {
-            return None;
-        }
-        loop {
-            let key_start = reader.cursor;
-            reader.string().ok()?;
-            let key_end = reader.cursor;
-            reader.whitespace();
-            reader.required(b':').ok()?;
-            reader.whitespace();
-            let value_start = reader.cursor;
-            reader.value(1).ok()?;
-            let value_end = reader.cursor;
-            if reader.key_matches((key_start, key_end), key) {
-                return reader.bytes.get(value_start..value_end);
-            }
-            reader.whitespace();
-            if reader.consume(b'}') {
-                return None;
-            }
-            reader.required(b',').ok()?;
-            reader.whitespace();
-        }
+        Some(self.root_member_value(key)?.bytes())
+    }
+
+    /// Select a root JSON value through its exact decoded object member name.
+    ///
+    /// The sealed result may be traversed without copying any source bytes.
+    /// Nested objects and arrays remain checked against the same original
+    /// document's syntax admission. Unknown names do not confer field policy.
+    #[must_use]
+    pub fn root_member_value(
+        self,
+        key: &str,
+    ) -> Option<ValidatedProfileJsonValue<'bytes>> {
+        let bytes = object_member_slice(self.bytes, self.values, key)?;
+        Some(ValidatedProfileJsonValue {
+            bytes,
+            document_values: self.values,
+        })
     }
 
     /// Number of syntactic JSON values consumed including the root object.
@@ -152,6 +287,19 @@ struct SyntaxCursor<'bytes> {
     maximum_object_members: usize,
     remaining_values: usize,
     values: usize,
+}
+
+impl<'bytes> SyntaxCursor<'bytes> {
+    const fn for_admitted(bytes: &'bytes [u8], values: usize) -> Self {
+        Self {
+            bytes,
+            cursor: 0,
+            maximum_nesting: MAXIMUM_JSON_NESTING,
+            maximum_object_members: MAXIMUM_JSON_OBJECT_MEMBERS,
+            remaining_values: values,
+            values: 0,
+        }
+    }
 }
 
 impl SyntaxCursor<'_> {
@@ -445,6 +593,42 @@ impl SyntaxCursor<'_> {
         while matches!(self.byte(), Some(b' ' | b'\t' | b'\r' | b'\n')) {
             self.cursor = self.cursor.saturating_add(1);
         }
+    }
+}
+
+// Scan a sealed object without changing or interpreting its source bytes.
+// Every nested value and decoded member name was already syntax-admitted.
+fn object_member_slice<'bytes>(
+    bytes: &'bytes [u8],
+    values: usize,
+    key: &str,
+) -> Option<&'bytes [u8]> {
+    let mut reader = SyntaxCursor::for_admitted(bytes, values);
+    reader.whitespace();
+    reader.required(b'{').ok()?;
+    reader.whitespace();
+    if reader.consume(b'}') {
+        return None;
+    }
+    loop {
+        let key_start = reader.cursor;
+        reader.string().ok()?;
+        let key_end = reader.cursor;
+        reader.whitespace();
+        reader.required(b':').ok()?;
+        reader.whitespace();
+        let value_start = reader.cursor;
+        reader.value(0).ok()?;
+        let value_end = reader.cursor;
+        if reader.key_matches((key_start, key_end), key) {
+            return reader.bytes.get(value_start..value_end);
+        }
+        reader.whitespace();
+        if reader.consume(b'}') {
+            return None;
+        }
+        reader.required(b',').ok()?;
+        reader.whitespace();
     }
 }
 

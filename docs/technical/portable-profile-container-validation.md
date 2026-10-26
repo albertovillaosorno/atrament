@@ -126,6 +126,32 @@ from a filesystem. Neither this generic lookup nor the sample fixture names
 freeze manifest wire fields, prove a typed manifest's provenance, or authorize
 profile acceptance. A future typed codec still owns those responsibilities.
 
+### Sealed nested JSON views and ordered array projection
+
+A `ValidatedProfileJsonObject` now projects one selected root member into a
+constructor-sealed borrowed `ValidatedProfileJsonValue`. Its six possible
+syntactic kinds are object, array, string, number, boolean, or null. No type
+choice implies any required manifest field or admits a typed profile.
+
+The value view can select an exact decoded member name inside an object or a
+zero-based element inside an array. Missing names, array overruns, and wrong
+value kinds return no view. Each successful projection reuses the already
+validated root's complete grammar, unique decoded key names, and resource
+budget; its returned slice is borrowed from the same original input bytes,
+including numeric and string escape spelling. The decoded name comparison
+remains Unicode-scalar exact without case folding or normalization.
+
+Arrays additionally expose a fused, one-pass iterator returning sealed value
+views in source order without allocating a JSON value collection. The test
+corpus checks empty/nested arrays, wrong-kind selection, extreme indices,
+source pointer provenance, every syntactic value kind and 256-element ordered
+iteration. A CRC-checked stored ZIP fixture demonstrates that nested values
+are borrowed directly from the actual ZIP root, not from reference literals.
+
+**This is still structural JSON projection, not typed schema parsing:** there
+is no canonical JSON writer, selection of manifest field names, semantics for
+unknown fields or numbers, or proof connecting a typed manifest to the ZIP root.
+
 ### Exact entry SHA-256 verifier
 
 The separate profile-entry-sha256 domain computes NIST FIPS 180-4 SHA-256 over

@@ -52,7 +52,7 @@ use atrament_profile_entry_sha256::{
     sha256_profile_bytes, verify_profile_entry_bytes,
 };
 use atrament_profile_json_syntax::{
-    ProfileJsonSyntaxError, ProfileJsonSyntaxLimits,
+    ProfileJsonSyntaxError, ProfileJsonSyntaxLimits, ProfileJsonValueKind,
 };
 use atrament_profile_zip_reader::{
     ProfileZipManifestSyntaxError,
@@ -1062,4 +1062,61 @@ fn sealed_zip_root_lookup_borrows_raw_nested_json_values() {
     assert_eq!(admitted.root_member_json("count"), Some(b"1e+1".as_slice()));
     assert_eq!(admitted.root_member_json("tags"), None);
     assert_eq!(admitted.root_member_json("Sample"), None);
+}
+#[test]
+fn sealed_crc_checked_zip_root_exposes_nested_read_only_json_values() {
+    let root =
+        br#"{"nested":{"rows":[{"id":1},[true,false],"\u0061"]},"id":3}"#;
+    let bytes = make_zip(&[("manifest.json", root, 0xfb5c_b798)]);
+    let archive = read_stored_profile_zip(&bytes, limits())
+        .expect("ZIP payload CRC and framing are correct");
+    let admitted = archive
+        .manifest_json_object(ProfileJsonSyntaxLimits {
+            maximum_bytes: root.len(),
+            maximum_nesting: 4,
+            maximum_object_members: 3,
+            maximum_values: 12,
+        })
+        .expect("ZIP root grammar and unique object keys verified");
+    let nested = admitted
+        .root_member_value("nested")
+        .expect("root object projection");
+    assert_eq!(nested.kind(), Some(ProfileJsonValueKind::Object));
+    let rows = nested.object_member("rows").expect("nested array");
+    let row0 = rows.array_element(0).expect("object row");
+    assert_eq!(
+        row0.object_member("id").expect("integer row value").bytes(),
+        b"1"
+    );
+    let row1 = rows.array_element(1).expect("nested array");
+    assert_eq!(
+        row1.array_element(0).expect("first boolean").bytes(),
+        b"true"
+    );
+    assert_eq!(
+        row1.array_element(1).expect("second boolean").bytes(),
+        b"false"
+    );
+    assert_eq!(row1.array_element(2), None);
+    assert_eq!(
+        rows.array_element(2).expect("escaped string").bytes(),
+        br#""\u0061""#
+    );
+    assert_eq!(rows.array_element(3), None);
+    assert_eq!(nested.object_member("id"), None);
+    assert_eq!(
+        admitted.root_member_value("id").expect("root id").bytes(),
+        b"3"
+    );
+    assert_eq!(admitted.root_member_value("\u{0072}ows"), None);
+    let selected = row0.object_member("id").expect("borrowed value").bytes();
+    assert!(
+        admitted
+            .bytes()
+            .windows(selected.len())
+            .any(|candidate| std::ptr::eq(
+                candidate.as_ptr(),
+                selected.as_ptr()
+            ))
+    );
 }

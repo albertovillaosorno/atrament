@@ -163,3 +163,10 @@ original JSON value bytes, retaining escapes, whitespace and numeric spelling,
 while refusing nested or absent names. ZIP fixtures prove that the projection
 comes from the CRC-checked root entry. Typed schema admission, semantic field
 identity and canonical writing still remain open.
+
+The sealed root JSON evidence now allows read-only nested object-member and
+array-element projections, plus a sequential allocation-free array iterator.
+All views borrow their exact payload bytes; a real CRC-correct ZIP root proves
+nested slices stay bound to the actual ZIP entry. Missing keys and out-of-range
+indices cannot substitute a value. This enables future schema decoding without
+inventing manifest wire names or granting Import authority today.

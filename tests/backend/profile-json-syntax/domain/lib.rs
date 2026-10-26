@@ -34,7 +34,8 @@
 
 use atrament_profile_json_syntax::{
     MAXIMUM_JSON_NESTING, MAXIMUM_JSON_OBJECT_MEMBERS, ProfileJsonSyntaxError,
-    ProfileJsonSyntaxLimits, validate_profile_json_object,
+    ProfileJsonSyntaxLimits, ProfileJsonValueKind,
+    validate_profile_json_object,
 };
 
 const fn limits() -> ProfileJsonSyntaxLimits {
@@ -611,4 +612,223 @@ fn generated_escaped_root_lookup_matches_exact_decoded_names() {
         }
     }
     assert!(cases > 1_000);
+}
+
+#[test]
+fn sealed_json_value_projection_exposes_all_syntax_kinds_without_typing() {
+    let input = concat!(
+        r#"{"object":{},"array":[],"true":true,"false":false,"null":null,"#,
+        r#""number":-1.30e+4,"string":"\u0061"}"#,
+    );
+    let admitted = validate_profile_json_object(input.as_bytes(), limits())
+        .expect("all six ordinary JSON syntactic categories are admitted");
+    for (key, expected, original) in [
+        ("object", ProfileJsonValueKind::Object, "{}"),
+        ("array", ProfileJsonValueKind::Array, "[]"),
+        ("true", ProfileJsonValueKind::Boolean, "true"),
+        ("false", ProfileJsonValueKind::Boolean, "false"),
+        ("null", ProfileJsonValueKind::Null, "null"),
+        ("number", ProfileJsonValueKind::Number, "-1.30e+4"),
+        ("string", ProfileJsonValueKind::String, r#""\u0061""#),
+    ] {
+        let view = admitted.root_member_value(key).expect("admitted member");
+        assert_eq!(view.kind(), Some(expected), "key={key}");
+        assert_eq!(view.bytes(), original.as_bytes(), "key={key}");
+        assert_eq!(admitted.root_member_json(key), Some(view.bytes()));
+        assert_eq!(view.object_member("anything"), None);
+        assert_eq!(view.array_element(0), None);
+    }
+    assert_eq!(admitted.root_member_value("missing"), None);
+}
+
+#[test]
+fn sealed_nested_arrays_and_objects_preserve_unmodified_value_slices() {
+    let json = concat!(
+        r#" { "\u0072oot" : { "list" : [ 1e+2 , {"a" : ["#,
+        r#""\uD83D\uDE00", null]} , [] ]"#,
+        r#", "empty" : {} } } "#,
+    );
+    let admitted = validate_profile_json_object(json.as_bytes(), limits())
+        .expect("nested unicode object and array syntax is valid");
+    let root = admitted
+        .root_member_value("root")
+        .expect("escaped root name");
+    assert_eq!(root.kind(), Some(ProfileJsonValueKind::Object));
+    let list = root.object_member("list").expect("nested list");
+    assert_eq!(list.kind(), Some(ProfileJsonValueKind::Array));
+    assert_eq!(list.array_element(0).expect("number").bytes(), b"1e+2");
+    let first_object = list.array_element(1).expect("nested object");
+    assert_eq!(first_object.kind(), Some(ProfileJsonValueKind::Object));
+    let inner = first_object.object_member("a").expect("inner array");
+    assert_eq!(
+        inner
+            .array_element(0)
+            .expect("escaped astral string")
+            .bytes(),
+        br#""\uD83D\uDE00""#,
+    );
+    assert_eq!(
+        inner.array_element(1).expect("null").kind(),
+        Some(ProfileJsonValueKind::Null),
+    );
+    assert_eq!(inner.array_element(2), None);
+    assert_eq!(
+        list.array_element(2).expect("empty array").array_element(0),
+        None
+    );
+    assert_eq!(list.array_element(3), None);
+    assert_eq!(list.array_element(usize::MAX), None);
+    assert_eq!(
+        root.object_member("list").expect("list").bytes(),
+        list.bytes()
+    );
+    assert_eq!(root.object_member("a"), None);
+    assert_eq!(first_object.object_member("A"), None);
+    assert_eq!(
+        root.object_member("empty")
+            .expect("empty object")
+            .object_member("x"),
+        None
+    );
+    assert_eq!(root.array_element(0), None);
+    let raw = inner.array_element(0).expect("source value").bytes();
+    assert!(
+        json.as_bytes()
+            .windows(raw.len())
+            .any(|candidate| std::ptr::eq(candidate.as_ptr(), raw.as_ptr()))
+    );
+}
+
+#[test]
+fn sealed_array_projection_distinguishes_nested_from_sibling_values() {
+    let bytes = br#"{"items":[[{"v":0}],{"v":1},{"v":2}],"v":3}"#;
+    let admitted =
+        validate_profile_json_object(bytes, limits()).expect("valid");
+    let array = admitted.root_member_value("items").expect("root array");
+    for index in [1, 2] {
+        let observed = array
+            .array_element(index)
+            .expect("object element")
+            .object_member("v")
+            .expect("nested value");
+        let expected = index.to_string();
+        assert_eq!(observed.bytes(), expected.as_bytes());
+    }
+    let deep = array.array_element(0).expect("first child array");
+    assert_eq!(
+        deep.array_element(0)
+            .expect("nested object")
+            .object_member("v")
+            .expect("nested value")
+            .bytes(),
+        b"0"
+    );
+    assert_eq!(array.object_member("v"), None);
+    assert_eq!(
+        admitted.root_member_value("v").expect("root value").bytes(),
+        b"3"
+    );
+}
+
+#[test]
+fn sealed_array_iterator_preserves_order_and_is_fused() {
+    let source = r#"{"list": [true, {"x":1}, [null, 3.0], "\u0061"]}"#;
+    let root = validate_profile_json_object(source.as_bytes(), limits())
+        .expect("syntax admission");
+    let list = root.root_member_value("list").expect("list value");
+    let mut values = list.array_elements().expect("array iterator");
+    for expected in ["true", r#"{"x":1}"#, "[null, 3.0]", r#""\u0061""#] {
+        let next = values.next().expect("next array element");
+        assert_eq!(next.bytes(), expected.as_bytes());
+    }
+    for _ in 0..3 {
+        assert_eq!(values.next(), None, "fused after last item");
+    }
+    let empty = root
+        .root_member_value("list")
+        .expect("list must exist")
+        .array_element(2)
+        .expect("inner array");
+    let mut nested = empty.array_elements().expect("nested iterator");
+    assert_eq!(nested.next().expect("null").bytes(), b"null");
+    assert_eq!(nested.next().expect("decimal").bytes(), b"3.0");
+    assert_eq!(nested.next(), None);
+    assert_eq!(nested.next(), None);
+}
+
+#[test]
+fn array_iterator_empty_and_large_index_do_not_wrap_or_leak() {
+    let source = br#"{"empty":[],"not_array":{},"numbers":[0,1,2]}"#;
+    let root = validate_profile_json_object(source, limits()).expect("valid");
+    let mut empty = root
+        .root_member_value("empty")
+        .expect("array")
+        .array_elements()
+        .expect("empty array iterator");
+    assert_eq!(empty.next(), None);
+    assert_eq!(empty.next(), None);
+    assert_eq!(
+        root.root_member_value("empty")
+            .expect("array")
+            .array_element(0),
+        None
+    );
+    assert_eq!(
+        root.root_member_value("numbers")
+            .expect("array")
+            .array_element(usize::MAX),
+        None
+    );
+    assert!(
+        root.root_member_value("not_array")
+            .expect("object")
+            .array_elements()
+            .is_none()
+    );
+    let values = root
+        .root_member_value("numbers")
+        .expect("array")
+        .array_elements()
+        .expect("iterator");
+    let decoded: Vec<Vec<u8>> =
+        values.map(|value| value.bytes().to_vec()).collect();
+    assert_eq!(decoded, [b"0".to_vec(), b"1".to_vec(), b"2".to_vec()]);
+}
+
+#[test]
+fn bounded_large_arrays_traverse_once_without_hidden_field_mapping() {
+    let members = (0..256usize)
+        .map(|index| format!("{{\"x\":{index}}}"))
+        .collect::<Vec<_>>()
+        .join(",");
+    let source = format!("{{\"rows\":[{members}]}}");
+    let budget = ProfileJsonSyntaxLimits {
+        maximum_bytes: 8_192,
+        maximum_nesting: 3,
+        maximum_object_members: 2,
+        maximum_values: 514,
+    };
+    let root = validate_profile_json_object(source.as_bytes(), budget)
+        .expect("root array with 256 objects and scalar leaves");
+    let rows = root.root_member_value("rows").expect("array");
+    let mut count = 0usize;
+    for (index, row) in rows.array_elements().expect("iterator").enumerate() {
+        assert_eq!(row.kind(), Some(ProfileJsonValueKind::Object));
+        let expected = index.to_string();
+        assert_eq!(
+            row.object_member("x").expect("one member").bytes(),
+            expected.as_bytes()
+        );
+        count = count.saturating_add(1);
+    }
+    assert_eq!(count, 256);
+    assert_eq!(
+        rows.array_element(255)
+            .expect("final row")
+            .object_member("x")
+            .expect("scalar")
+            .bytes(),
+        b"255"
+    );
+    assert_eq!(rows.array_element(256), None);
 }
