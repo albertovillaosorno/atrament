@@ -116,17 +116,19 @@ fn selection_requires_a_nonempty_file_name_component() {
             ExplicitFilePathSource::CallerSelection,
             ExplicitFilePathSource::AdmittedHostPolicy,
         ] {
-            let outcome = classify_explicit_file_path_intent(
-                ExplicitFilePurpose::ExportNotebook,
-                source,
-                PathBuf::from(selected),
-                ExplicitOverwriteIntent::PreserveExisting,
-            );
-            assert_eq!(
-                outcome,
-                Err(ExplicitFilePathIntentError::NoSelectedFile),
-                "selected={selected:?} source={source:?}",
-            );
+            for purpose in PURPOSES {
+                let outcome = classify_explicit_file_path_intent(
+                    purpose,
+                    source,
+                    PathBuf::from(selected),
+                    ExplicitOverwriteIntent::PreserveExisting,
+                );
+                assert_eq!(
+                    outcome,
+                    Err(ExplicitFilePathIntentError::NoSelectedFile),
+                    "path={selected:?} purpose={purpose:?} source={source:?}",
+                );
+            }
         }
     }
 }
