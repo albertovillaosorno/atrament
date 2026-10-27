@@ -297,3 +297,11 @@ caller-owned borrowed ZIP paths directly, including its missing-root failure.
 No additional observed-name vector is needed for that adapter integration;
 selected source authority, root schema decoding, payload digest acceptance and
 session effects remain independently unimplemented.
+
+An opt-in sorted Import preflight now shares the existing path-purpose,
+encoding, budget and typed-manifest gates while avoiding additional inventory
+membership-set allocations on success. It rechecks ZIP-order claims, returns
+typed order/count errors and seals the same inventory as general preflight.
+An 8,192-case sorted mutation corpus and a 65,534-name ZIP32 boundary guard
+acceptance equivalence; the real CRC-checked ZIP fixture checks both paths.
+No typed manifest is constructed from root bytes, and no file is imported.

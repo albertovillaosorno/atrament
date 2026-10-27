@@ -366,3 +366,9 @@ subsets, Unicode names, binary lengths and opaque root payloads through both
 byte writer and checked reader. Every emitted source must reproduce exactly
 from its borrowed entries; a CRC-valid date mutation must clear the fixed
 writer-framing claim without changing member contents.
+
+Already-admitted typed manifests can now seal strictly ordered observed ZIP
+names without allocating a separate inventory set. The sorted path rechecks
+order and membership, returns typed failures, and shares existing Import
+purpose, encoding and budget gates through opt-in read-only preflight.
+The general manifest inventory API remains order-agnostic and unchanged.

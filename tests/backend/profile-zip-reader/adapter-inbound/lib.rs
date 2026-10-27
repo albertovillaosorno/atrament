@@ -48,6 +48,7 @@ use atrament_handwriting_profile_container::{
 use atrament_profile_import_preflight::{
     ProfileImportBudget, ProfileImportPreflightError,
     preflight_explicit_profile_import,
+    preflight_explicit_profile_import_sorted,
 };
 
 use atrament_profile_entry_sha256::{
@@ -386,6 +387,10 @@ fn real_zip_observations_feed_exact_typed_profile_import_preflight() {
         &selected, &manifest, &["strokes"], paths, encoding, budget,
     ).expect("framing and typed inventory agree");
     assert_eq!(inspected.inventory().observed_paths(), paths);
+    let optimized = preflight_explicit_profile_import_sorted(
+        &selected, &manifest, &["strokes"], paths, encoding, budget,
+    ).expect("ZIP-checked sorted names admit without new membership sets");
+    assert_eq!(optimized, inspected);
     assert_eq!(archive.entries()[1].bytes(), b"123456789");
     // The manifest's synthetic SHA-256 is deliberately not verified here:
     // CRC only proves ZIP framing, never cryptographic profile admission.

@@ -291,6 +291,38 @@ impl<'manifest> ValidatedProfileManifest<'manifest> {
         })
     }
 
+    /// Seal sorted archive inventory without allocating membership sets.
+    ///
+    /// Rechecks strict lexicographic UTF-8 path order; no caller's bare claim
+    /// of sortedness is trusted. It validates each observed non-root path,
+    /// requires the exact root, and binary-searches that name sequence for
+    /// every already-admitted unique typed declaration. Equal entry counts
+    /// and complete declared membership then exclude undeclared extra names.
+    /// The result is the same constructor-sealed inventory evidence as the
+    /// general, order-agnostic validator, not a decoded archive or Import.
+    ///
+    /// # Errors
+    ///
+    /// Rejects unsafe names, duplicate/decreasing paths, missing root or
+    /// declared members, and undeclared extra names. This optimized sorted
+    /// path has distinct ordering and count diagnostics from the general
+    /// inventory validator, which remains unchanged for arbitrary input order.
+    pub fn admit_sorted_entry_inventory<'observed>(
+        &self,
+        observed_paths: &'observed [&'observed str],
+    ) -> Result<
+        ValidatedProfileEntryInventory<'manifest, 'observed>,
+        ProfileEntryInventoryError,
+    > {
+        validate_profile_entry_inventory_sorted_admitted(
+            self.manifest, observed_paths,
+        )?;
+        Ok(ValidatedProfileEntryInventory {
+            manifest: self.manifest,
+            observed_paths,
+        })
+    }
+
     /// Return canonical archive paths without revalidating this manifest.
     #[must_use]
     pub fn canonical_archive_paths(&self) -> Vec<&'manifest str> {
@@ -443,6 +475,20 @@ pub enum ProfileEntryInventoryError {
     },
     /// The archive contains no root `manifest.json`.
     MissingManifest,
+    /// An explicitly sorted archive-name view decreases between two names.
+    NonCanonicalObservedEntryOrder {
+        /// The preceding exact source path.
+        earlier: String,
+        /// The later out-of-order source path.
+        later: String,
+    },
+    /// An explicitly sorted view has extra undeclared archive members.
+    ObservedCountMismatch {
+        /// Total declared member count, including the required root.
+        expected: usize,
+        /// Number of independently observed member names.
+        observed: usize,
+    },
     /// One observed non-manifest entry has no manifest declaration.
     UndeclaredObservedEntry {
         /// Undeclared observed archive path retained exactly for diagnostics.
@@ -549,6 +595,62 @@ pub fn validate_profile_entry_inventory(
     )
     .map_err(|reason| ProfileEntryInventoryError::InvalidManifest { reason })?;
     validated.validate_entry_inventory(observed_paths)
+}
+
+// The ZIP reader seals strictly increasing names, but this method checks the
+// order again: it must not trust caller-provided &str references as proof.
+// The success path uses no heap-backed set and scales as O(m log n).
+fn validate_profile_entry_inventory_sorted_admitted(
+    manifest: &ProfileManifest,
+    observed_paths: &[&str],
+) -> Result<(), ProfileEntryInventoryError> {
+    let mut previous: Option<&str> = None;
+    let mut root_seen = false;
+    for path in observed_paths {
+        if let Some(earlier) = previous {
+            if earlier == *path {
+                return Err(
+                    ProfileEntryInventoryError::DuplicateObservedEntryPath {
+                        path: String::from(*path),
+                    },
+                );
+            }
+            if earlier > *path {
+                return Err(
+                    ProfileEntryInventoryError::NonCanonicalObservedEntryOrder {
+                        earlier: String::from(earlier),
+                        later: String::from(*path),
+                    },
+                );
+            }
+        }
+        previous = Some(path);
+        if *path == PROFILE_MANIFEST_PATH {
+            root_seen = true;
+        } else if let Err(reason) = validate_profile_entry_path(path) {
+            return Err(ProfileEntryInventoryError::InvalidObservedEntryPath {
+                path: String::from(*path), reason,
+            });
+        }
+    }
+    if !root_seen {
+        return Err(ProfileEntryInventoryError::MissingManifest);
+    }
+    for entry in &manifest.entries {
+        if observed_paths.binary_search(&entry.path.as_str()).is_err() {
+            return Err(ProfileEntryInventoryError::MissingDeclaredEntry {
+                path: entry.path.clone(),
+            });
+        }
+    }
+    let expected = manifest.entries.len().saturating_add(1);
+    if observed_paths.len() != expected {
+        return Err(ProfileEntryInventoryError::ObservedCountMismatch {
+            expected,
+            observed: observed_paths.len(),
+        });
+    }
+    Ok(())
 }
 
 fn validate_profile_entry_inventory_admitted(

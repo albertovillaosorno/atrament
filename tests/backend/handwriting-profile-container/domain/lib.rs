@@ -510,6 +510,13 @@ fn generated_archive_inventory_mutations_match_reference_oracle() {
             Err(ProfileEntryInventoryError::MissingManifest) => {
                 saw_missing_manifest = true;
             },
+            Err(ProfileEntryInventoryError::NonCanonicalObservedEntryOrder {
+                ..
+            } | ProfileEntryInventoryError::ObservedCountMismatch {
+                ..
+            }) => {
+                panic!("generic oracle cannot return sorted errors");
+            },
             Err(ProfileEntryInventoryError::UndeclaredObservedEntry { .. }) => {
                 saw_undeclared_observed = true;
             },
@@ -1538,4 +1545,160 @@ fn generated_full_range_entry_evidence_matches_reference_precedence() {
     assert!(saw_length_mismatch);
     assert!(saw_digest_mismatch);
     assert!(saw_valid);
+}
+
+#[test]
+fn sealed_sorted_inventory_matches_general_admission_without_allocated_sets() {
+    let value = manifest(vec![
+        entry("sections/strokes.json", "application/json", 7),
+        entry("assets/ñ.webp", "image/webp", 9),
+    ]);
+    let admitted =
+        validate_profile_manifest_view(&value, &["stroke-vocabulary"])
+            .expect("valid typed manifest may keep unsorted declarations");
+    let paths = ["assets/ñ.webp", "manifest.json", "sections/strokes.json"];
+    let sorted = admitted.admit_sorted_entry_inventory(&paths)
+        .expect("strictly increasing exact inventory is admitted");
+    let general = admitted.admit_entry_inventory(&paths)
+        .expect("general set-based comparison must agree");
+    assert_eq!(sorted, general);
+    assert_eq!(sorted.manifest(), &value);
+    assert_eq!(sorted.observed_paths(), paths);
+    assert!(std::ptr::eq(sorted.observed_paths()[0].as_ptr(),
+        paths[0].as_ptr()));
+    let evidence = ProfileEntryEvidence {
+        byte_length: 9,
+        digest: digest(9),
+    };
+    assert!(sorted.verify_entry("assets/ñ.webp", evidence)
+        .expect("same exact typed declaration").is_some());
+}
+
+#[test]
+fn sorted_inventory_fails_closed_for_inversion_duplicate_and_extra_names() {
+    let value = manifest(vec![
+        entry("sections/strokes.json", "application/json", 7),
+        entry("assets/sample.webp", "image/webp", 9),
+    ]);
+    let admitted =
+        validate_profile_manifest_view(&value, &["stroke-vocabulary"])
+            .expect("admitted manifest has safe unique paths");
+    for (observed, expected) in [
+        (vec!["assets/sample.webp", "assets/sample.webp", "manifest.json"],
+            ProfileEntryInventoryError::DuplicateObservedEntryPath {
+                path: String::from("assets/sample.webp"),
+            }),
+        (vec!["manifest.json", "assets/sample.webp", "sections/strokes.json"],
+            ProfileEntryInventoryError::NonCanonicalObservedEntryOrder {
+                earlier: String::from("manifest.json"),
+                later: String::from("assets/sample.webp"),
+            }),
+        (vec!["assets/sample.webp", "sections/strokes.json"],
+            ProfileEntryInventoryError::MissingManifest),
+        (vec!["manifest.json", "sections/strokes.json"],
+            ProfileEntryInventoryError::MissingDeclaredEntry {
+                path: String::from("assets/sample.webp"),
+            }),
+        (vec!["assets/extra.webp", "assets/sample.webp", "manifest.json",
+            "sections/strokes.json"],
+            ProfileEntryInventoryError::ObservedCountMismatch {
+                expected: 3,
+                observed: 4,
+            }),
+        (vec!["assets/../sample.webp", "manifest.json",
+            "sections/strokes.json"],
+            ProfileEntryInventoryError::InvalidObservedEntryPath {
+                path: String::from("assets/../sample.webp"),
+                reason: ProfileEntryPathError::TraversalSegment,
+            }),
+    ] {
+        assert_eq!(admitted.admit_sorted_entry_inventory(&observed),
+            Err(expected));
+    }
+    assert_eq!(admitted.admit_sorted_entry_inventory(&[
+        "assets/extra.webp", "manifest.json", "sections/strokes.json",
+    ]), Err(ProfileEntryInventoryError::MissingDeclaredEntry {
+        path: String::from("assets/sample.webp"),
+    }));
+}
+
+#[test]
+fn sorted_inventory_handles_largest_ordinary_zip32_path_count() {
+    const NONROOT_COUNT: usize = 65_533;
+    let entries = (0..NONROOT_COUNT)
+        .map(|index| entry(&format!("assets/{index:05}.bin"),
+            "application/octet-stream", 0))
+        .collect::<Vec<_>>();
+    let value = manifest(entries);
+    let admitted =
+        validate_profile_manifest_view(&value, &["stroke-vocabulary"])
+            .expect("large but finitely bounded typed declaration");
+    let mut observed = value.entries.iter()
+        .map(|entry| entry.path.as_str()).collect::<Vec<_>>();
+    observed.push(PROFILE_MANIFEST_PATH);
+    let sealed = admitted.admit_sorted_entry_inventory(&observed)
+        .expect("65534 sorted observed names admit without membership sets");
+    assert_eq!(sealed.observed_paths().len(), NONROOT_COUNT + 1);
+    assert!(std::ptr::eq(sealed.observed_paths()[0].as_ptr(),
+        observed[0].as_ptr()));
+    let _removed_root = observed.pop();
+    assert_eq!(admitted.admit_sorted_entry_inventory(&observed),
+        Err(ProfileEntryInventoryError::MissingManifest));
+}
+
+#[test]
+fn generated_sorted_inventory_admission_matches_general_success_semantics() {
+    let value = manifest(vec![
+        entry("sections/ñ.json", "application/json", 2),
+        entry("assets/🖌️.webp", "image/webp", 1),
+        entry("sections/x.json", "application/json", 4),
+        entry("assets/a.webp", "image/webp", 3),
+    ]);
+    let admitted =
+        validate_profile_manifest_view(&value, &["stroke-vocabulary"])
+            .expect("same manifest for both inventory validators");
+    let choices = [
+        "assets/a.webp", "assets/extra.webp", "assets/🖌️.webp",
+        "manifest.json", "sections/x.json", "sections/ñ.json",
+        "sections/z.json",
+    ];
+    let mut seed = 0x4154_5241_4d45_4e54u64;
+    let mut saw_admission = false;
+    let mut saw_rejection = false;
+    for case in 0..8_192usize {
+        seed = seed.wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
+        let mask = usize::try_from((seed >> 16) & 127)
+            .expect("seven-bit selection mask");
+        let mut paths = choices.iter().enumerate()
+            .filter(|(index, _path)| (mask & (1 << index)) != 0)
+            .map(|(_index, path)| *path)
+            .collect::<Vec<_>>();
+        if case % 5 == 0 && !paths.is_empty() {
+            paths.insert(0, paths[0]);
+        }
+        let general = admitted.admit_entry_inventory(&paths);
+        let sorted = admitted.admit_sorted_entry_inventory(&paths);
+        assert_eq!(general.is_ok(), sorted.is_ok(),
+            "sorted names preserve general admission case={case}");
+        if general.is_ok() {
+            saw_admission = true;
+            assert_eq!(general, sorted);
+        } else {
+            saw_rejection = true;
+        }
+    }
+    assert!(saw_admission);
+    assert!(saw_rejection);
+    let reversed = [
+        "manifest.json", "assets/a.webp", "assets/🖌️.webp",
+        "sections/x.json", "sections/ñ.json",
+    ];
+    assert!(admitted.admit_entry_inventory(&reversed).is_ok());
+    assert!(matches!(
+        admitted.admit_sorted_entry_inventory(&reversed),
+        Err(ProfileEntryInventoryError::NonCanonicalObservedEntryOrder {
+            ..
+        }),
+    ));
 }

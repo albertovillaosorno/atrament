@@ -47,6 +47,12 @@ use atrament_handwriting_profile_container::{
     validate_profile_manifest_view,
 };
 
+#[derive(Clone, Copy)]
+enum ProfileImportInventoryMode {
+    General,
+    Sorted,
+}
+
 /// Caller-selected upper bounds for an admitted portable-profile archive.
 ///
 /// These apply to manifest declarations, not yet verified ZIP payload bytes.
@@ -234,6 +240,24 @@ pub fn preflight_explicit_profile_import<'path, 'manifest, 'observed>(
     ProfileImportPreflight<'path, 'manifest, 'observed>,
     ProfileImportPreflightError,
 > {
+    preflight_profile_import_with_inventory_mode(
+        path, manifest, supported_required_features, observed_paths,
+        encoding, budget, ProfileImportInventoryMode::General,
+    )
+}
+
+fn preflight_profile_import_with_inventory_mode<'path, 'manifest, 'observed>(
+    path: &'path ExplicitFilePathIntent,
+    manifest: &'manifest ProfileManifest,
+    supported_required_features: &[&str],
+    observed_paths: &'observed [&'observed str],
+    encoding: ProfileArchiveEncodingEvidence,
+    budget: ProfileImportBudget,
+    mode: ProfileImportInventoryMode,
+) -> Result<
+    ProfileImportPreflight<'path, 'manifest, 'observed>,
+    ProfileImportPreflightError,
+> {
     if path.purpose() != ExplicitFilePurpose::ImportProfile {
         return Err(ProfileImportPreflightError::WrongPathPurpose);
     }
@@ -254,13 +278,49 @@ pub fn preflight_explicit_profile_import<'path, 'manifest, 'observed>(
         manifest, supported_required_features,
     )
     .map_err(ProfileImportPreflightError::Manifest)?;
-    let inventory = validated
-        .admit_entry_inventory(observed_paths)
-        .map_err(ProfileImportPreflightError::EntryInventory)?;
+    let inventory = match mode {
+        ProfileImportInventoryMode::General => {
+            validated.admit_entry_inventory(observed_paths)
+        },
+        ProfileImportInventoryMode::Sorted => {
+            validated.admit_sorted_entry_inventory(observed_paths)
+        },
+    }.map_err(ProfileImportPreflightError::EntryInventory)?;
     Ok(ProfileImportPreflight {
         archive_encoding,
         budget,
         inventory,
         path,
     })
+}
+
+/// Compose explicit profile Import preflight with a sorted ZIP view.
+///
+/// This reuses the general Import path-purpose, encoding, resource and typed
+/// manifest gates in the same order. Only the final observed-name inventory
+/// uses `ValidatedProfileManifest::admit_sorted_entry_inventory`: it rechecks
+/// strict UTF-8 lexicographic ordering and performs a bounded, allocation-free
+/// search of the validated observed-name slice rather than allocating separate
+/// inventory sets. The supplied names need not be trusted as already sorted.
+/// The result is still read-only evidence, not filesystem or Import authority.
+///
+/// # Errors
+///
+/// Returns the same early failures as `preflight_explicit_profile_import`,
+/// with additional strict-order/count failures for the sorted inventory path.
+pub fn preflight_explicit_profile_import_sorted<'path, 'manifest, 'observed>(
+    path: &'path ExplicitFilePathIntent,
+    manifest: &'manifest ProfileManifest,
+    supported_required_features: &[&str],
+    observed_paths: &'observed [&'observed str],
+    encoding: ProfileArchiveEncodingEvidence,
+    budget: ProfileImportBudget,
+) -> Result<
+    ProfileImportPreflight<'path, 'manifest, 'observed>,
+    ProfileImportPreflightError,
+> {
+    preflight_profile_import_with_inventory_mode(
+        path, manifest, supported_required_features, observed_paths,
+        encoding, budget, ProfileImportInventoryMode::Sorted,
+    )
 }

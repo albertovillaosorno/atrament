@@ -128,6 +128,19 @@ The existing read-only explicit Import preflight integration now consumes
 this caller-owned borrowed path slice, including a missing-root rejection,
 without separately allocating a list of observed archive names.
 
+For callers that already have strictly ordered ZIP names, the typed
+`ValidatedProfileManifest::admit_sorted_entry_inventory` performs its own
+order/path checks and uses binary searches to prove every declared member.
+It constructs the same sealed inventory without allocating new membership sets.
+An opt-in `preflight_explicit_profile_import_sorted` shares all existing path,
+encoding, resource-budget and manifest gates with the general Import preflight.
+
+The sorted comparison rejects duplicates, decreasing order, missing root,
+missing declared members and unexpected extra names with typed diagnostics.
+An 8,192-case generated comparison checks agreement on acceptance with the
+existing order-agnostic validator. A 65,534-name fixture exercises the ZIP32
+entry ceiling, and the read-only real-ZIP fixture compares both preflights.
+
 The typed manifest must still be parsed, checked and matched against those
 observations, and SHA-256 must be independently measured before any section
 interpretation or profile acceptance. ZIP64, archive-file I/O, canonical JSON,

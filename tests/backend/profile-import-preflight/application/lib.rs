@@ -49,7 +49,9 @@ use atrament_handwriting_profile_container::{
 };
 use atrament_profile_import_preflight::{
     ProfileImportBudget, ProfileImportBudgetError, ProfileImportPreflightError,
-    preflight_explicit_profile_import, validate_profile_import_budget,
+    preflight_explicit_profile_import,
+    preflight_explicit_profile_import_sorted,
+    validate_profile_import_budget,
 };
 
 fn selected(purpose: ExplicitFilePurpose) -> ExplicitFilePathIntent {
@@ -477,4 +479,65 @@ fn resource_budget_checks_observed_archive_names_before_allocating_inventory() {
         &path, &parsed, &["strokes"], OBSERVED,
         canonical_encoding(), exact,
     ).is_ok());
+}
+
+#[test]
+fn sorted_import_preflight_preserves_early_gates_and_exact_admission() {
+    let parsed = manifest();
+    let sorted = [
+        "assets/source.webp", "manifest.json", "sections/strokes.json",
+    ];
+    let selected_path = selected(ExplicitFilePurpose::ImportProfile);
+    let original = preflight_explicit_profile_import(
+        &selected_path, &parsed, &["strokes"], &sorted,
+        canonical_encoding(), budget(),
+    ).expect("general inventory accepts exact declaration set");
+    let optimized = preflight_explicit_profile_import_sorted(
+        &selected_path, &parsed, &["strokes"], &sorted,
+        canonical_encoding(), budget(),
+    ).expect("sorted inventory uses the same preflight gates");
+    assert_eq!(optimized, original);
+    assert_eq!(optimized.inventory().observed_paths(), sorted);
+    assert!(std::ptr::eq(optimized.path(), &selected_path));
+    assert!(std::ptr::eq(optimized.inventory().manifest(), &parsed));
+    assert_eq!(preflight_explicit_profile_import_sorted(
+        &selected_path, &parsed, &["strokes"], OBSERVED,
+        canonical_encoding(), budget(),
+    ), Err(ProfileImportPreflightError::EntryInventory(
+        ProfileEntryInventoryError::NonCanonicalObservedEntryOrder {
+            earlier: String::from("sections/strokes.json"),
+            later: String::from("manifest.json"),
+        },
+    )));
+    assert!(preflight_explicit_profile_import(
+        &selected_path, &parsed, &["strokes"], OBSERVED,
+        canonical_encoding(), budget(),
+    ).is_ok(), "general API retains arbitrary-order support");
+    let wrong = selected(ExplicitFilePurpose::ExportProfile);
+    assert_eq!(preflight_explicit_profile_import_sorted(
+        &wrong, &parsed, &["strokes"], OBSERVED,
+        canonical_encoding(), budget(),
+    ), Err(ProfileImportPreflightError::WrongPathPurpose));
+    let unsupported = ProfileArchiveEncodingEvidence {
+        entry_encoding: ProfileArchiveEntryEncoding::Compressed,
+        ..canonical_encoding()
+    };
+    assert_eq!(preflight_explicit_profile_import_sorted(
+        &selected_path, &parsed, &["strokes"], OBSERVED,
+        unsupported, budget(),
+    ), Err(ProfileImportPreflightError::ArchiveEncoding(
+        ProfileArchiveEncodingError::CompressedEntry,
+    )));
+    assert_eq!(preflight_explicit_profile_import_sorted(
+        &selected_path, &parsed, &["strokes"], OBSERVED,
+        canonical_encoding(), ProfileImportBudget {
+            maximum_entries: 1,
+            ..budget()
+        },
+    ), Err(ProfileImportPreflightError::Budget(
+        ProfileImportBudgetError::EntryCountExceeded {
+            limit: 1,
+            observed: 2,
+        },
+    )));
 }
