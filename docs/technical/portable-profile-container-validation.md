@@ -375,6 +375,13 @@ extra bytes fail with the first observed overrun, and early EOF reports the
 short observed count before digest comparison. Errors from the original
 reader remain `std::io::Error` values, including errors during EOF probing.
 
+This EOF proof is scoped to the provided `Read` view, not automatically to its
+underlying filesystem source. In particular, `Read::take` can manufacture
+an apparently complete stream even when the original reader contains extra
+bytes. Regression tests document that distinction, and future trusted
+adapters must bind reader scope, source authority and actual transport length
+independently before any Import acceptance.
+
 Synthetic reader fixtures exercise short reads, the 8 KiB boundary, empty
 entries, changed digests, injected read errors and refused byte budgets. A
 CRC-checked ZIP fixture confirms that a changed payload remains detectable

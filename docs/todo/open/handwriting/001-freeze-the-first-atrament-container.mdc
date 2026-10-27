@@ -268,3 +268,7 @@ already-open `Read` sources through fixed 8 KiB buffers. It preflights byte
 budgets before reading and verifies exact EOF using a single extra-byte probe.
 Tests distinguish short EOF, excess content, original read errors and changed
 SHA-256 after CRC-correct ZIP framing. No typed wire names are chosen.
+
+A reader-view regression demonstrates that artificial EOF from `Read::take`
+cannot prove the hidden underlying source's true end. Independent trusted
+source scope and transport length must still be established by future Import.

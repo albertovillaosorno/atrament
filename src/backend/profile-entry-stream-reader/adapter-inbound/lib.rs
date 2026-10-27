@@ -77,6 +77,10 @@ pub enum ProfileEntryStreamReadError {
 ///
 /// A partial or early EOF yields the observed length, not a guessed digest.
 /// A non-EOF `io::Error` is preserved instead of being treated as EOF.
+/// EOF refers **only to the supplied `Read` view**: wrappers such as
+/// `Read::take` can manufacture an EOF while an underlying source still has
+/// more bytes. The caller must independently prove that its reader exposes
+/// the complete intended source before interpreting verified evidence.
 /// Host deadlines, blocking, cancellation and stream closure remain the
 /// responsibility of the caller and are not enforced by this function.
 ///

@@ -377,3 +377,61 @@ fn oversized_source_with_large_declared_prefix_reads_only_one_extra_byte() {
     assert_eq!(source.source.position(), (expected.len() + 1) as u64);
     assert!(source.requested_max <= PROFILE_STREAM_READ_BUFFER_BYTES);
 }
+
+#[test]
+fn eof_is_proven_only_for_supplied_reader_not_hidden_upstream_sources() {
+    let expected = b"first nine";
+    let actual_source = b"first nine + additional bytes";
+    let entry = declaration(expected);
+    let mut physically_unbounded = Cursor::new(actual_source.as_slice());
+    assert!(matches!(
+        verify_profile_entry_from_reader(
+            &mut physically_unbounded,
+            &entry,
+            expected.len() as u64,
+        ),
+        Err(ProfileEntryStreamReadError::Verification(
+            ProfileChunkVerificationError::Entry(
+                ProfileEntryVerificationError::ByteLengthMismatch { .. },
+            ),
+        ))
+    ));
+    assert_eq!(physically_unbounded.position(), (expected.len() + 1) as u64);
+
+    // std::io::Take is allowed to manufacture EOF at its own limit.
+    // SHA success here is restricted to the caller-supplied Take view and
+    // cannot attest the hidden original source is exactly this long.
+    let cursor = Cursor::new(actual_source.as_slice());
+    let mut restricted = cursor.take(expected.len() as u64);
+    let accepted = verify_profile_entry_from_reader(
+        &mut restricted,
+        &entry,
+        expected.len() as u64,
+    )
+    .expect("exact supplied Take view hashes correctly");
+    assert_eq!(accepted.digest, entry.digest);
+    assert_eq!(restricted.get_ref().position(), expected.len() as u64);
+    assert!(restricted.get_ref().get_ref().len() > expected.len());
+}
+
+#[test]
+fn read_error_before_length_fails_even_when_declared_sha_matches_prefix() {
+    let complete = b"abcd";
+    let entry = declaration(complete);
+    let mut source = FailAtOffset {
+        source: Cursor::new(complete.as_slice()),
+        kind: ErrorKind::UnexpectedEof,
+        after_bytes: 3,
+        calls: 0,
+    };
+    // The upstream I/O error is not the same as observing a clean EOF at
+    // byte three, and it must not be reclassified as length mismatch.
+    let observed = verify_profile_entry_from_reader(&mut source, &entry, 4);
+    match observed {
+        Err(ProfileEntryStreamReadError::Input(error)) => {
+            assert_eq!(error.kind(), ErrorKind::UnexpectedEof);
+        }
+        other => panic!("upstream failure lost: {other:?}"),
+    }
+    assert_eq!(source.source.position(), 3);
+}

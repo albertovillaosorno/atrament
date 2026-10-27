@@ -246,3 +246,10 @@ declarations before I/O, hashes in fixed 8 KiB space and requires exact EOF
 without buffering whole members. Original I/O errors stay distinct from a
 short stream, excess bytes and digest mismatch. Trusted file opening, stream
 timeouts, path authority and accepted-profile mutation remain future work.
+
+Transport verification currently proves EOF only for the reader view supplied
+by the trusted adapter, not necessarily the physical source beneath wrappers.
+`Read::take` can hide trailing original bytes, so the eventual selected-file
+reader must bind the complete original source scope and length independently.
+The verifier explicitly tests and documents this distinction; it cannot serve
+as proof of a selected source by itself.
