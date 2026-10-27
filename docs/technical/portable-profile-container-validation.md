@@ -383,7 +383,11 @@ adapters must bind reader scope, source authority and actual transport length
 independently before any Import acceptance.
 
 Synthetic reader fixtures exercise short reads, the 8 KiB boundary, empty
-entries, changed digests, injected read errors and refused byte budgets. A
+entries, changed digests, injected read errors and refused byte budgets.
+Malformed `Read` implementations that report more bytes than the supplied
+buffer are rejected as `InvalidData` without unsafe slicing. Premature zero
+reads remain EOF failures rather than permitting a retry loop to consume later
+hidden bytes. A
 CRC-checked ZIP fixture confirms that a changed payload remains detectable
 when ZIP framing and CRC have been updated consistently. The adapter never
 opens a path, establishes trusted source selection, decodes a section or

@@ -253,3 +253,7 @@ by the trusted adapter, not necessarily the physical source beneath wrappers.
 reader must bind the complete original source scope and length independently.
 The verifier explicitly tests and documents this distinction; it cannot serve
 as proof of a selected source by itself.
+
+Adversarial `Read` fixtures also reject impossible reported byte counts without
+panicking and treat premature zero counts as EOF, not a way to retry hidden
+bytes. The selected host transport must still ensure truthful Read semantics.

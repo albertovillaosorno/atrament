@@ -435,3 +435,60 @@ fn read_error_before_length_fails_even_when_declared_sha_matches_prefix() {
     }
     assert_eq!(source.source.position(), 3);
 }
+
+#[test]
+fn invalid_reader_count_cannot_expand_slice_or_panic() {
+    struct InvalidLengthReader {
+        calls: usize,
+    }
+    impl Read for InvalidLengthReader {
+        fn read(&mut self, output: &mut [u8]) -> io::Result<usize> {
+            self.calls = self.calls.saturating_add(1);
+            Ok(output.len().saturating_add(1))
+        }
+    }
+    let entry = declaration(b"abc");
+    let mut source = InvalidLengthReader { calls: 0 };
+    let outcome = verify_profile_entry_from_reader(&mut source, &entry, 3);
+    match outcome {
+        Err(ProfileEntryStreamReadError::Input(error)) => {
+            assert_eq!(error.kind(), ErrorKind::InvalidData);
+        }
+        other => panic!("invalid Read contract did not fail closed: {other:?}"),
+    }
+    assert_eq!(source.calls, 1);
+}
+
+#[test]
+fn premature_zero_count_is_not_retried_into_hidden_later_bytes() {
+    struct PrematureEof {
+        calls: usize,
+    }
+    impl Read for PrematureEof {
+        fn read(&mut self, output: &mut [u8]) -> io::Result<usize> {
+            self.calls = self.calls.saturating_add(1);
+            if self.calls == 1 {
+                return Ok(0);
+            }
+            if let Some(slot) = output.get_mut(0) {
+                *slot = b'a';
+            }
+            Ok(1)
+        }
+    }
+    let entry = declaration(b"a");
+    let mut source = PrematureEof { calls: 0 };
+    let result = verify_profile_entry_from_reader(&mut source, &entry, 1);
+    assert!(matches!(
+        result,
+        Err(ProfileEntryStreamReadError::Verification(
+            ProfileChunkVerificationError::Entry(
+                ProfileEntryVerificationError::ByteLengthMismatch {
+                    declared: 1,
+                    observed: 0,
+                },
+            ),
+        )),
+    ));
+    assert_eq!(source.calls, 1, "no later bytes were used to bypass EOF");
+}
