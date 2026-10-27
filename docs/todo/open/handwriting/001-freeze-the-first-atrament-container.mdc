@@ -420,3 +420,14 @@ rejection, and a real stored ZIP whose source-attached decoded manifest passes
 complete SHA-256 payload verification. This closes only the manifest JSON
 writer prerequisite: there is no full profile Export adapter, physical file
 authorization, section serializer, ZIP64 implementation, or session acceptance.
+
+The canonical JSON writer additionally exposes exact-size planning and
+caller-owned slice emission. Both reuse the allocating writer's typed admission,
+limit checks, sorted ordering and byte emitter, including JSON string escaping.
+A short slice reports the exact required count without mutating any slot; extra
+capacity stays untouched.
+
+A 512-case deterministic manifest corpus compares both byte-for-byte,
+independently decodes the result and confirms a canonical round trip. This is
+bounded in-memory serialization only; it creates neither a complete profile
+artifact nor authorized filesystem Export.

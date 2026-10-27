@@ -60,6 +60,11 @@ pub enum ProfileManifestJsonWriteError {
     AllocationFailed,
     /// A feature or entry list exceeded the caller's count ceiling.
     ArrayLimitExceeded(&'static str),
+    /// Caller-owned output is smaller than the exact planned JSON length.
+    DestinationTooSmall {
+        /// Exact canonical manifest size in bytes.
+        required: usize,
+    },
     /// One internal encoding invariant was unexpectedly violated.
     InternalEncoding,
     /// Typed metadata fails the existing container admission contract.
@@ -96,12 +101,55 @@ impl JsonSink for JsonCounter {
     }
 }
 
+struct JsonSliceSink<'buffer> {
+    buffer: &'buffer mut [u8],
+    position: usize,
+}
+
+impl JsonSink for JsonSliceSink<'_> {
+    fn emit(
+        &mut self, bytes: &[u8],
+    ) -> Result<(), ProfileManifestJsonWriteError> {
+        let end = self.position
+            .checked_add(bytes.len())
+            .ok_or(ProfileManifestJsonWriteError::InternalEncoding)?;
+        let target = self.buffer
+            .get_mut(self.position..end)
+            .ok_or(ProfileManifestJsonWriteError::InternalEncoding)?;
+        target.copy_from_slice(bytes);
+        self.position = end;
+        Ok(())
+    }
+}
+
 impl JsonSink for Vec<u8> {
     fn emit(
         &mut self, bytes: &[u8],
     ) -> Result<(), ProfileManifestJsonWriteError> {
         self.extend_from_slice(bytes);
         Ok(())
+    }
+}
+
+struct CanonicalManifestPlan<'manifest> {
+    bytes: usize,
+    entries: Vec<&'manifest ProfileManifestEntry>,
+    manifest: &'manifest ProfileManifest,
+    optional: Vec<&'manifest str>,
+    required: Vec<&'manifest str>,
+}
+
+impl CanonicalManifestPlan<'_> {
+    fn emit<S>(
+        &self,
+        sink: &mut S,
+    ) -> Result<(), ProfileManifestJsonWriteError>
+    where
+        S: JsonSink,
+    {
+        append_manifest(
+            sink, self.manifest, &self.entries, &self.required, &self.optional,
+        )
     }
 }
 
@@ -262,28 +310,11 @@ where
     Ok(sorted)
 }
 
-/// Serialize a validated first-release manifest as deterministic UTF-8 JSON.
-///
-/// Object keys use ASCII lexical order, non-manifest entries sort by exact
-/// path bytes, feature lists sort by UTF-8 bytes, and unsigned sizes use plain
-/// decimal digits. Strings retain literal UTF-8 except JSON-required escapes,
-/// encoded without optional whitespace or a trailing newline. This is a
-/// first-release writer policy: section payloads and ZIP are separate.
-///
-/// All declaration and size checks, including an exact JSON byte count, run
-/// before allocating the final output vector. An invalid manifest or
-/// insufficient budget yields no partial serialized output. Required feature
-/// support is independently supplied by the caller; source values confer no
-/// filesystem Export intent and do not verify declared payload hashes.
-///
-/// # Errors
-///
-/// Refuses list/string/output limits and existing typed manifest failures.
-pub fn write_canonical_profile_manifest_json(
-    manifest: &ProfileManifest,
+fn plan_canonical_manifest<'manifest>(
+    manifest: &'manifest ProfileManifest,
     supported_required_features: &[&str],
     limits: ProfileManifestJsonWriteLimits,
-) -> Result<Vec<u8>, ProfileManifestJsonWriteError> {
+) -> Result<CanonicalManifestPlan<'manifest>, ProfileManifestJsonWriteError> {
     if manifest.entries.len() > limits.maximum_entries {
         return Err(ProfileManifestJsonWriteError::ArrayLimitExceeded(
             "entries",
@@ -329,15 +360,104 @@ pub fn write_canonical_profile_manifest_json(
         limit: limits.maximum_bytes,
     };
     append_manifest(&mut counter, manifest, &entries, &required, &optional)?;
+    Ok(CanonicalManifestPlan {
+        bytes: counter.count,
+        entries,
+        manifest,
+        optional,
+        required,
+    })
+}
+
+/// Return the exact canonical JSON byte length without allocating output.
+///
+/// The same typed admission, list, string, and byte-budget checks as the
+/// allocating writer run before producing a count. Sorting may reserve
+/// bounded metadata references but never allocates serialized output.
+///
+/// # Errors
+///
+/// Refuses the same invalid inputs as the two canonical JSON writers.
+pub fn planned_canonical_profile_manifest_json_bytes(
+    manifest: &ProfileManifest,
+    supported_required_features: &[&str],
+    limits: ProfileManifestJsonWriteLimits,
+) -> Result<usize, ProfileManifestJsonWriteError> {
+    Ok(plan_canonical_manifest(
+        manifest, supported_required_features, limits,
+    )?.bytes)
+}
+
+/// Write canonical JSON into caller-owned memory with no output allocation.
+///
+/// A short destination is rejected with the exact required byte count before
+/// touching any slot. Extra capacity is not changed. All admission, limits,
+/// and sorting checks precede emission; this function cannot create an
+/// authorized Export or verify accompanying section payloads.
+///
+/// # Errors
+///
+/// Refuses invalid manifests or inadequate destination capacity before writing.
+pub fn write_canonical_profile_manifest_json_into(
+    manifest: &ProfileManifest,
+    supported_required_features: &[&str],
+    limits: ProfileManifestJsonWriteLimits,
+    destination: &mut [u8],
+) -> Result<usize, ProfileManifestJsonWriteError> {
+    let plan = plan_canonical_manifest(
+        manifest, supported_required_features, limits,
+    )?;
+    if destination.len() < plan.bytes {
+        return Err(ProfileManifestJsonWriteError::DestinationTooSmall {
+            required: plan.bytes,
+        });
+    }
+    let mut sink = JsonSliceSink {
+        buffer: destination,
+        position: 0,
+    };
+    plan.emit(&mut sink)?;
+    debug_assert_eq!(
+        sink.position, plan.bytes,
+        "caller-owned emission must match exact bounded JSON plan",
+    );
+    Ok(sink.position)
+}
+
+/// Serialize a validated first-release manifest as deterministic UTF-8 JSON.
+///
+/// Object keys use ASCII lexical order, non-manifest entries sort by exact
+/// path bytes, feature lists sort by UTF-8 bytes, and unsigned sizes use plain
+/// decimal digits. Strings retain literal UTF-8 except JSON-required escapes,
+/// encoded without optional whitespace or a trailing newline. This is a
+/// first-release writer policy: section payloads and ZIP are separate.
+///
+/// All declaration and size checks, including an exact JSON byte count, run
+/// before allocating the final output vector. An invalid manifest or
+/// insufficient budget yields no partial serialized output. Required feature
+/// support is independently supplied by the caller; source values confer no
+/// filesystem Export intent and do not verify declared payload hashes.
+///
+/// # Errors
+///
+/// Refuses list/string/output limits and existing typed manifest failures.
+pub fn write_canonical_profile_manifest_json(
+    manifest: &ProfileManifest,
+    supported_required_features: &[&str],
+    limits: ProfileManifestJsonWriteLimits,
+) -> Result<Vec<u8>, ProfileManifestJsonWriteError> {
+    let plan = plan_canonical_manifest(
+        manifest, supported_required_features, limits,
+    )?;
     let mut output = Vec::new();
     output
-        .try_reserve_exact(counter.count)
+        .try_reserve_exact(plan.bytes)
         .map_err(|_allocation| {
             ProfileManifestJsonWriteError::AllocationFailed
         })?;
-    append_manifest(&mut output, manifest, &entries, &required, &optional)?;
+    plan.emit(&mut output)?;
     debug_assert_eq!(
-        output.len(), counter.count,
+        output.len(), plan.bytes,
         "emission must match exact bounded JSON plan",
     );
     Ok(output)

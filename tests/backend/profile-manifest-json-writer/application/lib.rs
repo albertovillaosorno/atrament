@@ -53,7 +53,9 @@ use atrament_profile_manifest_json_codec::{
 };
 use atrament_profile_manifest_json_writer::{
     ProfileManifestJsonWriteError as Error, ProfileManifestJsonWriteLimits,
+    planned_canonical_profile_manifest_json_bytes,
     write_canonical_profile_manifest_json,
+    write_canonical_profile_manifest_json_into,
 };
 use atrament_profile_stored_zip_writer::{
     ProfileStoredZipMember, ProfileStoredZipWriteLimits,
@@ -350,4 +352,124 @@ fn canonical_manifest_in_stored_zip_passes_source_attached_hash_checks() {
     assert_eq!(verified.root_sha256(), sha256_profile_bytes(&root_bytes));
     assert_eq!(verified.archive_sha256(), sha256_profile_bytes(&zip));
     assert_eq!(encode(verified.manifest()), root_bytes);
+}
+
+#[test]
+fn caller_owned_output_is_atomic_on_short_and_invalid_inputs() {
+    let manifest = fixture();
+    let bytes = encode(&manifest);
+    let required = planned_canonical_profile_manifest_json_bytes(
+        &manifest, &["layout", "strokes"], limits(),
+    ).unwrap();
+    assert_eq!(required, bytes.len());
+
+    for size in [0, 1, required - 1] {
+        let mut destination = vec![0x5au8; size];
+        assert_eq!(
+            write_canonical_profile_manifest_json_into(
+                &manifest, &["strokes", "layout"],
+                limits(), &mut destination,
+            ),
+            Err(Error::DestinationTooSmall { required }),
+        );
+        assert!(destination.iter().all(|&byte| byte == 0x5a));
+    }
+
+    for size in [required, required + 1, required + 16] {
+        let mut destination = vec![0x5au8; size];
+        assert_eq!(
+            write_canonical_profile_manifest_json_into(
+                &manifest, &["layout", "strokes"],
+                limits(), &mut destination,
+            ),
+            Ok(required),
+        );
+        assert_eq!(&destination[..required], &bytes);
+        assert!(destination[required..].iter().all(|&b| b == 0x5a));
+    }
+
+    let mut destination = vec![0x5au8; required + 16];
+    let mut too_small = limits();
+    too_small.maximum_bytes = required - 1;
+    assert_eq!(
+        write_canonical_profile_manifest_json_into(
+            &manifest, &["layout", "strokes"],
+            too_small, &mut destination,
+        ),
+        Err(Error::ManifestTooLarge),
+    );
+    assert_eq!(
+        planned_canonical_profile_manifest_json_bytes(
+            &manifest, &["layout", "strokes"], too_small,
+        ),
+        Err(Error::ManifestTooLarge),
+    );
+    assert!(destination.iter().all(|&byte| byte == 0x5a));
+
+    let mut invalid = manifest.clone();
+    invalid.required_features.push("unknown".into());
+    assert!(matches!(
+        write_canonical_profile_manifest_json_into(
+            &invalid, &["layout", "strokes"],
+            limits(), &mut destination,
+        ),
+        Err(Error::Manifest(
+            ProfileManifestError::UnsupportedRequiredFeature { .. }
+        )),
+    ));
+    assert!(destination.iter().all(|&byte| byte == 0x5a));
+}
+
+#[test]
+fn caller_owned_and_allocating_outputs_agree_across_512_manifests() {
+    let mut state = 0x4930_fab2_7511_280du64;
+    for iteration in 0..512 {
+        state = state
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
+        let mut manifest = fixture();
+        manifest.profile_identity = format!(
+            "profile-{iteration}-{}-\n\u{0000}🖋ñ\\\"",
+            state % 10_000,
+        );
+        if state & 1 != 0 {
+            manifest.required_features.reverse();
+        }
+        if state & 2 != 0 {
+            manifest.optional_features.reverse();
+        }
+        let count = usize::try_from((state >> 4) % 5).unwrap();
+        for index in 0..count {
+            let path = if (state >> (index + 10)) & 1 == 0 {
+                format!("sections/{index:02}-ñ.json")
+            } else {
+                format!("assets/{index:02}-🖋.bin")
+            };
+            let mut declaration = entry(&path, b"payload");
+            declaration.byte_length = u64::MAX - index as u64;
+            declaration.digest = Sha256Digest::from_bytes(
+                [u8::try_from(index * 17).unwrap(); 32],
+            );
+            manifest.entries.push(declaration);
+        }
+        if state & 4 != 0 {
+            manifest.entries.reverse();
+        }
+        let owned = encode(&manifest);
+        let required = planned_canonical_profile_manifest_json_bytes(
+            &manifest, &["layout", "strokes"], limits(),
+        ).unwrap();
+        assert_eq!(required, owned.len(), "iteration {iteration}");
+        let mut destination = vec![0xa5; required + 7];
+        assert_eq!(
+            write_canonical_profile_manifest_json_into(
+                &manifest, &["layout", "strokes"],
+                limits(), &mut destination,
+            ),
+            Ok(required),
+        );
+        assert_eq!(&destination[..required], &owned, "iteration {iteration}");
+        assert_eq!(&destination[required..], &[0xa5; 7]);
+        assert_eq!(encode(&decode(&destination[..required])), owned);
+    }
 }
