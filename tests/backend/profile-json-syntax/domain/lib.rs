@@ -1452,3 +1452,90 @@ fn low_surrogates_alone_never_become_unicode_scalars() {
         }
     }
 }
+
+#[test]
+fn sealed_nested_object_projection_reaches_exact_maximum_nesting() {
+    let levels = MAXIMUM_JSON_NESTING;
+    let source = format!("{}0{}", "{\"k\":".repeat(levels), "}".repeat(levels));
+    let caps = ProfileJsonSyntaxLimits {
+        maximum_bytes: source.len(),
+        maximum_nesting: levels,
+        maximum_object_members: 1,
+        maximum_values: levels + 1,
+    };
+    let root = validate_profile_json_object(source.as_bytes(), caps)
+        .expect("root plus 63 nested objects fit the hard nesting cap");
+    assert_eq!(root.value_count(), levels + 1);
+    let mut current = root.root_field("k").expect("first member").value();
+    for _ in 1..levels {
+        current = current
+            .object_field("k")
+            .expect("inner object at a validated depth")
+            .value();
+    }
+    assert_eq!(current.kind(), Some(ProfileJsonValueKind::Number));
+    assert_eq!(current.unsigned_integer(), Some(0));
+    assert_eq!(current.object_field("k"), None);
+    assert_eq!(current.array_element(0), None);
+    assert!(
+        root.bytes()
+            .windows(current.bytes().len())
+            .any(|slice| std::ptr::eq(
+                slice.as_ptr(),
+                current.bytes().as_ptr()
+            ))
+    );
+
+    let too_deep = format!(
+        "{}0{}",
+        "{\"k\":".repeat(levels + 1),
+        "}".repeat(levels + 1)
+    );
+    let rejected = validate_profile_json_object(
+        too_deep.as_bytes(),
+        ProfileJsonSyntaxLimits {
+            maximum_bytes: too_deep.len(),
+            maximum_nesting: usize::MAX,
+            maximum_object_members: usize::MAX,
+            maximum_values: usize::MAX,
+        },
+    );
+    assert_eq!(
+        rejected,
+        Err(ProfileJsonSyntaxError::MaximumNestingExceeded)
+    );
+}
+
+#[test]
+fn sealed_nested_array_projection_reaches_exact_maximum_nesting() {
+    let levels = MAXIMUM_JSON_NESTING - 1;
+    let source = format!(
+        "{{\"chain\":{}true{}}}",
+        "[".repeat(levels),
+        "]".repeat(levels)
+    );
+    let root = validate_profile_json_object(
+        source.as_bytes(),
+        ProfileJsonSyntaxLimits {
+            maximum_bytes: source.len(),
+            maximum_nesting: MAXIMUM_JSON_NESTING,
+            maximum_object_members: 1,
+            maximum_values: levels + 2,
+        },
+    )
+    .expect("root object and nested arrays meet hard ceiling");
+    let mut current = root.root_member_value("chain").expect("array");
+    for _ in 0..levels {
+        assert_eq!(current.kind(), Some(ProfileJsonValueKind::Array));
+        assert_eq!(
+            current.array_elements().expect("array iterator").count(),
+            1
+        );
+        assert_eq!(current.array_element(1), None);
+        current = current.array_element(0).expect("nested one-item array");
+    }
+    assert_eq!(current.kind(), Some(ProfileJsonValueKind::Boolean));
+    assert_eq!(current.boolean(), Some(true));
+    assert_eq!(current.array_element(0), None);
+    assert_eq!(current.bytes(), b"true");
+}

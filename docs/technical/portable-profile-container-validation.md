@@ -106,8 +106,12 @@ source ranges and a fast fingerprint, always checking actual decoded names
 when fingerprints match. No object member text is copied to the heap.
 
 A generated regression checks more than 4,000 escaped-versus-plain name
-pairs across varied key lengths and character positions. Independent real-ZIP
-fixtures prove that valid CRC-32 framing cannot hide duplicate names or evade
+pairs across varied key lengths and character positions. Separate sealed
+projection tests traverse nested objects and arrays at the exact hard 64-level
+ceiling, verify source-pointer provenance at the deepest scalar, and confirm
+that an additional object level is rejected rather than silently admitted.
+Independent real-ZIP fixtures prove that valid CRC-32 framing cannot hide
+duplicate names or evade
 caller object-member limits.
 
 **This gate still does not parse manifest fields, enforce canonical JSON wire
