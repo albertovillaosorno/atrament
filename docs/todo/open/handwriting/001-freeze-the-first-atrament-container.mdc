@@ -313,3 +313,8 @@ as a borrow and exposes its archive-wide SHA-256 without copying. An
 independent Python `hashlib` golden and changed-member regression distinguish
 the whole-ZIP fingerprint from the existing root JSON fingerprint. Neither
 fingerprint proves a signature, typed manifest authority or accepted Import.
+
+Writer-to-reader integration now preserves archive and root SHA-256 for an
+independently checked four-member ZIP golden. Another test admits two distinct
+CRC32-colliding assets as valid stored ZIP frames and proves only the complete
+archive SHA-256 distinguishes their exact source bytes. CRC is not authority.

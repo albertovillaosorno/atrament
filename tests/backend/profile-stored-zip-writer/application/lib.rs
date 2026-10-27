@@ -355,6 +355,8 @@ fn many_generated_sorted_payloads_are_stable_and_reader_admitted() {
         let output = write_stored_profile_zip(&members, limits())
             .expect("bounded sorted members");
         let parsed = parse_bytes(&output);
+        assert_eq!(parsed.source_bytes(), output);
+        assert_eq!(parsed.source_sha256(), sha256_profile_bytes(&output));
         assert_eq!(parsed.entries().len(), members.len());
         for (expected, observed) in members.iter().zip(parsed.entries()) {
             assert_eq!(observed.name(), expected.name);
@@ -671,6 +673,20 @@ fn independent_python_multimember_zipfile_golden_sha256_is_stable() {
         "1451e12dd97e666c89c7f752c92b3530520b1bbdc07df3cc244959b52d986553"
     );
     let parsed = parse_bytes(&archived);
+    assert_eq!(parsed.source_bytes(), archived);
+    assert!(std::ptr::eq(parsed.source_bytes().as_ptr(),
+        archived.as_ptr()));
+    assert_eq!(parsed.source_sha256().bytes(), digest);
+    let root = parsed.admitted_root_json(ProfileJsonSyntaxLimits {
+        maximum_bytes: 100,
+        maximum_nesting: 3,
+        maximum_object_members: 4,
+        maximum_values: 4,
+    }).expect("source-borrowed root grammar is valid");
+    assert_eq!(root.source_sha256(),
+        sha256_profile_bytes(b"{\"test\":true}"));
+    assert_ne!(root.source_sha256(), parsed.source_sha256());
+    assert!(std::ptr::eq(root.archive(), &parsed));
     for (record, original) in parsed.entries().iter().zip(source) {
         assert_eq!(record.name(), original.name);
         assert_eq!(record.bytes(), original.bytes);

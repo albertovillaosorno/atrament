@@ -1665,3 +1665,44 @@ fn structurally_checked_archive_hash_is_not_root_syntax_acceptance() {
     }).err(), Some(ProfileZipManifestSyntaxError::Json(
         ProfileJsonSyntaxError::Malformed)));
 }
+
+#[test]
+fn crc32_collision_cannot_hide_changed_archive_sha256_source() {
+    // Two independently generated 8-byte sources collide under Python zlib:
+    // CRC32 = 0x8b69ccdd for both, but their SHA-256 must remain distinct.
+    let first_asset: [u8; 8] = [
+        0x04, 0x2e, 0x53, 0x5d, 0x01, 0xc1, 0x96, 0x7a,
+    ];
+    let second_asset: [u8; 8] = [
+        0xfa, 0xed, 0x87, 0xb3, 0xe8, 0x47, 0x20, 0x2d,
+    ];
+    let first = make_zip(&[
+        ("assets/mark.webp", &first_asset, 0x8b69_ccdd),
+        ("manifest.json", b"{}", 0xa3a6_bf43),
+    ]);
+    let second = make_zip(&[
+        ("assets/mark.webp", &second_asset, 0x8b69_ccdd),
+        ("manifest.json", b"{}", 0xa3a6_bf43),
+    ]);
+    assert_ne!(first, second);
+    assert_eq!(first.len(), second.len());
+    let first_archive = read_stored_profile_zip(&first, limits())
+        .expect("first CRC-correct collision frame");
+    let second_archive = read_stored_profile_zip(&second, limits())
+        .expect("second CRC-correct collision frame");
+    assert_eq!(first_archive.entries()[0].crc32(), 0x8b69_ccdd);
+    assert_eq!(second_archive.entries()[0].crc32(), 0x8b69_ccdd);
+    assert_ne!(first_archive.entries()[0].bytes(),
+        second_archive.entries()[0].bytes());
+    assert_ne!(first_archive.source_sha256(), second_archive.source_sha256());
+    let caps = ProfileJsonSyntaxLimits {
+        maximum_bytes: 2,
+        maximum_nesting: 1,
+        maximum_object_members: 1,
+        maximum_values: 1,
+    };
+    assert_eq!(first_archive.admitted_root_json(caps)
+        .expect("same root").source_sha256(),
+        second_archive.admitted_root_json(caps)
+            .expect("same root").source_sha256());
+}

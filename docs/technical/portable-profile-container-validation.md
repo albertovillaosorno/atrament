@@ -101,6 +101,12 @@ member: the **archive fingerprint changes**, while the **root JSON fingerprint
 remains identical**. This establishes exact scope, not a cryptographic
 signature, selected filesystem source authority or typed profile admission.
 
+A deterministic Python `zlib` fixture also supplies two different eight-byte
+assets with identical CRC-32. Both remain valid stored ZIP frames, but their
+archive-wide SHA-256 fingerprints differ while their root fingerprints stay
+equal. CRC-32 protects ZIP framing against accidental damage; it is not a
+cryptographic identity or authenticity guarantee.
+
 ### Deterministic ordinary stored-ZIP byte writer
 
 The separate `atrament_profile_stored_zip_writer` application frames
