@@ -327,3 +327,9 @@ bounded memory without allocating another archive-sized output vector. Exact
 size preflight occurs before any mutation, with atomic too-small refusal and
 unchanged surplus bytes. This remains byte-only framing, not a canonical
 manifest serializer, authorized Export target or atomic filesystem commit.
+
+The read-only Export-byte/Import-byte boundary test now connects caller-owned
+ZIP writer output to CRC-checked reading, source-backed encoding observations,
+bounded borrowed path views, sorted typed inventory and complete SHA-256 entry
+verification. A ten-case matrix additionally proves that both writers and
+planning refuse the same malformed or over-budget inputs before output writes.

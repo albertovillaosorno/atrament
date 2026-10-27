@@ -379,7 +379,18 @@ fn emitted_archive_can_verify_complete_typed_inventory_and_sha256() {
     ];
     let byte_archive = write_stored_profile_zip(&members, limits())
         .expect("deterministic ZIP framing");
-    let parsed = parse_bytes(&byte_archive);
+    let mut output = vec![0xe3u8; byte_archive.len() + 7];
+    assert_eq!(
+        write_stored_profile_zip_into(&members, limits(), &mut output,),
+        Ok(byte_archive.len())
+    );
+    assert_eq!(&output[..byte_archive.len()], byte_archive.as_slice());
+    assert_eq!(&output[byte_archive.len()..], &[0xe3; 7]);
+    let parsed = parse_bytes(&output[..byte_archive.len()]);
+    assert!(atrament_handwriting_profile_container::
+        validate_profile_archive_encoding_view(
+            parsed.encoding_evidence(),
+        ).is_ok());
     let typed = ProfileManifest {
         container_version: PROFILE_CONTAINER_VERSION.into(),
         entries: vec![
@@ -403,10 +414,11 @@ fn emitted_archive_can_verify_complete_typed_inventory_and_sha256() {
     };
     let declared = validate_profile_manifest_view(&typed, &[])
         .expect("typed declaration is valid independently");
-    let names = parsed.observed_paths();
+    let mut names = ["unmodified"; 3];
+    assert_eq!(parsed.copy_observed_paths(&mut names), Ok(3));
     let inventory = declared
-        .admit_entry_inventory(&names)
-        .expect("exact sorted archive member inventory");
+        .admit_sorted_entry_inventory(&names)
+        .expect("exact source-borrowed sorted ZIP inventory");
     let verified = verify_admitted_profile_zip_payloads(&parsed, inventory)
         .expect("all emitted members match typed digests");
     assert_eq!(verified.verified_entry_count(), 2);
@@ -540,8 +552,19 @@ fn dry_run_and_writer_share_fail_closed_preflight_error_categories() {
     for (input, bound) in cases {
         let planned = planned_stored_profile_zip_bytes(input, bound);
         let written = write_stored_profile_zip(input, bound);
+        let mut sentinel = [0xb7u8; 256];
+        let bounded =
+            write_stored_profile_zip_into(input, bound, &mut sentinel);
         assert!(planned.is_err());
         assert_eq!(planned, written.map(|bytes| bytes.len()));
+        assert_eq!(
+            bounded, planned,
+            "byte storage cannot mask a preflight failure"
+        );
+        assert_eq!(
+            sentinel, [0xb7; 256],
+            "failed inputs never partially overwrite caller storage"
+        );
     }
 }
 

@@ -237,6 +237,15 @@ preflight error precedence before any destination mutation and untouched extra
 capacity. The full 65,534-entry ordinary ZIP32 golden is reproduced exactly in
 caller-owned memory, including SHA-256 and its seven-megabyte framing budget.
 
+The cross-component read-only writer/reader/typed-inventory test now starts
+with caller-owned ZIP bytes, checks the sealed ZIP-derived encoding evidence,
+copies exact member-name references into bounded storage and admits sorted
+inventory without a new membership set. It verifies all declared member
+SHA-256 digests against those unchanged output bytes before exposing any
+member payload to downstream code. A ten-case error matrix also confirms that
+planning, allocating writing and caller-owned writing return identical input
+preflight errors before modifying caller storage.
+
 `planned_stored_profile_zip_bytes` also returns the exact archive byte count
 without allocating or computing CRC-32. It shares every path, order, budget and
 ZIP32-limit check with actual writing; tests compare accepted output lengths
