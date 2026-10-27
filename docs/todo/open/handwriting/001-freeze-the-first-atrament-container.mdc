@@ -262,3 +262,9 @@ borrowed, nonzero-sized chunk iterators without allocating a second payload.
 A typed member is absent only when its exact name is missing; a present empty
 asset yields a valid iterator with zero chunks. All slices retain their source
 provenance, and no new source or Import authority is created.
+
+The independent `profile-entry-stream-reader` inbound adapter now hashes
+already-open `Read` sources through fixed 8 KiB buffers. It preflights byte
+budgets before reading and verifies exact EOF using a single extra-byte probe.
+Tests distinguish short EOF, excess content, original read errors and changed
+SHA-256 after CRC-correct ZIP framing. No typed wire names are chosen.

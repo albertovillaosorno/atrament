@@ -1,0 +1,9 @@
+identity:
+  id: function:profile-entry-stream-reader
+  name: profile-entry-stream-reader
+  path: src/backend/profile-entry-stream-reader
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: adapter-inbound

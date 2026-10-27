@@ -361,6 +361,27 @@ path-authority grant.
 
 None of this freezes typed manifest field names or introduces actual file I/O.
 
+### Bounded verification from already opened byte readers
+
+The separate `atrament_profile_entry_stream_reader` inbound adapter now accepts
+an already-open `std::io::Read` source, one typed entry declaration, and an
+independent maximum byte budget. It refuses oversized or SHA-unrepresentable
+declarations *before the first read*, then hashes using a fixed 8 KiB stack
+buffer without retaining another copy of the source payload.
+
+The adapter reads no more than the declared length plus one probe byte. An
+exact prefix is not admitted without an actual successful EOF observation;
+extra bytes fail with the first observed overrun, and early EOF reports the
+short observed count before digest comparison. Errors from the original
+reader remain `std::io::Error` values, including errors during EOF probing.
+
+Synthetic reader fixtures exercise short reads, the 8 KiB boundary, empty
+entries, changed digests, injected read errors and refused byte budgets. A
+CRC-checked ZIP fixture confirms that a changed payload remains detectable
+when ZIP framing and CRC have been updated consistently. The adapter never
+opens a path, establishes trusted source selection, decodes a section or
+accepts an Import; blocking, cancellation and host deadlines remain external.
+
 ### Complete stored member SHA-256 projection
 
 The ZIP inbound adapter can now take a constructor-sealed declared-versus-

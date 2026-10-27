@@ -12,6 +12,7 @@ atrament_profile_json_syntax = { workspace = true }
 
 [dev-dependencies]
 atrament_explicit_file_path_intent = { workspace = true }
+atrament_profile_entry_stream_reader = { workspace = true }
 atrament_profile_import_preflight = { workspace = true }
 
 [lib]

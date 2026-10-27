@@ -1,0 +1,21 @@
+[package]
+name = "atrament_profile_entry_stream_reader"
+version = "0.1.0"
+edition = "2024"
+publish = false
+license = "MIT"
+
+[dependencies]
+atrament_handwriting_profile_container = { workspace = true }
+atrament_profile_entry_sha256 = { workspace = true }
+
+[lib]
+path = "adapter-inbound/lib.rs"
+test = false
+
+[lints]
+workspace = true
+
+[[test]]
+name = "profile_entry_stream_reader_adapter_inbound"
+path = "../../../tests/backend/profile-entry-stream-reader/adapter-inbound/lib.rs"

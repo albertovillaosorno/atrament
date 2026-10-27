@@ -34,6 +34,7 @@
 //! Deterministic real ZIP byte fixtures and mutation corpus.
 
 use std::num::NonZeroUsize;
+use std::io::Cursor;
 use std::path::PathBuf;
 
 use atrament_explicit_file_path_intent::{
@@ -53,6 +54,7 @@ use atrament_profile_entry_sha256::{
     ProfileChunkVerificationError, ProfileSha256State, sha256_profile_bytes,
     verify_profile_entry_bytes, verify_profile_entry_chunks,
 };
+use atrament_profile_entry_stream_reader::verify_profile_entry_from_reader;
 use atrament_profile_json_syntax::{
     ProfileJsonPathSegment, ProfileJsonStringCopyError,
     ProfileJsonSyntaxError, ProfileJsonSyntaxLimits, ProfileJsonValueKind,
@@ -1455,4 +1457,52 @@ fn sealed_verified_empty_asset_produces_zero_chunks_not_missing() {
             .verified_entry_chunks("manifest.json", size)
             .is_none()
     );
+}
+
+#[test]
+fn actual_crc_checked_zip_member_matches_bounded_reader_sha256_evidence() {
+    let archived = make_zip(&ENTRIES);
+    let zip = read_stored_profile_zip(&archived, limits())
+        .expect("stored ZIP passes local/central and CRC checks");
+    let bytes = zip.entries().iter().find(|entry|
+        entry.name() == "sections/strokes.json")
+        .expect("stored member present")
+        .bytes();
+    let manifest_entry = ProfileManifestEntry {
+        byte_length: 9,
+        digest: sha256_profile_bytes(b"123456789"),
+        media_type: "application/json".into(),
+        path: "sections/strokes.json".into(),
+    };
+    let mut source = Cursor::new(bytes);
+    let evidence = verify_profile_entry_from_reader(&mut source,
+        &manifest_entry, 9).expect("preopened CRC member has correct SHA");
+    assert_eq!(evidence.byte_length, 9);
+    assert_eq!(evidence.digest, manifest_entry.digest);
+    assert_eq!(source.position(), 9);
+    assert!(std::ptr::eq(source.get_ref().as_ptr(), bytes.as_ptr()));
+
+    let tampered_zip = make_zip(&[
+        ENTRIES[0],
+        ("sections/strokes.json", b"123456788", 0xbcf3_09b0),
+    ]);
+    let changed = read_stored_profile_zip(&tampered_zip, limits())
+        .expect("updated CRC still passes weak ZIP integrity");
+    let modified = changed.entries().iter().find(|entry|
+        entry.name() == "sections/strokes.json")
+        .expect("stored member present")
+        .bytes();
+    let mut source = Cursor::new(modified);
+    let observed = verify_profile_entry_from_reader(
+        &mut source, &manifest_entry, 9,
+    );
+    assert!(matches!(observed,
+        Err(atrament_profile_entry_stream_reader::
+            ProfileEntryStreamReadError::Verification(
+                ProfileChunkVerificationError::Entry(
+                    atrament_handwriting_profile_container::
+                        ProfileEntryVerificationError::DigestMismatch,
+                ),
+            )),
+    ));
 }

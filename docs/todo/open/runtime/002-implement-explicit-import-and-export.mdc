@@ -239,3 +239,10 @@ nonzero-sized chunks, including distinct present-empty and absent cases.
 Future section importers can consume those exact slices without whole-payload
 copies; format decoding, source authorization, filesystem I/O and session
 acceptance must still be implemented independently.
+
+A bounded inbound reader-verification adapter now accepts only an independently
+preopened byte source and a typed entry declaration. It refuses over-budget
+declarations before I/O, hashes in fixed 8 KiB space and requires exact EOF
+without buffering whole members. Original I/O errors stay distinct from a
+short stream, excess bytes and digest mismatch. Trusted file opening, stream
+timeouts, path authority and accepted-profile mutation remain future work.
