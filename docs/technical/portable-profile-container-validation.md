@@ -56,6 +56,14 @@ extra-field, archive-comment, foreign-platform and other unsupported encodings
 rather than trying alternate decoders. Unsafe paths are passed through the
 shared portable-profile path validator before member bytes are exposed.
 
+The reader also records whether every checked ZIP entry has the deterministic
+writer's fixed metadata: extraction/creator versions 20, the UTF-8 filename
+flag, and zero DOS timestamps. `matches_fixed_writer_metadata()` is a
+read-only, allocation-free indicator; legacy ordinary stored ZIP variants may
+remain readable while returning `false`. Exact content SHA-256 fingerprints
+still include those different metadata bytes. This indicator does **not**
+prove canonical manifest JSON, typed profile identity, or Import authority.
+
 The reader recomputes ZIP CRC-32 over each bounded stored entry. This checks
 transport framing only: **CRC-32 does not establish manifest SHA-256
 integrity**. An additional root-manifest accessor checks a caller-chosen byte

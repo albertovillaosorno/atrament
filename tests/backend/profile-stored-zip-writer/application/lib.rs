@@ -92,6 +92,7 @@ fn stable_root_only_archive_has_correct_fixed_header_and_directory() {
     assert_eq!(first.get(14..18), Some(&[0x43, 0xbf, 0xa6, 0xa3][..]));
     assert_eq!(first.get(26..30), Some(&[13, 0, 0, 0][..]));
     let archive = parse_bytes(&first);
+    assert!(archive.matches_fixed_writer_metadata());
     assert_eq!(archive.entries().len(), 1);
     assert_eq!(archive.manifest_utf8(2), Ok("{}"));
     assert_eq!(archive.entries()[0].crc32(), 0xa3a6_bf43);
@@ -108,6 +109,7 @@ fn sorted_utf8_names_and_empty_asset_round_trip_byte_for_byte() {
     let output = write_stored_profile_zip(&entries, limits())
         .expect("canonical name order");
     let parsed = parse_bytes(&output);
+    assert!(parsed.matches_fixed_writer_metadata());
     assert_eq!(parsed.entries().len(), entries.len());
     for (admitted, original) in parsed.entries().iter().zip(entries) {
         assert_eq!(admitted.name(), original.name);
@@ -785,6 +787,7 @@ fn largest_ordinary_zip32_entry_count_round_trips_without_zip64() {
     };
     let parsed = read_stored_profile_zip(&bytes, read_limits)
         .expect("strict index accepts maximal ordinary ZIP count");
+    assert!(parsed.matches_fixed_writer_metadata());
     assert_eq!(parsed.entries().len(), maximum_ordinary_entries);
     assert_eq!(parsed.entries()[0].name(), "assets/00000.bin");
     assert_eq!(parsed.entries()[maximum_ordinary_entries - 2].name(),

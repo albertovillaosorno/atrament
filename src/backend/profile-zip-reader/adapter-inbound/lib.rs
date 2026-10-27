@@ -144,6 +144,7 @@ impl<'bytes> ProfileZipEntry<'bytes> {
 pub struct ProfileZipArchive<'bytes> {
     entries: Vec<ProfileZipEntry<'bytes>>,
     source: &'bytes [u8],
+    writer_metadata_matches: bool,
 }
 
 /// Constructor-sealed pairing of CRC-checked ZIP framing and its exact,
@@ -262,6 +263,19 @@ impl<'bytes> ProfileZipArchive<'bytes> {
             .ok_or(ProfileZipReadError::InvalidManifestUtf8)
     }
 
+    /// Whether accepted ZIP headers match the deterministic stored writer.
+    ///
+    /// The writer emits version 20, a UTF-8 filename flag and zero dates and
+    /// timestamps for every member, including its central creator version.
+    /// Other ordinary stored ZIP metadata can remain valid for reading, but
+    /// does not match those exact writer framing choices. This is only ZIP
+    /// header evidence: JSON canonicalization, typed manifest acceptance,
+    /// archive authenticity and Import authority are still unproven.
+    #[must_use]
+    pub const fn matches_fixed_writer_metadata(&self) -> bool {
+        self.writer_metadata_matches
+    }
+
     /// Extract borrowed exact archive names for manifest inventory preflight.
     #[must_use]
     pub fn observed_paths(&self) -> Vec<&'bytes str> {
@@ -370,6 +384,7 @@ impl<'manifest, 'bytes> VerifiedProfileZipPayloads<'manifest, '_, 'bytes> {
 #[derive(Clone, Copy)]
 struct CentralEntry<'bytes> {
     crc32: u32,
+    creator: u16,
     flags: u16,
     length: u32,
     local_offset: u32,
@@ -473,6 +488,7 @@ fn parse_central_entry(
         .ok_or(ProfileZipReadError::ResourceLimit)?;
     Ok(CentralEntry {
         crc32,
+        creator,
         flags,
         length,
         local_offset,
@@ -614,8 +630,14 @@ pub fn read_stored_profile_zip(
     entries.try_reserve_exact(usize::from(all_entries))
         .map_err(|_allocation| ProfileZipReadError::AllocationFailed)?;
     let mut previous_name: Option<&str> = None;
+    let mut writer_metadata_matches = true;
     for _ in 0..usize::from(all_entries) {
         let central = parse_central_entry(bytes, cursor)?;
+        writer_metadata_matches &= central.creator == 20
+            && central.version == 20
+            && central.flags == 0x0800
+            && central.modified_date == 0
+            && central.modified_time == 0;
         if previous_name.is_some_and(|name| name >= central.name) {
             return Err(ProfileZipReadError::NonCanonical);
         }
@@ -645,7 +667,11 @@ pub fn read_stored_profile_zip(
     if cursor != trailer || local_end != directory_start {
         return Err(ProfileZipReadError::InvalidStructure);
     }
-    Ok(ProfileZipArchive { entries, source: bytes })
+    Ok(ProfileZipArchive {
+        entries,
+        source: bytes,
+        writer_metadata_matches,
+    })
 }
 
 /// Verify all admitted member bytes against one exact ZIP archive.

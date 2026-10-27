@@ -1782,3 +1782,70 @@ fn seeded_zip_mutations_preserve_exact_member_identity_on_any_valid_read() {
     assert!(failure_classes.len() >= 4,
         "multiple independent framing failures must be exercised");
 }
+
+#[test]
+fn accepted_noncanonical_zip_headers_do_not_claim_fixed_writer_metadata() {
+    let input = make_zip(&[("manifest.json", b"{}", 0xa3a6_bf43)]);
+    let baseline = read_stored_profile_zip(&input, limits())
+        .expect("fixed writer-like archive is valid");
+    assert!(baseline.matches_fixed_writer_metadata());
+    let central = central_start(&input);
+    for (case, local_field, central_field, bytes) in [
+        ("creator version", None, 4, [10, 0]),
+        ("extractor version", Some(4), 6, [10, 0]),
+        ("ASCII UTF-8 flag", Some(6), 8, [0, 0]),
+        ("DOS modified time", Some(10), 12, [1, 0]),
+        ("DOS modified date", Some(12), 14, [1, 0]),
+    ] {
+        let mut changed = input.clone();
+        if let Some(local) = local_field {
+            changed[local..local + 2].copy_from_slice(&bytes);
+        }
+        changed[central + central_field..central + central_field + 2]
+            .copy_from_slice(&bytes);
+        let archive = read_stored_profile_zip(&changed, limits())
+            .expect("legacy stored metadata remains readable");
+        assert!(!archive.matches_fixed_writer_metadata(), "{case}");
+        assert_eq!(archive.entries()[0].name(), "manifest.json", "{case}");
+        assert_eq!(archive.entries()[0].bytes(), b"{}", "{case}");
+        assert_eq!(archive.entries()[0].crc32(), 0xa3a6_bf43, "{case}");
+        assert_ne!(archive.source_sha256(), baseline.source_sha256(),
+            "raw archive metadata still contributes to source identity");
+        assert_eq!(archive.admitted_root_json(ProfileJsonSyntaxLimits {
+            maximum_bytes: 2,
+            maximum_nesting: 1,
+            maximum_object_members: 1,
+            maximum_values: 1,
+        }).expect("valid root syntax").source_sha256(),
+        sha256_profile_bytes(b"{}"), "{case}");
+    }
+}
+
+#[test]
+fn fixed_writer_metadata_requires_every_header_not_just_the_root() {
+    let input = make_zip(&[
+        ("assets/mark.webp", b"a", 0xe8b7_be43),
+        ("manifest.json", b"{}", 0xa3a6_bf43),
+        ("sections/ink.json", b"{}", 0xa3a6_bf43),
+    ]);
+    let baseline = read_stored_profile_zip(&input, limits())
+        .expect("three-member fixed metadata ZIP");
+    assert!(baseline.matches_fixed_writer_metadata());
+    let central = central_start(&input);
+    let names = ["assets/mark.webp", "manifest.json", "sections/ink.json"];
+    let mut local = 0usize;
+    let mut directory = central;
+    for (index, name) in names.into_iter().enumerate() {
+        let mut changed = input.clone();
+        changed[local + 10..local + 12].copy_from_slice(&[3, 0]);
+        changed[directory + 12..directory + 14]
+            .copy_from_slice(&[3, 0]);
+        let archive = read_stored_profile_zip(&changed, limits())
+            .expect("metadata agreement still parses");
+        assert!(!archive.matches_fixed_writer_metadata(),
+            "noncanonical member index {index}");
+        assert_eq!(archive.entries(), baseline.entries());
+        local += 30 + name.len() + if index == 0 { 1 } else { 2 };
+        directory += 46 + name.len();
+    }
+}

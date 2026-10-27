@@ -336,3 +336,10 @@ maximum count minus one, archive bytes minus one, and aggregate payload bytes
 below the final nonempty root. Writer preflight and checked ZIP reading must
 return their exact resource or archive errors without treating a prefix as a
 complete portable profile.
+
+CRC-checked ZIP framing now also retains a read-only, non-authorizing marker
+for the fixed header metadata that Atrament's deterministic stored writer emits.
+A legacy ordinary stored ZIP with older version fields, missing ASCII UTF-8
+flag or nonzero timestamps remains readable but cannot claim matching writer
+metadata. Multi-member fixtures prove that one changed header clears the
+marker without changing accepted stored payloads.
