@@ -34,7 +34,7 @@
 
 use atrament_handwriting_profile_container::{
     PROFILE_CONTAINER_VERSION, PROFILE_MANIFEST_PATH, ProfileManifest,
-    ProfileManifestEntry, validate_profile_manifest_view,
+    ProfileManifestEntry, profile_entry_kind, validate_profile_manifest_view,
 };
 use atrament_profile_entry_sha256::sha256_profile_bytes;
 use atrament_profile_json_syntax::ProfileJsonSyntaxLimits;
@@ -537,4 +537,111 @@ fn dry_run_and_writer_share_fail_closed_preflight_error_categories() {
         assert!(planned.is_err());
         assert_eq!(planned, written.map(|bytes| bytes.len()));
     }
+}
+
+#[test]
+fn deterministic_generated_path_corpus_matches_shared_path_admission() {
+    let pieces = [
+        "alpha",
+        "B",
+        "ñ",
+        "ñ",
+        "😀",
+        "-",
+        "%2e",
+        "folder",
+        ".",
+        "..",
+        "",
+        "/",
+        "\\",
+        "\0",
+        "\n",
+        "\t",
+        "\r",
+        "nested/path",
+    ];
+    let mut checked = 0usize;
+    for index in 0..1_024usize {
+        let first = pieces[index % pieces.len()];
+        let second = pieces[(index / 17) % pieces.len()];
+        let prefix = if index % 2 == 0 {
+            "assets/"
+        } else {
+            "sections/"
+        };
+        let name = format!("{prefix}{first}{second}.bin");
+        let root = member("manifest.json", b"{}");
+        let content = member(&name, b"data");
+        let candidates = if name.as_str() < "manifest.json" {
+            [content, root]
+        } else {
+            [root, content]
+        };
+        let expected_admission = profile_entry_kind(&name).is_ok();
+        let actual = write_stored_profile_zip(&candidates, limits());
+        if expected_admission {
+            let encoded = actual.expect("shared path validator admitted name");
+            let parsed = parse_bytes(&encoded);
+            assert!(
+                parsed
+                    .entries()
+                    .iter()
+                    .any(|entry| entry.name() == name
+                        && entry.bytes() == b"data")
+            );
+        } else {
+            assert_eq!(
+                actual,
+                Err(ProfileStoredZipWriteError::InvalidName),
+                "invalid candidate {name:?}"
+            );
+        }
+        checked = checked.saturating_add(1);
+    }
+    assert_eq!(checked, 1_024);
+}
+
+#[test]
+fn seeded_one_byte_zip_mutations_cannot_change_admitted_payload_identity() {
+    let source = [
+        member("assets/zeros.webp", &[0, 0, 0, 0, 0]),
+        member("manifest.json", b"{\"unknown\":true}"),
+        member("sections/strokes.json", b"[0,1,2,3,4,5]"),
+    ];
+    let original = write_stored_profile_zip(&source, limits())
+        .expect("original canonical ZIP framing");
+    let original_reader = parse_bytes(&original);
+    let bounds = ProfileZipReadLimits {
+        maximum_archive_bytes: original.len(),
+        maximum_entries: source.len(),
+        maximum_entry_bytes: 100,
+        maximum_total_bytes: 100,
+    };
+    let mut seed = 0x5354_4f52_4544_5a49u64;
+    let mut checked = 0usize;
+    for _ in 0..4_096usize {
+        seed = seed
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
+        let position = usize::try_from(seed % original.len() as u64)
+            .expect("bounded seed position fits usize");
+        let mut changed = original.clone();
+        let bit = u8::try_from((seed >> 24) % 8).expect("bit index");
+        let before = *changed.get(position).expect("bounded mutated offset");
+        if let Some(slot) = changed.get_mut(position) {
+            *slot = before ^ (1u8 << bit);
+        }
+        if let Ok(parsed) = read_stored_profile_zip(&changed, bounds) {
+            for (before, after) in
+                original_reader.entries().iter().zip(parsed.entries())
+            {
+                assert_eq!(after.name(), before.name());
+                assert_eq!(after.bytes(), before.bytes());
+            }
+            assert_eq!(parsed.entries().len(), original_reader.entries().len());
+        }
+        checked = checked.saturating_add(1);
+    }
+    assert_eq!(checked, 4_096);
 }

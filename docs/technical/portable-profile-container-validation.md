@@ -112,6 +112,13 @@ still admits an opaque malformed JSON root that the strict root JSON reader
 rejects. This makes the separation between CRC-correct ZIP structure and
 actual typed manifest acceptance executable rather than merely descriptive.
 
+A deterministic 1,024-case filename corpus checks the writer's decisions
+against the existing portable-profile path domain across Unicode, escapes,
+control characters, traversal and literal percent signs. A separate 4,096-
+mutation byte corpus flips one bit in emitted ZIP records and either obtains a
+typed reader failure or confirms that admitted names and payload bytes remain
+identical. Permissible irrelevant metadata changes do not become new content.
+
 These results establish deterministic **ZIP framing only**: manifest JSON
 canonicalization, unknown-field preservation, typed serialization, ZIP64,
 trusted file commit and accepted profile Export remain unresolved.

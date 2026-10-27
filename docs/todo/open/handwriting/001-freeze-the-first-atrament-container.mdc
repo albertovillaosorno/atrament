@@ -284,3 +284,9 @@ Writer-to-reader integration now checks independently declared entry inventory
 and SHA-256 for all emitted non-root members. A separate invalid JSON root
 proves that successful ordinary ZIP framing does not admit manifest syntax,
 typed profile content, or a file effect.
+
+Writer regressions now cross-check 1,024 deterministically generated member
+names against the shared path validator and mutate 4,096 bits in real emitted
+stored ZIP frames. A valid read after mutation must retain every original
+member name and payload byte; invalid frames fail with existing typed errors.
+The writer still offers no typed manifest or canonical JSON serialization.
