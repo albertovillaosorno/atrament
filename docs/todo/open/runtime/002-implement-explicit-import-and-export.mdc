@@ -395,3 +395,15 @@ payload reordering and rejects corrupted members without partial artifacts.
 This is a pure **in-memory** profile artifact, not an Export command. A trusted
 caller-selected path adapter, durable atomic commit, overwrite/retry handling,
 section encoders and session lifecycle binding still need implementation.
+
+The complete profile artifact assembly now also provides exact ZIP byte-count
+planning and caller-owned ZIP emission using the same typed-manifest, inventory,
+length, digest and ZIP32 gates as owned assembly. A short buffer is refused
+before any destination mutation; surplus capacity is untouched and the returned
+root/full-archive SHA-256 fingerprints cover only emitted source bytes.
+
+Two additional fixtures prove atomic refusal of wrong bytes, resource limits
+and undersized caller buffers. The 256-case canonical corpus now compares all
+three paths byte-for-byte and confirms that even later corrupted payloads
+cannot mutate an already owned destination. The writer still does not establish
+selected destination authority or an atomic filesystem commit.

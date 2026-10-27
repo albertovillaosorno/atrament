@@ -45,7 +45,8 @@ use atrament_profile_manifest_json_writer::{
 };
 use atrament_profile_stored_zip_writer::{
     ProfileStoredZipMember, ProfileStoredZipWriteError,
-    ProfileStoredZipWriteLimits, write_stored_profile_zip,
+    ProfileStoredZipWriteLimits, planned_stored_profile_zip_bytes,
+    write_stored_profile_zip, write_stored_profile_zip_into,
 };
 
 /// Caller-supplied non-manifest payload. Paths are exact, not normalized.
@@ -94,6 +95,17 @@ pub enum ProfileExportAssemblyError {
     },
     /// The canonical ZIP framing limits or invariants refuse output.
     Zip(ProfileStoredZipWriteError),
+}
+
+/// Evidence from caller-owned ZIP storage; not a file or session receipt.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ProfileExportBufferEvidence {
+    /// SHA-256 of exactly the emitted prefix, not unused destination capacity.
+    pub archive_sha256: Sha256Digest,
+    /// Number of bytes written into caller-owned storage.
+    pub bytes_written: usize,
+    /// SHA-256 of the exact canonical manifest JSON payload.
+    pub root_sha256: Sha256Digest,
 }
 
 /// Owned and fully byte-verified profile ZIP, without file-write authority.
@@ -175,6 +187,88 @@ pub fn assemble_profile_export_artifact(
     supported_required_features: &[&str],
     limits: ProfileExportAssemblyLimits,
 ) -> Result<ProfileExportArtifact, ProfileExportAssemblyError> {
+    let (bytes, root_sha256) = with_verified_members(
+        manifest, payloads, supported_required_features, limits,
+        write_stored_profile_zip,
+    )?;
+    Ok(ProfileExportArtifact {
+        archive_sha256: sha256_profile_bytes(&bytes),
+        bytes,
+        root_sha256,
+    })
+}
+
+/// Preview the exact complete ZIP size after verifying all declared payloads.
+///
+/// Unlike the owned writer, this allocates no complete archive output and
+/// performs no ZIP CRC work. It does allocate bounded JSON root bytes and
+/// member references to validate the same SHA-256 and ZIP32 prerequisites.
+/// The result is a byte count, not Export intent or filesystem authority.
+///
+/// # Errors
+///
+/// Refuses the same manifest, inventory, digest and ZIP preflight failures.
+pub fn planned_profile_export_artifact_bytes(
+    manifest: &ProfileManifest,
+    payloads: &[ProfileExportPayload<'_>],
+    supported_required_features: &[&str],
+    limits: ProfileExportAssemblyLimits,
+) -> Result<usize, ProfileExportAssemblyError> {
+    let (size, _root_sha256) = with_verified_members(
+        manifest, payloads, supported_required_features, limits,
+        planned_stored_profile_zip_bytes,
+    )?;
+    Ok(size)
+}
+
+/// Assemble a complete verified profile ZIP into already-owned storage.
+///
+/// This does not allocate the final archive buffer. Every manifest, payload,
+/// ZIP resource and destination-size check occurs before any destination write.
+/// Short destinations report exact required capacity without mutation; extra
+/// bytes remain untouched. Returned SHA-256 evidence covers only written bytes.
+/// This is not Export file authorization, atomic commit or session acceptance.
+///
+/// # Errors
+///
+/// Refuses the same invalid inputs as owned assembly and rejects short buffers
+/// atomically through the underlying ZIP writer's `BufferTooSmall` error.
+pub fn write_profile_export_artifact_into(
+    manifest: &ProfileManifest,
+    payloads: &[ProfileExportPayload<'_>],
+    supported_required_features: &[&str],
+    limits: ProfileExportAssemblyLimits,
+    destination: &mut [u8],
+) -> Result<ProfileExportBufferEvidence, ProfileExportAssemblyError> {
+    let (bytes_written, root_sha256) = with_verified_members(
+        manifest, payloads, supported_required_features, limits,
+        |members, zip_limits| {
+            write_stored_profile_zip_into(members, zip_limits, destination)
+        },
+    )?;
+    let written = destination.get(..bytes_written).ok_or(
+        ProfileExportAssemblyError::Zip(
+            ProfileStoredZipWriteError::InconsistentFraming,
+        ),
+    )?;
+    Ok(ProfileExportBufferEvidence {
+        archive_sha256: sha256_profile_bytes(written),
+        bytes_written,
+        root_sha256,
+    })
+}
+
+// This common gate checks content and assembles exact member references before
+// handing the output effect to one of the three independent ZIP writers.
+fn with_verified_members<T>(
+    manifest: &ProfileManifest,
+    payloads: &[ProfileExportPayload<'_>],
+    supported_required_features: &[&str],
+    limits: ProfileExportAssemblyLimits,
+    write: impl FnOnce(
+        &[ProfileStoredZipMember<'_>], ProfileStoredZipWriteLimits,
+    ) -> Result<T, ProfileStoredZipWriteError>,
+) -> Result<(T, Sha256Digest), ProfileExportAssemblyError> {
     let root = write_canonical_profile_manifest_json(
         manifest, supported_required_features, limits.manifest_json,
     )
@@ -232,11 +326,7 @@ pub fn assemble_profile_export_artifact(
             name: PROFILE_MANIFEST_PATH,
         });
     }
-    let bytes = write_stored_profile_zip(&members, limits.zip)
+    let result = write(&members, limits.zip)
         .map_err(ProfileExportAssemblyError::Zip)?;
-    Ok(ProfileExportArtifact {
-        archive_sha256: sha256_profile_bytes(&bytes),
-        bytes,
-        root_sha256: sha256_profile_bytes(&root),
-    })
+    Ok((result, sha256_profile_bytes(&root)))
 }

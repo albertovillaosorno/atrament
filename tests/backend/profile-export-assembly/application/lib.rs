@@ -46,6 +46,7 @@ use atrament_profile_entry_sha256::sha256_profile_bytes;
 use atrament_profile_export_assembly::{
     ProfileExportAssemblyError as Error, ProfileExportAssemblyLimits,
     ProfileExportPayload, assemble_profile_export_artifact,
+    planned_profile_export_artifact_bytes, write_profile_export_artifact_into,
 };
 use atrament_profile_import_preflight::ProfileImportBudget;
 use atrament_profile_import_verification::verify_attached_profile_import;
@@ -331,6 +332,106 @@ fn manifest_and_zip_budgets_fail_without_artifact() {
 }
 
 #[test]
+fn caller_owned_archive_is_atomic_and_matches_exact_planned_size() {
+    let mut profile = manifest();
+    profile.entries = vec![
+        entry("sections/ñ.json", b"{\"ink\":1}"),
+        entry("assets/blank.bin", b""),
+    ];
+    let payloads = [
+        ProfileExportPayload { path: "assets/blank.bin", bytes: b"" },
+        ProfileExportPayload {
+            path: "sections/ñ.json", bytes: b"{\"ink\":1}",
+        },
+    ];
+    let expected = assemble_profile_export_artifact(
+        &profile, &payloads, &["strokes"], limits(),
+    ).unwrap();
+    let required = planned_profile_export_artifact_bytes(
+        &profile, &payloads, &["strokes"], limits(),
+    ).unwrap();
+    assert_eq!(required, expected.bytes().len());
+    for capacity in [0, 1, required - 1] {
+        let mut destination = vec![0xa5u8; capacity];
+        assert_eq!(
+            write_profile_export_artifact_into(
+                &profile, &payloads, &["strokes"],
+                limits(), &mut destination,
+            ).err(),
+            Some(Error::Zip(ProfileStoredZipWriteError::BufferTooSmall {
+                required,
+            })),
+        );
+        assert!(destination.iter().all(|&byte| byte == 0xa5));
+    }
+    for capacity in [required, required + 1, required + 20] {
+        let mut destination = vec![0xa5u8; capacity];
+        let evidence = write_profile_export_artifact_into(
+            &profile, &payloads, &["strokes"],
+            limits(), &mut destination,
+        ).unwrap();
+        assert_eq!(evidence.bytes_written, required);
+        assert_eq!(evidence.root_sha256, expected.root_sha256());
+        assert_eq!(evidence.archive_sha256, expected.archive_sha256());
+        assert_eq!(&destination[..required], expected.bytes());
+        assert!(destination[required..].iter().all(|&b| b == 0xa5));
+    }
+}
+
+#[test]
+fn caller_owned_output_rejects_bad_payload_before_mutating_any_slot() {
+    let mut profile = manifest();
+    profile.entries = vec![entry("assets/ink.bin", b"correct")];
+    let bad = [ProfileExportPayload {
+        path: "assets/ink.bin", bytes: b"corrupt",
+    }];
+    let mut destination = [0xabu8; 256];
+    let expected = Error::PayloadVerification {
+        index: 0,
+        reason: ProfileEntryVerificationError::DigestMismatch,
+    };
+    assert_eq!(
+        write_profile_export_artifact_into(
+            &profile, &bad, &["strokes"],
+            limits(), &mut destination,
+        ).err(),
+        Some(expected.clone()),
+    );
+    assert_eq!(
+        planned_profile_export_artifact_bytes(
+            &profile, &bad, &["strokes"], limits(),
+        ).err(),
+        Some(expected),
+    );
+    assert_eq!(destination, [0xab; 256]);
+    let good = [ProfileExportPayload {
+        path: "assets/ink.bin", bytes: b"correct",
+    }];
+    let mut budget = limits();
+    budget.zip.maximum_archive_bytes = 1;
+    assert_eq!(
+        write_profile_export_artifact_into(
+            &profile, &good, &["strokes"],
+            budget, &mut destination,
+        ).err(),
+        Some(Error::Zip(ProfileStoredZipWriteError::ArchiveTooLarge)),
+    );
+    assert_eq!(destination, [0xab; 256]);
+    budget = limits();
+    budget.manifest_json.maximum_bytes = 1;
+    assert_eq!(
+        write_profile_export_artifact_into(
+            &profile, &good, &["strokes"],
+            budget, &mut destination,
+        ).err(),
+        Some(Error::ManifestJson(
+            ProfileManifestJsonWriteError::ManifestTooLarge,
+        )),
+    );
+    assert_eq!(destination, [0xab; 256]);
+}
+
+#[test]
 fn generated_profile_archives_are_deterministic_and_sha_bound() {
     let mut state = 0x8ab5_41c0_9321_77b5u64;
     for case in 0..256 {
@@ -362,6 +463,20 @@ fn generated_profile_archives_are_deterministic_and_sha_bound() {
         assert_eq!(actual.bytes(), expected.bytes(), "case {case}");
         assert_eq!(actual.root_sha256(), expected.root_sha256());
         assert_eq!(actual.archive_sha256(), expected.archive_sha256());
+        let length = planned_profile_export_artifact_bytes(
+            &profile, &payloads, &["strokes"], limits(),
+        ).unwrap();
+        assert_eq!(length, expected.bytes().len());
+        let mut buffer = vec![0xceu8; length + 3];
+        let metadata = write_profile_export_artifact_into(
+            &profile, &payloads, &["strokes"], limits(),
+            &mut buffer,
+        ).unwrap();
+        assert_eq!(metadata.bytes_written, length);
+        assert_eq!(metadata.root_sha256, expected.root_sha256());
+        assert_eq!(metadata.archive_sha256, expected.archive_sha256());
+        assert_eq!(&buffer[..length], expected.bytes());
+        assert_eq!(&buffer[length..], &[0xce; 3]);
         if let Some(entry) = values.first_mut() {
             entry.1.push(42);
             let altered = values.iter().map(|(path, bytes)| {
@@ -373,6 +488,21 @@ fn generated_profile_archives_are_deterministic_and_sha_bound() {
                 ),
                 Err(Error::PayloadVerification { .. }),
             ));
+            assert!(matches!(
+                planned_profile_export_artifact_bytes(
+                    &profile, &altered, &["strokes"], limits(),
+                ),
+                Err(Error::PayloadVerification { .. }),
+            ));
+            assert!(matches!(
+                write_profile_export_artifact_into(
+                    &profile, &altered, &["strokes"],
+                    limits(), &mut buffer,
+                ),
+                Err(Error::PayloadVerification { .. }),
+            ));
+            assert_eq!(&buffer[..length], expected.bytes());
+            assert_eq!(&buffer[length..], &[0xce; 3]);
         }
     }
 }
