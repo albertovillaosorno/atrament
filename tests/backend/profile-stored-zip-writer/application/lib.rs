@@ -750,3 +750,46 @@ fn large_payload_local_and_central_crc_match_independent_zlib_oracle() {
     .expect("strict parser accepts both matching CRC fields");
     assert_eq!(parsed.entries()[0].bytes(), bytes);
 }
+
+#[test]
+fn largest_ordinary_zip32_entry_count_round_trips_without_zip64() {
+    let maximum_ordinary_entries = usize::from(u16::MAX) - 1;
+    let names = (0..(maximum_ordinary_entries - 1))
+        .map(|index| format!("assets/{index:05}.bin"))
+        .collect::<Vec<_>>();
+    let mut members = names.iter()
+        .map(|name| member(name, b""))
+        .collect::<Vec<_>>();
+    members.push(member("manifest.json", b"{}"));
+    let limits = ProfileStoredZipWriteLimits {
+        maximum_archive_bytes: 8_000_000,
+        maximum_entries: maximum_ordinary_entries,
+        maximum_entry_bytes: 2,
+        maximum_total_bytes: 2,
+    };
+    let planned = planned_stored_profile_zip_bytes(&members, limits)
+        .expect("maximal ordinary count is still representable");
+    let bytes = write_stored_profile_zip(&members, limits)
+        .expect("ZIP32 allows 65534 entries without ZIP64 sentinel");
+    assert_eq!(bytes.len(), planned);
+    let eocd = bytes.len() - 22;
+    for offset in [8usize, 10] {
+        assert_eq!(&bytes[eocd + offset..eocd + offset + 2],
+            &(u16::MAX - 1).to_le_bytes());
+    }
+    let parsed = read_stored_profile_zip(&bytes, ProfileZipReadLimits {
+        maximum_archive_bytes: planned,
+        maximum_entries: maximum_ordinary_entries,
+        maximum_entry_bytes: 2,
+        maximum_total_bytes: 2,
+    }).expect("strict index accepts maximal ordinary ZIP count");
+    assert_eq!(parsed.entries().len(), maximum_ordinary_entries);
+    assert_eq!(parsed.entries()[0].name(), "assets/00000.bin");
+    assert_eq!(parsed.entries()[maximum_ordinary_entries - 2].name(),
+        "assets/65532.bin");
+    assert_eq!(parsed.entries()[maximum_ordinary_entries - 1].name(),
+        "manifest.json");
+    assert_eq!(parsed.entries()[0].bytes(), b"");
+    assert_eq!(parsed.entries()[maximum_ordinary_entries - 1].bytes(), b"{}");
+    assert_eq!(parsed.source_sha256(), sha256_profile_bytes(&bytes));
+}

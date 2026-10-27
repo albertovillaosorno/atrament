@@ -62,8 +62,16 @@ integrity**. An additional root-manifest accessor checks a caller-chosen byte
 limit and strict UTF-8 before yielding borrowed text; it does not parse JSON.
 
 Before allocating member indices, the parser also verifies that declared
-entry counts fit within the measured central-directory byte length. This
-prevents a tiny forged trailer from triggering large index allocations.
+entry counts fit within the measured central-directory byte length. It then
+uses a fallible exact-size reservation, returning `AllocationFailed` if that
+bounded index cannot be allocated instead of relying on an infallible reserve.
+A tiny forged trailer cannot trigger a large index allocation.
+
+A writer-to-reader boundary test proves that all 65,534 ordinary ZIP entries
+fit and round-trip without ZIP64, including both end-record counts, sorted
+member identity, planned byte length, and the full ZIP source fingerprint.
+The next count (65,535) remains the ZIP64 sentinel and is refused without
+allocating output bytes.
 
 The typed manifest must still be parsed, checked and matched against those
 observations, and SHA-256 must be independently measured before any section

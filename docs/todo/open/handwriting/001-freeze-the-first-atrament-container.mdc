@@ -318,3 +318,10 @@ Writer-to-reader integration now preserves archive and root SHA-256 for an
 independently checked four-member ZIP golden. Another test admits two distinct
 CRC32-colliding assets as valid stored ZIP frames and proves only the complete
 archive SHA-256 distinguishes their exact source bytes. CRC is not authority.
+
+The largest ordinary ZIP32 count, 65,534 entries, now round-trips through the
+byte writer and strict ZIP index with exact output-size and source-fingerprint
+checks. The sentinel count 65,535 remains rejected as unsupported ZIP64.
+ZIP reader index reservation now fails with `AllocationFailed` if its already
+bounded count cannot be reserved, instead of calling infallible
+`with_capacity`.

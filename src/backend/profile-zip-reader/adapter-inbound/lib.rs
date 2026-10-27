@@ -74,6 +74,8 @@ pub struct ProfileZipReadLimits {
 /// One typed rejection of an unsupported or inconsistent ZIP framing.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ProfileZipReadError {
+    /// The bounded member index could not be allocated.
+    AllocationFailed,
     /// Complete supplied ZIP byte slice exceeds a caller-set bound.
     ArchiveTooLarge,
     /// Stored CRC-32 disagrees with independently checked member bytes.
@@ -606,7 +608,11 @@ pub fn read_stored_profile_zip(
     let mut cursor = directory_start;
     let mut local_end = 0usize;
     let mut total_bytes = 0u64;
-    let mut entries = Vec::with_capacity(usize::from(all_entries));
+    // Fallibly reserve exactly the validated member count. Never let an
+    // attacker-selected count enter an infallible allocation path.
+    let mut entries = Vec::new();
+    entries.try_reserve_exact(usize::from(all_entries))
+        .map_err(|_allocation| ProfileZipReadError::AllocationFailed)?;
     let mut previous_name: Option<&str> = None;
     for _ in 0..usize::from(all_entries) {
         let central = parse_central_entry(bytes, cursor)?;
