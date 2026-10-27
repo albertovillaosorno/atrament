@@ -224,8 +224,9 @@ Bodies are UTF-8 text with one explicit `Content-Length`; transfer encoding,
 malformed framing, and invalid UTF-8 are rejected before mutation. The
 socket reader and direct in-process draft router both reject `Expect` and
 `Transfer-Encoding` headers and enforce the same 16 KiB request-head limit;
-passing authentication does not bypass these framing limits. Each field has a
-backend-owned one-mebibyte limit. Over-limit input returns `413` without
+passing authentication does not bypass these framing limits.
+
+Each field has a backend-owned one-mebibyte limit. Over-limit input returns `413` without
 truncating or changing the current field. A successful whole-field replacement
 returns `204`.
 
