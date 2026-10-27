@@ -40,7 +40,7 @@
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
 import { spawn, spawnSync } from "node:child_process";
-import { once } from "node:events";
+import { EventEmitter, once } from "node:events";
 import fs from "node:fs";
 import http from "node:http";
 import net from "node:net";
@@ -128,36 +128,172 @@ function waitForLine(stream, select, timeoutMs = 15_000) {
     });
 }
 
-async function stopChild(child) {
+// Cleanup remains bounded even if a child does not emit exit after SIGKILL.
+// Every path removes the test-owned process observers and both deadlines.
+function stopChild(child, gracefulMs = 2_000, forcedMs = 2_000) {
     if (child.exitCode !== null || child.signalCode !== null) {
-        return;
+        return Promise.resolve();
     }
-    const exit = once(child, "exit");
-    child.kill("SIGTERM");
-    let timeout;
-    const exited = await Promise.race([
-        exit.then(() => true),
-        new Promise((resolve) => {
-            timeout = setTimeout(() => resolve(false), 2_000);
-        }),
-    ]);
-    clearTimeout(timeout);
-    if (!exited) {
-        if (child.exitCode === null && child.signalCode === null) {
-            child.kill("SIGKILL");
+    return new Promise((resolve, reject) => {
+        let gracefulTimer;
+        let forcedTimer;
+        let settled = false;
+        const finish = (error = null) => {
+            if (settled) {
+                return;
+            }
+            settled = true;
+            clearTimeout(gracefulTimer);
+            clearTimeout(forcedTimer);
+            child.off("exit", onExit);
+            child.off("error", onError);
+            if (error === null) {
+                resolve();
+            } else {
+                reject(error);
+            }
+        };
+        const onExit = () => finish();
+        const onError = (error) => finish(error);
+        child.once("exit", onExit);
+        child.once("error", onError);
+        gracefulTimer = setTimeout(() => {
+            if (child.exitCode !== null || child.signalCode !== null) {
+                finish();
+                return;
+            }
+            forcedTimer = setTimeout(() => finish(new Error(
+                "disposable child did not exit after SIGKILL",
+            )), forcedMs);
+            try {
+                child.kill("SIGKILL");
+            } catch (error) {
+                finish(error);
+            }
+        }, gracefulMs);
+        try {
+            child.kill("SIGTERM");
+        } catch (error) {
+            finish(error);
         }
-        await exit;
-    }
+    });
 }
+
+test("disposable child shutdown clears listeners on graceful exit",
+    async () => {
+        const child = new EventEmitter();
+        child.exitCode = null;
+        child.signalCode = null;
+        const signals = [];
+        child.kill = (signal) => {
+            signals.push(signal);
+            queueMicrotask(() => {
+                child.signalCode = signal;
+                child.emit("exit", null, signal);
+            });
+            return true;
+        };
+        await stopChild(child, 10, 10);
+        assert.deepEqual(signals, ["SIGTERM"]);
+        assert.equal(child.listenerCount("exit"), 0);
+        assert.equal(child.listenerCount("error"), 0);
+    },
+);
+
+test("disposable child shutdown escalates and observes SIGKILL exit",
+    async () => {
+        const child = new EventEmitter();
+        child.exitCode = null;
+        child.signalCode = null;
+        const signals = [];
+        child.kill = (signal) => {
+            signals.push(signal);
+            if (signal === "SIGKILL") {
+                child.signalCode = signal;
+                child.emit("exit", null, signal);
+            }
+            return true;
+        };
+        await stopChild(child, 10, 10);
+        assert.deepEqual(signals, ["SIGTERM", "SIGKILL"]);
+        assert.equal(child.listenerCount("exit"), 0);
+        assert.equal(child.listenerCount("error"), 0);
+    },
+);
+
+test("stubborn child aborts bounded shutdown without lingering observers",
+    async () => {
+        const child = new EventEmitter();
+        child.exitCode = null;
+        child.signalCode = null;
+        const signals = [];
+        child.kill = (signal) => {
+            signals.push(signal);
+            return true;
+        };
+        await assert.rejects(stopChild(child, 10, 10),
+            /did not exit after SIGKILL/);
+        assert.deepEqual(signals, ["SIGTERM", "SIGKILL"]);
+        assert.equal(child.listenerCount("exit"), 0);
+        assert.equal(child.listenerCount("error"), 0);
+        await stopChild(Object.assign(new EventEmitter(), {
+            exitCode: 0,
+            signalCode: null,
+        }), 10, 10);
+    },
+);
+
+test("disposable child teardown retains original spawn and kill errors",
+    async () => {
+        for (const signalToFail of ["SIGTERM", "SIGKILL"]) {
+            const child = new EventEmitter();
+            child.exitCode = null;
+            child.signalCode = null;
+            const fault = new Error(`injected failure during ${signalToFail}`);
+            const signals = [];
+            child.kill = (signal) => {
+                signals.push(signal);
+                if (signal === signalToFail) {
+                    throw fault;
+                }
+                return true;
+            };
+            await assert.rejects(stopChild(child, 10, 10),
+                (error) => error === fault);
+            assert.deepEqual(signals, signalToFail === "SIGTERM"
+                ? ["SIGTERM"] : ["SIGTERM", "SIGKILL"]);
+            assert.equal(child.listenerCount("exit"), 0);
+            assert.equal(child.listenerCount("error"), 0);
+        }
+        const child = new EventEmitter();
+        child.exitCode = null;
+        child.signalCode = null;
+        const fault = new Error("injected asynchronous child failure");
+        child.kill = () => {
+            queueMicrotask(() => child.emit("error", fault));
+            return true;
+        };
+        await assert.rejects(stopChild(child, 100, 100),
+            (error) => error === fault);
+        assert.equal(child.listenerCount("exit"), 0);
+        assert.equal(child.listenerCount("error"), 0);
+    },
+);
 
 // Fixture shutdown must not wait for a browser that still owns an HTTP
 // request. Close the listening socket first, then active HTTP connections.
-async function closeFixtureServer(server) {
+async function closeFixtureServer(server, timeoutMs = 5_000) {
     if (server === undefined || !server.listening) {
         return;
     }
+    // Node's closeAllConnections does not terminate upgraded WebSockets.
+    // Keep teardown bounded and report ownership leaks to the test runner.
     const closed = new Promise((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error(
+            "timed out closing disposable HTTP fixture server",
+        )), timeoutMs);
         server.close((error) => {
+            clearTimeout(timer);
             if (error) {
                 reject(error);
             } else {
@@ -230,6 +366,52 @@ test(
         } finally {
             request.destroy();
             await closeFixtureServer(server);
+        }
+    },
+);
+
+test("fixture server reports an upgraded connection that blocks shutdown",
+    { timeout: 5_000 },
+    async () => {
+        const server = http.createServer((_request, response) => {
+            response.end("ordinary response");
+        });
+        server.on("upgrade", (_request, peer) => {
+            peer.write([
+                "HTTP/1.1 101 Switching Protocols",
+                "Connection: Upgrade",
+                "Upgrade: websocket",
+                "", "",
+            ].join("\r\n"));
+        });
+        server.listen(0, "127.0.0.1");
+        await once(server, "listening");
+        const address = server.address();
+        assert.notEqual(address, null);
+        assert.notEqual(typeof address, "string");
+        const socket = net.createConnection({
+            host: "127.0.0.1",
+            port: address.port,
+        });
+        socket.on("error", () => {});
+        try {
+            await waitForSocketConnection(socket, 500);
+            const upgrade = once(socket, "data");
+            socket.write([
+                "GET /upgrade HTTP/1.1",
+                `Host: 127.0.0.1:${address.port}`,
+                "Connection: Upgrade",
+                "Upgrade: websocket",
+                "", "",
+            ].join("\r\n"));
+            await upgrade;
+            await assert.rejects(closeFixtureServer(server, 25),
+                /timed out closing disposable HTTP fixture/);
+        } finally {
+            socket.destroy();
+            if (server.listening) {
+                await closeFixtureServer(server);
+            }
         }
     },
 );

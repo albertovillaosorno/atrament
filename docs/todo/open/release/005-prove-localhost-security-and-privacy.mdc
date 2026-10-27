@@ -330,3 +330,17 @@ Partially initialized Firefox sessions close their BiDi connection when
 startup fails. Unit regressions verify real TCP peer disconnect, idempotent
 shutdown and failed writes. These are test-harness lifetime protections, not
 changes to the backend localhost admission or runtime session policy.
+
+Child-process teardown is now bounded after both graceful SIGTERM and forced
+SIGKILL. The harness removes exit/error observers and cancels both deadlines
+on normal exit or failure, rather than indefinitely awaiting a stubborn child.
+Pure EventEmitter fixtures simulate immediate exit, escalation and a child
+that never acknowledges either signal without launching an unrelated process.
+These safeguards apply only to disposable browser-test child handles.
+
+HTTP fixture teardown now has its own bounded deadline after closing active
+ordinary HTTP connections. An independent upgraded-socket fixture proves that
+Node cannot close every upgraded peer through `closeAllConnections`; if such a
+peer prevents the server close callback, teardown reports a timeout rather than
+blocking the test forever. The harness never claims to close arbitrary peers
+or change runtime host/origin enforcement.
