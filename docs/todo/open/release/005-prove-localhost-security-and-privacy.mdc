@@ -353,3 +353,12 @@ Independent frame fixtures cover 16-bit/64-bit lengths, fragmented messages,
 oversized claims with no payload allocation, protocol errors and bounded
 event history. These limits apply solely to disposable browser automation,
 not to runtime session messages or public application protocol limits.
+
+The browser harness now assembles fragmented WebSocket text messages across
+continuation frames under the same aggregate 8 MiB bound. It permits control
+frames between fragments, responds to server Ping frames with masked Pong,
+and refuses orphan continuations, overlapping text messages, binary data and
+fragmented control frames. Synthetic fixtures verify exact Unicode response
+bytes, split TCP headers, malformed sequencing and a synthetic over-limit
+fragment total without allocating a giant input. This remains automation
+framing only, not a production WebSocket or runtime protocol implementation.

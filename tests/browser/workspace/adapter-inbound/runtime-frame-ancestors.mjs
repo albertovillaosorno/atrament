@@ -587,6 +587,8 @@ class BidiClient {
         this.buffer = Buffer.alloc(0);
         this.closed = false;
         this.events = [];
+        this.fragments = null;
+        this.fragmentedBytes = 0;
         this.nextId = 1;
         this.pending = new Map();
         this.socket = null;
@@ -661,6 +663,8 @@ class BidiClient {
         this.pending.clear();
         this.socket?.destroy?.();
         this.buffer = Buffer.alloc(0);
+        this.fragments = null;
+        this.fragmentedBytes = 0;
     }
 
     command(method, params = {}, timeoutMs = 10_000) {
@@ -702,6 +706,7 @@ class BidiClient {
     drain() {
         while (this.buffer.length >= 2) {
             const opcode = this.buffer[0] & 0x0f;
+            const final = (this.buffer[0] & 0x80) !== 0;
             if ((this.buffer[1] & 0x80) !== 0) {
                 this.close(new Error("masked WebDriver server frame refused"));
                 return;
@@ -730,17 +735,65 @@ class BidiClient {
                 this.close(new Error("WebDriver BiDi frame too large"));
                 return;
             }
+            if ((opcode & 0x8) !== 0 && (!final || length > 125)) {
+                this.close(new Error("invalid WebDriver BiDi control frame"));
+                return;
+            }
             if (this.buffer.length < offset + length) {
                 return;
             }
-            const payload = this.buffer.subarray(offset, offset + length);
+            let payload = this.buffer.subarray(offset, offset + length);
             this.buffer = this.buffer.subarray(offset + length);
             if (opcode === 0x8) {
                 this.close(new Error("WebDriver BiDi peer sent close frame"));
                 return;
             }
-            if (opcode !== 0x1) {
+            // Control frames may occur between fragments of one text result.
+            if (opcode === 0x9) {
+                try {
+                    this.socket.write(this.textFrame(payload, 0xa));
+                } catch (error) {
+                    this.close(error);
+                    return;
+                }
                 continue;
+            }
+            if (opcode === 0xa) {
+                continue;
+            }
+            if (opcode === 0x1) {
+                if (this.fragments !== null) {
+                    this.close(new Error(
+                        "overlapping WebDriver BiDi text frames",
+                    ));
+                    return;
+                }
+                if (!final) {
+                    this.fragments = [payload];
+                    this.fragmentedBytes = payload.length;
+                    continue;
+                }
+            } else if (opcode === 0x0) {
+                if (this.fragments === null) {
+                    this.close(new Error("unexpected WebDriver continuation"));
+                    return;
+                }
+                const total = this.fragmentedBytes + payload.length;
+                if (total > MAX_BIDI_FRAME_BYTES) {
+                    this.close(new Error("WebDriver BiDi message too large"));
+                    return;
+                }
+                this.fragments.push(payload);
+                this.fragmentedBytes = total;
+                if (!final) {
+                    continue;
+                }
+                payload = Buffer.concat(this.fragments, total);
+                this.fragments = null;
+                this.fragmentedBytes = 0;
+            } else {
+                this.close(new Error("unsupported WebDriver BiDi data frame"));
+                return;
             }
             let message;
             try {
@@ -773,16 +826,16 @@ class BidiClient {
         }
     }
 
-    textFrame(text) {
+    textFrame(text, opcode = 0x1) {
         const payload = Buffer.from(text);
         const mask = crypto.randomBytes(4);
         let header;
         if (payload.length < 126) {
-            header = Buffer.from([0x81, 0x80 | payload.length]);
+            header = Buffer.from([0x80 | opcode, 0x80 | payload.length]);
         } else {
             assert.ok(payload.length < 65_536);
             header = Buffer.from([
-                0x81,
+                0x80 | opcode,
                 0xfe,
                 payload.length >> 8,
                 payload.length & 0xff,
@@ -889,19 +942,20 @@ test("WebDriver errors and timeouts release their pending command slots",
     },
 );
 
-function testServerFrame(payload, opcode = 0x1) {
+function testServerFrame(payload, opcode = 0x1, final = true) {
     const bytes = Buffer.from(payload);
+    const firstByte = opcode | (final ? 0x80 : 0);
     if (bytes.length < 126) {
         return Buffer.concat([
-            Buffer.from([0x80 | opcode, bytes.length]), bytes,
+            Buffer.from([firstByte, bytes.length]), bytes,
         ]);
     }
     if (bytes.length <= 65_535) {
-        const prefix = Buffer.from([0x80 | opcode, 126, 0, 0]);
+        const prefix = Buffer.from([firstByte, 126, 0, 0]);
         prefix.writeUInt16BE(bytes.length, 2);
         return Buffer.concat([prefix, bytes]);
     }
-    const prefix = Buffer.from([0x80 | opcode, 127, 0, 0, 0, 0, 0, 0, 0, 0]);
+    const prefix = Buffer.from([firstByte, 127, 0, 0, 0, 0, 0, 0, 0, 0]);
     prefix.writeBigUInt64BE(BigInt(bytes.length), 2);
     return Buffer.concat([prefix, bytes]);
 }
@@ -995,6 +1049,142 @@ test("WebDriver BiDi unsolicited event retention is bounded",
             Array.from({ length: MAX_BIDI_EVENTS },
                 (_, offset) => 256 - MAX_BIDI_EVENTS + offset));
         client.close();
+    },
+);
+
+test("WebDriver BiDi assembles fragmented JSON across continuation frames",
+    async () => {
+        const client = new BidiClient("ws://127.0.0.1:1234/session");
+        client.socket = { write: () => {}, destroy: () => {} };
+        const pending = client.command("script.evaluate", {}, 30_000);
+        const complete = Buffer.from(JSON.stringify({
+            id: 1, type: "success", result: { value: "á 👩‍🔬" },
+        }));
+        // Place continuation boundaries *inside* the four-byte emoji,
+        // proving UTF-8 decoding waits for the complete assembled message.
+        const scalarOffset = complete.indexOf(Buffer.from("👩"));
+        assert.ok(scalarOffset > 0);
+        const parts = [
+            complete.subarray(0, scalarOffset + 1),
+            complete.subarray(scalarOffset + 1, scalarOffset + 3),
+            complete.subarray(scalarOffset + 3),
+        ];
+        const first = testServerFrame(parts[0], 0x1, false);
+        const pong = testServerFrame("", 0xa);
+        const middle = testServerFrame(parts[1], 0x0, false);
+        const last = testServerFrame(parts[2], 0x0, true);
+        client.buffer = Buffer.concat([first, pong, middle]);
+        client.drain();
+        assert.equal(client.pending.size, 1);
+        assert.equal(client.fragmentedBytes, parts[0].length + parts[1].length);
+        client.buffer = last.subarray(0, 2);
+        client.drain();
+        assert.equal(client.pending.size, 1);
+        client.buffer = Buffer.concat([
+            client.buffer, last.subarray(2),
+        ]);
+        client.drain();
+        assert.deepEqual(await pending, { value: "á 👩‍🔬" });
+        assert.equal(client.fragments, null);
+        assert.equal(client.fragmentedBytes, 0);
+        client.close();
+    },
+);
+
+test("WebDriver BiDi rejects orphan, overlapping and binary data frames",
+    async () => {
+        for (const [frame, expected, openFragment] of [
+            [testServerFrame("{}", 0x0),
+                /unexpected WebDriver continuation/, false],
+            [testServerFrame("{}", 0x1), /overlapping WebDriver BiDi/, true],
+            [testServerFrame("{}", 0x2),
+                /unsupported WebDriver BiDi data/, false],
+            [testServerFrame("", 0x9, false),
+                /invalid WebDriver BiDi control/, false],
+        ]) {
+            const client = new BidiClient("ws://127.0.0.1:1234/session");
+            client.socket = { write: () => {}, destroy: () => {} };
+            const pending = client.command("script.evaluate", {}, 30_000);
+            if (openFragment) {
+                client.fragments = [Buffer.from("{")];
+                client.fragmentedBytes = 1;
+            }
+            client.buffer = frame;
+            client.drain();
+            await assert.rejects(pending, expected);
+            assert.equal(client.pending.size, 0);
+            assert.equal(client.fragments, null);
+            assert.equal(client.fragmentedBytes, 0);
+        }
+    },
+);
+
+test("WebDriver BiDi reassembles JSON at every bytewise split point",
+    async () => {
+        const source = Buffer.from(JSON.stringify({
+            id: 1,
+            type: "success",
+            result: { value: "NFC=á; NFD=a\u0301; ZWJ=👩‍🔬" },
+        }));
+        for (let split = 1; split < source.length; split += 1) {
+            const client = new BidiClient("ws://127.0.0.1:1234/session");
+            client.socket = { write: () => {}, destroy: () => {} };
+            const pending = client.command("script.evaluate", {}, 30_000);
+            const frames = Buffer.concat([
+                testServerFrame(source.subarray(0, split), 0x1, false),
+                testServerFrame(source.subarray(split), 0x0, true),
+            ]);
+            client.buffer = frames;
+            client.drain();
+            const observed = await pending;
+            assert.equal(observed.value, "NFC=á; NFD=a\u0301; ZWJ=👩‍🔬");
+            assert.equal(client.fragments, null);
+            assert.equal(client.pending.size, 0);
+            client.close();
+        }
+        assert.ok(source.length > 50);
+    },
+);
+
+test("WebDriver BiDi answers server ping with an RFC 6455 masked pong",
+    () => {
+        const client = new BidiClient("ws://127.0.0.1:1234/session");
+        const writes = [];
+        client.socket = {
+            write: (bytes) => { writes.push(bytes); },
+            destroy: () => {},
+        };
+        client.buffer = testServerFrame("live", 0x9);
+        client.drain();
+        assert.equal(writes.length, 1);
+        const pong = writes[0];
+        assert.equal(pong[0], 0x8a);
+        assert.equal(pong[1] & 0x80, 0x80);
+        assert.equal(pong[1] & 0x7f, 4);
+        const mask = pong.subarray(2, 6);
+        const decoded = pong.subarray(6).map((value, index) =>
+            value ^ mask[index % 4]);
+        assert.deepEqual(decoded, Buffer.from("live"));
+        assert.equal(client.closed, false);
+        client.close();
+    },
+);
+
+test("WebDriver BiDi bounds aggregate continuation bytes before joining",
+    async () => {
+        const client = new BidiClient("ws://127.0.0.1:1234/session");
+        client.socket = { write: () => {}, destroy: () => {} };
+        const pending = client.command("script.evaluate", {}, 30_000);
+        // Synthetic state avoids allocating the multi-megabyte adversarial
+        // prefix while testing the exact arithmetic refusal boundary.
+        client.fragments = [Buffer.from("x")];
+        client.fragmentedBytes = MAX_BIDI_FRAME_BYTES - 1;
+        client.buffer = testServerFrame("12", 0x0, true);
+        client.drain();
+        await assert.rejects(pending, /WebDriver BiDi message too large/);
+        assert.equal(client.fragments, null);
+        assert.equal(client.pending.size, 0);
+        assert.equal(client.closed, true);
     },
 );
 
