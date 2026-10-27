@@ -399,6 +399,7 @@ function validateWebSocketUpgrade(head, key) {
 class BidiClient {
     constructor(url) {
         this.buffer = Buffer.alloc(0);
+        this.closed = false;
         this.events = [];
         this.nextId = 1;
         this.pending = new Map();
@@ -442,11 +443,33 @@ class BidiClient {
             this.buffer = Buffer.concat([this.buffer, chunk]);
             this.drain();
         });
+        // A dead peer must settle pending commands immediately instead of
+        // leaving every caller to wait for its separate command timeout.
+        this.socket.on("error", (error) => this.close(error));
+        this.socket.on("close", () => this.close(new Error(
+            "WebDriver BiDi socket closed before command completion",
+        )));
         this.drain();
         this.socket.resume();
     }
 
+    close(error = new Error("WebDriver BiDi client closed")) {
+        if (this.closed) {
+            return;
+        }
+        this.closed = true;
+        for (const pending of this.pending.values()) {
+            pending.reject(error);
+        }
+        this.pending.clear();
+        this.socket?.destroy?.();
+        this.buffer = Buffer.alloc(0);
+    }
+
     command(method, params = {}, timeoutMs = 10_000) {
+        if (this.closed) {
+            return Promise.reject(new Error("WebDriver BiDi client closed"));
+        }
         const id = this.nextId;
         this.nextId += 1;
         return new Promise((resolve, reject) => {
@@ -465,11 +488,17 @@ class BidiClient {
                     resolve(result);
                 },
             });
-            this.socket.write(this.textFrame(JSON.stringify({
-                id,
-                method,
-                params,
-            })));
+            try {
+                this.socket.write(this.textFrame(JSON.stringify({
+                    id,
+                    method,
+                    params,
+                })));
+            } catch (error) {
+                this.pending.delete(id);
+                clearTimeout(timer);
+                reject(error);
+            }
         });
     }
 
@@ -633,6 +662,99 @@ test("WebDriver errors and timeouts release their pending command slots",
     },
 );
 
+test("WebDriver client close rejects commands and destroys its socket",
+    async () => {
+        const client = new BidiClient("ws://127.0.0.1:1234/session");
+        const sent = [];
+        let destroyed = 0;
+        client.socket = {
+            write: (frame) => sent.push(frame),
+            destroy: () => { destroyed += 1; },
+        };
+        const pending = client.command("script.evaluate", {}, 30_000);
+        assert.equal(client.pending.size, 1);
+        client.close();
+        await assert.rejects(pending, /client closed/);
+        assert.equal(client.pending.size, 0);
+        assert.equal(destroyed, 1);
+        assert.equal(sent.length, 1);
+        client.close();
+        assert.equal(destroyed, 1, "shutdown is idempotent");
+        await assert.rejects(client.command("session.status"), /client closed/);
+    },
+);
+
+test("WebDriver client rejects a failed socket write without a timer leak",
+    async () => {
+        const client = new BidiClient("ws://127.0.0.1:1234/session");
+        const fault = new Error("injected disconnected socket");
+        client.socket = {
+            write: () => { throw fault; },
+            destroy: () => {},
+        };
+        await assert.rejects(client.command("session.status", {}, 30_000),
+            (error) => error === fault);
+        assert.equal(client.pending.size, 0);
+        client.close();
+    },
+);
+
+test("WebDriver peer disconnect rejects its pending command immediately",
+    { timeout: 5_000 },
+    async () => {
+        const peers = new Set();
+        const server = net.createServer((peer) => {
+            peers.add(peer);
+            peer.once("data", (request) => {
+                const key = request.toString("latin1").match(
+                    /Sec-WebSocket-Key: ([^\r\n]+)/i,
+                )?.[1];
+                if (key === undefined) {
+                    peer.destroy();
+                    return;
+                }
+                const accepted = crypto.createHash("sha1")
+                    .update(`${key}258EAFA5-E914-47DA-95CA-C5AB0DC85B11`)
+                    .digest("base64");
+                peer.write([
+                    "HTTP/1.1 101 Switching Protocols",
+                    "Upgrade: websocket",
+                    "Connection: Upgrade",
+                    `Sec-WebSocket-Accept: ${accepted}`,
+                    "", "",
+                ].join("\r\n"));
+            });
+            peer.on("close", () => peers.delete(peer));
+        });
+        server.listen(0, "127.0.0.1");
+        await once(server, "listening");
+        const address = server.address();
+        assert.notEqual(address, null);
+        assert.notEqual(typeof address, "string");
+        const client = new BidiClient(`ws://127.0.0.1:${address.port}/session`);
+        try {
+            await client.connect();
+            const command = client.command("session.status", {}, 30_000);
+            assert.equal(client.pending.size, 1);
+            for (const peer of peers) {
+                peer.destroy();
+            }
+            await assert.rejects(
+                command,
+                /socket closed before command|ECONNRESET/,
+            );
+            assert.equal(client.pending.size, 0);
+            assert.equal(client.closed, true);
+        } finally {
+            client.close();
+            for (const peer of peers) {
+                peer.destroy();
+            }
+            await new Promise((resolve) => server.close(resolve));
+        }
+    },
+);
+
 async function evaluateDocument(client, context) {
     const response = await client.command("script.evaluate", {
         awaitPromise: false,
@@ -719,13 +841,20 @@ async function startBidiFirefox(profile, children) {
             : null;
     });
     const bidi = new BidiClient(`${remote}/session`);
-    await bidi.connect();
-    await bidi.command(
-        "session.new",
-        { capabilities: { alwaysMatch: {} } },
-        15_000,
-    );
-    return bidi;
+    try {
+        await bidi.connect();
+        await bidi.command(
+            "session.new",
+            { capabilities: { alwaysMatch: {} } },
+            15_000,
+        );
+        return bidi;
+    } catch (error) {
+        // The caller only receives successfully initialized clients. Keep
+        // partially initialized WebDriver sockets owned by this helper.
+        bidi.close();
+        throw error;
+    }
 }
 
 function serveFile(response, file, contentType) {
@@ -1296,9 +1425,7 @@ test(
             }
             assert.deepEqual(requests, ["/", "/workspace.css"]);
         } finally {
-            if (bidi?.socket != null) {
-                bidi.socket.end();
-            }
+            bidi?.close();
             await closeFixtureServer(server);
             for (const child of children.reverse()) {
                 await stopChild(child);
@@ -1412,9 +1539,7 @@ test(
                 "/workspace.css",
             ]);
         } finally {
-            if (bidi?.socket != null) {
-                bidi.socket.end();
-            }
+            bidi?.close();
             await closeFixtureServer(server);
             for (const child of children.reverse()) {
                 await stopChild(child);
@@ -1586,9 +1711,7 @@ test(
                 false,
             );
         } finally {
-            if (bidi?.socket != null) {
-                bidi.socket.end();
-            }
+            bidi?.close();
             await closeFixtureServer(server);
             for (const child of children.reverse()) {
                 await stopChild(child);
@@ -1702,9 +1825,7 @@ test(
                 false,
             );
         } finally {
-            if (bidi?.socket != null) {
-                bidi.socket.end();
-            }
+            bidi?.close();
             await closeFixtureServer(server);
             for (const child of children.reverse()) {
                 await stopChild(child);
@@ -1828,9 +1949,7 @@ test(
                 false,
             );
         } finally {
-            if (bidi?.socket != null) {
-                bidi.socket.end();
-            }
+            bidi?.close();
             await closeFixtureServer(server);
             for (const child of children.reverse()) {
                 await stopChild(child);
@@ -1914,9 +2033,7 @@ test(
                 false,
             );
         } finally {
-            if (bidi?.socket != null) {
-                bidi.socket.end();
-            }
+            bidi?.close();
             await closeFixtureServer(server);
             for (const child of children.reverse()) {
                 await stopChild(child);
@@ -2010,9 +2127,7 @@ test(
                 false,
             );
         } finally {
-            if (bidi?.socket != null) {
-                bidi.socket.end();
-            }
+            bidi?.close();
             await closeFixtureServer(server);
             for (const child of children.reverse()) {
                 await stopChild(child);
@@ -2209,9 +2324,7 @@ test(
                 false,
             );
         } finally {
-            if (bidi?.socket != null) {
-                bidi.socket.end();
-            }
+            bidi?.close();
             await closeFixtureServer(server);
             for (const child of children.reverse()) {
                 await stopChild(child);
@@ -2354,9 +2467,7 @@ test(
                 false,
             );
         } finally {
-            if (bidi?.socket != null) {
-                bidi.socket.end();
-            }
+            bidi?.close();
             await closeFixtureServer(server);
             for (const child of children.reverse()) {
                 await stopChild(child);
@@ -2453,9 +2564,7 @@ test(
                 assert.ok(state.scrollWidth <= state.width);
             }
         } finally {
-            if (bidi?.socket != null) {
-                bidi.socket.end();
-            }
+            bidi?.close();
             await closeFixtureServer(server);
             for (const child of children.reverse()) {
                 await stopChild(child);
@@ -2564,9 +2673,7 @@ test(
                 false,
             );
         } finally {
-            if (bidi?.socket != null) {
-                bidi.socket.end();
-            }
+            bidi?.close();
             await closeFixtureServer(server);
             for (const child of children.reverse()) {
                 await stopChild(child);
@@ -2733,9 +2840,7 @@ test(
                 false,
             );
         } finally {
-            if (bidi?.socket != null) {
-                bidi.socket.end();
-            }
+            bidi?.close();
             await closeFixtureServer(server);
             for (const child of children.reverse()) {
                 await stopChild(child);
@@ -2966,9 +3071,7 @@ test(
                 false,
             );
         } finally {
-            if (bidi?.socket != null) {
-                bidi.socket.end();
-            }
+            bidi?.close();
             await closeFixtureServer(server);
             for (const child of children.reverse()) {
                 await stopChild(child);
@@ -3093,9 +3196,7 @@ test(
                 false,
             );
         } finally {
-            if (bidi?.socket != null) {
-                bidi.socket.end();
-            }
+            bidi?.close();
             await closeFixtureServer(server);
             for (const child of children.reverse()) {
                 await stopChild(child);
@@ -3181,9 +3282,7 @@ test(
                 false,
             );
         } finally {
-            if (bidi?.socket != null) {
-                bidi.socket.end();
-            }
+            bidi?.close();
             await closeFixtureServer(server);
             for (const child of children.reverse()) {
                 await stopChild(child);
@@ -3357,9 +3456,7 @@ test(
             assert.equal(cases, 32);
             assert.deepEqual(apiRequests, []);
         } finally {
-            if (bidi?.socket != null) {
-                bidi.socket.end();
-            }
+            bidi?.close();
             await closeFixtureServer(server);
             for (const child of children.reverse()) {
                 await stopChild(child);
@@ -3585,9 +3682,7 @@ test(
             assert.equal(framed.hasWorkspace, false);
             assert.notEqual(framed.title, "Atrament");
         } finally {
-            if (bidi?.socket != null) {
-                bidi.socket.end();
-            }
+            bidi?.close();
             for (const server of [hostile, permissive]) {
                 await closeFixtureServer(server);
             }
@@ -3675,9 +3770,7 @@ test(
                 "GET /api/session/candidate",
             ]);
         } finally {
-            if (bidi?.socket != null) {
-                bidi.socket.end();
-            }
+            bidi?.close();
             await closeFixtureServer(server);
             for (const child of children.reverse()) {
                 await stopChild(child);
@@ -3816,9 +3909,7 @@ test(
             if (firstResponse !== null && !firstResponse.writableEnded) {
                 firstResponse.destroy();
             }
-            if (bidi?.socket != null) {
-                bidi.socket.end();
-            }
+            bidi?.close();
             await closeFixtureServer(server);
             for (const child of children.reverse()) {
                 await stopChild(child);
@@ -3942,9 +4033,7 @@ test(
             if (pendingResponse !== null && !pendingResponse.destroyed) {
                 pendingResponse.destroy();
             }
-            if (bidi?.socket != null) {
-                bidi.socket.end();
-            }
+            bidi?.close();
             await closeFixtureServer(server);
             for (const child of children.reverse()) {
                 await stopChild(child);
@@ -4041,9 +4130,7 @@ test(
                 false,
             );
         } finally {
-            if (bidi?.socket != null) {
-                bidi.socket.end();
-            }
+            bidi?.close();
             await closeFixtureServer(server);
             for (const child of children.reverse()) {
                 await stopChild(child);
@@ -4162,7 +4249,7 @@ test(
             }
             assert.equal(apiRequests.at(-1), "POST /api/session/end");
         } finally {
-            if (bidi?.socket != null) bidi.socket.end();
+            bidi?.close();
             await closeFixtureServer(server);
             for (const child of children.reverse()) await stopChild(child);
             fs.rmSync(profile, { recursive: true, force: true });
@@ -4263,7 +4350,7 @@ test(
                 }
             }
         } finally {
-            if (bidi?.socket != null) bidi.socket.end();
+            bidi?.close();
             for (const child of children.reverse()) await stopChild(child);
             fs.rmSync(profile, { recursive: true, force: true });
         }
