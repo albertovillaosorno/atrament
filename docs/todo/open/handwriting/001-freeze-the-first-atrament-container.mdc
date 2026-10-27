@@ -256,3 +256,9 @@ SHA-256 streaming now shares a directly testable checked byte-count helper
 between hash updates and typed entry chunk verification. Synthetic values at
 and above the FIPS bit-length ceiling fail safely without giant allocations.
 Real profile Import must still enforce much tighter caller resource budgets.
+
+After complete inventory and SHA-256 admission, verified ZIP members now expose
+borrowed, nonzero-sized chunk iterators without allocating a second payload.
+A typed member is absent only when its exact name is missing; a present empty
+asset yields a valid iterator with zero chunks. All slices retain their source
+provenance, and no new source or Import authority is created.

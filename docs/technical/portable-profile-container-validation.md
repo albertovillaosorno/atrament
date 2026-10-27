@@ -381,6 +381,16 @@ The regression suite additionally proves that an admitted zero-byte asset
 returns an actual empty byte slice rather than being confused with absence,
 and that a later member's length mismatch precedes its incorrect digest.
 
+The sealed result also exposes `verified_entry_chunks` with a typed nonzero
+chunk size. Consumers borrow original, consecutive source slices of a fully
+verified member without allocating a second payload or claiming fresh source
+authority. Tests compare the original pointer for each chunk at nine different
+sizes and reject root, absent, near-matching and case-altered member names.
+
+A present zero-byte verified asset yields a *present*, empty chunk iterator;
+an absent asset yields no iterator. The future typed section decoder must still
+provide its own format, size, streaming and Import acceptance policy.
+
 The caller still must prove the supplied typed manifest originated in
 this archive's root JSON, enforce caller or host path authority, and decode
 the typed sections before session acceptance. The adapter has no filesystem

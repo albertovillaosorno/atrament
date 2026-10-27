@@ -34,6 +34,8 @@
 
 //! Read-only, bounded ordinary stored ZIP framing for portable profiles.
 
+use std::num::NonZeroUsize;
+use std::slice::Chunks;
 use std::str::from_utf8;
 
 use atrament_handwriting_profile_container::{
@@ -302,6 +304,22 @@ impl<'manifest, 'bytes> VerifiedProfileZipPayloads<'manifest, '_, 'bytes> {
             |entry| entry.name().cmp(path)
         ).ok()?;
         self.archive.entries.get(index).map(|entry| entry.bytes())
+    }
+
+    /// Borrow fixed-size chunks of one completely SHA-256-verified member.
+    ///
+    /// The chunk size is nonzero by type, so no unchecked `chunks(0)` panic
+    /// can occur. Slices remain borrowed from the same stored ZIP payload as
+    /// `verified_entry_bytes`, with no new allocation or decode. Missing,
+    /// undeclared and root-manifest names never yield verified chunks.
+    /// This does not create a streaming file transport or typed section.
+    #[must_use]
+    pub fn verified_entry_chunks(
+        &self,
+        path: &str,
+        chunk_size: NonZeroUsize,
+    ) -> Option<Chunks<'bytes, u8>> {
+        Some(self.verified_entry_bytes(path)?.chunks(chunk_size.get()))
     }
 
     /// Number of non-manifest member payloads verified.

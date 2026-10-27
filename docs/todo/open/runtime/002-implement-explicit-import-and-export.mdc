@@ -233,3 +233,9 @@ transport errors distinctly from short streams, declared length failures or
 SHA-256 mismatches. The verifier consumes only caller-supplied in-memory
 `Result` chunks; actual file access, interruption, authorization, cleanup and
 profile acceptance remain unimplemented in the adapter layer.
+
+Already SHA-256-verified stored ZIP payloads can now be accessed as borrowed,
+nonzero-sized chunks, including distinct present-empty and absent cases.
+Future section importers can consume those exact slices without whole-payload
+copies; format decoding, source authorization, filesystem I/O and session
+acceptance must still be implemented independently.

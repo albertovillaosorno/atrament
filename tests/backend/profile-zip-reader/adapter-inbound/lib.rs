@@ -33,6 +33,7 @@
 
 //! Deterministic real ZIP byte fixtures and mutation corpus.
 
+use std::num::NonZeroUsize;
 use std::path::PathBuf;
 
 use atrament_explicit_file_path_intent::{
@@ -1347,4 +1348,111 @@ fn crc_verified_zip_member_streams_to_exact_sha256_evidence() {
             atrament_handwriting_profile_container::
                 ProfileEntryVerificationError::DigestMismatch,
         )));
+}
+#[test]
+fn sealed_verified_member_chunks_borrow_exact_crc_and_sha_checked_source() {
+    let archive_bytes = make_zip(&ENTRIES);
+    let archive = read_stored_profile_zip(&archive_bytes, limits())
+        .expect("CRC-checked ZIP root and member");
+    let declared = ProfileManifest {
+        container_version: PROFILE_CONTAINER_VERSION.into(),
+        entries: vec![ProfileManifestEntry {
+            byte_length: 9,
+            digest: sha256_profile_bytes(b"123456789"),
+            media_type: "application/json".into(),
+            path: "sections/strokes.json".into(),
+        }],
+        optional_features: vec![],
+        profile_identity: "sealed-chunks-only".into(),
+        required_features: vec![],
+    };
+    let names = archive.observed_paths();
+    let admitted =
+        atrament_handwriting_profile_container::validate_profile_manifest_view(
+            &declared,
+            &[],
+        )
+        .expect("typed declaration shape validated");
+    let inventory = admitted
+        .admit_entry_inventory(&names)
+        .expect("exact member inventory admitted");
+    let verified = verify_admitted_profile_zip_payloads(&archive, inventory)
+        .expect("every declared member verified before exposing bytes");
+    let original = verified
+        .verified_entry_bytes("sections/strokes.json")
+        .expect("verified exact member exists");
+    assert_eq!(original, b"123456789");
+    for chunk_size in [1usize, 2, 3, 4, 5, 8, 9, 10, 32] {
+        let size = NonZeroUsize::new(chunk_size).expect("nonzero size");
+        let chunks = verified
+            .verified_entry_chunks("sections/strokes.json", size)
+            .expect("same verified member");
+        let mut observed = Vec::new();
+        for (index, chunk) in chunks.enumerate() {
+            observed.extend_from_slice(chunk);
+            let start = index.saturating_mul(chunk_size);
+            assert!(std::ptr::eq(chunk.as_ptr(), original[start..].as_ptr()));
+            assert!(!chunk.is_empty());
+            assert!(chunk.len() <= chunk_size);
+        }
+        assert_eq!(observed, original, "chunk_size={chunk_size}");
+    }
+    let single = NonZeroUsize::new(1).expect("nonzero size");
+    for missing in [
+        "manifest.json",
+        "sections/STROKES.json",
+        "sections/strokes.json/",
+        "sections/strokes.json ",
+        "sections/missing.json",
+        "assets/strokes.json",
+    ] {
+        assert!(verified.verified_entry_chunks(missing, single).is_none());
+    }
+}
+
+#[test]
+fn sealed_verified_empty_asset_produces_zero_chunks_not_missing() {
+    let members = [("assets/empty.webp", b"".as_slice(), 0u32), ENTRIES[0]];
+    let bytes = make_zip(&members);
+    let archive = read_stored_profile_zip(&bytes, limits())
+        .expect("root plus CRC-valid empty asset");
+    let manifest = ProfileManifest {
+        container_version: PROFILE_CONTAINER_VERSION.into(),
+        entries: vec![ProfileManifestEntry {
+            byte_length: 0,
+            digest: sha256_profile_bytes(b""),
+            media_type: "image/webp".into(),
+            path: "assets/empty.webp".into(),
+        }],
+        optional_features: vec![],
+        profile_identity: "empty-asset-chunks".into(),
+        required_features: vec![],
+    };
+    let names = archive.observed_paths();
+    let admission =
+        atrament_handwriting_profile_container::validate_profile_manifest_view(
+            &manifest,
+            &[],
+        )
+        .expect("valid declaration");
+    let inventory = admission
+        .admit_entry_inventory(&names)
+        .expect("root and declared asset match");
+    let verified = verify_admitted_profile_zip_payloads(&archive, inventory)
+        .expect("empty member digest verified");
+    let size = NonZeroUsize::new(17).expect("nonzero size");
+    let chunks = verified
+        .verified_entry_chunks("assets/empty.webp", size)
+        .expect("present empty member is not missing");
+    assert_eq!(chunks.count(), 0);
+    assert!(
+        verified
+            .verified_entry_chunks("assets/absent.webp", size)
+            .is_none()
+    );
+    assert!(
+        verified
+            .verified_entry_chunks("manifest.json", size)
+            .is_none()
+    );
 }
