@@ -362,3 +362,9 @@ fragmented control frames. Synthetic fixtures verify exact Unicode response
 bytes, split TCP headers, malformed sequencing and a synthetic over-limit
 fragment total without allocating a giant input. This remains automation
 framing only, not a production WebSocket or runtime protocol implementation.
+
+A full-browser stress run exposed that a 2-second forced-kill reap deadline
+was too short under workstation memory pressure. The bounded SIGKILL window
+is now 10 seconds, while a separate delayed-exit fixture proves successful
+reaping after the earlier deadline. This retains a finite failure boundary
+without misreporting slow child exit as an immediate test failure.

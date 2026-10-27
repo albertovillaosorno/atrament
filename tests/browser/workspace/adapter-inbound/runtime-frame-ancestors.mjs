@@ -134,7 +134,7 @@ function waitForLine(stream, select, timeoutMs = 15_000) {
 
 // Cleanup remains bounded even if a child does not emit exit after SIGKILL.
 // Every path removes the test-owned process observers and both deadlines.
-function stopChild(child, gracefulMs = 2_000, forcedMs = 2_000) {
+function stopChild(child, gracefulMs = 2_000, forcedMs = 10_000) {
     if (child.exitCode !== null || child.signalCode !== null) {
         return Promise.resolve();
     }
@@ -219,6 +219,29 @@ test("disposable child shutdown escalates and observes SIGKILL exit",
             return true;
         };
         await stopChild(child, 10, 10);
+        assert.deepEqual(signals, ["SIGTERM", "SIGKILL"]);
+        assert.equal(child.listenerCount("exit"), 0);
+        assert.equal(child.listenerCount("error"), 0);
+    },
+);
+
+test("delayed forced child exit remains within its bounded reap window",
+    async () => {
+        const child = new EventEmitter();
+        child.exitCode = null;
+        child.signalCode = null;
+        const signals = [];
+        child.kill = (signal) => {
+            signals.push(signal);
+            if (signal === "SIGKILL") {
+                setTimeout(() => {
+                    child.signalCode = signal;
+                    child.emit("exit", null, signal);
+                }, 45);
+            }
+            return true;
+        };
+        await stopChild(child, 10, 100);
         assert.deepEqual(signals, ["SIGTERM", "SIGKILL"]);
         assert.equal(child.listenerCount("exit"), 0);
         assert.equal(child.listenerCount("error"), 0);
