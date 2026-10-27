@@ -118,6 +118,31 @@ The check includes configured evidence for Git bootstrap, working copy, hooks,
 CSpell, snapshot state, native validation, linters, planned work, exact units,
 and hexagonal-source policy before executing the registered rule set.
 
+### Later validator-catalog mismatch (2026-10-27)
+
+The initial clean observation above does not describe the current Rust and
+TypeScript workspace. As of 2026-10-27, the installed Jig `26.3.0`
+reports `ready` in `jig doctor`, but `jig check` is **not clean**.
+
+The remaining validator-catalog diagnostics are:
+
+- `JIG-VERSION-030`: repository `pnpm` authority `12.15.0` differs from
+  the Jig-wide catalog, although the repository manifest and installed
+  package manager agree on `12.15.0`.
+- `JIG-VERSION-030`: the repository's Python tool authority is `3.14.8`,
+  but the Jig catalog requires `3.14.6`. The installed repository-owned
+  interpreter remains pinned to `3.14.8`.
+- `JIG-VERSION-031`: `getrandom` and `unicode-segmentation` have pinned Cargo
+  dependencies and repository authorities, but neither authority is
+  registered in this Jig build.
+
+These are validator catalog compatibility failures, not evidence of a passing
+release gate. Do not delete tracked dependency authorities, downgrade a
+verified toolchain, or disable validation rules to hide them. Reconcile the
+Jig-wide catalog with the repository-pinned versions through a separately
+verified validator update, then run a fresh committed-HEAD `jig check` before
+claiming clean validation.
+
 ### Planning-generation boundary
 
 A clean planning-generation check does not pre-approve implementation source.
