@@ -207,3 +207,10 @@ The stored ZIP reader now uses its sealed sorted entry index for exact root
 `manifest.json` binary search, consistent with payload verification. Byte-level
 ZIP fixtures prove middle-index root provenance and that nested near-matching
 names fail closed. This does not expand ZIP64 support or import authority.
+
+The sealed root JSON reader now supports caller-supplied structural paths made
+of exact decoded object keys and zero-based array indices. Invalid paths fail
+without coercing numeric object names into indices or normalizing Unicode.
+A real CRC-checked ZIP fixture establishes borrowed deep-source provenance,
+including the hard JSON nesting ceiling. This path projection cannot choose
+wire field names, accept a profile, or grant any file path authority.

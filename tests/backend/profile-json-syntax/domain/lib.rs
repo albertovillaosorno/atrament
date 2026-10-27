@@ -33,8 +33,8 @@
 //! Strict and independently bounded JSON grammar regression checks.
 
 use atrament_profile_json_syntax::{
-    MAXIMUM_JSON_NESTING, MAXIMUM_JSON_OBJECT_MEMBERS, ProfileJsonSyntaxError,
-    ProfileJsonSyntaxLimits, ProfileJsonValueKind,
+    MAXIMUM_JSON_NESTING, MAXIMUM_JSON_OBJECT_MEMBERS, ProfileJsonPathSegment,
+    ProfileJsonSyntaxError, ProfileJsonSyntaxLimits, ProfileJsonValueKind,
     validate_profile_json_object,
 };
 
@@ -1538,4 +1538,119 @@ fn sealed_nested_array_projection_reaches_exact_maximum_nesting() {
     assert_eq!(current.boolean(), Some(true));
     assert_eq!(current.array_element(0), None);
     assert_eq!(current.bytes(), b"true");
+}
+
+#[test]
+fn sealed_structural_path_traversal_retains_exact_nested_source() {
+    use ProfileJsonPathSegment::{Index, Key};
+    let json = concat!(
+        r#" { "\u0072oot" : { "rows" : [ {"id": 0},"#,
+        r#"{"id": ["\uD83D\uDE00", {"value":-1.50e+3}]}] } } "#,
+    );
+    let root = validate_profile_json_object(json.as_bytes(), limits())
+        .expect("nested document syntax admitted");
+    let path = [
+        Key("root"),
+        Key("rows"),
+        Index(1),
+        Key("id"),
+        Index(1),
+        Key("value"),
+    ];
+    let selected = root.value_at_path(&path).expect("escaped root path");
+    assert_eq!(selected.kind(), Some(ProfileJsonValueKind::Number));
+    assert_eq!(selected.bytes(), b"-1.50e+3");
+    assert_eq!(selected.unsigned_integer(), None);
+    assert_eq!(selected.at_path(&[]), Some(selected));
+    assert_eq!(selected.at_path(&[Index(0)]), None);
+    assert_eq!(
+        root.value_at_path(&[Key("root")]),
+        root.root_member_value("root")
+    );
+    assert_eq!(
+        root.value_at_path(&[Key("root"), Key("rows")]),
+        root.root_member_value("root")
+            .expect("object")
+            .object_member("rows")
+    );
+    let string_path = [Key("root"), Key("rows"), Index(1), Key("id"), Index(0)];
+    let decoded = root
+        .value_at_path(&string_path)
+        .expect("string leaf")
+        .string_chars()
+        .expect("scalar stream")
+        .collect::<String>();
+    assert_eq!(decoded, "😀");
+    let source_slice = selected.bytes();
+    assert!(
+        root.bytes()
+            .windows(source_slice.len())
+            .any(|span| std::ptr::eq(span.as_ptr(), source_slice.as_ptr()))
+    );
+}
+
+#[test]
+fn sealed_structural_path_never_coerces_name_into_index_or_reverse() {
+    use ProfileJsonPathSegment::{Index, Key};
+    let source = br#"{"0":[{"0":42}],"rows":[0,true,null,{}]}"#;
+    let root = validate_profile_json_object(source, limits()).expect("valid");
+    let valid = [Key("0"), Index(0), Key("0")];
+    assert_eq!(
+        root.value_at_path(&valid)
+            .expect("exact path")
+            .unsigned_integer(),
+        Some(42)
+    );
+    let invalid: &[&[ProfileJsonPathSegment<'_>]] = &[
+        &[],
+        &[Index(0)],
+        &[Key("missing")],
+        &[Key("0"), Key("0")],
+        &[Key("0"), Index(1)],
+        &[Key("0"), Index(usize::MAX)],
+        &[Key("0"), Index(0), Index(0)],
+        &[Key("rows"), Index(1), Key("anything")],
+        &[Key("rows"), Index(2), Index(0)],
+        &[Key("rows"), Index(3), Key("unknown")],
+        &[Key("rows"), Index(4)],
+        &[Key("rows"), Index(usize::MAX)],
+    ];
+    for path in invalid {
+        assert_eq!(root.value_at_path(path), None, "path={path:?}");
+    }
+    let object = root
+        .root_member_value("rows")
+        .expect("array")
+        .array_element(3)
+        .expect("object");
+    assert_eq!(object.at_path(&[]), Some(object));
+    assert_eq!(object.at_path(&[Index(0)]), None);
+    assert_eq!(object.at_path(&[Key("missing")]), None);
+}
+
+#[test]
+fn sealed_path_traverses_limit_depth_without_allocating_a_json_tree() {
+    use ProfileJsonPathSegment::{Index, Key};
+    let depth = MAXIMUM_JSON_NESTING - 1;
+    let document =
+        format!("{{\"rows\":{}0{}}}", "[".repeat(depth), "]".repeat(depth));
+    let root = validate_profile_json_object(
+        document.as_bytes(),
+        ProfileJsonSyntaxLimits {
+            maximum_bytes: document.len(),
+            maximum_nesting: MAXIMUM_JSON_NESTING,
+            maximum_object_members: 1,
+            maximum_values: depth + 2,
+        },
+    )
+    .expect("hard nesting limit admitted");
+    let mut path = Vec::with_capacity(depth + 1);
+    path.push(Key("rows"));
+    path.extend((0..depth).map(|_| Index(0)));
+    assert_eq!(
+        root.value_at_path(&path).expect("deep scalar").bytes(),
+        b"0"
+    );
+    path.push(Index(0));
+    assert_eq!(root.value_at_path(&path), None);
 }

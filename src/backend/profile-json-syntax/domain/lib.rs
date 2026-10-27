@@ -106,6 +106,18 @@ pub enum ProfileJsonValueKind {
     String,
 }
 
+/// One caller-selected step through a syntax-admitted JSON value.
+///
+/// Keys compare decoded Unicode scalars without normalization; indices are
+/// zero-based and never silently interpreted as object member names.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ProfileJsonPathSegment<'key> {
+    /// Select an array element using a zero-based index.
+    Index(usize),
+    /// Select an exact decoded object member name.
+    Key(&'key str),
+}
+
 /// Constructor-sealed borrowed view into an already admitted JSON document.
 ///
 /// Traversal never confers manifest field names, canonical encoding, or
@@ -371,6 +383,28 @@ impl<'bytes> ValidatedProfileJsonValue<'bytes> {
         })
     }
 
+    /// Follow a caller-supplied structural path from this admitted value.
+    ///
+    /// An empty path returns this same sealed value. Key and index segments
+    /// must match their container kinds; missing members, wrong kinds and
+    /// out-of-range indices return `None` without coercion or allocation.
+    /// This is JSON syntax selection, never a typed manifest policy.
+    #[must_use]
+    pub fn at_path(self, path: &[ProfileJsonPathSegment<'_>]) -> Option<Self> {
+        let mut current = self;
+        for segment in path {
+            current = match segment {
+                ProfileJsonPathSegment::Key(key) => {
+                    current.object_member(key)?
+                }
+                ProfileJsonPathSegment::Index(index) => {
+                    current.array_element(*index)?
+                }
+            };
+        }
+        Some(current)
+    }
+
     /// Interpret an admitted JSON `true` or `false` token without coercion.
     ///
     /// Wrong kinds return `None`, including strings containing `"true"`.
@@ -533,6 +567,24 @@ impl<'bytes> ValidatedProfileJsonObject<'bytes> {
         Some(self.root_field(key)?.value())
     }
 
+    /// Follow a structural path into the admitted root without creating a
+    /// typed manifest or accepting an arbitrary raw JSON value.
+    ///
+    /// The first segment must be an object member key. A following index may
+    /// select array elements, and subsequent keys may select nested members.
+    /// An empty path returns `None` because the root object retains outer
+    /// whitespace and is not itself represented by a child value slice.
+    #[must_use]
+    pub fn value_at_path(
+        self,
+        path: &[ProfileJsonPathSegment<'_>],
+    ) -> Option<ValidatedProfileJsonValue<'bytes>> {
+        let (first, remainder) = path.split_first()?;
+        let ProfileJsonPathSegment::Key(name) = first else {
+            return None;
+        };
+        self.root_member_value(name)?.at_path(remainder)
+    }
     /// Number of syntactic JSON values consumed including the root object.
     #[must_use]
     pub const fn value_count(self) -> usize {

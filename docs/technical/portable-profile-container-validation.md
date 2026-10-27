@@ -228,6 +228,27 @@ JSON decoder, configured for strict duplicate-key and surrogate admission,
 and found no disagreements. This is corroborating test evidence, not an
 additional runtime dependency or a frozen manifest wire schema.
 
+### Constructor-sealed structural JSON path selection
+
+A caller-provided path can select a JSON value by ordered decoded-name `Key`
+and zero-based `Index` segments, without allocating or transforming the parsed
+JSON tree. Root traversal requires a first object key and refuses an empty
+path; traversal from an already selected value accepts an empty path as the
+same sealed view. Wrong kinds, absent decoded names and array overruns return
+no value, including `usize::MAX` indices.
+
+The path grammar is not JSON Pointer: a numeric object key remains a `Key`,
+never an implied array index, and no slash or tilde decoding is performed.
+Complete input syntax, decoded-key uniqueness, Unicode validity and resource
+ceilings are admitted *before* a path is evaluated. The selected value still
+borrows original source bytes with unchanged JSON escape and number spelling.
+
+Integration fixtures traverse a nested path into real CRC-verified ZIP root
+bytes and check source-pointer provenance. Further tests cover escaped root
+names, mixed nested object and array segments, sparse/wrong-kind paths and
+the hard JSON nesting ceiling. No path is a manifest schema, filesystem path,
+permission, accepted profile, or canonical encoding decision.
+
 ### Exact entry SHA-256 verifier
 
 The separate profile-entry-sha256 domain computes NIST FIPS 180-4 SHA-256 over

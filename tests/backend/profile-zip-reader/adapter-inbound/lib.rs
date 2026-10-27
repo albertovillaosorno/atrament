@@ -52,7 +52,8 @@ use atrament_profile_entry_sha256::{
     sha256_profile_bytes, verify_profile_entry_bytes,
 };
 use atrament_profile_json_syntax::{
-    ProfileJsonSyntaxError, ProfileJsonSyntaxLimits, ProfileJsonValueKind,
+    ProfileJsonPathSegment, ProfileJsonSyntaxError, ProfileJsonSyntaxLimits,
+    ProfileJsonValueKind,
 };
 use atrament_profile_zip_reader::{
     ProfileZipManifestSyntaxError,
@@ -1109,6 +1110,19 @@ fn sealed_crc_checked_zip_root_exposes_nested_read_only_json_values() {
         br#""rows":[{"id":1},[true,false],"\u0061"]"#);
     let rows = nested.object_member("rows").expect("nested array");
     assert_eq!(rows_field.value().bytes(), rows.bytes());
+    use ProfileJsonPathSegment::{Index, Key};
+    let deep_path = [Key("nested"), Key("rows"), Index(1), Index(1)];
+    let selected = admitted.value_at_path(&deep_path)
+        .expect("CRC-verified ZIP nested scalar");
+    assert_eq!(selected.bytes(), b"false");
+    assert_eq!(selected.boolean(), Some(false));
+    assert!(admitted.bytes().windows(selected.bytes().len())
+        .any(|segment| std::ptr::eq(segment.as_ptr(),
+            selected.bytes().as_ptr())));
+    assert_eq!(admitted.value_at_path(&[Index(0)]), None);
+    assert_eq!(admitted.value_at_path(&[Key("nested"), Index(0)]), None);
+    assert_eq!(admitted.value_at_path(&[Key("nested"), Key("rows"),
+        Index(usize::MAX)]), None);
     let row0 = rows.array_element(0).expect("object row");
     assert_eq!(
         row0.object_member("id").expect("integer row value").bytes(),
