@@ -77,6 +77,12 @@ stored writer. The result matches the original fixed-metadata ZIP byte-for-byte,
 while the legacy complete-archive fingerprint remains different. This is a
 **read-only proof of envelope compatibility**, not a deployed rewrite action.
 
+Fifteen additional writer/reader differential fixtures alter creator version,
+extraction version, the ASCII UTF-8 flag, DOS time and DOS date independently
+on each of three member positions. All remain structurally readable, return
+`false` for writer framing, retain the exact same member evidence and produce
+the byte-identical fixed-metadata archive when deliberately reframed in memory.
+
 The reader recomputes ZIP CRC-32 over each bounded stored entry. This checks
 transport framing only: **CRC-32 does not establish manifest SHA-256
 integrity**. An additional root-manifest accessor checks a caller-chosen byte

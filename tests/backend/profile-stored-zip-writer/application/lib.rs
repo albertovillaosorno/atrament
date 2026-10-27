@@ -882,3 +882,63 @@ fn legacy_stored_headers_round_trip_to_writer_framing_without_payload_edits() {
     assert_eq!(checked.entries()[1].bytes(), members[1].bytes);
     assert!(parse_bytes(&canonical_reframe).matches_stored_writer_framing());
 }
+
+#[test]
+fn every_accepted_legacy_header_variant_reframes_to_exact_writer_bytes() {
+    let selected = [
+        member("assets/mark.webp", b"\0\x81\xff"),
+        member("manifest.json", b"{}"),
+        member("sections/ink.json", br#"[1,2,3]"#),
+    ];
+    let canonical = write_stored_profile_zip(&selected, limits())
+        .expect("three-member exact stored ZIP output");
+    let canonical_archive = parse_bytes(&canonical);
+    assert!(canonical_archive.matches_stored_writer_framing());
+    let central = u32::from_le_bytes(
+        canonical[canonical.len() - 6..canonical.len() - 2]
+            .try_into().expect("EOCD central offset"),
+    ) as usize;
+    let mut local_offset = 0usize;
+    let mut central_offset = central;
+    let mut checked = 0usize;
+    for (index, entry) in selected.iter().enumerate() {
+        for (case, local_field, central_field, value) in [
+            ("creator", None, 4usize, [10, 0]),
+            ("extractor", Some(4usize), 6, [10, 0]),
+            ("ASCII UTF-8 flag", Some(6), 8, [0, 0]),
+            ("DOS time", Some(10), 12, [3, 0]),
+            ("DOS date", Some(12), 14, [3, 0]),
+        ] {
+            let mut changed = canonical.clone();
+            if let Some(field) = local_field {
+                changed[local_offset + field..local_offset + field + 2]
+                    .copy_from_slice(&value);
+            }
+            changed[central_offset + central_field
+                ..central_offset + central_field + 2]
+                .copy_from_slice(&value);
+            let archive = parse_bytes(&changed);
+            assert_eq!(archive.entries(), canonical_archive.entries(),
+                "case={case} member={index}");
+            assert!(!archive.matches_fixed_writer_metadata(),
+                "case={case} member={index}");
+            assert!(!archive.matches_stored_writer_framing(),
+                "case={case} member={index}");
+            assert_ne!(archive.source_sha256(),
+                canonical_archive.source_sha256());
+            let members = archive.entries().iter()
+                .map(|item| member(item.name(), item.bytes()))
+                .collect::<Vec<_>>();
+            let output = write_stored_profile_zip(&members, limits())
+                .expect("admitted original payloads can reframe");
+            assert_eq!(output, canonical,
+                "case={case} member={index}");
+            assert!(parse_bytes(&output).matches_stored_writer_framing());
+            checked += 1;
+        }
+        local_offset += 30 + entry.name.len() + entry.bytes.len();
+        central_offset += 46 + entry.name.len();
+    }
+    assert_eq!(checked, 15);
+    assert_eq!(local_offset, central);
+}
