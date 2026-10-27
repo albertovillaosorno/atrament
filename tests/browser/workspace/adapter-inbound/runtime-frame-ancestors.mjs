@@ -4367,7 +4367,8 @@ test(
                         body: Buffer.concat(chunks).toString("utf8"), field,
                     });
                     const status = mutations.length === 1 ? 503
-                        : mutations.length === 3 ? 413 : 204;
+                        : mutations.length === 3 ? 413
+                            : mutations.length === 4 ? 401 : 204;
                     response.writeHead(status, {
                         "Cache-Control": "no-store",
                         "Content-Type": "application/json; charset=utf-8",
@@ -4544,7 +4545,24 @@ test(
                 { body: "preserve this unsaved text exactly", field: "task" },
                 { body: "too large to retry unchanged", field: "task" },
             ]);
+            await editTask("authorization revoked");
+            const revoked = await waitForSessionStatus(
+                bidi,
+                tab.context,
+                "Authorization failed",
+            );
+            for (const field of ["task", "source", "candidate"]) {
+                assert.deepEqual(revoked[field], {
+                    disabled: true,
+                    value: "",
+                });
+            }
+            assert.deepEqual(await inspectRetry(), {
+                disabled: true, hidden: true, label: "Retry edits",
+            });
+            await clickRetry();
             assert.deepEqual(apiRequests.slice(8), [
+                "POST /api/session/task",
                 "POST /api/session/task",
                 "POST /api/session/task",
                 "POST /api/session/task",
