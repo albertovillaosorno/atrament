@@ -432,6 +432,63 @@ fn caller_owned_output_rejects_bad_payload_before_mutating_any_slot() {
 }
 
 #[test]
+fn zip_preflight_refuses_unaffordable_input_before_hash_comparison() {
+    let mut profile = manifest();
+    profile.entries.push(entry("assets/ink.bin", b"correct"));
+    let bad = [ProfileExportPayload {
+        path: "assets/ink.bin", bytes: b"corrupt",
+    }];
+    let mut budget = limits();
+    budget.zip.maximum_entries = 1;
+    let refusal = Error::Zip(ProfileStoredZipWriteError::ResourceLimit);
+    assert_eq!(
+        assemble_profile_export_artifact(
+            &profile, &bad, &["strokes"], budget,
+        ).err(),
+        Some(refusal.clone()),
+    );
+    assert_eq!(
+        planned_profile_export_artifact_bytes(
+            &profile, &bad, &["strokes"], budget,
+        ).err(),
+        Some(refusal.clone()),
+    );
+    let mut destination = [0xa7u8; 512];
+    assert_eq!(
+        write_profile_export_artifact_into(
+            &profile, &bad, &["strokes"], budget, &mut destination,
+        ).err(),
+        Some(refusal.clone()),
+    );
+    assert_eq!(destination, [0xa7; 512]);
+    budget = limits();
+    budget.zip.maximum_total_bytes = 1;
+    assert_eq!(
+        assemble_profile_export_artifact(
+            &profile, &bad, &["strokes"], budget,
+        ).err(),
+        Some(refusal.clone()),
+    );
+    assert_eq!(
+        planned_profile_export_artifact_bytes(
+            &profile, &bad, &["strokes"], budget,
+        ).err(),
+        Some(refusal),
+    );
+    assert_eq!(
+        write_profile_export_artifact_into(
+            &profile, &bad, &["strokes"],
+            limits(), &mut destination,
+        ).err(),
+        Some(Error::PayloadVerification {
+            index: 0,
+            reason: ProfileEntryVerificationError::DigestMismatch,
+        }),
+    );
+    assert_eq!(destination, [0xa7; 512]);
+}
+
+#[test]
 fn generated_profile_archives_are_deterministic_and_sha_bound() {
     let mut state = 0x8ab5_41c0_9321_77b5u64;
     for case in 0..256 {

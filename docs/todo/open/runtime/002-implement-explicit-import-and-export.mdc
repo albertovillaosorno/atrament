@@ -407,3 +407,12 @@ and undersized caller buffers. The 256-case canonical corpus now compares all
 three paths byte-for-byte and confirms that even later corrupted payloads
 cannot mutate an already owned destination. The writer still does not establish
 selected destination authority or an atomic filesystem commit.
+
+The assembly gate now runs the stored-ZIP count, declared byte-budget and ZIP32
+preflight **before** SHA-256 work on potentially large supplied payload bodies.
+Exact path inventory is still matched first, and admitted archives retain their
+length-before-digest failure priority. A focused three-writer regression
+confirms
+that an unaffordable archive fails by typed ZIP budget rather than hashing
+corrupt member bytes; a sufficient budget still detects the digest mismatch.
+No output or caller-owned buffer is affected by these refusals.

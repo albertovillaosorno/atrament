@@ -289,12 +289,6 @@ fn with_verified_members<T>(
                 index,
             });
         }
-        let _evidence = verify_profile_entry_bytes(entry, payload.bytes)
-            .map_err(|reason| {
-                ProfileExportAssemblyError::PayloadVerification {
-                    index, reason,
-                }
-            })?;
     }
 
     let count = declared.len()
@@ -325,6 +319,22 @@ fn with_verified_members<T>(
             bytes: &root,
             name: PROFILE_MANIFEST_PATH,
         });
+    }
+    // Refuse ZIP count, payload budgets and ZIP32 overflow before hashing
+    // potentially large member bodies. The output writer checks again.
+    let _planned_size = planned_stored_profile_zip_bytes(
+        &members, limits.zip,
+    )
+    .map_err(ProfileExportAssemblyError::Zip)?;
+    for (index, (entry, payload)) in
+        declared.iter().zip(&supplied).enumerate()
+    {
+        let _evidence = verify_profile_entry_bytes(entry, payload.bytes)
+            .map_err(|reason| {
+                ProfileExportAssemblyError::PayloadVerification {
+                    index, reason,
+                }
+            })?;
     }
     let result = write(&members, limits.zip)
         .map_err(ProfileExportAssemblyError::Zip)?;
