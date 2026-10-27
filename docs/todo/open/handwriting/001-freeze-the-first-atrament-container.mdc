@@ -290,3 +290,8 @@ names against the shared path validator and mutate 4,096 bits in real emitted
 stored ZIP frames. A valid read after mutation must retain every original
 member name and payload byte; invalid frames fail with existing typed errors.
 The writer still offers no typed manifest or canonical JSON serialization.
+
+A second immutable multi-member ZIP SHA-256 golden now records an archive
+independently verified with Python's standard `zipfile` reader and SHA library,
+including empty, binary and Unicode-named entries. This checks byte-stable
+stored framing but does not establish canonical JSON or profile Export.

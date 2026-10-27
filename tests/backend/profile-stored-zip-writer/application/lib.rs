@@ -645,3 +645,34 @@ fn seeded_one_byte_zip_mutations_cannot_change_admitted_payload_identity() {
     }
     assert_eq!(checked, 4_096);
 }
+
+#[test]
+fn independent_python_multimember_zipfile_golden_sha256_is_stable() {
+    // An external Python zipfile reader verified the names, content, CRC,
+    // UTF-8 flag, stored method and absence of extras/comments. Its hashlib
+    // digest freezes this exact multi-member encoding independently.
+    let image: &[u8] = &[0, 0xff, 1, 0x80, 0x7f, 0];
+    let source = [
+        member("assets/empty.webp", b""),
+        member("assets/ñ.webp", image),
+        member("manifest.json", b"{\"test\":true}"),
+        member("sections/😀.json", b"[12,34,56]"),
+    ];
+    let archived = write_stored_profile_zip(&source, limits())
+        .expect("fixed deterministic four-member ZIP");
+    assert_eq!(archived.len(), 479);
+    let digest = sha256_profile_bytes(&archived).bytes();
+    let encoded = digest
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>();
+    assert_eq!(
+        encoded,
+        "1451e12dd97e666c89c7f752c92b3530520b1bbdc07df3cc244959b52d986553"
+    );
+    let parsed = parse_bytes(&archived);
+    for (record, original) in parsed.entries().iter().zip(source) {
+        assert_eq!(record.name(), original.name);
+        assert_eq!(record.bytes(), original.bytes);
+    }
+}

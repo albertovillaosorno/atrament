@@ -102,7 +102,10 @@ It rejects ordinary-ZIP sentinel values rather than misrepresenting large
 archives.
 
 An independent Python `struct`/`zlib`/`zipfile` golden fixture establishes
-byte-for-byte output for a root-only archive. Cross-component tests round-trip
+byte-for-byte output for a root-only archive. Python's standard `zipfile`
+reader also verifies a four-member archive's stored method, UTF-8 flags,
+payloads and CRC checks; its independent SHA-256 digest is now a permanent
+multi-member output regression. Cross-component tests round-trip
 empty and Unicode-named members through Atrament's strict ZIP reader, including
 the 65,535-byte filename boundary and 65,535-entry ZIP64 sentinel refusal.
 
