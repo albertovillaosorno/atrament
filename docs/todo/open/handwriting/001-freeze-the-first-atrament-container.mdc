@@ -404,3 +404,19 @@ The real stored-ZIP regression connects the decoded declarations through
 sorted Import preflight and cryptographic member verification; a new CRC cannot
 conceal a substituted payload. Canonical JSON writing, filesystem authority,
 section decoding, migration and accepted-profile mutation remain open.
+
+The new pure `atrament_profile_manifest_json_writer` serializes admitted typed
+manifest metadata into deterministic UTF-8 under caller-owned entry, feature,
+string and exact encoded-byte limits. Keys use fixed ASCII lexical order,
+entries sort by exact archive path, feature lists sort by UTF-8 bytes, SHA-256
+is lowercase hex, `u64` sizes are plain decimal, and strings use minimal
+JSON-required escaping while preserving non-control Unicode. Both byte
+planning and emission run through the same sink, with a single fallible output
+reservation.
+
+Six tests prove golden bytes, input-order invariance, control
+escapes and max-integer round trips, exact limit refusal, typed-manifest
+rejection, and a real stored ZIP whose source-attached decoded manifest passes
+complete SHA-256 payload verification. This closes only the manifest JSON
+writer prerequisite: there is no full profile Export adapter, physical file
+authorization, section serializer, ZIP64 implementation, or session acceptance.

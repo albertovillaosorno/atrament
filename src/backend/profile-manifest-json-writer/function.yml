@@ -1,0 +1,9 @@
+identity:
+  id: function:profile-manifest-json-writer
+  name: profile-manifest-json-writer
+  path: src/backend/profile-manifest-json-writer
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: application
