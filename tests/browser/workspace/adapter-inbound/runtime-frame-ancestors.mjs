@@ -65,6 +65,7 @@ const WORKSPACE_DIR = path.resolve(
 // A Firefox automation result may exceed a megabyte, but not an unbounded
 // length advertised by a malformed remote WebSocket peer.
 const MAX_BIDI_FRAME_BYTES = 8 * 1024 * 1024;
+const MAX_BIDI_FRAGMENTS = 1_024;
 const MAX_BIDI_EVENTS = 16;
 const REFRESH_SECRET = "a".repeat(64);
 const REFRESH_DRAFT = {
@@ -495,10 +496,16 @@ function readWebSocketUpgrade(socket, timeoutMs = 10_000) {
             "remote WebSocket endpoint closed before its upgrade response",
         ));
         const onData = (chunk) => {
-            received = Buffer.concat([received, chunk]);
+            const maximumHeader = 16_384;
+            // Inspect at most the header ceiling plus the four-byte marker.
+            // A valid response may coalesce a large WebSocket data frame into
+            // the same TCP chunk; that trailing data is not header content.
+            const inspected = Math.min(chunk.length,
+                Math.max(0, maximumHeader + 4 - received.length));
+            received = Buffer.concat([received, chunk.subarray(0, inspected)]);
             const boundary = received.indexOf("\r\n\r\n");
-            if (boundary > 16_384 ||
-                (boundary < 0 && received.length > 16_384)) {
+            if (boundary > maximumHeader ||
+                (boundary < 0 && received.length > maximumHeader)) {
                 finish(new Error("WebSocket upgrade headers exceed limit"));
                 return;
             }
@@ -508,7 +515,10 @@ function readWebSocketUpgrade(socket, timeoutMs = 10_000) {
             socket.pause();
             finish(null, {
                 head: received.subarray(0, boundary).toString("latin1"),
-                remainder: received.subarray(boundary + 4),
+                remainder: Buffer.concat([
+                    received.subarray(boundary + 4),
+                    chunk.subarray(inspected),
+                ]),
             });
         };
         const timer = setTimeout(() => finish(new Error(
@@ -561,6 +571,60 @@ test(
         assert.equal(stream.listenerCount("error"), 0);
         assert.equal(stream.listenerCount("close"), 0);
         stream.destroy();
+    },
+);
+
+test("upgrade bounds header scanning without dropping coalesced frames",
+    async () => {
+        const stream = new PassThrough();
+        const header = Buffer.from([
+            "HTTP/1.1 101 Switching Protocols",
+            "Upgrade: websocket",
+            "Connection: Upgrade",
+            "", "",
+        ].join("\r\n"));
+        const largeFrame = Buffer.alloc(256_000, 0xc5);
+        const response = readWebSocketUpgrade(stream, 500);
+        stream.write(Buffer.concat([header, largeFrame]));
+        const accepted = await response;
+        assert.equal(accepted.head,
+            header.subarray(0, header.length - 4).toString("latin1"));
+        assert.deepEqual(accepted.remainder, largeFrame);
+        assert.equal(stream.listenerCount("data"), 0);
+        stream.destroy();
+        const invalid = new PassThrough();
+        const rejected = readWebSocketUpgrade(invalid, 500);
+        invalid.write(Buffer.alloc(256_000, 0x41));
+        await assert.rejects(rejected, /headers exceed limit/);
+        assert.equal(invalid.listenerCount("data"), 0);
+        invalid.destroy();
+    },
+);
+
+test("upgrade accepts the exact header-byte boundary across chunks",
+    async () => {
+        for (const [length, accepted] of [
+            [16_384, true],
+            [16_385, false],
+        ]) {
+            const stream = new PassThrough();
+            const upgrade = readWebSocketUpgrade(stream, 500);
+            stream.write("X".repeat(length));
+            stream.write(Buffer.concat([
+                Buffer.from("\r\n\r\n"),
+                Buffer.from([0x81, 0x02, 0x6f, 0x6b]),
+            ]));
+            if (accepted) {
+                const result = await upgrade;
+                assert.equal(result.head.length, length);
+                assert.deepEqual(result.remainder,
+                    Buffer.from([0x81, 0x02, 0x6f, 0x6b]));
+            } else {
+                await assert.rejects(upgrade, /headers exceed limit/);
+            }
+            assert.equal(stream.listenerCount("data"), 0);
+            stream.destroy();
+        }
     },
 );
 
@@ -804,6 +868,10 @@ class BidiClient {
                 const total = this.fragmentedBytes + payload.length;
                 if (total > MAX_BIDI_FRAME_BYTES) {
                     this.close(new Error("WebDriver BiDi message too large"));
+                    return;
+                }
+                if (this.fragments.length >= MAX_BIDI_FRAGMENTS) {
+                    this.close(new Error("too many WebDriver BiDi fragments"));
                     return;
                 }
                 this.fragments.push(payload);
@@ -1190,6 +1258,34 @@ test("WebDriver BiDi answers server ping with an RFC 6455 masked pong",
         assert.deepEqual(decoded, Buffer.from("live"));
         assert.equal(client.closed, false);
         client.close();
+    },
+);
+
+test("WebDriver BiDi refuses unlimited empty continuation fragments",
+    async () => {
+        const client = new BidiClient("ws://127.0.0.1:1234/session");
+        let destroyed = 0;
+        client.socket = {
+            write: () => {},
+            destroy: () => { destroyed += 1; },
+        };
+        const pending = client.command("script.evaluate", {}, 30_000);
+        client.buffer = testServerFrame("{", 0x1, false);
+        client.drain();
+        for (let index = 1; index < MAX_BIDI_FRAGMENTS; index += 1) {
+            client.buffer = testServerFrame("", 0x0, false);
+            client.drain();
+            assert.equal(client.closed, false);
+        }
+        assert.equal(client.fragments.length, MAX_BIDI_FRAGMENTS);
+        assert.equal(client.fragmentedBytes, 1);
+        client.buffer = testServerFrame("", 0x0, true);
+        client.drain();
+        await assert.rejects(pending, /too many WebDriver BiDi fragments/);
+        assert.equal(client.fragments, null);
+        assert.equal(client.fragmentedBytes, 0);
+        assert.equal(client.pending.size, 0);
+        assert.equal(destroyed, 1);
     },
 );
 

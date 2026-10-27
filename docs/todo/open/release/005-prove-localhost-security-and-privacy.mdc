@@ -368,3 +368,14 @@ was too short under workstation memory pressure. The bounded SIGKILL window
 is now 10 seconds, while a separate delayed-exit fixture proves successful
 reaping after the earlier deadline. This retains a finite failure boundary
 without misreporting slow child exit as an immediate test failure.
+
+An automation-parser ceiling now caps WebDriver BiDi text fragments at
+1,024, including zero-length continuations that consume no payload byte
+budget. A focused fixture sends 1,025 fragments and verifies that the owned
+socket and pending commands fail closed without unbounded fragment retention.
+
+WebSocket upgrade-header scanning now inspects at most 16 KiB plus the
+four-byte terminator before identifying the header boundary. A large frame
+coalesced into the same TCP response is still preserved byte-for-byte, while
+a similarly large unterminated header fails without copying the full chunk
+into the header buffer. Both cases have dedicated regression tests.
