@@ -50,6 +50,7 @@ use atrament_profile_json_syntax::{
 use atrament_profile_manifest_json_codec::{
     ProfileManifestJsonError as Error, ProfileManifestJsonLimits,
     decode_profile_manifest_json,
+    decode_attached_profile_manifest_json,
 };
 use atrament_profile_stored_zip_writer::{
     ProfileStoredZipMember, ProfileStoredZipWriteLimits,
@@ -323,11 +324,18 @@ fn real_zip_root_decodes_to_typed_manifest_with_independent_payload_digest() {
         .admitted_root_json(syntax_limits())
         .expect("source-backed JSON root");
     assert_eq!(attached.archive().source_sha256(), archive.source_sha256());
-    let manifest = decode_profile_manifest_json(attached.root(), codec_limits())
-        .expect("typed source-backed manifest fields");
+    let original_sha = attached.source_sha256();
+    let attached_decoded = decode_attached_profile_manifest_json(
+        &attached, codec_limits(),
+    ).expect("type remains associated with source ZIP");
+    assert_eq!(attached_decoded.root_sha256(), original_sha);
+    assert_eq!(attached_decoded.archive().source_sha256(),
+        archive.source_sha256());
+    assert!(std::ptr::eq(attached_decoded.archive(), &archive));
+    let manifest = attached_decoded.manifest();
     assert_eq!(manifest.entries[0].digest, sha);
     assert_eq!(manifest.entries[0].byte_length, payload.len() as u64);
-    assert_eq!(validate_profile_manifest(&manifest, &["strokes"]), Ok(()));
+    assert_eq!(validate_profile_manifest(manifest, &["strokes"]), Ok(()));
     let selected = classify_explicit_file_path_intent(
         ExplicitFilePurpose::ImportProfile,
         ExplicitFilePathSource::CallerSelection,
@@ -338,7 +346,7 @@ fn real_zip_root_decodes_to_typed_manifest_with_independent_payload_digest() {
     let count = archive.copy_observed_paths(&mut paths)
         .expect("names sourced from this ZIP");
     let preflight = preflight_explicit_profile_import_sorted(
-        &selected, &manifest, &["strokes"], &paths[..count],
+        &selected, manifest, &["strokes"], &paths[..count],
         archive.encoding_evidence(), ProfileImportBudget {
             maximum_declared_bytes: 2,
             maximum_entries: 1,
@@ -377,6 +385,15 @@ fn real_zip_root_decodes_to_typed_manifest_with_independent_payload_digest() {
             maximum_total_bytes: 8_192,
         },
     ).expect("same framing still passes");
+    let changed_root = changed_archive.admitted_root_json(syntax_limits())
+        .expect("the same root stays schema-admissible");
+    let changed_decoded = decode_attached_profile_manifest_json(
+        &changed_root, codec_limits(),
+    ).expect("the other ZIP also has a typed manifest");
+    assert!(std::ptr::eq(changed_decoded.archive(), &changed_archive));
+    assert_eq!(changed_decoded.root_sha256(), original_sha);
+    assert_ne!(changed_decoded.archive().source_sha256(),
+        attached_decoded.archive().source_sha256());
     assert!(verify_admitted_profile_zip_payloads(
         &changed_archive, preflight.inventory(),
     ).is_err());

@@ -39,6 +39,9 @@ use atrament_handwriting_profile_container::{
 use atrament_profile_json_syntax::{
     ValidatedProfileJsonObject, ValidatedProfileJsonValue,
 };
+use atrament_profile_zip_reader::{
+    ProfileZipArchive, ValidatedProfileZipRootJson,
+};
 
 /// Allocation ceilings independent of the upstream JSON grammar limits.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -68,6 +71,64 @@ pub enum ProfileManifestJsonError {
     UnknownField(&'static str),
     /// A present field has the wrong JSON kind.
     WrongType(&'static str),
+}
+
+/// The typed manifest paired with the exact CRC-checked ZIP that supplied it.
+///
+/// This association cannot be constructed from unrelated manifest values by
+/// callers. The underlying source bytes, root syntax, and typed metadata stay
+/// tied together, but the declarations have not yet been checked against the
+/// ZIP member inventory and SHA-256 bytes. No filesystem source is authorized.
+#[derive(Debug)]
+pub struct DecodedProfileZipManifest<'archive, 'bytes> {
+    archive: &'archive ProfileZipArchive<'bytes>,
+    manifest: ProfileManifest,
+    root_sha256: Sha256Digest,
+}
+
+impl<'archive, 'bytes> DecodedProfileZipManifest<'archive, 'bytes> {
+    /// Borrow the checked source archive for subsequent inventory verification.
+    #[must_use]
+    pub const fn archive(&self) -> &'archive ProfileZipArchive<'bytes> {
+        self.archive
+    }
+
+    /// Borrow the schema-decoded declarations, without Import authority.
+    #[must_use]
+    pub const fn manifest(&self) -> &ProfileManifest {
+        &self.manifest
+    }
+
+    /// Return the hash of the exact root member bytes admitted from this ZIP.
+    ///
+    /// This is **not** a cryptographic proof of the other archive members.
+    #[must_use]
+    pub const fn root_sha256(&self) -> Sha256Digest {
+        self.root_sha256
+    }
+}
+
+/// Decode only root JSON evidence sealed to the checked source ZIP archive.
+///
+/// Unlike decoding a standalone syntax-admitted object, this function retains
+/// the exact supplying archive borrow and root-only SHA-256 fingerprint in a
+/// private constructor result. This is not entry-hash verification or Import.
+///
+/// # Errors
+///
+/// Propagates exact typed schema and allocation-limit errors without exposing
+/// a partially decoded manifest or independent archive relationship.
+pub fn decode_attached_profile_manifest_json<'archive, 'bytes>(
+    source: &ValidatedProfileZipRootJson<'archive, 'bytes>,
+    limits: ProfileManifestJsonLimits,
+) -> Result<DecodedProfileZipManifest<'archive, 'bytes>,
+    ProfileManifestJsonError> {
+    let manifest = decode_profile_manifest_json(source.root(), limits)?;
+    Ok(DecodedProfileZipManifest {
+        archive: source.archive(),
+        manifest,
+        root_sha256: source.source_sha256(),
+    })
 }
 
 /// Decode every required first-release wire field, refusing unknown keys.

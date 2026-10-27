@@ -903,9 +903,17 @@ typed decoding results must match exactly; each operation is exercised 512
 times, and the corpus requires both rejection stages and accepted typed values.
 This is regression fuzzing, not a claim of complete coverage-guided fuzzing.
 
+The decoder also accepts the source-sealed `ValidatedProfileZipRootJson`
+into a `DecodedProfileZipManifest` with a private constructor. That result
+borrows the exact checked ZIP that supplied the manifest, retains its typed
+fields and binds the source-root SHA-256 fingerprint. Callers cannot associate
+unrelated ZIPs and typed manifests by constructing this wrapper themselves.
+The original standalone syntax decoder is still available but carries no ZIP
+association, so downstream Import should prefer the sealed ZIP entry point.
+
 This is a reader-side schema contract, not canonical manifest JSON writing or
-a selected-file Import. Source provenance, filesystem admission, real section
-schemas, profile acceptance, and canonical serialization remain outstanding.
+a selected-file Import. Selected-file provenance, filesystem admission, real
+section schemas, profile acceptance and canonical writing remain outstanding.
 No path inside the manifest conveys file read or write authorization.
 
 ## Verification

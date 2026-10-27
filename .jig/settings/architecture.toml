@@ -346,7 +346,7 @@ depends_on = ["atrament_explicit_file_path_intent", "atrament_handwriting_profil
 depends_on = []
 
 [component.atrament_profile_manifest_json_codec]
-# ZIP framing and hashes are integration-test dependencies only.
+# Direct ZIP root read evidence; other edges are integration tests.
 depends_on = ["atrament_handwriting_profile_container", "atrament_profile_json_syntax", "atrament_profile_entry_sha256", "atrament_profile_stored_zip_writer", "atrament_profile_zip_reader", "atrament_explicit_file_path_intent", "atrament_profile_import_preflight"]
 
 [component.atrament_profile_stored_zip_writer]

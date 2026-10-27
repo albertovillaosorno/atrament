@@ -344,3 +344,9 @@ composes source-backed root decoding with sorted Import preflight and full
 member digest verification, including a CRC-correct same-length mutation.
 This advances read-only prerequisites but does not open a selected file,
 authorize Import or Export, decode handwriting sections or accept a profile.
+
+The typed root decoder also now offers a constructor-sealed result pairing the
+manifest to its exact checked archive and root SHA-256 fingerprint. This removes
+a detached-manifest substitution opportunity for future Import composition.
+It still requires explicit caller-selected file evidence, inventory and entry
+hash checks, typed sections and session acceptance before completing Import.
