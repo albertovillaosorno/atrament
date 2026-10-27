@@ -169,3 +169,17 @@ The corpus requires both valid and invalid results, actual CRC failures,
 invalid structure failures and at least four distinct rejection classes.
 This complements finite regression generators but does not replace dedicated
 coverage-guided fuzzing of all other untrusted formats.
+
+A new 4,096-case deterministic profile manifest JSON corpus now runs every
+untrusted mutation through both bounded JSON syntax admission and the strict
+typed manifest decoder. It exercises byte replacement, deletion, insertion,
+duplication, whitespace, plain integer changes, valid SHA-256 hex replacements,
+and decoded feature strings containing NUL.
+
+All eight operation groups must
+appear 512 times and the corpus must observe syntax rejection, schema
+rejection, and typed admission in independently checked nonempty quantities.
+Each stage is rerun on identical input and must return identical typed results
+without panicking; successful decodes still grant no file-source authority.
+This supplements the ZIP and manifest metadata corpora, not coverage-guided
+fuzzing or end-to-end authorization and profile-session acceptance.

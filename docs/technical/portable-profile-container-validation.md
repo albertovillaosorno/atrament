@@ -896,6 +896,13 @@ fixture passes the decoded manifest to sorted Import preflight and complete
 member SHA-256 verification. A CRC-correct modified member fails digest
 admission even though the original root remains syntactically valid.
 
+A 4,096-case deterministic mutation fixture also exercises raw JSON byte
+replacement, insertion, deletion and duplication plus value-level integer,
+digest, whitespace and decoded NUL-string variations. Repeated syntax and
+typed decoding results must match exactly; each operation is exercised 512
+times, and the corpus requires both rejection stages and accepted typed values.
+This is regression fuzzing, not a claim of complete coverage-guided fuzzing.
+
 This is a reader-side schema contract, not canonical manifest JSON writing or
 a selected-file Import. Source provenance, filesystem admission, real section
 schemas, profile acceptance, and canonical serialization remain outstanding.

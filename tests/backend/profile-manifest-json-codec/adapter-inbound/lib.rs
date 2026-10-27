@@ -382,3 +382,84 @@ fn real_zip_root_decodes_to_typed_manifest_with_independent_payload_digest() {
     ).is_err());
     // No selected filesystem source has been opened or session mutated.
 }
+
+#[test]
+fn deterministic_manifest_mutations_never_escape_sealed_schema_gates() {
+    // These inputs model untrusted root bytes before file-source admission.
+    // Syntax and typed admission must agree on every repeated observation.
+    let base = base_json().into_bytes();
+    let mut state = 0x4c52_4f4f_u64;
+    let mut syntax_rejected = 0usize;
+    let mut schema_rejected = 0usize;
+    let mut admitted = 0usize;
+    let mut observed_operations = [0usize; 8];
+    for case in 0usize..4_096 {
+        state = state.wrapping_mul(6_364_136_223_846_793_005u64)
+            .wrapping_add(1_442_695_040_888_963_407u64);
+        let offset = usize::try_from(state >> 32u32)
+            .expect("high LCG half fits usize") % base.len();
+        let mutation = case % observed_operations.len();
+        if let Some(count) = observed_operations.get_mut(mutation) {
+            *count = count.saturating_add(1);
+        }
+        let mut raw = base.clone();
+        match mutation {
+            0 => raw[offset] = [b'"', b'\\', b'[', b'{', 0xff]
+                .get(case % 5).copied().expect("bounded selection"),
+            1 => { let _removed = raw.remove(offset); }
+            2 => raw.insert(offset, b'0'),
+            3 => raw.insert(offset, b' '),
+            4 => {
+                let next = raw.get(offset).copied().expect("bounded offset");
+                raw.insert(offset, next);
+            }
+            5 => raw = base_json().replace(
+                "\"byte_length\":2", &format!(
+                    "\"byte_length\":{}", case % 11,
+                ),
+            ).into_bytes(),
+            6 => raw = base_json().replace(
+                ZERO_SHA, &format!("{:064x}", case),
+            ).into_bytes(),
+            7 => raw = base_json().replace(
+                "\"optional_features\":[]",
+                "\"optional_features\":[\"unknown\\u0000future\"]",
+            ).into_bytes(),
+            _ => unreachable!("the operation index is bounded"),
+        }
+        let first = validate_profile_json_object(&raw, syntax_limits());
+        let second = validate_profile_json_object(&raw, syntax_limits());
+        assert_eq!(first, second, "case={case}, mutation={mutation}");
+        let Ok(root) = first else {
+            syntax_rejected = syntax_rejected.saturating_add(1);
+            continue;
+        };
+        let first = decode_profile_manifest_json(root, codec_limits());
+        let second = decode_profile_manifest_json(root, codec_limits());
+        assert_eq!(first, second, "case={case}, mutation={mutation}");
+        match first {
+            Ok(manifest) => {
+                admitted = admitted.saturating_add(1);
+                assert!(
+                    manifest.entries.len() <= codec_limits().maximum_entries
+                );
+                assert!(
+                    manifest.required_features.len()
+                        <= codec_limits().maximum_features
+                );
+                assert!(
+                    manifest.optional_features.len()
+                        <= codec_limits().maximum_features
+                );
+                // No schema success grants selected-file or section admission.
+            }
+            Err(_schema) => {
+                schema_rejected = schema_rejected.saturating_add(1);
+            }
+        }
+    }
+    assert!(observed_operations.iter().all(|count| *count >= 512));
+    assert!(syntax_rejected > 500);
+    assert!(schema_rejected > 100);
+    assert!(admitted > 300);
+}
