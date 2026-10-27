@@ -311,3 +311,8 @@ through complete entry SHA-256 checks, preserving exact borrowed source bytes.
 An altered member with a valid new CRC and unchanged inventory still passes
 structural preflight but fails declared SHA-256, even though root syntax and
 its exact-source fingerprint remain unchanged. No profile is accepted.
+
+An exhaustive 128-case comparison also proves that both Import preflight
+variants return identical earlier path-purpose, archive-encoding and budget
+results across all first-release ZIP metadata combinations. Only the final
+inventory gate differs by explicit ordering and count diagnostics.

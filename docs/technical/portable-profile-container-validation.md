@@ -137,6 +137,9 @@ encoding, resource-budget and manifest gates with the general Import preflight.
 
 The sorted comparison rejects duplicates, decreasing order, missing root,
 missing declared members and unexpected extra names with typed diagnostics.
+A further 128-case matrix confirms sorted and general Import preflight agree
+on purpose, compression, platform extras, ZIP64 and resource-budget outcomes
+before the two inventory admission strategies can diverge.
 An 8,192-case generated comparison checks agreement on acceptance with the
 existing order-agnostic validator. A 65,534-name fixture exercises the ZIP32
 entry ceiling, and the read-only real-ZIP fixture compares both preflights.

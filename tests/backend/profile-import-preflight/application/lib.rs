@@ -541,3 +541,77 @@ fn sorted_import_preflight_preserves_early_gates_and_exact_admission() {
         },
     )));
 }
+
+#[test]
+fn sorted_and_general_import_preflight_share_all_early_gate_combinations() {
+    let parsed = manifest();
+    let names = [
+        "assets/source.webp", "manifest.json", "sections/strokes.json",
+    ];
+    let mut cases = 0usize;
+    let mut accepted = 0usize;
+    let mut rejected = 0usize;
+    for purpose in [
+        ExplicitFilePurpose::ImportProfile,
+        ExplicitFilePurpose::ExportProfile,
+        ExplicitFilePurpose::ImportNotebook,
+        ExplicitFilePurpose::ExportNotebook,
+    ] {
+        let selection = selected(purpose);
+        for entry_encoding in [
+            ProfileArchiveEntryEncoding::Stored,
+            ProfileArchiveEntryEncoding::Compressed,
+        ] {
+            for platform_extras in [
+                ProfileArchivePlatformExtras::Absent,
+                ProfileArchivePlatformExtras::Present,
+            ] {
+                for zip64_requirement in [
+                    ProfileZip64Requirement::Ordinary,
+                    ProfileZip64Requirement::Required,
+                ] {
+                    for zip64_use in [
+                        ProfileZip64Use::Absent,
+                        ProfileZip64Use::Present,
+                    ] {
+                        let encoding = ProfileArchiveEncodingEvidence {
+                            entry_encoding, platform_extras,
+                            zip64_requirement, zip64_use,
+                        };
+                        for restrictive_budget in [false, true] {
+                            let budget = if restrictive_budget {
+                                ProfileImportBudget {
+                                    maximum_entries: 1,
+                                    ..budget()
+                                }
+                            } else {
+                                budget()
+                            };
+                            let general = preflight_explicit_profile_import(
+                                &selection, &parsed, &["strokes"], &names,
+                                encoding, budget,
+                            );
+                            let sorted =
+                                preflight_explicit_profile_import_sorted(
+                                    &selection, &parsed, &["strokes"],
+                                    &names, encoding, budget,
+                                );
+                            assert_eq!(sorted, general,
+                                "same gate result case={cases}");
+                            if general.is_ok() {
+                                accepted += 1;
+                            } else {
+                                rejected += 1;
+                            }
+                            cases += 1;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    assert_eq!(cases, 128);
+    assert!(accepted > 0);
+    assert!(rejected > 0);
+    assert_eq!(accepted + rejected, cases);
+}
