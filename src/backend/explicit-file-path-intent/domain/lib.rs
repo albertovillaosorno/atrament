@@ -161,9 +161,16 @@ pub fn classify_explicit_file_path_intent(
     if path_bytes.contains(&0) {
         return Err(ExplicitFilePathIntentError::NulByteInPath);
     }
-    let selected_directory = path_bytes.ends_with(
-        MAIN_SEPARATOR_STR.as_bytes(),
-    ) || cfg!(windows) && path_bytes.ends_with(b"/");
+    // Path::file_name() ignores trailing `/.` on Unix. Inspect the original
+    // path spelling so an explicitly selected directory cannot masquerade as
+    // a filename after component normalization.
+    let selected_directory = path_bytes.ends_with(MAIN_SEPARATOR_STR.as_bytes())
+        || path_bytes.ends_with(b"/.")
+        || path_bytes.ends_with(b"/..")
+        || cfg!(windows)
+            && (path_bytes.ends_with(b"/")
+                || path_bytes.ends_with(b"\\.")
+                || path_bytes.ends_with(b"\\.."));
     if path.file_name().is_none() || selected_directory {
         return Err(ExplicitFilePathIntentError::NoSelectedFile);
     }

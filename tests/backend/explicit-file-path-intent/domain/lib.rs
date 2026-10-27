@@ -110,6 +110,7 @@ fn every_source_purpose_and_overwrite_combination_is_classified() {
 fn selection_requires_a_nonempty_file_name_component() {
     for selected in [
         "", ".", "..", "/", "../..", "notes/", "./notes/", "notes/sub/",
+        "notes/.", "notes/sub/.", "notes/..", "notes/sub/..",
     ] {
         for source in [
             ExplicitFilePathSource::CallerSelection,

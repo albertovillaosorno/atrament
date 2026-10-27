@@ -112,8 +112,10 @@ unimplemented. No persistent output is created by this work.
 
 The selected-file classifier now also rejects embedded NUL bytes before any
 future file adapter can interpret the path, while retaining exact non-UTF-8
-names and refusing directory-marker paths. The caller/host selection provenance
-rule remains unchanged and no file effect is introduced.
+names and refusing directory-marker paths. Raw paths ending in `/.` or
+`/..` now also reject before `Path::file_name()` can discard a trailing dot
+component and mistake a directory selection for a file. The caller/host
+selection provenance rule remains unchanged and no file effect is introduced.
 
 ## Explicit portable-profile Import preflight evidence
 
