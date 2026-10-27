@@ -71,7 +71,9 @@ A writer-to-reader boundary test proves that all 65,534 ordinary ZIP entries
 fit and round-trip without ZIP64, including both end-record counts, sorted
 member identity, planned byte length, and the full ZIP source fingerprint.
 The next count (65,535) remains the ZIP64 sentinel and is refused without
-allocating output bytes.
+allocating output bytes. Python's independent `struct`/`zlib` framing and
+standard `zipfile` reader also verified the 65,534-entry boundary archive.
+A permanent 7,077,690-byte SHA-256 golden protects the exact ZIP32 framing.
 
 The typed manifest must still be parsed, checked and matched against those
 observations, and SHA-256 must be independently measured before any section

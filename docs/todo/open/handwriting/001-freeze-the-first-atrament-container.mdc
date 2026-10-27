@@ -325,3 +325,8 @@ checks. The sentinel count 65,535 remains rejected as unsupported ZIP64.
 ZIP reader index reservation now fails with `AllocationFailed` if its already
 bounded count cannot be reserved, instead of calling infallible
 `with_capacity`.
+
+An independent Python `struct`/`zlib` implementation and standard `zipfile`
+reader now establish byte-for-byte golden SHA-256 for the 65,534-entry ordinary
+ZIP32 boundary, including empty assets, the root manifest and exact directory
+count fields. It protects a 7,077,690-byte output without using ZIP64.

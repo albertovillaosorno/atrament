@@ -792,4 +792,12 @@ fn largest_ordinary_zip32_entry_count_round_trips_without_zip64() {
     assert_eq!(parsed.entries()[0].bytes(), b"");
     assert_eq!(parsed.entries()[maximum_ordinary_entries - 1].bytes(), b"{}");
     assert_eq!(parsed.source_sha256(), sha256_profile_bytes(&bytes));
+    // Python's independent struct/zlib implementation produced these exact
+    // ZIP32 bytes; its standard zipfile reader opened all 65,534 entries.
+    assert_eq!(planned, 7_077_690);
+    let digest = parsed.source_sha256().bytes();
+    let golden = digest.iter().map(|byte| format!("{byte:02x}"))
+        .collect::<String>();
+    assert_eq!(golden,
+        "c564b867a623511169ae843eac4acf3f08322782fdf7b6b6bb7351b90a52a793");
 }
