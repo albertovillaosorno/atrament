@@ -323,6 +323,13 @@ altered bytes cannot satisfy an unchanged manifest SHA-256 digest.
 
 ### Incremental, fixed-memory entry SHA-256 verification
 
+The FIPS maximum message length now has an explicit, testable
+`checked_sha256_message_bytes` helper shared by the streaming hasher and
+entry verifier. Synthetic arithmetic tests exercise the largest admissible
+byte count, its zero-length edge and the first overflowing byte without
+allocating unrealistic multi-exabyte buffers. This is a cryptographic bit-
+length limit only, never an acceptable application resource budget.
+
 The same dependency-free SHA-256 domain now offers a 64-byte incremental
 `ProfileSha256State` for already bounded chunks, independent of filesystem or
 ZIP transport. Updates preserve pending partial compression blocks, exact

@@ -251,3 +251,8 @@ Fallible chunk verification now returns original upstream errors instead of
 silently accepting partial input as an EOF or conflating a read failure with a
 cryptographic mismatch. Both fallible and ordinary SHA-256 chunk paths share
 one byte-length and digest gate; no ZIP/file source authority is introduced.
+
+SHA-256 streaming now shares a directly testable checked byte-count helper
+between hash updates and typed entry chunk verification. Synthetic values at
+and above the FIPS bit-length ceiling fail safely without giant allocations.
+Real profile Import must still enforce much tighter caller resource budgets.

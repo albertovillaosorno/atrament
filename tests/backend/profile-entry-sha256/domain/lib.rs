@@ -37,9 +37,11 @@ use atrament_handwriting_profile_container::{
     Sha256Digest,
 };
 use atrament_profile_entry_sha256::{
-    ProfileChunkVerificationError, ProfileFallibleChunkVerificationError,
-    ProfileSha256State, sha256_profile_bytes, verify_profile_entry_bytes,
-    verify_profile_entry_chunks, verify_profile_entry_chunks_fallible,
+    MAXIMUM_SHA256_MESSAGE_BYTES, ProfileChunkVerificationError,
+    ProfileFallibleChunkVerificationError, ProfileSha256State,
+    checked_sha256_message_bytes, sha256_profile_bytes,
+    verify_profile_entry_bytes, verify_profile_entry_chunks,
+    verify_profile_entry_chunks_fallible,
 };
 use std::fmt::Write as _;
 use std::iter::successors;
@@ -477,4 +479,32 @@ fn fallible_sha256_rejects_known_overrun_before_reading_later_error() {
         ))
     );
     assert_eq!(reads.get(), 2, "third source error was never read");
+}
+
+#[test]
+fn sha256_message_length_arithmetic_rejects_exact_overflow_without_allocating()
+{
+    let maximum = MAXIMUM_SHA256_MESSAGE_BYTES;
+    assert_eq!(maximum, u64::MAX >> 3u32);
+    assert_eq!(checked_sha256_message_bytes(0, 0), Ok(0));
+    assert_eq!(checked_sha256_message_bytes(123, 0), Ok(123));
+    assert_eq!(checked_sha256_message_bytes(maximum, 0), Ok(maximum));
+    assert_eq!(checked_sha256_message_bytes(maximum - 1, 1), Ok(maximum));
+    assert_eq!(checked_sha256_message_bytes(maximum, 1),
+        Err(atrament_profile_entry_sha256::
+            ProfileSha256UpdateError::MessageTooLong));
+    assert_eq!(checked_sha256_message_bytes(maximum - 1, 2),
+        Err(atrament_profile_entry_sha256::
+            ProfileSha256UpdateError::MessageTooLong));
+    assert_eq!(checked_sha256_message_bytes(u64::MAX, 0),
+        Err(atrament_profile_entry_sha256::
+            ProfileSha256UpdateError::MessageTooLong));
+    if let Ok(capacity) = usize::try_from(maximum) {
+        assert_eq!(checked_sha256_message_bytes(0, capacity), Ok(maximum));
+        if let Some(too_big) = capacity.checked_add(1) {
+            assert_eq!(checked_sha256_message_bytes(0, too_big),
+                Err(atrament_profile_entry_sha256::
+                    ProfileSha256UpdateError::MessageTooLong));
+        }
+    }
 }

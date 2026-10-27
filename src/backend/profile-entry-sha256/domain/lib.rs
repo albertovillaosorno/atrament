@@ -118,6 +118,11 @@ const ROUND_CONSTANTS: [u32; 64] = [
     0xc671_78f2,
 ];
 
+/// Maximum SHA-256 message size in bytes with a 64-bit bit-length field.
+///
+/// The importing application must enforce much smaller resource budgets.
+pub const MAXIMUM_SHA256_MESSAGE_BYTES: u64 = u64::MAX >> 3u32;
+
 /// Rejected incremental SHA-256 input beyond the FIPS message-length bound.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ProfileSha256UpdateError {
@@ -200,17 +205,11 @@ impl EntryChunkAccumulator<'_> {
         &mut self,
         chunk: &[u8],
     ) -> Result<(), ProfileChunkVerificationError> {
-        let additional = u64::try_from(chunk.len()).map_err(|_overflow| {
-            ProfileChunkVerificationError::Hasher(
-                ProfileSha256UpdateError::MessageTooLong,
-            )
-        })?;
-        let observed =
-            self.hasher.bytes_hashed().checked_add(additional).ok_or(
-                ProfileChunkVerificationError::Hasher(
-                    ProfileSha256UpdateError::MessageTooLong,
-                ),
-            )?;
+        let observed = checked_sha256_message_bytes(
+            self.hasher.bytes_hashed(),
+            chunk.len(),
+        )
+        .map_err(ProfileChunkVerificationError::Hasher)?;
         if observed > self.declaration.byte_length {
             return Err(ProfileChunkVerificationError::Entry(
                 ProfileEntryVerificationError::ByteLengthMismatch {
@@ -300,13 +299,8 @@ impl ProfileSha256State {
         &mut self,
         bytes: &[u8],
     ) -> Result<(), ProfileSha256UpdateError> {
-        let additional = u64::try_from(bytes.len())
-            .map_err(|_overflow| ProfileSha256UpdateError::MessageTooLong)?;
-        let total = self
-            .length_bytes
-            .checked_add(additional)
-            .filter(|length| *length <= u64::MAX >> 3u32)
-            .ok_or(ProfileSha256UpdateError::MessageTooLong)?;
+        let total =
+            checked_sha256_message_bytes(self.length_bytes, bytes.len())?;
         self.length_bytes = total;
         let mut remaining = bytes;
         if self.buffered != 0 {
@@ -338,6 +332,26 @@ impl ProfileSha256State {
         self.buffered = rest.len();
         Ok(())
     }
+}
+
+/// Check cumulative SHA-256 message length without allocating any bytes.
+///
+/// This proves arithmetic range only, not source, file, or Import authority.
+/// The calling application must separately bound allowed entry sizes.
+///
+/// # Errors
+///
+/// Refuses a total size exceeding the SHA-256 64-bit bit-length field.
+pub fn checked_sha256_message_bytes(
+    already: u64,
+    additional: usize,
+) -> Result<u64, ProfileSha256UpdateError> {
+    let additional_bytes = u64::try_from(additional)
+        .map_err(|_overflow| ProfileSha256UpdateError::MessageTooLong)?;
+    already
+        .checked_add(additional_bytes)
+        .filter(|total| *total <= MAXIMUM_SHA256_MESSAGE_BYTES)
+        .ok_or(ProfileSha256UpdateError::MessageTooLong)
 }
 
 fn compress(state: &mut [u32; 8], block: &[u8; 64]) {
