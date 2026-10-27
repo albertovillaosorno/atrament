@@ -434,3 +434,102 @@ fn pseudo_regular_zero_length_file_does_not_fake_eof() {
         Err(Error::Source(ProfileFileReadError::FileLengthChanged)),
     );
 }
+
+#[test]
+fn tighter_import_and_schema_entry_caps_refuse_zip_before_root_decode() {
+    let payload = b"ok";
+    // Invalid JSON still has valid stored ZIP framing and CRC. The member
+    // count must refuse without attempting root JSON or digest inspection.
+    let fixture = OwnedTestFile::new(&zip(b"{broken-json}", payload));
+    let intent = selected(ExplicitFilePurpose::ImportProfile);
+    let inspected = Cell::new(false);
+    for (import_max, schema_max, zip_max) in [(0, 2, 3), (2, 0, 3), (2, 2, 1)] {
+        let mut config = limits();
+        config.import.maximum_entries = import_max;
+        config.manifest.maximum_entries = schema_max;
+        config.zip.maximum_entries = zip_max;
+        assert_eq!(
+            inspect_open_profile_import(
+                &intent,
+                |max| read_bounded_profile_file(fixture.open(), max),
+                &[],
+                config,
+                |_verified| inspected.set(true),
+            ),
+            Err(Error::Zip(ProfileZipReadError::ResourceLimit)),
+        );
+    }
+    assert!(!inspected.get());
+    let mut config = limits();
+    config.import.maximum_entries = usize::MAX;
+    config.manifest.maximum_entries = usize::MAX;
+    assert!(matches!(
+        inspect_open_profile_import(
+            &intent,
+            |max| read_bounded_profile_file(fixture.open(), max),
+            &[],
+            config,
+            |_verified| (),
+        ),
+        Err(Error::RootJson(ProfileZipManifestSyntaxError::Json(
+            ProfileJsonSyntaxError::Malformed,
+        ))),
+    ));
+}
+
+#[test]
+fn manifest_only_archive_passes_with_zero_non_root_entry_budget() {
+    let root = concat!(
+        r#"{"container_version":"atrament.profile/1","#,
+        r#""profile_identity":"empty","required_features":[],"#,
+        r#""optional_features":[],"entries":[]}"#,
+    );
+    let bytes = write_stored_profile_zip(
+        &[ProfileStoredZipMember {
+            name: "manifest.json",
+            bytes: root.as_bytes(),
+        }],
+        ProfileStoredZipWriteLimits {
+            maximum_archive_bytes: 16_384,
+            maximum_entries: 3,
+            maximum_entry_bytes: 8_192,
+            maximum_total_bytes: 12_000,
+        },
+    )
+    .expect("manifest-only stored archive");
+    let fixture = OwnedTestFile::new(&bytes);
+    let intent = selected(ExplicitFilePurpose::ImportProfile);
+    let mut config = limits();
+    config.import.maximum_entries = 0;
+    config.import.maximum_declared_bytes = 0;
+    config.import.maximum_entry_bytes = 0;
+    config.manifest.maximum_entries = 0;
+    assert_eq!(
+        inspect_open_profile_import(
+            &intent,
+            |max| read_bounded_profile_file(fixture.open(), max),
+            &[],
+            config,
+            |verified| {
+                assert_eq!(
+                    verified.verified_entry_bytes("manifest.json"),
+                    None
+                );
+                assert!(verified.manifest().entries.is_empty());
+                (verified.verified_entry_count(), verified.archive_sha256())
+            },
+        ),
+        Ok((0, sha256_profile_bytes(&bytes))),
+    );
+    config.zip.maximum_entries = 0;
+    assert_eq!(
+        inspect_open_profile_import(
+            &intent,
+            |max| read_bounded_profile_file(fixture.open(), max),
+            &[],
+            config,
+            |_verified| (),
+        ),
+        Err(Error::Zip(ProfileZipReadError::ResourceLimit)),
+    );
+}

@@ -95,6 +95,8 @@ pub enum ProfileOpenFileImportError {
 /// a `ProfileOpenedFileBytes` produced by the outbound file reader, not a
 /// path string. Wrong purpose refuses before invoking that callback.
 /// Source length is checked against independent transport/ZIP ceilings.
+/// The strictest ZIP, Import or schema count bound is enforced before
+/// the ZIP reader allocates its member index; excess returns ZIP `ResourceLimit`.
 /// ZIP framing, JSON, manifest, inventory and every payload SHA-256 must all
 /// pass before invoking `inspect`; verified borrows cannot escape inspection.
 /// Same-length concurrent file rewrites do not prove a stable disk snapshot.
@@ -134,7 +136,21 @@ where
             ProfileFileReadError::FileTooLarge,
         ));
     }
-    let archive = read_stored_profile_zip(source.bytes(), limits.zip)
+    // The ZIP index is an allocation-bearing boundary. Do not build an
+    // index that the tighter Import or typed-manifest count budget
+    // must reject after parsing; reserve one slot for the root.
+    let maximum_entries = limits.zip.maximum_entries.min(
+        limits
+            .import
+            .maximum_entries
+            .min(limits.manifest.maximum_entries)
+            .saturating_add(1),
+    );
+    let zip_limits = ProfileZipReadLimits {
+        maximum_entries,
+        ..limits.zip
+    };
+    let archive = read_stored_profile_zip(source.bytes(), zip_limits)
         .map_err(ProfileOpenFileImportError::Zip)?;
     let root = archive
         .admitted_root_json(limits.root_json)

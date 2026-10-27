@@ -51,7 +51,7 @@ checks classified `ImportProfile` intent before invoking that reader.
 It then checks stored ZIP framing and CRC, bounded root JSON syntax,
 typed manifest fields, inventory and every declared member SHA-256.
 
-Ten tests use real temporary files, an unopened path-intent string,
+Twelve tests use real temporary files, an unopened path-intent string,
 an initial file cursor at EOF, a write-only handle, directories,
 a Linux procfs file reporting zero length, budget boundaries,
 CRC-correct payload substitution and malicious JSON. Wrong-purpose,
@@ -63,6 +63,14 @@ caller-selected path, with symlink and source-provenance policy. A
 classified path and open handle alone do not prove that association.
 Concurrent same-length rewrites cannot prove a stable disk snapshot,
 although admitted bytes must pass complete integrity verification.
+
+The composition also tightens the ZIP reader's member-index budget to the
+minimum of the ZIP total-member ceiling and the tighter of the
+schema and Import non-root limits plus one root manifest slot.
+A manifest-only ZIP is accepted at zero non-root entry allowance.
+Excess counts refuse during ZIP framing before index allocation or
+root decoding.
+
 Typed section decoding, explicit profile acceptance, revision-bound
 Export and atomic file commit remain open.
 
