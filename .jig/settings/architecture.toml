@@ -347,7 +347,7 @@ depends_on = []
 
 [component.atrament_profile_stored_zip_writer]
 # Read adapter is used only by this writer's integration tests.
-depends_on = ["atrament_handwriting_profile_container", "atrament_profile_zip_reader"]
+depends_on = ["atrament_handwriting_profile_container", "atrament_profile_entry_sha256", "atrament_profile_json_syntax", "atrament_profile_zip_reader"]
 
 [component.atrament_profile_zip_reader]
 # Import and intent adapters are consumed only by its integration fixture.

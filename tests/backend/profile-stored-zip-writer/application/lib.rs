@@ -32,13 +32,20 @@
 
 //! Deterministic stored-only ZIP framing and fail-closed budget checks.
 
-use atrament_handwriting_profile_container::PROFILE_MANIFEST_PATH;
+use atrament_handwriting_profile_container::{
+    PROFILE_CONTAINER_VERSION, PROFILE_MANIFEST_PATH, ProfileManifest,
+    ProfileManifestEntry, validate_profile_manifest_view,
+};
+use atrament_profile_entry_sha256::sha256_profile_bytes;
+use atrament_profile_json_syntax::ProfileJsonSyntaxLimits;
 use atrament_profile_stored_zip_writer::{
     ProfileStoredZipMember, ProfileStoredZipWriteError,
-    ProfileStoredZipWriteLimits, write_stored_profile_zip,
+    ProfileStoredZipWriteLimits, planned_stored_profile_zip_bytes,
+    write_stored_profile_zip,
 };
 use atrament_profile_zip_reader::{
     ProfileZipReadLimits, read_stored_profile_zip,
+    verify_admitted_profile_zip_payloads,
 };
 
 fn limits() -> ProfileStoredZipWriteLimits {
@@ -354,5 +361,180 @@ fn many_generated_sorted_payloads_are_stable_and_reader_admitted() {
             assert_eq!(observed.bytes(), expected.bytes);
         }
         assert_eq!(write_stored_profile_zip(&members, limits()), Ok(output));
+    }
+}
+
+#[test]
+fn emitted_archive_can_verify_complete_typed_inventory_and_sha256() {
+    let members = [
+        member("assets/image.webp", b"\x00\xff\x01\x80"),
+        member("manifest.json", b"{}"),
+        member("sections/sample.json", br#"{"strokes":[1,2,3]}"#),
+    ];
+    let byte_archive = write_stored_profile_zip(&members, limits())
+        .expect("deterministic ZIP framing");
+    let parsed = parse_bytes(&byte_archive);
+    let typed = ProfileManifest {
+        container_version: PROFILE_CONTAINER_VERSION.into(),
+        entries: vec![
+            ProfileManifestEntry {
+                byte_length: 4,
+                digest: sha256_profile_bytes(members[0].bytes),
+                media_type: "image/webp".into(),
+                path: "assets/image.webp".into(),
+            },
+            ProfileManifestEntry {
+                byte_length: u64::try_from(members[2].bytes.len())
+                    .expect("fixed fixture fits u64"),
+                digest: sha256_profile_bytes(members[2].bytes),
+                media_type: "application/json".into(),
+                path: "sections/sample.json".into(),
+            },
+        ],
+        optional_features: vec![],
+        profile_identity: "writer-reader-sha-fixture".into(),
+        required_features: vec![],
+    };
+    let declared = validate_profile_manifest_view(&typed, &[])
+        .expect("typed declaration is valid independently");
+    let names = parsed.observed_paths();
+    let inventory = declared
+        .admit_entry_inventory(&names)
+        .expect("exact sorted archive member inventory");
+    let verified = verify_admitted_profile_zip_payloads(&parsed, inventory)
+        .expect("all emitted members match typed digests");
+    assert_eq!(verified.verified_entry_count(), 2);
+    assert_eq!(
+        verified.verified_entry_bytes("assets/image.webp"),
+        Some(members[0].bytes)
+    );
+    assert_eq!(
+        verified.verified_entry_bytes("sections/sample.json"),
+        Some(members[2].bytes)
+    );
+    assert_eq!(verified.verified_entry_bytes("manifest.json"), None);
+    assert_eq!(verified.verified_entry_bytes("sections/SAMPLE.json"), None);
+}
+
+#[test]
+fn framing_validity_does_not_imply_manifest_json_syntax_admission() {
+    let source = [member("manifest.json", b"{broken syntax...")];
+    let bytes = write_stored_profile_zip(&source, limits())
+        .expect("opaque root allowed at ZIP framing level");
+    let parsed = parse_bytes(&bytes);
+    assert_eq!(parsed.manifest_utf8(20), Ok("{broken syntax..."));
+    let json = parsed.manifest_json_object(ProfileJsonSyntaxLimits {
+        maximum_bytes: 20,
+        maximum_nesting: 10,
+        maximum_object_members: 10,
+        maximum_values: 10,
+    });
+    assert!(json.is_err(), "ZIP framing is not typed JSON admission");
+}
+
+#[test]
+fn exact_framing_size_plan_matches_every_written_output() {
+    for count in [1usize, 2, 3, 4, 7, 23, 64, 127, 255] {
+        let names = (0..count.saturating_sub(1))
+            .map(|i| format!("assets/{i:05}.bin"))
+            .collect::<Vec<_>>();
+        let bytes = (0..count.saturating_sub(1))
+            .map(|i| vec![u8::try_from(i % 255).expect("in range"); i % 99])
+            .collect::<Vec<_>>();
+        let mut members = names
+            .iter()
+            .zip(bytes.iter())
+            .map(|(name, data)| member(name, data))
+            .collect::<Vec<_>>();
+        members.push(member("manifest.json", b"{}"));
+        let bound = ProfileStoredZipWriteLimits {
+            maximum_archive_bytes: 100_000,
+            maximum_entries: count,
+            maximum_entry_bytes: 100,
+            maximum_total_bytes: 100_000,
+        };
+        let expected_len = planned_stored_profile_zip_bytes(&members, bound)
+            .expect("all fixed records fit admitted budgets");
+        let actual = write_stored_profile_zip(&members, bound)
+            .expect("preflighted writer admits same members");
+        assert_eq!(actual.len(), expected_len, "count={count}");
+        assert_eq!(parse_bytes(&actual).entries().len(), count);
+        let exact_bound = ProfileStoredZipWriteLimits {
+            maximum_archive_bytes: expected_len,
+            ..bound
+        };
+        assert_eq!(
+            planned_stored_profile_zip_bytes(&members, exact_bound),
+            Ok(expected_len)
+        );
+        assert_eq!(write_stored_profile_zip(&members, exact_bound), Ok(actual));
+    }
+}
+
+#[test]
+fn dry_run_and_writer_share_fail_closed_preflight_error_categories() {
+    let good = [member("manifest.json", b"{}")];
+    let duplicates = [
+        member("manifest.json", b"{}"),
+        member("manifest.json", b"{}"),
+    ];
+    let invalid_path = [
+        member("manifest.json", b"{}"),
+        member("sections/../forbidden", b"content"),
+    ];
+    let reversed = [
+        member("sections/x.json", b""),
+        member("manifest.json", b"{}"),
+    ];
+    let missing = [member("assets/a.webp", b"1")];
+    let empty: [ProfileStoredZipMember<'_>; 0] = [];
+    let cases: [(&[ProfileStoredZipMember<'_>], ProfileStoredZipWriteLimits);
+        10] = [
+        (
+            &good,
+            ProfileStoredZipWriteLimits {
+                maximum_archive_bytes: 0,
+                ..limits()
+            },
+        ),
+        (
+            &good,
+            ProfileStoredZipWriteLimits {
+                maximum_entries: 0,
+                ..limits()
+            },
+        ),
+        (
+            &good,
+            ProfileStoredZipWriteLimits {
+                maximum_entry_bytes: 1,
+                ..limits()
+            },
+        ),
+        (
+            &good,
+            ProfileStoredZipWriteLimits {
+                maximum_total_bytes: 1,
+                ..limits()
+            },
+        ),
+        (&duplicates, limits()),
+        (&invalid_path, limits()),
+        (&reversed, limits()),
+        (&missing, limits()),
+        (&empty, limits()),
+        (
+            &good,
+            ProfileStoredZipWriteLimits {
+                maximum_archive_bytes: 1,
+                ..limits()
+            },
+        ),
+    ];
+    for (input, bound) in cases {
+        let planned = planned_stored_profile_zip_bytes(input, bound);
+        let written = write_stored_profile_zip(input, bound);
+        assert!(planned.is_err());
+        assert_eq!(planned, written.map(|bytes| bytes.len()));
     }
 }

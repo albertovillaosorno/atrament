@@ -263,3 +263,9 @@ in memory from already chosen section bytes and an opaque supplied root.
 It never serializes a typed manifest or writes a path; the missing canonical
 JSON codec, explicit output artifact identity, selected destination authority,
 atomic file commit and retry recovery still block genuine profile Export.
+
+The pure stored-ZIP framing application can now preview exact final archive
+size through the same failure checks used by its byte writer, without output
+allocation or checksum work. This only supports eventual output resource
+planning: the future host still needs source authenticity, typed manifest
+serialization, explicit file intent and independent atomic commit authority.

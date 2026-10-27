@@ -237,6 +237,27 @@ fn append_central_member(
     Ok(())
 }
 
+/// Compute the exact ordinary stored-ZIP output byte count before allocating.
+///
+/// This shares all member-name, ordering, resource and ZIP32 constraints
+/// with `write_stored_profile_zip`, but performs no CRC hashing or output
+/// allocation. The plan refers only to the supplied byte slices at the time
+/// of this call; it cannot reserve memory, bind a source path, establish an
+/// accepted typed manifest, or authorize Export.
+///
+/// # Errors
+///
+/// Returns the same input preflight failure as the framing writer; the
+/// distinct later `AllocationFailed` error applies only to actual writing.
+pub fn planned_stored_profile_zip_bytes(
+    members: &[ProfileStoredZipMember<'_>],
+    limits: ProfileStoredZipWriteLimits,
+) -> Result<usize, ProfileStoredZipWriteError> {
+    let (whole_archive, _directory) =
+        preflight_stored_profile_zip(members, limits)?;
+    Ok(whole_archive)
+}
+
 /// Encode already selected bytes into deterministic ordinary stored-only ZIP.
 ///
 /// This supplies fixed ZIP framing only; it never chooses a portable-profile

@@ -87,16 +87,31 @@ byte budget are checked **before any output allocation**. Only one bounded
 then emitted into the same vector, without a second directory byte buffer.
 Failed allocation returns a typed error, never partially exported data.
 
+`planned_stored_profile_zip_bytes` also returns the exact archive byte count
+without allocating or computing CRC-32. It shares every path, order, budget and
+ZIP32-limit check with actual writing; tests compare accepted output lengths
+and all preflight error classes across bounded fixtures. This preview does not
+reserve memory, bind a source or grant permission to write a destination.
+
 Framing always fixes version to 20, UTF-8 flag, zero timestamps, stored method,
 zero attributes and empty comments/extras. It computes CRC-32 from the exact
-member payload and emits a comment-free end-of-directory record. The writer
-never uses data descriptors, compression, encryption or ZIP64, and rejects
-ordinary-ZIP sentinel values rather than misrepresenting large archives.
+member payload and emits a comment-free end-of-directory record.
+
+The writer never uses data descriptors, compression, encryption or ZIP64.
+It rejects ordinary-ZIP sentinel values rather than misrepresenting large
+archives.
 
 An independent Python `struct`/`zlib`/`zipfile` golden fixture establishes
 byte-for-byte output for a root-only archive. Cross-component tests round-trip
 empty and Unicode-named members through Atrament's strict ZIP reader, including
 the 65,535-byte filename boundary and 65,535-entry ZIP64 sentinel refusal.
+
+Additional integration tests use the generated ZIP with an independently
+admitted typed entry inventory and SHA-256 verification. Conversely, framing
+still admits an opaque malformed JSON root that the strict root JSON reader
+rejects. This makes the separation between CRC-correct ZIP structure and
+actual typed manifest acceptance executable rather than merely descriptive.
+
 These results establish deterministic **ZIP framing only**: manifest JSON
 canonicalization, unknown-field preservation, typed serialization, ZIP64,
 trusted file commit and accepted profile Export remain unresolved.

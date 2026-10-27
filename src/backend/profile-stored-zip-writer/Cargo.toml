@@ -9,6 +9,8 @@ license = "MIT"
 atrament_handwriting_profile_container = { workspace = true }
 
 [dev-dependencies]
+atrament_profile_entry_sha256 = { workspace = true }
+atrament_profile_json_syntax = { workspace = true }
 atrament_profile_zip_reader = { workspace = true }
 
 [lib]

@@ -558,6 +558,8 @@ name = "atrament_profile_stored_zip_writer"
 version = "0.1.0"
 dependencies = [
  "atrament_handwriting_profile_container",
+ "atrament_profile_entry_sha256",
+ "atrament_profile_json_syntax",
  "atrament_profile_zip_reader",
 ]
 

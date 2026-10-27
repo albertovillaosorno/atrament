@@ -279,3 +279,8 @@ It preflights all names, byte budgets and ZIP32 sentinel limits before one
 output allocation. Golden `struct`/`zlib`/`zipfile` bytes and strict reader
 round trips establish fixed metadata, CRC-32 and exact UTF-8 names. It is not
 a typed manifest JSON writer, ZIP64 solution or an authorized profile Export.
+
+Writer-to-reader integration now checks independently declared entry inventory
+and SHA-256 for all emitted non-root members. A separate invalid JSON root
+proves that successful ordinary ZIP framing does not admit manifest syntax,
+typed profile content, or a file effect.
