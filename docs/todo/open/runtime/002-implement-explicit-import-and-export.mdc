@@ -285,3 +285,9 @@ legacy-metadata archive from bytes matching the pure stored-ZIP writer. Even
 when the complete framing matches, future Import must still admit canonical
 JSON, a schema-typed root, declared entry hashes, chosen source authority and
 session mutation independently; this indicator performs none of those steps.
+
+The checked ZIP reader can now copy its exact archive path references into
+caller-owned bounded storage with atomic too-small rejection. Future Import
+inventory preflight can use this view instead of an infallibly allocated `Vec`
+when memory policy requires it, but validated path names do not bind a typed
+manifest or authorize a filesystem read.

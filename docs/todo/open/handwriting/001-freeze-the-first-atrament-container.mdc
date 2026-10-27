@@ -354,3 +354,9 @@ A 15-case differential regression also checks legacy creator/extractor versions,
 ASCII UTF-8 flags and DOS timestamp fields at each of three member positions.
 Every CRC-valid variant keeps its admitted payloads unchanged, cannot claim
 fixed writer framing, and reframes into exactly the baseline stored-ZIP bytes.
+
+Checked ZIP member names can now be projected into caller-bounded reference
+slots without allocating a fresh vector or copying string bytes. Insufficient
+space returns an exact required count without modifying a destination slot;
+the full 65,534-member ZIP32 boundary retains source-pointer identity and the
+extra output slots remain unchanged. This is inventory evidence, not Import.

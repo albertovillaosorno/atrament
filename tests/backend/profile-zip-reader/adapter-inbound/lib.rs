@@ -62,7 +62,7 @@ use atrament_profile_json_syntax::{
 use atrament_profile_zip_reader::{
     ProfileZipManifestSyntaxError,
     ProfileZipPayloadVerificationError, ProfileZipReadError,
-    ProfileZipReadLimits, read_stored_profile_zip,
+    ProfileZipPathCopyError, ProfileZipReadLimits, read_stored_profile_zip,
     verify_admitted_profile_zip_payloads,
 };
 
@@ -1875,4 +1875,58 @@ fn stored_writer_framing_needs_root_even_with_fixed_zip_headers() {
     let archive = read_stored_profile_zip(&bytes, limits())
         .expect("with exact root ZIP becomes a writer framing candidate");
     assert!(archive.matches_stored_writer_framing());
+}
+
+#[test]
+fn checked_zip_names_copy_into_bounded_caller_storage_atomically() {
+    let entries = [
+        ("assets/ñ.webp", b"".as_slice(), 0),
+        ("manifest.json", b"{}".as_slice(), 0xa3a6_bf43),
+        ("sections/😀.json", b"123456789".as_slice(), 0xcbf4_3926),
+    ];
+    let source = make_zip(&entries);
+    let archive = read_stored_profile_zip(&source, limits())
+        .expect("sorted Unicode member names accepted");
+    let mut destination = ["untouched"; 5];
+    for capacity in [0usize, 1, 2] {
+        assert_eq!(
+            archive.copy_observed_paths(&mut destination[..capacity]),
+            Err(ProfileZipPathCopyError::BufferTooSmall { required: 3 }),
+        );
+        assert_eq!(destination, ["untouched"; 5],
+            "insufficient destination changes no entries");
+    }
+    assert_eq!(archive.copy_observed_paths(&mut destination[..3]), Ok(3));
+    assert_eq!(&destination[..3], &[
+        "assets/ñ.webp", "manifest.json", "sections/😀.json",
+    ]);
+    assert_eq!(&destination[3..], &["untouched"; 2]);
+    for (borrowed, entry) in destination.iter().zip(archive.entries()) {
+        assert!(std::ptr::eq(borrowed.as_ptr(), entry.name().as_ptr()));
+        assert_eq!(borrowed.len(), entry.name().len());
+    }
+    assert_eq!(archive.copy_observed_paths(&mut destination), Ok(3));
+    assert_eq!(&destination[3..], &["untouched"; 2]);
+    assert_eq!(&destination[..3], archive.observed_paths());
+}
+
+#[test]
+fn empty_and_rootless_archives_can_copy_names_without_import_authority() {
+    for (entries, expected) in [
+        (vec![], vec![]),
+        (vec![("assets/missing.webp", b"x".as_slice(), 0x8cdc_1683)],
+            vec!["assets/missing.webp"]),
+    ] {
+        let source = make_zip(&entries);
+        let archive = read_stored_profile_zip(&source, limits())
+            .expect("framed archive may lack an importable root");
+        let mut names = ["unmodified"; 2];
+        assert_eq!(archive.copy_observed_paths(&mut names), Ok(expected.len()));
+        assert_eq!(&names[..expected.len()], expected);
+        assert_eq!(&names[expected.len()..],
+            &["unmodified"; 2][expected.len()..]);
+        assert_eq!(archive.manifest_utf8(64),
+            Err(ProfileZipReadError::MissingManifest));
+        assert!(!archive.matches_stored_writer_framing());
+    }
 }

@@ -107,6 +107,14 @@ budget by one byte and the total payload allowance below the nonempty root.
 They verify typed, fail-closed errors rather than silently admitting a partial
 archive or allocating output beyond the selected bounds.
 
+The reader also exposes `copy_observed_paths` for bounded caller-owned storage
+of exact borrowed ZIP member names. A too-small destination reports the
+required count before mutating any slot; surplus slots remain untouched and
+no name is copied, allocated, normalized or resolved against a filesystem.
+The existing allocating `observed_paths` helper remains for compatibility.
+Tests exercise Unicode, empty and rootless ZIPs, and an exact 65,534-entry
+ordinary ZIP32 boundary, including pointer identity into source archive bytes.
+
 The typed manifest must still be parsed, checked and matched against those
 observations, and SHA-256 must be independently measured before any section
 interpretation or profile acceptance. ZIP64, archive-file I/O, canonical JSON,

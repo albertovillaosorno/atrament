@@ -102,6 +102,16 @@ pub enum ProfileZipReadError {
     UnsupportedZip64,
 }
 
+/// Failure to copy checked ZIP names into caller-owned reference storage.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ProfileZipPathCopyError {
+    /// The destination lacks enough slots for all admitted archive members.
+    BufferTooSmall {
+        /// Exact number of required slots, including `manifest.json` if any.
+        required: usize,
+    },
+}
+
 /// Root JSON syntax failure after ordinary stored-ZIP framing.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ProfileZipManifestSyntaxError {
@@ -205,6 +215,32 @@ impl<'bytes> ProfileZipArchive<'bytes> {
         Ok(ValidatedProfileZipRootJson { archive: self, root })
     }
 
+    /// Copy checked archive path references into caller-owned bounded slots.
+    ///
+    /// Every path still borrows the original validated ZIP name bytes;
+    /// nothing is allocated, normalized or interpreted as filesystem access.
+    /// The names retain the already proven sorted order, including the root
+    /// when present. Inadequate capacity preserves the complete destination
+    /// without modifying even its first element. Surplus slots stay intact.
+    /// This does not prove a typed profile manifest or authorized Import.
+    ///
+    /// # Errors
+    ///
+    /// Returns the exact number of slots required on undersized storage.
+    pub fn copy_observed_paths(
+        &self,
+        destination: &mut [&'bytes str],
+    ) -> Result<usize, ProfileZipPathCopyError> {
+        let required = self.entries.len();
+        if destination.len() < required {
+            return Err(ProfileZipPathCopyError::BufferTooSmall { required });
+        }
+        for (slot, entry) in destination.iter_mut().zip(&self.entries) {
+            *slot = entry.name;
+        }
+        Ok(required)
+    }
+
     /// Borrow entries in the canonical byte order already validated.
     #[must_use]
     pub fn entries(&self) -> &[ProfileZipEntry<'bytes>] {
@@ -296,7 +332,10 @@ impl<'bytes> ProfileZipArchive<'bytes> {
             }).is_ok()
     }
 
-    /// Extract borrowed exact archive names for manifest inventory preflight.
+    /// Allocate borrowed exact archive names for manifest inventory preflight.
+    ///
+    /// Use `copy_observed_paths` instead when caller-owned memory budgets or
+    /// atomic refusal of undersized output storage are required.
     #[must_use]
     pub fn observed_paths(&self) -> Vec<&'bytes str> {
         self.entries.iter().map(|entry| entry.name).collect()

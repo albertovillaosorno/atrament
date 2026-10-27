@@ -44,7 +44,8 @@ use atrament_profile_stored_zip_writer::{
     write_stored_profile_zip,
 };
 use atrament_profile_zip_reader::{
-    ProfileZipReadError, ProfileZipReadLimits, read_stored_profile_zip,
+    ProfileZipPathCopyError, ProfileZipReadError, ProfileZipReadLimits,
+    read_stored_profile_zip,
     verify_admitted_profile_zip_payloads,
 };
 
@@ -792,6 +793,24 @@ fn largest_ordinary_zip32_entry_count_round_trips_without_zip64() {
     assert!(parsed.matches_fixed_writer_metadata());
     assert!(parsed.matches_stored_writer_framing());
     assert_eq!(parsed.entries().len(), maximum_ordinary_entries);
+    let mut slots = vec!["unchanged"; maximum_ordinary_entries + 1];
+    assert_eq!(parsed.copy_observed_paths(
+        &mut slots[..maximum_ordinary_entries - 1]),
+        Err(ProfileZipPathCopyError::BufferTooSmall {
+            required: maximum_ordinary_entries,
+        }),
+        "largest supported member count refuses short storage atomically",
+    );
+    assert!(slots.iter().all(|name| *name == "unchanged"));
+    assert_eq!(parsed.copy_observed_paths(&mut slots),
+        Ok(maximum_ordinary_entries));
+    assert_eq!(slots[0], "assets/00000.bin");
+    assert_eq!(slots[maximum_ordinary_entries - 1], "manifest.json");
+    assert_eq!(slots[maximum_ordinary_entries], "unchanged");
+    assert!(std::ptr::eq(slots[0].as_ptr(),
+        parsed.entries()[0].name().as_ptr()));
+    assert!(std::ptr::eq(slots[maximum_ordinary_entries - 1].as_ptr(),
+        parsed.entries()[maximum_ordinary_entries - 1].name().as_ptr()));
     assert_eq!(parsed.entries()[0].name(), "assets/00000.bin");
     assert_eq!(parsed.entries()[maximum_ordinary_entries - 2].name(),
         "assets/65532.bin");
