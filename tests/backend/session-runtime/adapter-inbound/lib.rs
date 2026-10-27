@@ -3344,7 +3344,8 @@ fn all_direct_routes_enforce_the_socket_header_budget() {
     let long_header = format!("X-Fill: {}\r\n", "x".repeat(16 * 1024));
     let requests = [
         format!(
-            "GET /health HTTP/1.1\r\nHost: {EXPECTED_HOST}\r\n{long_header}\r\n",
+            "GET /health HTTP/1.1\r\nHost: {EXPECTED_HOST}\r\n{}\r\n",
+            long_header,
         ),
         format!(
             concat!(
