@@ -44,7 +44,7 @@ use atrament_profile_stored_zip_writer::{
     write_stored_profile_zip,
 };
 use atrament_profile_zip_reader::{
-    ProfileZipReadLimits, read_stored_profile_zip,
+    ProfileZipReadError, ProfileZipReadLimits, read_stored_profile_zip,
     verify_admitted_profile_zip_payloads,
 };
 
@@ -777,12 +777,14 @@ fn largest_ordinary_zip32_entry_count_round_trips_without_zip64() {
         assert_eq!(&bytes[eocd + offset..eocd + offset + 2],
             &(u16::MAX - 1).to_le_bytes());
     }
-    let parsed = read_stored_profile_zip(&bytes, ProfileZipReadLimits {
+    let read_limits = ProfileZipReadLimits {
         maximum_archive_bytes: planned,
         maximum_entries: maximum_ordinary_entries,
         maximum_entry_bytes: 2,
         maximum_total_bytes: 2,
-    }).expect("strict index accepts maximal ordinary ZIP count");
+    };
+    let parsed = read_stored_profile_zip(&bytes, read_limits)
+        .expect("strict index accepts maximal ordinary ZIP count");
     assert_eq!(parsed.entries().len(), maximum_ordinary_entries);
     assert_eq!(parsed.entries()[0].name(), "assets/00000.bin");
     assert_eq!(parsed.entries()[maximum_ordinary_entries - 2].name(),
@@ -800,4 +802,43 @@ fn largest_ordinary_zip32_entry_count_round_trips_without_zip64() {
         .collect::<String>();
     assert_eq!(golden,
         "c564b867a623511169ae843eac4acf3f08322782fdf7b6b6bb7351b90a52a793");
+    assert_eq!(
+        read_stored_profile_zip(&bytes, ProfileZipReadLimits {
+            maximum_entries: maximum_ordinary_entries - 1,
+            ..read_limits
+        }),
+        Err(ProfileZipReadError::ResourceLimit),
+        "too many members must reject before index reservation",
+    );
+    assert_eq!(
+        read_stored_profile_zip(&bytes, ProfileZipReadLimits {
+            maximum_archive_bytes: planned - 1,
+            ..read_limits
+        }),
+        Err(ProfileZipReadError::ArchiveTooLarge),
+        "one byte less than exact archive budget must reject",
+    );
+    assert_eq!(
+        read_stored_profile_zip(&bytes, ProfileZipReadLimits {
+            maximum_total_bytes: 1,
+            ..read_limits
+        }),
+        Err(ProfileZipReadError::ResourceLimit),
+        "many empty entries cannot bypass nonempty root payload limit",
+    );
+    assert_eq!(
+        planned_stored_profile_zip_bytes(&members,
+            ProfileStoredZipWriteLimits {
+                maximum_archive_bytes: planned - 1,
+                ..limits
+            }),
+        Err(ProfileStoredZipWriteError::ArchiveTooLarge),
+    );
+    assert_eq!(
+        write_stored_profile_zip(&members, ProfileStoredZipWriteLimits {
+            maximum_entries: maximum_ordinary_entries - 1,
+            ..limits
+        }),
+        Err(ProfileStoredZipWriteError::ResourceLimit),
+    );
 }

@@ -330,3 +330,9 @@ An independent Python `struct`/`zlib` implementation and standard `zipfile`
 reader now establish byte-for-byte golden SHA-256 for the 65,534-entry ordinary
 ZIP32 boundary, including empty assets, the root manifest and exact directory
 count fields. It protects a 7,077,690-byte output without using ZIP64.
+
+The same 65,534-entry golden now tests adjacent rejection boundaries:
+maximum count minus one, archive bytes minus one, and aggregate payload bytes
+below the final nonempty root. Writer preflight and checked ZIP reading must
+return their exact resource or archive errors without treating a prefix as a
+complete portable profile.

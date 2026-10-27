@@ -75,6 +75,11 @@ allocating output bytes. Python's independent `struct`/`zlib` framing and
 standard `zipfile` reader also verified the 65,534-entry boundary archive.
 A permanent 7,077,690-byte SHA-256 golden protects the exact ZIP32 framing.
 
+Adjacent negative tests reduce the entry allowance by one, the archive-byte
+budget by one byte and the total payload allowance below the nonempty root.
+They verify typed, fail-closed errors rather than silently admitting a partial
+archive or allocating output beyond the selected bounds.
+
 The typed manifest must still be parsed, checked and matched against those
 observations, and SHA-256 must be independently measured before any section
 interpretation or profile acceptance. ZIP64, archive-file I/O, canonical JSON,
