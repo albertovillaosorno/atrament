@@ -3337,6 +3337,10 @@ fn malformed_draft_body_framing_never_mutates_state() {
         format!("{prefix}Content-Length: +4\r\n\r\nbody").into_bytes(),
         format!("{prefix}Content-Length: 4\r\nContent-Length: 4\r\n\r\nbody",)
             .into_bytes(),
+        format!("{prefix}Expect: 100-continue\r\nContent-Length: 4\r\n\r\nbody",)
+            .into_bytes(),
+        format!("{prefix}eXpEcT: something-else\r\nContent-Length: 4\r\n\r\nbody",)
+            .into_bytes(),
         format!(
             "{prefix}Transfer-Encoding: chunked\r\n\r\n4\r\nbody\r\n0\r\n\r\n",
         )

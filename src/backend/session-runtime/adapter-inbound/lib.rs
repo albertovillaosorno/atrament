@@ -833,16 +833,12 @@ fn route_handshake(
 fn request_body(request: &[u8]) -> Option<&[u8]> {
     let head_end = request_head_end(request)?;
     let request_head = request.get(..head_end)?;
-    if header_is_present(request_head, "transfer-encoding")
-        || !header_is_present(request_head, "content-length")
-    {
+    // The socket reader and direct in-process router must apply the same
+    // Expect/Transfer-Encoding refusal before any draft mutation.
+    if !header_is_present(request_head, "content-length") {
         return None;
     }
-    let declared = parse_content_length_value(single_header_value(
-        request_head,
-        "content-length",
-    )?)
-    .ok()?;
+    let declared = declared_content_length(request_head).ok()?;
     let body = request.get(head_end..)?;
     (body.len() == declared).then_some(body)
 }
