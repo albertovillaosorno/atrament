@@ -257,3 +257,9 @@ as proof of a selected source by itself.
 Adversarial `Read` fixtures also reject impossible reported byte counts without
 panicking and treat premature zero counts as EOF, not a way to retry hidden
 bytes. The selected host transport must still ensure truthful Read semantics.
+
+A separate pure application can produce deterministic stored-only ZIP framing
+in memory from already chosen section bytes and an opaque supplied root.
+It never serializes a typed manifest or writes a path; the missing canonical
+JSON codec, explicit output artifact identity, selected destination authority,
+atomic file commit and retry recovery still block genuine profile Export.

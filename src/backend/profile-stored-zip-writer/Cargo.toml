@@ -1,0 +1,23 @@
+[package]
+name = "atrament_profile_stored_zip_writer"
+version = "0.1.0"
+edition = "2024"
+publish = false
+license = "MIT"
+
+[dependencies]
+atrament_handwriting_profile_container = { workspace = true }
+
+[dev-dependencies]
+atrament_profile_zip_reader = { workspace = true }
+
+[lib]
+path = "application/lib.rs"
+test = false
+
+[lints]
+workspace = true
+
+[[test]]
+name = "profile_stored_zip_writer_application"
+path = "../../../tests/backend/profile-stored-zip-writer/application/lib.rs"

@@ -1,0 +1,358 @@
+// Copyright:
+//   - Copyright © 2026 Alberto Villa Osorno.
+// SPDX-License-Identifier:
+//   - MIT
+// Confidential:
+//   - false
+// License-File:
+//   - LICENSE-MIT
+//
+// Boundary-Contract:
+// - Owns:
+//   - Independent reader round trips, fixed metadata and source budgets.
+// - Must-Not:
+//   - Freeze portable manifest schema or authorize a filesystem Export.
+// - Allows:
+//   - Inputs: In-memory named ZIP payloads and malicious member fixtures.
+//   - Outputs: Exact frame, reader, checksum and error assertions.
+//   - Side effects: Test-owned memory only.
+// - Split-When:
+//   - Canonical ZIP64 output requires an independent encoding adapter.
+// - Merge-When:
+//   - Complete profile codec tests own typed serialized manifest bytes.
+// - Summary:
+//   - Proves deterministic ordinary ZIP framing accepted by strict reader.
+// - Description:
+//   - Different payload bytes must produce different CRC-correct records.
+// - Usage:
+//   - Run with Cargo workspace tests and Jig package checks.
+// - Defaults:
+//   - Reject names and lengths before any bytes are emitted.
+//
+
+//! Deterministic stored-only ZIP framing and fail-closed budget checks.
+
+use atrament_handwriting_profile_container::PROFILE_MANIFEST_PATH;
+use atrament_profile_stored_zip_writer::{
+    ProfileStoredZipMember, ProfileStoredZipWriteError,
+    ProfileStoredZipWriteLimits, write_stored_profile_zip,
+};
+use atrament_profile_zip_reader::{
+    ProfileZipReadLimits, read_stored_profile_zip,
+};
+
+fn limits() -> ProfileStoredZipWriteLimits {
+    ProfileStoredZipWriteLimits {
+        maximum_archive_bytes: 100_000,
+        maximum_entries: 256,
+        maximum_entry_bytes: 65_536,
+        maximum_total_bytes: 100_000,
+    }
+}
+
+fn parse_bytes(
+    bytes: &[u8],
+) -> atrament_profile_zip_reader::ProfileZipArchive<'_> {
+    read_stored_profile_zip(
+        bytes,
+        ProfileZipReadLimits {
+            maximum_archive_bytes: bytes.len(),
+            maximum_entries: 256,
+            maximum_entry_bytes: 65_536,
+            maximum_total_bytes: 100_000,
+        },
+    )
+    .expect("emitted ordinary framing accepted by independent strict reader")
+}
+
+fn member<'a>(name: &'a str, bytes: &'a [u8]) -> ProfileStoredZipMember<'a> {
+    ProfileStoredZipMember { bytes, name }
+}
+
+#[test]
+fn stable_root_only_archive_has_correct_fixed_header_and_directory() {
+    let members = [member(PROFILE_MANIFEST_PATH, b"{}")];
+    let first =
+        write_stored_profile_zip(&members, limits()).expect("single ZIP root");
+    let second = write_stored_profile_zip(&members, limits())
+        .expect("deterministic ZIP output");
+    assert_eq!(first, second);
+    assert_eq!(first.len(), 30 + 13 + 2 + 46 + 13 + 22);
+    assert_eq!(first.get(..4), Some(&[0x50, 0x4b, 0x03, 0x04][..]));
+    assert_eq!(first.get(4..6), Some(&[20, 0][..]));
+    assert_eq!(first.get(6..8), Some(&[0, 8][..]));
+    assert_eq!(first.get(8..14), Some(&[0; 6][..]));
+    assert_eq!(first.get(14..18), Some(&[0x43, 0xbf, 0xa6, 0xa3][..]));
+    assert_eq!(first.get(26..30), Some(&[13, 0, 0, 0][..]));
+    let archive = parse_bytes(&first);
+    assert_eq!(archive.entries().len(), 1);
+    assert_eq!(archive.manifest_utf8(2), Ok("{}"));
+    assert_eq!(archive.entries()[0].crc32(), 0xa3a6_bf43);
+}
+
+#[test]
+fn sorted_utf8_names_and_empty_asset_round_trip_byte_for_byte() {
+    let entries = [
+        member("assets/empty.webp", b""),
+        member("assets/ñ.webp", b"\x01\x00\xff"),
+        member("manifest.json", b"{\"example\":true}"),
+        member("sections/😀.json", br#"[0,1,2]"#),
+    ];
+    let output = write_stored_profile_zip(&entries, limits())
+        .expect("canonical name order");
+    let parsed = parse_bytes(&output);
+    assert_eq!(parsed.entries().len(), entries.len());
+    for (admitted, original) in parsed.entries().iter().zip(entries) {
+        assert_eq!(admitted.name(), original.name);
+        assert_eq!(admitted.bytes(), original.bytes);
+    }
+    assert_eq!(parsed.entries()[0].bytes(), b"");
+    let duplicate = write_stored_profile_zip(&entries, limits())
+        .expect("same inputs produce same output bytes");
+    assert_eq!(output, duplicate);
+}
+
+#[test]
+fn missing_root_is_not_a_complete_stored_archive_candidate() {
+    for candidates in [
+        vec![],
+        vec![member("assets/valid.webp", b"abc")],
+        vec![member("sections/x.json", b"{}")],
+    ] {
+        assert_eq!(
+            write_stored_profile_zip(&candidates, limits()),
+            Err(ProfileStoredZipWriteError::MissingManifest)
+        );
+    }
+}
+
+#[test]
+fn repeated_reverse_and_near_duplicate_names_are_rejected() {
+    let duplicates =
+        [member("manifest.json", b"a"), member("manifest.json", b"b")];
+    let reversed = [
+        member("sections/x.json", b"{}"),
+        member("manifest.json", b"{}"),
+    ];
+    for candidates in [&duplicates[..], &reversed[..]] {
+        assert_eq!(
+            write_stored_profile_zip(candidates, limits()),
+            Err(ProfileStoredZipWriteError::NonCanonicalOrder)
+        );
+    }
+    // Percent signs are literal ZIP member bytes, never URI-decoded into
+    // a traversal segment by this framing-only adapter.
+    let literal_percent = [
+        member("manifest.json", b"{}"),
+        member("sections/%2e%2e/x", b"opaque"),
+    ];
+    assert!(write_stored_profile_zip(&literal_percent, limits()).is_ok());
+    let aliases = [
+        member("manifest.json", b"{}"),
+        member("sections/X.json", b"{}"),
+        member("sections/x.json", b"{}"),
+    ];
+    assert!(
+        write_stored_profile_zip(&aliases, limits()).is_ok(),
+        "byte-distinct case-sensitive names are not aliases"
+    );
+}
+
+#[test]
+fn unsafe_member_names_are_rejected_without_canonicalizing_them() {
+    for name in [
+        "",
+        "/",
+        "manifest.json/",
+        "assets/",
+        "./assets/x",
+        "assets/../secret",
+        "sections\\bad",
+        "sections/x\0.json",
+        "sections/x\n.json",
+        "sections/x\r.json",
+        "sections/x\t.json",
+        "other/x",
+        "MANIFEST.JSON",
+        "assets//duplicate",
+        "sections/x/../y",
+        "sections/x.json/",
+    ] {
+        let entries = [member("manifest.json", b"{}"), member(name, b"x")];
+        let result = write_stored_profile_zip(&entries, limits());
+        assert!(
+            matches!(
+                result,
+                Err(ProfileStoredZipWriteError::InvalidName)
+                    | Err(ProfileStoredZipWriteError::NonCanonicalOrder)
+            ),
+            "unsafe member {name:?} was admitted: {result:?}"
+        );
+    }
+}
+
+#[test]
+fn exact_budget_ceiling_accepts_and_one_byte_short_rejects() {
+    let members = [member("manifest.json", b"123456789")];
+    let bytes =
+        write_stored_profile_zip(&members, limits()).expect("bounded source");
+    let exact = ProfileStoredZipWriteLimits {
+        maximum_archive_bytes: bytes.len(),
+        maximum_entries: 1,
+        maximum_entry_bytes: 9,
+        maximum_total_bytes: 9,
+    };
+    assert_eq!(write_stored_profile_zip(&members, exact), Ok(bytes.clone()));
+    for smaller in [
+        ProfileStoredZipWriteLimits {
+            maximum_archive_bytes: bytes.len() - 1,
+            ..exact
+        },
+        ProfileStoredZipWriteLimits {
+            maximum_entries: 0,
+            ..exact
+        },
+        ProfileStoredZipWriteLimits {
+            maximum_entry_bytes: 8,
+            ..exact
+        },
+        ProfileStoredZipWriteLimits {
+            maximum_total_bytes: 8,
+            ..exact
+        },
+    ] {
+        assert!(write_stored_profile_zip(&members, smaller).is_err());
+    }
+}
+
+#[test]
+fn fixed_output_crc_changes_when_bytes_change_even_if_name_does_not() {
+    let first = write_stored_profile_zip(
+        &[member("manifest.json", b"{\"id\":1}")],
+        limits(),
+    )
+    .expect("original");
+    let second = write_stored_profile_zip(
+        &[member("manifest.json", b"{\"id\":2}")],
+        limits(),
+    )
+    .expect("changed root");
+    assert_eq!(first.len(), second.len());
+    assert_ne!(first, second);
+    assert_ne!(
+        parse_bytes(&first).entries()[0].crc32(),
+        parse_bytes(&second).entries()[0].crc32()
+    );
+}
+
+#[test]
+fn maximum_member_count_is_preflighted_before_allocating_archive() {
+    let members = [member("manifest.json", b"{}")];
+    assert_eq!(
+        write_stored_profile_zip(
+            &members,
+            ProfileStoredZipWriteLimits {
+                maximum_entries: 0,
+                ..limits()
+            }
+        ),
+        Err(ProfileStoredZipWriteError::ResourceLimit)
+    );
+}
+
+#[test]
+fn golden_root_zip_matches_independent_struct_and_crc_reference() {
+    // Generated separately using Python's struct, zlib and zipfile modules.
+    // No ZIP code or digest helpers from this crate produced the oracle.
+    const GOLDEN: &str = concat!(
+        "504b03041400000800000000000043bfa6a302000000020000000d0000006d61",
+        "6e69666573742e6a736f6e7b7d504b010214001400000800000000000043bfa6",
+        "a302000000020000000d00000000000000000000000000000000006d616e6966",
+        "6573742e6a736f6e504b050600000000010001003b0000002d0000000000",
+    );
+    let bytes =
+        write_stored_profile_zip(&[member("manifest.json", b"{}")], limits())
+            .expect("root-only fixed ZIP");
+    let encoded = bytes
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>();
+    assert_eq!(encoded, GOLDEN);
+}
+
+#[test]
+fn zip_entry_count_sentinel_refuses_65_535_members_without_output() {
+    let members = vec![member("manifest.json", b"{}"); usize::from(u16::MAX)];
+    let limit = ProfileStoredZipWriteLimits {
+        maximum_entries: members.len(),
+        ..limits()
+    };
+    assert_eq!(
+        write_stored_profile_zip(&members, limit),
+        Err(ProfileStoredZipWriteError::UnsupportedZip64)
+    );
+}
+
+#[test]
+fn utf8_member_name_field_limit_is_enforced_on_byte_length() {
+    let maximum_name = format!("assets/{}", "x".repeat(65_535 - 7));
+    let too_long = format!("{maximum_name}x");
+    assert_eq!(maximum_name.len(), usize::from(u16::MAX));
+    let limit = ProfileStoredZipWriteLimits {
+        maximum_archive_bytes: 200_000,
+        maximum_entry_bytes: 100,
+        maximum_total_bytes: 100,
+        ..limits()
+    };
+    let admissible =
+        [member(&maximum_name, b"x"), member("manifest.json", b"{}")];
+    let archive_bytes = write_stored_profile_zip(&admissible, limit)
+        .expect("maximal ZIP filename fits in u16");
+    let parsed = read_stored_profile_zip(
+        &archive_bytes,
+        ProfileZipReadLimits {
+            maximum_archive_bytes: 200_000,
+            maximum_entries: 2,
+            maximum_entry_bytes: 100,
+            maximum_total_bytes: 100,
+        },
+    )
+    .expect("strict reader accepts 65535 UTF-8 bytes");
+    assert_eq!(parsed.entries()[0].name(), maximum_name);
+    let overflow = [member(&too_long, b"x"), member("manifest.json", b"{}")];
+    assert_eq!(
+        write_stored_profile_zip(&overflow, limit),
+        Err(ProfileStoredZipWriteError::InvalidName)
+    );
+}
+
+#[test]
+fn many_generated_sorted_payloads_are_stable_and_reader_admitted() {
+    for size in [1usize, 2, 3, 7, 17, 31, 64, 127] {
+        let names = (0..size)
+            .map(|index| format!("assets/{index:04}.bin"))
+            .collect::<Vec<_>>();
+        let contents = (0..size)
+            .map(|index| {
+                (0..(index % 129))
+                    .map(|value| (value as u8).wrapping_mul(17))
+                    .collect::<Vec<_>>()
+            })
+            .collect::<Vec<_>>();
+        let mut members = names
+            .iter()
+            .zip(contents.iter())
+            .map(|(name, content)| member(name.as_str(), content.as_slice()))
+            .collect::<Vec<_>>();
+        members.push(member("manifest.json", b"{}"));
+        let output = write_stored_profile_zip(&members, limits())
+            .expect("bounded sorted members");
+        let parsed = parse_bytes(&output);
+        assert_eq!(parsed.entries().len(), members.len());
+        for (expected, observed) in members.iter().zip(parsed.entries()) {
+            assert_eq!(observed.name(), expected.name);
+            assert_eq!(observed.bytes(), expected.bytes);
+        }
+        assert_eq!(write_stored_profile_zip(&members, limits()), Ok(output));
+    }
+}

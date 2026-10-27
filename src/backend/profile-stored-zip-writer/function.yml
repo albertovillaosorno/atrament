@@ -1,0 +1,9 @@
+identity:
+  id: function:profile-stored-zip-writer
+  name: profile-stored-zip-writer
+  path: src/backend/profile-stored-zip-writer
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: application

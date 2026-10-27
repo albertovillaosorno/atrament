@@ -6,10 +6,10 @@ Verified implementation guide for the current `.atrament` container boundary.
 
 ## Purpose
 
-This guide explains what Atrament currently validates after a `.atrament`
-manifest and archive metadata have been parsed. It connects the portable-
-profile ADR to the dependency-free container domain and its new limited ZIP
-byte reader without claiming that manifest JSON parsing already exists.
+This guide explains what Atrament currently validates and projects at its
+portable-profile boundaries. It connects the container ADR to typed admission,
+limited ZIP/JSON readers and byte-only framing output without claiming that
+a typed manifest has been decoded from any ZIP root.
 
 The authoritative design remains
 `docs/adr/handwriting/portable-atrament-profile.md`. This guide documents
@@ -17,9 +17,9 @@ executable behavior only.
 
 ## Scope
 
-This guide covers the current transport-neutral profile-container domain and its
-checked-in regression evidence. It does not define a wire schema, archive
-file-reading adapter, migration, or inspection command.
+This guide covers the transport-neutral profile-container domain and its
+checked-in regression evidence. It does not define a JSON wire schema, trusted
+file-open and commit adapters, migration, or inspection command.
 
 The transport-neutral domain is
 `src/backend/handwriting-profile-container/domain/lib.rs`. It owns:
@@ -70,6 +70,36 @@ observations, and SHA-256 must be independently measured before any section
 interpretation or profile acceptance. ZIP64, archive-file I/O, canonical JSON,
 integration of digest evidence into actual Import, and section decoding remain
 unimplemented.
+
+### Deterministic ordinary stored-ZIP byte writer
+
+The separate `atrament_profile_stored_zip_writer` application frames
+already-selected member names and complete byte slices into an ordinary,
+stored-only ZIP **in memory**. It does not write files, encode typed JSON,
+choose profile field names, or establish Export authority. The required root
+is the exact `manifest.json` name; other paths use the shared validated
+section-or-asset path contract without normalization or URI decoding.
+
+All member counts, names, strict raw UTF-8 byte order, individual and total
+payload sizes, ordinary ZIP32 offsets, directory sizes and complete output
+byte budget are checked **before any output allocation**. Only one bounded
+`Vec` allocation is reserved; local headers and the central directory are
+then emitted into the same vector, without a second directory byte buffer.
+Failed allocation returns a typed error, never partially exported data.
+
+Framing always fixes version to 20, UTF-8 flag, zero timestamps, stored method,
+zero attributes and empty comments/extras. It computes CRC-32 from the exact
+member payload and emits a comment-free end-of-directory record. The writer
+never uses data descriptors, compression, encryption or ZIP64, and rejects
+ordinary-ZIP sentinel values rather than misrepresenting large archives.
+
+An independent Python `struct`/`zlib`/`zipfile` golden fixture establishes
+byte-for-byte output for a root-only archive. Cross-component tests round-trip
+empty and Unicode-named members through Atrament's strict ZIP reader, including
+the 65,535-byte filename boundary and 65,535-entry ZIP64 sentinel refusal.
+These results establish deterministic **ZIP framing only**: manifest JSON
+canonicalization, unknown-field preservation, typed serialization, ZIP64,
+trusted file commit and accepted profile Export remain unresolved.
 
 ### Bounded root JSON syntax admission
 
@@ -387,8 +417,9 @@ entries, changed digests, injected read errors and refused byte budgets.
 Malformed `Read` implementations that report more bytes than the supplied
 buffer are rejected as `InvalidData` without unsafe slicing. Premature zero
 reads remain EOF failures rather than permitting a retry loop to consume later
-hidden bytes. A
-CRC-checked ZIP fixture confirms that a changed payload remains detectable
+hidden bytes.
+
+A CRC-checked ZIP fixture confirms that a changed payload remains detectable
 when ZIP framing and CRC have been updated consistently. The adapter never
 opens a path, establishes trusted source selection, decodes a section or
 accepts an Import; blocking, cancellation and host deadlines remain external.

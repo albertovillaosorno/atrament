@@ -272,3 +272,10 @@ SHA-256 after CRC-correct ZIP framing. No typed wire names are chosen.
 A reader-view regression demonstrates that artificial EOF from `Read::take`
 cannot prove the hidden underlying source's true end. Independent trusted
 source scope and transport length must still be established by future Import.
+
+An independent ZIP-framing application now emits deterministic ordinary
+stored-only archives from caller-provided sorted member names and payloads.
+It preflights all names, byte budgets and ZIP32 sentinel limits before one
+output allocation. Golden `struct`/`zlib`/`zipfile` bytes and strict reader
+round trips establish fixed metadata, CRC-32 and exact UTF-8 names. It is not
+a typed manifest JSON writer, ZIP64 solution or an authorized profile Export.
