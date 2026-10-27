@@ -233,3 +233,9 @@ fixtures with identical member names but different valid root contents prove
 that the paired archive and root source bytes cannot be mixed by construction.
 This does not yet bind an independently supplied typed manifest to the root or
 authorize profile Import, SHA-256 inventory acceptance, or filesystem effects.
+
+A deterministic 5,120-scalar Unicode sweep now confirms that decoded field
+lookup, key copying and string-value copying produce the same UTF-8 identity
+for escaped JSON source. Both copies refuse insufficient capacity without
+writing bytes, including cases across BMP and supplementary Unicode planes.
+This is still syntax evidence rather than a selected manifest string policy.

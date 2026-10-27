@@ -1858,3 +1858,57 @@ fn max_member_keys_copy_into_bounded_buffers_without_heap_ownership() {
         assert_eq!(field.value().unsigned_integer(), Some(index as u64));
     }
 }
+
+#[test]
+fn generated_unicode_name_and_value_copies_agree_on_scalar_bytes() {
+    let mut exercised = 0usize;
+    for index in 0..5_120u32 {
+        // Coprime stride crosses BMP and supplementary planes without
+        // allocating a corpus or ever treating surrogate code units as chars.
+        let scalar_value = index.wrapping_mul(271) % 0x110000;
+        let Some(scalar) = char::from_u32(scalar_value) else {
+            continue;
+        };
+        let name = scalar.to_string();
+        let escaped = if scalar_value <= 0xffff {
+            format!("\\u{scalar_value:04X}")
+        } else {
+            let value = scalar_value - 0x10000;
+            let high = 0xd800 + (value >> 10);
+            let low = 0xdc00 + (value & 0x3ff);
+            format!("\\u{high:04x}\\u{low:04X}")
+        };
+        let source = format!("{{\"{escaped}\":\"{escaped}\"}}");
+        let admitted =
+            validate_profile_json_object(source.as_bytes(), limits())
+                .expect("valid scalar escapes in key and value");
+        let field = admitted
+            .root_field(&name)
+            .expect("exact scalar lookup matches escaped key");
+        assert_eq!(field.decoded_key_chars().collect::<String>(), name);
+        let mut key = [0xddu8; 7];
+        let mut value = [0xddu8; 7];
+        let size = name.len();
+        assert_eq!(
+            field.copy_key_utf8(&mut key[..size - 1]),
+            Err(ProfileJsonStringCopyError::BufferTooSmall { required: size })
+        );
+        assert_eq!(
+            field.value().copy_string_utf8(&mut value[..size - 1]),
+            Err(ProfileJsonStringCopyError::BufferTooSmall { required: size })
+        );
+        assert_eq!(key, [0xdd; 7]);
+        assert_eq!(value, [0xdd; 7]);
+        assert_eq!(field.copy_key_utf8(&mut key[..size]), Ok(size));
+        assert_eq!(
+            field.value().copy_string_utf8(&mut value[..size]),
+            Ok(size)
+        );
+        assert_eq!(&key[..size], name.as_bytes());
+        assert_eq!(&value[..size], name.as_bytes());
+        assert_eq!(&key[size..], &[0xdd; 7][size..]);
+        assert_eq!(&value[size..], &[0xdd; 7][size..]);
+        exercised = exercised.saturating_add(1);
+    }
+    assert!(exercised > 4_800, "crosses all relevant UTF-8 widths");
+}

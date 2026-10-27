@@ -276,6 +276,13 @@ Tests also cover empty, composed/decomposed, astral, and embedded-NUL keys,
 plus all 128 source-order object members at the hard ceiling. String keys are
 still not normalized or interpreted as manifest feature and path authorities.
 
+An additional deterministic 5,120-scalar sweep crosses BMP and
+supplementary Unicode planes using a nonrepeating stride. For each valid
+scalar, the name and value use equivalent escaped JSON source bytes; decoded
+field lookup, key copy and value copy must agree byte-for-byte. The test
+preflights a one-byte-short buffer for each value and confirms both caller
+buffers remain unmodified before accepting exactly sized outputs.
+
 String copying is not canonical JSON serialization or profile field
 validation. Future schema codecs must choose field names, string budgets,
 allowed characters and normalized identities, and must preserve unknown data
