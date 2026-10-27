@@ -832,10 +832,6 @@ fn route_handshake(
 
 fn request_body(request: &[u8]) -> Option<&[u8]> {
     let head_end = request_head_end(request)?;
-    // Direct in-process routing must obey the same header budget as TCP.
-    if head_end > MAX_HEADER_BYTES {
-        return None;
-    }
     let request_head = request.get(..head_end)?;
     // The socket reader and direct in-process router must apply the same
     // Expect/Transfer-Encoding refusal before any draft mutation.
@@ -1120,6 +1116,14 @@ pub fn route_request(
     context: &RouteRequestContext<'_>,
     draft: &mut dyn SessionDraft,
 ) -> Vec<u8> {
+    // All in-process entry points obey the same bounded request-head admission
+    // as the TCP reader, including public GET and session termination.
+    if request_head_end(request).is_none_or(|end| end > MAX_HEADER_BYTES) {
+        return json_response(
+            "400 Bad Request",
+            br#"{"error":"invalid_request"}"#,
+        );
+    }
     let Some(parsed) = request_method_host_and_target(request) else {
         return json_response(
             "400 Bad Request",

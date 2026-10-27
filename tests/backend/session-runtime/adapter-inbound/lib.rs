@@ -3320,6 +3320,63 @@ fn every_body_byte_preserves_request_head_admission() {
 }
 
 #[test]
+fn direct_header_budget_admits_exact_limit_and_rejects_one_more_byte() {
+    let prefix = format!(
+        "GET /health HTTP/1.1\r\nHost: {EXPECTED_HOST}\r\nX-Fill: ",
+    );
+    let suffix = "\r\n\r\n";
+    let padding = 16 * 1024 - prefix.len() - suffix.len();
+    let request = format!("{prefix}{}{suffix}", "x".repeat(padding));
+    assert_eq!(request.len(), 16 * 1024);
+    assert_eq!(
+        status_line(&route_runtime(request.as_bytes(), EXPECTED_HOST)),
+        "HTTP/1.1 200 OK",
+    );
+    let too_long = format!("{prefix}{}{suffix}", "x".repeat(padding + 1));
+    assert_eq!(
+        status_line(&route_runtime(too_long.as_bytes(), EXPECTED_HOST)),
+        "HTTP/1.1 400 Bad Request",
+    );
+}
+
+#[test]
+fn all_direct_routes_enforce_the_socket_header_budget() {
+    let long_header = format!("X-Fill: {}\r\n", "x".repeat(16 * 1024));
+    let requests = [
+        format!(
+            "GET /health HTTP/1.1\r\nHost: {EXPECTED_HOST}\r\n{long_header}\r\n",
+        ),
+        format!(
+            concat!(
+                "GET /api/session/task HTTP/1.1\r\n",
+                "Host: {}\r\nAuthorization: Bearer {}\r\n{}\r\n",
+            ),
+            EXPECTED_HOST, EXPECTED_SECRET, long_header,
+        ),
+        format!(
+            concat!(
+                "POST /api/session/end HTTP/1.1\r\n",
+                "Host: {}\r\nAuthorization: Bearer {}\r\n",
+                "Origin: {}\r\n{}\r\n",
+            ),
+            EXPECTED_HOST, EXPECTED_SECRET, EXPECTED_ORIGIN, long_header,
+        ),
+    ];
+    for (index, request) in requests.iter().enumerate() {
+        let mut draft = seeded_private_draft();
+        let response = route_with_draft(
+            request.as_bytes(), EXPECTED_HOST, &mut draft,
+        );
+        assert_eq!(
+            status_line(&response),
+            "HTTP/1.1 400 Bad Request",
+            "direct route {index} must honor header byte budget",
+        );
+        assert_private_draft_unchanged(&draft);
+    }
+}
+
+#[test]
 fn direct_draft_routing_rejects_transport_oversized_header_before_mutation() {
     // A direct in-process call must not bypass the socket reader's 16 KiB
     // request-head limit just because authentication and the body are valid.
