@@ -94,8 +94,10 @@ and all preflight error classes across bounded fixtures. This preview does not
 reserve memory, bind a source or grant permission to write a destination.
 
 Framing always fixes version to 20, UTF-8 flag, zero timestamps, stored method,
-zero attributes and empty comments/extras. It computes CRC-32 from the exact
-member payload and emits a comment-free end-of-directory record.
+zero attributes and empty comments/extras. It computes CRC-32 once from each
+member's exact payload, then reuses that local-header checksum for the central
+directory without rescanning potentially large member bytes. It emits a
+comment-free end-of-directory record.
 
 The writer never uses data descriptors, compression, encryption or ZIP64.
 It rejects ordinary-ZIP sentinel values rather than misrepresenting large
@@ -105,7 +107,9 @@ An independent Python `struct`/`zlib`/`zipfile` golden fixture establishes
 byte-for-byte output for a root-only archive. Python's standard `zipfile`
 reader also verifies a four-member archive's stored method, UTF-8 flags,
 payloads and CRC checks; its independent SHA-256 digest is now a permanent
-multi-member output regression. Cross-component tests round-trip
+multi-member output regression. An additional one-megabyte deterministic
+binary fixture checks local and central directory CRC fields against an
+independently computed Python `zlib` oracle. Cross-component tests round-trip
 empty and Unicode-named members through Atrament's strict ZIP reader, including
 the 65,535-byte filename boundary and 65,535-entry ZIP64 sentinel refusal.
 

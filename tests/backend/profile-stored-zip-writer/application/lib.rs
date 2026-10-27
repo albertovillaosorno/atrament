@@ -676,3 +676,61 @@ fn independent_python_multimember_zipfile_golden_sha256_is_stable() {
         assert_eq!(record.bytes(), original.bytes);
     }
 }
+
+#[test]
+fn large_payload_local_and_central_crc_match_independent_zlib_oracle() {
+    // zlib.crc32(bytes(index % 256 for index in range(1_048_576)))
+    // is 0x04d0_e435; Python's implementation is independent of the writer.
+    const PYTHON_ZLIB_CRC32: u32 = 0x04d0_e435;
+    let bytes = (0usize..1_048_576)
+        .map(|index| u8::try_from(index % 256).expect("bounded pattern"))
+        .collect::<Vec<_>>();
+    let entry = [member("manifest.json", &bytes)];
+    let bound = ProfileStoredZipWriteLimits {
+        maximum_archive_bytes: 1_049_000,
+        maximum_entries: 1,
+        maximum_entry_bytes: 1_048_576,
+        maximum_total_bytes: 1_048_576,
+    };
+    let planned = planned_stored_profile_zip_bytes(&entry, bound)
+        .expect("large stored payload fits finite ZIP32 budget");
+    let written = write_stored_profile_zip(&entry, bound)
+        .expect("exact preflighted ZIP output");
+    assert_eq!(written.len(), planned);
+    assert_eq!(planned, bytes.len() + 124);
+    let local_crc = u32::from_le_bytes(
+        written
+            .get(14..18)
+            .expect("complete local CRC header")
+            .try_into()
+            .expect("exact 4-byte CRC field"),
+    );
+    let eocd = written.len() - 22;
+    let central_start = u32::from_le_bytes(
+        written
+            .get(eocd + 16..eocd + 20)
+            .expect("complete end record central offset")
+            .try_into()
+            .expect("exact central offset field"),
+    ) as usize;
+    let central_crc = u32::from_le_bytes(
+        written
+            .get(central_start + 16..central_start + 20)
+            .expect("complete central CRC header")
+            .try_into()
+            .expect("exact 4-byte CRC field"),
+    );
+    assert_eq!(local_crc, PYTHON_ZLIB_CRC32);
+    assert_eq!(central_crc, PYTHON_ZLIB_CRC32);
+    let parsed = read_stored_profile_zip(
+        &written,
+        ProfileZipReadLimits {
+            maximum_archive_bytes: written.len(),
+            maximum_entries: 1,
+            maximum_entry_bytes: bytes.len() as u64,
+            maximum_total_bytes: bytes.len() as u64,
+        },
+    )
+    .expect("strict parser accepts both matching CRC fields");
+    assert_eq!(parsed.entries()[0].bytes(), bytes);
+}

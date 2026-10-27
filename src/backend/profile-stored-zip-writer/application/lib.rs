@@ -41,6 +41,7 @@ use atrament_handwriting_profile_container::{
 const CENTRAL_HEADER_BYTES: usize = 46;
 const END_BYTES: usize = 22;
 const LOCAL_HEADER_BYTES: usize = 30;
+const LOCAL_CRC32_OFFSET: usize = 14;
 const MAX_ZIP32_VALUE: u32 = u32::MAX - 1;
 
 /// Already serialized entry name and complete payload bytes, not a profile.
@@ -72,6 +73,8 @@ pub enum ProfileStoredZipWriteError {
     AllocationFailed,
     /// The complete output would exceed the independent archive budget.
     ArchiveTooLarge,
+    /// Internal local framing unexpectedly disagreed with checked offsets.
+    InconsistentFraming,
     /// A member's UTF-8 path is unsafe or cannot fit a ZIP name field.
     InvalidName,
     /// No exact root `manifest.json` was supplied.
@@ -212,6 +215,7 @@ fn append_central_member(
     output: &mut Vec<u8>,
     member: ProfileStoredZipMember<'_>,
     offset: u32,
+    crc: u32,
 ) -> Result<(), ProfileStoredZipWriteError> {
     let name_len = u16::try_from(member.name.len())
         .map_err(|_len| ProfileStoredZipWriteError::InvalidName)?;
@@ -224,7 +228,7 @@ fn append_central_member(
     put16(output, 0);
     put16(output, 0);
     put16(output, 0);
-    put32(output, crc32(member.bytes));
+    put32(output, crc);
     put32(output, len);
     put32(output, len);
     put16(output, name_len);
@@ -235,6 +239,16 @@ fn append_central_member(
     put32(output, offset);
     output.extend_from_slice(member.name.as_bytes());
     Ok(())
+}
+
+// The local record already contains CRC-32 of the exact member bytes.
+// Read this checked offset rather than hashing every potentially large
+// payload a second time when emitting the central directory.
+fn stored_local_crc32(output: &[u8], local_offset: usize) -> Option<u32> {
+    let start = local_offset.checked_add(LOCAL_CRC32_OFFSET)?;
+    let end = start.checked_add(4)?;
+    let bytes: [u8; 4] = output.get(start..end)?.try_into().ok()?;
+    Some(u32::from_le_bytes(bytes))
 }
 
 /// Compute the exact ordinary stored-ZIP output byte count before allocating.
@@ -288,7 +302,9 @@ pub fn write_stored_profile_zip(
     for member in members {
         let offset = u32::try_from(local_offset)
             .map_err(|_offset| ProfileStoredZipWriteError::UnsupportedZip64)?;
-        append_central_member(&mut output, *member, offset)?;
+        let crc = stored_local_crc32(&output, local_offset)
+            .ok_or(ProfileStoredZipWriteError::InconsistentFraming)?;
+        append_central_member(&mut output, *member, offset, crc)?;
         local_offset = local_offset
             .checked_add(LOCAL_HEADER_BYTES)
             .and_then(|bytes| bytes.checked_add(member.name.len()))

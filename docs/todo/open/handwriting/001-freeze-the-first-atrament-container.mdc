@@ -295,3 +295,9 @@ A second immutable multi-member ZIP SHA-256 golden now records an archive
 independently verified with Python's standard `zipfile` reader and SHA library,
 including empty, binary and Unicode-named entries. This checks byte-stable
 stored framing but does not establish canonical JSON or profile Export.
+
+Stored ZIP output now computes CRC-32 once per caller-selected payload and
+copies the checked local-header checksum into its central directory record,
+avoiding a second hash pass without a second output allocation. A 1 MiB
+independent Python `zlib` test vector protects both on-disk CRC fields and
+reader round-trip identity. This still establishes only ZIP byte framing.
