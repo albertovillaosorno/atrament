@@ -56,6 +56,20 @@ extra-field, archive-comment, foreign-platform and other unsupported encodings
 rather than trying alternate decoders. Unsafe paths are passed through the
 shared portable-profile path validator before member bytes are exposed.
 
+The reader projects `ProfileZipArchive::encoding_evidence()` from an already
+constructor-sealed ZIP archive. Successful parsing proves stored-only members,
+absent extras, ordinary ZIP32 sufficiency and absent ZIP64 records; the Import
+preflight test now receives those facts from the parsed source rather than
+reconstructing them as an independent caller claim. CRC-valid legacy header
+versions and timestamps retain the same encoding evidence even when they fail
+the stricter deterministic-writer metadata comparison.
+
+The parser must reject compression, encryption, ZIP64 and platform extras
+before such evidence exists. A negative fixture separately changes those
+header fields to ensure no parsed archive can supply a misleading encoding
+projection. This still does not prove manifest-to-root provenance or file path
+selection authority.
+
 The reader also records whether every checked ZIP entry has the deterministic
 writer's fixed metadata: extraction/creator versions 20, the UTF-8 filename
 flag, and zero DOS timestamps. `matches_fixed_writer_metadata()` is a

@@ -39,8 +39,10 @@ use std::slice::Chunks;
 use std::str::from_utf8;
 
 use atrament_handwriting_profile_container::{
-    PROFILE_MANIFEST_PATH, ProfileEntryVerificationError,
-    ProfileManifest, Sha256Digest, ValidatedProfileEntryInventory,
+    PROFILE_MANIFEST_PATH, ProfileArchiveEncodingEvidence,
+    ProfileArchiveEntryEncoding, ProfileArchivePlatformExtras,
+    ProfileEntryVerificationError, ProfileManifest, ProfileZip64Requirement,
+    ProfileZip64Use, Sha256Digest, ValidatedProfileEntryInventory,
     profile_entry_kind,
 };
 use atrament_profile_entry_sha256::{
@@ -239,6 +241,25 @@ impl<'bytes> ProfileZipArchive<'bytes> {
             *slot = entry.name;
         }
         Ok(required)
+    }
+
+    /// Project archive encoding facts proven by this ZIP byte reader.
+    ///
+    /// A successfully constructed archive has only ordinary single-disk,
+    /// stored and CRC-checked members with no extras or ZIP64 structures.
+    /// This evidence comes from this archive's exact parsed framing, not a
+    /// caller-supplied encoding claim. Legacy versions, UTF-8 flags and DOS
+    /// timestamps do not change these four independent encoding facts.
+    /// This is read-only transport evidence, not proof of canonical JSON,
+    /// typed manifest provenance, user-selected file authority or Import.
+    #[must_use]
+    pub const fn encoding_evidence(&self) -> ProfileArchiveEncodingEvidence {
+        ProfileArchiveEncodingEvidence {
+            entry_encoding: ProfileArchiveEntryEncoding::Stored,
+            platform_extras: ProfileArchivePlatformExtras::Absent,
+            zip64_requirement: ProfileZip64Requirement::Ordinary,
+            zip64_use: ProfileZip64Use::Absent,
+        }
     }
 
     /// Borrow entries in the canonical byte order already validated.

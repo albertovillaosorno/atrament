@@ -372,17 +372,7 @@ fn real_zip_observations_feed_exact_typed_profile_import_preflight() {
         maximum_entries: 1,
         maximum_entry_bytes: 9,
     };
-    let encoding = atrament_handwriting_profile_container::
-        ProfileArchiveEncodingEvidence {
-            entry_encoding: atrament_handwriting_profile_container::
-                ProfileArchiveEntryEncoding::Stored,
-            platform_extras: atrament_handwriting_profile_container::
-                ProfileArchivePlatformExtras::Absent,
-            zip64_requirement: atrament_handwriting_profile_container::
-                ProfileZip64Requirement::Ordinary,
-            zip64_use: atrament_handwriting_profile_container::
-                ProfileZip64Use::Absent,
-        };
+    let encoding = archive.encoding_evidence();
     let inspected = preflight_explicit_profile_import(
         &selected, &manifest, &["strokes"], paths, encoding, budget,
     ).expect("framing and typed inventory agree");
@@ -402,6 +392,7 @@ fn real_zip_observations_feed_exact_typed_profile_import_preflight() {
     ]);
     let archive = read_stored_profile_zip(&missing_manifest, limits())
         .expect("missing manifest is structurally valid ZIP");
+    assert_eq!(archive.encoding_evidence(), encoding);
     let mut missing_names = ["unused"; 1];
     assert_eq!(archive.copy_observed_paths(&mut missing_names), Ok(1));
     assert_eq!(
@@ -603,20 +594,7 @@ fn admitted_zip_payloads_require_all_exact_member_hashes() {
         profile_identity: "typed-unbound-to-root".into(),
         required_features: vec!["strokes".into()],
     };
-    let encoding =
-        atrament_handwriting_profile_container::ProfileArchiveEncodingEvidence {
-            entry_encoding:
-                atrament_handwriting_profile_container::
-                    ProfileArchiveEntryEncoding::Stored,
-            platform_extras:
-                atrament_handwriting_profile_container::
-                    ProfileArchivePlatformExtras::Absent,
-            zip64_requirement:
-                atrament_handwriting_profile_container::
-                    ProfileZip64Requirement::Ordinary,
-            zip64_use:
-                atrament_handwriting_profile_container::ProfileZip64Use::Absent,
-        };
+    let encoding = archive.encoding_evidence();
     let budget = ProfileImportBudget {
         maximum_declared_bytes: 9,
         maximum_entries: 1,
@@ -1971,17 +1949,7 @@ fn sorted_import_preflight_still_requires_real_member_sha256_evidence() {
         maximum_entries: 1,
         maximum_entry_bytes: 9,
     };
-    let encoding = atrament_handwriting_profile_container::
-        ProfileArchiveEncodingEvidence {
-            entry_encoding: atrament_handwriting_profile_container::
-                ProfileArchiveEntryEncoding::Stored,
-            platform_extras: atrament_handwriting_profile_container::
-                ProfileArchivePlatformExtras::Absent,
-            zip64_requirement: atrament_handwriting_profile_container::
-                ProfileZip64Requirement::Ordinary,
-            zip64_use: atrament_handwriting_profile_container::
-                ProfileZip64Use::Absent,
-        };
+    let encoding = checked.encoding_evidence();
     let mut names = ["unmodified"; 2];
     assert_eq!(checked.copy_observed_paths(&mut names), Ok(2));
     let preflight = preflight_explicit_profile_import_sorted(
@@ -2004,6 +1972,7 @@ fn sorted_import_preflight_still_requires_real_member_sha256_evidence() {
     ]);
     let mutated = read_stored_profile_zip(&damaged, limits())
         .expect("new CRC-valid ZIP has identical admitted paths");
+    assert_eq!(mutated.encoding_evidence(), checked.encoding_evidence());
     let mut changed_names = ["unmodified"; 2];
     assert_eq!(mutated.copy_observed_paths(&mut changed_names), Ok(2));
     let changed_preflight = preflight_explicit_profile_import_sorted(
@@ -2030,4 +1999,65 @@ fn sorted_import_preflight_still_requires_real_member_sha256_evidence() {
         maximum_object_members: 1,
         maximum_values: 1,
     }).expect("unchanged root grammar").source_sha256());
+}
+
+#[test]
+fn checked_zip_encoding_evidence_survives_readable_legacy_header_variants() {
+    use atrament_handwriting_profile_container::{
+        ProfileArchiveEncodingEvidence, ProfileArchiveEntryEncoding,
+        ProfileArchivePlatformExtras, ProfileZip64Requirement, ProfileZip64Use,
+        validate_profile_archive_encoding_view,
+    };
+    let original = make_zip(&ENTRIES);
+    let canonical = read_stored_profile_zip(&original, limits())
+        .expect("original header bytes have checked stored framing");
+    let expected = ProfileArchiveEncodingEvidence {
+        entry_encoding: ProfileArchiveEntryEncoding::Stored,
+        platform_extras: ProfileArchivePlatformExtras::Absent,
+        zip64_requirement: ProfileZip64Requirement::Ordinary,
+        zip64_use: ProfileZip64Use::Absent,
+    };
+    assert_eq!(canonical.encoding_evidence(), expected);
+    assert!(validate_profile_archive_encoding_view(
+        canonical.encoding_evidence()).is_ok());
+    assert!(canonical.matches_stored_writer_framing());
+    let first_directory = central_start(&original);
+    for (name, local_field, central_field, value) in [
+        ("creator version", None, 4usize, [10u8, 0]),
+        ("extractor version", Some(4usize), 6, [10, 0]),
+        ("ASCII UTF-8 bit", Some(6usize), 8, [0, 0]),
+        ("modified time", Some(10usize), 12, [3, 0]),
+        ("modified date", Some(12usize), 14, [3, 0]),
+    ] {
+        let mut changed = original.clone();
+        if let Some(offset) = local_field {
+            changed[offset..offset + 2].copy_from_slice(&value);
+        }
+        changed[first_directory + central_field
+            ..first_directory + central_field + 2]
+            .copy_from_slice(&value);
+        let archived = read_stored_profile_zip(&changed, limits())
+            .expect("legacy metadata is permitted in ordinary stored ZIP");
+        assert_eq!(archived.encoding_evidence(), expected, "{name}");
+        assert!(!archived.matches_fixed_writer_metadata(), "{name}");
+        assert!(!archived.matches_stored_writer_framing(), "{name}");
+        assert_eq!(archived.entries(), canonical.entries(), "{name}");
+        assert_ne!(archived.source_sha256(), canonical.source_sha256());
+    }
+    for (name, local_field, central_field, value) in [
+        ("compressed", Some(8usize), 10usize, [8u8, 0]),
+        ("encrypted", Some(6usize), 8usize, [1u8, 8]),
+        ("foreign creator", None, 4usize, [20u8, 3]),
+        ("central extras", None, 30usize, [1u8, 0]),
+    ] {
+        let mut changed = original.clone();
+        if let Some(offset) = local_field {
+            changed[offset..offset + 2].copy_from_slice(&value);
+        }
+        changed[first_directory + central_field
+            ..first_directory + central_field + 2]
+            .copy_from_slice(&value);
+        assert!(read_stored_profile_zip(&changed, limits()).is_err(),
+            "{name} must not yield any checked encoding evidence");
+    }
 }

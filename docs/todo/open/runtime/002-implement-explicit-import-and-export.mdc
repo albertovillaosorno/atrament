@@ -316,3 +316,8 @@ An exhaustive 128-case comparison also proves that both Import preflight
 variants return identical earlier path-purpose, archive-encoding and budget
 results across all first-release ZIP metadata combinations. Only the final
 inventory gate differs by explicit ordering and count diagnostics.
+
+The CRC-checked stored ZIP reader now projects its own archive encoding facts
+for Import preflight, replacing synthetic encoding values in integration tests.
+This observation is sourced from checked bytes, including legacy ZIP headers,
+but still has no filesystem path authority or typed manifest-root provenance.

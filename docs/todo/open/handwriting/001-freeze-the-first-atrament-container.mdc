@@ -377,3 +377,9 @@ The sorted profile Import path is also exercised with real CRC-checked ZIP
 members and actual declared SHA-256. Matching names and root syntax do not
 expose changed member bytes if a different CRC-valid ZIP supplies them:
 digest verification still rejects the substituted payload before decoding.
+
+ZIP parsing now yields the exact transport-neutral encoding observations
+from a constructor-sealed read-only archive. Structural Import preflight
+fixtures consume this parsed-source evidence rather than hand-creating ZIP
+facts; five readable legacy metadata changes preserve stored/no-extra/ZIP32
+observations while four unsupported features fail before evidence can exist.
