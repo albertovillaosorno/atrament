@@ -1985,10 +1985,16 @@ where
     let width = table_grid_width(table)?;
     let row_count = u64::try_from(table.rows.len()).unwrap_or(u64::MAX);
     let mut active = Vec::<TableActiveSpan>::new();
+    let mut active_needs_sort = false;
     let mut current_row = 0u64;
     for row in &table.rows {
+        // Retaining still-active intervals preserves their sorted order.
+        // Only newly appended row spans can make the next row unsorted.
         active.retain(|span| current_row < span.until_row);
-        active.sort_unstable_by_key(|span| span.start);
+        if active_needs_sort {
+            active.sort_unstable_by_key(|span| span.start);
+            active_needs_sort = false;
+        }
         let mut cursor = 0u64;
         let mut additions = Vec::<TableActiveSpan>::new();
         let context = TableGridRowContext {
@@ -2014,7 +2020,10 @@ where
         if cursor != width {
             return Err(TableGridError::RowWidth { row: row.id });
         }
-        active.extend(additions);
+        if !additions.is_empty() {
+            active.extend(additions);
+            active_needs_sort = true;
+        }
         current_row = current_row.saturating_add(1);
     }
     Ok(width)

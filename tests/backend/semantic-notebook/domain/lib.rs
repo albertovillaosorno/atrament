@@ -1168,6 +1168,43 @@ fn wide_interleaved_row_spans_preserve_compact_grid_placements() {
 }
 
 #[test]
+fn tall_fully_inherited_grid_remains_compact_and_ordered() {
+    // A large number of rows inherit the identical wide set of active spans.
+    // Sorting these unchanged spans on every row is unnecessary work.
+    const COLUMNS: u32 = 4_096;
+    const ROWS: u32 = 512;
+    let first_row = (0..COLUMNS)
+        .map(|column| grid_cell(column + 1, 1, ROWS))
+        .collect();
+    let mut rows = Vec::new();
+    rows.push(grid_row(1, first_row));
+    for index in 1..ROWS {
+        rows.push(grid_row(index + 1, Vec::new()));
+    }
+    let table = Table { id: 1u32, rows };
+    let topology = table
+        .validated_logical_topology()
+        .expect("fully inherited tall table");
+    assert_eq!(topology.logical_column_count(), u64::from(COLUMNS));
+    assert_eq!(
+        topology.cell_placements().len(),
+        usize::try_from(COLUMNS).expect("bounded column count"),
+    );
+    for row in [0, 1, ROWS / 2, ROWS - 1] {
+        for column in [0, 1, COLUMNS / 2, COLUMNS - 1] {
+            assert_eq!(
+                topology
+                    .cell_covering(u64::from(row), u64::from(column))
+                    .map(|cell| cell.cell),
+                Some(column + 1),
+                "inherited cell must retain its logical owner",
+            );
+        }
+    }
+    assert_eq!(topology.cell_covering(u64::from(ROWS), 0), None);
+}
+
+#[test]
 fn adjacent_inherited_spans_skip_entire_occupied_run() {
     let table = Table {
         id: 1u32,

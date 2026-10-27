@@ -71,6 +71,12 @@ preserving the existing column-span and row-span rejection precedence. A new
 exercise the compact walk; generated and exhaustive occupancy oracles continue
 to check exact placements, typed errors, and validated topology behavior.
 
+A separate 4,096-column, 512-row fixture now keeps all inherited row spans
+active across hundreds of later rows. The table walk preserves the sorted
+interval invariant through expiry and skips sorting entirely on rows that add
+no spans; it still sorts after new spans are appended, preserving the same
+next-row overlap and cursor behavior.
+
 A constructor-sealed logical-topology view now binds one exact table to its
 validated column count and complete caller-order cell placements. The borrowed
 evidence cannot survive mutation of that table, and generated plus exhaustive
