@@ -609,8 +609,14 @@ fn deterministic_generated_path_corpus_matches_shared_path_admission() {
         };
         let expected_admission = profile_entry_kind(&name).is_ok();
         let actual = write_stored_profile_zip(&candidates, limits());
+        let mut output = [0x5cu8; 1_024];
+        let bounded =
+            write_stored_profile_zip_into(&candidates, limits(), &mut output);
         if expected_admission {
             let encoded = actual.expect("shared path validator admitted name");
+            assert_eq!(bounded, Ok(encoded.len()), "candidate {name:?}");
+            assert_eq!(&output[..encoded.len()], encoded.as_slice());
+            assert!(output[encoded.len()..].iter().all(|byte| *byte == 0x5c));
             let parsed = parse_bytes(&encoded);
             assert!(
                 parsed
@@ -624,6 +630,15 @@ fn deterministic_generated_path_corpus_matches_shared_path_admission() {
                 actual,
                 Err(ProfileStoredZipWriteError::InvalidName),
                 "invalid candidate {name:?}"
+            );
+            assert_eq!(
+                bounded,
+                Err(ProfileStoredZipWriteError::InvalidName),
+                "bounded candidate {name:?}"
+            );
+            assert_eq!(
+                output, [0x5c; 1_024],
+                "unsafe path cannot change caller-owned destination"
             );
         }
         checked = checked.saturating_add(1);

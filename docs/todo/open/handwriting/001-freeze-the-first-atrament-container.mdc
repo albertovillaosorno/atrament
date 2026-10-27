@@ -390,3 +390,8 @@ existing `Vec` writer; a short destination reports the exact required size
 without changing a byte, and extra buffer capacity remains untouched.
 The 65,534-member golden and 1,024 generated Unicode/binary archives compare
 byte-for-byte across both output forms without claiming file Export authority.
+
+The shared 1,024-case generated path corpus now checks caller-owned ZIP output
+as well as allocated writing: every safe path preserves exact framing and
+unused buffer space, while every rejected unsafe path leaves all caller bytes
+untouched. No rejected name is URI-decoded or normalized into a new target.
