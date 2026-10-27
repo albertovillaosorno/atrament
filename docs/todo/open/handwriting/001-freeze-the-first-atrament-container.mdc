@@ -20,6 +20,20 @@ migrated_from: TODO.md
 
 # Freeze the first `.atrament` container
 
+## Current portable-container implementation status
+
+The pure typed manifest, canonical JSON writer, stored-ZIP byte writer and
+checked reader now exist, with SHA-256 verification of imported member bodies.
+The separate in-memory Export artifact assembly binds canonical root JSON to
+complete verified ZIP bytes and supports size planning and caller-owned output.
+These are byte-format and read-only verification components, not selected-file
+Export, accepted-profile Import or an external persistence permission.
+
+Typed handwriting section schemas and encoders, migration/ZIP64 support,
+physical path authority and the application-level Import/Export lifecycle
+remain open. Earlier sections below retain their historical step-by-step
+implementation evidence, rather than the final state of every prerequisite.
+
 ## Scope and existing evidence
 
 Choose canonical encoding, manifest, checksums, optional assets, version rules,

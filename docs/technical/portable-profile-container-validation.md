@@ -918,6 +918,22 @@ No path inside the manifest conveys file read or write authorization.
 
 ## Verification
 
+### Current adapter implementation status (2026-10-27)
+
+The codebase now has deterministic stored-only ZIP32 bytes and a checked ZIP
+reader, exact SHA-256 verification of declared members, a source-sealed typed
+JSON manifest decoder, and canonical JSON serialization. Export assembly now
+combines admitted typed manifests with every verified supplied payload into an
+owned full ZIP artifact, or writes it into caller-owned memory after length,
+digest and archive-budget checks. An independent Import verification fixture
+reopens that exact emitted archive and accepts all declared members.
+
+The preceding milestones describe how these boundaries were established; old
+phrases stating that a ZIP or JSON writer is missing are historical, not the
+present implementation status. Portable byte production does not establish
+file authority, persistent Export, accepted-session Import, section schemas,
+ZIP64 support, migration or a human-readable inspection command.
+
 ### Regression evidence
 
 The executable profile-container fixture is
@@ -960,12 +976,14 @@ When extending this boundary:
 
 The profile-container TODO remains open for:
 
-- actual ZIP parsing and deterministic writing;
-- fixed canonical ZIP metadata values;
-- canonical JSON encoding and parsing;
-- wiring verified SHA-256 bytes to a parsed, admitted profile manifest;
-- numeric archive and section resource limits;
-- typed section schemas and decoders;
-- supported migrations and loss reporting;
-- golden byte-stable ZIP and ZIP64 fixtures;
-- a human-readable inspection command.
+- typed handwriting section schemas, encoders and decoders;
+- section-specific resource limits and admitted profile semantics;
+- supported migrations, compatibility and loss reporting;
+- ZIP64 implementation and golden byte-stable ZIP64 fixtures;
+- a human-readable profile inspection command;
+- trusted selected-file origin and target admission;
+- durable atomic Export, retry recovery and accepted-session Import.
+
+Canonical JSON, ordinary stored-ZIP32 reading and writing, fixed writer ZIP
+metadata, whole-archive hashing and source-bound Import payload verification
+are already covered by the current adapters and integration tests.

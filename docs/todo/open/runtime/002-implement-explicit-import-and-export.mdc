@@ -36,11 +36,17 @@ explicit host-policy output intent, explicit path and overwrite behavior,
 blocking validation, temporary cleanup, file-commit semantics, output identity,
 same-retry lost-receipt recovery, external target drift handling, cancellation,
 typed output results, concurrency, and browser/CLI/MCP parity. File adapters and
-format-specific execution remain open. Execution is also blocked on a typed
-exportable-artifact payload: current backend code has semantic layout preflight
-but no renderer or serializer result value whose admitted bytes a file adapter
-can commit. Filesystem writes must not guess that missing artifact-ownership
-boundary.
+format-specific execution remain open.
+
+The pure profile serializer now produces complete, SHA-256-verified
+`.atrament` ZIP artifact bytes, including
+exact size planning and caller-owned memory emission. Those bytes are not bound
+to an accepted session revision, authenticated selected-file target, overwrite
+policy or durable commit.
+
+Notebook/PDF Export still lacks an admitted renderer artifact, and profile
+section encoders remain unfinished. Filesystem adapters
+must not guess these missing ownership and authorization boundaries.
 
 The shared derived/output result domain now freezes all 11 first-release core
 result classes and their operation applicability across Render, Plan, and
