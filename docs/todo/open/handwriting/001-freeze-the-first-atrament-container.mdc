@@ -395,3 +395,12 @@ The shared 1,024-case generated path corpus now checks caller-owned ZIP output
 as well as allocated writing: every safe path preserves exact framing and
 unused buffer space, while every rejected unsafe path leaves all caller bytes
 untouched. No rejected name is URI-decoded or normalized into a new target.
+
+The read-only typed `manifest.json` decoder now maps sealed ZIP-root JSON into
+`ProfileManifest` under independent string, feature and entry limits. It
+requires exact first-release fields, rejects unknown wire keys and ambiguous
+numeric or SHA-256 spellings, and retains unknown optional feature identifiers.
+The real stored-ZIP regression connects the decoded declarations through
+sorted Import preflight and cryptographic member verification; a new CRC cannot
+conceal a substituted payload. Canonical JSON writing, filesystem authority,
+section decoding, migration and accepted-profile mutation remain open.

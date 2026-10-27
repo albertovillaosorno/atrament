@@ -870,6 +870,37 @@ and migration failures belong to adapters or section owners and are not
 manufactured by the pure container domain. SHA-256 computation is now available
 as a separate byte-slice primitive, not as a complete Import adapter.
 
+### Typed manifest JSON decoding (read-only)
+
+`atrament_profile_manifest_json_codec` now consumes constructor-sealed JSON
+root evidence and produces the existing typed `ProfileManifest` without opening
+a file or mutating any accepted profile. The first-release decoder requires
+`container_version`, `profile_identity`, `required_features`,
+`optional_features`, and `entries` as exact decoded object names. Every entry
+requires `path`, `media_type`, `byte_length`, and `sha256`; digests must have
+exactly 64 lowercase hexadecimal scalars and lengths must be plain `u64`
+integer tokens. Unknown wire keys reject rather than silently losing data;
+unknown optional feature identifiers remain typed and unchanged.
+
+Caller-owned ceilings separately bound entry count, each feature-list count,
+and each decoded string's UTF-8 bytes. The upstream JSON syntax gate already
+bounds total source bytes, nesting, object keys and JSON values, rejecting
+ambiguous duplicate decoded keys before this decoder runs. These independent
+limits prevent a valid but oversized manifest from bypassing resource policy.
+
+The regression in
+`tests/backend/profile-manifest-json-codec/adapter-inbound/lib.rs` checks all
+wire fields, Unicode escapes, alias collisions, missing/unknown/wrongly typed
+keys, limits, numeric ambiguities and malformed SHA-256. Its real stored-ZIP
+fixture passes the decoded manifest to sorted Import preflight and complete
+member SHA-256 verification. A CRC-correct modified member fails digest
+admission even though the original root remains syntactically valid.
+
+This is a reader-side schema contract, not canonical manifest JSON writing or
+a selected-file Import. Source provenance, filesystem admission, real section
+schemas, profile acceptance, and canonical serialization remain outstanding.
+No path inside the manifest conveys file read or write authorization.
+
 ## Verification
 
 ### Regression evidence

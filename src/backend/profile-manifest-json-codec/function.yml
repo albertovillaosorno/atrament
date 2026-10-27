@@ -1,0 +1,9 @@
+identity:
+  id: function:profile-manifest-json-codec
+  name: profile-manifest-json-codec
+  path: src/backend/profile-manifest-json-codec
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: adapter-inbound

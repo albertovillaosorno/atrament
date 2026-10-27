@@ -335,3 +335,12 @@ ZIP writer output to CRC-checked reading, source-backed encoding observations,
 bounded borrowed path views, sorted typed inventory and complete SHA-256 entry
 verification. A ten-case matrix additionally proves that both writers and
 planning refuse the same malformed or over-budget inputs before output writes.
+
+A new strict typed manifest JSON decoder consumes only already syntax-admitted
+root evidence. It enforces exact required object fields, lowercase SHA-256 hex,
+plain `u64` lengths, and caller-chosen string, feature and entry ceilings;
+unknown wire keys refuse instead of disappearing. A real ZIP fixture now
+composes source-backed root decoding with sorted Import preflight and full
+member digest verification, including a CRC-correct same-length mutation.
+This advances read-only prerequisites but does not open a selected file,
+authorize Import or Export, decode handwriting sections or accept a profile.
