@@ -215,3 +215,9 @@ Sealed JSON member names now support bounded decoded UTF-8 copies without
 allocating a JSON tree or reinterpreting input as path authority. Future typed
 manifest schema recognition and unknown-field preservation still need their
 own explicit policy before section decoding or session Import.
+
+The stored-ZIP reader can now pair its own CRC-checked archive index and exact
+syntax-admitted root JSON bytes in a sealed borrowed view. A future typed
+manifest decoder can receive that association instead of independent arguments.
+The typed schema, all declared SHA-256 entry checks, selected path authority,
+and session acceptance are still unimplemented and cannot be inferred here.

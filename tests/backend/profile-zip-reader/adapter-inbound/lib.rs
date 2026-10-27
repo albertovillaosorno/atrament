@@ -1229,3 +1229,74 @@ fn nearby_nested_archive_names_cannot_substitute_for_missing_root() {
     }), Err(ProfileZipManifestSyntaxError::Zip(
         ProfileZipReadError::MissingManifest)));
 }
+
+#[test]
+fn sealed_zip_root_json_proof_carries_exact_supplying_archive_identity() {
+    let first_bytes = make_zip(&[
+        ("assets/notes.bin", b"data", 0xadf3_f363),
+        ("manifest.json", br#"{"id":42}"#, 0x66d6_18ea),
+        ("sections/notes.json", b"{}", 0xa3a6_bf43),
+    ]);
+    let second_bytes = make_zip(&[
+        ("assets/notes.bin", b"data", 0xadf3_f363),
+        ("manifest.json", br#"{"id":0}"#, 0x5d46_c984),
+        ("sections/notes.json", b"{}", 0xa3a6_bf43),
+    ]);
+    let first_archive = read_stored_profile_zip(&first_bytes, limits())
+        .expect("first CRC-checked archive");
+    let second_archive = read_stored_profile_zip(&second_bytes, limits())
+        .expect("second CRC-checked archive with same entry names");
+    let bounds = ProfileJsonSyntaxLimits {
+        maximum_bytes: 16,
+        maximum_nesting: 2,
+        maximum_object_members: 2,
+        maximum_values: 2,
+    };
+    let first = first_archive.admitted_root_json(bounds)
+        .expect("first actual ZIP root admitted");
+    let second = second_archive.admitted_root_json(bounds)
+        .expect("second actual ZIP root admitted");
+    assert!(std::ptr::eq(first.archive(), &first_archive));
+    assert!(std::ptr::eq(second.archive(), &second_archive));
+    assert!(!std::ptr::eq(first.archive(), second.archive()));
+    assert_eq!(first.root().bytes(), br#"{"id":42}"#);
+    assert_eq!(second.root().bytes(), br#"{"id":0}"#);
+    assert_eq!(first.root().value_count(), 2);
+    assert_eq!(second.root().value_count(), 2);
+    assert_eq!(first.root().root_member_value("id").expect("first id")
+        .unsigned_integer(), Some(42));
+    assert_eq!(second.root().root_member_value("id").expect("second id")
+        .unsigned_integer(), Some(0));
+    for bound in [&first, &second] {
+        let manifest = bound.archive().entries().iter()
+            .find(|entry| entry.name() == "manifest.json")
+            .expect("the same root member is in this archive");
+        assert_eq!(bound.root().bytes().len(), manifest.bytes().len());
+        assert!(std::ptr::eq(bound.root().bytes().as_ptr(),
+            manifest.bytes().as_ptr()));
+    }
+    assert_eq!(first_archive.manifest_json_object(bounds),
+        Ok(first.root()), "legacy syntax query agrees with sealed pairing");
+}
+
+#[test]
+fn zipped_root_provenance_proof_fails_closed_on_json_syntax_and_budget() {
+    let bytes = make_zip(&[("manifest.json", br#"{"broken":]"#,
+        0xff90_525f)]);
+    let archive = read_stored_profile_zip(&bytes, limits())
+        .expect("valid framing and correct CRC but bad JSON");
+    let generous = ProfileJsonSyntaxLimits {
+        maximum_bytes: 1024,
+        maximum_nesting: 10,
+        maximum_object_members: 10,
+        maximum_values: 10,
+    };
+    assert_eq!(archive.admitted_root_json(generous).err(),
+        Some(ProfileZipManifestSyntaxError::Json(
+            ProfileJsonSyntaxError::Malformed)));
+    assert_eq!(archive.admitted_root_json(ProfileJsonSyntaxLimits {
+        maximum_bytes: 4,
+        ..generous
+    }).err(), Some(ProfileZipManifestSyntaxError::Zip(
+        ProfileZipReadError::ManifestTooLarge)));
+}

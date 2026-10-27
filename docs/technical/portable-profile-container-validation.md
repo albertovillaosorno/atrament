@@ -281,6 +281,24 @@ validation. Future schema codecs must choose field names, string budgets,
 allowed characters and normalized identities, and must preserve unknown data
 according to the still-unfrozen wire contract.
 
+### Archive-bound root JSON syntax evidence
+
+The ZIP reader also exposes `admitted_root_json` to pair the exact supplying
+CRC-checked, stored-only ZIP archive with its resource-bounded, syntax-checked
+root JSON object in one constructor-sealed borrowed view. A caller can inspect
+`archive()` and `root()` without constructing an independently supplied archive
+association or guessing that similarly named members share manifest authority.
+
+A two-archive fixture keeps the same member names but changes the root JSON
+payload and its valid CRC. Each sealed view retains only its own archive and
+points into that archive's exact stored root bytes; malformed JSON and root
+byte-budget failures return the same typed errors before any paired view exists.
+
+The pairing **does not** establish provenance of a separately constructed typed
+`ProfileManifest`, prove SHA-256 over declared entries, or authorize any file or
+session effect. Typed field decoding from the paired root remains necessary
+before Import can claim manifest-to-archive correspondence.
+
 ### Exact entry SHA-256 verifier
 
 The separate profile-entry-sha256 domain computes NIST FIPS 180-4 SHA-256 over

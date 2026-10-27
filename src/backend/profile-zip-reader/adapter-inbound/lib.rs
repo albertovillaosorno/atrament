@@ -138,7 +138,53 @@ pub struct ProfileZipArchive<'bytes> {
     entries: Vec<ProfileZipEntry<'bytes>>,
 }
 
+/// Constructor-sealed pairing of CRC-checked ZIP framing and its exact,
+/// resource-bounded, syntax-validated `manifest.json` root object.
+///
+/// The archive borrow prevents substituting an unrelated archive while
+/// downstream code inspects this root. It does not prove that an independently
+/// constructed typed manifest was decoded from these bytes; that separate
+/// admission and authorization gate remains unimplemented.
+#[derive(Debug)]
+pub struct ValidatedProfileZipRootJson<'archive, 'bytes> {
+    archive: &'archive ProfileZipArchive<'bytes>,
+    root: ValidatedProfileJsonObject<'bytes>,
+}
+
+impl<'archive, 'bytes> ValidatedProfileZipRootJson<'archive, 'bytes> {
+    /// Borrow the same ZIP index that supplied these admitted root bytes.
+    #[must_use]
+    pub const fn archive(&self) -> &'archive ProfileZipArchive<'bytes> {
+        self.archive
+    }
+
+    /// Borrow the constructor-sealed root JSON syntax view from that ZIP.
+    #[must_use]
+    pub const fn root(&self) -> ValidatedProfileJsonObject<'bytes> {
+        self.root
+    }
+}
+
 impl<'bytes> ProfileZipArchive<'bytes> {
+    /// Pair this checked ZIP archive with exact admitted root JSON syntax.
+    ///
+    /// The returned view keeps the archive association in one sealed value,
+    /// not just an independent typed manifest or detached JSON byte range.
+    /// No decoded manifest fields, entry hashes or file authority are proved.
+    ///
+    /// # Errors
+    ///
+    /// Reports the existing root size, UTF-8, JSON grammar and budget errors
+    /// without exposing a partial paired view.
+    pub fn admitted_root_json(
+        &self,
+        limits: ProfileJsonSyntaxLimits,
+    ) -> Result<ValidatedProfileZipRootJson<'_, 'bytes>,
+        ProfileZipManifestSyntaxError> {
+        let root = self.manifest_json_object(limits)?;
+        Ok(ValidatedProfileZipRootJson { archive: self, root })
+    }
+
     /// Borrow entries in the canonical byte order already validated.
     #[must_use]
     pub fn entries(&self) -> &[ProfileZipEntry<'bytes>] {

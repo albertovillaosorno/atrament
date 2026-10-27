@@ -226,3 +226,10 @@ caller-owned UTF-8 buffer with the same atomic, capacity-first logic used for
 string values. The exact original member-name token remains borrowed and
 available for future unknown-field preservation. Fixtures cover source order,
 escaped and Unicode keys, a CRC-checked ZIP root, and all 128 key slots.
+
+A constructor-sealed archive-root JSON view now pairs the exact CRC-checked
+stored ZIP index with its syntax-admitted `manifest.json` root. Two real ZIP
+fixtures with identical member names but different valid root contents prove
+that the paired archive and root source bytes cannot be mixed by construction.
+This does not yet bind an independently supplied typed manifest to the root or
+authorize profile Import, SHA-256 inventory acceptance, or filesystem effects.
