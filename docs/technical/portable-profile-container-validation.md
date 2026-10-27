@@ -87,8 +87,16 @@ The reader preserves the **exact** admitted byte slice and value count.
 
 The ZIP inbound adapter exposes `manifest_json_object` to bind these syntax
 checks to the actual root `manifest.json` entry after ordinary ZIP and CRC
-validation. Missing or invalid UTF-8 roots and root byte-budget excess retain
-the existing ZIP errors; malformed JSON and node/depth excess return separate
+validation.
+
+The root lookup uses the archive's already validated sorted index for exact-
+name binary search, matching verified payload lookup rather than scanning
+independently. CRC-correct ZIP fixtures prove the root is found between asset
+and section entries. Nested `assets/manifest.json` or `sections/manifest.json`
+cannot substitute for a missing exact root.
+
+Missing or invalid UTF-8 roots and root byte-budget excess retain the
+existing ZIP errors; malformed JSON and node/depth excess return separate
 syntax errors. Real ZIP fixtures prove that valid CRC-32 cannot establish
 JSON syntax, object-key uniqueness or typed profile acceptance.
 

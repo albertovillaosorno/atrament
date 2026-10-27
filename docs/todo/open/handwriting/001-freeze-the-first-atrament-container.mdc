@@ -202,3 +202,8 @@ surrogates, and invalid high followers in both key and value positions.
 An independent Python JSON decoder cross-check agreed with the admitted
 bounded grammar on 13,784 generated cases. The runtime parser still carries
 no Python dependency or manifest schema interpretation.
+
+The stored ZIP reader now uses its sealed sorted entry index for exact root
+`manifest.json` binary search, consistent with payload verification. Byte-level
+ZIP fixtures prove middle-index root provenance and that nested near-matching
+names fail closed. This does not expand ZIP64 support or import authority.

@@ -1149,3 +1149,55 @@ fn sealed_crc_checked_zip_root_exposes_nested_read_only_json_values() {
             ))
     );
 }
+
+#[test]
+fn sorted_zip_manifest_lookup_selects_only_exact_middle_root_name() {
+    let root = br#"{"id":42}"#;
+    let entries: [(&str, &[u8], u32); 3] = [
+        ("assets/notes.bin", b"data", 0xadf3_f363),
+        ("manifest.json", root, 0x66d6_18ea),
+        ("sections/notes.json", b"{}", 0xa3a6_bf43),
+    ];
+    let bytes = make_zip(&entries);
+    let archive = read_stored_profile_zip(&bytes, limits())
+        .expect("canonical ZIP with root in middle of sorted index");
+    assert_eq!(archive.entries().len(), 3);
+    let manifest = archive.manifest_utf8(root.len())
+        .expect("only exact root filename has manifest authority");
+    assert_eq!(manifest.as_bytes(), root);
+    assert_eq!(archive.manifest_utf8(root.len() - 1),
+        Err(ProfileZipReadError::ManifestTooLarge));
+    let admitted = archive.manifest_json_object(ProfileJsonSyntaxLimits {
+        maximum_bytes: root.len(),
+        maximum_nesting: 2,
+        maximum_object_members: 2,
+        maximum_values: 3,
+    }).expect("the root JSON, not any adjacent member, is admitted");
+    assert_eq!(admitted.root_member_value("id").expect("id")
+        .unsigned_integer(), Some(42));
+    let value = admitted.root_field("id").expect("root field")
+        .source_member_json();
+    assert_eq!(value, br#""id":42"#);
+    assert!(archive.entries()[1].bytes().windows(value.len())
+        .any(|part| std::ptr::eq(part.as_ptr(), value.as_ptr())));
+}
+
+#[test]
+fn nearby_nested_archive_names_cannot_substitute_for_missing_root() {
+    let entries: [(&str, &[u8], u32); 2] = [
+        ("assets/manifest.json", br#"{"spoof":true}"#, 0xeb29_ac2c),
+        ("sections/manifest.json", b"{}", 0xa3a6_bf43),
+    ];
+    let bytes = make_zip(&entries);
+    let archive = read_stored_profile_zip(&bytes, limits())
+        .expect("both near-matching paths have valid ZIP framing");
+    assert_eq!(archive.manifest_utf8(1024),
+        Err(ProfileZipReadError::MissingManifest));
+    assert_eq!(archive.manifest_json_object(ProfileJsonSyntaxLimits {
+        maximum_bytes: 1_024,
+        maximum_nesting: 3,
+        maximum_object_members: 5,
+        maximum_values: 10,
+    }), Err(ProfileZipManifestSyntaxError::Zip(
+        ProfileZipReadError::MissingManifest)));
+}

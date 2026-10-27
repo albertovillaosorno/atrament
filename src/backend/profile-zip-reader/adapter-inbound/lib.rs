@@ -182,8 +182,13 @@ impl<'bytes> ProfileZipArchive<'bytes> {
         &self,
         maximum_bytes: usize,
     ) -> Result<&'bytes str, ProfileZipReadError> {
-        let entry = self.entries.iter()
-            .find(|entry| entry.name == PROFILE_MANIFEST_PATH)
+        // The admitted index is strictly sorted by exact UTF-8 name bytes.
+        // Use that same ordering as verified payload lookup; near matches
+        // must not supply the root manifest's source-byte provenance.
+        let index = self.entries.binary_search_by(
+            |entry| entry.name.cmp(PROFILE_MANIFEST_PATH)
+        ).map_err(|_insertion_index| ProfileZipReadError::MissingManifest)?;
+        let entry = self.entries.get(index)
             .ok_or(ProfileZipReadError::MissingManifest)?;
         if entry.bytes.len() > maximum_bytes {
             return Err(ProfileZipReadError::ManifestTooLarge);
