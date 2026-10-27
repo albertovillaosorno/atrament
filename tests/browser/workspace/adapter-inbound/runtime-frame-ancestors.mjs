@@ -64,6 +64,10 @@ const WORKSPACE_DIR = path.resolve(
 );
 // A Firefox automation result may exceed a megabyte, but not an unbounded
 // length advertised by a malformed remote WebSocket peer.
+// Headless Firefox can take longer to expose its debugging endpoint under
+// workstation memory pressure. Both deadlines remain finite and test-owned.
+const FIREFOX_BIDI_READY_TIMEOUT_MS = 25_000;
+const FIREFOX_CASE_TIMEOUT_MS = 50_000;
 const MAX_BIDI_FRAME_BYTES = 8 * 1024 * 1024;
 const MAX_BIDI_FRAGMENTS = 1_024;
 const MAX_BIDI_EVENTS = 16;
@@ -1484,7 +1488,7 @@ async function startBidiFirefox(profile, children) {
         return line.startsWith(prefix)
             ? line.slice(prefix.length)
             : null;
-    });
+    }, FIREFOX_BIDI_READY_TIMEOUT_MS);
     const bidi = new BidiClient(`${remote}/session`);
     try {
         await bidi.connect();
@@ -1947,7 +1951,7 @@ function assertVisibleInViewport(rectangle, viewportHeight, label) {
 
 test(
     "Firefox without JavaScript keeps both static workspace surfaces visible",
-    { skip: !FIREFOX_AVAILABLE, timeout: 30_000 },
+    { skip: !FIREFOX_AVAILABLE, timeout: FIREFOX_CASE_TIMEOUT_MS },
     async () => {
         fs.mkdirSync(".temp", { recursive: true });
         const profile = fs.mkdtempSync(".temp/workspace-static-");
@@ -2082,7 +2086,7 @@ test(
 
 test(
     "Firefox keeps hostile prompt and response text inert",
-    { skip: !FIREFOX_AVAILABLE, timeout: 30_000 },
+    { skip: !FIREFOX_AVAILABLE, timeout: FIREFOX_CASE_TIMEOUT_MS },
     async () => {
         fs.mkdirSync(".temp", { recursive: true });
         const profile = fs.mkdtempSync(".temp/workspace-hostile-text-");
@@ -2196,7 +2200,7 @@ test(
 
 test(
     "Firefox preserves large Unicode prompt data and canonical line endings",
-    { skip: !FIREFOX_AVAILABLE, timeout: 30_000 },
+    { skip: !FIREFOX_AVAILABLE, timeout: FIREFOX_CASE_TIMEOUT_MS },
     async () => {
         fs.mkdirSync(".temp", { recursive: true });
         const profile = fs.mkdtempSync(".temp/workspace-prompt-text-");
@@ -2368,7 +2372,7 @@ test(
 
 test(
     "Firefox Copy prompt ignores stale writes and reports current failures",
-    { skip: !FIREFOX_AVAILABLE, timeout: 30_000 },
+    { skip: !FIREFOX_AVAILABLE, timeout: FIREFOX_CASE_TIMEOUT_MS },
     async () => {
         fs.mkdirSync(".temp", { recursive: true });
         const profile = fs.mkdtempSync(".temp/workspace-copy-lifecycle-");
@@ -2482,7 +2486,7 @@ test(
 
 test(
     "Firefox serializes repeated prompt copy requests without UI churn",
-    { skip: !FIREFOX_AVAILABLE, timeout: 30_000 },
+    { skip: !FIREFOX_AVAILABLE, timeout: FIREFOX_CASE_TIMEOUT_MS },
     async () => {
         fs.mkdirSync(".temp", { recursive: true });
         const profile = fs.mkdtempSync(".temp/workspace-copy-stress-");
@@ -2606,7 +2610,7 @@ test(
 
 test(
     "Firefox trusted Tab order follows compact divider availability",
-    { skip: !FIREFOX_AVAILABLE, timeout: 30_000 },
+    { skip: !FIREFOX_AVAILABLE, timeout: FIREFOX_CASE_TIMEOUT_MS },
     async () => {
         fs.mkdirSync(".temp", { recursive: true });
         const profile = fs.mkdtempSync(".temp/workspace-tab-order-");
@@ -2690,7 +2694,7 @@ test(
 
 test(
     "Firefox trusted keyboard activates native skip links without workspace JS",
-    { skip: !FIREFOX_AVAILABLE, timeout: 30_000 },
+    { skip: !FIREFOX_AVAILABLE, timeout: FIREFOX_CASE_TIMEOUT_MS },
     async () => {
         fs.mkdirSync(".temp", { recursive: true });
         const profile = fs.mkdtempSync(".temp/workspace-skip-links-");
@@ -2784,7 +2788,7 @@ test(
 
 test(
     "Firefox trusted divider keys and zoom boundaries preserve keyboard focus",
-    { skip: !FIREFOX_AVAILABLE, timeout: 30_000 },
+    { skip: !FIREFOX_AVAILABLE, timeout: FIREFOX_CASE_TIMEOUT_MS },
     async () => {
         fs.mkdirSync(".temp", { recursive: true });
         const profile = fs.mkdtempSync(".temp/workspace-keyboard-controls-");
@@ -2981,7 +2985,7 @@ test(
 
 test(
     "Firefox text-spacing override keeps short workspace controls reachable",
-    { skip: !FIREFOX_AVAILABLE, timeout: 30_000 },
+    { skip: !FIREFOX_AVAILABLE, timeout: FIREFOX_CASE_TIMEOUT_MS },
     async () => {
         fs.mkdirSync(".temp", { recursive: true });
         const profile = fs.mkdtempSync(".temp/workspace-text-spacing-");
@@ -3124,7 +3128,7 @@ test(
 
 test(
     "Firefox 200 percent text keeps compact skip links viewport bounded",
-    { skip: !FIREFOX_AVAILABLE, timeout: 30_000 },
+    { skip: !FIREFOX_AVAILABLE, timeout: FIREFOX_CASE_TIMEOUT_MS },
     async () => {
         fs.mkdirSync(".temp", { recursive: true });
         const profile = fs.mkdtempSync(".temp/workspace-text-zoom-");
@@ -3221,7 +3225,7 @@ test(
 
 test(
     "Firefox compaction moves focused divider to the visible source heading",
-    { skip: !FIREFOX_AVAILABLE, timeout: 30_000 },
+    { skip: !FIREFOX_AVAILABLE, timeout: FIREFOX_CASE_TIMEOUT_MS },
     async () => {
         fs.mkdirSync(".temp", { recursive: true });
         const profile = fs.mkdtempSync(".temp/workspace-compact-focus-");
@@ -3330,7 +3334,7 @@ test(
 
 test(
     "Firefox pointer-capture fallback preserves focus until completed click",
-    { skip: !FIREFOX_AVAILABLE, timeout: 30_000 },
+    { skip: !FIREFOX_AVAILABLE, timeout: FIREFOX_CASE_TIMEOUT_MS },
     async () => {
         fs.mkdirSync(".temp", { recursive: true });
         const profile = fs.mkdtempSync(".temp/workspace-pointer-fallback-");
@@ -3497,7 +3501,7 @@ test(
 
 test(
     "Firefox resize interrupts pointer capture without poisoning the next drag",
-    { skip: !FIREFOX_AVAILABLE, timeout: 30_000 },
+    { skip: !FIREFOX_AVAILABLE, timeout: FIREFOX_CASE_TIMEOUT_MS },
     async () => {
         fs.mkdirSync(".temp", { recursive: true });
         const profile = fs.mkdtempSync(".temp/workspace-pointer-resize-");
@@ -3728,7 +3732,7 @@ test(
 
 test(
     "Firefox divider ARIA changes only when compact state changes",
-    { skip: !FIREFOX_AVAILABLE, timeout: 30_000 },
+    { skip: !FIREFOX_AVAILABLE, timeout: FIREFOX_CASE_TIMEOUT_MS },
     async () => {
         fs.mkdirSync(".temp", { recursive: true });
         const profile = fs.mkdtempSync(".temp/workspace-resize-aria-");
@@ -3853,7 +3857,7 @@ test(
 
 test(
     "Firefox compact breakpoint matches viewport CSS and divider state",
-    { skip: !FIREFOX_AVAILABLE, timeout: 30_000 },
+    { skip: !FIREFOX_AVAILABLE, timeout: FIREFOX_CASE_TIMEOUT_MS },
     async () => {
         fs.mkdirSync(".temp", { recursive: true });
         const profile = fs.mkdtempSync(".temp/workspace-breakpoint-");
@@ -3939,7 +3943,7 @@ test(
 
 test(
     "Firefox viewport matrix keeps both workspace surfaces reachable",
-    { skip: !FIREFOX_AVAILABLE, timeout: 30_000 },
+    { skip: !FIREFOX_AVAILABLE, timeout: FIREFOX_CASE_TIMEOUT_MS },
     async () => {
         fs.mkdirSync(".temp", { recursive: true });
         const profile = fs.mkdtempSync(".temp/workspace-layout-");
@@ -4113,7 +4117,7 @@ test(
 
 test(
     "Firefox blocks Atrament inside a hostile loopback frame",
-    { skip: !FIREFOX_AVAILABLE, timeout: 30_000 },
+    { skip: !FIREFOX_AVAILABLE, timeout: FIREFOX_CASE_TIMEOUT_MS },
     async () => {
         fs.mkdirSync(".temp", { recursive: true });
         const profile = fs.mkdtempSync(".temp/frame-ancestors-");
@@ -4341,7 +4345,7 @@ test(
 
 test(
     "Firefox refresh cannot reuse the scrubbed session credential",
-    { skip: !FIREFOX_AVAILABLE, timeout: 30_000 },
+    { skip: !FIREFOX_AVAILABLE, timeout: FIREFOX_CASE_TIMEOUT_MS },
     async () => {
         fs.mkdirSync(".temp", { recursive: true });
         const profile = fs.mkdtempSync(".temp/session-refresh-");
@@ -4427,7 +4431,7 @@ test(
 
 test(
     "Firefox retries a newer draft after an obsolete resource limit",
-    { skip: !FIREFOX_AVAILABLE, timeout: 30_000 },
+    { skip: !FIREFOX_AVAILABLE, timeout: FIREFOX_CASE_TIMEOUT_MS },
     async () => {
         fs.mkdirSync(".temp", { recursive: true });
         const profile = fs.mkdtempSync(".temp/session-draft-coalesce-");
@@ -4566,7 +4570,7 @@ test(
 
 test(
     "Firefox close aborts an in-flight private draft replacement",
-    { skip: !FIREFOX_AVAILABLE, timeout: 30_000 },
+    { skip: !FIREFOX_AVAILABLE, timeout: FIREFOX_CASE_TIMEOUT_MS },
     async () => {
         fs.mkdirSync(".temp", { recursive: true });
         const profile = fs.mkdtempSync(".temp/session-close-");
@@ -4690,7 +4694,7 @@ test(
 
 test(
     "Firefox divider never publishes nonfinite shares on missing geometry",
-    { skip: !FIREFOX_AVAILABLE, timeout: 30_000 },
+    { skip: !FIREFOX_AVAILABLE, timeout: FIREFOX_CASE_TIMEOUT_MS },
     async () => {
         fs.mkdirSync(".temp", { recursive: true });
         const profile = fs.mkdtempSync(".temp/workspace-degenerate-share-");
@@ -4787,7 +4791,7 @@ test(
 
 test(
     "Firefox explicit end requires confirmation and clears session state",
-    { skip: !FIREFOX_AVAILABLE, timeout: 30_000 },
+    { skip: !FIREFOX_AVAILABLE, timeout: FIREFOX_CASE_TIMEOUT_MS },
     async () => {
         fs.mkdirSync(".temp", { recursive: true });
         const profile = fs.mkdtempSync(".temp/session-end-control-");
@@ -4904,7 +4908,7 @@ test(
 
 test(
     "Firefox end failures preserve retryability but revoke stale authority",
-    { skip: !FIREFOX_AVAILABLE, timeout: 30_000 },
+    { skip: !FIREFOX_AVAILABLE, timeout: FIREFOX_CASE_TIMEOUT_MS },
     async () => {
         fs.mkdirSync(".temp", { recursive: true });
         const profile = fs.mkdtempSync(".temp/session-end-rejections-");

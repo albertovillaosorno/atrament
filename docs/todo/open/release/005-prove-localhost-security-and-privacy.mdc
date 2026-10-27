@@ -379,3 +379,10 @@ four-byte terminator before identifying the header boundary. A large frame
 coalesced into the same TCP response is still preserved byte-for-byte, while
 a similarly large unterminated header fails without copying the full chunk
 into the header buffer. Both cases have dedicated regression tests.
+
+A full-browser contention run reproduced intermittent Firefox readiness timeout
+before an explicit-end assertion, while the same case passed in isolation.
+The disposable test harness now permits 25 seconds for Firefox's BiDi startup
+announcement and 50 seconds for each complete Firefox integration case.
+These deadlines remain finite, apply only to tests, and do not change browser
+session, backend readiness or real runtime admission policy.
