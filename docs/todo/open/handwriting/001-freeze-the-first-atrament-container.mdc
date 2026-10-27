@@ -307,3 +307,9 @@ JSON bytes through the constructor-sealed archive/root view. Independent
 Python `hashlib` goldens distinguish semantically equal whitespace variants;
 changing another ZIP member cannot change the root-only fingerprint. This
 fingerprint is not an accepted typed manifest or a declared root-hash proof.
+
+The ordinary stored-ZIP reader now retains the complete checked source slice
+as a borrow and exposes its archive-wide SHA-256 without copying. An
+independent Python `hashlib` golden and changed-member regression distinguish
+the whole-ZIP fingerprint from the existing root JSON fingerprint. Neither
+fingerprint proves a signature, typed manifest authority or accepted Import.

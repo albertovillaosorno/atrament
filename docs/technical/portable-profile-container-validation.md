@@ -86,6 +86,21 @@ is a **root-only fingerprint** and not a digest of the entire archive. It
 cannot serve as verification of a declared root hash or proof that a typed
 manifest was parsed, and confers no Import authorization.
 
+### Complete stored-ZIP source fingerprint
+
+The constructor-sealed `ProfileZipArchive` now retains an immutable borrow of
+the *entire* checked ZIP byte slice, not just its individual stored member
+payloads. Its `source_bytes()` points at the exact caller-supplied archive and
+`source_sha256()` hashes that complete slice without copying or canonicalizing
+it. This includes all local headers, payloads, CRC fields, directory records
+and the end-of-directory marker.
+
+An independent Python `hashlib` golden fixes the archive SHA-256 for a
+root-only 126-byte ZIP. A second CRC-valid fixture changes just one non-root
+member: the **archive fingerprint changes**, while the **root JSON fingerprint
+remains identical**. This establishes exact scope, not a cryptographic
+signature, selected filesystem source authority or typed profile admission.
+
 ### Deterministic ordinary stored-ZIP byte writer
 
 The separate `atrament_profile_stored_zip_writer` application frames

@@ -274,3 +274,8 @@ Source-sealed ZIP root JSON also has a non-authorizing SHA-256 fingerprint
 computed from exact CRC-checked, syntax-admitted root bytes. The fingerprint
 is deliberately root-scoped: it does not establish full archive identity,
 manifest semantic agreement, file authority or accepted Import state.
+
+The checked archive now exposes a distinct SHA-256 of its complete original
+ZIP source in addition to the root-only JSON SHA-256. Changed non-root bytes
+alter only the archive-wide fingerprint; neither digest binds a selected file
+handle, a trusted destination, a schema-valid manifest or Import acceptance.

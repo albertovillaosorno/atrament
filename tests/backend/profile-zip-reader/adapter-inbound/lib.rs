@@ -1601,3 +1601,67 @@ fn admitted_root_fingerprint_does_not_cover_unrelated_zip_members() {
         second.entries()[1].bytes().as_ptr()
     ));
 }
+
+#[test]
+fn checked_zip_archive_keeps_full_source_and_python_hashlib_fingerprint() {
+    // Python hashlib.sha256(struct/zlib-assembled root-only stored ZIP)
+    // produces 69635ab9...171c394 over exactly 126 bytes.
+    let source = make_zip(&[("manifest.json", b"{}", 0xa3a6_bf43)]);
+    assert_eq!(source.len(), 126);
+    let archive = read_stored_profile_zip(&source, limits())
+        .expect("strict CRC-correct ZIP framing");
+    assert_eq!(archive.source_bytes(), source);
+    assert!(std::ptr::eq(archive.source_bytes().as_ptr(), source.as_ptr()));
+    assert_eq!(archive.source_sha256(), sha256_profile_bytes(&source));
+    let hex = archive.source_sha256().bytes().iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect::<String>();
+    assert_eq!(hex,
+        "69635ab9c8b0a4dfc5a4e6743607342a0a4e4d6a50d23ac79b0ebe41e171c394");
+}
+
+#[test]
+fn complete_zip_hash_changes_when_only_a_nonroot_member_changes() {
+    let root = br#"{"a":1}"#;
+    let first_bytes = make_zip(&[
+        ("assets/mark.webp", b"a", 0xe8b7_be43),
+        ("manifest.json", root, 0x561b_acaf),
+    ]);
+    let second_bytes = make_zip(&[
+        ("assets/mark.webp", b"b", 0x71be_eff9),
+        ("manifest.json", root, 0x561b_acaf),
+    ]);
+    let first = read_stored_profile_zip(&first_bytes, limits())
+        .expect("first full ZIP admitted");
+    let second = read_stored_profile_zip(&second_bytes, limits())
+        .expect("second full ZIP admitted");
+    assert_ne!(first.source_bytes(), second.source_bytes());
+    assert_ne!(first.source_sha256(), second.source_sha256());
+    let caps = ProfileJsonSyntaxLimits {
+        maximum_bytes: root.len(),
+        maximum_nesting: 3,
+        maximum_object_members: 3,
+        maximum_values: 3,
+    };
+    assert_eq!(first.admitted_root_json(caps)
+        .expect("valid first JSON").source_sha256(),
+        second.admitted_root_json(caps)
+            .expect("valid second JSON").source_sha256());
+}
+
+#[test]
+fn structurally_checked_archive_hash_is_not_root_syntax_acceptance() {
+    let malformed_root = br#"{"bad":]"#;
+    // A CRC-valid ZIP can still contain a malformed JSON root.
+    let source = make_zip(&[("manifest.json", malformed_root, 0x92aa8b5c)]);
+    let archive = read_stored_profile_zip(&source, limits())
+        .expect("only stored framing and CRC accepted");
+    assert_eq!(archive.source_sha256(), sha256_profile_bytes(&source));
+    assert_eq!(archive.admitted_root_json(ProfileJsonSyntaxLimits {
+        maximum_bytes: 40,
+        maximum_nesting: 3,
+        maximum_object_members: 3,
+        maximum_values: 3,
+    }).err(), Some(ProfileZipManifestSyntaxError::Json(
+        ProfileJsonSyntaxError::Malformed)));
+}

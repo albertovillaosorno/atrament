@@ -141,6 +141,7 @@ impl<'bytes> ProfileZipEntry<'bytes> {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ProfileZipArchive<'bytes> {
     entries: Vec<ProfileZipEntry<'bytes>>,
+    source: &'bytes [u8],
 }
 
 /// Constructor-sealed pairing of CRC-checked ZIP framing and its exact,
@@ -263,6 +264,27 @@ impl<'bytes> ProfileZipArchive<'bytes> {
     #[must_use]
     pub fn observed_paths(&self) -> Vec<&'bytes str> {
         self.entries.iter().map(|entry| entry.name).collect()
+    }
+
+    /// Borrow the complete original source bytes of this checked ZIP frame.
+    ///
+    /// The slice is exactly the caller-provided archive without any copy or
+    /// normalization; only stored-ZIP framing/CRC checks have succeeded.
+    /// No typed manifest or selected filesystem identity is established.
+    #[must_use]
+    pub const fn source_bytes(&self) -> &'bytes [u8] {
+        self.source
+    }
+
+    /// SHA-256 fingerprint of the full checked ZIP byte slice, not its root.
+    ///
+    /// Unlike `ValidatedProfileZipRootJson::source_sha256`, this includes
+    /// local headers, CRC fields, every member, the directory and end record.
+    /// It is not an authenticity signature, typed manifest acceptance, or
+    /// permission to read or write a selected path.
+    #[must_use]
+    pub fn source_sha256(&self) -> Sha256Digest {
+        sha256_profile_bytes(self.source)
     }
 }
 
@@ -617,7 +639,7 @@ pub fn read_stored_profile_zip(
     if cursor != trailer || local_end != directory_start {
         return Err(ProfileZipReadError::InvalidStructure);
     }
-    Ok(ProfileZipArchive { entries })
+    Ok(ProfileZipArchive { entries, source: bytes })
 }
 
 /// Verify all admitted member bytes against one exact ZIP archive.
