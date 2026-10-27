@@ -126,6 +126,23 @@ synchronization keeps any field failure visible until that field succeeds;
 another field's success cannot advertise `Session ready` while failed or active
 work remains.
 
+### Recovering a failed initial draft connection
+
+A transient handshake transport failure, backend `5xx` handshake, or failed
+initial draft read leaves Task, Source, and Candidate disabled. The session
+secret has already been removed from the address bar, so reloading would lose
+this session rather than retrying it.
+
+The **Retry connection** button is shown only while the current in-memory
+credential can be used for a fresh compatibility handshake and complete draft
+load. It hides and disables itself immediately when clicked, preventing
+parallel retries. Failed hydration never writes a partial draft into the UI.
+On success, all three fields become editable together and Retry disappears.
+
+An unauthorized response clears the credential; an incompatible or malformed
+handshake does not enable Retry. A page exit also removes the retry affordance
+and destroys browser-held session access.
+
 ### Localhost HTTP status classes
 
 The current runtime uses these response classes at the inbound HTTP boundary:

@@ -126,6 +126,7 @@ const promptOutput = requireElement("#prompt-output");
 const copyPrompt = requireElement("#copy-prompt");
 const copyStatus = requireElement("#copy-status");
 const sessionStatus = requireElement("#session-status");
+const retrySession = requireElement("#retry-session");
 const endSession = requireElement("#end-session");
 let copyGeneration = 0;
 let clipboardWriteInFlight = false;
@@ -322,7 +323,16 @@ function scrubBfcacheSubtree(root) {
     }
     scrubBfcacheElement(root);
 }
+function showSessionRetry() {
+    retrySession.hidden = false;
+    retrySession.disabled = false;
+}
+function hideSessionRetry() {
+    retrySession.disabled = true;
+    retrySession.hidden = true;
+}
 function clearSessionText() {
+    hideSessionRetry();
     taskInput.defaultValue = "";
     taskInput.value = "";
     sourceInput.defaultValue = "";
@@ -352,6 +362,7 @@ function enableCompatibleEditing() {
     candidateInput.disabled = false;
 }
 async function completeSessionHandshake(secret) {
+    hideSessionRetry();
     setTextIfChanged(sessionStatus, "Checking backend compatibility…");
     let response;
     try {
@@ -370,6 +381,7 @@ async function completeSessionHandshake(secret) {
         if (sessionSecret === secret) {
             const unavailableMessage = "Handshake unavailable · editing off";
             setTextIfChanged(sessionStatus, unavailableMessage);
+            showSessionRetry();
         }
         return;
     }
@@ -383,6 +395,9 @@ async function completeSessionHandshake(secret) {
     if (response.status !== 200 && response.status !== 409) {
         const invalidMessage = "Invalid backend handshake · editing disabled";
         setTextIfChanged(sessionStatus, invalidMessage);
+        if (response.status >= 500) {
+            showSessionRetry();
+        }
         return;
     }
     let payload;
@@ -510,6 +525,9 @@ async function hydrateSessionDraft(secret) {
             setTextIfChanged(sessionStatus, outcome.kind === "unavailable"
                 ? "Draft load unavailable · editing off"
                 : "Draft load rejected · editing off");
+            if (draftSyncIsCurrent(secret, generation)) {
+                showSessionRetry();
+            }
             return;
         }
         snapshot.push([input, count, outcome.value]);
@@ -625,6 +643,13 @@ function bindDraftSync(field, input) {
 bindDraftSync("task", taskInput);
 bindDraftSync("source", sourceInput);
 bindDraftSync("candidate", candidateInput);
+retrySession.addEventListener("click", () => {
+    const secret = sessionSecret;
+    if (secret === null || retrySession.disabled) {
+        return;
+    }
+    void completeSessionHandshake(secret);
+});
 let endSessionConfirmed = false;
 let endSessionPreviousStatus = "Session ready";
 function disarmEndSessionConfirmation() {

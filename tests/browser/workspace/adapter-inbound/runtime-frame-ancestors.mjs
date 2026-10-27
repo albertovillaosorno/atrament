@@ -1564,6 +1564,8 @@ function createSessionFixtureServer(
     apiRequests,
     onDraftMutation = null,
     onSessionEnd = null,
+    onHandshake = null,
+    onDraftRead = null,
 ) {
     const generated = new Set([
         "main.js",
@@ -1638,11 +1640,12 @@ function createSessionFixtureServer(
                 response.end();
                 return;
             }
-            response.writeHead(200, {
+            const status = onHandshake?.() ?? 200;
+            response.writeHead(status, {
                 "Cache-Control": "no-store",
                 "Content-Type": "application/json; charset=utf-8",
             });
-            response.end(COMPATIBLE_HANDSHAKE);
+            response.end(status === 200 ? COMPATIBLE_HANDSHAKE : "");
             return;
         }
         if (pathname.startsWith("/api/session/")) {
@@ -1674,11 +1677,12 @@ function createSessionFixtureServer(
                 response.end();
                 return;
             }
-            response.writeHead(200, {
+            const status = onDraftRead?.(field) ?? 200;
+            response.writeHead(status, {
                 "Cache-Control": "no-store",
                 "Content-Type": "text/plain; charset=utf-8",
             });
-            response.end(REFRESH_DRAFT[field]);
+            response.end(status === 200 ? REFRESH_DRAFT[field] : "");
             return;
         }
         response.writeHead(404);
@@ -4335,6 +4339,133 @@ test(
             for (const server of [hostile, permissive]) {
                 await closeFixtureServer(server);
             }
+            for (const child of children.reverse()) {
+                await stopChild(child);
+            }
+            fs.rmSync(profile, { recursive: true, force: true });
+        }
+    },
+);
+
+test(
+    "Firefox retries transient handshake and draft-load failures in place",
+    { skip: !FIREFOX_AVAILABLE, timeout: FIREFOX_CASE_TIMEOUT_MS },
+    async () => {
+        fs.mkdirSync(".temp", { recursive: true });
+        const profile = fs.mkdtempSync(".temp/session-retry-");
+        const apiRequests = [];
+        let handshakeCalls = 0;
+        let sourceReads = 0;
+        const server = createSessionFixtureServer(
+            apiRequests,
+            null,
+            null,
+            () => (++handshakeCalls === 1 ? 503 : 200),
+            (field) => field === "source" && ++sourceReads === 1
+                ? 503
+                : 200,
+        );
+        const children = [];
+        let bidi;
+        try {
+            server.listen(0, "127.0.0.1");
+            await once(server, "listening");
+            const address = server.address();
+            assert.notEqual(typeof address, "string");
+            assert.notEqual(address, null);
+            const origin = `http://127.0.0.1:${address.port}`;
+
+            bidi = await startBidiFirefox(profile, children);
+            const tab = await bidi.command("browsingContext.create", {
+                type: "tab",
+            });
+            await bidi.command("browsingContext.navigate", {
+                context: tab.context,
+                url: `${origin}/#session=${REFRESH_SECRET}`,
+                wait: "complete",
+            });
+            const inspectRetry = async () => {
+                const result = await bidi.command("script.evaluate", {
+                    awaitPromise: false,
+                    expression: `(() => {
+                        const retry = document.getElementById("retry-session");
+                        return JSON.stringify({
+                            disabled: retry.disabled,
+                            hidden: retry.hidden
+                        });
+                    })()`,
+                    resultOwnership: "none",
+                    target: { context: tab.context },
+                });
+                assert.equal(result.type, "success");
+                return JSON.parse(result.result.value);
+            };
+            const clickRetry = async () => {
+                await bidi.command("script.evaluate", {
+                    awaitPromise: false,
+                    expression: `(() => {
+                        const retry = document.getElementById("retry-session");
+                        retry.click();
+                        retry.click();
+                    })()`,
+                    resultOwnership: "none",
+                    target: { context: tab.context },
+                });
+            };
+
+            const handshakeFailure = await waitForSessionStatus(
+                bidi,
+                tab.context,
+                "Invalid backend handshake · editing disabled",
+            );
+            assert.equal(handshakeFailure.hash, "");
+            assert.deepEqual(await inspectRetry(), {
+                disabled: false, hidden: false,
+            });
+            await clickRetry();
+
+            const draftFailure = await waitForSessionStatus(
+                bidi,
+                tab.context,
+                "Draft load rejected · editing off",
+            );
+            for (const field of ["task", "source", "candidate"]) {
+                assert.deepEqual(draftFailure[field], {
+                    disabled: true, value: "",
+                });
+            }
+            assert.deepEqual(await inspectRetry(), {
+                disabled: false, hidden: false,
+            });
+            await clickRetry();
+
+            const ready = await waitForSessionStatus(
+                bidi,
+                tab.context,
+                "Session ready",
+            );
+            assert.equal(ready.hash, "");
+            for (const field of ["task", "source", "candidate"]) {
+                assert.deepEqual(ready[field], {
+                    disabled: false, value: REFRESH_DRAFT[field],
+                });
+            }
+            assert.deepEqual(await inspectRetry(), {
+                disabled: true, hidden: true,
+            });
+            assert.deepEqual(apiRequests, [
+                "POST /api/handshake",
+                "POST /api/handshake",
+                "GET /api/session/task",
+                "GET /api/session/source",
+                "POST /api/handshake",
+                "GET /api/session/task",
+                "GET /api/session/source",
+                "GET /api/session/candidate",
+            ]);
+        } finally {
+            bidi?.close();
+            await closeFixtureServer(server);
             for (const child of children.reverse()) {
                 await stopChild(child);
             }

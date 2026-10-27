@@ -49,6 +49,7 @@ test("static workspace starts session controls disabled", async () => {
     for (const id of [
         "copy-prompt",
         "end-session",
+        "retry-session",
         "task-input",
         "source-input",
         "profile-select",

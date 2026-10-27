@@ -152,6 +152,7 @@ const promptOutput = requireElement<HTMLTextAreaElement>("#prompt-output");
 const copyPrompt = requireElement<HTMLButtonElement>("#copy-prompt");
 const copyStatus = requireElement<HTMLElement>("#copy-status");
 const sessionStatus = requireElement<HTMLElement>("#session-status");
+const retrySession = requireElement<HTMLButtonElement>("#retry-session");
 const endSession = requireElement<HTMLButtonElement>("#end-session");
 
 type ClipboardWrite = (text: string) => unknown;
@@ -387,7 +388,18 @@ function scrubBfcacheSubtree(root: HTMLElement): void {
     scrubBfcacheElement(root);
 }
 
+function showSessionRetry(): void {
+    retrySession.hidden = false;
+    retrySession.disabled = false;
+}
+
+function hideSessionRetry(): void {
+    retrySession.disabled = true;
+    retrySession.hidden = true;
+}
+
 function clearSessionText(): void {
+    hideSessionRetry();
     taskInput.defaultValue = "";
     taskInput.value = "";
     sourceInput.defaultValue = "";
@@ -419,6 +431,7 @@ function enableCompatibleEditing(): void {
 }
 
 async function completeSessionHandshake(secret: string): Promise<void> {
+    hideSessionRetry();
     setTextIfChanged(sessionStatus, "Checking backend compatibility…");
     let response: Response;
     try {
@@ -437,6 +450,7 @@ async function completeSessionHandshake(secret: string): Promise<void> {
             const unavailableMessage =
                 "Handshake unavailable · editing off";
             setTextIfChanged(sessionStatus, unavailableMessage);
+            showSessionRetry();
         }
         return;
     }
@@ -450,6 +464,9 @@ async function completeSessionHandshake(secret: string): Promise<void> {
     if (response.status !== 200 && response.status !== 409) {
         const invalidMessage = "Invalid backend handshake · editing disabled";
         setTextIfChanged(sessionStatus, invalidMessage);
+        if (response.status >= 500) {
+            showSessionRetry();
+        }
         return;
     }
     let payload: unknown;
@@ -610,6 +627,9 @@ async function hydrateSessionDraft(secret: string): Promise<void> {
                     ? "Draft load unavailable · editing off"
                     : "Draft load rejected · editing off",
             );
+            if (draftSyncIsCurrent(secret, generation)) {
+                showSessionRetry();
+            }
             return;
         }
         snapshot.push([input, count, outcome.value]);
@@ -738,6 +758,14 @@ function bindDraftSync(
 bindDraftSync("task", taskInput);
 bindDraftSync("source", sourceInput);
 bindDraftSync("candidate", candidateInput);
+
+retrySession.addEventListener("click", (): void => {
+    const secret = sessionSecret;
+    if (secret === null || retrySession.disabled) {
+        return;
+    }
+    void completeSessionHandshake(secret);
+});
 
 let endSessionConfirmed = false;
 let endSessionPreviousStatus = "Session ready";
