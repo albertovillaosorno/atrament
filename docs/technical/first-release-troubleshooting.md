@@ -126,6 +126,18 @@ synchronization keeps any field failure visible until that field succeeds;
 another field's success cannot advertise `Session ready` while failed or active
 work remains.
 
+### Retrying unsaved draft edits
+
+A failed replacement caused by lost transport, a timeout, or backend `5xx`
+leaves its exact unsaved value in the editor and offers **Retry edits**. This
+button resends only the retryable complete field values without reloading or
+replacing any local draft text. Repeated clicks cannot start duplicate sends.
+
+A `413` needs a smaller edited value rather than an identical retry. An
+unauthorized session cannot retry, and malformed success bodies do not count
+as accepted writes. The browser never reports `Session ready` while another
+field remains unsaved or a retry is in flight.
+
 ### Recovering a failed initial draft connection
 
 A transient handshake transport failure, backend `5xx` handshake, or failed

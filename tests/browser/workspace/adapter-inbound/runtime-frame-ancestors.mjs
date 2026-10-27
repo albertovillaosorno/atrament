@@ -4354,11 +4354,36 @@ test(
         fs.mkdirSync(".temp", { recursive: true });
         const profile = fs.mkdtempSync(".temp/session-retry-");
         const apiRequests = [];
+        const mutations = [];
         let handshakeCalls = 0;
         let sourceReads = 0;
         const server = createSessionFixtureServer(
             apiRequests,
-            null,
+            (request, response, field) => {
+                const chunks = [];
+                request.on("data", (chunk) => chunks.push(chunk));
+                request.on("end", () => {
+                    mutations.push({
+                        body: Buffer.concat(chunks).toString("utf8"), field,
+                    });
+                    const status = mutations.length === 1 ? 503
+                        : mutations.length === 3 ? 413 : 204;
+                    response.writeHead(status, {
+                        "Cache-Control": "no-store",
+                        "Content-Type": "application/json; charset=utf-8",
+                    });
+                    response.end(status === 413 ? JSON.stringify({
+                        error: "resource_limit",
+                        diagnostics: {
+                            version: "atrament.diagnostic/1",
+                            completeness: "complete",
+                            items: [{
+                                code: "atrament.session-draft.resource-limit",
+                            }],
+                        },
+                    }) : "");
+                });
+            },
             null,
             () => (++handshakeCalls === 1 ? 503 : 200),
             (field) => field === "source" && ++sourceReads === 1
@@ -4391,7 +4416,8 @@ test(
                         const retry = document.getElementById("retry-session");
                         return JSON.stringify({
                             disabled: retry.disabled,
-                            hidden: retry.hidden
+                            hidden: retry.hidden,
+                            label: retry.textContent
                         });
                     })()`,
                     resultOwnership: "none",
@@ -4420,7 +4446,7 @@ test(
             );
             assert.equal(handshakeFailure.hash, "");
             assert.deepEqual(await inspectRetry(), {
-                disabled: false, hidden: false,
+                disabled: false, hidden: false, label: "Retry connection",
             });
             await clickRetry();
 
@@ -4435,7 +4461,7 @@ test(
                 });
             }
             assert.deepEqual(await inspectRetry(), {
-                disabled: false, hidden: false,
+                disabled: false, hidden: false, label: "Retry connection",
             });
             await clickRetry();
 
@@ -4451,7 +4477,7 @@ test(
                 });
             }
             assert.deepEqual(await inspectRetry(), {
-                disabled: true, hidden: true,
+                disabled: true, hidden: true, label: "Retry connection",
             });
             assert.deepEqual(apiRequests, [
                 "POST /api/handshake",
@@ -4462,6 +4488,66 @@ test(
                 "GET /api/session/task",
                 "GET /api/session/source",
                 "GET /api/session/candidate",
+            ]);
+
+            const editTask = async (value) => {
+                await bidi.command("script.evaluate", {
+                    awaitPromise: false,
+                    expression: `(() => {
+                        const task = document.getElementById("task-input");
+                        task.value = ${JSON.stringify(value)};
+                        task.dispatchEvent(new Event("input"));
+                    })()`,
+                    resultOwnership: "none",
+                    target: { context: tab.context },
+                });
+            };
+            await editTask("preserve this unsaved text exactly");
+            const unsaved = await waitForSessionStatus(
+                bidi,
+                tab.context,
+                "Draft sync rejected · retry edit",
+            );
+            assert.equal(
+                unsaved.task.value,
+                "preserve this unsaved text exactly",
+            );
+            assert.deepEqual(await inspectRetry(), {
+                disabled: false, hidden: false, label: "Retry edits",
+            });
+            await clickRetry();
+            const saved = await waitForSessionStatus(
+                bidi,
+                tab.context,
+                "Session ready",
+            );
+            assert.equal(
+                saved.task.value,
+                "preserve this unsaved text exactly",
+            );
+            assert.equal(saved.source.value, REFRESH_DRAFT.source);
+            assert.deepEqual(await inspectRetry(), {
+                disabled: true, hidden: true, label: "Retry edits",
+            });
+            await editTask("too large to retry unchanged");
+            const tooLarge = await waitForSessionStatus(
+                bidi,
+                tab.context,
+                "Draft too large · reduce",
+            );
+            assert.equal(tooLarge.task.value, "too large to retry unchanged");
+            assert.deepEqual(await inspectRetry(), {
+                disabled: true, hidden: true, label: "Retry edits",
+            });
+            assert.deepEqual(mutations, [
+                { body: "preserve this unsaved text exactly", field: "task" },
+                { body: "preserve this unsaved text exactly", field: "task" },
+                { body: "too large to retry unchanged", field: "task" },
+            ]);
+            assert.deepEqual(apiRequests.slice(8), [
+                "POST /api/session/task",
+                "POST /api/session/task",
+                "POST /api/session/task",
             ]);
         } finally {
             bidi?.close();

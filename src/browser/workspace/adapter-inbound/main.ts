@@ -388,12 +388,22 @@ function scrubBfcacheSubtree(root: HTMLElement): void {
     scrubBfcacheElement(root);
 }
 
-function showSessionRetry(): void {
+type RetryPurpose = "connection" | "draft";
+let retryPurpose: RetryPurpose | null = null;
+
+function showSessionRetry(purpose: RetryPurpose): void {
+    retryPurpose = purpose;
+    let label = "Retry edits";
+    if (purpose === "connection") {
+        label = "Retry connection";
+    }
+    setTextIfChanged(retrySession, label);
     retrySession.hidden = false;
     retrySession.disabled = false;
 }
 
 function hideSessionRetry(): void {
+    retryPurpose = null;
     retrySession.disabled = true;
     retrySession.hidden = true;
 }
@@ -450,7 +460,7 @@ async function completeSessionHandshake(secret: string): Promise<void> {
             const unavailableMessage =
                 "Handshake unavailable · editing off";
             setTextIfChanged(sessionStatus, unavailableMessage);
-            showSessionRetry();
+            showSessionRetry("connection");
         }
         return;
     }
@@ -465,7 +475,7 @@ async function completeSessionHandshake(secret: string): Promise<void> {
         const invalidMessage = "Invalid backend handshake · editing disabled";
         setTextIfChanged(sessionStatus, invalidMessage);
         if (response.status >= 500) {
-            showSessionRetry();
+            showSessionRetry("connection");
         }
         return;
     }
@@ -499,12 +509,14 @@ async function completeSessionHandshake(secret: string): Promise<void> {
 
 
 const failedDraftFields = new Set<sessionDraft.DraftField>();
+const retryableDraftFields = new Set<sessionDraft.DraftField>();
 const syncingDraftFields = new Set<sessionDraft.DraftField>();
 let draftSyncGeneration = 0;
 
 function invalidateDraftSync(): number {
     draftSyncGeneration += 1;
     failedDraftFields.clear();
+    retryableDraftFields.clear();
     syncingDraftFields.clear();
     return draftSyncGeneration;
 }
@@ -516,8 +528,18 @@ function draftSyncIsCurrent(secret: string, generation: number): boolean {
 function recordDraftSyncFailure(
     field: sessionDraft.DraftField,
     message: string,
+    retryable = false,
 ): void {
     failedDraftFields.add(field);
+    if (retryable) {
+        retryableDraftFields.add(field);
+        showSessionRetry("draft");
+    } else {
+        retryableDraftFields.delete(field);
+        if (retryableDraftFields.size === 0 && retryPurpose === "draft") {
+            hideSessionRetry();
+        }
+    }
     setTextIfChanged(sessionStatus, message);
 }
 
@@ -628,7 +650,7 @@ async function hydrateSessionDraft(secret: string): Promise<void> {
                     : "Draft load rejected · editing off",
             );
             if (draftSyncIsCurrent(secret, generation)) {
-                showSessionRetry();
+                showSessionRetry("connection");
             }
             return;
         }
@@ -683,7 +705,7 @@ async function syncDraftField(
             } catch {
                 if (draftSyncIsCurrent(secret, generation)) {
                     const offlineMessage = "Draft offline · retry edit";
-                    recordDraftSyncFailure(field, offlineMessage);
+                    recordDraftSyncFailure(field, offlineMessage, true);
                 }
                 return;
             }
@@ -692,6 +714,7 @@ async function syncDraftField(
             }
             if (response.status === 204) {
                 failedDraftFields.delete(field);
+                retryableDraftFields.delete(field);
                 if (input.value === attemptedValue) {
                     return;
                 }
@@ -724,7 +747,9 @@ async function syncDraftField(
                 return;
             }
             const rejectedMessage = "Draft sync rejected · retry edit";
-            recordDraftSyncFailure(field, rejectedMessage);
+            const retryable = response.status >= 500
+                || response.status === 408;
+            recordDraftSyncFailure(field, rejectedMessage, retryable);
             return;
         }
     } finally {
@@ -738,6 +763,7 @@ async function syncDraftField(
             && syncingDraftFields.size === 0
             && failedDraftFields.size === 0
         ) {
+            hideSessionRetry();
             setTextIfChanged(sessionStatus, "Session ready");
         }
     }
@@ -761,10 +787,20 @@ bindDraftSync("candidate", candidateInput);
 
 retrySession.addEventListener("click", (): void => {
     const secret = sessionSecret;
-    if (secret === null || retrySession.disabled) {
+    const purpose = retryPurpose;
+    if (secret === null || retrySession.disabled || purpose === null) {
         return;
     }
-    void completeSessionHandshake(secret);
+    hideSessionRetry();
+    if (purpose === "connection") {
+        void completeSessionHandshake(secret);
+        return;
+    }
+    for (const [field, input] of draftInputs) {
+        if (retryableDraftFields.has(field)) {
+            void syncDraftField(field, input, secret);
+        }
+    }
 });
 
 let endSessionConfirmed = false;
