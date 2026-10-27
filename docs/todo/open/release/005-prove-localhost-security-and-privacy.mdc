@@ -344,3 +344,12 @@ Node cannot close every upgraded peer through `closeAllConnections`; if such a
 peer prevents the server close callback, teardown reports a timeout rather than
 blocking the test forever. The harness never claims to close arbitrary peers
 or change runtime host/origin enforcement.
+
+Inbound WebDriver BiDi framing now refuses an advertised message larger than
+8 MiB, masked server frames, malformed JSON, null top-level messages and
+explicit WebSocket close frames. A disconnect rejects every pending command,
+and asynchronous notification history retains only the latest 16 events.
+Independent frame fixtures cover 16-bit/64-bit lengths, fragmented messages,
+oversized claims with no payload allocation, protocol errors and bounded
+event history. These limits apply solely to disposable browser automation,
+not to runtime session messages or public application protocol limits.

@@ -62,6 +62,10 @@ const RUNTIME_BINARY = path.join(TARGET_DIR, "debug", "atrament");
 const WORKSPACE_DIR = path.resolve(
     "src/browser/workspace/adapter-inbound",
 );
+// A Firefox automation result may exceed a megabyte, but not an unbounded
+// length advertised by a malformed remote WebSocket peer.
+const MAX_BIDI_FRAME_BYTES = 8 * 1024 * 1024;
+const MAX_BIDI_EVENTS = 16;
 const REFRESH_SECRET = "a".repeat(64);
 const REFRESH_DRAFT = {
     candidate: "refresh-private candidate",
@@ -622,6 +626,17 @@ class BidiClient {
         }
         this.buffer = response.remainder;
         this.socket.on("data", (chunk) => {
+            if (this.closed) {
+                return;
+            }
+            if (chunk.length > MAX_BIDI_FRAME_BYTES + 10
+                || this.buffer.length > MAX_BIDI_FRAME_BYTES + 10
+                    - chunk.length) {
+                this.close(new Error(
+                    "WebDriver BiDi input exceeds byte limit",
+                ));
+                return;
+            }
             this.buffer = Buffer.concat([this.buffer, chunk]);
             this.drain();
         });
@@ -687,6 +702,10 @@ class BidiClient {
     drain() {
         while (this.buffer.length >= 2) {
             const opcode = this.buffer[0] & 0x0f;
+            if ((this.buffer[1] & 0x80) !== 0) {
+                this.close(new Error("masked WebDriver server frame refused"));
+                return;
+            }
             let length = this.buffer[1] & 0x7f;
             let offset = 2;
             if (length === 126) {
@@ -699,18 +718,41 @@ class BidiClient {
                 if (this.buffer.length < 10) {
                     return;
                 }
-                length = Number(this.buffer.readBigUInt64BE(2));
+                const declared = this.buffer.readBigUInt64BE(2);
+                if (declared > BigInt(MAX_BIDI_FRAME_BYTES)) {
+                    this.close(new Error("WebDriver BiDi frame too large"));
+                    return;
+                }
+                length = Number(declared);
                 offset = 10;
+            }
+            if (length > MAX_BIDI_FRAME_BYTES) {
+                this.close(new Error("WebDriver BiDi frame too large"));
+                return;
             }
             if (this.buffer.length < offset + length) {
                 return;
             }
             const payload = this.buffer.subarray(offset, offset + length);
             this.buffer = this.buffer.subarray(offset + length);
+            if (opcode === 0x8) {
+                this.close(new Error("WebDriver BiDi peer sent close frame"));
+                return;
+            }
             if (opcode !== 0x1) {
                 continue;
             }
-            const message = JSON.parse(payload.toString("utf8"));
+            let message;
+            try {
+                message = JSON.parse(payload.toString("utf8"));
+            } catch {
+                this.close(new Error("invalid WebDriver BiDi JSON frame"));
+                return;
+            }
+            if (message === null || typeof message !== "object") {
+                this.close(new Error("invalid WebDriver BiDi message value"));
+                return;
+            }
             if (message.type === "success" || message.type === "error") {
                 const pending = this.pending.get(message.id);
                 if (pending === undefined) {
@@ -723,6 +765,9 @@ class BidiClient {
                     pending.reject(new Error(JSON.stringify(message)));
                 }
             } else {
+                if (this.events.length >= MAX_BIDI_EVENTS) {
+                    this.events.shift();
+                }
                 this.events.push(message);
             }
         }
@@ -841,6 +886,115 @@ test("WebDriver errors and timeouts release their pending command slots",
         await assert.rejects(client.command("never.responds", {}, 20),
             /never.responds timed out/);
         assert.equal(client.pending.size, 0);
+    },
+);
+
+function testServerFrame(payload, opcode = 0x1) {
+    const bytes = Buffer.from(payload);
+    if (bytes.length < 126) {
+        return Buffer.concat([
+            Buffer.from([0x80 | opcode, bytes.length]), bytes,
+        ]);
+    }
+    if (bytes.length <= 65_535) {
+        const prefix = Buffer.from([0x80 | opcode, 126, 0, 0]);
+        prefix.writeUInt16BE(bytes.length, 2);
+        return Buffer.concat([prefix, bytes]);
+    }
+    const prefix = Buffer.from([0x80 | opcode, 127, 0, 0, 0, 0, 0, 0, 0, 0]);
+    prefix.writeBigUInt64BE(BigInt(bytes.length), 2);
+    return Buffer.concat([prefix, bytes]);
+}
+
+test("WebDriver BiDi refuses gigantic declared and masked inbound frames",
+    async () => {
+        for (const input of [
+            Buffer.from([0x81, 0x7f, 0, 0, 0, 0, 0, 0x80, 0, 1]),
+            Buffer.from([0x81, 0xfe, 0, 1, 0, 0, 0, 0, 0]),
+        ]) {
+            const client = new BidiClient("ws://127.0.0.1:1234/session");
+            let destroyed = 0;
+            client.socket = {
+                write: () => {}, destroy: () => { destroyed += 1; },
+            };
+            const pending = client.command("script.evaluate", {}, 30_000);
+            client.buffer = input;
+            client.drain();
+            await assert.rejects(pending,
+                /frame too large|masked WebDriver server frame/);
+            assert.equal(client.pending.size, 0);
+            assert.equal(client.buffer.length, 0);
+            assert.equal(destroyed, 1);
+        }
+    },
+);
+
+test("WebDriver BiDi rejects malformed JSON, null data and close frames",
+    async () => {
+        for (const [frame, expected] of [
+            [testServerFrame("{invalid"), /invalid WebDriver BiDi JSON/],
+            [testServerFrame("null"), /invalid WebDriver BiDi message/],
+            [testServerFrame(Buffer.alloc(0), 0x8), /peer sent close frame/],
+        ]) {
+            const client = new BidiClient("ws://127.0.0.1:1234/session");
+            client.socket = {
+                write: () => {}, destroy: () => {},
+            };
+            const pending = client.command("script.evaluate", {}, 30_000);
+            client.buffer = frame;
+            client.drain();
+            await assert.rejects(pending, expected);
+            assert.equal(client.pending.size, 0);
+            assert.equal(client.closed, true);
+        }
+    },
+);
+
+test("WebDriver BiDi parses bounded extended and split frames losslessly",
+    async () => {
+        for (const count of [1, 126, 512, 65_536]) {
+            const client = new BidiClient("ws://127.0.0.1:1234/session");
+            client.socket = {
+                write: () => {}, destroy: () => {},
+            };
+            const pending = client.command("script.evaluate", {}, 30_000);
+            const large = "a".repeat(count);
+            const encoded = testServerFrame(JSON.stringify({
+                id: 1, type: "success", result: { value: large },
+            }));
+            const midway = Math.floor(encoded.length / 2);
+            client.buffer = encoded.subarray(0, midway);
+            client.drain();
+            assert.equal(client.pending.size, 1);
+            client.buffer = Buffer.concat([
+                client.buffer, encoded.subarray(midway),
+            ]);
+            client.drain();
+            assert.deepEqual(await pending, { value: large });
+            assert.equal(client.pending.size, 0);
+            assert.equal(client.closed, false);
+            client.close();
+        }
+    },
+);
+
+test("WebDriver BiDi unsolicited event retention is bounded",
+    () => {
+        const client = new BidiClient("ws://127.0.0.1:1234/session");
+        client.socket = {
+            write: () => {}, destroy: () => {},
+        };
+        for (let index = 0; index < 256; index += 1) {
+            client.buffer = testServerFrame(JSON.stringify({
+                type: "event", id: index,
+            }));
+            client.drain();
+        }
+        assert.equal(client.events.length, MAX_BIDI_EVENTS);
+        assert.deepEqual(client.events.map((event) => event.id),
+            Array.from({ length: MAX_BIDI_EVENTS },
+                (_, offset) => 256 - MAX_BIDI_EVENTS + offset));
+        client.close();
     },
 );
 
