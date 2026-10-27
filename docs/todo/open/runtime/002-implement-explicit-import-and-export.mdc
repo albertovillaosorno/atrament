@@ -291,3 +291,9 @@ caller-owned bounded storage with atomic too-small rejection. Future Import
 inventory preflight can use this view instead of an infallibly allocated `Vec`
 when memory policy requires it, but validated path names do not bind a typed
 manifest or authorize a filesystem read.
+
+The existing read-only explicit-profile Import preflight fixture now consumes
+caller-owned borrowed ZIP paths directly, including its missing-root failure.
+No additional observed-name vector is needed for that adapter integration;
+selected source authority, root schema decoding, payload digest acceptance and
+session effects remain independently unimplemented.

@@ -114,6 +114,9 @@ no name is copied, allocated, normalized or resolved against a filesystem.
 The existing allocating `observed_paths` helper remains for compatibility.
 Tests exercise Unicode, empty and rootless ZIPs, and an exact 65,534-entry
 ordinary ZIP32 boundary, including pointer identity into source archive bytes.
+The existing read-only explicit Import preflight integration now consumes
+this caller-owned borrowed path slice, including a missing-root rejection,
+without separately allocating a list of observed archive names.
 
 The typed manifest must still be parsed, checked and matched against those
 observations, and SHA-256 must be independently measured before any section

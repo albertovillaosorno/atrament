@@ -342,7 +342,12 @@ fn real_zip_observations_feed_exact_typed_profile_import_preflight() {
     let bytes = make_zip(&ENTRIES);
     let archive = read_stored_profile_zip(&bytes, limits())
         .expect("bounded stored ZIP framing passes");
-    let paths = archive.observed_paths();
+    let mut path_storage = ["unused"; 2];
+    let count = archive.copy_observed_paths(&mut path_storage)
+        .expect("caller-sized path slots for this checked archive");
+    let paths = &path_storage[..count];
+    assert!(std::ptr::eq(paths[0].as_ptr(),
+        archive.entries()[0].name().as_ptr()));
     let selected = classify_explicit_file_path_intent(
         ExplicitFilePurpose::ImportProfile,
         ExplicitFilePathSource::CallerSelection,
@@ -378,7 +383,7 @@ fn real_zip_observations_feed_exact_typed_profile_import_preflight() {
                 ProfileZip64Use::Absent,
         };
     let inspected = preflight_explicit_profile_import(
-        &selected, &manifest, &["strokes"], &paths, encoding, budget,
+        &selected, &manifest, &["strokes"], paths, encoding, budget,
     ).expect("framing and typed inventory agree");
     assert_eq!(inspected.inventory().observed_paths(), paths);
     assert_eq!(archive.entries()[1].bytes(), b"123456789");
@@ -392,10 +397,12 @@ fn real_zip_observations_feed_exact_typed_profile_import_preflight() {
     ]);
     let archive = read_stored_profile_zip(&missing_manifest, limits())
         .expect("missing manifest is structurally valid ZIP");
-    let names = archive.observed_paths();
+    let mut missing_names = ["unused"; 1];
+    assert_eq!(archive.copy_observed_paths(&mut missing_names), Ok(1));
     assert_eq!(
         preflight_explicit_profile_import(
-            &selected, &manifest, &["strokes"], &names, encoding, budget,
+            &selected, &manifest, &["strokes"], &missing_names,
+            encoding, budget,
         ),
         Err(ProfileImportPreflightError::EntryInventory(
             atrament_handwriting_profile_container::
