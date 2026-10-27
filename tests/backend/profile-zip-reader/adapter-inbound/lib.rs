@@ -1706,3 +1706,79 @@ fn crc32_collision_cannot_hide_changed_archive_sha256_source() {
         second_archive.admitted_root_json(caps)
             .expect("same root").source_sha256());
 }
+
+#[test]
+fn seeded_zip_mutations_preserve_exact_member_identity_on_any_valid_read() {
+    let declared = [
+        ("assets/mark.webp", b"\0\xff\x11B".as_slice(), 0x54d7_e85d),
+        ("manifest.json", br#"{"id":1}"#.as_slice(), 0x445d_f8c5),
+        ("sections/sample.json", b"[1,2,3]".as_slice(), 0xfd6d_b3e9),
+    ];
+    let original = make_zip(&declared);
+    let canonical = read_stored_profile_zip(&original, limits())
+        .expect("independent zlib CRC goldens form a valid source archive");
+    assert_eq!(canonical.entries().len(), 3);
+    let mut seed = 0x4154_5241_4d45_4e54u64;
+    let mut attempted = [0usize; 4];
+    let mut admitted = 0usize;
+    let mut rejected = 0usize;
+    let mut failure_classes = Vec::new();
+    let mut touched = [false; 3];
+    for case in 0usize..8_192 {
+        seed = seed.wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
+        let position = usize::try_from((seed >> 20) % original.len() as u64)
+            .expect("bounded mutation position fits usize");
+        let replacement = u8::try_from((seed >> 40) & 0xff)
+            .expect("eight-bit replacement");
+        let operation = case % 4;
+        attempted[operation] += 1;
+        touched[(position * 3) / original.len()] = true;
+        let mut bytes = original.clone();
+        match operation {
+            0 => bytes[position] ^= 1u8 << (replacement % 8),
+            1 => bytes.insert(position, replacement),
+            2 => { let _removed = bytes.remove(position); },
+            _ => bytes.insert(position, bytes[position]),
+        }
+        let checked = std::panic::catch_unwind(|| {
+            read_stored_profile_zip(&bytes, limits())
+        }).expect("untrusted ZIP mutation must not panic");
+        if let Ok(archive) = checked {
+            admitted += 1;
+            assert_eq!(archive.entries().len(), declared.len(),
+                "admitted mutation operation={operation} case={case}");
+            for (member, (path, data, crc)) in
+                archive.entries().iter().zip(declared)
+            {
+                assert_eq!(member.name(), path);
+                assert_eq!(member.bytes(), data);
+                assert_eq!(member.crc32(), crc);
+            }
+            assert_eq!(archive.source_bytes(), bytes);
+            assert_eq!(archive.source_sha256(), sha256_profile_bytes(&bytes));
+            let admitted_root = archive.admitted_root_json(
+                ProfileJsonSyntaxLimits {
+                    maximum_bytes: 64,
+                    maximum_nesting: 3,
+                    maximum_object_members: 4,
+                    maximum_values: 4,
+                },
+            ).expect("mutated framing cannot substitute malformed root");
+            assert_eq!(admitted_root.root().bytes(), declared[1].1);
+        } else if let Err(reason) = checked {
+            rejected += 1;
+            if !failure_classes.contains(&reason) {
+                failure_classes.push(reason);
+            }
+        }
+    }
+    assert_eq!(attempted, [2_048; 4]);
+    assert!(touched.into_iter().all(|seen| seen));
+    assert!(admitted > 0, "irrelevant metadata changes can be admitted");
+    assert!(rejected > 0, "framing and CRC mutations are refused");
+    assert!(failure_classes.contains(&ProfileZipReadError::BadCrc32));
+    assert!(failure_classes.contains(&ProfileZipReadError::InvalidStructure));
+    assert!(failure_classes.len() >= 4,
+        "multiple independent framing failures must be exercised");
+}

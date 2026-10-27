@@ -170,6 +170,13 @@ mutation byte corpus flips one bit in emitted ZIP records and either obtains a
 typed reader failure or confirms that admitted names and payload bytes remain
 identical. Permissible irrelevant metadata changes do not become new content.
 
+The strict ZIP reader also exercises an 8,192-case seeded mutation corpus
+against a three-entry archive with independent Python `zlib` CRC values.
+Replacement, insertion, deletion and duplication operations must never panic,
+and any surviving stored-ZIP admission must preserve all declared member bytes,
+names, CRCs and the syntax-admitted manifest root. Branch guards ensure
+multiple malformed framing and checksum outcomes occur.
+
 These results establish deterministic **ZIP framing only**: manifest JSON
 canonicalization, unknown-field preservation, typed serialization, ZIP64,
 trusted file commit and accepted profile Export remain unresolved.

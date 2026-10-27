@@ -156,3 +156,16 @@ reference corpus across namespace versions, completeness states, zero through
 three items, valid and invalid item/code shapes, and ignored opaque fields. The
 generator asserts every declared selector class is exercised while malformed
 metadata remains unadmitted.
+
+A stored-profile ZIP parser corpus now applies 8,192 deterministic mutations to
+a valid three-member binary/JSON archive. It covers byte replacement,
+insertion, deletion and duplication, exercising each operation 2,048 times and
+reaching the beginning, middle and end of the archive. Any admitted result must
+retain all original names, payloads and CRC values, expose the complete exact
+source bytes, and preserve the syntax-admitted root; every input must avoid a
+panic.
+
+The corpus requires both valid and invalid results, actual CRC failures,
+invalid structure failures and at least four distinct rejection classes.
+This complements finite regression generators but does not replace dedicated
+coverage-guided fuzzing of all other untrusted formats.
