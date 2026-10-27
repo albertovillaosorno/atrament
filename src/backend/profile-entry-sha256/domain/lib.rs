@@ -11,11 +11,12 @@
 // - Owns:
 //   - Dependency-free FIPS 180-4 SHA-256 over exact bounded entry bytes.
 //   - Independent byte-length and cryptographic digest verification.
+//   - Fixed-memory incremental hashing of caller-bounded byte chunks.
 // - Must-Not:
 //   - Trust archive CRC-32, read paths, parse ZIP or JSON, allocate a copy of
 //     entry contents, or authorize application-level profile acceptance.
 // - Allows:
-//   - Inputs: A bounded in-memory byte slice and one typed declaration.
+//   - Inputs: Bounded in-memory byte slices and one typed declaration.
 //   - Outputs: Exact SHA-256 evidence or length/digest mismatch.
 //   - Side effects: None.
 // - Split-When:
@@ -116,6 +117,151 @@ const ROUND_CONSTANTS: [u32; 64] = [
     0xbef9_a3f7,
     0xc671_78f2,
 ];
+
+/// Rejected incremental SHA-256 input beyond the FIPS message-length bound.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ProfileSha256UpdateError {
+    /// The total message would exceed the maximum 64-bit bit-length field.
+    MessageTooLong,
+}
+
+/// Failed verification of one typed entry across admitted byte chunks.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ProfileChunkVerificationError {
+    /// Byte count or digest differs from the supplied typed declaration.
+    Entry(ProfileEntryVerificationError),
+    /// The cumulative source length exceeds the SHA-256 bit-length field.
+    Hasher(ProfileSha256UpdateError),
+}
+
+/// Fixed-memory incremental SHA-256 state for already bounded input chunks.
+///
+/// The caller still owns byte-source admission and resource ceilings. This
+/// primitive performs no I/O, does not accept paths, and never authorizes
+/// a manifest, profile or section. `finish` consumes one state value, ending
+/// its update sequence before returning the digest.
+#[derive(Clone, Copy, Debug)]
+pub struct ProfileSha256State {
+    block: [u8; 64],
+    buffered: usize,
+    length_bytes: u64,
+    state: [u32; 8],
+}
+
+impl Default for ProfileSha256State {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl ProfileSha256State {
+    /// Number of complete and pending input bytes admitted so far.
+    ///
+    /// This count includes the pending partial compression block and never
+    /// wraps the SHA-256 64-bit message-length field.
+    #[must_use]
+    pub const fn bytes_hashed(&self) -> u64 {
+        self.length_bytes
+    }
+
+    /// Finish all admitted chunks and return their combined SHA-256 digest.
+    ///
+    /// A final partial block, including an empty final block, is padded
+    /// according to FIPS 180-4 with the exact total 64-bit bit length.
+    #[must_use]
+    pub fn finish(mut self) -> Sha256Digest {
+        if let Some(delimiter) = self.block.get_mut(self.buffered) {
+            *delimiter = 0x80;
+        }
+        if let Some(remaining) =
+            self.block.get_mut(self.buffered.saturating_add(1)..)
+        {
+            remaining.fill(0);
+        }
+        if self.buffered >= 56 {
+            compress(&mut self.state, &self.block);
+            self.block.fill(0);
+        }
+        if let Some(length) = self.block.get_mut(56..64) {
+            let bit_length = self.length_bytes.wrapping_mul(8);
+            length.copy_from_slice(&bit_length.to_be_bytes());
+        }
+        compress(&mut self.state, &self.block);
+        let mut digest = [0u8; 32];
+        for (word, destination) in self
+            .state
+            .into_iter()
+            .zip(digest.as_chunks_mut::<4>().0.iter_mut())
+        {
+            *destination = word.to_be_bytes();
+        }
+        Sha256Digest::from_bytes(digest)
+    }
+
+    /// Create the SHA-256 initial state using fixed-size stack storage.
+    #[must_use]
+    pub const fn new() -> Self {
+        Self {
+            block: [0u8; 64],
+            buffered: 0,
+            length_bytes: 0,
+            state: INITIAL,
+        }
+    }
+
+    /// Add an admitted chunk, preserving exact byte order across updates.
+    ///
+    /// A length overflow is rejected before mutating state. Chunks can be
+    /// empty, split at any byte, or span multiple compression blocks; the
+    /// decoder never keeps a heap-backed copy of the complete message.
+    ///
+    /// # Errors
+    ///
+    /// Returns `MessageTooLong` if the cumulative bit count would exceed
+    /// the SHA-256 64-bit message-length field, without consuming input.
+    pub fn update(
+        &mut self,
+        bytes: &[u8],
+    ) -> Result<(), ProfileSha256UpdateError> {
+        let additional = u64::try_from(bytes.len())
+            .map_err(|_overflow| ProfileSha256UpdateError::MessageTooLong)?;
+        let total = self
+            .length_bytes
+            .checked_add(additional)
+            .filter(|length| *length <= u64::MAX >> 3u32)
+            .ok_or(ProfileSha256UpdateError::MessageTooLong)?;
+        self.length_bytes = total;
+        let mut remaining = bytes;
+        if self.buffered != 0 {
+            let available = 64usize.saturating_sub(self.buffered);
+            let consumed = available.min(remaining.len());
+            let end = self.buffered.saturating_add(consumed);
+            if let Some(slot) = self.block.get_mut(self.buffered..end)
+                && let Some(source) = remaining.get(..consumed)
+            {
+                slot.copy_from_slice(source);
+            }
+            self.buffered = end;
+            remaining = remaining.get(consumed..).unwrap_or_default();
+            if self.buffered != 64 {
+                // No complete compression block yet: retain the partial
+                // prefix across arbitrary subsequent update calls.
+                return Ok(());
+            }
+            compress(&mut self.state, &self.block);
+            self.buffered = 0;
+        }
+        let (full, rest) = remaining.as_chunks::<64>();
+        for block in full {
+            compress(&mut self.state, block);
+        }
+        if let Some(slot) = self.block.get_mut(..rest.len()) {
+            slot.copy_from_slice(rest);
+        }
+        self.buffered = rest.len();
+        Ok(())
+    }
+}
 
 fn compress(state: &mut [u32; 8], block: &[u8; 64]) {
     // Indices are bounded by the fixed 64-word SHA-256 message schedule.
@@ -238,6 +384,70 @@ pub fn sha256_profile_bytes(bytes: &[u8]) -> Sha256Digest {
         *destination = word.to_be_bytes();
     }
     Sha256Digest::from_bytes(digest)
+}
+
+/// Verify one declared entry from ordered, already admitted byte chunks.
+///
+/// The caller must independently enforce source and aggregate resource limits
+/// and must not infer profile or path authority from this digest. Every chunk
+/// is processed once without collecting the full message on the heap. A
+/// byte-count overrun rejects at the earliest known prefix before its hash
+/// is computed; a short stream rejects after the final chunk. Digest equality
+/// is considered only for an exact declared byte length.
+///
+/// # Errors
+///
+/// Distinguishes the existing typed entry length/digest failures from a
+/// SHA-256 message-length overflow. A length-overrun error's `observed` count
+/// is the first already-supplied prefix larger than the declaration, not a
+/// claim about unseen later chunks.
+pub fn verify_profile_entry_chunks<'bytes, I>(
+    declaration: &ProfileManifestEntry,
+    chunks: I,
+) -> Result<ProfileEntryEvidence, ProfileChunkVerificationError>
+where
+    I: IntoIterator<Item = &'bytes [u8]>,
+{
+    let mut hasher = ProfileSha256State::new();
+    for chunk in chunks {
+        let additional = u64::try_from(chunk.len()).map_err(|_overflow| {
+            ProfileChunkVerificationError::Hasher(
+                ProfileSha256UpdateError::MessageTooLong,
+            )
+        })?;
+        let observed = hasher.bytes_hashed().checked_add(additional).ok_or(
+            ProfileChunkVerificationError::Hasher(
+                ProfileSha256UpdateError::MessageTooLong,
+            ),
+        )?;
+        if observed > declaration.byte_length {
+            return Err(ProfileChunkVerificationError::Entry(
+                ProfileEntryVerificationError::ByteLengthMismatch {
+                    declared: declaration.byte_length,
+                    observed,
+                },
+            ));
+        }
+        hasher
+            .update(chunk)
+            .map_err(ProfileChunkVerificationError::Hasher)?;
+    }
+    let observed = hasher.bytes_hashed();
+    if observed != declaration.byte_length {
+        return Err(ProfileChunkVerificationError::Entry(
+            ProfileEntryVerificationError::ByteLengthMismatch {
+                declared: declaration.byte_length,
+                observed,
+            },
+        ));
+    }
+    let evidence = ProfileEntryEvidence {
+        byte_length: observed,
+        digest: hasher.finish(),
+    };
+    verify_profile_entry(declaration, evidence)
+        .map_err(ProfileChunkVerificationError::Entry)?;
+    Ok(evidence)
 }
 
 /// Verify one actual member byte slice against a typed manifest declaration.

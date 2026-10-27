@@ -221,3 +221,9 @@ syntax-admitted root JSON bytes in a sealed borrowed view. A future typed
 manifest decoder can receive that association instead of independent arguments.
 The typed schema, all declared SHA-256 entry checks, selected path authority,
 and session acceptance are still unimplemented and cannot be inferred here.
+
+Incremental SHA-256 evidence now supports future bounded streaming Import
+without retaining an entire member as one allocation. The pure chunk verifier
+checks declared byte length before comparing SHA-256 and does not open any file,
+validate source path authority, or accept a profile. Actual I/O errors and
+explicit path/source admission remain responsibilities of future adapters.

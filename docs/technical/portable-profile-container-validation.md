@@ -321,6 +321,29 @@ digests, unchanged bytes, changed bytes, and failure precedence. A
 cross-component ZIP fixture additionally proves that a matching CRC-32 over
 altered bytes cannot satisfy an unchanged manifest SHA-256 digest.
 
+### Incremental, fixed-memory entry SHA-256 verification
+
+The same dependency-free SHA-256 domain now offers a 64-byte incremental
+`ProfileSha256State` for already bounded chunks, independent of filesystem or
+ZIP transport. Updates preserve pending partial compression blocks, exact
+byte counts and FIPS message-length limits, rejecting overflow before any
+state mutation. Finishing consumes one state value and pads using its exact
+accumulated bit count.
+
+`verify_profile_entry_chunks` accepts already admitted ordered byte slices and
+one existing typed declaration. It rejects the first known length overrun
+before hashing that chunk, reports complete-stream underflow after iteration,
+and compares SHA-256 only for a matching declared byte length. If an overrun
+occurs, the reported observed length is the first exceeded prefix, not a claim
+that unseen later chunks were consumed.
+
+Regression cases include the million-byte SHA-256 vector; every split of all
+lengths 0 through 256; padding boundaries, empty chunks and varied strides;
+copyable prefix state divergence; length-before-digest failure precedence; and
+early stream consumption termination. A CRC-correct stored ZIP fixture proves
+that a modified payload still fails its declared SHA-256 under chunked reads.
+None of this freezes typed manifest field names or introduces actual file I/O.
+
 ### Complete stored member SHA-256 projection
 
 The ZIP inbound adapter can now take a constructor-sealed declared-versus-

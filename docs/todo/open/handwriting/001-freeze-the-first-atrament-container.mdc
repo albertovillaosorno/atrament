@@ -239,3 +239,10 @@ lookup, key copying and string-value copying produce the same UTF-8 identity
 for escaped JSON source. Both copies refuse insufficient capacity without
 writing bytes, including cases across BMP and supplementary Unicode planes.
 This is still syntax evidence rather than a selected manifest string policy.
+
+The portable SHA-256 domain now supports fixed-memory incremental hashing over
+ordered, already admitted byte chunks, preserving partial-block state and
+rejecting bit-length overflow. A read-only typed-entry chunk verifier refuses
+oversized prefixes before hashing them, short streams before digest comparison,
+and altered CRC-correct ZIP payloads at SHA-256 comparison. The complete file
+transport and manifest-root wire binding remain open.

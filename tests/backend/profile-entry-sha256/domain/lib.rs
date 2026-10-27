@@ -37,7 +37,8 @@ use atrament_handwriting_profile_container::{
     Sha256Digest,
 };
 use atrament_profile_entry_sha256::{
-    sha256_profile_bytes, verify_profile_entry_bytes,
+    ProfileChunkVerificationError, ProfileSha256State, sha256_profile_bytes,
+    verify_profile_entry_bytes, verify_profile_entry_chunks,
 };
 use std::fmt::Write as _;
 use std::iter::successors;
@@ -166,4 +167,189 @@ fn length_mismatch_takes_precedence_over_digest_mismatch() {
         verify_profile_entry_bytes(&entry, b"abc"),
         Err(ProfileEntryVerificationError::DigestMismatch),
     );
+}
+
+#[test]
+fn incremental_sha256_matches_known_vectors_and_exact_padding_boundaries() {
+    let patterns = [
+        b"".as_slice(),
+        b"abc".as_slice(),
+        b"The quick brown fox jumps over the lazy dog".as_slice(),
+    ];
+    for pattern in patterns {
+        let mut state = ProfileSha256State::new();
+        assert_eq!(state.update(pattern), Ok(()));
+        assert_eq!(state.finish(), sha256_profile_bytes(pattern));
+    }
+    let mut million = ProfileSha256State::default();
+    let chunk = [b'a'; 1000];
+    for _ in 0..1000 {
+        assert_eq!(million.update(&chunk), Ok(()));
+    }
+    assert_eq!(
+        digest_hex(million.finish()),
+        "cdc76e5c9914fb9281a1c7e284d73e67f1809a48a497200e046d39ccc7112cd0"
+    );
+
+    // Exhaust the full final-padding and first-block transitions around
+    // 55/56 and 63/64. Different input splittings must be indistinguishable.
+    for length in 0usize..=256usize {
+        let bytes = (0..length)
+            .map(|i| (i as u8).wrapping_mul(31))
+            .collect::<Vec<_>>();
+        let expected = sha256_profile_bytes(&bytes);
+        for split in 0..=length {
+            let (a, b) = bytes.split_at(split);
+            let mut state = ProfileSha256State::new();
+            assert_eq!(state.update(a), Ok(()));
+            assert_eq!(state.update(&[]), Ok(()));
+            assert_eq!(state.update(b), Ok(()));
+            assert_eq!(
+                state.finish(),
+                expected,
+                "length={length} split={split}"
+            );
+        }
+    }
+}
+
+#[test]
+fn incremental_sha256_preserves_empty_chunks_and_arbitrary_stride_splits() {
+    for length in [
+        0usize, 1, 2, 3, 7, 55, 56, 57, 63, 64, 65, 118, 119, 120, 121, 127,
+        128, 129, 1024, 4097,
+    ] {
+        let bytes = (0..length)
+            .map(|index| (index as u8).wrapping_mul(73).wrapping_add(17))
+            .collect::<Vec<_>>();
+        let expected = sha256_profile_bytes(&bytes);
+        for stride in [
+            1usize, 2, 3, 7, 31, 55, 56, 57, 63, 64, 65, 127, 128, 129, 256,
+            1024,
+        ] {
+            let mut state = ProfileSha256State::new();
+            for part in bytes.chunks(stride) {
+                assert_eq!(state.update(&[]), Ok(()));
+                assert_eq!(state.update(part), Ok(()));
+            }
+            assert_eq!(state.update(&[]), Ok(()));
+            assert_eq!(
+                state.finish(),
+                expected,
+                "length={length} stride={stride}"
+            );
+        }
+    }
+}
+
+#[test]
+fn incremental_sha256_cloned_prefixes_produce_independent_suffix_digests() {
+    let prefix = vec![0xabu8; 47];
+    let mut shared = ProfileSha256State::new();
+    assert_eq!(shared.update(&prefix), Ok(()));
+    let mut left = shared;
+    let mut right = shared;
+    assert_eq!(left.update(b"left"), Ok(()));
+    assert_eq!(right.update(b"right"), Ok(()));
+    let expected_left = [prefix.as_slice(), b"left"].concat();
+    let expected_right = [prefix.as_slice(), b"right"].concat();
+    assert_eq!(left.finish(), sha256_profile_bytes(&expected_left));
+    assert_eq!(right.finish(), sha256_profile_bytes(&expected_right));
+    assert_eq!(shared.finish(), sha256_profile_bytes(&prefix));
+}
+
+#[test]
+fn chunked_entry_verification_matches_exact_slice_evidence() {
+    for length in [
+        0usize, 1, 3, 55, 56, 57, 63, 64, 65, 119, 120, 127, 128, 129, 1_024,
+        4_097,
+    ] {
+        let bytes = (0..length)
+            .map(|index| (index as u8).wrapping_mul(47).wrapping_add(3))
+            .collect::<Vec<_>>();
+        let entry = declaration(&bytes);
+        let expected = verify_profile_entry_bytes(&entry, &bytes)
+            .expect("complete in-memory bytes match declared digest");
+        for stride in [1usize, 2, 3, 7, 55, 56, 63, 64, 65, 127, 128, 1_023] {
+            let parts = bytes.chunks(stride);
+            assert_eq!(
+                verify_profile_entry_chunks(&entry, parts),
+                Ok(expected),
+                "length={length} stride={stride}"
+            );
+        }
+        let parts = [b"".as_slice(), bytes.as_slice(), b"".as_slice()];
+        assert_eq!(verify_profile_entry_chunks(&entry, parts), Ok(expected));
+    }
+}
+
+#[test]
+fn chunked_entry_verification_rejects_length_before_bad_sha_digest() {
+    let bytes = b"critical member bytes";
+    let mut entry = declaration(bytes);
+    entry.digest = sha256_profile_bytes(b"unrelated");
+    let short = [bytes.get(..7).expect("short prefix")];
+    let observed_short = 7u64;
+    assert_eq!(
+        verify_profile_entry_chunks(&entry, short),
+        Err(ProfileChunkVerificationError::Entry(
+            ProfileEntryVerificationError::ByteLengthMismatch {
+                declared: bytes.len() as u64,
+                observed: observed_short,
+            }
+        ))
+    );
+
+    let length = bytes.len() as u64;
+    let oversized = [bytes.as_slice(), b"extra".as_slice()];
+    assert_eq!(
+        verify_profile_entry_chunks(&entry, oversized),
+        Err(ProfileChunkVerificationError::Entry(
+            ProfileEntryVerificationError::ByteLengthMismatch {
+                declared: length,
+                observed: length + 5,
+            }
+        ))
+    );
+    assert_eq!(
+        verify_profile_entry_chunks(&entry, [bytes.as_slice()]),
+        Err(ProfileChunkVerificationError::Entry(
+            ProfileEntryVerificationError::DigestMismatch,
+        ))
+    );
+}
+
+#[test]
+fn chunked_entry_verification_stops_before_consuming_more_after_overrun() {
+    use std::cell::Cell;
+    let calls = Cell::new(0usize);
+    let data = b"abc";
+    let mut entry = declaration(data);
+    entry.byte_length = 2;
+    let chunks = [b"ab".as_slice(), b"c".as_slice(), b"surplus".as_slice()];
+    let instrumented = chunks.into_iter().inspect(|_chunk| {
+        calls.set(calls.get().saturating_add(1));
+    });
+    assert_eq!(
+        verify_profile_entry_chunks(&entry, instrumented),
+        Err(ProfileChunkVerificationError::Entry(
+            ProfileEntryVerificationError::ByteLengthMismatch {
+                declared: 2,
+                observed: 3,
+            }
+        ))
+    );
+    assert_eq!(calls.get(), 2, "unseen third chunk is not consumed");
+}
+
+#[test]
+fn incremental_hasher_tracks_admitted_byte_length_including_pending_prefix() {
+    let mut state = ProfileSha256State::new();
+    assert_eq!(state.bytes_hashed(), 0);
+    for size in [0usize, 1, 2, 50, 0, 10, 1, 64, 5, 129] {
+        let previous = state.bytes_hashed();
+        let data = vec![0xabu8; size];
+        assert_eq!(state.update(&data), Ok(()));
+        assert_eq!(state.bytes_hashed(), previous + size as u64);
+    }
 }

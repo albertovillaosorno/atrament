@@ -49,7 +49,8 @@ use atrament_profile_import_preflight::{
 };
 
 use atrament_profile_entry_sha256::{
-    sha256_profile_bytes, verify_profile_entry_bytes,
+    ProfileChunkVerificationError, ProfileSha256State, sha256_profile_bytes,
+    verify_profile_entry_bytes, verify_profile_entry_chunks,
 };
 use atrament_profile_json_syntax::{
     ProfileJsonPathSegment, ProfileJsonStringCopyError,
@@ -1299,4 +1300,51 @@ fn zipped_root_provenance_proof_fails_closed_on_json_syntax_and_budget() {
         ..generous
     }).err(), Some(ProfileZipManifestSyntaxError::Zip(
         ProfileZipReadError::ManifestTooLarge)));
+}
+
+#[test]
+fn crc_verified_zip_member_streams_to_exact_sha256_evidence() {
+    let bytes = make_zip(&ENTRIES);
+    let archive = read_stored_profile_zip(&bytes, limits())
+        .expect("canonical CRC-valid stored archive");
+    let payload = archive.entries().iter()
+        .find(|entry| entry.name() == "sections/strokes.json")
+        .expect("declared stored member")
+        .bytes();
+    assert_eq!(payload, b"123456789");
+    let declaration = ProfileManifestEntry {
+        byte_length: 9,
+        digest: sha256_profile_bytes(payload),
+        media_type: "application/json".into(),
+        path: "sections/strokes.json".into(),
+    };
+    let reference = verify_profile_entry_bytes(&declaration, payload)
+        .expect("source-backed member matches declaration");
+    for stride in [1usize, 2, 3, 4, 5, 8, 9, 64] {
+        assert_eq!(verify_profile_entry_chunks(&declaration,
+            payload.chunks(stride)), Ok(reference));
+    }
+    let mut stream = ProfileSha256State::new();
+    for part in payload.chunks(2) {
+        assert_eq!(stream.update(part), Ok(()));
+    }
+    assert_eq!(stream.bytes_hashed(), 9);
+    assert_eq!(stream.finish(), declaration.digest);
+
+    let damaged_bytes = make_zip(&[
+        ENTRIES[0],
+        ("sections/strokes.json", b"123456788", 0xbcf3_09b0),
+    ]);
+    let damaged_archive = read_stored_profile_zip(&damaged_bytes, limits())
+        .expect("corrupted content with matching updated CRC still passes ZIP");
+    let damaged_payload = damaged_archive.entries().iter()
+        .find(|entry| entry.name() == "sections/strokes.json")
+        .expect("same declared path but altered bytes")
+        .bytes();
+    assert_eq!(verify_profile_entry_chunks(&declaration,
+        damaged_payload.chunks(2)),
+        Err(ProfileChunkVerificationError::Entry(
+            atrament_handwriting_profile_container::
+                ProfileEntryVerificationError::DigestMismatch,
+        )));
 }
