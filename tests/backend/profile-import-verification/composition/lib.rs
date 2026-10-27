@@ -440,3 +440,38 @@ fn any_modified_member_blocks_all_verified_bytes_even_after_first_passes() {
         ));
     }
 }
+
+#[test]
+fn manifest_only_archive_admits_zero_byte_budget_without_payload_leak() {
+    let root = concat!(
+        r#"{"container_version":"atrament.profile/1","#,
+        r#""profile_identity":"empty","required_features":[],"#,
+        r#""optional_features":[],"entries":[]}"#,
+    );
+    let only_member = [ProfileStoredZipMember {
+        name: "manifest.json",
+        bytes: root.as_bytes(),
+    }];
+    let bytes = write_stored_profile_zip(&only_member, write_limits())
+        .expect("manifest-only stored archive");
+    let archive = checked(&bytes);
+    let source = decoded(&archive);
+    let path = selected(ExplicitFilePurpose::ImportProfile);
+    let mut names = ["untouched"; 2];
+    let verified = verify_attached_profile_import(
+        &path,
+        &source,
+        &[],
+        ProfileImportBudget {
+            maximum_declared_bytes: 0,
+            maximum_entries: 0,
+            maximum_entry_bytes: 0,
+        },
+        &mut names,
+    ).expect("a zero-entry declaration consumes no payload budget");
+    assert_eq!(verified.verified_entry_count(), 0);
+    assert!(verified.manifest().entries.is_empty());
+    assert_eq!(verified.verified_entry_bytes("manifest.json"), None);
+    assert_eq!(verified.verified_entry_bytes(MEMBER), None);
+    assert_eq!(names, ["manifest.json", "untouched"]);
+}

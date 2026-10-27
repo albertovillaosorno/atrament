@@ -370,3 +370,8 @@ before either is exposed; changing either payload while regenerating its ZIP
 CRC still refuses the whole result at the correct declaration index. A valid
 first member cannot leak as partially verified Import evidence when the
 second member fails its hash.
+
+The source-bound verifier also admits an exact manifest-only ZIP with an
+empty declaration inventory and a zero-byte, zero-entry payload budget. Its
+sealed result exposes no member payload, including `manifest.json`. This
+proves empty profiles do not require artificial payload allocations.
