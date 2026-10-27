@@ -1,0 +1,30 @@
+[package]
+name = "atrament_profile_open_file_import"
+version = "0.1.0"
+edition = "2024"
+publish = false
+license = "MIT"
+
+[dependencies]
+atrament_explicit_file_path_intent = { workspace = true }
+atrament_profile_file_reader = { workspace = true }
+atrament_profile_import_preflight = { workspace = true }
+atrament_profile_import_verification = { workspace = true }
+atrament_profile_json_syntax = { workspace = true }
+atrament_profile_manifest_json_codec = { workspace = true }
+atrament_profile_zip_reader = { workspace = true }
+
+[dev-dependencies]
+atrament_profile_entry_sha256 = { workspace = true }
+atrament_profile_stored_zip_writer = { workspace = true }
+
+[lib]
+path = "composition/lib.rs"
+test = false
+
+[lints]
+workspace = true
+
+[[test]]
+name = "profile_open_file_import_composition"
+path = "../../../tests/backend/profile-open-file-import/composition/lib.rs"

@@ -1,0 +1,17 @@
+[package]
+name = "atrament_profile_file_reader"
+version = "0.1.0"
+edition = "2024"
+publish = false
+license = "MIT"
+
+[lib]
+path = "adapter-outbound/lib.rs"
+test = false
+
+[lints]
+workspace = true
+
+[[test]]
+name = "profile_file_reader_adapter_outbound"
+path = "../../../tests/backend/profile-file-reader/adapter-outbound/lib.rs"

@@ -1,0 +1,9 @@
+identity:
+  id: function:profile-open-file-import
+  name: profile-open-file-import
+  path: src/backend/profile-open-file-import
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: composition

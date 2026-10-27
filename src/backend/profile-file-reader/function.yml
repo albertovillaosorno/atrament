@@ -1,0 +1,9 @@
+identity:
+  id: function:profile-file-reader
+  name: profile-file-reader
+  path: src/backend/profile-file-reader
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: adapter-outbound

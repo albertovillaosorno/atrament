@@ -44,6 +44,28 @@ exact size planning and caller-owned memory emission. Those bytes are not bound
 to an accepted session revision, authenticated selected-file target, overwrite
 policy or durable commit.
 
+An outbound `atrament_profile_file_reader` now reads an already-opened
+regular file with independent byte limits, initial cursor rewind and a
+real EOF probe. The `atrament_profile_open_file_import` composition
+checks classified `ImportProfile` intent before invoking that reader.
+It then checks stored ZIP framing and CRC, bounded root JSON syntax,
+typed manifest fields, inventory and every declared member SHA-256.
+
+Ten tests use real temporary files, an unopened path-intent string,
+an initial file cursor at EOF, a write-only handle, directories,
+a Linux procfs file reporting zero length, budget boundaries,
+CRC-correct payload substitution and malicious JSON. Wrong-purpose,
+size, schema and digest failures never invoke inspection. The production
+components perform no persistent writes or session state changes.
+
+A trusted host must independently bind the open file to the actual
+caller-selected path, with symlink and source-provenance policy. A
+classified path and open handle alone do not prove that association.
+Concurrent same-length rewrites cannot prove a stable disk snapshot,
+although admitted bytes must pass complete integrity verification.
+Typed section decoding, explicit profile acceptance, revision-bound
+Export and atomic file commit remain open.
+
 Notebook/PDF Export still lacks an admitted renderer artifact, and profile
 section encoders remain unfinished. Filesystem adapters
 must not guess these missing ownership and authorization boundaries.

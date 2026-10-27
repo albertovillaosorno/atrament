@@ -337,6 +337,9 @@ depends_on = []
 # Import verification is used only by assembly tests.
 depends_on = ["atrament_handwriting_profile_container", "atrament_profile_entry_sha256", "atrament_profile_manifest_json_writer", "atrament_profile_stored_zip_writer", "atrament_profile_import_verification", "atrament_profile_import_preflight", "atrament_profile_manifest_json_codec", "atrament_profile_json_syntax", "atrament_profile_zip_reader", "atrament_explicit_file_path_intent"]
 
+[component.atrament_profile_file_reader]
+depends_on = []
+
 [component.atrament_profile_entry_sha256]
 depends_on = ["atrament_handwriting_profile_container"]
 
@@ -348,6 +351,9 @@ depends_on = ["atrament_explicit_file_path_intent", "atrament_handwriting_profil
 
 [component.atrament_profile_import_verification]
 depends_on = ["atrament_explicit_file_path_intent", "atrament_handwriting_profile_container", "atrament_profile_import_preflight", "atrament_profile_manifest_json_codec", "atrament_profile_zip_reader", "atrament_profile_entry_sha256", "atrament_profile_json_syntax", "atrament_profile_stored_zip_writer"]
+
+[component.atrament_profile_open_file_import]
+depends_on = ["atrament_profile_file_reader", "atrament_explicit_file_path_intent", "atrament_profile_import_preflight", "atrament_profile_import_verification", "atrament_profile_json_syntax", "atrament_profile_manifest_json_codec", "atrament_profile_zip_reader", "atrament_handwriting_profile_container", "atrament_profile_entry_sha256", "atrament_profile_stored_zip_writer"]
 
 [component.atrament_profile_json_syntax]
 depends_on = []
