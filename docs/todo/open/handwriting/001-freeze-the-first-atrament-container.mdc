@@ -343,3 +343,9 @@ A legacy ordinary stored ZIP with older version fields, missing ASCII UTF-8
 flag or nonzero timestamps remains readable but cannot claim matching writer
 metadata. Multi-member fixtures prove that one changed header clears the
 marker without changing accepted stored payloads.
+
+A separate `matches_stored_writer_framing` projection requires the exact ZIP
+root in addition to all deterministic writer metadata. Valid empty or rootless
+ZIP frames therefore cannot claim writer compatibility. Reframing a readable
+legacy-timestamp ZIP in memory reproduces fixed writer bytes without changing
+any member payload, but does not canonicalize opaque root JSON or grant Export.

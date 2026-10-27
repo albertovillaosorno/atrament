@@ -276,6 +276,26 @@ impl<'bytes> ProfileZipArchive<'bytes> {
         self.writer_metadata_matches
     }
 
+    /// Whether these checked ZIP bytes have the stored writer's framing.
+    ///
+    /// Requires fixed writer metadata for all entries and the exact root
+    /// `manifest.json` member in the already-validated sorted ZIP index.
+    /// The reader separately proves stored-only CRC, path safety, nonoverlap,
+    /// sorted order and canonical ZIP32 records; this projection allocates
+    /// nothing and never serializes or normalizes source bytes.
+    ///
+    /// This confirms only that the stored ZIP **envelope** could have been
+    /// emitted by the deterministic byte writer for these exact member bytes.
+    /// It cannot prove canonical manifest JSON, a decoded typed profile,
+    /// a trusted source path, or file Import/Export authorization.
+    #[must_use]
+    pub fn matches_stored_writer_framing(&self) -> bool {
+        self.writer_metadata_matches
+            && self.entries.binary_search_by(|entry| {
+                entry.name.cmp(PROFILE_MANIFEST_PATH)
+            }).is_ok()
+    }
+
     /// Extract borrowed exact archive names for manifest inventory preflight.
     #[must_use]
     pub fn observed_paths(&self) -> Vec<&'bytes str> {

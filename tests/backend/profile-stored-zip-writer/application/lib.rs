@@ -93,6 +93,7 @@ fn stable_root_only_archive_has_correct_fixed_header_and_directory() {
     assert_eq!(first.get(26..30), Some(&[13, 0, 0, 0][..]));
     let archive = parse_bytes(&first);
     assert!(archive.matches_fixed_writer_metadata());
+    assert!(archive.matches_stored_writer_framing());
     assert_eq!(archive.entries().len(), 1);
     assert_eq!(archive.manifest_utf8(2), Ok("{}"));
     assert_eq!(archive.entries()[0].crc32(), 0xa3a6_bf43);
@@ -110,6 +111,7 @@ fn sorted_utf8_names_and_empty_asset_round_trip_byte_for_byte() {
         .expect("canonical name order");
     let parsed = parse_bytes(&output);
     assert!(parsed.matches_fixed_writer_metadata());
+    assert!(parsed.matches_stored_writer_framing());
     assert_eq!(parsed.entries().len(), entries.len());
     for (admitted, original) in parsed.entries().iter().zip(entries) {
         assert_eq!(admitted.name(), original.name);
@@ -788,6 +790,7 @@ fn largest_ordinary_zip32_entry_count_round_trips_without_zip64() {
     let parsed = read_stored_profile_zip(&bytes, read_limits)
         .expect("strict index accepts maximal ordinary ZIP count");
     assert!(parsed.matches_fixed_writer_metadata());
+    assert!(parsed.matches_stored_writer_framing());
     assert_eq!(parsed.entries().len(), maximum_ordinary_entries);
     assert_eq!(parsed.entries()[0].name(), "assets/00000.bin");
     assert_eq!(parsed.entries()[maximum_ordinary_entries - 2].name(),
@@ -844,4 +847,38 @@ fn largest_ordinary_zip32_entry_count_round_trips_without_zip64() {
         }),
         Err(ProfileStoredZipWriteError::ResourceLimit),
     );
+}
+
+#[test]
+fn legacy_stored_headers_round_trip_to_writer_framing_without_payload_edits() {
+    let members = [
+        member("assets/source.webp", b"\x00\x81\xff"),
+        member("manifest.json", br#"{"kept":true}"#),
+    ];
+    let canonical = write_stored_profile_zip(&members, limits())
+        .expect("fixed-metadata ZIP output");
+    let central = u32::from_le_bytes(
+        canonical[canonical.len() - 6..canonical.len() - 2]
+            .try_into().expect("EOCD central offset"),
+    ) as usize;
+    let mut legacy = canonical.clone();
+    // Both fields describe the same first member, so the strict reader may
+    // admit this legacy DOS timestamp without treating it as writer output.
+    legacy[10..12].copy_from_slice(&[0x15, 0x00]);
+    legacy[central + 12..central + 14].copy_from_slice(&[0x15, 0x00]);
+    let checked = parse_bytes(&legacy);
+    assert!(!checked.matches_fixed_writer_metadata());
+    assert!(!checked.matches_stored_writer_framing());
+    assert_eq!(checked.entries().len(), members.len());
+    let recovered = checked.entries().iter().map(|entry| {
+        member(entry.name(), entry.bytes())
+    }).collect::<Vec<_>>();
+    let canonical_reframe = write_stored_profile_zip(&recovered, limits())
+        .expect("same caller-selected bytes yield fixed ZIP metadata");
+    assert_eq!(canonical_reframe, canonical);
+    assert_ne!(canonical_reframe, legacy);
+    assert_eq!(checked.source_sha256(), sha256_profile_bytes(&legacy));
+    assert_ne!(checked.source_sha256(), sha256_profile_bytes(&canonical));
+    assert_eq!(checked.entries()[1].bytes(), members[1].bytes);
+    assert!(parse_bytes(&canonical_reframe).matches_stored_writer_framing());
 }

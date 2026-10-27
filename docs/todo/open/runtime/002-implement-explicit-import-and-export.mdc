@@ -279,3 +279,9 @@ The checked archive now exposes a distinct SHA-256 of its complete original
 ZIP source in addition to the root-only JSON SHA-256. Changed non-root bytes
 alter only the archive-wide fingerprint; neither digest binds a selected file
 handle, a trusted destination, a schema-valid manifest or Import acceptance.
+
+Read-only source-backed ZIP framing evidence can now distinguish a readable
+legacy-metadata archive from bytes matching the pure stored-ZIP writer. Even
+when the complete framing matches, future Import must still admit canonical
+JSON, a schema-typed root, declared entry hashes, chosen source authority and
+session mutation independently; this indicator performs none of those steps.

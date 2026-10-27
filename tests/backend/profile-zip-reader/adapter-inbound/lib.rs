@@ -1656,6 +1656,8 @@ fn structurally_checked_archive_hash_is_not_root_syntax_acceptance() {
     let source = make_zip(&[("manifest.json", malformed_root, 0x92aa8b5c)]);
     let archive = read_stored_profile_zip(&source, limits())
         .expect("only stored framing and CRC accepted");
+    assert!(archive.matches_stored_writer_framing(),
+        "matching envelope never guarantees valid JSON");
     assert_eq!(archive.source_sha256(), sha256_profile_bytes(&source));
     assert_eq!(archive.admitted_root_json(ProfileJsonSyntaxLimits {
         maximum_bytes: 40,
@@ -1789,6 +1791,7 @@ fn accepted_noncanonical_zip_headers_do_not_claim_fixed_writer_metadata() {
     let baseline = read_stored_profile_zip(&input, limits())
         .expect("fixed writer-like archive is valid");
     assert!(baseline.matches_fixed_writer_metadata());
+    assert!(baseline.matches_stored_writer_framing());
     let central = central_start(&input);
     for (case, local_field, central_field, bytes) in [
         ("creator version", None, 4, [10, 0]),
@@ -1806,6 +1809,7 @@ fn accepted_noncanonical_zip_headers_do_not_claim_fixed_writer_metadata() {
         let archive = read_stored_profile_zip(&changed, limits())
             .expect("legacy stored metadata remains readable");
         assert!(!archive.matches_fixed_writer_metadata(), "{case}");
+        assert!(!archive.matches_stored_writer_framing(), "{case}");
         assert_eq!(archive.entries()[0].name(), "manifest.json", "{case}");
         assert_eq!(archive.entries()[0].bytes(), b"{}", "{case}");
         assert_eq!(archive.entries()[0].crc32(), 0xa3a6_bf43, "{case}");
@@ -1831,6 +1835,7 @@ fn fixed_writer_metadata_requires_every_header_not_just_the_root() {
     let baseline = read_stored_profile_zip(&input, limits())
         .expect("three-member fixed metadata ZIP");
     assert!(baseline.matches_fixed_writer_metadata());
+    assert!(baseline.matches_stored_writer_framing());
     let central = central_start(&input);
     let names = ["assets/mark.webp", "manifest.json", "sections/ink.json"];
     let mut local = 0usize;
@@ -1848,4 +1853,26 @@ fn fixed_writer_metadata_requires_every_header_not_just_the_root() {
         local += 30 + name.len() + if index == 0 { 1 } else { 2 };
         directory += 46 + name.len();
     }
+}
+
+#[test]
+fn stored_writer_framing_needs_root_even_with_fixed_zip_headers() {
+    for entries in [
+        vec![],
+        vec![("assets/mark.webp", b"x".as_slice(), 0x8cdc_1683)],
+    ] {
+        let bytes = make_zip(&entries);
+        let archive = read_stored_profile_zip(&bytes, limits())
+            .expect("ordinary stored ZIP without a manifest is readable");
+        assert!(archive.matches_fixed_writer_metadata(),
+            "every present ZIP header has the fixed writer's metadata");
+        assert!(!archive.matches_stored_writer_framing(),
+            "writer needs an exact root even when ZIP framing is valid");
+        assert_eq!(archive.manifest_utf8(100),
+            Err(ProfileZipReadError::MissingManifest));
+    }
+    let bytes = make_zip(&[("manifest.json", b"{}", 0xa3a6_bf43)]);
+    let archive = read_stored_profile_zip(&bytes, limits())
+        .expect("with exact root ZIP becomes a writer framing candidate");
+    assert!(archive.matches_stored_writer_framing());
 }

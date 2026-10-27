@@ -64,6 +64,19 @@ remain readable while returning `false`. Exact content SHA-256 fingerprints
 still include those different metadata bytes. This indicator does **not**
 prove canonical manifest JSON, typed profile identity, or Import authority.
 
+`matches_stored_writer_framing()` strengthens that indicator with the exact
+presence of `manifest.json` in the validated sorted archive. An empty or
+rootless stored ZIP may have all fixed metadata fields but still cannot have
+been emitted by the current writer, which requires that root. The check does
+not allocate or mutate bytes, and its `true` result can coexist with malformed
+root JSON because writer framing never interprets its opaque root payload.
+
+A cross-component test starts with a CRC-valid legacy DOS-timestamp variant,
+recovers each original member from the reader and feeds it to the independent
+stored writer. The result matches the original fixed-metadata ZIP byte-for-byte,
+while the legacy complete-archive fingerprint remains different. This is a
+**read-only proof of envelope compatibility**, not a deployed rewrite action.
+
 The reader recomputes ZIP CRC-32 over each bounded stored entry. This checks
 transport framing only: **CRC-32 does not establish manifest SHA-256
 integrity**. An additional root-manifest accessor checks a caller-chosen byte
