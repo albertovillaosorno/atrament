@@ -1083,6 +1083,13 @@ fn sealed_crc_checked_zip_root_exposes_nested_read_only_json_values() {
     assert_eq!(root_fields.len(), 2);
     assert!(root_fields[0].key_matches("nested"));
     assert_eq!(root_fields[0].key_json(), br#""nested""#);
+    let mut root_key = [0xceu8; 10];
+    assert_eq!(root_fields[0].copy_key_utf8(&mut root_key[..5]),
+        Err(ProfileJsonStringCopyError::BufferTooSmall { required: 6 }));
+    assert_eq!(root_key, [0xce; 10]);
+    assert_eq!(root_fields[0].copy_key_utf8(&mut root_key), Ok(6));
+    assert_eq!(&root_key[..6], b"nested");
+    assert_eq!(&root_key[6..], &[0xce; 10][6..]);
     assert!(root_fields[1].key_matches("id"));
     assert_eq!(root_fields[1].value().unsigned_integer(), Some(3));
     assert_eq!(root_fields[0].source_member_json(),

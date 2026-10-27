@@ -210,3 +210,8 @@ bounded caller-owned storage, atomically refusing inadequate destination space
 and non-string values. This does not permit using decoded values as paths,
 selecting a source, or accepting a typed profile until the future import codec
 and explicit filesystem authority establish those independent checks.
+
+Sealed JSON member names now support bounded decoded UTF-8 copies without
+allocating a JSON tree or reinterpreting input as path authority. Future typed
+manifest schema recognition and unknown-field preservation still need their
+own explicit policy before section decoding or session Import.

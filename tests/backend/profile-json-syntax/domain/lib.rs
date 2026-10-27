@@ -1756,3 +1756,105 @@ fn bounded_string_copy_preserves_non_normalized_unicode_sequences() {
     assert_eq!(&composed[..second], "ñ".as_bytes());
     assert_ne!(&decomposed[..first], &composed[..second]);
 }
+
+#[test]
+fn decoded_object_name_copy_preserves_exact_unicode_and_original_tokens() {
+    let source = concat!(
+        r#" {"\u0061":0, "ñ":1, "ñ":2, "#,
+        r#""\uD83D\uDE00":3, "":4} "#,
+    );
+    let admitted = validate_profile_json_object(source.as_bytes(), limits())
+        .expect("all keys have distinct exact Unicode scalar identities");
+    for (name, original, value) in [
+        ("a", br#""\u0061""#.as_slice(), 0),
+        ("ñ", "\"ñ\"".as_bytes(), 1),
+        ("ñ", "\"ñ\"".as_bytes(), 2),
+        ("😀", br#""\uD83D\uDE00""#.as_slice(), 3),
+        ("", br#""""#.as_slice(), 4),
+    ] {
+        let field = admitted.root_field(name).expect("decoded key");
+        assert_eq!(field.key_json(), original);
+        assert_eq!(field.value().unsigned_integer(), Some(value));
+        let mut output = [0xb5u8; 16];
+        let capacity = name.len();
+        if capacity > 0 {
+            assert_eq!(
+                field.copy_key_utf8(&mut output[..capacity - 1]),
+                Err(ProfileJsonStringCopyError::BufferTooSmall {
+                    required: capacity,
+                })
+            );
+            assert_eq!(output, [0xb5; 16]);
+        }
+        assert_eq!(field.copy_key_utf8(&mut output[..capacity]), Ok(capacity));
+        assert_eq!(&output[..capacity], name.as_bytes());
+        assert_eq!(&output[capacity..], &[0xb5; 16][capacity..]);
+        assert!(field.key_matches(name));
+        assert!(admitted.bytes().windows(field.key_json().len()).any(
+            |segment| {
+                std::ptr::eq(segment.as_ptr(), field.key_json().as_ptr())
+            }
+        ));
+    }
+    assert_ne!(
+        admitted.root_field("ñ").expect("composed").key_json(),
+        admitted.root_field("ñ").expect("decomposed").key_json()
+    );
+}
+
+#[test]
+fn decoded_field_names_and_values_share_atomic_utf8_copy_behavior() {
+    let root = validate_profile_json_object(
+        br#"{"\u0061":"\u0061","\u0000":"\u0000"}"#,
+        limits(),
+    )
+    .expect("distinct escaped names and values");
+    for (name, expected) in [("a", b"a".as_slice()), ("\0", b"\0".as_slice())] {
+        let field = root.root_field(name).expect("key");
+        let mut key_out = [0xdd; 2];
+        let mut value_out = [0xdd; 2];
+        assert_eq!(
+            field.copy_key_utf8(&mut key_out[..0]),
+            Err(ProfileJsonStringCopyError::BufferTooSmall { required: 1 })
+        );
+        assert_eq!(
+            field.value().copy_string_utf8(&mut value_out[..0]),
+            Err(ProfileJsonStringCopyError::BufferTooSmall { required: 1 })
+        );
+        assert_eq!(key_out, [0xdd; 2]);
+        assert_eq!(value_out, [0xdd; 2]);
+        assert_eq!(field.copy_key_utf8(&mut key_out), Ok(1));
+        assert_eq!(field.value().copy_string_utf8(&mut value_out), Ok(1));
+        assert_eq!(&key_out[..1], expected);
+        assert_eq!(&value_out[..1], expected);
+        assert_eq!(key_out[1], 0xdd);
+        assert_eq!(value_out[1], 0xdd);
+    }
+}
+
+#[test]
+fn max_member_keys_copy_into_bounded_buffers_without_heap_ownership() {
+    let entries = (0..MAXIMUM_JSON_OBJECT_MEMBERS)
+        .map(|index| format!(r#""\u006b{index}":{index}"#))
+        .collect::<Vec<_>>()
+        .join(",");
+    let source = format!("{{{entries}}}");
+    let admitted = validate_profile_json_object(
+        source.as_bytes(),
+        ProfileJsonSyntaxLimits {
+            maximum_bytes: source.len(),
+            maximum_nesting: 2,
+            maximum_object_members: MAXIMUM_JSON_OBJECT_MEMBERS,
+            maximum_values: MAXIMUM_JSON_OBJECT_MEMBERS + 1,
+        },
+    )
+    .expect("at fixed key ceiling");
+    for (index, field) in admitted.root_fields().enumerate() {
+        let expected = format!("k{index}");
+        let mut output = [0xab; 16];
+        let written = field.copy_key_utf8(&mut output).expect("bounded name");
+        assert_eq!(&output[..written], expected.as_bytes());
+        assert_eq!(&output[written..], &[0xab; 16][written..]);
+        assert_eq!(field.value().unsigned_integer(), Some(index as u64));
+    }
+}

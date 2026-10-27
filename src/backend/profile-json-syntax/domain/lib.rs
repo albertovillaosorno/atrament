@@ -118,7 +118,7 @@ pub enum ProfileJsonPathSegment<'key> {
     Key(&'key str),
 }
 
-/// Failure to copy decoded JSON string scalars into caller-owned storage.
+/// Failure to copy decoded JSON string or member-name UTF-8 scalars.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ProfileJsonStringCopyError {
     /// The caller supplied fewer bytes than are needed for the decoded UTF-8.
@@ -237,6 +237,22 @@ pub struct ValidatedProfileJsonField<'bytes> {
 }
 
 impl<'bytes> ValidatedProfileJsonField<'bytes> {
+    /// Copy one decoded object key into caller-owned bounded UTF-8 storage.
+    ///
+    /// Failure on inadequate space leaves every destination byte unchanged.
+    /// `NotString` cannot occur for a constructor-sealed JSON field name.
+    /// Original name spelling remains available through `key_json`.
+    ///
+    /// # Errors
+    ///
+    /// Reports exact required UTF-8 bytes on insufficient capacity.
+    pub fn copy_key_utf8(
+        self,
+        destination: &mut [u8],
+    ) -> Result<usize, ProfileJsonStringCopyError> {
+        copy_decoded_utf8(self.decoded_key_chars(), destination)
+    }
+
     /// Iterate decoded Unicode scalars of the admitted member name.
     #[must_use]
     pub fn decoded_key_chars(self) -> ValidatedProfileJsonStringChars<'bytes> {
@@ -454,27 +470,7 @@ impl<'bytes> ValidatedProfileJsonValue<'bytes> {
         let scalars = self
             .string_chars()
             .ok_or(ProfileJsonStringCopyError::NotString)?;
-        // Valid JSON decoding cannot expand beyond the admitted source
-        // string's byte length, so this sum cannot overflow usize.
-        let required = scalars.clone().map(char::len_utf8).sum::<usize>();
-        if destination.len() < required {
-            return Err(ProfileJsonStringCopyError::BufferTooSmall {
-                required,
-            });
-        }
-        let mut cursor = 0usize;
-        for scalar in scalars {
-            let next = cursor.saturating_add(scalar.len_utf8());
-            let Some(target) = destination.get_mut(cursor..next) else {
-                // Guaranteed unreachable after the full size preflight.
-                return Err(ProfileJsonStringCopyError::BufferTooSmall {
-                    required,
-                });
-            };
-            let _encoded = scalar.encode_utf8(target);
-            cursor = next;
-        }
-        Ok(cursor)
+        copy_decoded_utf8(scalars, destination)
     }
 
     /// Return whether the admitted token is exactly JSON `null`.
@@ -944,6 +940,31 @@ impl SyntaxCursor<'_> {
             self.cursor = self.cursor.saturating_add(1);
         }
     }
+}
+
+// Two passes prevent partial writes on wrong-size caller buffers.
+// Valid JSON decoding never expands beyond the already admitted source token.
+fn copy_decoded_utf8(
+    scalars: ValidatedProfileJsonStringChars<'_>,
+    destination: &mut [u8],
+) -> Result<usize, ProfileJsonStringCopyError> {
+    let required = scalars.clone().map(char::len_utf8).sum::<usize>();
+    if destination.len() < required {
+        return Err(ProfileJsonStringCopyError::BufferTooSmall { required });
+    }
+    let mut cursor = 0usize;
+    for scalar in scalars {
+        let next = cursor.saturating_add(scalar.len_utf8());
+        let Some(target) = destination.get_mut(cursor..next) else {
+            // The full capacity preflight proves this branch unreachable.
+            return Err(ProfileJsonStringCopyError::BufferTooSmall {
+                required,
+            });
+        };
+        let _encoded = scalar.encode_utf8(target);
+        cursor = next;
+    }
+    Ok(cursor)
 }
 
 // Decode one scalar from a previously validated JSON string interior.

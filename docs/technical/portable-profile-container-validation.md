@@ -265,6 +265,17 @@ UTF-8 width transitions, UTF-16 surrogate pairs and distinct Unicode scalar
 sequences. A real CRC-verified ZIP fixture proves that decoding does not
 rewrite or separate the sealed original manifest value bytes.
 
+The same bounded Unicode copy engine now powers `copy_key_utf8` for sealed
+object fields. A future decoder can preserve a key's exact JSON token while
+copying its decoded name into caller-owned storage, even when the original
+key uses escapes or a UTF-16 surrogate pair. Caller capacity is preflighted
+before any mutation, matching the value-copy behavior, and a CRC-verified ZIP
+fixture checks root-key copies with no change to original manifest bytes.
+
+Tests also cover empty, composed/decomposed, astral, and embedded-NUL keys,
+plus all 128 source-order object members at the hard ceiling. String keys are
+still not normalized or interpreted as manifest feature and path authorities.
+
 String copying is not canonical JSON serialization or profile field
 validation. Future schema codecs must choose field names, string budgets,
 allowed characters and normalized identities, and must preserve unknown data

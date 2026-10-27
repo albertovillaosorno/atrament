@@ -220,3 +220,9 @@ into caller-owned bounded buffers, with typed wrong-kind and insufficient-size
 failures before any destination mutation. CRC-checked ZIP fixtures verify that
 escaped root strings retain their source bytes after the decoded copy. Schema
 string policies and canonical writing remain outside the syntax boundary.
+
+The sealed JSON field view can now copy decoded Unicode member names into a
+caller-owned UTF-8 buffer with the same atomic, capacity-first logic used for
+string values. The exact original member-name token remains borrowed and
+available for future unknown-field preservation. Fixtures cover source order,
+escaped and Unicode keys, a CRC-checked ZIP root, and all 128 key slots.
