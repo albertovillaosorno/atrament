@@ -227,6 +227,10 @@ socket reader and direct in-process draft router both reject `Expect` and
 session termination, enforce the same 16 KiB request-head limit as the socket
 reader; passing authentication does not bypass these framing limits.
 
+The header-terminator search examines at most the first 16 KiB even when a
+direct caller supplies a much larger byte slice. A delimiter beyond the header
+budget cannot turn oversized input into an admissible request.
+
 Each field has a backend-owned one-mebibyte limit. Over-limit input returns
 `413` without
 truncating or changing the current field. A successful whole-field replacement

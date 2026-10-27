@@ -222,8 +222,11 @@ pub(crate) fn configure_connection_deadline(
     stream.set_write_timeout(Some(REQUEST_IO_TIMEOUT))
 }
 
-fn request_head_end(request: &[u8]) -> Option<usize> {
+pub(crate) fn request_head_end(request: &[u8]) -> Option<usize> {
+    // A direct in-process caller may provide a much larger byte slice than
+    // the TCP transport. Never scan beyond the maximum admitted HTTP head.
     request
+        .get(..request.len().min(MAX_HEADER_BYTES))?
         .windows(4)
         .position(|window| window == b"\r\n\r\n")
         .and_then(|index| index.checked_add(4))

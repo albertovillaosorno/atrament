@@ -3378,6 +3378,19 @@ fn all_direct_routes_enforce_the_socket_header_budget() {
 }
 
 #[test]
+fn header_terminator_search_never_looks_past_the_admitted_budget() {
+    // In-process callers can supply arbitrarily long slices. A terminator
+    // after the 16 KiB header ceiling is not a usable request boundary.
+    let mut oversized = vec![b'x'; 2 * 1024 * 1024];
+    oversized.extend_from_slice(b"\r\n\r\n");
+    assert_eq!(runtime::request_head_end(&oversized), None);
+
+    let mut exact = vec![b'x'; 16 * 1024 - 4];
+    exact.extend_from_slice(b"\r\n\r\n");
+    assert_eq!(runtime::request_head_end(&exact), Some(16 * 1024));
+}
+
+#[test]
 fn direct_draft_routing_rejects_transport_oversized_header_before_mutation() {
     // A direct in-process call must not bypass the socket reader's 16 KiB
     // request-head limit just because authentication and the body are valid.
