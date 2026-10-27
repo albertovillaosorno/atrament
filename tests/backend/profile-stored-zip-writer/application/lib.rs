@@ -41,12 +41,11 @@ use atrament_profile_json_syntax::ProfileJsonSyntaxLimits;
 use atrament_profile_stored_zip_writer::{
     ProfileStoredZipMember, ProfileStoredZipWriteError,
     ProfileStoredZipWriteLimits, planned_stored_profile_zip_bytes,
-    write_stored_profile_zip,
+    write_stored_profile_zip, write_stored_profile_zip_into,
 };
 use atrament_profile_zip_reader::{
     ProfileZipPathCopyError, ProfileZipReadError, ProfileZipReadLimits,
-    read_stored_profile_zip,
-    verify_admitted_profile_zip_payloads,
+    read_stored_profile_zip, verify_admitted_profile_zip_payloads,
 };
 
 fn limits() -> ProfileStoredZipWriteLimits {
@@ -679,17 +678,23 @@ fn independent_python_multimember_zipfile_golden_sha256_is_stable() {
     );
     let parsed = parse_bytes(&archived);
     assert_eq!(parsed.source_bytes(), archived);
-    assert!(std::ptr::eq(parsed.source_bytes().as_ptr(),
-        archived.as_ptr()));
+    assert!(std::ptr::eq(
+        parsed.source_bytes().as_ptr(),
+        archived.as_ptr()
+    ));
     assert_eq!(parsed.source_sha256().bytes(), digest);
-    let root = parsed.admitted_root_json(ProfileJsonSyntaxLimits {
-        maximum_bytes: 100,
-        maximum_nesting: 3,
-        maximum_object_members: 4,
-        maximum_values: 4,
-    }).expect("source-borrowed root grammar is valid");
-    assert_eq!(root.source_sha256(),
-        sha256_profile_bytes(b"{\"test\":true}"));
+    let root = parsed
+        .admitted_root_json(ProfileJsonSyntaxLimits {
+            maximum_bytes: 100,
+            maximum_nesting: 3,
+            maximum_object_members: 4,
+            maximum_values: 4,
+        })
+        .expect("source-borrowed root grammar is valid");
+    assert_eq!(
+        root.source_sha256(),
+        sha256_profile_bytes(b"{\"test\":true}")
+    );
     assert_ne!(root.source_sha256(), parsed.source_sha256());
     assert!(std::ptr::eq(root.archive(), &parsed));
     for (record, original) in parsed.entries().iter().zip(source) {
@@ -762,7 +767,8 @@ fn largest_ordinary_zip32_entry_count_round_trips_without_zip64() {
     let names = (0..(maximum_ordinary_entries - 1))
         .map(|index| format!("assets/{index:05}.bin"))
         .collect::<Vec<_>>();
-    let mut members = names.iter()
+    let mut members = names
+        .iter()
         .map(|name| member(name, b""))
         .collect::<Vec<_>>();
     members.push(member("manifest.json", b"{}"));
@@ -777,10 +783,28 @@ fn largest_ordinary_zip32_entry_count_round_trips_without_zip64() {
     let bytes = write_stored_profile_zip(&members, limits)
         .expect("ZIP32 allows 65534 entries without ZIP64 sentinel");
     assert_eq!(bytes.len(), planned);
+    let mut caller_owned = vec![0x91u8; planned + 1];
+    assert_eq!(
+        write_stored_profile_zip_into(
+            &members,
+            limits,
+            &mut caller_owned[..planned - 1],
+        ),
+        Err(ProfileStoredZipWriteError::BufferTooSmall { required: planned })
+    );
+    assert!(caller_owned.iter().all(|byte| *byte == 0x91));
+    assert_eq!(
+        write_stored_profile_zip_into(&members, limits, &mut caller_owned,),
+        Ok(planned)
+    );
+    assert_eq!(&caller_owned[..planned], bytes.as_slice());
+    assert_eq!(caller_owned[planned], 0x91);
     let eocd = bytes.len() - 22;
     for offset in [8usize, 10] {
-        assert_eq!(&bytes[eocd + offset..eocd + offset + 2],
-            &(u16::MAX - 1).to_le_bytes());
+        assert_eq!(
+            &bytes[eocd + offset..eocd + offset + 2],
+            &(u16::MAX - 1).to_le_bytes()
+        );
     }
     let read_limits = ProfileZipReadLimits {
         maximum_archive_bytes: planned,
@@ -794,76 +818,109 @@ fn largest_ordinary_zip32_entry_count_round_trips_without_zip64() {
     assert!(parsed.matches_stored_writer_framing());
     assert_eq!(parsed.entries().len(), maximum_ordinary_entries);
     let mut slots = vec!["unchanged"; maximum_ordinary_entries + 1];
-    assert_eq!(parsed.copy_observed_paths(
-        &mut slots[..maximum_ordinary_entries - 1]),
+    assert_eq!(
+        parsed.copy_observed_paths(&mut slots[..maximum_ordinary_entries - 1]),
         Err(ProfileZipPathCopyError::BufferTooSmall {
             required: maximum_ordinary_entries,
         }),
         "largest supported member count refuses short storage atomically",
     );
     assert!(slots.iter().all(|name| *name == "unchanged"));
-    assert_eq!(parsed.copy_observed_paths(&mut slots),
-        Ok(maximum_ordinary_entries));
+    assert_eq!(
+        parsed.copy_observed_paths(&mut slots),
+        Ok(maximum_ordinary_entries)
+    );
     assert_eq!(slots[0], "assets/00000.bin");
     assert_eq!(slots[maximum_ordinary_entries - 1], "manifest.json");
     assert_eq!(slots[maximum_ordinary_entries], "unchanged");
-    assert!(std::ptr::eq(slots[0].as_ptr(),
-        parsed.entries()[0].name().as_ptr()));
-    assert!(std::ptr::eq(slots[maximum_ordinary_entries - 1].as_ptr(),
-        parsed.entries()[maximum_ordinary_entries - 1].name().as_ptr()));
+    assert!(std::ptr::eq(
+        slots[0].as_ptr(),
+        parsed.entries()[0].name().as_ptr()
+    ));
+    assert!(std::ptr::eq(
+        slots[maximum_ordinary_entries - 1].as_ptr(),
+        parsed.entries()[maximum_ordinary_entries - 1]
+            .name()
+            .as_ptr()
+    ));
     assert_eq!(parsed.entries()[0].name(), "assets/00000.bin");
-    assert_eq!(parsed.entries()[maximum_ordinary_entries - 2].name(),
-        "assets/65532.bin");
-    assert_eq!(parsed.entries()[maximum_ordinary_entries - 1].name(),
-        "manifest.json");
+    assert_eq!(
+        parsed.entries()[maximum_ordinary_entries - 2].name(),
+        "assets/65532.bin"
+    );
+    assert_eq!(
+        parsed.entries()[maximum_ordinary_entries - 1].name(),
+        "manifest.json"
+    );
     assert_eq!(parsed.entries()[0].bytes(), b"");
-    assert_eq!(parsed.entries()[maximum_ordinary_entries - 1].bytes(), b"{}");
+    assert_eq!(
+        parsed.entries()[maximum_ordinary_entries - 1].bytes(),
+        b"{}"
+    );
     assert_eq!(parsed.source_sha256(), sha256_profile_bytes(&bytes));
     // Python's independent struct/zlib implementation produced these exact
     // ZIP32 bytes; its standard zipfile reader opened all 65,534 entries.
     assert_eq!(planned, 7_077_690);
     let digest = parsed.source_sha256().bytes();
-    let golden = digest.iter().map(|byte| format!("{byte:02x}"))
+    let golden = digest
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
         .collect::<String>();
-    assert_eq!(golden,
-        "c564b867a623511169ae843eac4acf3f08322782fdf7b6b6bb7351b90a52a793");
     assert_eq!(
-        read_stored_profile_zip(&bytes, ProfileZipReadLimits {
-            maximum_entries: maximum_ordinary_entries - 1,
-            ..read_limits
-        }),
+        golden,
+        "c564b867a623511169ae843eac4acf3f08322782fdf7b6b6bb7351b90a52a793"
+    );
+    assert_eq!(
+        read_stored_profile_zip(
+            &bytes,
+            ProfileZipReadLimits {
+                maximum_entries: maximum_ordinary_entries - 1,
+                ..read_limits
+            }
+        ),
         Err(ProfileZipReadError::ResourceLimit),
         "too many members must reject before index reservation",
     );
     assert_eq!(
-        read_stored_profile_zip(&bytes, ProfileZipReadLimits {
-            maximum_archive_bytes: planned - 1,
-            ..read_limits
-        }),
+        read_stored_profile_zip(
+            &bytes,
+            ProfileZipReadLimits {
+                maximum_archive_bytes: planned - 1,
+                ..read_limits
+            }
+        ),
         Err(ProfileZipReadError::ArchiveTooLarge),
         "one byte less than exact archive budget must reject",
     );
     assert_eq!(
-        read_stored_profile_zip(&bytes, ProfileZipReadLimits {
-            maximum_total_bytes: 1,
-            ..read_limits
-        }),
+        read_stored_profile_zip(
+            &bytes,
+            ProfileZipReadLimits {
+                maximum_total_bytes: 1,
+                ..read_limits
+            }
+        ),
         Err(ProfileZipReadError::ResourceLimit),
         "many empty entries cannot bypass nonempty root payload limit",
     );
     assert_eq!(
-        planned_stored_profile_zip_bytes(&members,
+        planned_stored_profile_zip_bytes(
+            &members,
             ProfileStoredZipWriteLimits {
                 maximum_archive_bytes: planned - 1,
                 ..limits
-            }),
+            }
+        ),
         Err(ProfileStoredZipWriteError::ArchiveTooLarge),
     );
     assert_eq!(
-        write_stored_profile_zip(&members, ProfileStoredZipWriteLimits {
-            maximum_entries: maximum_ordinary_entries - 1,
-            ..limits
-        }),
+        write_stored_profile_zip(
+            &members,
+            ProfileStoredZipWriteLimits {
+                maximum_entries: maximum_ordinary_entries - 1,
+                ..limits
+            }
+        ),
         Err(ProfileStoredZipWriteError::ResourceLimit),
     );
 }
@@ -878,7 +935,8 @@ fn legacy_stored_headers_round_trip_to_writer_framing_without_payload_edits() {
         .expect("fixed-metadata ZIP output");
     let central = u32::from_le_bytes(
         canonical[canonical.len() - 6..canonical.len() - 2]
-            .try_into().expect("EOCD central offset"),
+            .try_into()
+            .expect("EOCD central offset"),
     ) as usize;
     let mut legacy = canonical.clone();
     // Both fields describe the same first member, so the strict reader may
@@ -889,9 +947,11 @@ fn legacy_stored_headers_round_trip_to_writer_framing_without_payload_edits() {
     assert!(!checked.matches_fixed_writer_metadata());
     assert!(!checked.matches_stored_writer_framing());
     assert_eq!(checked.entries().len(), members.len());
-    let recovered = checked.entries().iter().map(|entry| {
-        member(entry.name(), entry.bytes())
-    }).collect::<Vec<_>>();
+    let recovered = checked
+        .entries()
+        .iter()
+        .map(|entry| member(entry.name(), entry.bytes()))
+        .collect::<Vec<_>>();
     let canonical_reframe = write_stored_profile_zip(&recovered, limits())
         .expect("same caller-selected bytes yield fixed ZIP metadata");
     assert_eq!(canonical_reframe, canonical);
@@ -915,7 +975,8 @@ fn every_accepted_legacy_header_variant_reframes_to_exact_writer_bytes() {
     assert!(canonical_archive.matches_stored_writer_framing());
     let central = u32::from_le_bytes(
         canonical[canonical.len() - 6..canonical.len() - 2]
-            .try_into().expect("EOCD central offset"),
+            .try_into()
+            .expect("EOCD central offset"),
     ) as usize;
     let mut local_offset = 0usize;
     let mut central_offset = central;
@@ -937,21 +998,31 @@ fn every_accepted_legacy_header_variant_reframes_to_exact_writer_bytes() {
                 ..central_offset + central_field + 2]
                 .copy_from_slice(&value);
             let archive = parse_bytes(&changed);
-            assert_eq!(archive.entries(), canonical_archive.entries(),
-                "case={case} member={index}");
-            assert!(!archive.matches_fixed_writer_metadata(),
-                "case={case} member={index}");
-            assert!(!archive.matches_stored_writer_framing(),
-                "case={case} member={index}");
-            assert_ne!(archive.source_sha256(),
-                canonical_archive.source_sha256());
-            let members = archive.entries().iter()
+            assert_eq!(
+                archive.entries(),
+                canonical_archive.entries(),
+                "case={case} member={index}"
+            );
+            assert!(
+                !archive.matches_fixed_writer_metadata(),
+                "case={case} member={index}"
+            );
+            assert!(
+                !archive.matches_stored_writer_framing(),
+                "case={case} member={index}"
+            );
+            assert_ne!(
+                archive.source_sha256(),
+                canonical_archive.source_sha256()
+            );
+            let members = archive
+                .entries()
+                .iter()
                 .map(|item| member(item.name(), item.bytes()))
                 .collect::<Vec<_>>();
             let output = write_stored_profile_zip(&members, limits())
                 .expect("admitted original payloads can reframe");
-            assert_eq!(output, canonical,
-                "case={case} member={index}");
+            assert_eq!(output, canonical, "case={case} member={index}");
             assert!(parse_bytes(&output).matches_stored_writer_framing());
             checked += 1;
         }
@@ -985,7 +1056,8 @@ fn generated_stored_writer_framing_equivalence_is_byte_exact() {
         let mut selected = Vec::new();
         let mut owned = Vec::new();
         for (index, path) in PATHS.iter().enumerate() {
-            seed = seed.wrapping_mul(6364136223846793005)
+            seed = seed
+                .wrapping_mul(6364136223846793005)
                 .wrapping_add(1442695040888963407);
             if index != 3 && seed & 3 == 0 {
                 continue;
@@ -999,7 +1071,8 @@ fn generated_stored_writer_framing_equivalence_is_byte_exact() {
             };
             let mut payload = Vec::with_capacity(size);
             for _ in 0..size {
-                seed = seed.wrapping_mul(2862933555777941757)
+                seed = seed
+                    .wrapping_mul(2862933555777941757)
                     .wrapping_add(3037000493);
                 payload.push((seed >> 48) as u8);
             }
@@ -1014,16 +1087,34 @@ fn generated_stored_writer_framing_equivalence_is_byte_exact() {
         let canonical = write_stored_profile_zip(&selected, generous)
             .expect("all generated members have safe sorted paths");
         assert_eq!(canonical.len(), planned, "case={case}");
-        let archive = read_stored_profile_zip(&canonical, ProfileZipReadLimits {
-            maximum_archive_bytes: planned,
-            maximum_entries: selected.len(),
-            maximum_entry_bytes: generous.maximum_entry_bytes,
-            maximum_total_bytes: generous.maximum_total_bytes,
-        }).expect("independent strict reader must accept writer output");
+        let mut caller_storage = vec![0x6du8; planned + 3];
+        assert_eq!(
+            write_stored_profile_zip_into(
+                &selected,
+                generous,
+                &mut caller_storage,
+            ),
+            Ok(planned),
+            "case={case}"
+        );
+        assert_eq!(&caller_storage[..planned], canonical.as_slice());
+        assert_eq!(&caller_storage[planned..], &[0x6d; 3]);
+        let archive = read_stored_profile_zip(
+            &canonical,
+            ProfileZipReadLimits {
+                maximum_archive_bytes: planned,
+                maximum_entries: selected.len(),
+                maximum_entry_bytes: generous.maximum_entry_bytes,
+                maximum_total_bytes: generous.maximum_total_bytes,
+            },
+        )
+        .expect("independent strict reader must accept writer output");
         assert!(archive.matches_stored_writer_framing(), "case={case}");
         assert!(archive.matches_fixed_writer_metadata(), "case={case}");
         assert_eq!(archive.source_bytes(), canonical, "case={case}");
-        let recovered = archive.entries().iter()
+        let recovered = archive
+            .entries()
+            .iter()
             .map(|entry| member(entry.name(), entry.bytes()))
             .collect::<Vec<_>>();
         assert_eq!(recovered, selected, "case={case}");
@@ -1035,22 +1126,134 @@ fn generated_stored_writer_framing_equivalence_is_byte_exact() {
         // retains CRC-verified payloads but can never claim writer framing.
         let directory = u32::from_le_bytes(
             canonical[canonical.len() - 6..canonical.len() - 2]
-                .try_into().expect("central directory byte offset"),
+                .try_into()
+                .expect("central directory byte offset"),
         ) as usize;
         let mut legacy = canonical.clone();
         legacy[12..14].copy_from_slice(&[3, 0]);
-        legacy[directory + 14..directory + 16]
-            .copy_from_slice(&[3, 0]);
-        let observed = read_stored_profile_zip(&legacy, ProfileZipReadLimits {
-            maximum_archive_bytes: legacy.len(),
-            maximum_entries: selected.len(),
-            maximum_entry_bytes: generous.maximum_entry_bytes,
-            maximum_total_bytes: generous.maximum_total_bytes,
-        }).expect("metadata changed without affecting stored entry proof");
+        legacy[directory + 14..directory + 16].copy_from_slice(&[3, 0]);
+        let observed = read_stored_profile_zip(
+            &legacy,
+            ProfileZipReadLimits {
+                maximum_archive_bytes: legacy.len(),
+                maximum_entries: selected.len(),
+                maximum_entry_bytes: generous.maximum_entry_bytes,
+                maximum_total_bytes: generous.maximum_total_bytes,
+            },
+        )
+        .expect("metadata changed without affecting stored entry proof");
         assert!(!observed.matches_stored_writer_framing(), "case={case}");
         assert_eq!(observed.entries(), archive.entries(), "case={case}");
         assert_ne!(observed.source_sha256(), archive.source_sha256());
         cases += 1;
     }
     assert_eq!(cases, 1_024);
+}
+
+#[test]
+fn caller_owned_zip_output_is_atomic_for_too_small_storage() {
+    let members = [
+        member("assets/ñ.webp", b"\x00\xff\x80"),
+        member("manifest.json", br#"{"spacing":true}"#),
+        member("sections/😀.json", b"[1,2,3]"),
+    ];
+    let expected = write_stored_profile_zip(&members, limits())
+        .expect("owned reference emits one exact ZIP frame");
+    let required = planned_stored_profile_zip_bytes(&members, limits())
+        .expect("exact ZIP32 byte planning");
+    assert_eq!(expected.len(), required);
+    let mut storage = vec![0xabu8; required + 17];
+    for available in [0usize, 1, 22, required - 1] {
+        assert_eq!(
+            write_stored_profile_zip_into(
+                &members,
+                limits(),
+                &mut storage[..available],
+            ),
+            Err(ProfileStoredZipWriteError::BufferTooSmall { required }),
+            "available bytes={available}"
+        );
+        assert!(
+            storage.iter().all(|byte| *byte == 0xab),
+            "undersized storage must not change any byte"
+        );
+    }
+    assert_eq!(
+        write_stored_profile_zip_into(
+            &members,
+            limits(),
+            &mut storage[..required],
+        ),
+        Ok(required)
+    );
+    assert_eq!(&storage[..required], expected.as_slice());
+    assert!(storage[required..].iter().all(|byte| *byte == 0xab));
+    storage.fill(0xcd);
+    assert_eq!(
+        write_stored_profile_zip_into(&members, limits(), &mut storage,),
+        Ok(required)
+    );
+    assert_eq!(&storage[..required], expected.as_slice());
+    assert_eq!(&storage[required..], &[0xcd; 17]);
+    let archive = parse_bytes(&storage[..required]);
+    assert!(archive.matches_stored_writer_framing());
+    assert_eq!(archive.source_sha256(), sha256_profile_bytes(&expected));
+}
+
+#[test]
+fn caller_owned_zip_output_checks_input_before_destination_capacity() {
+    let missing = [member("sections/alone.json", b"[]")];
+    let unordered = [
+        member("manifest.json", b"{}"),
+        member("assets/file.webp", b"x"),
+    ];
+    let invalid = [
+        member("manifest.json", b"{}"),
+        member("sections/../unsafe.json", b"bad"),
+    ];
+    let valid = [member("manifest.json", b"{}")];
+    let cases = [
+        (
+            &missing[..],
+            limits(),
+            ProfileStoredZipWriteError::MissingManifest,
+        ),
+        (
+            &unordered[..],
+            limits(),
+            ProfileStoredZipWriteError::NonCanonicalOrder,
+        ),
+        (
+            &invalid[..],
+            limits(),
+            ProfileStoredZipWriteError::InvalidName,
+        ),
+        (
+            &valid[..],
+            ProfileStoredZipWriteLimits {
+                maximum_entries: 0,
+                ..limits()
+            },
+            ProfileStoredZipWriteError::ResourceLimit,
+        ),
+        (
+            &valid[..],
+            ProfileStoredZipWriteLimits {
+                maximum_archive_bytes: 1,
+                ..limits()
+            },
+            ProfileStoredZipWriteError::ArchiveTooLarge,
+        ),
+    ];
+    for (members, bound, expected) in cases {
+        let mut sentinel = [0x8cu8; 64];
+        assert_eq!(
+            write_stored_profile_zip_into(members, bound, &mut sentinel,),
+            Err(expected)
+        );
+        assert_eq!(
+            sentinel, [0x8c; 64],
+            "invalid input must never reach destination writing"
+        );
+    }
 }

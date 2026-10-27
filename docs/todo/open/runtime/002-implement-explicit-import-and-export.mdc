@@ -321,3 +321,9 @@ The CRC-checked stored ZIP reader now projects its own archive encoding facts
 for Import preflight, replacing synthetic encoding values in integration tests.
 This observation is sourced from checked bytes, including legacy ZIP headers,
 but still has no filesystem path authority or typed manifest-root provenance.
+
+The pure stored-ZIP encoder can now fill already caller-owned, explicitly
+bounded memory without allocating another archive-sized output vector. Exact
+size preflight occurs before any mutation, with atomic too-small refusal and
+unchanged surplus bytes. This remains byte-only framing, not a canonical
+manifest serializer, authorized Export target or atomic filesystem commit.

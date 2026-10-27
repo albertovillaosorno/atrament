@@ -383,3 +383,10 @@ from a constructor-sealed read-only archive. Structural Import preflight
 fixtures consume this parsed-source evidence rather than hand-creating ZIP
 facts; five readable legacy metadata changes preserve stored/no-extra/ZIP32
 observations while four unsupported features fail before evidence can exist.
+
+The byte writer now supports caller-owned ZIP32 output slices with no internal
+output allocation. It shares preflight, CRC and header emission with the
+existing `Vec` writer; a short destination reports the exact required size
+without changing a byte, and extra buffer capacity remains untouched.
+The 65,534-member golden and 1,024 generated Unicode/binary archives compare
+byte-for-byte across both output forms without claiming file Export authority.

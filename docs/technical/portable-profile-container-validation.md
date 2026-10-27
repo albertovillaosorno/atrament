@@ -218,10 +218,24 @@ section-or-asset path contract without normalization or URI decoding.
 
 All member counts, names, strict raw UTF-8 byte order, individual and total
 payload sizes, ordinary ZIP32 offsets, directory sizes and complete output
-byte budget are checked **before any output allocation**. Only one bounded
-`Vec` allocation is reserved; local headers and the central directory are
-then emitted into the same vector, without a second directory byte buffer.
+byte budget are checked **before any output allocation or output write**.
+The original writer reserves one bounded `Vec` and emits local headers and the
+central directory directly into it, without a second directory byte buffer.
 Failed allocation returns a typed error, never partially exported data.
+
+The new `write_stored_profile_zip_into` uses the same exact byte-emission path
+but writes into a caller-owned, pre-sized `&mut [u8]`, allocating no output
+storage. It rejects a short destination with the precise required byte count
+before modifying any output slot, and leaves surplus destination bytes intact.
+Both forms reuse the exact planned length, path checks, local-header CRC-32,
+ZIP32 directory and end record; neither writes to a filesystem or grants Export.
+
+A 1,024-case generated fixture compares the caller-owned output slice with
+the existing owned byte vector for varying Unicode names, opaque root JSON
+bytes and binary payloads. Additional tests cover empty/one-byte-short buffers,
+preflight error precedence before any destination mutation and untouched extra
+capacity. The full 65,534-entry ordinary ZIP32 golden is reproduced exactly in
+caller-owned memory, including SHA-256 and its seven-megabyte framing budget.
 
 `planned_stored_profile_zip_bytes` also returns the exact archive byte count
 without allocating or computing CRC-32. It shares every path, order, budget and
