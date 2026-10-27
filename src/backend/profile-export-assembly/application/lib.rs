@@ -1,0 +1,242 @@
+// Copyright:
+//   - Copyright © 2026 Alberto Villa Osorno.
+// SPDX-License-Identifier:
+//   - MIT
+// Confidential:
+//   - false
+// License-File:
+//   - LICENSE-MIT
+//
+// Boundary-Contract:
+// - Owns:
+//   - Complete profile ZIP bytes tied to a typed manifest and payloads.
+// - Must-Not:
+//   - Select paths, write files, mutate a session, or claim Export authority.
+// - Allows:
+//   - Inputs: Typed profile declarations, supplied payloads and byte budgets.
+//   - Outputs: Payload-verified canonical ZIP bytes or one typed refusal.
+//   - Side effects: Bounded in-memory allocation and digest computation only.
+// - Split-When:
+//   - Trusted selected-file commits or section encoders are implemented.
+// - Merge-When:
+//   - The application owns complete validated profile import/export commands.
+// - Summary:
+//   - Ensures each payload matches exactly one manifest declaration before ZIP.
+// - Description:
+//   - Independent manifest JSON and stored-ZIP codecs retain byte authority.
+// - Usage:
+//   - Supply already selected semantic profile data, not untrusted paths.
+// - Defaults:
+//   - No archive bytes escape on count, path, length or digest failure.
+//
+
+//! Complete canonical portable-profile framing without file or session effects.
+
+use atrament_handwriting_profile_container::{
+    PROFILE_MANIFEST_PATH, ProfileManifest, ProfileManifestEntry, Sha256Digest,
+    ProfileEntryVerificationError,
+};
+use atrament_profile_entry_sha256::{
+    sha256_profile_bytes, verify_profile_entry_bytes,
+};
+use atrament_profile_manifest_json_writer::{
+    ProfileManifestJsonWriteError, ProfileManifestJsonWriteLimits,
+    write_canonical_profile_manifest_json,
+};
+use atrament_profile_stored_zip_writer::{
+    ProfileStoredZipMember, ProfileStoredZipWriteError,
+    ProfileStoredZipWriteLimits, write_stored_profile_zip,
+};
+
+/// Caller-supplied non-manifest payload. Paths are exact, not normalized.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ProfileExportPayload<'bytes> {
+    /// Exact payload bytes whose declared length and SHA-256 must match.
+    pub bytes: &'bytes [u8],
+    /// Exact declared ZIP entry path (never a filesystem target).
+    pub path: &'bytes str,
+}
+
+/// Independent JSON and complete-ZIP resource ceilings.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ProfileExportAssemblyLimits {
+    /// Strict limits before allocating canonical manifest JSON.
+    pub manifest_json: ProfileManifestJsonWriteLimits,
+    /// Strict limits before allocating final stored ZIP framing.
+    pub zip: ProfileStoredZipWriteLimits,
+}
+
+/// Failure before any complete profile artifact is exposed.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum ProfileExportAssemblyError {
+    /// The bounded list of borrowed metadata slots could not be reserved.
+    AllocationFailed,
+    /// Typed manifest could not be encoded within declared JSON limits.
+    ManifestJson(ProfileManifestJsonWriteError),
+    /// Supplied ZIP member count disagrees with the manifest declaration count.
+    PayloadCountMismatch {
+        /// Declared non-root member count.
+        declared: usize,
+        /// Number of supplied non-root payloads.
+        supplied: usize,
+    },
+    /// Sorted caller payload path differs from the exact declared path.
+    PayloadPathMismatch {
+        /// Zero-based index in canonical manifest entry ordering.
+        index: usize,
+    },
+    /// A declared length or SHA-256 digest disagrees with actual payload bytes.
+    PayloadVerification {
+        /// Zero-based index in canonical manifest entry ordering.
+        index: usize,
+        /// Verified failure of one exact declared member.
+        reason: ProfileEntryVerificationError,
+    },
+    /// The canonical ZIP framing limits or invariants refuse output.
+    Zip(ProfileStoredZipWriteError),
+}
+
+/// Owned and fully byte-verified profile ZIP, without file-write authority.
+///
+/// The complete archive and root fingerprints identify bytes, not identity of
+/// an external source or destination. This type accepts no session state.
+#[derive(Debug)]
+pub struct ProfileExportArtifact {
+    archive_sha256: Sha256Digest,
+    bytes: Vec<u8>,
+    root_sha256: Sha256Digest,
+}
+
+impl ProfileExportArtifact {
+    /// SHA-256 of the complete exact canonical ZIP byte sequence.
+    #[must_use]
+    pub const fn archive_sha256(&self) -> Sha256Digest {
+        self.archive_sha256
+    }
+
+    /// Borrow the complete ZIP bytes; this is not a filesystem permission.
+    #[must_use]
+    pub fn bytes(&self) -> &[u8] {
+        &self.bytes
+    }
+
+    /// SHA-256 of the exact canonical manifest root JSON bytes.
+    #[must_use]
+    pub const fn root_sha256(&self) -> Sha256Digest {
+        self.root_sha256
+    }
+}
+
+fn sorted_entries(
+    entries: &[ProfileManifestEntry],
+) -> Result<Vec<&ProfileManifestEntry>, ProfileExportAssemblyError> {
+    let mut sorted = Vec::new();
+    sorted
+        .try_reserve_exact(entries.len())
+        .map_err(|_error| ProfileExportAssemblyError::AllocationFailed)?;
+    sorted.extend(entries);
+    sorted.sort_unstable_by(|left, right| left.path.cmp(&right.path));
+    Ok(sorted)
+}
+
+fn sorted_payloads<'bytes>(
+    payloads: &'bytes [ProfileExportPayload<'bytes>],
+) -> Result<
+    Vec<&'bytes ProfileExportPayload<'bytes>>,
+    ProfileExportAssemblyError,
+> {
+    let mut sorted: Vec<&ProfileExportPayload<'_>> = Vec::new();
+    sorted
+        .try_reserve_exact(payloads.len())
+        .map_err(|_error| ProfileExportAssemblyError::AllocationFailed)?;
+    sorted.extend(payloads);
+    sorted.sort_unstable_by(|left, right| left.path.cmp(right.path));
+    Ok(sorted)
+}
+
+/// Assemble complete verified profile ZIP bytes without importing or exporting.
+///
+/// First checks typed manifest JSON and the exact supplied payload inventory,
+/// then length-before-SHA-256 verifies **all** non-root bytes. Only after all
+/// payloads match does the canonical stored-ZIP writer allocate final output.
+/// The independent JSON and ZIP limits include the root bytes. Caller payload
+/// order and manifest declaration order never change the resulting archive.
+///
+/// Nothing here attests the origin of semantic profile data, authorizes a file
+/// path, writes any target, or accepts a profile into the live session.
+///
+/// # Errors
+///
+/// Rejects invalid declarations, path/count mismatch, digest mismatch or
+/// archive limits, without returning partial artifacts.
+pub fn assemble_profile_export_artifact(
+    manifest: &ProfileManifest,
+    payloads: &[ProfileExportPayload<'_>],
+    supported_required_features: &[&str],
+    limits: ProfileExportAssemblyLimits,
+) -> Result<ProfileExportArtifact, ProfileExportAssemblyError> {
+    let root = write_canonical_profile_manifest_json(
+        manifest, supported_required_features, limits.manifest_json,
+    )
+    .map_err(ProfileExportAssemblyError::ManifestJson)?;
+    if payloads.len() != manifest.entries.len() {
+        return Err(ProfileExportAssemblyError::PayloadCountMismatch {
+            declared: manifest.entries.len(),
+            supplied: payloads.len(),
+        });
+    }
+    let declared = sorted_entries(&manifest.entries)?;
+    let supplied = sorted_payloads(payloads)?;
+    for (index, (entry, payload)) in
+        declared.iter().zip(&supplied).enumerate()
+    {
+        if entry.path != payload.path {
+            return Err(ProfileExportAssemblyError::PayloadPathMismatch {
+                index,
+            });
+        }
+        let _evidence = verify_profile_entry_bytes(entry, payload.bytes)
+            .map_err(|reason| {
+                ProfileExportAssemblyError::PayloadVerification {
+                    index, reason,
+                }
+            })?;
+    }
+
+    let count = declared.len()
+        .checked_add(1)
+        .ok_or(ProfileExportAssemblyError::Zip(
+            ProfileStoredZipWriteError::UnsupportedZip64,
+        ))?;
+    let mut members = Vec::new();
+    members
+        .try_reserve_exact(count)
+        .map_err(|_error| ProfileExportAssemblyError::AllocationFailed)?;
+    let mut wrote_root = false;
+    for (entry, payload) in declared.iter().zip(&supplied) {
+        if !wrote_root && entry.path.as_str() > PROFILE_MANIFEST_PATH {
+            members.push(ProfileStoredZipMember {
+                bytes: &root,
+                name: PROFILE_MANIFEST_PATH,
+            });
+            wrote_root = true;
+        }
+        members.push(ProfileStoredZipMember {
+            bytes: payload.bytes,
+            name: &entry.path,
+        });
+    }
+    if !wrote_root {
+        members.push(ProfileStoredZipMember {
+            bytes: &root,
+            name: PROFILE_MANIFEST_PATH,
+        });
+    }
+    let bytes = write_stored_profile_zip(&members, limits.zip)
+        .map_err(ProfileExportAssemblyError::Zip)?;
+    Ok(ProfileExportArtifact {
+        archive_sha256: sha256_profile_bytes(&bytes),
+        bytes,
+        root_sha256: sha256_profile_bytes(&root),
+    })
+}

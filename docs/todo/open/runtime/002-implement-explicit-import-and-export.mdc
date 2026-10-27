@@ -375,3 +375,23 @@ The source-bound verifier also admits an exact manifest-only ZIP with an
 empty declaration inventory and a zero-byte, zero-entry payload budget. Its
 sealed result exposes no member payload, including `manifest.json`. This
 proves empty profiles do not require artificial payload allocations.
+
+## In-memory complete profile Export artifact evidence
+
+The new `atrament_profile_export_assembly` application combines validated
+canonical manifest JSON, an exact caller-supplied payload set and stored-only
+ZIP framing into one owned artifact. It sorts paths without normalization,
+requires a one-to-one declared/supplied inventory and verifies every member's
+byte length before comparing its SHA-256 digest. Only a fully admitted set can
+produce a complete archive, its root fingerprint and its archive fingerprint.
+
+An integration fixture decodes the resulting ZIP root and verifies every
+member through the independent source-attached Import path. Negative fixtures
+exercise missing and unexpected members, duplicate or divergent names,
+early/late digest mismatch, length-before-digest precedence and resource caps.
+A generated 256-case corpus proves canonical byte identity under manifest and
+payload reordering and rejects corrupted members without partial artifacts.
+
+This is a pure **in-memory** profile artifact, not an Export command. A trusted
+caller-selected path adapter, durable atomic commit, overwrite/retry handling,
+section encoders and session lifecycle binding still need implementation.

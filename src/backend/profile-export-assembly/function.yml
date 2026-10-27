@@ -1,0 +1,9 @@
+identity:
+  id: function:profile-export-assembly
+  name: profile-export-assembly
+  path: src/backend/profile-export-assembly
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: application
