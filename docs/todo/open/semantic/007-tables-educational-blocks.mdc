@@ -63,6 +63,14 @@ after complete-grid validation. Generated and exhaustive occupancy oracles check
 that count with identical invalid-grid failure precedence, including the full
 nonzero `u32` cell-span range without per-column allocation.
 
+Wide tables with thousands of interleaved inherited row spans now skip earlier
+active intervals by binary search rather than scanning every inherited cell for
+every placement. The first possible overlap remains the only overlap candidate,
+preserving the existing column-span and row-span rejection precedence. A new
+8,192-pair interleaved-grid fixture and an adjacent inherited-span fixture
+exercise the compact walk; generated and exhaustive occupancy oracles continue
+to check exact placements, typed errors, and validated topology behavior.
+
 A constructor-sealed logical-topology view now binds one exact table to its
 validated column count and complete caller-order cell placements. The borrowed
 evidence cannot survive mutation of that table, and generated plus exhaustive

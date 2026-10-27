@@ -1919,7 +1919,11 @@ fn table_grid_advance_cursor(
     mut cursor: u64,
     active: &[TableActiveSpan],
 ) -> u64 {
-    for span in active {
+    // Active spans are non-overlapping and sorted by start, hence also by end.
+    // Skip completed columns without rescanning every preceding row span for
+    // each cell in a wide table.
+    let first = active.partition_point(|span| span.end <= cursor);
+    for span in active.get(first..).unwrap_or_default() {
         if cursor < span.start {
             break;
         }
@@ -1942,11 +1946,16 @@ where
     let end = cursor
         .checked_add(columns)
         .ok_or(TableGridError::ColumnSpan { cell: cell.id })?;
+    // The first active span ending after the cursor is the only one that
+    // can overlap a new cell: active intervals cannot overlap each other.
+    let next_active = context
+        .active
+        .partition_point(|span| span.end <= cursor);
     if end > context.width
         || context
             .active
-            .iter()
-            .any(|span| span.start < end && cursor < span.end)
+            .get(next_active)
+            .is_some_and(|span| span.start < end)
     {
         return Err(TableGridError::ColumnSpan { cell: cell.id });
     }

@@ -1134,6 +1134,62 @@ fn maximum_logical_colspan_stays_compact() {
 }
 
 #[test]
+fn wide_interleaved_row_spans_preserve_compact_grid_placements() {
+    // Each second-row cell follows a different inherited row span. Walking
+    // every active span per new cell would make this fixture quadratic.
+    const PAIRS: u32 = 8_192;
+    let mut first = Vec::new();
+    let mut second = Vec::new();
+    for index in 0..PAIRS {
+        first.push(grid_cell(index * 2 + 1, 1, 2));
+        first.push(grid_cell(index * 2 + 2, 1, 1));
+        second.push(grid_cell(PAIRS * 2 + index + 1, 1, 1));
+    }
+    let table = Table {
+        id: 1,
+        rows: vec![grid_row(1, first), grid_row(2, second)],
+    };
+    assert_eq!(table.logical_column_count(), Ok(u64::from(PAIRS) * 2));
+    let topology = table
+        .validated_logical_topology()
+        .expect("interleaved valid table");
+    assert_eq!(topology.cell_placements().len(), PAIRS as usize * 3);
+    for index in [0, 1, PAIRS / 2, PAIRS - 1] {
+        let start = u64::from(index) * 2;
+        assert_eq!(
+            topology.cell_covering(1, start).map(|cell| cell.cell),
+            Some(index * 2 + 1),
+        );
+        assert_eq!(
+            topology.cell_covering(1, start + 1).map(|cell| cell.cell),
+            Some(PAIRS * 2 + index + 1),
+        );
+    }
+}
+
+#[test]
+fn adjacent_inherited_spans_skip_entire_occupied_run() {
+    let table = Table {
+        id: 1u32,
+        rows: vec![
+            grid_row(1, vec![
+                grid_cell(10, 1, 2),
+                grid_cell(11, 1, 2),
+                grid_cell(12, 1, 2),
+                grid_cell(13, 1, 1),
+            ]),
+            grid_row(2, vec![grid_cell(20, 1, 1)]),
+        ],
+    };
+    assert_eq!(table.validate_grid(), Ok(()));
+    let topology = table
+        .validated_logical_topology()
+        .expect("adjacent inherited spans");
+    assert_eq!(topology.cell_covering(1, 2).map(|cell| cell.cell), Some(12));
+    assert_eq!(topology.cell_covering(1, 3).map(|cell| cell.cell), Some(20));
+}
+
+#[test]
 fn logical_cell_placements_reuse_validated_merged_grid_topology() {
     let table = Table {
         id: 100u32,
