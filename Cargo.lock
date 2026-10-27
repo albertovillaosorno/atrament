@@ -550,6 +550,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "atrament_profile_import_verification"
+version = "0.1.0"
+dependencies = [
+ "atrament_explicit_file_path_intent",
+ "atrament_handwriting_profile_container",
+ "atrament_profile_entry_sha256",
+ "atrament_profile_import_preflight",
+ "atrament_profile_json_syntax",
+ "atrament_profile_manifest_json_codec",
+ "atrament_profile_stored_zip_writer",
+ "atrament_profile_zip_reader",
+]
+
+[[package]]
 name = "atrament_profile_json_syntax"
 version = "0.1.0"
 

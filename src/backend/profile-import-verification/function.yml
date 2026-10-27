@@ -1,0 +1,9 @@
+identity:
+  id: function:profile-import-verification
+  name: profile-import-verification
+  path: src/backend/profile-import-verification
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: composition

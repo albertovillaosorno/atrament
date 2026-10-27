@@ -79,6 +79,7 @@ members = [
     "src/backend/profile-entry-sha256",
     "src/backend/profile-entry-stream-reader",
     "src/backend/profile-import-preflight",
+    "src/backend/profile-import-verification",
     "src/backend/profile-manifest-json-codec",
     "src/backend/profile-json-syntax",
     "src/backend/profile-stored-zip-writer",
@@ -162,6 +163,7 @@ atrament_physical_page_profile = { path = "src/backend/physical-page-profile" }
 atrament_profile_entry_sha256 = { path = "src/backend/profile-entry-sha256" }
 atrament_profile_entry_stream_reader = { path = "src/backend/profile-entry-stream-reader" }
 atrament_profile_import_preflight = { path = "src/backend/profile-import-preflight" }
+atrament_profile_import_verification = { path = "src/backend/profile-import-verification" }
 atrament_profile_json_syntax = { path = "src/backend/profile-json-syntax" }
 atrament_profile_manifest_json_codec = { path = "src/backend/profile-manifest-json-codec" }
 atrament_profile_stored_zip_writer = { path = "src/backend/profile-stored-zip-writer" }

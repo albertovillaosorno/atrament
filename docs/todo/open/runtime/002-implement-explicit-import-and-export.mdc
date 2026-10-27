@@ -350,3 +350,16 @@ manifest to its exact checked archive and root SHA-256 fingerprint. This removes
 a detached-manifest substitution opportunity for future Import composition.
 It still requires explicit caller-selected file evidence, inventory and entry
 hash checks, typed sections and session acceptance before completing Import.
+
+The new read-only `atrament_profile_import_verification` application now
+accepts only a source-sealed decoded ZIP manifest and caller-classified
+`ImportProfile` intent, copies the ZIP's actual sorted member names into
+caller-owned slots, admits the typed declaration and resource budget, then
+checks **every** declared payload's length and SHA-256 before exposing borrowed
+member bytes. The result ties the same archive and root digest to its verified
+manifest instead of allowing a caller to pair unrelated values. Seven fixtures
+cover success, wrong-purpose priority, atomic undersized-slot refusal,
+required-feature and resource limits, undeclared members, CRC-correct changed
+bytes, and byte-length-before-digest precedence. A trusted selected-file
+adapter, actual source provenance, typed section decoding, and explicit
+session-state acceptance remain open; no filesystem effect occurs here.
