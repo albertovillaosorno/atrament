@@ -143,6 +143,21 @@ Jig-wide catalog with the repository-pinned versions through a separately
 verified validator update, then run a fresh committed-HEAD `jig check` before
 claiming clean validation.
 
+### Frontend package materialization during validation
+
+Running `pnpm run check:frontend`, `pnpm run test:frontend`, or
+`pnpm run build:frontend` can materialize ignored `node_modules` links under
+the repository root and `src/browser/workspace/`. The currently configured
+Jig package and portability rules require those runtime dependency artifacts
+to remain under `.dependencies/pnpm`, so a frontend test can pass while a later
+Jig check reports `JIG-PERF-PKG-006` and `JIG-PORT-006`.
+
+Before running frontend checks, inspect whether those directories already exist.
+If the commands create them during the current session, verify they are
+untracked and session-owned before removing only those new materializations.
+Do not remove pre-existing dependency trees or shared caches just to satisfy
+the gate. Always run Jig again after test-created artifacts are accounted for.
+
 ### Planning-generation boundary
 
 A clean planning-generation check does not pre-approve implementation source.
