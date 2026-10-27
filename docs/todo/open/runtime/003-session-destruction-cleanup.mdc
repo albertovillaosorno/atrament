@@ -45,6 +45,11 @@ and forced process
 death both leave a fresh owner with no accepted revision, history position, raw
 bytes, or prior media-job authority.
 
+A 128-job interleaving regression additionally verifies that independent
+process-local media jobs preserve their own cleanup requirements, failed
+cleanup retries, and settled states even when supplied with another job's
+waveform identity. This is in-memory bookkeeping only, not actual file cleanup.
+
 Media decoding and actual temporary
 conversion-file cleanup remain open because no filesystem intermediate exists
 yet.

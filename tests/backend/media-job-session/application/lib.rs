@@ -218,6 +218,71 @@ fn settled_job_rejects_late_cleanup_events_without_recreating_work() {
 }
 
 #[test]
+fn many_interleaved_cleanup_jobs_never_accept_another_jobs_waveform() {
+    let mut session = MediaJobSessionService::new();
+    let mut jobs = Vec::new();
+    for index in 0..128_usize {
+        let job = session.begin_job().expect("bounded fresh job identity");
+        let waveform = if index % 4 == 0 {
+            None
+        } else {
+            Some(session.register_waveform_intermediate(job)
+                .expect("bounded distinct waveform identity"))
+        };
+        let outcome = match index % 3 {
+            0 => MediaJobOutcome::Cancelled,
+            1 => MediaJobOutcome::Failed,
+            _ => MediaJobOutcome::Succeeded,
+        };
+        let expected = if waveform.is_some() {
+            MediaJobCleanupStatus::CleanupRequired
+        } else {
+            MediaJobCleanupStatus::Settled
+        };
+        assert_eq!(session.finish_job(job, outcome), Ok(expected));
+        jobs.push((job, waveform));
+    }
+
+    for (index, (job, waveform)) in jobs.iter().copied().enumerate() {
+        let expected = match (index % 4, waveform) {
+            (0, None) => MediaJobCleanupStatus::Settled,
+            (1, Some(_)) => MediaJobCleanupStatus::CleanupRequired,
+            (2, Some(_)) => MediaJobCleanupStatus::CleanupRetryRequired,
+            (3, Some(_)) => MediaJobCleanupStatus::Settled,
+            _ => panic!("generated job shape changed"),
+        };
+        if let Some(owned) = waveform {
+            let wrong = jobs[(index + 1) % jobs.len()]
+                .1
+                .or(jobs[(index + 2) % jobs.len()].1)
+                .expect("neighbor has waveform");
+            let observed = MediaJobSessionError::WaveformMismatch {
+                expected: owned,
+            };
+            if index % 4 == 2 {
+                assert_eq!(
+                    session.record_cleanup_failure(job, owned),
+                    Ok(MediaJobCleanupStatus::CleanupRetryRequired),
+                );
+            }
+            assert_eq!(
+                session.record_cleanup_success(job, wrong),
+                Err(observed),
+            );
+            if index % 4 == 3 {
+                assert_eq!(
+                    session.record_cleanup_success(job, owned),
+                    Ok(MediaJobCleanupStatus::Settled),
+                );
+            }
+        }
+        assert_eq!(session.cleanup_status(job), Ok(expected));
+    }
+    assert!(!session.is_empty());
+    assert_eq!(jobs.len(), 128);
+}
+
+#[test]
 fn all_terminal_session_cleanup_paths_match_state_machine() {
     let outcomes = [
         MediaJobOutcome::Cancelled,
