@@ -961,3 +961,96 @@ fn every_accepted_legacy_header_variant_reframes_to_exact_writer_bytes() {
     assert_eq!(checked, 15);
     assert_eq!(local_offset, central);
 }
+
+#[test]
+fn generated_stored_writer_framing_equivalence_is_byte_exact() {
+    const PATHS: [&str; 7] = [
+        "assets/000.bin",
+        "assets/ñ.webp",
+        "assets/🖌️.webp",
+        "manifest.json",
+        "sections/000.json",
+        "sections/ß.json",
+        "sections/😀.json",
+    ];
+    let generous = ProfileStoredZipWriteLimits {
+        maximum_archive_bytes: 100_000,
+        maximum_entries: PATHS.len(),
+        maximum_entry_bytes: 1_024,
+        maximum_total_bytes: 3_000,
+    };
+    let mut seed = 0x4154_5241_4d45_4e54u64;
+    let mut cases = 0usize;
+    for case in 0..1_024usize {
+        let mut selected = Vec::new();
+        let mut owned = Vec::new();
+        for (index, path) in PATHS.iter().enumerate() {
+            seed = seed.wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
+            if index != 3 && seed & 3 == 0 {
+                continue;
+            }
+            let size = if index == 3 {
+                // The byte writer never parses root JSON: some roots are
+                // intentionally invalid while their ZIP framing stays exact.
+                [0usize, 2, 7, 31][case % 4]
+            } else {
+                ((seed >> 19) % 161) as usize
+            };
+            let mut payload = Vec::with_capacity(size);
+            for _ in 0..size {
+                seed = seed.wrapping_mul(2862933555777941757)
+                    .wrapping_add(3037000493);
+                payload.push((seed >> 48) as u8);
+            }
+            owned.push((path, payload));
+        }
+        for (path, payload) in &owned {
+            selected.push(member(path, payload));
+        }
+        assert!(selected.iter().any(|item| item.name == "manifest.json"));
+        let planned = planned_stored_profile_zip_bytes(&selected, generous)
+            .expect("finite inputs fit deterministic ZIP32 plan");
+        let canonical = write_stored_profile_zip(&selected, generous)
+            .expect("all generated members have safe sorted paths");
+        assert_eq!(canonical.len(), planned, "case={case}");
+        let archive = read_stored_profile_zip(&canonical, ProfileZipReadLimits {
+            maximum_archive_bytes: planned,
+            maximum_entries: selected.len(),
+            maximum_entry_bytes: generous.maximum_entry_bytes,
+            maximum_total_bytes: generous.maximum_total_bytes,
+        }).expect("independent strict reader must accept writer output");
+        assert!(archive.matches_stored_writer_framing(), "case={case}");
+        assert!(archive.matches_fixed_writer_metadata(), "case={case}");
+        assert_eq!(archive.source_bytes(), canonical, "case={case}");
+        let recovered = archive.entries().iter()
+            .map(|entry| member(entry.name(), entry.bytes()))
+            .collect::<Vec<_>>();
+        assert_eq!(recovered, selected, "case={case}");
+        let encoded_again = write_stored_profile_zip(&recovered, generous)
+            .expect("proven checked inputs re-encode without byte drift");
+        assert_eq!(encoded_again, canonical, "case={case}");
+        assert_eq!(archive.source_sha256(), sha256_profile_bytes(&canonical));
+        // One matching DOS date edit in the first local and central headers
+        // retains CRC-verified payloads but can never claim writer framing.
+        let directory = u32::from_le_bytes(
+            canonical[canonical.len() - 6..canonical.len() - 2]
+                .try_into().expect("central directory byte offset"),
+        ) as usize;
+        let mut legacy = canonical.clone();
+        legacy[12..14].copy_from_slice(&[3, 0]);
+        legacy[directory + 14..directory + 16]
+            .copy_from_slice(&[3, 0]);
+        let observed = read_stored_profile_zip(&legacy, ProfileZipReadLimits {
+            maximum_archive_bytes: legacy.len(),
+            maximum_entries: selected.len(),
+            maximum_entry_bytes: generous.maximum_entry_bytes,
+            maximum_total_bytes: generous.maximum_total_bytes,
+        }).expect("metadata changed without affecting stored entry proof");
+        assert!(!observed.matches_stored_writer_framing(), "case={case}");
+        assert_eq!(observed.entries(), archive.entries(), "case={case}");
+        assert_ne!(observed.source_sha256(), archive.source_sha256());
+        cases += 1;
+    }
+    assert_eq!(cases, 1_024);
+}

@@ -360,3 +360,9 @@ slots without allocating a fresh vector or copying string bytes. Insufficient
 space returns an exact required count without modifying a destination slot;
 the full 65,534-member ZIP32 boundary retains source-pointer identity and the
 extra output slots remain unchanged. This is inventory evidence, not Import.
+
+A 1,024-case deterministic generated ZIP32 corpus now exercises varied member
+subsets, Unicode names, binary lengths and opaque root payloads through both
+byte writer and checked reader. Every emitted source must reproduce exactly
+from its borrowed entries; a CRC-valid date mutation must clear the fixed
+writer-framing claim without changing member contents.

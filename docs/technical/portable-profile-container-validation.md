@@ -85,6 +85,13 @@ on each of three member positions. All remain structurally readable, return
 `false` for writer framing, retain the exact same member evidence and produce
 the byte-identical fixed-metadata archive when deliberately reframed in memory.
 
+A further 1,024-case seeded byte writer/reader corpus varies present entry
+names, Unicode archive paths, stored payload lengths and opaque root bytes.
+Each result must match the exact preflight count, retain borrowed members and
+SHA-256 source identity, report fixed writer framing and serialize again into
+byte-for-byte identical ZIP records. Changing only one matching local/central
+DOS date preserves every member but must clear that writer-framing marker.
+
 The reader recomputes ZIP CRC-32 over each bounded stored entry. This checks
 transport framing only: **CRC-32 does not establish manifest SHA-256
 integrity**. An additional root-manifest accessor checks a caller-chosen byte
