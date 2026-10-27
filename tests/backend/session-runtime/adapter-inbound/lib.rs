@@ -3320,6 +3320,30 @@ fn every_body_byte_preserves_request_head_admission() {
 }
 
 #[test]
+fn direct_draft_routing_rejects_transport_oversized_header_before_mutation() {
+    // A direct in-process call must not bypass the socket reader's 16 KiB
+    // request-head limit just because authentication and the body are valid.
+    let request = format!(
+        concat!(
+            "POST /api/session/task HTTP/1.1\r\n",
+            "Host: {}\r\nAuthorization: Bearer {}\r\n",
+            "Origin: {}\r\nX-Fill: {}\r\n",
+            "Content-Length: 4\r\n\r\nbody",
+        ),
+        EXPECTED_HOST, EXPECTED_SECRET, EXPECTED_ORIGIN,
+        "x".repeat(16 * 1024),
+    );
+    let mut draft = seeded_private_draft();
+    assert_eq!(
+        status_line(&route_with_draft(
+            request.as_bytes(), EXPECTED_HOST, &mut draft,
+        )),
+        "HTTP/1.1 400 Bad Request",
+    );
+    assert_private_draft_unchanged(&draft);
+}
+
+#[test]
 fn malformed_draft_body_framing_never_mutates_state() {
     let authorization = format!("Bearer {EXPECTED_SECRET}");
     let prefix = format!(

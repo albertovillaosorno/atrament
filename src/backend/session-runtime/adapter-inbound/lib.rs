@@ -832,6 +832,10 @@ fn route_handshake(
 
 fn request_body(request: &[u8]) -> Option<&[u8]> {
     let head_end = request_head_end(request)?;
+    // Direct in-process routing must obey the same header budget as TCP.
+    if head_end > MAX_HEADER_BYTES {
+        return None;
+    }
     let request_head = request.get(..head_end)?;
     // The socket reader and direct in-process router must apply the same
     // Expect/Transfer-Encoding refusal before any draft mutation.
