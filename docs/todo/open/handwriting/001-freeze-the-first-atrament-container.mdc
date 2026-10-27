@@ -372,3 +372,8 @@ names without allocating a separate inventory set. The sorted path rechecks
 order and membership, returns typed failures, and shares existing Import
 purpose, encoding and budget gates through opt-in read-only preflight.
 The general manifest inventory API remains order-agnostic and unchanged.
+
+The sorted profile Import path is also exercised with real CRC-checked ZIP
+members and actual declared SHA-256. Matching names and root syntax do not
+expose changed member bytes if a different CRC-valid ZIP supplies them:
+digest verification still rejects the substituted payload before decoding.

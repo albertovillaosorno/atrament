@@ -305,3 +305,9 @@ typed order/count errors and seals the same inventory as general preflight.
 An 8,192-case sorted mutation corpus and a 65,534-name ZIP32 boundary guard
 acceptance equivalence; the real CRC-checked ZIP fixture checks both paths.
 No typed manifest is constructed from root bytes, and no file is imported.
+
+A read-only CRC-correct ZIP regression now exercises sorted Import preflight
+through complete entry SHA-256 checks, preserving exact borrowed source bytes.
+An altered member with a valid new CRC and unchanged inventory still passes
+structural preflight but fails declared SHA-256, even though root syntax and
+its exact-source fingerprint remain unchanged. No profile is accepted.

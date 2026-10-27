@@ -1942,3 +1942,92 @@ fn empty_and_rootless_archives_can_copy_names_without_import_authority() {
         assert!(!archive.matches_stored_writer_framing());
     }
 }
+
+#[test]
+fn sorted_import_preflight_still_requires_real_member_sha256_evidence() {
+    let original = make_zip(&ENTRIES);
+    let checked = read_stored_profile_zip(&original, limits())
+        .expect("root and section have valid ZIP framing and CRC");
+    let selected = classify_explicit_file_path_intent(
+        ExplicitFilePurpose::ImportProfile,
+        ExplicitFilePathSource::CallerSelection,
+        PathBuf::from("selected/handwriting.atrament"),
+        ExplicitOverwriteIntent::PreserveExisting,
+    ).expect("trusted selection is independent of ZIP contents");
+    let manifest = ProfileManifest {
+        container_version: PROFILE_CONTAINER_VERSION.into(),
+        entries: vec![ProfileManifestEntry {
+            byte_length: 9,
+            digest: sha256_profile_bytes(b"123456789"),
+            media_type: "application/json".into(),
+            path: "sections/strokes.json".into(),
+        }],
+        optional_features: vec![],
+        profile_identity: "read-only-sha256-evidence".into(),
+        required_features: vec!["strokes".into()],
+    };
+    let budget = ProfileImportBudget {
+        maximum_declared_bytes: 9,
+        maximum_entries: 1,
+        maximum_entry_bytes: 9,
+    };
+    let encoding = atrament_handwriting_profile_container::
+        ProfileArchiveEncodingEvidence {
+            entry_encoding: atrament_handwriting_profile_container::
+                ProfileArchiveEntryEncoding::Stored,
+            platform_extras: atrament_handwriting_profile_container::
+                ProfileArchivePlatformExtras::Absent,
+            zip64_requirement: atrament_handwriting_profile_container::
+                ProfileZip64Requirement::Ordinary,
+            zip64_use: atrament_handwriting_profile_container::
+                ProfileZip64Use::Absent,
+        };
+    let mut names = ["unmodified"; 2];
+    assert_eq!(checked.copy_observed_paths(&mut names), Ok(2));
+    let preflight = preflight_explicit_profile_import_sorted(
+        &selected, &manifest, &["strokes"], &names, encoding, budget,
+    ).expect("exact sorted names and budget are independent of bytes");
+    let verified = verify_admitted_profile_zip_payloads(
+        &checked, preflight.inventory(),
+    ).expect("all member hashes must match before exposure");
+    assert_eq!(verified.verified_entry_count(), 1);
+    assert_eq!(verified.verified_entry_bytes("sections/strokes.json"),
+        Some(b"123456789".as_slice()));
+    assert_eq!(verified.verified_entry_bytes("manifest.json"), None);
+    let borrowed = verified.verified_entry_bytes("sections/strokes.json")
+        .expect("verified member bytes");
+    assert!(std::ptr::eq(borrowed.as_ptr(),
+        checked.entries()[1].bytes().as_ptr()));
+    let damaged = make_zip(&[
+        ENTRIES[0],
+        ("sections/strokes.json", b"123456788", 0xbcf3_09b0),
+    ]);
+    let mutated = read_stored_profile_zip(&damaged, limits())
+        .expect("new CRC-valid ZIP has identical admitted paths");
+    let mut changed_names = ["unmodified"; 2];
+    assert_eq!(mutated.copy_observed_paths(&mut changed_names), Ok(2));
+    let changed_preflight = preflight_explicit_profile_import_sorted(
+        &selected, &manifest, &["strokes"], &changed_names,
+        encoding, budget,
+    ).expect("structural Import preflight cannot prove entry hash");
+    assert_eq!(verify_admitted_profile_zip_payloads(
+        &mutated, changed_preflight.inventory(),
+    ).err(), Some(ProfileZipPayloadVerificationError::Entry {
+        index: 0,
+        reason: atrament_handwriting_profile_container::
+            ProfileEntryVerificationError::DigestMismatch,
+    }));
+    assert_ne!(mutated.source_sha256(), checked.source_sha256());
+    assert_eq!(mutated.admitted_root_json(ProfileJsonSyntaxLimits {
+        maximum_bytes: 2,
+        maximum_nesting: 1,
+        maximum_object_members: 1,
+        maximum_values: 1,
+    }).expect("unchanged root grammar").source_sha256(),
+    checked.admitted_root_json(ProfileJsonSyntaxLimits {
+        maximum_bytes: 2,
+        maximum_nesting: 1,
+        maximum_object_members: 1,
+        maximum_values: 1,
+    }).expect("unchanged root grammar").source_sha256());
+}

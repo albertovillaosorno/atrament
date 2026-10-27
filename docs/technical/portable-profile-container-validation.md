@@ -141,6 +141,13 @@ An 8,192-case generated comparison checks agreement on acceptance with the
 existing order-agnostic validator. A 65,534-name fixture exercises the ZIP32
 entry ceiling, and the read-only real-ZIP fixture compares both preflights.
 
+One additional CRC-valid ZIP fixture exercises that sorted Import path through
+real SHA-256 verification of every declared member before exposing its bytes.
+A second ZIP preserves the same names and admitted root but changes the member
+and updates its framing CRC: structural preflight still succeeds, while exact
+SHA-256 payload verification rejects the altered bytes. This demonstrates that
+ordered inventory admission cannot substitute for cryptographic evidence.
+
 The typed manifest must still be parsed, checked and matched against those
 observations, and SHA-256 must be independently measured before any section
 interpretation or profile acceptance. ZIP64, archive-file I/O, canonical JSON,
