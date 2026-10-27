@@ -227,3 +227,9 @@ without retaining an entire member as one allocation. The pure chunk verifier
 checks declared byte length before comparing SHA-256 and does not open any file,
 validate source path authority, or accept a profile. Actual I/O errors and
 explicit path/source admission remain responsibilities of future adapters.
+
+A fallible variant of the fixed-memory chunk verifier now preserves upstream
+transport errors distinctly from short streams, declared length failures or
+SHA-256 mismatches. The verifier consumes only caller-supplied in-memory
+`Result` chunks; actual file access, interruption, authorization, cleanup and
+profile acceptance remain unimplemented in the adapter layer.

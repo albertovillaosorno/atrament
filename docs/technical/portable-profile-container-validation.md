@@ -342,6 +342,16 @@ lengths 0 through 256; padding boundaries, empty chunks and varied strides;
 copyable prefix state divergence; length-before-digest failure precedence; and
 early stream consumption termination. A CRC-correct stored ZIP fixture proves
 that a modified payload still fails its declared SHA-256 under chunked reads.
+A companion `verify_profile_entry_chunks_fallible` API accepts chunks that
+can report a separate upstream error. It propagates the original read failure
+without reinterpreting it as an ordinary truncated stream, length mismatch or
+completed digest—even if a complete byte prefix arrived first.
+
+Ordinary and fallible iterators share one internal length-before-digest
+accumulator, and overlong streams still stop without requesting subsequent
+input. This remains a pure in-memory primitive, not an I/O adapter or
+path-authority grant.
+
 None of this freezes typed manifest field names or introduces actual file I/O.
 
 ### Complete stored member SHA-256 projection

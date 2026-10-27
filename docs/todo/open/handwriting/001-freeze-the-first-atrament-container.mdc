@@ -246,3 +246,8 @@ rejecting bit-length overflow. A read-only typed-entry chunk verifier refuses
 oversized prefixes before hashing them, short streams before digest comparison,
 and altered CRC-correct ZIP payloads at SHA-256 comparison. The complete file
 transport and manifest-root wire binding remain open.
+
+Fallible chunk verification now returns original upstream errors instead of
+silently accepting partial input as an EOF or conflating a read failure with a
+cryptographic mismatch. Both fallible and ordinary SHA-256 chunk paths share
+one byte-length and digest gate; no ZIP/file source authority is introduced.

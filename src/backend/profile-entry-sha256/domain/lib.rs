@@ -134,6 +134,15 @@ pub enum ProfileChunkVerificationError {
     Hasher(ProfileSha256UpdateError),
 }
 
+/// Verification failure for a source that can separately report read errors.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ProfileFallibleChunkVerificationError<E> {
+    /// The upstream source failed, not a declared length or digest mismatch.
+    Input(E),
+    /// The admitted chunk data failed its separate SHA-256 or length check.
+    Verification(ProfileChunkVerificationError),
+}
+
 /// Fixed-memory incremental SHA-256 state for already bounded input chunks.
 ///
 /// The caller still owns byte-source admission and resource ceilings. This
@@ -146,6 +155,74 @@ pub struct ProfileSha256State {
     buffered: usize,
     length_bytes: u64,
     state: [u32; 8],
+}
+
+// Shared verifier state prevents ordinary and fallible byte iterators from
+// disagreeing about length-overrun precedence or digest acceptance.
+#[derive(Clone, Copy)]
+struct EntryChunkAccumulator<'manifest> {
+    declaration: &'manifest ProfileManifestEntry,
+    hasher: ProfileSha256State,
+}
+
+impl EntryChunkAccumulator<'_> {
+    fn finish(
+        self,
+    ) -> Result<ProfileEntryEvidence, ProfileChunkVerificationError> {
+        let observed = self.hasher.bytes_hashed();
+        if observed != self.declaration.byte_length {
+            return Err(ProfileChunkVerificationError::Entry(
+                ProfileEntryVerificationError::ByteLengthMismatch {
+                    declared: self.declaration.byte_length,
+                    observed,
+                },
+            ));
+        }
+        let evidence = ProfileEntryEvidence {
+            byte_length: observed,
+            digest: self.hasher.finish(),
+        };
+        verify_profile_entry(self.declaration, evidence)
+            .map_err(ProfileChunkVerificationError::Entry)?;
+        Ok(evidence)
+    }
+
+    const fn new(
+        declaration: &ProfileManifestEntry,
+    ) -> EntryChunkAccumulator<'_> {
+        EntryChunkAccumulator {
+            declaration,
+            hasher: ProfileSha256State::new(),
+        }
+    }
+
+    fn update(
+        &mut self,
+        chunk: &[u8],
+    ) -> Result<(), ProfileChunkVerificationError> {
+        let additional = u64::try_from(chunk.len()).map_err(|_overflow| {
+            ProfileChunkVerificationError::Hasher(
+                ProfileSha256UpdateError::MessageTooLong,
+            )
+        })?;
+        let observed =
+            self.hasher.bytes_hashed().checked_add(additional).ok_or(
+                ProfileChunkVerificationError::Hasher(
+                    ProfileSha256UpdateError::MessageTooLong,
+                ),
+            )?;
+        if observed > self.declaration.byte_length {
+            return Err(ProfileChunkVerificationError::Entry(
+                ProfileEntryVerificationError::ByteLengthMismatch {
+                    declared: self.declaration.byte_length,
+                    observed,
+                },
+            ));
+        }
+        self.hasher
+            .update(chunk)
+            .map_err(ProfileChunkVerificationError::Hasher)
+    }
 }
 
 impl Default for ProfileSha256State {
@@ -408,46 +485,43 @@ pub fn verify_profile_entry_chunks<'bytes, I>(
 where
     I: IntoIterator<Item = &'bytes [u8]>,
 {
-    let mut hasher = ProfileSha256State::new();
+    let mut verifier = EntryChunkAccumulator::new(declaration);
     for chunk in chunks {
-        let additional = u64::try_from(chunk.len()).map_err(|_overflow| {
-            ProfileChunkVerificationError::Hasher(
-                ProfileSha256UpdateError::MessageTooLong,
-            )
-        })?;
-        let observed = hasher.bytes_hashed().checked_add(additional).ok_or(
-            ProfileChunkVerificationError::Hasher(
-                ProfileSha256UpdateError::MessageTooLong,
-            ),
-        )?;
-        if observed > declaration.byte_length {
-            return Err(ProfileChunkVerificationError::Entry(
-                ProfileEntryVerificationError::ByteLengthMismatch {
-                    declared: declaration.byte_length,
-                    observed,
-                },
-            ));
-        }
-        hasher
-            .update(chunk)
-            .map_err(ProfileChunkVerificationError::Hasher)?;
+        verifier.update(chunk)?;
     }
-    let observed = hasher.bytes_hashed();
-    if observed != declaration.byte_length {
-        return Err(ProfileChunkVerificationError::Entry(
-            ProfileEntryVerificationError::ByteLengthMismatch {
-                declared: declaration.byte_length,
-                observed,
-            },
-        ));
+    verifier.finish()
+}
+
+/// Verify a declared entry from ordered chunks that can fail independently.
+///
+/// Upstream errors propagate without being mislabeled as missing bytes,
+/// malformed digests, or successful end-of-stream. This function never reads
+/// from files: the caller still owns source authentication, path policy,
+/// I/O, aggregate budget enforcement and cleanup. It shares the exact
+/// length-before-digest policy of `verify_profile_entry_chunks`.
+///
+/// # Errors
+///
+/// Returns the original input error unchanged or the typed entry verifier
+/// failure; an input failure never yields partially accepted digest evidence.
+pub fn verify_profile_entry_chunks_fallible<'bytes, I, E>(
+    declaration: &ProfileManifestEntry,
+    chunks: I,
+) -> Result<ProfileEntryEvidence, ProfileFallibleChunkVerificationError<E>>
+where
+    I: IntoIterator<Item = Result<&'bytes [u8], E>>,
+{
+    let mut verifier = EntryChunkAccumulator::new(declaration);
+    for chunk in chunks {
+        let bytes =
+            chunk.map_err(ProfileFallibleChunkVerificationError::Input)?;
+        verifier
+            .update(bytes)
+            .map_err(ProfileFallibleChunkVerificationError::Verification)?;
     }
-    let evidence = ProfileEntryEvidence {
-        byte_length: observed,
-        digest: hasher.finish(),
-    };
-    verify_profile_entry(declaration, evidence)
-        .map_err(ProfileChunkVerificationError::Entry)?;
-    Ok(evidence)
+    verifier
+        .finish()
+        .map_err(ProfileFallibleChunkVerificationError::Verification)
 }
 
 /// Verify one actual member byte slice against a typed manifest declaration.

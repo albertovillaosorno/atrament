@@ -37,8 +37,9 @@ use atrament_handwriting_profile_container::{
     Sha256Digest,
 };
 use atrament_profile_entry_sha256::{
-    ProfileChunkVerificationError, ProfileSha256State, sha256_profile_bytes,
-    verify_profile_entry_bytes, verify_profile_entry_chunks,
+    ProfileChunkVerificationError, ProfileFallibleChunkVerificationError,
+    ProfileSha256State, sha256_profile_bytes, verify_profile_entry_bytes,
+    verify_profile_entry_chunks, verify_profile_entry_chunks_fallible,
 };
 use std::fmt::Write as _;
 use std::iter::successors;
@@ -352,4 +353,128 @@ fn incremental_hasher_tracks_admitted_byte_length_including_pending_prefix() {
         assert_eq!(state.update(&data), Ok(()));
         assert_eq!(state.bytes_hashed(), previous + size as u64);
     }
+}
+
+#[test]
+fn fallible_chunked_sha256_preserves_source_error_identity() {
+    use std::io::ErrorKind;
+    let bytes = b"deliberate profile payload";
+    let entry = declaration(bytes);
+    let partial: [Result<&[u8], ErrorKind>; 3] = [
+        Ok(b"deliberate"),
+        Err(ErrorKind::PermissionDenied),
+        Ok(b" profile payload"),
+    ];
+    assert_eq!(
+        verify_profile_entry_chunks_fallible(&entry, partial),
+        Err(ProfileFallibleChunkVerificationError::Input(
+            ErrorKind::PermissionDenied,
+        ))
+    );
+    // Even a perfect complete prefix does not make a later source error
+    // look like successful completion or a missing-byte length error.
+    let complete_then_fail: [Result<&[u8], ErrorKind>; 2] =
+        [Ok(bytes), Err(ErrorKind::Interrupted)];
+    assert_eq!(
+        verify_profile_entry_chunks_fallible(&entry, complete_then_fail),
+        Err(ProfileFallibleChunkVerificationError::Input(
+            ErrorKind::Interrupted,
+        ))
+    );
+
+    let empty = declaration(b"");
+    let failed_empty: [Result<&[u8], ErrorKind>; 1] =
+        [Err(ErrorKind::UnexpectedEof)];
+    assert_eq!(
+        verify_profile_entry_chunks_fallible(&empty, failed_empty),
+        Err(ProfileFallibleChunkVerificationError::Input(
+            ErrorKind::UnexpectedEof,
+        ))
+    );
+}
+
+#[test]
+fn fallible_chunked_sha256_success_matches_infallible_and_slice_paths() {
+    use std::io::ErrorKind;
+    for length in [0usize, 1, 55, 56, 63, 64, 65, 127, 128, 129, 1023] {
+        let bytes = (0..length)
+            .map(|index| (index as u8).wrapping_mul(37).wrapping_add(11))
+            .collect::<Vec<_>>();
+        let entry = declaration(&bytes);
+        let expected = verify_profile_entry_bytes(&entry, &bytes)
+            .expect("known declaration for complete bytes");
+        for stride in [1usize, 2, 7, 63, 64, 65, 128, 256] {
+            let input = bytes.chunks(stride).map(Ok::<&[u8], ErrorKind>);
+            assert_eq!(
+                verify_profile_entry_chunks_fallible(&entry, input),
+                Ok(expected),
+                "length={length} stride={stride}"
+            );
+        }
+    }
+}
+
+#[test]
+fn fallible_chunked_sha256_preserves_length_and_digest_error_precedence() {
+    use std::io::ErrorKind;
+    let bytes = b"abc";
+    let mut entry = declaration(bytes);
+    entry.digest = sha256_profile_bytes(b"wrong");
+    let underflow: [Result<&[u8], ErrorKind>; 1] = [Ok(b"ab")];
+    assert_eq!(
+        verify_profile_entry_chunks_fallible(&entry, underflow),
+        Err(ProfileFallibleChunkVerificationError::Verification(
+            ProfileChunkVerificationError::Entry(
+                ProfileEntryVerificationError::ByteLengthMismatch {
+                    declared: 3,
+                    observed: 2,
+                },
+            ),
+        ))
+    );
+    let complete: [Result<&[u8], ErrorKind>; 1] = [Ok(bytes)];
+    assert_eq!(
+        verify_profile_entry_chunks_fallible(&entry, complete),
+        Err(ProfileFallibleChunkVerificationError::Verification(
+            ProfileChunkVerificationError::Entry(
+                ProfileEntryVerificationError::DigestMismatch,
+            ),
+        ))
+    );
+    let extra: [Result<&[u8], ErrorKind>; 2] = [Ok(bytes), Ok(b"x")];
+    assert_eq!(
+        verify_profile_entry_chunks_fallible(&entry, extra),
+        Err(ProfileFallibleChunkVerificationError::Verification(
+            ProfileChunkVerificationError::Entry(
+                ProfileEntryVerificationError::ByteLengthMismatch {
+                    declared: 3,
+                    observed: 4,
+                },
+            ),
+        ))
+    );
+}
+
+#[test]
+fn fallible_sha256_rejects_known_overrun_before_reading_later_error() {
+    use std::cell::Cell;
+    let entry = declaration(b"ab");
+    let reads = Cell::new(0usize);
+    let chunks: [Result<&[u8], &'static str>; 3] =
+        [Ok(b"ab"), Ok(b"z"), Err("unread transport failure")];
+    let observed = chunks.into_iter().inspect(|_chunk| {
+        reads.set(reads.get().saturating_add(1));
+    });
+    assert_eq!(
+        verify_profile_entry_chunks_fallible(&entry, observed),
+        Err(ProfileFallibleChunkVerificationError::Verification(
+            ProfileChunkVerificationError::Entry(
+                ProfileEntryVerificationError::ByteLengthMismatch {
+                    declared: 2,
+                    observed: 3,
+                },
+            ),
+        ))
+    );
+    assert_eq!(reads.get(), 2, "third source error was never read");
 }
