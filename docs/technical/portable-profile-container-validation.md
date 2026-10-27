@@ -67,9 +67,11 @@ prove canonical manifest JSON, typed profile identity, or Import authority.
 `matches_stored_writer_framing()` strengthens that indicator with the exact
 presence of `manifest.json` in the validated sorted archive. An empty or
 rootless stored ZIP may have all fixed metadata fields but still cannot have
-been emitted by the current writer, which requires that root. The check does
-not allocate or mutate bytes, and its `true` result can coexist with malformed
-root JSON because writer framing never interprets its opaque root payload.
+been emitted by the current writer, which requires that root.
+
+The check does not allocate or mutate bytes, and its `true` result can coexist
+with malformed root JSON because writer framing never interprets its opaque
+root payload.
 
 A cross-component test starts with a CRC-valid legacy DOS-timestamp variant,
 recovers each original member from the reader and feeds it to the independent
@@ -112,6 +114,7 @@ of exact borrowed ZIP member names. A too-small destination reports the
 required count before mutating any slot; surplus slots remain untouched and
 no name is copied, allocated, normalized or resolved against a filesystem.
 The existing allocating `observed_paths` helper remains for compatibility.
+
 Tests exercise Unicode, empty and rootless ZIPs, and an exact 65,534-entry
 ordinary ZIP32 boundary, including pointer identity into source archive bytes.
 The existing read-only explicit Import preflight integration now consumes
