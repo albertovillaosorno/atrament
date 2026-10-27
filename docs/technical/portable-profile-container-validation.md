@@ -249,6 +249,27 @@ names, mixed nested object and array segments, sparse/wrong-kind paths and
 the hard JSON nesting ceiling. No path is a manifest schema, filesystem path,
 permission, accepted profile, or canonical encoding decision.
 
+### Caller-bounded decoded JSON string copies
+
+A sealed JSON string value can copy decoded Unicode scalars into caller-owned
+UTF-8 storage using `copy_string_utf8`. A two-pass, allocation-free copy first
+computes the exact decoded byte count and refuses a short destination without
+writing any bytes. The distinct errors are wrong JSON kind and too-small
+buffer, with the latter reporting the number of bytes required.
+
+Successful copying preserves embedded NUL characters, escaped controls and
+supplementary Unicode scalars without case folding or normalization. Returned
+length is the number of written bytes, not a C terminator; any unused caller
+buffer remains unchanged. Test cases cover exact and zero-size buffers,
+UTF-8 width transitions, UTF-16 surrogate pairs and distinct Unicode scalar
+sequences. A real CRC-verified ZIP fixture proves that decoding does not
+rewrite or separate the sealed original manifest value bytes.
+
+String copying is not canonical JSON serialization or profile field
+validation. Future schema codecs must choose field names, string budgets,
+allowed characters and normalized identities, and must preserve unknown data
+according to the still-unfrozen wire contract.
+
 ### Exact entry SHA-256 verifier
 
 The separate profile-entry-sha256 domain computes NIST FIPS 180-4 SHA-256 over

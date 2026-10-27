@@ -34,7 +34,8 @@
 
 use atrament_profile_json_syntax::{
     MAXIMUM_JSON_NESTING, MAXIMUM_JSON_OBJECT_MEMBERS, ProfileJsonPathSegment,
-    ProfileJsonSyntaxError, ProfileJsonSyntaxLimits, ProfileJsonValueKind,
+    ProfileJsonStringCopyError, ProfileJsonSyntaxError,
+    ProfileJsonSyntaxLimits, ProfileJsonValueKind,
     validate_profile_json_object,
 };
 
@@ -1653,4 +1654,105 @@ fn sealed_path_traverses_limit_depth_without_allocating_a_json_tree() {
     );
     path.push(Index(0));
     assert_eq!(root.value_at_path(&path), None);
+}
+
+#[test]
+fn bounded_json_string_copy_decodes_escapes_without_partial_writes() {
+    let original = concat!(
+        r#"{"mixed":"a\u0061\u0000\n\t\/\"\\"#,
+        r#"\uD83D\uDE00ñ","empty":"","number":0}"#,
+    );
+    let admitted = validate_profile_json_object(original.as_bytes(), limits())
+        .expect("source string escapes are all valid");
+    let value = admitted.root_member_value("mixed").expect("JSON string");
+    let expected = "aa\0\n\t/\"\\😀ñ";
+    let mut destination = [0xabu8; 64];
+    for capacity in [0usize, 1, expected.len() - 1] {
+        let observed = value.copy_string_utf8(&mut destination[..capacity]);
+        assert_eq!(
+            observed,
+            Err(ProfileJsonStringCopyError::BufferTooSmall {
+                required: expected.len()
+            })
+        );
+        assert_eq!(destination, [0xab; 64], "failure left buffer alone");
+    }
+    let written = value
+        .copy_string_utf8(&mut destination[..expected.len()])
+        .expect("exact buffer size admits all Unicode scalars");
+    assert_eq!(written, expected.len());
+    assert_eq!(&destination[..written], expected.as_bytes());
+    assert_eq!(&destination[written..], &[0xab; 64][written..]);
+    assert!(std::str::from_utf8(&destination[..written]).is_ok());
+    assert!(original.as_bytes().windows(value.bytes().len()).any(
+        |candidate| std::ptr::eq(candidate.as_ptr(), value.bytes().as_ptr())
+    ));
+
+    let mut zero = [];
+    let empty = admitted.root_member_value("empty").expect("empty string");
+    assert_eq!(empty.copy_string_utf8(&mut zero), Ok(0));
+    let mut wrong_kind = [0xabu8; 8];
+    let number = admitted.root_member_value("number").expect("number");
+    assert_eq!(
+        number.copy_string_utf8(&mut wrong_kind),
+        Err(ProfileJsonStringCopyError::NotString)
+    );
+    assert_eq!(wrong_kind, [0xab; 8]);
+}
+
+#[test]
+fn bounded_string_copy_handles_unicode_encoding_thresholds_atomically() {
+    for code in [
+        0x0u32, 0x7f, 0x80, 0x7ff, 0x800, 0xd7ff, 0xe000, 0xffff, 0x10000,
+        0x1f600, 0x10ffff,
+    ] {
+        let scalar = char::from_u32(code).expect("scalar is not a surrogate");
+        let bytes = scalar.to_string();
+        let source = format!(
+            "{{\"field\":{}}}",
+            if code <= 0xffff {
+                format!(r#""\u{code:04x}""#)
+            } else {
+                let upper = 0xd800 + ((code - 0x10000) >> 10);
+                let lower = 0xdc00 + ((code - 0x10000) & 0x03ff);
+                format!(r#""\u{upper:04X}\u{lower:04X}""#)
+            }
+        );
+        let admitted =
+            validate_profile_json_object(source.as_bytes(), limits())
+                .expect("escaped Unicode scalar is a valid string");
+        let value = admitted.root_member_value("field").expect("string");
+        let mut insufficient = [0x5au8; 4];
+        let len = bytes.len();
+        assert_eq!(
+            value.copy_string_utf8(&mut insufficient[..len - 1]),
+            Err(ProfileJsonStringCopyError::BufferTooSmall { required: len })
+        );
+        assert_eq!(insufficient, [0x5a; 4]);
+        assert_eq!(value.copy_string_utf8(&mut insufficient[..len]), Ok(len));
+        assert_eq!(&insufficient[..len], bytes.as_bytes());
+        assert_eq!(&insufficient[len..], &[0x5a; 4][len..]);
+    }
+}
+
+#[test]
+fn bounded_string_copy_preserves_non_normalized_unicode_sequences() {
+    let source = r#"{"decomposed":"ñ","composed":"\u00f1"}"#;
+    let admitted = validate_profile_json_object(source.as_bytes(), limits())
+        .expect("both names are valid and distinct");
+    let mut decomposed = [0xff; 8];
+    let mut composed = [0xff; 8];
+    let first = admitted
+        .root_member_value("decomposed")
+        .expect("string")
+        .copy_string_utf8(&mut decomposed)
+        .expect("bounded copy");
+    let second = admitted
+        .root_member_value("composed")
+        .expect("string")
+        .copy_string_utf8(&mut composed)
+        .expect("bounded copy");
+    assert_eq!(&decomposed[..first], "ñ".as_bytes());
+    assert_eq!(&composed[..second], "ñ".as_bytes());
+    assert_ne!(&decomposed[..first], &composed[..second]);
 }

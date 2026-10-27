@@ -204,3 +204,9 @@ object keys and array indices to select one original source-byte value, even
 through nested ZIP-root structures. The actual typed manifest parser must
 still decide allowed keys, enforce required/unknown field handling, bind
 declared SHA-256 entries to this root, and pass explicit path authorization.
+
+Decoded manifest JSON strings can now be copied without heap allocation into
+bounded caller-owned storage, atomically refusing inadequate destination space
+and non-string values. This does not permit using decoded values as paths,
+selecting a source, or accepting a typed profile until the future import codec
+and explicit filesystem authority establish those independent checks.

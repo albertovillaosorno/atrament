@@ -52,8 +52,8 @@ use atrament_profile_entry_sha256::{
     sha256_profile_bytes, verify_profile_entry_bytes,
 };
 use atrament_profile_json_syntax::{
-    ProfileJsonPathSegment, ProfileJsonSyntaxError, ProfileJsonSyntaxLimits,
-    ProfileJsonValueKind,
+    ProfileJsonPathSegment, ProfileJsonStringCopyError,
+    ProfileJsonSyntaxError, ProfileJsonSyntaxLimits, ProfileJsonValueKind,
 };
 use atrament_profile_zip_reader::{
     ProfileZipManifestSyntaxError,
@@ -1141,6 +1141,13 @@ fn sealed_crc_checked_zip_root_exposes_nested_read_only_json_values() {
     assert_eq!(row1.array_element(0).expect("true").boolean(), Some(true));
     assert_eq!(row1.array_element(1).expect("false").boolean(), Some(false));
     let escaped = rows.array_element(2).expect("escaped string");
+    let mut empty = [];
+    assert_eq!(escaped.copy_string_utf8(&mut empty),
+        Err(ProfileJsonStringCopyError::BufferTooSmall { required: 1 }));
+    let mut output = [0xccu8; 8];
+    assert_eq!(escaped.copy_string_utf8(&mut output), Ok(1));
+    assert_eq!(&output[..1], b"a");
+    assert_eq!(&output[1..], &[0xcc; 8][1..]);
     assert_eq!(escaped.bytes(), br#""\u0061""#);
     assert_eq!(
         escaped.string_chars().expect("Unicode string").collect::<String>(),

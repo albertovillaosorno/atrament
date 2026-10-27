@@ -214,3 +214,9 @@ without coercing numeric object names into indices or normalizing Unicode.
 A real CRC-checked ZIP fixture establishes borrowed deep-source provenance,
 including the hard JSON nesting ceiling. This path projection cannot choose
 wire field names, accept a profile, or grant any file path authority.
+
+The sealed JSON value reader now offers a two-pass decoded UTF-8 string copy
+into caller-owned bounded buffers, with typed wrong-kind and insufficient-size
+failures before any destination mutation. CRC-checked ZIP fixtures verify that
+escaped root strings retain their source bytes after the decoded copy. Schema
+string policies and canonical writing remain outside the syntax boundary.

@@ -118,6 +118,18 @@ pub enum ProfileJsonPathSegment<'key> {
     Key(&'key str),
 }
 
+/// Failure to copy decoded JSON string scalars into caller-owned storage.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ProfileJsonStringCopyError {
+    /// The caller supplied fewer bytes than are needed for the decoded UTF-8.
+    BufferTooSmall {
+        /// Exact required number of UTF-8 destination bytes.
+        required: usize,
+    },
+    /// The sealed selected JSON value is not a string.
+    NotString,
+}
+
 /// Constructor-sealed borrowed view into an already admitted JSON document.
 ///
 /// Traversal never confers manifest field names, canonical encoding, or
@@ -421,6 +433,48 @@ impl<'bytes> ValidatedProfileJsonValue<'bytes> {
     #[must_use]
     pub const fn bytes(self) -> &'bytes [u8] {
         self.bytes
+    }
+
+    /// Copy the Unicode scalar contents of one JSON string into a bounded,
+    /// caller-owned UTF-8 buffer without allocating an owned string.
+    ///
+    /// JSON escape spellings are decoded, but normalization, case folding
+    /// and schema-specific length or character policies are not performed.
+    /// If the value is not a string or capacity is insufficient, the output
+    /// remains completely unchanged. The returned length excludes any NUL
+    /// terminator; embedded JSON `\u0000` decodes as an ordinary NUL byte.
+    ///
+    /// # Errors
+    ///
+    /// Distinguishes a wrong JSON kind from inadequate caller buffer space.
+    pub fn copy_string_utf8(
+        self,
+        destination: &mut [u8],
+    ) -> Result<usize, ProfileJsonStringCopyError> {
+        let scalars = self
+            .string_chars()
+            .ok_or(ProfileJsonStringCopyError::NotString)?;
+        // Valid JSON decoding cannot expand beyond the admitted source
+        // string's byte length, so this sum cannot overflow usize.
+        let required = scalars.clone().map(char::len_utf8).sum::<usize>();
+        if destination.len() < required {
+            return Err(ProfileJsonStringCopyError::BufferTooSmall {
+                required,
+            });
+        }
+        let mut cursor = 0usize;
+        for scalar in scalars {
+            let next = cursor.saturating_add(scalar.len_utf8());
+            let Some(target) = destination.get_mut(cursor..next) else {
+                // Guaranteed unreachable after the full size preflight.
+                return Err(ProfileJsonStringCopyError::BufferTooSmall {
+                    required,
+                });
+            };
+            let _encoded = scalar.encode_utf8(target);
+            cursor = next;
+        }
+        Ok(cursor)
     }
 
     /// Return whether the admitted token is exactly JSON `null`.
