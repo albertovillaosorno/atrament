@@ -1506,3 +1506,98 @@ fn actual_crc_checked_zip_member_matches_bounded_reader_sha256_evidence() {
             )),
     ));
 }
+#[test]
+fn admitted_zip_root_fingerprint_preserves_exact_json_source_whitespace() {
+    // Both input SHA-256 digests and ZIP CRC32 values were independently
+    // obtained from Python hashlib and zlib; the scalar values are equal.
+    let cases = [
+        (
+            br#"{"a":1}"#.as_slice(),
+            0x561b_acaf,
+            "015abd7f5cc57a2dd94b7590f04ad8084273905ee33ec5cebeae62276a97f862",
+        ),
+        (
+            br#"{ "a" : 1 }"#.as_slice(),
+            0xc32b_e995,
+            "c94841c938b16d8b21ccfcd43131ec607e39782e486250bcd72341c7a3af0e44",
+        ),
+    ];
+    let caps = ProfileJsonSyntaxLimits {
+        maximum_bytes: 128,
+        maximum_nesting: 8,
+        maximum_object_members: 8,
+        maximum_values: 8,
+    };
+    let mut hashes = Vec::new();
+    for (root, crc, golden_hex) in cases {
+        let input = make_zip(&[("manifest.json", root, crc)]);
+        let archive = read_stored_profile_zip(&input, limits())
+            .expect("CRC-correct root framing");
+        let admitted = archive
+            .admitted_root_json(caps)
+            .expect("exact root JSON grammar admitted");
+        assert_eq!(admitted.root().bytes(), root);
+        assert_eq!(
+            admitted
+                .root()
+                .root_member_value("a")
+                .expect("same semantic integer")
+                .unsigned_integer(),
+            Some(1)
+        );
+        let digest = admitted.source_sha256();
+        let hex = digest
+            .bytes()
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>();
+        assert_eq!(hex, golden_hex);
+        assert_eq!(digest, sha256_profile_bytes(root));
+        hashes.push(digest);
+    }
+    assert_ne!(
+        hashes[0], hashes[1],
+        "byte-distinct syntax sources never silently canonicalize"
+    );
+}
+
+#[test]
+fn admitted_root_fingerprint_does_not_cover_unrelated_zip_members() {
+    let root = br#"{"a":1}"#;
+    let original = make_zip(&[
+        ("assets/mark.webp", b"a", 0xe8b7_be43),
+        ("manifest.json", root, 0x561b_acaf),
+    ]);
+    let changed = make_zip(&[
+        ("assets/mark.webp", b"b", 0x71be_eff9),
+        ("manifest.json", root, 0x561b_acaf),
+    ]);
+    let bounds = ProfileJsonSyntaxLimits {
+        maximum_bytes: root.len(),
+        maximum_nesting: 3,
+        maximum_object_members: 3,
+        maximum_values: 3,
+    };
+    assert_ne!(original, changed);
+    let first = read_stored_profile_zip(&original, limits())
+        .expect("first CRC-valid ZIP");
+    let second = read_stored_profile_zip(&changed, limits())
+        .expect("changed CRC-valid ZIP");
+    let first_root = first
+        .admitted_root_json(bounds)
+        .expect("source-root admission");
+    let second_root = second
+        .admitted_root_json(bounds)
+        .expect("source-root admission");
+    assert_eq!(first_root.source_sha256(), second_root.source_sha256());
+    assert_eq!(first_root.source_sha256(), sha256_profile_bytes(root));
+    assert_ne!(first.entries()[0].bytes(), second.entries()[0].bytes());
+    assert!(std::ptr::eq(
+        first_root.root().bytes().as_ptr(),
+        first.entries()[1].bytes().as_ptr()
+    ));
+    assert!(std::ptr::eq(
+        second_root.root().bytes().as_ptr(),
+        second.entries()[1].bytes().as_ptr()
+    ));
+}

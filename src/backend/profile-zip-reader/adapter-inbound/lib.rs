@@ -40,9 +40,12 @@ use std::str::from_utf8;
 
 use atrament_handwriting_profile_container::{
     PROFILE_MANIFEST_PATH, ProfileEntryVerificationError,
-    ProfileManifest, ValidatedProfileEntryInventory, profile_entry_kind,
+    ProfileManifest, Sha256Digest, ValidatedProfileEntryInventory,
+    profile_entry_kind,
 };
-use atrament_profile_entry_sha256::verify_profile_entry_bytes;
+use atrament_profile_entry_sha256::{
+    sha256_profile_bytes, verify_profile_entry_bytes,
+};
 use atrament_profile_json_syntax::{
     ProfileJsonSyntaxError, ProfileJsonSyntaxLimits,
     ValidatedProfileJsonObject, validate_profile_json_object,
@@ -164,6 +167,17 @@ impl<'archive, 'bytes> ValidatedProfileZipRootJson<'archive, 'bytes> {
     #[must_use]
     pub const fn root(&self) -> ValidatedProfileJsonObject<'bytes> {
         self.root
+    }
+
+    /// SHA-256 fingerprint of this archive's exact syntax-admitted root bytes.
+    ///
+    /// Unlike a CRC-32 framing check, this digest identifies the admitted
+    /// source bytes without JSON reserialization or name normalization.
+    /// It does **not** verify a declared root hash, decode a typed manifest,
+    /// bind an imported file path, or grant Import/Export authorization.
+    #[must_use]
+    pub fn source_sha256(&self) -> Sha256Digest {
+        sha256_profile_bytes(self.root.bytes())
     }
 }
 

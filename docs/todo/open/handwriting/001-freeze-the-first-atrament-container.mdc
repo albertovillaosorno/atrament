@@ -301,3 +301,9 @@ copies the checked local-header checksum into its central directory record,
 avoiding a second hash pass without a second output allocation. A 1 MiB
 independent Python `zlib` test vector protects both on-disk CRC fields and
 reader round-trip identity. This still establishes only ZIP byte framing.
+
+A CRC-checked, syntax-admitted ZIP root now exposes SHA-256 of its exact source
+JSON bytes through the constructor-sealed archive/root view. Independent
+Python `hashlib` goldens distinguish semantically equal whitespace variants;
+changing another ZIP member cannot change the root-only fingerprint. This
+fingerprint is not an accepted typed manifest or a declared root-hash proof.

@@ -71,6 +71,21 @@ interpretation or profile acceptance. ZIP64, archive-file I/O, canonical JSON,
 integration of digest evidence into actual Import, and section decoding remain
 unimplemented.
 
+### Source-backed root manifest SHA-256 fingerprint
+
+After an ordinary stored ZIP is CRC-checked and its exact root object is
+syntax-admitted, `ValidatedProfileZipRootJson::source_sha256()` fingerprints
+those **unchanged UTF-8 JSON bytes** with SHA-256. The digest is derived from
+the sealed archive-backed root slice without parsing a typed manifest, editing
+JSON, normalizing Unicode, or reserializing the source.
+
+Python `hashlib` goldens distinguish `{"a":1}` from `{ "a" : 1 }`, even though
+both syntax views expose the same scalar. Another fixture changes a CRC-valid
+non-root ZIP member without changing the root digest, explicitly proving this
+is a **root-only fingerprint** and not a digest of the entire archive. It
+cannot serve as verification of a declared root hash or proof that a typed
+manifest was parsed, and confers no Import authorization.
+
 ### Deterministic ordinary stored-ZIP byte writer
 
 The separate `atrament_profile_stored_zip_writer` application frames
