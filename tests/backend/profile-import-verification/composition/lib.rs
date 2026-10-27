@@ -359,3 +359,84 @@ fn stored_payload_length_mismatch_takes_precedence_over_sha256() {
         }))
     ));
 }
+
+fn two_member_manifest(primary: &[u8], extra: &[u8]) -> String {
+    let root = manifest(primary, "[]");
+    let prefix = root.strip_suffix("]}")
+        .expect("one-entry fixture has a complete entries array");
+    let digest = sha256_profile_bytes(extra);
+    let hash: String = digest.bytes().iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect();
+    let additional_entry = format!(
+        concat!(
+            r#"{{"path":"assets/icon.png","media_type":"image/png","#,
+            r#""byte_length":{},"sha256":"{}"}}"#,
+        ),
+        extra.len(), hash,
+    );
+    format!("{prefix},{additional_entry}]}}")
+}
+
+#[test]
+fn multiple_members_are_only_exposed_after_complete_digest_verification() {
+    let section = b"first";
+    let asset = b"second";
+    let root = two_member_manifest(section, asset);
+    let bytes = zip(&root, section, Some(("assets/icon.png", asset)));
+    let archive = checked(&bytes);
+    let source = decoded(&archive);
+    let path = selected(ExplicitFilePurpose::ImportProfile);
+    let mut names = [""; 3];
+    let result = verify_attached_profile_import(
+        &path, &source, &[], budget(), &mut names,
+    ).expect("both declared hashes agree with the original ZIP");
+    assert_eq!(result.verified_entry_count(), 2);
+    assert_eq!(result.verified_entry_bytes(MEMBER), Some(section.as_slice()));
+    assert_eq!(
+        result.verified_entry_bytes("assets/icon.png"),
+        Some(asset.as_slice()),
+    );
+    assert_eq!(names, ["assets/icon.png", "manifest.json", MEMBER]);
+}
+
+#[test]
+fn any_modified_member_blocks_all_verified_bytes_even_after_first_passes() {
+    let section = b"first";
+    let asset = b"second";
+    let root = two_member_manifest(section, asset);
+    let original = zip(&root, section, Some(("assets/icon.png", asset)));
+    let original_archive = checked(&original);
+    let original_decoded = decoded(&original_archive);
+    let path = selected(ExplicitFilePurpose::ImportProfile);
+    let mut names = [""; 3];
+    assert!(verify_attached_profile_import(
+        &path, &original_decoded, &[], budget(), &mut names,
+    ).is_ok());
+    // Declarations order differs from ZIP order. The second declaration
+    // fails only after the first section's valid SHA-256 has been checked.
+    for (section_bytes, asset_bytes, failed_index) in [
+        (section.as_slice(), b"other!".as_slice(), 1),
+        (b"other".as_slice(), asset.as_slice(), 0),
+    ] {
+        let tampered = zip(
+            &root, section_bytes, Some(("assets/icon.png", asset_bytes)),
+        );
+        let tampered_archive = checked(&tampered);
+        let tampered_decoded = decoded(&tampered_archive);
+        let mut tampered_names = [""; 3];
+        assert_eq!(tampered_decoded.root_sha256(),
+            original_decoded.root_sha256());
+        assert_ne!(tampered_archive.source_sha256(),
+            original_archive.source_sha256());
+        assert!(matches!(
+            verify_attached_profile_import(
+                &path, &tampered_decoded, &[], budget(), &mut tampered_names,
+            ),
+            Err(Error::Payload(ProfileZipPayloadVerificationError::Entry {
+                index,
+                reason: ProfileEntryVerificationError::DigestMismatch,
+            })) if index == failed_index
+        ));
+    }
+}

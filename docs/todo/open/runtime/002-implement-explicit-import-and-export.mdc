@@ -363,3 +363,10 @@ required-feature and resource limits, undeclared members, CRC-correct changed
 bytes, and byte-length-before-digest precedence. A trusted selected-file
 adapter, actual source provenance, typed section decoding, and explicit
 session-state acceptance remain open; no filesystem effect occurs here.
+
+Two further source-bound fixtures use a profile with two distinct member
+payloads and different declaration versus ZIP ordering. Both must verify
+before either is exposed; changing either payload while regenerating its ZIP
+CRC still refuses the whole result at the correct declaration index. A valid
+first member cannot leak as partially verified Import evidence when the
+second member fails its hash.
