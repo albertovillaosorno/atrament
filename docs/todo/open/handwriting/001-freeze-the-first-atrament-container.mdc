@@ -29,6 +29,15 @@ complete verified ZIP bytes and supports size planning and caller-owned output.
 These are byte-format and read-only verification components, not selected-file
 Export, accepted-profile Import or an external persistence permission.
 
+An outbound regular-file reader now checks size, exact EOF and
+read errors on a host-opened handle. The read-only Import composition
+rejects wrong purpose, invalid ZIP/JSON/schema, inventory and any
+declared SHA-256 mismatch before inspecting the bounded source.
+Fifteen tests exercise real files, zero-size pseudo-files, count and
+byte ceilings, missing or undeclared entries and equal-length
+CRC-valid payload substitutions. This does not select or open paths
+or prove that the host supplied the caller-chosen file.
+
 Typed handwriting section schemas and encoders, migration/ZIP64 support,
 physical path authority and the application-level Import/Export lifecycle
 remain open. Earlier sections below retain their historical step-by-step

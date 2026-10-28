@@ -8,8 +8,8 @@ Verified implementation guide for the current `.atrament` container boundary.
 
 This guide explains what Atrament currently validates and projects at its
 portable-profile boundaries. It connects the container ADR to typed admission,
-limited ZIP/JSON readers and byte-only framing output without claiming that
-a typed manifest has been decoded from any ZIP root.
+source-attached ZIP/JSON readers, complete in-memory artifact writing and
+bounded verification of host-opened profile files.
 
 The authoritative design remains
 `docs/adr/handwriting/portable-atrament-profile.md`. This guide documents
@@ -17,9 +17,10 @@ executable behavior only.
 
 ## Scope
 
-This guide covers the transport-neutral profile-container domain and its
-checked-in regression evidence. It does not define a JSON wire schema, trusted
-file-open and commit adapters, migration, or inspection command.
+This guide covers the transport-neutral container domain and read-only
+file-source and archive verification evidence. It does not authorize selected
+file opening, persistent commit, migration, session acceptance or a CLI
+inspection command.
 
 The transport-neutral domain is
 `src/backend/handwriting-profile-container/domain/lib.rs`. It owns:
@@ -37,6 +38,35 @@ The transport-neutral domain is
 
 The domain performs no file I/O and has no ZIP, JSON, hashing, migration, or
 renderer dependency.
+
+### Bounded host-opened Import verification
+
+`src/backend/profile-file-reader/adapter-outbound/lib.rs` accepts an
+**already-opened** regular-file handle and a hard source byte ceiling.
+It rewinds to offset zero, validates metadata size and actual read
+length, and probes the real EOF before returning bounded owned bytes.
+Directories, oversized sources, read failures and length drift refuse.
+This is a read-only file transport, not a file picker or a stable
+disk snapshot across concurrent same-length rewrites.
+
+`src/backend/profile-open-file-import/composition/lib.rs` accepts
+classified `ImportProfile` intent and a host-supplied reader callback.
+It rejects any other purpose before reading and enforces the strictest
+ZIP, typed-manifest and Import member-index ceiling before ZIP parsing.
+Only after source-bound ZIP CRC, bounded root JSON, typed manifest,
+exact inventory and every declared member SHA-256 pass can a scoped
+inspection callback access verified member bytes. No typed section
+is decoded, no profile is accepted into a session and no file is
+written.
+
+The trusted host still must independently associate that open file
+with the actual caller-selected path, including its symlink policy.
+The path intent itself is not filesystem authority. Fifteen real-file
+tests cover transport ceilings, EOF, regular-file restrictions,
+malformed ZIP/JSON, wrong purpose, unknown required features,
+manifest-only archives, count and member-byte budgets, invalid
+inventory, and CRC-valid equal-length SHA-256 substitutions.
+The profile Import session transition and atomic Export remain open.
 
 ### Bounded stored-ZIP byte reader
 
