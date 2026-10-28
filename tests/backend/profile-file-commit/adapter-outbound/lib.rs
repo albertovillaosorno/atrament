@@ -42,13 +42,20 @@ mod linux {
     use std::env;
     use std::ffi::OsString;
     use std::fs::{self, OpenOptions};
-    use std::io::Write as _;
+    use std::io::{self, Read as _, Write as _};
     use std::os::unix::fs::{PermissionsExt as _, symlink};
     use std::path::{Path, PathBuf};
-    use std::process;
+    use std::process::{self, Command, Stdio};
     use std::sync::atomic::{AtomicU64, Ordering};
+    use std::thread;
+    use std::time::Duration;
 
     static NEXT: AtomicU64 = AtomicU64::new(0);
+
+    const CRASH_STAGE_TARGET: &str = "ATRAMENT_TEST_ANONYMOUS_STAGE_TARGET";
+    const CRASH_STAGE_REPLACE: &str = "ATRAMENT_TEST_ANONYMOUS_REPLACE";
+    const CRASH_STAGE_TEST: &str =
+        "linux::forced_death_during_write_leaves_no_named_stage";
 
     struct OwnedDir(PathBuf);
     #[expect(
@@ -118,6 +125,95 @@ mod linux {
                 & 0o777,
             0o600
         );
+    }
+
+    #[test]
+    fn forced_death_during_write_leaves_no_named_stage() {
+        // The child blocks after its first 64 KiB chunk, while the file is
+        // still incomplete. SIGKILL bypasses all Rust destructor cleanup.
+        if let Some(path) = env::var_os(CRASH_STAGE_TARGET) {
+            let target = PathBuf::from(path);
+            let mode = if env::var_os(CRASH_STAGE_REPLACE).is_some() {
+                Mode::ReplaceExisting
+            } else {
+                Mode::PreserveExisting
+            };
+            let payload = vec![0x83u8; 200_000];
+            let mut observations = 0usize;
+            let result = commit_profile_file_cancellable(
+                &target,
+                &payload,
+                payload.len(),
+                mode,
+                || {
+                    observations += 1;
+                    if observations == 3 {
+                        fs::write(target.with_extension("ready"), b"writing")
+                            .expect("notify parent after first chunk");
+                        let mut release = [0u8; 1];
+                        let _ignored = io::stdin().read_exact(&mut release);
+                    }
+                    false
+                },
+            );
+            assert!(
+                result.is_err(),
+                "fixture must not reach a successful file commit",
+            );
+        }
+
+        for mode in [Mode::PreserveExisting, Mode::ReplaceExisting] {
+            let dir = OwnedDir::new();
+            let target = dir.target();
+            let marker = target.with_extension("ready");
+            if mode == Mode::ReplaceExisting {
+                fs::write(&target, b"original").expect("seed target");
+            }
+            let executable = env::current_exe().expect("test executable");
+            let mut command = Command::new(executable);
+            let _configured = command
+                .arg("--exact")
+                .arg(CRASH_STAGE_TEST)
+                .env(CRASH_STAGE_TARGET, &target)
+                .env_remove(CRASH_STAGE_REPLACE)
+                .stdin(Stdio::piped())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null());
+            if mode == Mode::ReplaceExisting {
+                let _replace_flag = command.env(CRASH_STAGE_REPLACE, "yes");
+            }
+            let mut child = command.spawn().expect("spawn midwrite process");
+            let mut writing = false;
+            for _ in 0..200u16 {
+                if marker.exists() {
+                    writing = true;
+                    break;
+                }
+                if child.try_wait().expect("check child status").is_some() {
+                    break;
+                }
+                thread::sleep(Duration::from_millis(50));
+            }
+            if writing {
+                child.kill().expect("kill midwrite child");
+            } else if child.try_wait().expect("child liveness").is_none() {
+                child.kill().expect("stop timed-out child");
+            }
+            let status = child.wait().expect("reap killed child");
+            assert!(writing, "child did not stage its first data chunk");
+            assert!(!status.success(), "child must die without unwinding");
+            fs::remove_file(&marker).expect("remove test-only marker");
+            if mode == Mode::ReplaceExisting {
+                assert_eq!(
+                    dir.entries(),
+                    vec![String::from("chosen.atrament")],
+                );
+                assert_eq!(fs::read(&target).expect("old target"), b"original");
+            } else {
+                assert!(dir.entries().is_empty());
+                assert!(!target.exists());
+            }
+        }
     }
 
     #[test]

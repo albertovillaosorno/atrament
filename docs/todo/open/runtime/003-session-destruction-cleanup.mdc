@@ -130,9 +130,14 @@ Import path in a fresh process owner. The new owner has no inherited Export
 retry receipt and cannot replay the same key over a preserve-existing target;
 no Export staging file remains after the successful commit. The readiness
 marker is test-only and removed before checking surviving directory entries.
-This covers **post-commit** forced termination, not a crash mid-write or
-cleanup of future media intermediates.
+
+A separate low-level Linux file-commit fixture now kills a process while
+writing an incomplete profile through anonymous `O_TMPFILE` staging. Both
+preserve-existing and replacement dispositions leave no named partial stage;
+the original replacement target survives unchanged. This is not a proof of
+cleanup if the process dies in the brief replacement link-before-rename window.
+The test-owned readiness marker is removed after each forced kill.
 
 The task remains open until temporary media exist and end-to-end fixtures also
-cover backend operation cancellation, media cleanup, and crashes during
-staging rather than only after a synced Export.
+cover backend operation cancellation, media cleanup, and late-link crash
+recovery rather than only anonymous-stage and post-sync termination.

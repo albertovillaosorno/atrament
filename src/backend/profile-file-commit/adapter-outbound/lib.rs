@@ -23,13 +23,13 @@
 // - Merge-When:
 //   - A complete Export adapter subsumes this narrow file transport.
 // - Summary:
-//   - Secure directory-relative staging and atomic Linux file replacement.
+//   - Anonymous Linux staging with late link and atomic file replacement.
 // - Description:
 //   - Precommit failures preserve targets; postcommit sync failure is unknown.
 // - Usage:
 //   - Call only after authenticated path, revision and artifact admission.
 // - Defaults:
-//   - No symlink parent traversal, no silent overwrite, no portable fallback.
+//   - No symlink traversal, no named mid-write stage or weak fallback.
 //
 
 //! Low-level profile file-commit transport, never itself Export admission.
@@ -43,7 +43,7 @@ use std::fs::File;
 #[cfg(target_os = "linux")]
 use nix::errno::Errno;
 #[cfg(target_os = "linux")]
-use nix::unistd::{UnlinkatFlags, unlinkat};
+use nix::unistd::{UnlinkatFlags, linkat, unlinkat};
 
 /// Caller-supplied policy for an already admitted Export target.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -61,7 +61,7 @@ pub enum ProfileFileCommitError {
     ArtifactTooLarge,
     /// Cancellation was observed before the irreversible rename.
     CancelledBeforeCommit,
-    /// Rename succeeded, but directory sync did not prove durability.
+    /// The target changed but directory sync did not prove durability.
     CommittedDurabilityUnknown(io::ErrorKind),
     /// Initial staging, commit I/O or cleanup failed.
     FileIo(io::ErrorKind),
@@ -138,15 +138,18 @@ pub fn commit_profile_file(
 ///
 /// A caller-supplied predicate is checked after byte/path preflight and before
 /// any filesystem effects, before each 64 KiB write, and after file sync just
-/// before atomic rename. Once rename succeeds, cancellation cannot undo that
-/// commit and is never checked again. A true pre-rename predicate returns
-/// `CancelledBeforeCommit`; the owned staging file is then unlinked and an
-/// existing selected target is preserved. The predicate is an observation of
-/// caller-owned cancellation state, not a source of Export authorization.
+/// before the first permanent directory entry is created. Linux stages bytes
+/// through `O_TMPFILE`, so cancellation or process death during writing cannot
+/// leave a named temporary file. Preserve-existing links the completed file
+/// directly to the chosen target; replacement links a random sibling for the
+/// shortest possible rename window. Crash after that link but before rename
+/// can still leave the owned stage name, so it is not a fully crash-atomic
+/// replacement cleanup guarantee. The predicate is cancellation observation,
+/// never a source of Export authorization.
 ///
 /// A predicate that becomes true **after** the final check cannot revoke a
-/// completed rename. A directory-sync failure after rename remains uncertain;
-/// the caller must use higher-level receipt recovery rather than retrying.
+/// completed commit. A directory-sync failure after linking/rename remains
+/// uncertain; the caller must not blindly retry.
 /// Only Linux has the secure directory-relative implementation. Other
 /// platforms refuse without a weak fallback.
 ///
@@ -272,44 +275,24 @@ fn commit_platform(
         }
     }
 
-    let mut staging = None;
-    for _attempt in 0..6u8 {
-        let mut nonce = [0u8; 16];
-        getrandom::fill(&mut nonce)
-            .map_err(|_error| ProfileFileCommitError::RandomUnavailable)?;
-        let temporary_name =
-            format!(".atrament-export-{:032x}.tmp", u128::from_be_bytes(nonce));
-        match openat(
-            &directory,
-            temporary_name.as_str(),
-            OFlag::O_WRONLY
-                | OFlag::O_CREAT
-                | OFlag::O_EXCL
-                | OFlag::O_NOFOLLOW
-                | OFlag::O_CLOEXEC,
-            Mode::S_IRUSR | Mode::S_IWUSR,
+    // An unnamed inode cannot survive process death as a directory entry.
+    // Refuse a filesystem without anonymous staging instead of falling back
+    // to a named file that can leak partial profile bytes after a crash.
+    let mut output = File::from(openat(
+        &directory,
+        ".",
+        OFlag::O_WRONLY | OFlag::O_TMPFILE | OFlag::O_CLOEXEC,
+        Mode::S_IRUSR | Mode::S_IWUSR,
+    ).map_err(|error| {
+        if matches!(
+            error,
+            Errno::ENOSYS | Errno::EINVAL | Errno::EOPNOTSUPP | Errno::EISDIR
         ) {
-            Ok(fd) => {
-                staging = Some((
-                    File::from(fd),
-                    OwnedTemp {
-                        dir: &directory,
-                        name: temporary_name,
-                        committed: false,
-                    },
-                ));
-                break;
-            }
-            Err(Errno::EEXIST) => {}
-            Err(error) => {
-                return Err(ProfileFileCommitError::FileIo(
-                    io::Error::from(error).kind(),
-                ));
-            }
+            ProfileFileCommitError::UnsupportedPlatform
+        } else {
+            ProfileFileCommitError::FileIo(io::Error::from(error).kind())
         }
-    }
-    let (mut output, mut temp) =
-        staging.ok_or(ProfileFileCommitError::RandomUnavailable)?;
+    })?);
     for chunk in artifact.chunks(64 * 1024) {
         if is_cancelled() {
             return Err(ProfileFileCommitError::CancelledBeforeCommit);
@@ -321,28 +304,79 @@ fn commit_platform(
     output
         .sync_all()
         .map_err(|error| ProfileFileCommitError::FileIo(error.kind()))?;
-    drop(output);
     if is_cancelled() {
         return Err(ProfileFileCommitError::CancelledBeforeCommit);
     }
 
-    let flags = match disposition {
+    match disposition {
         ProfileFileCommitDisposition::PreserveExisting => {
-            RenameFlags::RENAME_NOREPLACE
+            // Direct linking is atomic no-overwrite without a temporary name.
+            let linked =
+                linkat(&output, "", &directory, name, AtFlags::AT_EMPTY_PATH);
+            match linked {
+                Ok(()) => {}
+                Err(Errno::EEXIST) => {
+                    return Err(ProfileFileCommitError::TargetExists);
+                }
+                Err(error) => {
+                    return Err(ProfileFileCommitError::FileIo(
+                        io::Error::from(error).kind(),
+                    ));
+                }
+            }
         }
-        ProfileFileCommitDisposition::ReplaceExisting => RenameFlags::empty(),
-    };
-    match renameat2(&directory, temp.name.as_str(), &directory, name, flags) {
-        Ok(()) => {
+        ProfileFileCommitDisposition::ReplaceExisting => {
+            // Replacement needs a name for renameat2. Create it only after
+            // all bytes are synced and the final cancellation check passes.
+            let mut linked = None;
+            for _attempt in 0..6u8 {
+                let mut nonce = [0u8; 16];
+                getrandom::fill(&mut nonce).map_err(|_error| {
+                    ProfileFileCommitError::RandomUnavailable
+                })?;
+                let temporary_name = format!(
+                    ".atrament-export-{:032x}.tmp",
+                    u128::from_be_bytes(nonce),
+                );
+                match linkat(
+                    &output,
+                    "",
+                    &directory,
+                    temporary_name.as_str(),
+                    AtFlags::AT_EMPTY_PATH,
+                ) {
+                    Ok(()) => {
+                        linked = Some(OwnedTemp {
+                            committed: false,
+                            dir: &directory,
+                            name: temporary_name,
+                        });
+                        break;
+                    }
+                    Err(Errno::EEXIST) => {}
+                    Err(error) => {
+                        return Err(ProfileFileCommitError::FileIo(
+                            io::Error::from(error).kind(),
+                        ));
+                    }
+                }
+            }
+            let mut temp =
+                linked.ok_or(ProfileFileCommitError::RandomUnavailable)?;
+            renameat2(
+                &directory,
+                temp.name.as_str(),
+                &directory,
+                name,
+                RenameFlags::empty(),
+            )
+            .map_err(|error| {
+                ProfileFileCommitError::FileIo(io::Error::from(error).kind())
+            })?;
             temp.committed = true;
         }
-        Err(Errno::EEXIST) => return Err(ProfileFileCommitError::TargetExists),
-        Err(error) => {
-            return Err(ProfileFileCommitError::FileIo(
-                io::Error::from(error).kind(),
-            ));
-        }
     }
+    drop(output);
     // The target already changed. Never return an ordinary no-effect error.
     directory.sync_all().map_err(|error| {
         ProfileFileCommitError::CommittedDurabilityUnknown(error.kind())

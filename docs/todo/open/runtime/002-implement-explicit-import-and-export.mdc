@@ -47,28 +47,36 @@ policy or durable commit.
 A new outbound `atrament_profile_file_commit` primitive can write
 already-admitted complete artifact bytes to an exact caller-supplied Linux
 path with a strict byte ceiling. It resolves the parent directory through
-symlink-forbidding `openat2`, stages a randomized, exclusive 0600 sibling,
-syncs the complete bytes, commits by atomic `renameat2`, and syncs the parent.
-Preserve-existing requests cannot overwrite a competing target; an explicitly
-admitted replacement preserves the prior file until rename.
+symlink-forbidding `openat2` and stages complete 0600 bytes in an unnamed
+`O_TMPFILE` inode. After file sync and the final cancellation check, a
+preserve-existing request links directly to the selected name with atomic
+no-overwrite; an explicit replacement creates a randomized sibling hard link
+only for the final `renameat2`, then syncs the directory. A filesystem without
+secure anonymous staging refuses rather than leaking partial files on crash.
 
-The adapter
-refuses observed symlinks and nonregular replacement targets, cleans owned
-staging paths on ordinary pre-commit refusal, and distinguishes an uncertain
-post-rename directory-sync failure from proven no-effect refusal. Real-file
-regressions cover complete writes, conflicts, replacement, traversal, links,
+The adapter refuses observed symlinks and nonregular replacement targets,
+cleans any late-linked replacement staging path on ordinary refusal, and
+distinguishes an uncertain post-link/rename sync failure from no commit.
+Real-file regressions cover complete writes, conflicts, replacement, traversal,
+links,
 byte ceilings, opaque names and concurrent preserve writers.
 
 An opt-in `commit_profile_file_cancellable` variant now observes caller-owned
 cancellation before any filesystem operation, between 64 KiB stage writes,
-and again after syncing the complete temporary file just before atomic rename.
-The `CancelledBeforeCommit` outcome proves that no target rename occurred;
-owned stages are removed and existing target bytes remain unchanged.
+and after syncing the complete anonymous file, before linking a target.
+`CancelledBeforeCommit` proves that no target link or rename occurred;
+existing target bytes remain unchanged.
 
-After rename, cancellation is not polled and cannot revoke a committed output.
-Four Linux cancellation fixtures cover early refusal, mid-write cleanup,
-pre-rename replacement preservation and completed commits. The original
-non-cancellable file API retains identical behavior through delegation.
+After linking or rename, cancellation is not polled and cannot revoke a
+committed output. Four Linux cancellation fixtures cover early refusal,
+mid-write cleanup, pre-commit replacement preservation and completed commits.
+Two new SIGKILL-midwrite cases for preserve and replacement also show the
+unnamed stage disappears without running destructors.
+
+Replacement still has a narrow crash window after linking its temporary name
+and before rename: that late named link can survive process death and needs
+future safe recovery. The original non-cancellable file API delegates to the
+same implementation.
 
 This is only a
 low-level file effect: it cannot establish trusted selection provenance,
