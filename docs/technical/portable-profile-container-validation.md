@@ -73,8 +73,9 @@ admission; the classified intent cannot prove that provenance itself.
 Fifteen existing real-file regressions cover source transport, malformed
 archives and full integrity gates. Five path-open fixtures cover link
 policy, relative paths, nonregular sources and replacement after open;
-a separate real-file integration fixture joins the secure open to the
-bounded source reader and all-member SHA-256 verification. Typed profile
+two real-file integration fixtures join secure open to bounded source
+reading and all-member SHA-256 checks. A valid-CRC, same-length payload
+forgery refuses Import without invoking the inspection callback. Typed profile
 sections, session Import acceptance and atomic Export remain open.
 
 ### Bounded stored-ZIP byte reader

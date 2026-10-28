@@ -263,6 +263,54 @@ fn selected_linux_path_is_bound_to_opened_descriptor_and_full_sha() {
     assert_eq!(inspected.1.as_deref(), Some(payload.as_slice()));
 }
 
+#[cfg(target_os = "linux")]
+#[test]
+fn selected_crc_valid_source_with_wrong_sha_never_reaches_inspection() {
+    let authentic = b"authentic";
+    let forged = b"impostors";
+    assert_eq!(authentic.len(), forged.len());
+    let declared_root = root(authentic, "[]");
+    // This is a new, structurally valid ZIP with the forged bytes' own CRC.
+    let selected_zip = zip(declared_root.as_bytes(), forged);
+    let source = OwnedTestFile::new(&selected_zip);
+    let chosen = classify_explicit_file_path_intent(
+        ExplicitFilePurpose::ImportProfile,
+        ExplicitFilePathSource::CallerSelection,
+        source.path.clone(),
+        ExplicitOverwriteIntent::PreserveExisting,
+    )
+    .expect("typed selected Import path");
+    let inspected = Cell::new(false);
+    let result = inspect_open_profile_import(
+        &chosen,
+        |maximum| {
+            read_bounded_profile_file(
+                open_selected_profile_file(chosen.path())
+                    .expect("secure Linux path open"),
+                maximum,
+            )
+        },
+        &[],
+        limits(),
+        |_verified| inspected.set(true),
+    );
+    assert!(matches!(
+        result,
+        Err(Error::Verification(
+            ProfileImportVerificationError::Payload(
+                ProfileZipPayloadVerificationError::Entry {
+                    index: 0,
+                    reason: ProfileEntryVerificationError::DigestMismatch,
+                },
+            )
+        )),
+    ));
+    assert!(
+        !inspected.get(),
+        "no payload inspection before full SHA admission"
+    );
+}
+
 #[test]
 fn wrong_purpose_refuses_before_inspection_or_file_read() {
     let fixture = OwnedTestFile::new(b"not a zip");

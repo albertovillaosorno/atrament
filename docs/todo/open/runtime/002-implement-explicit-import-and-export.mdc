@@ -74,8 +74,10 @@ kernels refuse without falling back to a racy `File::open`. Five
 path-policy fixtures cover final and parent links, relative source,
 pathname replacement after opening and invalid file types.
 
-An additional integration fixture connects this opened descriptor to
-bounded source reading, ZIP/root admission and every member SHA-256.
+Two integration fixtures connect this opened descriptor to bounded
+source reading, ZIP/root admission and every member SHA-256. The negative
+fixture reconstructs a valid CRC ZIP with a same-length forged member;
+the SHA mismatch refuses before any inspection callback is invoked.
 
 The trusted host must still prove the `CallerSelection` or admitted policy
 actually came from an authorized action, not document or model content;
