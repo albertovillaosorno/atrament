@@ -42,6 +42,7 @@ use atrament_explicit_file_path_intent::{
     ExplicitFilePathSource, ExplicitFilePurpose, ExplicitOverwriteIntent,
     classify_explicit_file_path_intent,
 };
+use atrament_handwriting_profile_container::ProfileEntryVerificationError;
 use atrament_profile_entry_sha256::sha256_profile_bytes;
 use atrament_profile_file_reader::{
     ProfileFileReadError, read_bounded_profile_file,
@@ -62,6 +63,7 @@ use atrament_profile_stored_zip_writer::{
     ProfileStoredZipMember, ProfileStoredZipWriteLimits,
     write_stored_profile_zip,
 };
+use atrament_profile_zip_reader::ProfileZipPayloadVerificationError;
 use atrament_profile_zip_reader::{
     ProfileZipManifestSyntaxError, ProfileZipReadError, ProfileZipReadLimits,
 };
@@ -382,7 +384,7 @@ fn unsupported_features_and_crc_correct_sha_substitution_fail_closed() {
     ));
     let declared_root = root(payload, "[]");
     let replaced =
-        OwnedTestFile::new(&zip(declared_root.as_bytes(), b"impostor"));
+        OwnedTestFile::new(&zip(declared_root.as_bytes(), b"impostors"));
     assert!(matches!(
         inspect_open_profile_import(
             &intent,
@@ -392,7 +394,12 @@ fn unsupported_features_and_crc_correct_sha_substitution_fail_closed() {
             |_verified| { inspected.set(true) }
         ),
         Err(Error::Verification(
-            ProfileImportVerificationError::Payload(_)
+            ProfileImportVerificationError::Payload(
+                ProfileZipPayloadVerificationError::Entry {
+                    index: 0,
+                    reason: ProfileEntryVerificationError::DigestMismatch,
+                },
+            )
         )),
     ));
     assert!(!inspected.get());
@@ -532,4 +539,116 @@ fn manifest_only_archive_passes_with_zero_non_root_entry_budget() {
         ),
         Err(Error::Zip(ProfileZipReadError::ResourceLimit)),
     );
+}
+
+fn two_entry_manifest(section: &[u8], asset: &[u8]) -> String {
+    let one = root(section, "[]");
+    let prefix = one
+        .strip_suffix("]}")
+        .expect("one-entry fixture has a JSON entries suffix");
+    let hash: String = sha256_profile_bytes(asset)
+        .bytes()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect();
+    format!(
+        concat!(
+            r#"{},{{"path":"assets/icon.png","media_type":"image/png","#,
+            r#""byte_length":{},"sha256":"{}"}}]}}"#,
+        ),
+        prefix,
+        asset.len(),
+        hash,
+    )
+}
+
+fn two_entry_zip(root_json: &str, section: &[u8], asset: &[u8]) -> Vec<u8> {
+    // Canonical ZIP name ordering differs from declaration order.
+    write_stored_profile_zip(
+        &[
+            ProfileStoredZipMember {
+                name: "assets/icon.png",
+                bytes: asset,
+            },
+            ProfileStoredZipMember {
+                name: "manifest.json",
+                bytes: root_json.as_bytes(),
+            },
+            ProfileStoredZipMember {
+                name: MEMBER,
+                bytes: section,
+            },
+        ],
+        ProfileStoredZipWriteLimits {
+            maximum_archive_bytes: 16_384,
+            maximum_entries: 3,
+            maximum_entry_bytes: 8_192,
+            maximum_total_bytes: 12_000,
+        },
+    )
+    .expect("canonical three-member stored ZIP")
+}
+
+#[test]
+fn two_payload_open_file_admits_only_after_all_digest_checks() {
+    let section = b"first";
+    let asset = b"second";
+    let root_json = two_entry_manifest(section, asset);
+    let original = two_entry_zip(&root_json, section, asset);
+    let original_file = OwnedTestFile::new(&original);
+    let intent = selected(ExplicitFilePurpose::ImportProfile);
+    let success = inspect_open_profile_import(
+        &intent,
+        |max| read_bounded_profile_file(original_file.open(), max),
+        &[],
+        limits(),
+        |verified| {
+            assert_eq!(verified.verified_entry_count(), 2);
+            (
+                verified
+                    .verified_entry_bytes(MEMBER)
+                    .expect("verified section")
+                    .to_vec(),
+                verified
+                    .verified_entry_bytes("assets/icon.png")
+                    .expect("verified asset")
+                    .to_vec(),
+                verified.archive_sha256(),
+            )
+        },
+    )
+    .expect("all original members pass SHA-256");
+    assert_eq!(success.0, section);
+    assert_eq!(success.1, asset);
+    assert_eq!(success.2, sha256_profile_bytes(&original));
+
+    let inspected = Cell::new(false);
+    // Both payload replacements are equal length, and the writer updates
+    // CRC-32 for each forged ZIP. Only declared SHA-256 can reject them.
+    for (replacement_section, replacement_asset, index) in [
+        (b"other".as_slice(), asset.as_slice(), 0),
+        (section.as_slice(), b"seconD".as_slice(), 1),
+    ] {
+        let altered =
+            two_entry_zip(&root_json, replacement_section, replacement_asset);
+        let file = OwnedTestFile::new(&altered);
+        assert_eq!(
+            inspect_open_profile_import(
+                &intent,
+                |max| read_bounded_profile_file(file.open(), max),
+                &[],
+                limits(),
+                |_verified| inspected.set(true),
+            ),
+            Err(Error::Verification(
+                ProfileImportVerificationError::Payload(
+                    ProfileZipPayloadVerificationError::Entry {
+                        index,
+                        reason: ProfileEntryVerificationError::DigestMismatch,
+                    },
+                ),
+            )),
+        );
+    }
+    assert!(!inspected.get());
 }

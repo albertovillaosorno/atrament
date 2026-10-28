@@ -51,12 +51,15 @@ checks classified `ImportProfile` intent before invoking that reader.
 It then checks stored ZIP framing and CRC, bounded root JSON syntax,
 typed manifest fields, inventory and every declared member SHA-256.
 
-Twelve tests use real temporary files, an unopened path-intent string,
+Thirteen tests use real temporary files, an unopened path-intent string,
 an initial file cursor at EOF, a write-only handle, directories,
 a Linux procfs file reporting zero length, budget boundaries,
-CRC-correct payload substitution and malicious JSON. Wrong-purpose,
+CRC-correct equal-length payload substitution and malicious JSON. Wrong-purpose,
 size, schema and digest failures never invoke inspection. The production
 components perform no persistent writes or session state changes.
+A two-payload file fixture proves that ZIP CRC-valid, equal-length edits
+to either member fail its declared SHA-256 and expose neither member
+through the all-or-nothing inspection callback.
 
 A trusted host must independently bind the open file to the actual
 caller-selected path, with symlink and source-provenance policy. A

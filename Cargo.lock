@@ -620,6 +620,7 @@ name = "atrament_profile_open_file_import"
 version = "0.1.0"
 dependencies = [
  "atrament_explicit_file_path_intent",
+ "atrament_handwriting_profile_container",
  "atrament_profile_entry_sha256",
  "atrament_profile_file_reader",
  "atrament_profile_import_preflight",

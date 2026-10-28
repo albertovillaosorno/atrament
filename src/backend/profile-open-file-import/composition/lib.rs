@@ -96,7 +96,7 @@ pub enum ProfileOpenFileImportError {
 /// path string. Wrong purpose refuses before invoking that callback.
 /// Source length is checked against independent transport/ZIP ceilings.
 /// The strictest ZIP, Import or schema count bound is enforced before
-/// the ZIP reader allocates its member index; excess returns ZIP `ResourceLimit`.
+/// ZIP member-index allocation; excess returns ZIP `ResourceLimit`.
 /// ZIP framing, JSON, manifest, inventory and every payload SHA-256 must all
 /// pass before invoking `inspect`; verified borrows cannot escape inspection.
 /// Same-length concurrent file rewrites do not prove a stable disk snapshot.
