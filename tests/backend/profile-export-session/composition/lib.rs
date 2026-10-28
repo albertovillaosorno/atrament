@@ -395,6 +395,46 @@ mod linux {
     }
 
     #[test]
+    fn session_export_round_trips_through_selected_import_verifier() {
+        let root = fixture();
+        let chosen = root.0.join("selected.atrament");
+        let request = intent(chosen.clone(), PreserveExisting);
+        let original = artifact("writer-a");
+        let accepted = revision();
+        let mut session = ProfileExportSession::new(1);
+        let effect =
+            session.export("roundtrip", accepted, &request, &original, 8192);
+        assert!(matches!(effect, Ok(Outcome::Committed(_))));
+        let before = fs::metadata(&chosen).expect("exported inode").ino();
+        let selected_import = classify_explicit_file_path_intent(
+            ExplicitFilePurpose::ImportProfile,
+            ExplicitFilePathSource::CallerSelection,
+            chosen.clone(),
+            PreserveExisting,
+        )
+        .expect("test-selected import intent");
+        let imported = inspect_selected_profile_import(
+            &selected_import,
+            &[],
+            import_limits(),
+            |verified| {
+                assert_eq!(verified.path().path(), chosen);
+                assert_eq!(verified.verified_entry_count(), 0);
+                assert!(verified.manifest().entries.is_empty());
+                verified.manifest().profile_identity.clone()
+            },
+        );
+        assert_eq!(imported, Ok(String::from("writer-a")));
+        assert_eq!(fs::metadata(&chosen).expect("same inode").ino(), before);
+        assert_eq!(
+            fs::read(&chosen).expect("original bytes"),
+            original.bytes()
+        );
+        assert_eq!(fs::read_dir(&root.0).expect("only output").count(), 1);
+        assert_eq!(session.len(), 1);
+    }
+
+    #[test]
     fn no_persisted_receipt_survives_dropped_session() {
         let root = fixture();
         let chosen = root.0.join("selected.atrament");
@@ -440,8 +480,15 @@ use atrament_profile_export_session::{
 };
 use atrament_profile_export_target_check as _;
 use atrament_profile_file_commit::ProfileFileCommitError;
+use atrament_profile_import_preflight::ProfileImportBudget;
+use atrament_profile_json_syntax::ProfileJsonSyntaxLimits;
+use atrament_profile_manifest_json_codec::ProfileManifestJsonLimits;
 use atrament_profile_manifest_json_writer::ProfileManifestJsonWriteLimits;
+use atrament_profile_open_file_import::{
+    ProfileOpenFileImportLimits, inspect_selected_profile_import,
+};
 use atrament_profile_stored_zip_writer::ProfileStoredZipWriteLimits;
+use atrament_profile_zip_reader::ProfileZipReadLimits;
 use atrament_semantic_notebook::{IdentityAllocator, RevisionIdentity};
 
 fn artifact(identity: &str) -> ProfileExportArtifact {
@@ -490,4 +537,32 @@ fn intent(
         overwrite,
     )
     .expect("test-selected path classification")
+}
+
+const fn import_limits() -> ProfileOpenFileImportLimits {
+    ProfileOpenFileImportLimits {
+        import: ProfileImportBudget {
+            maximum_declared_bytes: 4096,
+            maximum_entries: 2,
+            maximum_entry_bytes: 4096,
+        },
+        manifest: ProfileManifestJsonLimits {
+            maximum_entries: 2,
+            maximum_features: 2,
+            maximum_string_bytes: 128,
+        },
+        maximum_file_bytes: 8192,
+        root_json: ProfileJsonSyntaxLimits {
+            maximum_bytes: 4096,
+            maximum_nesting: 8,
+            maximum_object_members: 20,
+            maximum_values: 64,
+        },
+        zip: ProfileZipReadLimits {
+            maximum_archive_bytes: 8192,
+            maximum_entries: 3,
+            maximum_entry_bytes: 4096,
+            maximum_total_bytes: 4096,
+        },
+    }
 }

@@ -151,6 +151,12 @@ intent alongside the destination, accepted revision, archive digest and root
 digest. Same-key recovery returns this original sealed receipt unchanged; it
 does not silently derive replacement permission from current filesystem state.
 
+A real-file cross-boundary regression also exports a canonical ZIP through
+the disposable session and securely reopens that same selected path with the
+existing strict Import verifier. It checks the decoded identity, complete
+member verification and byte/inode stability without accepting a profile into
+the session or granting any new file authority.
+
 The journal reserves `NotRecorded` before invoking any cancellation callback
 or staging I/O. If a callback unwinds, no saved outcome is fabricated, and the
 same key refuses another write even if the selected file later holds identical

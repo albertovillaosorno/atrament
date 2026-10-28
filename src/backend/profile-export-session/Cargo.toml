@@ -16,6 +16,11 @@ atrament_profile_file_commit = { workspace = true }
 atrament_semantic_notebook = { workspace = true }
 
 [dev-dependencies]
+atrament_profile_import_preflight = { workspace = true }
+atrament_profile_json_syntax = { workspace = true }
+atrament_profile_manifest_json_codec = { workspace = true }
+atrament_profile_open_file_import = { workspace = true }
+atrament_profile_zip_reader = { workspace = true }
 atrament_profile_manifest_json_writer = { workspace = true }
 atrament_profile_stored_zip_writer = { workspace = true }
 

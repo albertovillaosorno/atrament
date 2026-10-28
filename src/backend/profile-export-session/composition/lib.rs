@@ -56,9 +56,19 @@ use atrament_profile_file_commit::{
     ProfileFileCommitEvidence, commit_profile_file_cancellable,
 };
 #[cfg(test)]
+use atrament_profile_import_preflight as _;
+#[cfg(test)]
+use atrament_profile_json_syntax as _;
+#[cfg(test)]
+use atrament_profile_manifest_json_codec as _;
+#[cfg(test)]
 use atrament_profile_manifest_json_writer as _;
 #[cfg(test)]
+use atrament_profile_open_file_import as _;
+#[cfg(test)]
 use atrament_profile_stored_zip_writer as _;
+#[cfg(test)]
+use atrament_profile_zip_reader as _;
 use atrament_semantic_notebook::RevisionIdentity;
 
 /// A receipt for an actually successful, directory-synced file commit.
