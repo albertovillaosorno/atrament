@@ -306,9 +306,13 @@ fn real_file_commit_then_exact_recovery_and_external_drift() {
         ExplicitOverwriteIntent::PreserveExisting,
     )
     .expect("selected path classification");
-    let revision = IdentityAllocator::new()
+    let allocator = IdentityAllocator::new();
+    let revision = allocator
         .allocate_revision()
         .expect("accepted revision identity");
+    let other_revision = allocator
+        .allocate_revision()
+        .expect("another accepted revision identity");
     let zip = artifact("A");
     let mut bindings = ProfileExportRetryBindings::new(1);
     assert_eq!(
@@ -327,6 +331,16 @@ fn real_file_commit_then_exact_recovery_and_external_drift() {
     assert_eq!(
         assess(bound, Prior::SyncedCommit(evidence), Some(current), &zip),
         Decision::PriorCommitBytesVerified
+    );
+    // Matching complete bytes do not forgive a conflicting revision retry.
+    assert_eq!(
+        assess(
+            bindings.bind("key", other_revision, &intent, &zip),
+            Prior::SyncedCommit(evidence),
+            Some(Ok(matches(&zip))),
+            &zip
+        ),
+        Decision::BindingRefused(ProfileRetryBindingError::ConflictingRequest)
     );
     fs::write(&path, b"external change").expect("simulate external drift");
     let observed =
