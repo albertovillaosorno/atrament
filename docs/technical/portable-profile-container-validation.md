@@ -86,6 +86,34 @@ refuse before inspection; a CRC-valid same-length forged member still fails
 SHA-256. Typed profile sections, session Import acceptance, authentic caller
 selection and atomic Export remain open.
 
+### Local read-only profile inspection CLI (Linux)
+
+`atrament profile inspect PATH` is an opt-in, local CLI operation. With no
+arguments `atrament` still starts its usual disposable browser session;
+unknown or incomplete arguments refuse before that session starts. The
+inspection path itself never launches a browser, publishes a credential,
+extracts a member to disk, or modifies session state.
+
+The command passes its explicit path through the selected-file opener and
+complete bounded ZIP, JSON manifest, inventory and SHA-256 verifier. Only
+after full admission does stdout receive canonical manifest JSON and the
+verbatim syntax-checked JSON objects under `sections/`. Opaque asset names
+remain visible in manifest declarations, but asset bodies are never printed.
+A malformed section fails before any stdout content; section JSON is not yet
+admitted to a versioned handwriting schema.
+
+This first CLI policy limits input archives to 4 MiB, including at most 64
+ZIP members and 2 MiB per member. It limits manifest root JSON to 128 KiB,
+requires object-shaped section JSON, and applies independent nesting, value,
+feature and name ceilings. Unsupported required features and unsupported
+platforms still fail closed. These are command-specific protective limits,
+not portable format maxima or proof of a trusted picker gesture.
+
+The runtime-bootstrap integration suite exercises the real command process:
+valid section inspection without opaque asset extraction, CRC-valid forged
+member rejection, syntax-invalid section rejection without partial stdout,
+unknown argument rejection, and existing browser launch recovery errors.
+
 ### Bounded stored-ZIP byte reader
 
 `src/backend/profile-zip-reader/adapter-inbound/lib.rs` is a separate,
@@ -893,13 +921,11 @@ Do not treat the current Rust structs as an accidental frozen wire schema.
 
 ### Inspection command boundary
 
-The accepted design requires a human-readable inspection command that exposes
-the manifest and typed sections without extracting opaque assets by default.
-That command does not yet exist.
-
-An eventual implementation should consume the same validated inventory and
-entry evidence described above. It must not bypass container admission merely
-because the operation is read-only.
+The provisional Linux CLI above exposes the fully verified manifest and
+syntax-checked section objects without printing opaque asset bodies.
+Versioned typed handwriting section decoding remains unimplemented. The
+complete accepted design still requires typed and cross-platform inspection;
+read-only operation must never bypass profile byte admission.
 
 ## Failure Modes
 
@@ -1028,7 +1054,7 @@ The profile-container TODO remains open for:
 - section-specific resource limits and admitted profile semantics;
 - supported migrations, compatibility and loss reporting;
 - ZIP64 implementation and golden byte-stable ZIP64 fixtures;
-- a human-readable profile inspection command;
+- versioned typed and cross-platform profile inspection;
 - trusted selected-file origin and target admission;
 - durable atomic Export, retry recovery and accepted-session Import.
 

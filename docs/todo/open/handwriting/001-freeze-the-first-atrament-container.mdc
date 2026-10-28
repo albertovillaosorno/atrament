@@ -43,6 +43,13 @@ selected paths cannot be substituted with a different supplied descriptor.
 This still cannot authenticate a genuine caller-selection gesture or admit
 a decoded profile into session state.
 
+A provisional `atrament profile inspect PATH` Linux CLI now displays the
+fully checked manifest and syntax-verified JSON objects under `sections/`,
+without emitting opaque asset bodies or opening a browser. Its independently
+bounded transport and JSON ceilings refuse forged SHA and malformed section
+sources before any stdout output. It does not decode versioned handwriting
+sections; full typed and cross-platform inspection remains unfinished.
+
 Typed handwriting section schemas and encoders, migration/ZIP64 support,
 physical path authority and the application-level Import/Export lifecycle
 remain open. Earlier sections below retain their historical step-by-step

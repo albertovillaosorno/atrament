@@ -685,6 +685,15 @@ name = "atrament_runtime_bootstrap"
 version = "0.1.0"
 dependencies = [
  "atrament_browser_launch",
+ "atrament_explicit_file_path_intent",
+ "atrament_profile_entry_sha256",
+ "atrament_profile_import_preflight",
+ "atrament_profile_json_syntax",
+ "atrament_profile_manifest_json_codec",
+ "atrament_profile_manifest_json_writer",
+ "atrament_profile_open_file_import",
+ "atrament_profile_stored_zip_writer",
+ "atrament_profile_zip_reader",
  "atrament_session_application",
  "atrament_session_handshake",
  "atrament_session_runtime",
