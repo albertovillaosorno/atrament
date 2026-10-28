@@ -1,0 +1,9 @@
+identity:
+  id: function:profile-file-commit
+  name: profile-file-commit
+  path: src/backend/profile-file-commit
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: adapter-outbound

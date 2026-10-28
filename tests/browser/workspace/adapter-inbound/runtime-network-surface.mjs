@@ -180,6 +180,30 @@ test("backend registry dependencies remain explicitly reviewed", () => {
     resolvedRegistryPackages.sort(comparePackages);
     assert.deepEqual(registryDependencies, [
         {
+            defaultFeatures: true,
+            features: [],
+            kind: null,
+            name: "getrandom",
+            optional: false,
+            owner: "atrament_profile_file_commit",
+            rename: null,
+            requirement: "=0.4.3",
+            source: "registry+https://github.com/rust-lang/crates.io-index",
+            target: 'cfg(target_os = "linux")',
+        },
+        {
+            defaultFeatures: false,
+            features: ["fs"],
+            kind: null,
+            name: "nix",
+            optional: false,
+            owner: "atrament_profile_file_commit",
+            rename: null,
+            requirement: "=0.31.3",
+            source: "registry+https://github.com/rust-lang/crates.io-index",
+            target: 'cfg(target_os = "linux")',
+        },
+        {
             defaultFeatures: false,
             features: ["fs"],
             kind: null,

@@ -558,6 +558,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "atrament_profile_file_commit"
+version = "0.1.0"
+dependencies = [
+ "getrandom",
+ "nix",
+]
+
+[[package]]
 name = "atrament_profile_file_reader"
 version = "0.1.0"
 

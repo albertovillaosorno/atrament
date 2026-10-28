@@ -44,6 +44,28 @@ exact size planning and caller-owned memory emission. Those bytes are not bound
 to an accepted session revision, authenticated selected-file target, overwrite
 policy or durable commit.
 
+A new outbound `atrament_profile_file_commit` primitive can write
+already-admitted complete artifact bytes to an exact caller-supplied Linux
+path with a strict byte ceiling. It resolves the parent directory through
+symlink-forbidding `openat2`, stages a randomized, exclusive 0600 sibling,
+syncs the complete bytes, commits by atomic `renameat2`, and syncs the parent.
+Preserve-existing requests cannot overwrite a competing target; an explicitly
+admitted replacement preserves the prior file until rename.
+
+The adapter
+refuses observed symlinks and nonregular replacement targets, cleans owned
+staging paths on ordinary pre-commit refusal, and distinguishes an uncertain
+post-rename directory-sync failure from proven no-effect refusal. Real-file
+regressions cover complete writes, conflicts, replacement, traversal, links,
+byte ceilings, opaque names and concurrent preserve writers.
+
+This is only a
+low-level file effect: it cannot establish trusted selection provenance,
+accepted revision, artifact identity, retry recovery or cancellation. A
+trusted application must bind all of those before invoking the adapter; it
+must not be wired directly to a model-supplied path. Non-Linux platforms
+still fail closed.
+
 An outbound `atrament_profile_file_reader` now reads an already-opened
 regular file with independent byte limits, initial cursor rewind and a
 real EOF probe. The `atrament_profile_open_file_import` composition
