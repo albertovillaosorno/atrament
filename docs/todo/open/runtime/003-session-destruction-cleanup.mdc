@@ -142,6 +142,14 @@ the original replacement target survives unchanged. This is not a proof of
 cleanup if the process dies in the brief replacement link-before-rename window.
 The test-owned readiness marker is removed after each forced kill.
 
+The same Linux child-process harness now also suspends the final cancellation
+observation **after** the full anonymous file has been synced but **before**
+its first link, then kills the child with SIGKILL. Both preserve-existing and
+replacement runs prove no staged filename escapes and the replacement target
+remains unchanged. The harness verifies actual SIGKILL termination, not only
+an unsuccessful exit. This extends the precommit crash proof to synced bytes;
+it still does not cover a crash in the later link-before-rename window.
+
 The task remains open until temporary media exist and end-to-end fixtures also
 cover backend operation cancellation, media cleanup, and late-link crash
 recovery rather than only anonymous-stage and post-sync termination.

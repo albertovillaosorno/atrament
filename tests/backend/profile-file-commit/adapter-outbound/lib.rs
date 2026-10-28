@@ -38,12 +38,13 @@
 mod linux {
     use super::*;
     use getrandom as _;
-    use nix as _;
+    use nix::libc::SIGKILL;
     use std::env;
     use std::ffi::OsString;
     use std::fs::{self, OpenOptions};
     use std::io::{self, Read as _, Write as _};
     use std::os::unix::fs::{PermissionsExt as _, symlink};
+    use std::os::unix::process::ExitStatusExt as _;
     use std::path::{Path, PathBuf};
     use std::process::{self, Command, Stdio};
     use std::sync::atomic::{AtomicU64, Ordering};
@@ -54,6 +55,7 @@ mod linux {
 
     const CRASH_STAGE_TARGET: &str = "ATRAMENT_TEST_ANONYMOUS_STAGE_TARGET";
     const CRASH_STAGE_REPLACE: &str = "ATRAMENT_TEST_ANONYMOUS_REPLACE";
+    const CRASH_STAGE_AFTER_SYNC: &str = "ATRAMENT_TEST_AFTER_STAGE_SYNC";
     const CRASH_STAGE_TEST: &str =
         "linux::forced_death_during_write_leaves_no_named_stage";
 
@@ -129,8 +131,8 @@ mod linux {
 
     #[test]
     fn forced_death_during_write_leaves_no_named_stage() {
-        // The child blocks after its first 64 KiB chunk, while the file is
-        // still incomplete. SIGKILL bypasses all Rust destructor cleanup.
+        // The child test process runs this same test function. Its parent
+        // chooses which precommit boundary blocks until a forced SIGKILL.
         if let Some(path) = env::var_os(CRASH_STAGE_TARGET) {
             let target = PathBuf::from(path);
             let mode = if env::var_os(CRASH_STAGE_REPLACE).is_some() {
@@ -138,6 +140,10 @@ mod linux {
             } else {
                 Mode::PreserveExisting
             };
+            let after_sync = env::var_os(CRASH_STAGE_AFTER_SYNC).is_some();
+            // 200,000 bytes take four 64-KiB writes: observations 2-5
+            // precede those writes and observation 6 follows file sync.
+            let stop_at = if after_sync { 6 } else { 3 };
             let payload = vec![0x83u8; 200_000];
             let mut observations = 0usize;
             let result = commit_profile_file_cancellable(
@@ -147,9 +153,11 @@ mod linux {
                 mode,
                 || {
                     observations += 1;
-                    if observations == 3 {
-                        fs::write(target.with_extension("ready"), b"writing")
-                            .expect("notify parent after first chunk");
+                    if observations == stop_at {
+                        // Step 3 follows the first chunk, while step 6
+                        // follows full file sync but precedes the first link.
+                        fs::write(target.with_extension("ready"), b"blocked")
+                            .expect("notify parent at designated stage");
                         let mut release = [0u8; 1];
                         let _ignored = io::stdin().read_exact(&mut release);
                     }
@@ -161,7 +169,17 @@ mod linux {
                 "fixture must not reach a successful file commit",
             );
         }
+        assert_kill_before_commit(false);
+    }
 
+    #[test]
+    fn forced_death_after_file_sync_before_link_leaves_no_named_stage() {
+        // A complete synced O_TMPFILE still has no public directory entry.
+        // This is not the later replacement link-before-rename window.
+        assert_kill_before_commit(true);
+    }
+
+    fn assert_kill_before_commit(after_sync: bool) {
         for mode in [Mode::PreserveExisting, Mode::ReplaceExisting] {
             let dir = OwnedDir::new();
             let target = dir.target();
@@ -176,13 +194,17 @@ mod linux {
                 .arg(CRASH_STAGE_TEST)
                 .env(CRASH_STAGE_TARGET, &target)
                 .env_remove(CRASH_STAGE_REPLACE)
+                .env_remove(CRASH_STAGE_AFTER_SYNC)
                 .stdin(Stdio::piped())
                 .stdout(Stdio::null())
                 .stderr(Stdio::null());
             if mode == Mode::ReplaceExisting {
                 let _replace_flag = command.env(CRASH_STAGE_REPLACE, "yes");
             }
-            let mut child = command.spawn().expect("spawn midwrite process");
+            if after_sync {
+                let _after_sync = command.env(CRASH_STAGE_AFTER_SYNC, "yes");
+            }
+            let mut child = command.spawn().expect("spawn stage process");
             let mut writing = false;
             for _ in 0..200u16 {
                 if marker.exists() {
@@ -200,18 +222,33 @@ mod linux {
                 child.kill().expect("stop timed-out child");
             }
             let status = child.wait().expect("reap killed child");
-            assert!(writing, "child did not stage its first data chunk");
-            assert!(!status.success(), "child must die without unwinding");
+            assert!(writing, "child did not reach the designated stage");
+            assert_eq!(
+                status.signal(),
+                Some(SIGKILL),
+                "child died by SIGKILL",
+            );
             fs::remove_file(&marker).expect("remove test-only marker");
             if mode == Mode::ReplaceExisting {
                 assert_eq!(
                     dir.entries(),
                     vec![String::from("chosen.atrament")],
+                    "only the original target can remain after forced death",
                 );
-                assert_eq!(fs::read(&target).expect("old target"), b"original");
+                assert_eq!(
+                    fs::read(&target).expect("old target"),
+                    b"original",
+                    "the original target survives precommit process death",
+                );
             } else {
-                assert!(dir.entries().is_empty());
-                assert!(!target.exists());
+                assert!(
+                    dir.entries().is_empty(),
+                    "no temporary or target name may survive forced death",
+                );
+                assert!(
+                    !target.exists(),
+                    "preserve mode cannot publish before the final link",
+                );
             }
         }
     }
