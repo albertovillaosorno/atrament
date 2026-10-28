@@ -235,6 +235,12 @@ The Linux CLI now reuses the same gate, rather than rechecking section syntax
 only inside its own inspection callback. Two additional real CLI regressions
 prove that non-UTF-8 selected pathname bytes round-trip through OS argv and
 that a valid early section cannot appear on stdout if a later section fails.
+
+Independent real-file regressions further reject over-depth and over-member
+sections, excess JSON values and invalid section UTF-8, without rejecting a
+valid section merely because its opaque asset contains non-UTF-8 binary bytes.
+A manifest-only archive passes even when all section limits are zero.
+
 This proves section JSON syntax, not a versioned handwriting schema or admitted
 session profile; both remain open.
 

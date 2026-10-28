@@ -34,11 +34,12 @@ read errors on a host-opened handle. The read-only Import composition
 rejects wrong purpose, invalid ZIP/JSON/schema, inventory and any
 declared SHA-256 mismatch before inspecting the bounded source.
 
-Twenty-one composition tests exercise real files, zero-size pseudo-files,
+Twenty-three composition tests exercise real files, zero-size pseudo-files,
 count and byte ceilings, missing or undeclared entries, and equal-length
-CRC-valid payload substitutions. The common Import gate now validates every
+CRC-valid payload substitutions. The common Import gate validates every
 SHA-verified `sections/` payload as independently bounded JSON object syntax,
-refusing before inspection on any invalid section while leaving assets opaque.
+refusing before inspection on invalid UTF-8, depth, key or value ceilings.
+A valid JSON section can still coexist with an opaque binary asset.
 
 A second Import entrypoint now opens only
 the exact classified path via the secure Linux `openat2` adapter before full

@@ -82,10 +82,12 @@ file writes can still change its bytes. The host must independently
 authenticate the selected path's original caller gesture or host-policy
 admission; the classified intent cannot prove that provenance itself.
 
-Twenty-one composition tests exercise open-descriptor and selected-path
+Twenty-three composition tests exercise open-descriptor and selected-path
 paths, source transport, malformed archives, and complete integrity gates.
-Malformed but SHA-valid section JSON, duplicate decoded keys, section-specific
-byte ceilings and a later invalid section refuse before inspection.
+SHA-valid invalid section JSON, duplicate decoded keys, independent section
+byte, depth, key, and value ceilings, and a later invalid section all refuse
+before inspection. A separately admitted JSON section may coexist with an
+opaque, non-UTF-8 binary asset, whose bytes remain available without parsing.
 
 Five path-open fixtures cover link policy, relative paths, nonregular sources
 and replacement after open. Missing selected sources, links and wrong purposes

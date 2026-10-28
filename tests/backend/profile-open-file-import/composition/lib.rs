@@ -677,6 +677,8 @@ fn manifest_only_archive_passes_with_zero_non_root_entry_budget() {
     config.import.maximum_declared_bytes = 0;
     config.import.maximum_entry_bytes = 0;
     config.manifest.maximum_entries = 0;
+    config.section_json.maximum_bytes = 0;
+    config.section_json.maximum_values = 0;
     assert_eq!(
         inspect_open_profile_import(
             &intent,
@@ -781,6 +783,95 @@ fn section_json_duplicate_keys_and_independent_budget_refuse_inspection() {
         }),
     );
     assert!(!called.get());
+}
+
+#[test]
+fn section_nesting_keys_values_and_utf8_require_independent_admission() {
+    let default_section_limits = limits().section_json;
+    let cases: [(&[u8], ProfileJsonSyntaxLimits, ProfileJsonSyntaxError); 4] = [
+        (
+            br#"{"outer":{"inner":{}}}"#,
+            ProfileJsonSyntaxLimits {
+                maximum_nesting: 2,
+                ..default_section_limits
+            },
+            ProfileJsonSyntaxError::MaximumNestingExceeded,
+        ),
+        (
+            br#"{"a":1,"b":2}"#,
+            ProfileJsonSyntaxLimits {
+                maximum_object_members: 1,
+                ..default_section_limits
+            },
+            ProfileJsonSyntaxError::MaximumObjectMembersExceeded,
+        ),
+        (
+            br#"{"a":1,"b":2}"#,
+            ProfileJsonSyntaxLimits {
+                maximum_values: 2,
+                ..default_section_limits
+            },
+            ProfileJsonSyntaxError::MaximumValuesExceeded,
+        ),
+        (
+            b"{\"a\":\"\xff\"}",
+            default_section_limits,
+            ProfileJsonSyntaxError::InvalidUtf8,
+        ),
+    ];
+    let intent = selected(ExplicitFilePurpose::ImportProfile);
+    let called = Cell::new(false);
+    for (section, section_json, reason) in cases {
+        let fixture = OwnedTestFile::new(&zip(
+            root(section, "[]").as_bytes(), section,
+        ));
+        let mut config = limits();
+        config.section_json = section_json;
+        assert_eq!(
+            inspect_open_profile_import(
+                &intent,
+                |max| read_bounded_profile_file(fixture.open(), max),
+                &[],
+                config,
+                |_verified| called.set(true),
+            ),
+            Err(Error::SectionJson { index: 0, reason }),
+        );
+        assert!(!called.get());
+    }
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn valid_section_preserves_non_utf8_opaque_asset_without_decoding() {
+    let section = br#"{"written":true}"#;
+    let opaque = b"\xff\0binary\x80";
+    let manifest = two_entry_manifest(section, opaque);
+    let bytes = two_entry_zip(&manifest, section, opaque);
+    let source = OwnedTestFile::new(&bytes);
+    let selected = classify_explicit_file_path_intent(
+        ExplicitFilePurpose::ImportProfile,
+        ExplicitFilePathSource::CallerSelection,
+        source.path.clone(),
+        ExplicitOverwriteIntent::PreserveExisting,
+    )
+    .expect("source is caller-selected");
+    let inspected = inspect_selected_profile_import(
+        &selected,
+        &[],
+        limits(),
+        |verified| {
+            (
+                verified.verified_entry_bytes(MEMBER).map(<[u8]>::to_vec),
+                verified.verified_entry_bytes("assets/icon.png")
+                    .map(<[u8]>::to_vec),
+            )
+        },
+    );
+    assert_eq!(
+        inspected,
+        Ok((Some(section.to_vec()), Some(opaque.to_vec()))),
+    );
 }
 
 #[test]
