@@ -471,7 +471,7 @@ mod linux {
         // journal cannot remain reachable after termination.
         if let Some(path) = env::var_os(CRASH_EXPORT_TARGET) {
             let chosen = PathBuf::from(path);
-            let original = artifact("crash-survivor");
+            let original = full_artifact(b"{\"ink\":1}");
             let request = intent(chosen.clone(), PreserveExisting);
             let mut session = ProfileExportSession::new(1);
             let result = session.export(
@@ -523,7 +523,7 @@ mod linux {
         fs::remove_file(&ready).expect("remove test-only marker");
         assert_eq!(fs::read_dir(&root.0).expect("export files").count(), 1);
 
-        let original = artifact("crash-survivor");
+        let original = full_artifact(b"{\"ink\":1}");
         assert_eq!(
             fs::read(&chosen).expect("surviving file"),
             original.bytes(),
@@ -536,9 +536,24 @@ mod linux {
         )
         .expect("explicit selection after restart");
         assert_eq!(
-            inspect_selected_profile_import(&import, &[], import_limits(),
-                |verified| verified.manifest().profile_identity.clone()),
-            Ok(String::from("crash-survivor")),
+            inspect_selected_profile_import(
+                &import,
+                &[],
+                import_limits(),
+                |verified| {
+                    assert_eq!(verified.verified_entry_count(), 2);
+                    assert_eq!(
+                        verified.verified_entry_bytes("sections/ink.json"),
+                        Some(&b"{\"ink\":1}"[..]),
+                    );
+                    assert_eq!(
+                        verified.verified_entry_bytes("assets/sample.bin"),
+                        Some(BINARY_ASSET),
+                    );
+                    verified.archive_sha256()
+                },
+            ),
+            Ok(original.archive_sha256()),
         );
 
         // A fresh process owner did not inherit the dead process's receipt.

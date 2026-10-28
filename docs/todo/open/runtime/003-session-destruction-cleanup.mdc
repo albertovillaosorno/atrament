@@ -126,7 +126,11 @@ confirmation cancellation and cleanup.
 A Linux process fixture now completes an explicitly selected profile Export,
 forcibly kills its process after the synced file effect, and verifies that the
 exported ZIP remains readable through the independent secure selected-profile
-Import path in a fresh process owner. The new owner has no inherited Export
+Import path in a fresh process owner. The ZIP includes a syntax-valid JSON
+section and opaque binary asset, both independently SHA-verified after process
+death.
+
+The new owner has no inherited Export
 retry receipt and cannot replay the same key over a preserve-existing target;
 no Export staging file remains after the successful commit. The readiness
 marker is test-only and removed before checking surviving directory entries.
