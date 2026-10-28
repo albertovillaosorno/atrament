@@ -15,7 +15,7 @@
 //     state, or write persistent output.
 // - Allows:
 //   - Inputs: Classified Import intent, optional file-source callback, limits.
-//   - Outputs: Scoped complete ZIP/manifest/SHA proof or typed refusal.
+//   - Outputs: Verified ZIP/manifest/SHA, section syntax or typed refusal.
 //   - Side effects: Opens selected paths only through secure platform policy;
 //     invokes a caller-provided bounded reader on admitted source callbacks.
 // - Split-When:
@@ -33,11 +33,15 @@
 //   - Wrong purpose never invokes the file-source callback.
 //
 
-//! Source-attached profile Import and exact selected-path verification.
+//! Selected-path profile Import with bounded section syntax verification.
 
 use atrament_explicit_file_path_intent::{
     ExplicitFilePathIntent, ExplicitFilePurpose,
 };
+#[cfg(test)]
+use atrament_handwriting_profile_container as _;
+#[cfg(test)]
+use atrament_profile_entry_sha256 as _;
 use atrament_profile_file_reader::{
     ProfileFileReadError, ProfileOpenedFileBytes, read_bounded_profile_file,
 };
@@ -46,7 +50,10 @@ use atrament_profile_import_verification::{
     ProfileImportVerificationError, VerifiedAttachedProfileImport,
     verify_attached_profile_import,
 };
-use atrament_profile_json_syntax::ProfileJsonSyntaxLimits;
+use atrament_profile_json_syntax::{
+    ProfileJsonSyntaxError, ProfileJsonSyntaxLimits,
+    validate_profile_json_object,
+};
 use atrament_profile_manifest_json_codec::{
     ProfileManifestJsonError, ProfileManifestJsonLimits,
     decode_attached_profile_manifest_json,
@@ -54,6 +61,8 @@ use atrament_profile_manifest_json_codec::{
 use atrament_profile_selected_file_open::{
     ProfileSelectedFileOpenError, open_selected_profile_file,
 };
+#[cfg(test)]
+use atrament_profile_stored_zip_writer as _;
 use atrament_profile_zip_reader::{
     ProfileZipManifestSyntaxError, ProfileZipReadError, ProfileZipReadLimits,
     read_stored_profile_zip,
@@ -70,6 +79,8 @@ pub struct ProfileOpenFileImportLimits {
     pub maximum_file_bytes: usize,
     /// Root JSON bytes, members, values and nesting ceilings.
     pub root_json: ProfileJsonSyntaxLimits,
+    /// Independent syntax ceilings for each declared `sections/` member.
+    pub section_json: ProfileJsonSyntaxLimits,
     /// ZIP envelope and member byte bounds.
     pub zip: ProfileZipReadLimits,
 }
@@ -81,10 +92,22 @@ pub enum ProfileOpenFileImportError {
     AllocationFailed,
     /// ZIP-root-backed JSON failed typed schema decoding.
     Manifest(ProfileManifestJsonError),
+    /// A verified declared section was unexpectedly unavailable.
+    MissingVerifiedSection {
+        /// Original manifest index with the absent verified payload.
+        index: usize,
+    },
     /// Secure opening of the exact selected path failed.
     Open(ProfileSelectedFileOpenError),
     /// The exact ZIP root is not a valid bounded JSON object.
     RootJson(ProfileZipManifestSyntaxError),
+    /// A digest-verified section was not a bounded JSON object.
+    SectionJson {
+        /// Original manifest declaration index of the invalid section.
+        index: usize,
+        /// Syntax or resource ceiling failure before callback invocation.
+        reason: ProfileJsonSyntaxError,
+    },
     /// The trusted host-opened source could not be read completely.
     Source(ProfileFileReadError),
     /// Features, inventory, declared budgets or SHA-256 did not match.
@@ -105,7 +128,10 @@ pub enum ProfileOpenFileImportError {
 /// The strictest ZIP, Import or schema count bound is enforced before
 /// ZIP member-index allocation; excess returns ZIP `ResourceLimit`.
 /// ZIP framing, JSON, manifest, inventory and every payload SHA-256 must all
-/// pass before invoking `inspect`; verified borrows cannot escape inspection.
+/// pass before any declared `sections/` member is checked as a bounded JSON
+/// object. The callback runs only after **all** sections pass syntax checks;
+/// opaque `assets/` members remain byte-verified but uninterpreted. This is
+/// not a typed handwriting section schema. Verified borrows cannot escape.
 /// Same-length concurrent file rewrites do not prove a stable disk snapshot.
 /// This is not a session profile acceptance or persistent Export operation.
 ///
@@ -177,6 +203,21 @@ where
         &mut names,
     )
     .map_err(ProfileOpenFileImportError::Verification)?;
+    for (index, entry) in verified.manifest().entries.iter().enumerate() {
+        if !entry.path.starts_with("sections/") {
+            continue;
+        }
+        let bytes = verified.verified_entry_bytes(&entry.path).ok_or(
+            ProfileOpenFileImportError::MissingVerifiedSection { index },
+        )?;
+        let _syntax =
+            validate_profile_json_object(bytes, limits.section_json).map_err(
+                |reason| ProfileOpenFileImportError::SectionJson {
+                    index,
+                    reason,
+                },
+            )?;
+    }
     Ok(inspect(&verified))
 }
 
@@ -194,7 +235,8 @@ where
 /// # Errors
 ///
 /// Rejects wrong purpose before opening and preserves secure-open, bounded
-/// source, ZIP, manifest and SHA refusals with no partial inspection.
+/// source, ZIP, manifest, SHA and section syntax refusals with no partial
+/// inspection.
 pub fn inspect_selected_profile_import<R, Inspect>(
     intent: &ExplicitFilePathIntent,
     supported_required_features: &[&str],

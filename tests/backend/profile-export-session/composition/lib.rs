@@ -823,6 +823,12 @@ const fn import_limits() -> ProfileOpenFileImportLimits {
             maximum_object_members: 20,
             maximum_values: 64,
         },
+        section_json: ProfileJsonSyntaxLimits {
+            maximum_bytes: 4096,
+            maximum_nesting: 8,
+            maximum_object_members: 20,
+            maximum_values: 64,
+        },
         zip: ProfileZipReadLimits {
             maximum_archive_bytes: 8192,
             maximum_entries: 3,

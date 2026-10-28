@@ -120,6 +120,12 @@ fn limits() -> ProfileOpenFileImportLimits {
             maximum_object_members: 16,
             maximum_values: 50,
         },
+        section_json: ProfileJsonSyntaxLimits {
+            maximum_bytes: 1_024,
+            maximum_nesting: 8,
+            maximum_object_members: 16,
+            maximum_values: 50,
+        },
         manifest: ProfileManifestJsonLimits {
             maximum_entries: 2,
             maximum_features: 4,
@@ -314,7 +320,7 @@ fn selected_entrypoint_checks_purpose_before_touching_selected_path() {
 #[cfg(target_os = "linux")]
 #[test]
 fn selected_entrypoint_refuses_missing_source_despite_other_valid_file() {
-    let payload = b"valid";
+    let payload = b"{}";
     let genuine =
         OwnedTestFile::new(&zip(root(payload, "[]").as_bytes(), payload));
     let chosen = selected(ExplicitFilePurpose::ImportProfile);
@@ -400,7 +406,7 @@ fn wrong_purpose_refuses_before_inspection_or_file_read() {
 
 #[test]
 fn file_and_zip_byte_limits_refuse_before_inspection() {
-    let payload = b"ok";
+    let payload = b"{}";
     let bytes = zip(root(payload, "[]").as_bytes(), payload);
     let fixture = OwnedTestFile::new(&bytes);
     let intent = selected(ExplicitFilePurpose::ImportProfile);
@@ -604,7 +610,7 @@ fn pseudo_regular_zero_length_file_does_not_fake_eof() {
 
 #[test]
 fn tighter_import_and_schema_entry_caps_refuse_zip_before_root_decode() {
-    let payload = b"ok";
+    let payload = b"{}";
     // Invalid JSON still has valid stored ZIP framing and CRC. The member
     // count must refuse without attempting root JSON or digest inspection.
     let fixture = OwnedTestFile::new(&zip(b"{broken-json}", payload));
@@ -701,6 +707,145 @@ fn manifest_only_archive_passes_with_zero_non_root_entry_budget() {
     );
 }
 
+#[test]
+fn sha_valid_section_syntax_failure_refuses_before_generic_inspection() {
+    let section = b"{not-json}";
+    let asset = b"\0\xffopaque non-JSON asset";
+    let manifest = two_entry_manifest(section, asset);
+    let original = OwnedTestFile::new(&two_entry_zip(
+        &manifest, section, asset,
+    ));
+    let chosen = classify_explicit_file_path_intent(
+        ExplicitFilePurpose::ImportProfile,
+        ExplicitFilePathSource::CallerSelection,
+        original.path.clone(),
+        ExplicitOverwriteIntent::PreserveExisting,
+    )
+    .expect("real caller-selected profile");
+    let observed = Cell::new(false);
+    assert_eq!(
+        inspect_selected_profile_import(
+            &chosen,
+            &[],
+            limits(),
+            |_verified| observed.set(true),
+        ),
+        Err(Error::SectionJson {
+            index: 0,
+            reason: ProfileJsonSyntaxError::Malformed,
+        }),
+    );
+    assert!(!observed.get());
+}
+
+#[test]
+fn section_json_duplicate_keys_and_independent_budget_refuse_inspection() {
+    let intent = selected(ExplicitFilePurpose::ImportProfile);
+    let duplicate = br#"{"a":1,"\u0061":2}"#;
+    let duplicate_file = OwnedTestFile::new(&zip(
+        root(duplicate, "[]").as_bytes(), duplicate,
+    ));
+    let called = Cell::new(false);
+    assert_eq!(
+        inspect_open_profile_import(
+            &intent,
+            |max| read_bounded_profile_file(duplicate_file.open(), max),
+            &[],
+            limits(),
+            |_verified| called.set(true),
+        ),
+        Err(Error::SectionJson {
+            index: 0,
+            reason: ProfileJsonSyntaxError::DuplicateObjectKey,
+        }),
+    );
+    assert!(!called.get());
+
+    let valid = br#"{"a":1}"#;
+    let valid_file = OwnedTestFile::new(&zip(
+        root(valid, "[]").as_bytes(), valid,
+    ));
+    let mut bounded = limits();
+    bounded.section_json.maximum_bytes = valid.len() - 1;
+    assert_eq!(
+        inspect_open_profile_import(
+            &intent,
+            |max| read_bounded_profile_file(valid_file.open(), max),
+            &[],
+            bounded,
+            |_verified| called.set(true),
+        ),
+        Err(Error::SectionJson {
+            index: 0,
+            reason: ProfileJsonSyntaxError::MaximumBytesExceeded,
+        }),
+    );
+    assert!(!called.get());
+}
+
+#[test]
+fn later_invalid_section_cannot_expose_prior_verified_section() {
+    let first = br#"{"valid":true}"#;
+    let last = b"[1,2,3]";
+    let first_manifest = root(first, "[]");
+    let prefix = first_manifest
+        .strip_suffix("]}")
+        .expect("one-entry manifest suffix");
+    let digest: String = sha256_profile_bytes(last)
+        .bytes()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect();
+    let manifest = format!(
+        concat!(
+            r#"{},{{"path":"sections/z.json","media_type":"application/json","#,
+            r#""byte_length":{},"sha256":"{}"}}]}}"#,
+        ),
+        prefix,
+        last.len(),
+        digest,
+    );
+    let archive = write_stored_profile_zip(
+        &[
+            ProfileStoredZipMember {
+                name: "manifest.json",
+                bytes: manifest.as_bytes(),
+            },
+            ProfileStoredZipMember {
+                name: MEMBER,
+                bytes: first,
+            },
+            ProfileStoredZipMember {
+                name: "sections/z.json",
+                bytes: last,
+            },
+        ],
+        ProfileStoredZipWriteLimits {
+            maximum_archive_bytes: 16_384,
+            maximum_entries: 3,
+            maximum_entry_bytes: 8_192,
+            maximum_total_bytes: 12_000,
+        },
+    )
+    .expect("valid ZIP and complete manifest hashes");
+    let file = OwnedTestFile::new(&archive);
+    let called = Cell::new(false);
+    assert_eq!(
+        inspect_open_profile_import(
+            &selected(ExplicitFilePurpose::ImportProfile),
+            |max| read_bounded_profile_file(file.open(), max),
+            &[],
+            limits(),
+            |_verified| called.set(true),
+        ),
+        Err(Error::SectionJson {
+            index: 1,
+            reason: ProfileJsonSyntaxError::RootNotObject,
+        }),
+    );
+    assert!(!called.get());
+}
+
 fn two_entry_manifest(section: &[u8], asset: &[u8]) -> String {
     let one = root(section, "[]");
     let prefix = one
@@ -751,7 +896,7 @@ fn two_entry_zip(root_json: &str, section: &[u8], asset: &[u8]) -> Vec<u8> {
 
 #[test]
 fn two_payload_open_file_admits_only_after_all_digest_checks() {
-    let section = b"first";
+    let section = br#"{"first":true}"#;
     let asset = b"second";
     let root_json = two_entry_manifest(section, asset);
     let original = two_entry_zip(&root_json, section, asset);
@@ -786,7 +931,7 @@ fn two_payload_open_file_admits_only_after_all_digest_checks() {
     // Both payload replacements are equal length, and the writer updates
     // CRC-32 for each forged ZIP. Only declared SHA-256 can reject them.
     for (replacement_section, replacement_asset, index) in [
-        (b"other".as_slice(), asset.as_slice(), 0),
+        (br#"{"first":null}"#.as_slice(), asset.as_slice(), 0),
         (section.as_slice(), b"seconD".as_slice(), 1),
     ] {
         let altered =

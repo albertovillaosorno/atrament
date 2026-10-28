@@ -55,10 +55,14 @@ classified `ImportProfile` intent and a host-supplied reader callback.
 It rejects any other purpose before reading and enforces the strictest
 ZIP, typed-manifest and Import member-index ceiling before ZIP parsing.
 Only after source-bound ZIP CRC, bounded root JSON, typed manifest,
-exact inventory and every declared member SHA-256 pass can a scoped
-inspection callback access verified member bytes. No typed section
-is decoded, no profile is accepted into a session and no file is
-written.
+exact inventory and every declared member SHA-256 pass does the composition
+syntax-check **every** `sections/` payload as a bounded JSON object.
+
+Each section has independent byte, depth, object-key and value limits. Only
+then can the scoped inspection callback access any verified member bytes; a bad
+second section cannot expose the first. Assets remain opaque (but SHA-verified).
+No typed handwriting section is decoded, no profile is accepted into a session
+and no file is written.
 
 A second `inspect_selected_profile_import` entrypoint instead
 opens exactly the classified path through the secure Linux opener, then
@@ -78,10 +82,13 @@ file writes can still change its bytes. The host must independently
 authenticate the selected path's original caller gesture or host-policy
 admission; the classified intent cannot prove that provenance itself.
 
-Eighteen composition tests exercise open-descriptor and selected-path paths,
-source transport, malformed archives, and complete integrity gates. Five
-path-open fixtures cover link policy, relative paths, nonregular sources and
-replacement after open. Missing selected sources, links and wrong purposes
+Twenty-one composition tests exercise open-descriptor and selected-path
+paths, source transport, malformed archives, and complete integrity gates.
+Malformed but SHA-valid section JSON, duplicate decoded keys, section-specific
+byte ceilings and a later invalid section refuse before inspection.
+
+Five path-open fixtures cover link policy, relative paths, nonregular sources
+and replacement after open. Missing selected sources, links and wrong purposes
 refuse before inspection; a CRC-valid same-length forged member still fails
 SHA-256. Typed profile sections, session Import acceptance, authentic caller
 selection and atomic Export remain open.
@@ -95,12 +102,14 @@ inspection path itself never launches a browser, publishes a credential,
 extracts a member to disk, or modifies session state.
 
 The command passes its explicit path through the selected-file opener and
-complete bounded ZIP, JSON manifest, inventory and SHA-256 verifier. Only
-after full admission does stdout receive canonical manifest JSON and the
-verbatim syntax-checked JSON objects under `sections/`. Opaque asset names
-remain visible in manifest declarations, but asset bodies are never printed.
-A malformed section fails before any stdout content; section JSON is not yet
-admitted to a versioned handwriting schema.
+complete bounded ZIP, JSON manifest, inventory, SHA-256 and section-syntax
+gate. The CLI reuses the central bounded section check instead of separately
+parsing verified payloads. Only after full admission does stdout receive
+canonical manifest JSON and verbatim section JSON.
+
+Opaque asset names remain visible in manifest declarations, but asset bodies
+are never printed. A malformed section fails before any stdout content;
+section JSON is not yet admitted to a versioned handwriting schema.
 
 This first CLI policy limits input archives to 4 MiB, including at most 64
 ZIP members and 2 MiB per member. It limits manifest root JSON to 128 KiB,

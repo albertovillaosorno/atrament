@@ -46,9 +46,7 @@ use atrament_explicit_file_path_intent::{
     classify_explicit_file_path_intent,
 };
 use atrament_profile_import_preflight::ProfileImportBudget;
-use atrament_profile_json_syntax::{
-    ProfileJsonSyntaxLimits, validate_profile_json_object,
-};
+use atrament_profile_json_syntax::ProfileJsonSyntaxLimits;
 use atrament_profile_manifest_json_codec::ProfileManifestJsonLimits;
 use atrament_profile_manifest_json_writer::{
     ProfileManifestJsonWriteLimits, write_canonical_profile_manifest_json,
@@ -151,6 +149,12 @@ const fn profile_inspection_limits() -> ProfileOpenFileImportLimits {
             maximum_object_members: 64,
             maximum_values: 4096,
         },
+        section_json: ProfileJsonSyntaxLimits {
+            maximum_bytes: PROFILE_INSPECT_MAX_MEMBER_BYTES,
+            maximum_nesting: 32,
+            maximum_object_members: 64,
+            maximum_values: 4096,
+        },
         zip: ProfileZipReadLimits {
             maximum_archive_bytes: PROFILE_INSPECT_MAX_ARCHIVE_BYTES,
             maximum_entries: PROFILE_INSPECT_MAX_ENTRIES,
@@ -212,17 +216,6 @@ pub(crate) fn inspect_profile(path: PathBuf) -> io::Result<String> {
                     .ok_or_else(|| {
                         io::Error::other("missing verified section")
                     })?;
-                let limits = ProfileJsonSyntaxLimits {
-                    maximum_bytes: PROFILE_INSPECT_MAX_MEMBER_BYTES,
-                    maximum_nesting: 32,
-                    maximum_object_members: 64,
-                    maximum_values: 4096,
-                };
-                let _syntax = validate_profile_json_object(bytes, limits)
-                    .map_err(|error| io::Error::new(
-                        io::ErrorKind::InvalidData,
-                        format!("section {} JSON: {error:?}", entry.path),
-                    ))?;
                 readable.push_str(&entry.path);
                 readable.push_str(" (syntax-checked; untyped):\n");
                 readable.push_str(from_utf8(bytes)

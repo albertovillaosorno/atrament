@@ -220,6 +220,21 @@ source reading, ZIP/root admission and every member SHA-256. The negative
 fixture reconstructs a valid CRC ZIP with a same-length forged member;
 the SHA mismatch refuses before any inspection callback is invoked.
 
+The Import composition now applies one additional all-or-nothing gate after
+manifest inventory and every declared member digest pass: each `sections/`
+entry must contain an entire, resource-bounded JSON **object** with distinct
+decoded keys. Independent per-section byte, nesting, key and value ceilings
+are explicit in `ProfileOpenFileImportLimits`. A typed `SectionJson` refusal
+reports the original manifest declaration index before **any** callback can
+inspect a previously verified section. `assets/` remain opaque byte payloads.
+
+Three real-file regressions exercise an authentic, correctly hashed malformed
+section alongside an opaque binary asset, escaped duplicate JSON keys and
+an over-limit valid object, plus a later invalid section after a valid one.
+The Linux CLI now reuses the same gate, rather than rechecking section syntax
+only inside its own inspection callback. This proves section JSON syntax, not
+any versioned handwriting schema or admitted session profile; both remain open.
+
 The trusted host must still prove the `CallerSelection` or admitted policy
 actually came from an authorized action, not document or model content;
 a classified intent cannot authenticate its own origin. Non-Linux source
