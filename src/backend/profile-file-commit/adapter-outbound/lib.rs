@@ -15,8 +15,8 @@
 //     autosave, decode a profile, or expose owned temporary names.
 // - Allows:
 //   - Inputs: Trusted host-selected target, complete artifact bytes, byte cap,
-//     and independently admitted overwrite disposition.
-//   - Outputs: Exact committed byte count or typed I/O/commit uncertainty.
+//     independently admitted overwrite disposition and optional cancel probe.
+//   - Outputs: Exact byte count, precommit cancellation or typed I/O refusal.
 //   - Side effects: One explicit file commit; owned sibling temp cleanup.
 // - Split-When:
 //   - Revision/authorization and same-retry recovery are composed upstream.
@@ -59,6 +59,8 @@ pub enum ProfileFileCommitDisposition {
 pub enum ProfileFileCommitError {
     /// Complete artifact exceeds caller byte ceiling.
     ArtifactTooLarge,
+    /// Cancellation was observed before the irreversible rename.
+    CancelledBeforeCommit,
     /// Rename succeeded, but directory sync did not prove durability.
     CommittedDurabilityUnknown(io::ErrorKind),
     /// Initial staging, commit I/O or cleanup failed.
@@ -108,26 +110,60 @@ impl Drop for OwnedTemp<'_> {
 
 /// Persist one complete, already validated artifact at an authorized target.
 ///
-/// This adapter cannot establish caller selection, accepted revision, profile
-/// semantics or retry identity. The owning host must establish those **before**
-/// calling this function. Linux uses a symlink-free, descriptor-bound parent,
-/// a random exclusive 0600 sibling file, `sync_all`, and atomic `renameat2`.
-/// The directory is synced after rename. A failure after rename is explicitly
-/// ambiguous, never advertised as a known no-effect. An unexpected target
-/// change can race a replacement: rename changes the directory entry, never
-/// follows the target link. Non-Linux platforms refuse without a weak fallback.
+/// This compatibility entrypoint uses the same atomic staging behavior as
+/// [`commit_profile_file_cancellable`] without a cancellation source.
+/// Selection, revision, artifact and overwrite admission remain the caller's
+/// responsibility, not this file transport's authority.
 ///
 /// # Errors
 ///
-/// Refuses invalid path, bytes, conflict or unavailable I/O without reporting
-/// Export success. If directory sync fails after rename, the file may already
-/// have been committed; the caller must recover rather than blindly retry.
+/// Refuses invalid path, bytes, conflict or unavailable I/O. Directory-sync
+/// failure after rename remains explicitly uncertain.
 pub fn commit_profile_file(
     target: &Path,
     artifact: &[u8],
     maximum_bytes: usize,
     disposition: ProfileFileCommitDisposition,
 ) -> Result<ProfileFileCommitEvidence, ProfileFileCommitError> {
+    commit_profile_file_cancellable(
+        target,
+        artifact,
+        maximum_bytes,
+        disposition,
+        || false,
+    )
+}
+
+/// Persist admitted bytes with cooperative checks before the file commit.
+///
+/// A caller-supplied predicate is checked after byte/path preflight and before
+/// any filesystem effects, before each 64 KiB write, and after file sync just
+/// before atomic rename. Once rename succeeds, cancellation cannot undo that
+/// commit and is never checked again. A true pre-rename predicate returns
+/// `CancelledBeforeCommit`; the owned staging file is then unlinked and an
+/// existing selected target is preserved. The predicate is an observation of
+/// caller-owned cancellation state, not a source of Export authorization.
+///
+/// A predicate that becomes true **after** the final check cannot revoke a
+/// completed rename. A directory-sync failure after rename remains uncertain;
+/// the caller must use higher-level receipt recovery rather than retrying.
+/// Only Linux has the secure directory-relative implementation. Other
+/// platforms refuse without a weak fallback.
+///
+/// # Errors
+///
+/// Reports proven precommit cancellation, typed I/O refusal, and uncertain
+/// post-rename durability without suggesting a receipt or retry policy.
+pub fn commit_profile_file_cancellable<Cancel>(
+    target: &Path,
+    artifact: &[u8],
+    maximum_bytes: usize,
+    disposition: ProfileFileCommitDisposition,
+    mut is_cancelled: Cancel,
+) -> Result<ProfileFileCommitEvidence, ProfileFileCommitError>
+where
+    Cancel: FnMut() -> bool,
+{
     if artifact.len() > maximum_bytes {
         return Err(ProfileFileCommitError::ArtifactTooLarge);
     }
@@ -141,7 +177,10 @@ pub fn commit_profile_file(
     {
         return Err(ProfileFileCommitError::InvalidTarget);
     }
-    commit_platform(target, artifact, disposition)?;
+    if is_cancelled() {
+        return Err(ProfileFileCommitError::CancelledBeforeCommit);
+    }
+    commit_platform(target, artifact, disposition, &mut is_cancelled)?;
     Ok(ProfileFileCommitEvidence {
         byte_length: artifact.len(),
     })
@@ -152,6 +191,7 @@ fn commit_platform(
     _target: &Path,
     _artifact: &[u8],
     _disposition: ProfileFileCommitDisposition,
+    _is_cancelled: &mut dyn FnMut() -> bool,
 ) -> Result<(), ProfileFileCommitError> {
     Err(ProfileFileCommitError::UnsupportedPlatform)
 }
@@ -165,6 +205,7 @@ fn commit_platform(
     target: &Path,
     artifact: &[u8],
     disposition: ProfileFileCommitDisposition,
+    is_cancelled: &mut dyn FnMut() -> bool,
 ) -> Result<(), ProfileFileCommitError> {
     use std::io::Write as _;
 
@@ -269,11 +310,21 @@ fn commit_platform(
     }
     let (mut output, mut temp) =
         staging.ok_or(ProfileFileCommitError::RandomUnavailable)?;
+    for chunk in artifact.chunks(64 * 1024) {
+        if is_cancelled() {
+            return Err(ProfileFileCommitError::CancelledBeforeCommit);
+        }
+        output
+            .write_all(chunk)
+            .map_err(|error| ProfileFileCommitError::FileIo(error.kind()))?;
+    }
     output
-        .write_all(artifact)
-        .and_then(|()| output.sync_all())
+        .sync_all()
         .map_err(|error| ProfileFileCommitError::FileIo(error.kind()))?;
     drop(output);
+    if is_cancelled() {
+        return Err(ProfileFileCommitError::CancelledBeforeCommit);
+    }
 
     let flags = match disposition {
         ProfileFileCommitDisposition::PreserveExisting => {

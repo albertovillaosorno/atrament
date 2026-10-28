@@ -319,6 +319,130 @@ mod linux {
     }
 
     #[test]
+    fn cancellation_preflight_refuses_without_file_io() {
+        let dir = OwnedDir::new();
+        let target = dir.target();
+        let mut observations: usize = 0;
+        assert_eq!(
+            commit_profile_file_cancellable(
+                &target,
+                b"data",
+                4,
+                Mode::PreserveExisting,
+                || {
+                    observations += 1;
+                    true
+                },
+            ),
+            Err(Error::CancelledBeforeCommit)
+        );
+        assert_eq!(observations, 1);
+        assert!(dir.entries().is_empty());
+        assert_eq!(
+            commit_profile_file_cancellable(
+                &target,
+                b"oversize",
+                4,
+                Mode::PreserveExisting,
+                || {
+                    observations += 1;
+                    true
+                },
+            ),
+            Err(Error::ArtifactTooLarge)
+        );
+        assert_eq!(
+            commit_profile_file_cancellable(
+                Path::new("../escape.atrament"),
+                b"data",
+                4,
+                Mode::PreserveExisting,
+                || {
+                    observations += 1;
+                    true
+                },
+            ),
+            Err(Error::InvalidTarget)
+        );
+        assert_eq!(observations, 1);
+        assert!(dir.entries().is_empty());
+    }
+
+    #[test]
+    fn cancellation_after_file_sync_preserves_existing_target_and_cleans_temp()
+    {
+        let dir = OwnedDir::new();
+        let target = dir.target();
+        fs::write(&target, b"original").expect("original file");
+        let mut observations: usize = 0;
+        assert_eq!(
+            commit_profile_file_cancellable(
+                &target,
+                b"replacement",
+                11,
+                Mode::ReplaceExisting,
+                || {
+                    observations += 1;
+                    observations == 3
+                },
+            ),
+            Err(Error::CancelledBeforeCommit)
+        );
+        assert_eq!(observations, 3);
+        assert_eq!(fs::read(&target).expect("original remains"), b"original");
+        assert_eq!(dir.entries(), vec![String::from("chosen.atrament")]);
+    }
+
+    #[test]
+    fn cancellation_midwrite_discards_partial_staging_and_preserves_target() {
+        let dir = OwnedDir::new();
+        let target = dir.target();
+        fs::write(&target, b"original").expect("original file");
+        let mut observations: usize = 0;
+        let payload = vec![0x93u8; 200_000];
+        assert_eq!(
+            commit_profile_file_cancellable(
+                &target,
+                &payload,
+                payload.len(),
+                Mode::ReplaceExisting,
+                || {
+                    observations += 1;
+                    observations == 3
+                },
+            ),
+            Err(Error::CancelledBeforeCommit)
+        );
+        assert_eq!(observations, 3);
+        assert_eq!(fs::read(&target).expect("original remains"), b"original");
+        assert_eq!(dir.entries(), vec![String::from("chosen.atrament")]);
+    }
+
+    #[test]
+    fn cancellation_after_final_observation_cannot_revoke_committed_bytes() {
+        let dir = OwnedDir::new();
+        let target = dir.target();
+        let mut observations: usize = 0;
+        let payload = vec![0x47u8; 131_072];
+        let evidence = commit_profile_file_cancellable(
+            &target,
+            &payload,
+            payload.len(),
+            Mode::PreserveExisting,
+            || {
+                observations += 1;
+                false
+            },
+        )
+        .expect("complete commit");
+        // 1 preflight, 2 data chunks and 1 pre-rename check; none after.
+        assert_eq!(observations, 4);
+        assert_eq!(evidence.byte_length, payload.len());
+        assert_eq!(fs::read(&target).expect("committed file"), payload);
+        assert_eq!(dir.entries(), vec![String::from("chosen.atrament")]);
+    }
+
+    #[test]
     fn preserve_conflict_does_not_modify_original_open_handle() {
         let dir = OwnedDir::new();
         let target = dir.target();
@@ -340,7 +464,7 @@ mod linux {
 
 use atrament_profile_file_commit::{
     ProfileFileCommitDisposition as Mode, ProfileFileCommitError as Error,
-    commit_profile_file,
+    commit_profile_file, commit_profile_file_cancellable,
 };
 
 #[cfg(not(target_os = "linux"))]

@@ -58,10 +58,21 @@ post-rename directory-sync failure from proven no-effect refusal. Real-file
 regressions cover complete writes, conflicts, replacement, traversal, links,
 byte ceilings, opaque names and concurrent preserve writers.
 
+An opt-in `commit_profile_file_cancellable` variant now observes caller-owned
+cancellation before any filesystem operation, between 64 KiB stage writes,
+and again after syncing the complete temporary file just before atomic rename.
+The `CancelledBeforeCommit` outcome proves that no target rename occurred;
+owned stages are removed and existing target bytes remain unchanged.
+
+After rename, cancellation is not polled and cannot revoke a committed output.
+Four Linux cancellation fixtures cover early refusal, mid-write cleanup,
+pre-rename replacement preservation and completed commits. The original
+non-cancellable file API retains identical behavior through delegation.
+
 This is only a
 low-level file effect: it cannot establish trusted selection provenance,
-accepted revision, artifact identity, retry recovery or cancellation. A
-trusted application must bind all of those before invoking the adapter; it
+accepted revision, artifact identity, retry recovery or the caller-owned
+cancellation state. A trusted application must bind those before invocation; it
 must not be wired directly to a model-supplied path. Non-Linux platforms
 still fail closed.
 
