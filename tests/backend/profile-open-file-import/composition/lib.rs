@@ -23,7 +23,7 @@
 // - Summary:
 //   - Bad bytes cannot reach inspection; valid open files are read exactly.
 // - Description:
-//   - Proves caller path strings never cause this adapter to open files.
+//   - Open-file inspection never opens paths; selected entrypoint does.
 // - Usage:
 //   - Run Cargo test for the profile open-file-import adapter.
 // - Defaults:
@@ -59,9 +59,9 @@ use atrament_profile_manifest_json_codec::{
 };
 use atrament_profile_open_file_import::{
     ProfileOpenFileImportError as Error, ProfileOpenFileImportLimits,
-    inspect_open_profile_import,
+    inspect_open_profile_import, inspect_selected_profile_import,
 };
-use atrament_profile_selected_file_open::open_selected_profile_file;
+use atrament_profile_selected_file_open::ProfileSelectedFileOpenError;
 use atrament_profile_stored_zip_writer::{
     ProfileStoredZipMember, ProfileStoredZipWriteLimits,
     write_stored_profile_zip,
@@ -240,24 +240,13 @@ fn selected_linux_path_is_bound_to_opened_descriptor_and_full_sha() {
         ExplicitOverwriteIntent::PreserveExisting,
     )
     .expect("host-selected typed path");
-    let inspected = inspect_open_profile_import(
-        &chosen,
-        |maximum| {
-            read_bounded_profile_file(
-                open_selected_profile_file(chosen.path())
-                    .expect("secure openat2 selected path"),
-                maximum,
-            )
-        },
-        &[],
-        limits(),
-        |verified| {
-            (
-                verified.archive_sha256(),
-                verified.verified_entry_bytes(MEMBER).map(<[u8]>::to_vec),
-            )
-        },
-    )
+    let inspected = inspect_selected_profile_import(
+        &chosen, &[], limits(), |verified| {
+        (
+            verified.archive_sha256(),
+            verified.verified_entry_bytes(MEMBER).map(<[u8]>::to_vec),
+        )
+    })
     .expect("source-sealed selected file verified");
     assert_eq!(inspected.0, sha256_profile_bytes(&bytes));
     assert_eq!(inspected.1.as_deref(), Some(payload.as_slice()));
@@ -281,19 +270,9 @@ fn selected_crc_valid_source_with_wrong_sha_never_reaches_inspection() {
     )
     .expect("typed selected Import path");
     let inspected = Cell::new(false);
-    let result = inspect_open_profile_import(
-        &chosen,
-        |maximum| {
-            read_bounded_profile_file(
-                open_selected_profile_file(chosen.path())
-                    .expect("secure Linux path open"),
-                maximum,
-            )
-        },
-        &[],
-        limits(),
-        |_verified| inspected.set(true),
-    );
+    let result =
+        inspect_selected_profile_import(
+            &chosen, &[], limits(), |_verified| inspected.set(true));
     assert!(matches!(
         result,
         Err(Error::Verification(
@@ -308,6 +287,99 @@ fn selected_crc_valid_source_with_wrong_sha_never_reaches_inspection() {
     assert!(
         !inspected.get(),
         "no payload inspection before full SHA admission"
+    );
+}
+
+#[test]
+fn selected_entrypoint_checks_purpose_before_touching_selected_path() {
+    // The selected path does not exist; opening it would produce a distinct
+    // OS error. Purpose rejection must take precedence even on Linux.
+    for purpose in [
+        ExplicitFilePurpose::ImportNotebook,
+        ExplicitFilePurpose::ExportProfile,
+        ExplicitFilePurpose::ExportNotebook,
+    ] {
+        let inspected = Cell::new(false);
+        let intent = selected(purpose);
+        assert_eq!(
+            inspect_selected_profile_import(&intent, &[], limits(), |_view| {
+                inspected.set(true)
+            }),
+            Err(Error::WrongPathPurpose),
+        );
+        assert!(!inspected.get());
+    }
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn selected_entrypoint_refuses_missing_source_despite_other_valid_file() {
+    let payload = b"valid";
+    let genuine =
+        OwnedTestFile::new(&zip(root(payload, "[]").as_bytes(), payload));
+    let chosen = selected(ExplicitFilePurpose::ImportProfile);
+    let inspected = Cell::new(false);
+    // A permissive external callback could use genuine.open() for chosen.
+    // The path-bound API has no such callback and must refuse the selection.
+    assert_eq!(
+        inspect_selected_profile_import(&chosen, &[], limits(), |_verified| {
+            inspected.set(true)
+        }),
+        Err(Error::Open(ProfileSelectedFileOpenError::FileIo(
+            std::io::ErrorKind::NotFound,
+        ))),
+    );
+    assert!(!inspected.get());
+    assert_eq!(
+        inspect_open_profile_import(
+            &chosen,
+            |max| read_bounded_profile_file(genuine.open(), max),
+            &[],
+            limits(),
+            |verified| verified.verified_entry_count(),
+        ),
+        Ok(1),
+        "opened-source API leaves descriptor binding to host",
+    );
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn selected_entrypoint_rejects_symlink_even_to_valid_profile() {
+    use std::os::unix::fs::symlink;
+    let payload = b"trusted";
+    let genuine =
+        OwnedTestFile::new(&zip(root(payload, "[]").as_bytes(), payload));
+    let alias = genuine.path.with_extension("linked");
+    symlink(&genuine.path, &alias).expect("test symlink");
+    let chosen = classify_explicit_file_path_intent(
+        ExplicitFilePurpose::ImportProfile,
+        ExplicitFilePathSource::CallerSelection,
+        alias.clone(),
+        ExplicitOverwriteIntent::PreserveExisting,
+    )
+    .expect("classified alias is not authority");
+    let inspected = Cell::new(false);
+    let result =
+        inspect_selected_profile_import(
+            &chosen, &[], limits(), |_verified| inspected.set(true));
+    std::fs::remove_file(&alias).expect("remove only test-created symlink");
+    assert_eq!(
+        result,
+        Err(Error::Open(ProfileSelectedFileOpenError::SymlinkForbidden)),
+    );
+    assert!(!inspected.get());
+}
+
+#[cfg(not(target_os = "linux"))]
+#[test]
+fn selected_entrypoint_fails_closed_without_supported_open_policy() {
+    let intent = selected(ExplicitFilePurpose::ImportProfile);
+    assert_eq!(
+        inspect_selected_profile_import(&intent, &[], limits(), |_verified| ()),
+        Err(Error::Open(
+            ProfileSelectedFileOpenError::UnsupportedOpenPolicy,
+        )),
     );
 }
 

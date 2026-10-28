@@ -93,6 +93,16 @@ A manifest-only ZIP is accepted at zero non-root entry allowance.
 Excess counts refuse during ZIP framing before index allocation or
 root decoding.
 
+The composition now also offers a selected-path Import entrypoint that first
+rejects wrong purpose, opens only the classified `intent.path()` through the
+Linux secure-open adapter, reads the returned descriptor, then applies the
+complete bounded ZIP/manifest/SHA gate. Unlike the injected-open-file path,
+this entrypoint cannot inspect a different host-supplied descriptor while the
+selected path is absent. Tests cover the exact chosen file, missing-path
+substitution refusal, symlink refusal, wrong-purpose ordering and CRC-valid
+SHA forgery. It still cannot prove a genuine user-selection gesture from an
+untrusted source label; that must be established by a future host boundary.
+
 Typed section decoding, explicit profile acceptance, revision-bound
 Export and atomic file commit remain open.
 

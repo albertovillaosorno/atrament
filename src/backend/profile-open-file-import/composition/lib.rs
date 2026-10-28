@@ -9,14 +9,15 @@
 //
 // Boundary-Contract:
 // - Owns:
-//   - Import verification of a bounded host-opened file byte snapshot.
+//   - Selected Linux source opening and bounded Import verification.
 // - Must-Not:
-//   - Open paths, infer file authority, decode profile sections, accept
-//     session state, or write persistent output.
+//   - Infer selection authority, decode profile sections, accept session
+//     state, or write persistent output.
 // - Allows:
-//   - Inputs: Classified Import intent, file-source callback and limits.
+//   - Inputs: Classified Import intent, optional file-source callback, limits.
 //   - Outputs: Scoped complete ZIP/manifest/SHA proof or typed refusal.
-//   - Side effects: Invokes a caller-provided bounded reader once on admission.
+//   - Side effects: Opens selected paths only through secure platform policy;
+//     invokes a caller-provided bounded reader on admitted source callbacks.
 // - Split-When:
 //   - Host selection/open policy and profile acceptance become implemented.
 // - Merge-When:
@@ -26,18 +27,19 @@
 // - Description:
 //   - Readiness is not a file-selection capability or session acceptance.
 // - Usage:
-//   - Host must associate the open source with its selected path itself.
+//   - Host must authenticate the classified source; selected entrypoint
+//     binds its exact path to the opened file without trusting callbacks.
 // - Defaults:
 //   - Wrong purpose never invokes the file-source callback.
 //
 
-//! Source-attached profile Import verification without filesystem authority.
+//! Source-attached profile Import and exact selected-path verification.
 
 use atrament_explicit_file_path_intent::{
     ExplicitFilePathIntent, ExplicitFilePurpose,
 };
 use atrament_profile_file_reader::{
-    ProfileFileReadError, ProfileOpenedFileBytes,
+    ProfileFileReadError, ProfileOpenedFileBytes, read_bounded_profile_file,
 };
 use atrament_profile_import_preflight::ProfileImportBudget;
 use atrament_profile_import_verification::{
@@ -48,6 +50,9 @@ use atrament_profile_json_syntax::ProfileJsonSyntaxLimits;
 use atrament_profile_manifest_json_codec::{
     ProfileManifestJsonError, ProfileManifestJsonLimits,
     decode_attached_profile_manifest_json,
+};
+use atrament_profile_selected_file_open::{
+    ProfileSelectedFileOpenError, open_selected_profile_file,
 };
 use atrament_profile_zip_reader::{
     ProfileZipManifestSyntaxError, ProfileZipReadError, ProfileZipReadLimits,
@@ -76,6 +81,8 @@ pub enum ProfileOpenFileImportError {
     AllocationFailed,
     /// ZIP-root-backed JSON failed typed schema decoding.
     Manifest(ProfileManifestJsonError),
+    /// Secure opening of the exact selected path failed.
+    Open(ProfileSelectedFileOpenError),
     /// The exact ZIP root is not a valid bounded JSON object.
     RootJson(ProfileZipManifestSyntaxError),
     /// The trusted host-opened source could not be read completely.
@@ -171,4 +178,42 @@ where
     )
     .map_err(ProfileOpenFileImportError::Verification)?;
     Ok(inspect(&verified))
+}
+
+/// Inspect a source opened only from the classified selected profile path.
+///
+/// This composition checks purpose before any filesystem access, opens only
+/// `intent.path()` via the secure platform policy, then reads and verifies the
+/// returned descriptor. It cannot be redirected to an unrelated file-source
+/// callback. A selected path or `CallerSelection` label is still **not** proof
+/// of a real caller gesture: a trusted host must authenticate that provenance
+/// before invoking this method. Linux requires `openat2` with no symlinks;
+/// other platforms and unsupported kernels fail closed. No session mutation
+/// or file Export occurs, and concurrent in-place writes are not snapshotted.
+///
+/// # Errors
+///
+/// Rejects wrong purpose before opening and preserves secure-open, bounded
+/// source, ZIP, manifest and SHA refusals with no partial inspection.
+pub fn inspect_selected_profile_import<R, Inspect>(
+    intent: &ExplicitFilePathIntent,
+    supported_required_features: &[&str],
+    limits: ProfileOpenFileImportLimits,
+    inspect: Inspect,
+) -> Result<R, ProfileOpenFileImportError>
+where
+    Inspect: FnOnce(&VerifiedAttachedProfileImport<'_, '_, '_, '_>) -> R,
+{
+    if intent.purpose() != ExplicitFilePurpose::ImportProfile {
+        return Err(ProfileOpenFileImportError::WrongPathPurpose);
+    }
+    let opened = open_selected_profile_file(intent.path())
+        .map_err(ProfileOpenFileImportError::Open)?;
+    inspect_open_profile_import(
+        intent,
+        |maximum| read_bounded_profile_file(opened, maximum),
+        supported_required_features,
+        limits,
+        inspect,
+    )
 }

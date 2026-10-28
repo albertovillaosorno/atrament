@@ -11,13 +11,13 @@ atrament_profile_file_reader = { workspace = true }
 atrament_profile_import_preflight = { workspace = true }
 atrament_profile_import_verification = { workspace = true }
 atrament_profile_json_syntax = { workspace = true }
+atrament_profile_selected_file_open = { workspace = true }
 atrament_profile_manifest_json_codec = { workspace = true }
 atrament_profile_zip_reader = { workspace = true }
 
 [dev-dependencies]
 atrament_handwriting_profile_container = { workspace = true }
 atrament_profile_entry_sha256 = { workspace = true }
-atrament_profile_selected_file_open = { workspace = true }
 atrament_profile_stored_zip_writer = { workspace = true }
 
 [lib]
