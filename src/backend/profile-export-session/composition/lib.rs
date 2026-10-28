@@ -56,6 +56,8 @@ use atrament_profile_file_commit::{
     ProfileFileCommitEvidence, commit_profile_file_cancellable,
 };
 #[cfg(test)]
+use atrament_profile_entry_sha256 as _;
+#[cfg(test)]
 use atrament_profile_import_preflight as _;
 #[cfg(test)]
 use atrament_profile_json_syntax as _;

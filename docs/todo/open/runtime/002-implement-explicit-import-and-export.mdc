@@ -627,3 +627,10 @@ confirms
 that an unaffordable archive fails by typed ZIP budget rather than hashing
 corrupt member bytes; a sufficient budget still detects the digest mismatch.
 No output or caller-owned buffer is affected by these refusals.
+
+A Linux full-member Export session integration now commits a stored profile
+with one syntax-valid JSON section and one opaque binary asset. The separate
+secure selected-file Import verifier independently authenticates both exact
+member bytes and archive identity from that committed file. Replacing it
+externally with another valid same-size archive changes the admitted section
+but cannot turn same-key Export recovery into a receipt or another write.

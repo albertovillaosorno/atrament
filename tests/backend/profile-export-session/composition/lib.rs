@@ -553,6 +553,79 @@ mod linux {
     }
 
     #[test]
+    fn two_member_export_import_refuses_valid_external_replacement() {
+        let root = fixture();
+        let chosen = root.0.join("full.atrament");
+        let request = intent(chosen.clone(), PreserveExisting);
+        let first_section = b"{\"ink\":1}";
+        let second_section = b"{\"ink\":2}";
+        let original = full_artifact(first_section);
+        let replacement = full_artifact(second_section);
+        assert_eq!(original.bytes().len(), replacement.bytes().len());
+        assert_ne!(original.archive_sha256(), replacement.archive_sha256());
+        let accepted = revision();
+        let mut session = ProfileExportSession::new(1);
+        assert!(matches!(
+            session.export("full", accepted, &request, &original, 8192),
+            Ok(Outcome::Committed(_)),
+        ));
+        let selected_import = classify_explicit_file_path_intent(
+            ExplicitFilePurpose::ImportProfile,
+            ExplicitFilePathSource::CallerSelection,
+            chosen.clone(),
+            PreserveExisting,
+        )
+        .expect("selected Import path");
+        let verified_original = inspect_selected_profile_import(
+            &selected_import,
+            &[],
+            import_limits(),
+            |verified| {
+                assert_eq!(verified.verified_entry_count(), 2);
+                assert_eq!(
+                    verified.verified_entry_bytes("sections/ink.json"),
+                    Some(&first_section[..]),
+                );
+                assert_eq!(
+                    verified.verified_entry_bytes("assets/sample.bin"),
+                    Some(BINARY_ASSET),
+                );
+                verified.archive_sha256()
+            },
+        );
+        assert_eq!(verified_original, Ok(original.archive_sha256()));
+
+        // External file bytes are independently valid, but not the bytes
+        // the original Export session committed under this retry key.
+        fs::write(&chosen, replacement.bytes())
+            .expect("external valid ZIP replacement");
+        let verified_new = inspect_selected_profile_import(
+            &selected_import,
+            &[],
+            import_limits(),
+            |verified| {
+                assert_eq!(
+                    verified.verified_entry_bytes("sections/ink.json"),
+                    Some(&second_section[..]),
+                );
+                verified.archive_sha256()
+            },
+        );
+        assert_eq!(verified_new, Ok(replacement.archive_sha256()));
+        assert_eq!(
+            session.export("full", accepted, &request, &original, 8192),
+            Err(Error::Retry(
+                ProfileExportRetryRecoveryDecision::ExternalTargetDrift
+            )),
+        );
+        assert_eq!(
+            fs::read(&chosen).expect("unchanged external archive"),
+            replacement.bytes(),
+        );
+        assert_eq!(fs::read_dir(&root.0).expect("one output").count(), 1);
+    }
+
+    #[test]
     fn no_persisted_receipt_survives_dropped_session() {
         let root = fixture();
         let chosen = root.0.join("selected.atrament");
@@ -584,10 +657,11 @@ use atrament_explicit_file_path_intent::{
     ExplicitOverwriteIntent, classify_explicit_file_path_intent,
 };
 use atrament_handwriting_profile_container::{
-    PROFILE_CONTAINER_VERSION, ProfileManifest,
+    PROFILE_CONTAINER_VERSION, ProfileManifest, ProfileManifestEntry,
 };
+use atrament_profile_entry_sha256::sha256_profile_bytes;
 use atrament_profile_export_assembly::{
-    ProfileExportArtifact, ProfileExportAssemblyLimits,
+    ProfileExportArtifact, ProfileExportAssemblyLimits, ProfileExportPayload,
     assemble_profile_export_artifact,
 };
 use atrament_profile_export_retry_binding::ProfileRetryBindingError;
@@ -609,6 +683,8 @@ use atrament_profile_open_file_import::{
 use atrament_profile_stored_zip_writer::ProfileStoredZipWriteLimits;
 use atrament_profile_zip_reader::ProfileZipReadLimits;
 use atrament_semantic_notebook::{IdentityAllocator, RevisionIdentity};
+
+const BINARY_ASSET: &[u8] = b"\x00\xff\x1bopaque-data";
 
 fn artifact(identity: &str) -> ProfileExportArtifact {
     assemble_profile_export_artifact(
@@ -637,6 +713,61 @@ fn artifact(identity: &str) -> ProfileExportArtifact {
         },
     )
     .expect("complete canonical profile ZIP")
+}
+
+fn full_artifact(section_bytes: &[u8]) -> ProfileExportArtifact {
+    let manifest = ProfileManifest {
+        container_version: PROFILE_CONTAINER_VERSION.into(),
+        entries: vec![
+            ProfileManifestEntry {
+                byte_length: u64::try_from(section_bytes.len())
+                    .expect("section size fits u64"),
+                digest: sha256_profile_bytes(section_bytes),
+                media_type: String::from("application/json"),
+                path: String::from("sections/ink.json"),
+            },
+            ProfileManifestEntry {
+                byte_length: u64::try_from(BINARY_ASSET.len())
+                    .expect("asset size fits u64"),
+                digest: sha256_profile_bytes(BINARY_ASSET),
+                media_type: String::from("application/octet-stream"),
+                path: String::from("assets/sample.bin"),
+            },
+        ],
+        optional_features: Vec::new(),
+        profile_identity: String::from("complete-profile"),
+        required_features: Vec::new(),
+    };
+    let payloads = [
+        ProfileExportPayload {
+            bytes: BINARY_ASSET,
+            path: "assets/sample.bin",
+        },
+        ProfileExportPayload {
+            bytes: section_bytes,
+            path: "sections/ink.json",
+        },
+    ];
+    assemble_profile_export_artifact(
+        &manifest,
+        &payloads,
+        &[],
+        ProfileExportAssemblyLimits {
+            manifest_json: ProfileManifestJsonWriteLimits {
+                maximum_bytes: 4096,
+                maximum_entries: 2,
+                maximum_features: 2,
+                maximum_string_bytes: 128,
+            },
+            zip: ProfileStoredZipWriteLimits {
+                maximum_archive_bytes: 8192,
+                maximum_entries: 3,
+                maximum_entry_bytes: 4096,
+                maximum_total_bytes: 4096,
+            },
+        },
+    )
+    .expect("complete two-member portable profile")
 }
 
 fn revision() -> RevisionIdentity {

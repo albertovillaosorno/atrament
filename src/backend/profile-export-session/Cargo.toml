@@ -16,6 +16,7 @@ atrament_profile_file_commit = { workspace = true }
 atrament_semantic_notebook = { workspace = true }
 
 [dev-dependencies]
+atrament_profile_entry_sha256 = { workspace = true }
 atrament_profile_import_preflight = { workspace = true }
 atrament_profile_json_syntax = { workspace = true }
 atrament_profile_manifest_json_codec = { workspace = true }
