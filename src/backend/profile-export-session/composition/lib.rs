@@ -65,14 +65,20 @@ use atrament_semantic_notebook::RevisionIdentity;
 ///
 /// This is retained only for the owning disposable session. It describes the
 /// successful effect, not a guarantee that an external file still exists.
+/// Overwrite and retry identity preserve the original normalized intent; they
+/// do not independently authorize new filesystem operations.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ProfileExportReceipt {
     /// SHA-256 of the exact complete ZIP committed.
     archive_sha256: Sha256Digest,
     /// Exact output length for the original committed artifact.
     byte_length: usize,
+    /// Original caller-selected overwrite disposition.
+    overwrite: ExplicitOverwriteIntent,
     /// Path selected by an independently authenticated host operation.
     path: PathBuf,
+    /// Exact retry identity for the original normalized request.
+    retry_key: String,
     /// Accepted revision bound to the original attempt.
     revision: RevisionIdentity,
     /// SHA-256 of exact canonical manifest JSON.
@@ -94,10 +100,22 @@ impl ProfileExportReceipt {
         self.byte_length
     }
 
+    /// Overwrite disposition admitted for the original output request.
+    #[must_use]
+    pub const fn overwrite(&self) -> ExplicitOverwriteIntent {
+        self.overwrite
+    }
+
     /// Exact selected destination originally committed.
     #[must_use]
     pub fn path(&self) -> &Path {
         &self.path
+    }
+
+    /// Retry identity bound to the exact original request and output.
+    #[must_use]
+    pub fn retry_key(&self) -> &str {
+        &self.retry_key
     }
 
     /// Accepted session revision recorded for the original commit.
@@ -246,7 +264,9 @@ impl ProfileExportSession {
                         let receipt = ProfileExportReceipt {
                             archive_sha256: artifact.archive_sha256(),
                             byte_length,
+                            overwrite: intent.overwrite(),
                             path: intent.path().to_path_buf(),
+                            retry_key: String::from(retry_key),
                             revision,
                             root_sha256: artifact.root_sha256(),
                             source: intent.source(),

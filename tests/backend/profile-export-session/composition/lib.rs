@@ -94,6 +94,8 @@ mod linux {
         };
         assert_eq!(receipt.revision(), accepted);
         assert_eq!(receipt.path(), chosen);
+        assert_eq!(receipt.overwrite(), PreserveExisting);
+        assert_eq!(receipt.retry_key(), "request-a");
         assert_eq!(receipt.archive_sha256(), original.archive_sha256());
         assert_eq!(receipt.root_sha256(), original.root_sha256());
         assert_eq!(receipt.byte_length(), original.bytes().len());
@@ -195,6 +197,12 @@ mod linux {
             .export("new-authorized-key", accepted, &request, &original, 8192)
             .expect("distinct authorized attempt");
         assert!(matches!(committed, Outcome::Committed(_)));
+        let receipt = match &committed {
+            Outcome::Committed(value) | Outcome::Recovered(value) => value,
+        };
+        assert_eq!(receipt.overwrite(), ReplaceExisting);
+        assert_eq!(receipt.retry_key(), "new-authorized-key");
+        assert_eq!(receipt.path(), chosen);
         assert_eq!(
             fs::read(&chosen).expect("new exact bytes"),
             original.bytes()

@@ -146,6 +146,11 @@ the session loses the journal, not a deliberately exported file. Seven
 real-file integration fixtures cover these states, key exhaustion, invalid
 purpose, byte budget, and absent or symlink-swapped targets.
 
+Receipts now retain both the original retry key and explicit overwrite
+intent alongside the destination, accepted revision, archive digest and root
+digest. Same-key recovery returns this original sealed receipt unchanged; it
+does not silently derive replacement permission from current filesystem state.
+
 The journal reserves `NotRecorded` before invoking any cancellation callback
 or staging I/O. If a callback unwinds, no saved outcome is fabricated, and the
 same key refuses another write even if the selected file later holds identical
