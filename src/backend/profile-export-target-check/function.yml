@@ -1,0 +1,9 @@
+identity:
+  id: function:profile-export-target-check
+  name: profile-export-target-check
+  path: src/backend/profile-export-target-check
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: composition

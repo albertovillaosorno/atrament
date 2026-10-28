@@ -31,12 +31,11 @@ diagnostic, clipboard, or model-response text as data rather than Export
 authority.
 
 Current export design evidence freezes accepted-revision binding, caller-owned
-or
-explicit host-policy output intent, explicit path and overwrite behavior,
+or explicit host-policy output intent, explicit path and overwrite behavior,
 blocking validation, temporary cleanup, file-commit semantics, output identity,
 same-retry lost-receipt recovery, external target drift handling, cancellation,
-typed output results, concurrency, and browser/CLI/MCP parity. File adapters and
-format-specific execution remain open.
+typed output results, concurrency, and browser/CLI/MCP parity.
+Application Export orchestration and non-profile output execution remain open.
 
 The pure profile serializer now produces complete, SHA-256-verified
 `.atrament` ZIP artifact bytes, including
@@ -65,6 +64,25 @@ accepted revision, artifact identity, retry recovery or cancellation. A
 trusted application must bind all of those before invoking the adapter; it
 must not be wired directly to a model-supplied path. Non-Linux platforms
 still fail closed.
+
+The read-only `atrament_profile_export_target_check` composition now compares
+an independently classified `ExportProfile` path against a complete sealed
+`ProfileExportArtifact`. It reuses secure no-symlink opening and a bounded,
+exact-EOF file reader, then compares the complete byte sequences rather than
+trusting only the ZIP filename or declared SHA-256. An absent path is `Missing`;
+a different complete file, including a same-length valid ZIP replacement or
+an oversized one, is `Drifted`.
+
+Unsafe links, nonregular sources, unsupported platforms and unstable reads
+refuse without asserting a match. Ten real-file checks include parity with
+the atomic file writer and prove that comparison never rewrites targets.
+
+The returned digest and length describe a matched artifact, **not** a prior
+file-commit receipt:
+it neither attests the host's selection gesture nor binds a session revision,
+retry identity, output options, or historic operation. A matching current file
+can still have been externally rewritten to identical bytes. Same-retry recovery
+and drift-conflict reporting remain application responsibilities.
 
 An outbound `atrament_profile_file_reader` now reads an already-opened
 regular file with independent byte limits, initial cursor rewind and a
@@ -126,7 +144,9 @@ SHA forgery. It still cannot prove a genuine user-selection gesture from an
 untrusted source label; that must be established by a future host boundary.
 
 Typed section decoding, explicit profile acceptance, revision-bound
-Export and atomic file commit remain open.
+Export application admission and retry recovery remain open. The low-level
+atomic Linux file commit is implemented but is not yet caller-authorized or
+session-bound.
 
 Notebook/PDF Export still lacks an admitted renderer artifact, and profile
 section encoders remain unfinished. Filesystem adapters

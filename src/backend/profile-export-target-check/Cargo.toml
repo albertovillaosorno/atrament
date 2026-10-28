@@ -1,0 +1,29 @@
+[package]
+name = "atrament_profile_export_target_check"
+version = "0.1.0"
+edition = "2024"
+publish = false
+license = "MIT"
+
+[dependencies]
+atrament_explicit_file_path_intent = { workspace = true }
+atrament_handwriting_profile_container = { workspace = true }
+atrament_profile_export_assembly = { workspace = true }
+atrament_profile_file_reader = { workspace = true }
+atrament_profile_selected_file_open = { workspace = true }
+
+[dev-dependencies]
+atrament_profile_file_commit = { workspace = true }
+atrament_profile_manifest_json_writer = { workspace = true }
+atrament_profile_stored_zip_writer = { workspace = true }
+
+[lib]
+path = "composition/lib.rs"
+test = false
+
+[lints]
+workspace = true
+
+[[test]]
+name = "profile_export_target_check_composition"
+path = "../../../tests/backend/profile-export-target-check/composition/lib.rs"
