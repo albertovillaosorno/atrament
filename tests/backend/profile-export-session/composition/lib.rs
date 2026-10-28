@@ -40,6 +40,7 @@ mod linux {
     use std::env;
     use std::fs;
     use std::os::unix::fs::{MetadataExt as _, symlink};
+    use std::panic::{AssertUnwindSafe, catch_unwind};
     use std::process;
     use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -334,6 +335,55 @@ mod linux {
             )),
         );
         assert!(!chosen.exists());
+    }
+
+    #[test]
+    fn unwound_cancellation_callback_never_retries_or_recovers() {
+        let root = fixture();
+        let chosen = root.0.join("selected.atrament");
+        fs::write(&chosen, b"original target").expect("original file");
+        let request = intent(chosen.clone(), ReplaceExisting);
+        let original = artifact("writer-a");
+        let accepted = revision();
+        let mut session = ProfileExportSession::new(2);
+        let calls = Cell::new(0u8);
+        let unwind = catch_unwind(AssertUnwindSafe(|| {
+            let _result = session.export_cancellable(
+                "unwound",
+                accepted,
+                &request,
+                &original,
+                8192,
+                || {
+                    calls.set(calls.get() + 1);
+                    assert!(
+                        calls.get() != 3,
+                        "fixture cancellation callback unwind"
+                    );
+                    false
+                },
+            );
+        }));
+        assert!(unwind.is_err());
+        // One before I/O, one before the write, one after temporary sync.
+        assert_eq!(calls.get(), 3);
+        assert_eq!(session.len(), 1);
+        assert_eq!(
+            fs::read(&chosen).expect("preserved original file"),
+            b"original target"
+        );
+        assert_eq!(fs::read_dir(&root.0).expect("no stage leaked").count(), 1);
+        // A matched external file cannot upgrade the missing effect record.
+        fs::write(&chosen, original.bytes()).expect("external matching bytes");
+        assert_eq!(
+            session.export("unwound", accepted, &request, &original, 8192),
+            Err(Error::Retry(
+                ProfileExportRetryRecoveryDecision::PriorOutcomeNotRecorded
+            )),
+        );
+        let outcome =
+            session.export("distinct-key", accepted, &request, &original, 8192);
+        assert!(matches!(outcome, Ok(Outcome::Committed(_))));
     }
 
     #[test]

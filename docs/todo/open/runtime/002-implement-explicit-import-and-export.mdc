@@ -146,6 +146,13 @@ the session loses the journal, not a deliberately exported file. Seven
 real-file integration fixtures cover these states, key exhaustion, invalid
 purpose, byte budget, and absent or symlink-swapped targets.
 
+The journal reserves `NotRecorded` before invoking any cancellation callback
+or staging I/O. If a callback unwinds, no saved outcome is fabricated, and the
+same key refuses another write even if the selected file later holds identical
+bytes. A real-file regression forces unwind after staging and file sync, checks
+owned temporary cleanup and target preservation, then proves a distinct key
+can still make a newly authorized attempt.
+
 This is a trusted-runtime composition prerequisite, **not a public Export
 command**: path provenance labels and a supplied revision identity do not
 authenticate the caller or prove that the ZIP was derived from the currently

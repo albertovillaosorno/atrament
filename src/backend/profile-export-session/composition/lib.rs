@@ -199,9 +199,9 @@ impl ProfileExportSession {
 
     /// Export with cooperative cancellation checked only before first commit.
     ///
-    /// A repeated key cannot retry a cancelled or failed attempt. Its cancel
-    /// callback is not invoked: same-key reconciliation is read-only. Callers
-    /// seeking a new authorized attempt must explicitly choose a new key.
+    /// A repeated key cannot retry a cancelled, failed or unwound attempt.
+    /// Its cancellation callback is not invoked on a same-key retry.
+    /// A new authorized attempt needs a distinct key.
     ///
     /// # Errors
     ///
@@ -233,6 +233,7 @@ impl ProfileExportSession {
                         ProfileFileCommitDisposition::ReplaceExisting
                     }
                 };
+                self.reserve_attempt(retry_key)?;
                 let result = commit_profile_file_cancellable(
                     intent.path(),
                     artifact.bytes(),
@@ -262,13 +263,12 @@ impl ProfileExportSession {
                     ) => (ProfileExportPriorEffect::DurabilityUnknown, None),
                     Err(_) => (ProfileExportPriorEffect::KnownNoCommit, None),
                 };
-                let _previous = self.attempts.insert(
-                    String::from(retry_key),
-                    ProfileExportAttempt {
-                        effect,
-                        receipt: receipt.clone(),
-                    },
-                );
+                let attempt = self
+                    .attempts
+                    .get_mut(retry_key)
+                    .ok_or(ProfileExportSessionError::JournalInconsistent)?;
+                attempt.effect = effect;
+                attempt.receipt.clone_from(&receipt);
                 match result {
                     Ok(_) => receipt
                         .map(ProfileExportSessionOutcome::Committed)
@@ -332,5 +332,24 @@ impl ProfileExportSession {
             attempts: BTreeMap::new(),
             bindings: ProfileExportRetryBindings::new(maximum_attempts),
         }
+    }
+
+    // Reserve the outcome slot BEFORE calling any host callback or I/O.
+    // A callback panic leaves this attempt unknown, never retryable by key.
+    fn reserve_attempt(
+        &mut self,
+        retry_key: &str,
+    ) -> Result<(), ProfileExportSessionError> {
+        if self.attempts.contains_key(retry_key) {
+            return Err(ProfileExportSessionError::JournalInconsistent);
+        }
+        let _previous = self.attempts.insert(
+            String::from(retry_key),
+            ProfileExportAttempt {
+                effect: ProfileExportPriorEffect::NotRecorded,
+                receipt: None,
+            },
+        );
+        Ok(())
     }
 }
