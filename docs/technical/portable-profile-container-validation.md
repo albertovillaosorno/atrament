@@ -18,9 +18,10 @@ executable behavior only.
 ## Scope
 
 This guide covers the transport-neutral container domain and read-only
-file-source and archive verification evidence. It does not authorize selected
-file opening, persistent commit, migration, session acceptance or a CLI
-inspection command.
+file-source and archive verification evidence. The Linux selected-path
+composition can open an already classified profile pathname, but cannot
+authenticate the caller gesture or host policy. It does not authorize a
+persistent commit, migration, session acceptance or CLI inspection command.
 
 The transport-neutral domain is
 `src/backend/handwriting-profile-container/domain/lib.rs`. It owns:
@@ -59,6 +60,13 @@ inspection callback access verified member bytes. No typed section
 is decoded, no profile is accepted into a session and no file is
 written.
 
+A second `inspect_selected_profile_import` entrypoint instead
+opens exactly the classified path through the secure Linux opener, then
+invokes the same bounded source reader and complete verification gate.
+It has no caller-supplied file-descriptor callback, so an absent selected
+path cannot be replaced by a different valid host-opened source. Purpose
+refusal precedes even the attempted open, and failure never invokes inspection.
+
 `src/backend/profile-selected-file-open/adapter-outbound/lib.rs`
 can securely open the **exact classified** ImportProfile pathname on
 Linux with `openat2`, forbidding symlinks in every component and parent
@@ -70,13 +78,13 @@ file writes can still change its bytes. The host must independently
 authenticate the selected path's original caller gesture or host-policy
 admission; the classified intent cannot prove that provenance itself.
 
-Fifteen existing real-file regressions cover source transport, malformed
-archives and full integrity gates. Five path-open fixtures cover link
-policy, relative paths, nonregular sources and replacement after open;
-two real-file integration fixtures join secure open to bounded source
-reading and all-member SHA-256 checks. A valid-CRC, same-length payload
-forgery refuses Import without invoking the inspection callback. Typed profile
-sections, session Import acceptance and atomic Export remain open.
+Eighteen composition tests exercise open-descriptor and selected-path paths,
+source transport, malformed archives, and complete integrity gates. Five
+path-open fixtures cover link policy, relative paths, nonregular sources and
+replacement after open. Missing selected sources, links and wrong purposes
+refuse before inspection; a CRC-valid same-length forged member still fails
+SHA-256. Typed profile sections, session Import acceptance, authentic caller
+selection and atomic Export remain open.
 
 ### Bounded stored-ZIP byte reader
 

@@ -33,10 +33,15 @@ An outbound regular-file reader now checks size, exact EOF and
 read errors on a host-opened handle. The read-only Import composition
 rejects wrong purpose, invalid ZIP/JSON/schema, inventory and any
 declared SHA-256 mismatch before inspecting the bounded source.
-Fifteen tests exercise real files, zero-size pseudo-files, count and
-byte ceilings, missing or undeclared entries and equal-length
-CRC-valid payload substitutions. This does not select or open paths
-or prove that the host supplied the caller-chosen file.
+
+Eighteen composition tests exercise real files, zero-size pseudo-files,
+count and byte ceilings, missing or undeclared entries, and equal-length
+CRC-valid payload substitutions. A second Import entrypoint now opens only
+the exact classified path via the secure Linux `openat2` adapter before full
+verification. Wrong purposes refuse before the open, and missing or linked
+selected paths cannot be substituted with a different supplied descriptor.
+This still cannot authenticate a genuine caller-selection gesture or admit
+a decoded profile into session state.
 
 Typed handwriting section schemas and encoders, migration/ZIP64 support,
 physical path authority and the application-level Import/Export lifecycle
