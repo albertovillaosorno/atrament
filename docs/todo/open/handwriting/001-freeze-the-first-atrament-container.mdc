@@ -34,9 +34,13 @@ read errors on a host-opened handle. The read-only Import composition
 rejects wrong purpose, invalid ZIP/JSON/schema, inventory and any
 declared SHA-256 mismatch before inspecting the bounded source.
 
-Eighteen composition tests exercise real files, zero-size pseudo-files,
+Twenty-one composition tests exercise real files, zero-size pseudo-files,
 count and byte ceilings, missing or undeclared entries, and equal-length
-CRC-valid payload substitutions. A second Import entrypoint now opens only
+CRC-valid payload substitutions. The common Import gate now validates every
+SHA-verified `sections/` payload as independently bounded JSON object syntax,
+refusing before inspection on any invalid section while leaving assets opaque.
+
+A second Import entrypoint now opens only
 the exact classified path via the secure Linux `openat2` adapter before full
 verification. Wrong purposes refuse before the open, and missing or linked
 selected paths cannot be substituted with a different supplied descriptor.
@@ -47,9 +51,10 @@ A provisional `atrament profile inspect PATH` Linux CLI now displays the
 fully checked manifest and syntax-verified JSON objects under `sections/`,
 without emitting opaque asset bodies or opening a browser. Its independently
 bounded transport and JSON ceilings refuse forged SHA and malformed section
-sources before any stdout output. CLI regressions also check missing and
-symlinked sources and bounded argument dispatch. Versioned handwriting
-sections and full cross-platform inspection remain unfinished.
+sources before any stdout output. Eleven CLI regressions also check missing
+and symlinked sources, bounded argument dispatch, exact non-UTF-8 selected
+paths, and complete stdout refusal when a later declared section is invalid.
+Versioned handwriting sections and full cross-platform inspection remain open.
 
 Typed handwriting section schemas and encoders, migration/ZIP64 support,
 physical path authority and the application-level Import/Export lifecycle

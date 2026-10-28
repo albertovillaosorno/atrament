@@ -279,6 +279,101 @@ fn cli_inspects_verified_section_without_extracting_opaque_assets() {
 
 #[cfg(target_os = "linux")]
 #[test]
+fn cli_preserves_exact_non_utf8_selected_profile_path() {
+    use std::os::unix::ffi::OsStringExt as _;
+
+    let section = br#"{"strokes":[1,2]}"#;
+    let mut owned = OwnedProfileFile::new(&profile_zip(
+        section, b"\0\xffbinary", section,
+    ));
+    let mut selected_bytes = owned.0.as_os_str().as_encoded_bytes().to_vec();
+    selected_bytes.push(0xff);
+    let selected = PathBuf::from(OsString::from_vec(selected_bytes));
+    fs::rename(&owned.0, &selected)
+        .expect("rename only test-owned profile to opaque path");
+    owned.0 = selected;
+
+    let inspected = bootstrap::inspect_profile(owned.0.clone())
+        .expect("exact opaque source path remains valid Import selection");
+    assert!(inspected.contains("sections/writer.json"));
+    assert!(!inspected.contains("binary"));
+    let executed = Command::new(env!("CARGO_BIN_EXE_atrament"))
+        .args(["profile", "inspect"])
+        .arg(&owned.0)
+        .output()
+        .expect("OS argv accepts caller-selected opaque path bytes");
+    assert!(executed.status.success());
+    assert_eq!(executed.stdout, inspected.as_bytes());
+    assert!(executed.stderr.is_empty());
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn cli_refuses_later_invalid_section_without_partial_stdout() {
+    let first = br#"{"valid":true}"#;
+    let later = b"[invalid-section]";
+    let opaque = b"\0\xffprivate sample";
+    let manifest = format!(
+        concat!(
+            r#"{{"container_version":"atrament.profile/1","#,
+            r#""profile_identity":"writer","required_features":[],"#,
+            r#""optional_features":[],"entries":["#,
+            r#"{{"path":"sections/a.json","media_type":"application/json","#,
+            r#""byte_length":{},"sha256":"{}"}},"#,
+            r#"{{"path":"sections/z.json","media_type":"application/json","#,
+            r#""byte_length":{},"sha256":"{}"}},"#,
+            r#"{{"path":"assets/raw.bin","#,
+            r#""media_type":"application/octet-stream","#,
+            r#""byte_length":{},"sha256":"{}"}}]}}"#,
+        ),
+        first.len(), digest_hex(first),
+        later.len(), digest_hex(later),
+        opaque.len(), digest_hex(opaque),
+    );
+    let archive = write_stored_profile_zip(
+        &[
+            ProfileStoredZipMember {
+                name: "assets/raw.bin",
+                bytes: opaque,
+            },
+            ProfileStoredZipMember {
+                name: "manifest.json",
+                bytes: manifest.as_bytes(),
+            },
+            ProfileStoredZipMember {
+                name: "sections/a.json",
+                bytes: first,
+            },
+            ProfileStoredZipMember {
+                name: "sections/z.json",
+                bytes: later,
+            },
+        ],
+        ProfileStoredZipWriteLimits {
+            maximum_archive_bytes: 4096,
+            maximum_entries: 4,
+            maximum_entry_bytes: 2048,
+            maximum_total_bytes: 3000,
+        },
+    )
+    .expect("authentic fully SHA-verified two-section ZIP");
+    let owned = OwnedProfileFile::new(&archive);
+    let error = bootstrap::inspect_profile(owned.0.clone())
+        .expect_err("later invalid section refuses before any inspection");
+    assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+    assert!(error.to_string().contains("SectionJson { index: 1"));
+    let executed = Command::new(env!("CARGO_BIN_EXE_atrament"))
+        .args(["profile", "inspect"])
+        .arg(&owned.0)
+        .output()
+        .expect("run actually malformed second-section profile CLI");
+    assert!(!executed.status.success());
+    assert!(executed.stdout.is_empty());
+    assert!(!executed.stderr.is_empty());
+}
+
+#[cfg(target_os = "linux")]
+#[test]
 fn cli_refuses_crc_valid_sha_forgery_without_printing_manifest() {
     let authentic = br#"{"genuine":true}"#;
     let forgery = br#"{"genuine":null}"#;

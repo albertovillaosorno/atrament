@@ -118,11 +118,13 @@ feature and name ceilings. Unsupported required features and unsupported
 platforms still fail closed. These are command-specific protective limits,
 not portable format maxima or proof of a trusted picker gesture.
 
-The runtime-bootstrap integration suite exercises the real command process:
-valid section inspection without opaque asset extraction, CRC-valid forged
-member rejection, syntax-invalid section rejection without partial stdout,
-missing or symlinked selected paths, bounded argument rejection, and
-existing browser launch recovery errors.
+The eleven runtime-bootstrap integration tests exercise the real CLI process:
+verified sections without opaque asset extraction, CRC-valid forged members,
+invalid section syntax, missing or symlinked selected paths, and bounded
+argument rejection. Linux fixtures additionally prove that opaque non-UTF-8
+caller-selected path bytes survive CLI argv and that a later invalid JSON
+section cannot publish even a previously valid section or manifest to stdout.
+Browser launch recovery error behavior remains independently covered.
 
 ### Bounded stored-ZIP byte reader
 

@@ -232,8 +232,11 @@ Three real-file regressions exercise an authentic, correctly hashed malformed
 section alongside an opaque binary asset, escaped duplicate JSON keys and
 an over-limit valid object, plus a later invalid section after a valid one.
 The Linux CLI now reuses the same gate, rather than rechecking section syntax
-only inside its own inspection callback. This proves section JSON syntax, not
-any versioned handwriting schema or admitted session profile; both remain open.
+only inside its own inspection callback. Two additional real CLI regressions
+prove that non-UTF-8 selected pathname bytes round-trip through OS argv and
+that a valid early section cannot appear on stdout if a later section fails.
+This proves section JSON syntax, not a versioned handwriting schema or admitted
+session profile; both remain open.
 
 The trusted host must still prove the `CallerSelection` or admitted policy
 actually came from an authorized action, not document or model content;
