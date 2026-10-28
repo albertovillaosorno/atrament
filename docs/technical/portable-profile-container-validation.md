@@ -112,7 +112,8 @@ not portable format maxima or proof of a trusted picker gesture.
 The runtime-bootstrap integration suite exercises the real command process:
 valid section inspection without opaque asset extraction, CRC-valid forged
 member rejection, syntax-invalid section rejection without partial stdout,
-unknown argument rejection, and existing browser launch recovery errors.
+missing or symlinked selected paths, bounded argument rejection, and
+existing browser launch recovery errors.
 
 ### Bounded stored-ZIP byte reader
 

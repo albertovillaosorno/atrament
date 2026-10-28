@@ -48,10 +48,12 @@
 #[path = "../../../../src/backend/runtime-bootstrap/composition/main.rs"]
 mod bootstrap;
 
+use std::cell::Cell;
 use std::env;
 use std::ffi::OsString;
 use std::fs::{self, OpenOptions};
 use std::io::{self, Write as _};
+use std::iter;
 use std::path::PathBuf;
 use std::process::{self, Command};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -188,6 +190,65 @@ fn cli_args_reject_unknown_and_incomplete_commands_without_startup() {
             io::ErrorKind::InvalidInput,
         );
     }
+}
+
+#[test]
+fn cli_rejects_infinite_argument_stream_after_four_values() {
+    let pulls = Cell::new(0usize);
+    let source = iter::from_fn(|| {
+        pulls.set(pulls.get() + 1usize);
+        Some(OsString::from("unexpected"))
+    });
+    assert_eq!(
+        bootstrap::inspect_cli_args(source)
+            .expect_err("unknown CLI command must fail boundedly")
+            .kind(),
+        io::ErrorKind::InvalidInput,
+    );
+    assert_eq!(pulls.get(), 4usize);
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn cli_never_substitutes_a_missing_path_with_another_profile() {
+    let bytes = profile_zip(
+        br#"{"valid":true}"#, b"opaque", br#"{"valid":true}"#,
+    );
+    let owned = OwnedProfileFile::new(&bytes);
+    let missing = owned.0.with_extension("missing");
+    assert_eq!(
+        bootstrap::inspect_profile(missing.clone())
+            .expect_err("missing source must refuse")
+            .kind(),
+        io::ErrorKind::InvalidData,
+    );
+    let executed = Command::new(env!("CARGO_BIN_EXE_atrament"))
+        .args(["profile", "inspect"])
+        .arg(&missing)
+        .output()
+        .expect("run missing-source profile CLI");
+    assert!(!executed.status.success());
+    assert!(executed.stdout.is_empty());
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn cli_rejects_symlinked_selection_before_any_output() {
+    use std::os::unix::fs::symlink;
+    let section = br#"{"valid":true}"#;
+    let owned = OwnedProfileFile::new(&profile_zip(
+        section, b"opaque", section,
+    ));
+    let link = owned.0.with_extension("linked");
+    symlink(&owned.0, &link).expect("create test-owned symlink");
+    let executed = Command::new(env!("CARGO_BIN_EXE_atrament"))
+        .args(["profile", "inspect"])
+        .arg(&link)
+        .output()
+        .expect("run symlink-refusal profile CLI");
+    fs::remove_file(&link).expect("remove test-owned symlink");
+    assert!(!executed.status.success());
+    assert!(executed.stdout.is_empty());
 }
 
 #[cfg(target_os = "linux")]

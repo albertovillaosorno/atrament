@@ -35,7 +35,7 @@
 //! Atrament process composition for session startup or profile inspection.
 
 use std::env;
-use std::ffi::OsString;
+use std::ffi::{OsStr, OsString};
 use std::io::{self, Write as _};
 use std::path::PathBuf;
 use std::str::from_utf8;
@@ -245,19 +245,24 @@ pub(crate) fn inspect_profile(path: PathBuf) -> io::Result<String> {
 ///
 /// # Errors
 ///
-/// Rejects unknown or incomplete CLI commands before session startup.
+/// Rejects unknown or incomplete commands before session startup. It reads
+/// at most four argument values without allocating an unbounded argv list.
 pub(crate) fn inspect_cli_args(
     args: impl IntoIterator<Item = OsString>,
 ) -> io::Result<Option<String>> {
-    let values: Vec<_> = args.into_iter().collect();
-    if values.is_empty() {
+    let mut arguments = args.into_iter();
+    let Some(command) = arguments.next() else {
         return Ok(None);
-    }
-    if let [command, action, path] = values.as_slice()
-        && command == "profile"
-        && action == "inspect"
+    };
+    let action = arguments.next();
+    let path = arguments.next();
+    let additional = arguments.next();
+    if command == "profile"
+        && action.as_deref() == Some(OsStr::new("inspect"))
+        && let Some(selected_path) = path
+        && additional.is_none()
     {
-        return inspect_profile(PathBuf::from(path)).map(Some);
+        return inspect_profile(PathBuf::from(selected_path)).map(Some);
     }
     Err(io::Error::new(
         io::ErrorKind::InvalidInput,

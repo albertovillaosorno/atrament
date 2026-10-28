@@ -47,8 +47,9 @@ A provisional `atrament profile inspect PATH` Linux CLI now displays the
 fully checked manifest and syntax-verified JSON objects under `sections/`,
 without emitting opaque asset bodies or opening a browser. Its independently
 bounded transport and JSON ceilings refuse forged SHA and malformed section
-sources before any stdout output. It does not decode versioned handwriting
-sections; full typed and cross-platform inspection remains unfinished.
+sources before any stdout output. CLI regressions also check missing and
+symlinked sources and bounded argument dispatch. Versioned handwriting
+sections and full cross-platform inspection remain unfinished.
 
 Typed handwriting section schemas and encoders, migration/ZIP64 support,
 physical path authority and the application-level Import/Export lifecycle
