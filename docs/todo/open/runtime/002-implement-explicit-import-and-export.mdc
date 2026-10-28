@@ -58,8 +58,10 @@ The adapter refuses observed symlinks and nonregular replacement targets,
 cleans any late-linked replacement staging path on ordinary refusal, and
 distinguishes an uncertain post-link/rename sync failure from no commit.
 Real-file regressions cover complete writes, conflicts, replacement, traversal,
-links,
-byte ceilings, opaque names and concurrent preserve writers.
+links, byte ceilings, opaque names and concurrent preserve writers. Two
+post-preflight replacement-swap tests now show that a symlink is replaced
+without following its unrelated target, while a directory substituted just
+before rename refuses and removes its late-linked staging name.
 
 An opt-in `commit_profile_file_cancellable` variant now observes caller-owned
 cancellation before any filesystem operation, between 64 KiB stage writes,

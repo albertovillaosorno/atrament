@@ -337,6 +337,73 @@ mod linux {
     }
 
     #[test]
+    fn replacement_target_swap_never_follows_new_symlink() {
+        let dir = OwnedDir::new();
+        let target = dir.target();
+        let victim = dir.0.join("victim");
+        fs::write(&target, b"original target").expect("seed regular target");
+        fs::write(&victim, b"unrelated bytes").expect("seed victim");
+        let mut observations = 0usize;
+        let committed = commit_profile_file_cancellable(
+            &target,
+            b"new bytes",
+            9,
+            Mode::ReplaceExisting,
+            || {
+                observations += 1;
+                if observations == 3 {
+                    // The initial nofollow stat already saw a regular file.
+                    fs::remove_file(&target).expect("remove observed target");
+                    symlink(&victim, &target).expect("swap target to link");
+                }
+                false
+            },
+        );
+        assert_eq!(
+            committed.expect("atomic replacement").byte_length,
+            9,
+        );
+        assert_eq!(observations, 3);
+        assert_eq!(
+            fs::read(&victim).expect("unrelated file"),
+            b"unrelated bytes",
+        );
+        assert_eq!(fs::read(&target).expect("replacement"), b"new bytes");
+        assert_eq!(dir.entries().len(), 2);
+        assert!(!fs::symlink_metadata(&target)
+            .expect("replaced target entry")
+            .file_type()
+            .is_symlink());
+    }
+
+    #[test]
+    fn replacement_target_swap_to_directory_refuses_without_stage_leak() {
+        let dir = OwnedDir::new();
+        let target = dir.target();
+        fs::write(&target, b"original target").expect("seed regular target");
+        let mut observations = 0usize;
+        let denied = commit_profile_file_cancellable(
+            &target,
+            b"new bytes",
+            9,
+            Mode::ReplaceExisting,
+            || {
+                observations += 1;
+                if observations == 3 {
+                    fs::remove_file(&target).expect("remove observed target");
+                    fs::create_dir_all(&target)
+                        .expect("swap target to directory");
+                }
+                false
+            },
+        );
+        assert!(matches!(denied, Err(Error::FileIo(_))));
+        assert_eq!(observations, 3);
+        assert!(target.is_dir());
+        assert_eq!(dir.entries(), vec![String::from("chosen.atrament")]);
+    }
+
+    #[test]
     fn refuses_symlink_in_parent_and_parent_escape() {
         let dir = OwnedDir::new();
         let linked_parent = dir.0.join("alias");
