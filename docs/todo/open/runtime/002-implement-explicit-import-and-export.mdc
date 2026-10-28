@@ -35,7 +35,8 @@ or explicit host-policy output intent, explicit path and overwrite behavior,
 blocking validation, temporary cleanup, file-commit semantics, output identity,
 same-retry lost-receipt recovery, external target drift handling, cancellation,
 typed output results, concurrency, and browser/CLI/MCP parity.
-Application Export orchestration and non-profile output execution remain open.
+Trusted host-caller Export admission, accepted session revision enforcement,
+application integration and non-profile output execution remain open.
 
 The pure profile serializer now produces complete, SHA-256-verified
 `.atrament` ZIP artifact bytes, including
@@ -125,6 +126,34 @@ it neither attests the host's selection gesture nor binds a session revision,
 retry identity, output options, or historic operation. A matching current file
 can still have been externally rewritten to identical bytes. Same-retry recovery
 and drift-conflict reporting remain application responsibilities.
+
+The `atrament_profile_export_session` composition now retains the original
+file-commit outcome and a constructor-sealed receipt in bounded process-local
+memory. A fresh retry key first binds revision, exact selected path, overwrite
+and ZIP identity, then attempts the atomic Linux writer once. Only a successful
+parent-directory-synced commit creates a receipt. Cancellation, existing-target
+conflicts and other proven pre-commit refusals retain `KnownNoCommit`; uncertain
+post-rename directory sync retains `DurabilityUnknown` without any receipt.
+
+An identical repeated key never writes again. It returns the saved receipt
+only after a new symlink-safe, complete-byte target check agrees with the
+original sealed ZIP; changed revision, path, source, overwrite, archive or
+root identity refuse before any I/O.
+
+Missing, drifted, unsafe or substituted
+files cannot be overwritten or counted as success by retry recovery. Dropping
+the session loses the journal, not a deliberately exported file. Seven
+real-file integration fixtures cover these states, key exhaustion, invalid
+purpose, byte budget, and absent or symlink-swapped targets.
+
+This is a trusted-runtime composition prerequisite, **not a public Export
+command**: path provenance labels and a supplied revision identity do not
+authenticate the caller or prove that the ZIP was derived from the currently
+accepted profile. The session runtime must establish those facts before
+calling it, enforce concurrency and lifecycle policy, and integrate UI, CLI
+and MCP results. A target can still change after the read-only recovery
+inspection, so the receipt describes the original synced effect, not a
+permanent guarantee of current bytes. Non-Linux writes continue to refuse.
 
 An outbound `atrament_profile_file_reader` now reads an already-opened
 regular file with independent byte limits, initial cursor rewind and a

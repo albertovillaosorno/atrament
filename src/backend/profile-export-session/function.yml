@@ -1,0 +1,9 @@
+identity:
+  id: function:profile-export-session
+  name: profile-export-session
+  path: src/backend/profile-export-session
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: composition
