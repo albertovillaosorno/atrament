@@ -83,6 +83,7 @@ members = [
     "src/backend/profile-import-preflight",
     "src/backend/profile-import-verification",
     "src/backend/profile-open-file-import",
+    "src/backend/profile-selected-file-open",
     "src/backend/profile-manifest-json-codec",
     "src/backend/profile-manifest-json-writer",
     "src/backend/profile-json-syntax",
@@ -171,6 +172,7 @@ atrament_profile_entry_stream_reader = { path = "src/backend/profile-entry-strea
 atrament_profile_import_preflight = { path = "src/backend/profile-import-preflight" }
 atrament_profile_import_verification = { path = "src/backend/profile-import-verification" }
 atrament_profile_open_file_import = { path = "src/backend/profile-open-file-import" }
+atrament_profile_selected_file_open = { path = "src/backend/profile-selected-file-open" }
 atrament_profile_json_syntax = { path = "src/backend/profile-json-syntax" }
 atrament_profile_manifest_json_codec = { path = "src/backend/profile-manifest-json-codec" }
 atrament_profile_manifest_json_writer = { path = "src/backend/profile-manifest-json-writer" }
@@ -200,6 +202,11 @@ atrament_unicode_grapheme_edit = { path = "src/backend/unicode-grapheme-edit" }
 atrament_unicode_grapheme_segmentation = { path = "src/backend/unicode-grapheme-segmentation" }
 getrandom = "=0.4.3"
 unicode-segmentation = "=1.13.3"
+
+[workspace.dependencies.nix]
+version = "=0.31.3"
+default-features = false
+features = ["fs"]
 
 [workspace.lints.rust]
 absolute_paths_not_starting_with_crate = "deny"

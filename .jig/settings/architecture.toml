@@ -353,7 +353,11 @@ depends_on = ["atrament_explicit_file_path_intent", "atrament_handwriting_profil
 depends_on = ["atrament_explicit_file_path_intent", "atrament_handwriting_profile_container", "atrament_profile_import_preflight", "atrament_profile_manifest_json_codec", "atrament_profile_zip_reader", "atrament_profile_entry_sha256", "atrament_profile_json_syntax", "atrament_profile_stored_zip_writer"]
 
 [component.atrament_profile_open_file_import]
-depends_on = ["atrament_profile_file_reader", "atrament_explicit_file_path_intent", "atrament_profile_import_preflight", "atrament_profile_import_verification", "atrament_profile_json_syntax", "atrament_profile_manifest_json_codec", "atrament_profile_zip_reader", "atrament_handwriting_profile_container", "atrament_profile_entry_sha256", "atrament_profile_stored_zip_writer"]
+# Selected-file opener is a test-only path policy fixture.
+depends_on = ["atrament_profile_selected_file_open", "atrament_profile_file_reader", "atrament_explicit_file_path_intent", "atrament_profile_import_preflight", "atrament_profile_import_verification", "atrament_profile_json_syntax", "atrament_profile_manifest_json_codec", "atrament_profile_zip_reader", "atrament_handwriting_profile_container", "atrament_profile_entry_sha256", "atrament_profile_stored_zip_writer"]
+
+[component.atrament_profile_selected_file_open]
+depends_on = []
 
 [component.atrament_profile_json_syntax]
 depends_on = []

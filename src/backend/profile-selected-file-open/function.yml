@@ -1,0 +1,9 @@
+identity:
+  id: function:profile-selected-file-open
+  name: profile-selected-file-open
+  path: src/backend/profile-selected-file-open
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: adapter-outbound

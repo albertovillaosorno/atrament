@@ -65,11 +65,24 @@ Separate real-file regressions reject missing and undeclared member names,
 as well as declared payload sizes above the Import-specific byte ceiling,
 even when the ZIP framing, CRC and manifest JSON are otherwise valid.
 
-A trusted host must independently bind the open file to the actual
-caller-selected path, with symlink and source-provenance policy. A
-classified path and open handle alone do not prove that association.
-Concurrent same-length rewrites cannot prove a stable disk snapshot,
-although admitted bytes must pass complete integrity verification.
+A Linux-only `atrament_profile_selected_file_open` adapter now opens the
+exact classified ImportProfile path with `openat2` anchored at the process
+working directory or filesystem root. It refuses symlinks in every
+component, parent traversal and nonregular files. The Import composition
+still rejects wrong-purpose requests before file reading, and unsupported
+kernels refuse without falling back to a racy `File::open`. Five
+path-policy fixtures cover final and parent links, relative source,
+pathname replacement after opening and invalid file types.
+
+An additional integration fixture connects this opened descriptor to
+bounded source reading, ZIP/root admission and every member SHA-256.
+
+The trusted host must still prove the `CallerSelection` or admitted policy
+actually came from an authorized action, not document or model content;
+a classified intent cannot authenticate its own origin. Non-Linux source
+policy remains unsupported, and a concurrent same-length file rewrite
+is not guaranteed to yield a stable disk snapshot. No adapter has accepted
+a decoded handwriting profile into the current session.
 
 The composition also tightens the ZIP reader's member-index budget to the
 minimum of the ZIP total-member ceiling and the tighter of the

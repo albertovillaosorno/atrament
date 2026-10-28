@@ -61,6 +61,7 @@ use atrament_profile_open_file_import::{
     ProfileOpenFileImportError as Error, ProfileOpenFileImportLimits,
     inspect_open_profile_import,
 };
+use atrament_profile_selected_file_open::open_selected_profile_file;
 use atrament_profile_stored_zip_writer::{
     ProfileStoredZipMember, ProfileStoredZipWriteLimits,
     write_stored_profile_zip,
@@ -223,6 +224,43 @@ fn open_regular_file_reads_from_zero_and_exposes_only_verified_payload() {
     assert_eq!(evidence.0, payload);
     assert_eq!(evidence.1, sha256_profile_bytes(&bytes));
     assert_eq!(evidence.2, sha256_profile_bytes(root.as_bytes()));
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn selected_linux_path_is_bound_to_opened_descriptor_and_full_sha() {
+    let payload = br#"{"strokes":[1,2,3]}"#;
+    let root = root(payload, "[]");
+    let bytes = zip(root.as_bytes(), payload);
+    let fixture = OwnedTestFile::new(&bytes);
+    let chosen = classify_explicit_file_path_intent(
+        ExplicitFilePurpose::ImportProfile,
+        ExplicitFilePathSource::CallerSelection,
+        fixture.path.clone(),
+        ExplicitOverwriteIntent::PreserveExisting,
+    )
+    .expect("host-selected typed path");
+    let inspected = inspect_open_profile_import(
+        &chosen,
+        |maximum| {
+            read_bounded_profile_file(
+                open_selected_profile_file(chosen.path())
+                    .expect("secure openat2 selected path"),
+                maximum,
+            )
+        },
+        &[],
+        limits(),
+        |verified| {
+            (
+                verified.archive_sha256(),
+                verified.verified_entry_bytes(MEMBER).map(<[u8]>::to_vec),
+            )
+        },
+    )
+    .expect("source-sealed selected file verified");
+    assert_eq!(inspected.0, sha256_profile_bytes(&bytes));
+    assert_eq!(inspected.1.as_deref(), Some(payload.as_slice()));
 }
 
 #[test]

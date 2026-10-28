@@ -180,6 +180,18 @@ test("backend registry dependencies remain explicitly reviewed", () => {
     resolvedRegistryPackages.sort(comparePackages);
     assert.deepEqual(registryDependencies, [
         {
+            defaultFeatures: false,
+            features: ["fs"],
+            kind: null,
+            name: "nix",
+            optional: false,
+            owner: "atrament_profile_selected_file_open",
+            rename: null,
+            requirement: "=0.31.3",
+            source: "registry+https://github.com/rust-lang/crates.io-index",
+            target: 'cfg(target_os = "linux")',
+        },
+        {
             defaultFeatures: true,
             features: [],
             kind: null,
@@ -206,6 +218,16 @@ test("backend registry dependencies remain explicitly reviewed", () => {
     ]);
     assert.deepEqual(resolvedRegistryPackages, [
         [
+            "bitflags",
+            "2.13.2",
+            "registry+https://github.com/rust-lang/crates.io-index",
+        ],
+        [
+            "cfg_aliases",
+            "0.2.2",
+            "registry+https://github.com/rust-lang/crates.io-index",
+        ],
+        [
             "cfg-if",
             "1.0.4",
             "registry+https://github.com/rust-lang/crates.io-index",
@@ -218,6 +240,11 @@ test("backend registry dependencies remain explicitly reviewed", () => {
         [
             "libc",
             "0.2.189",
+            "registry+https://github.com/rust-lang/crates.io-index",
+        ],
+        [
+            "nix",
+            "0.31.3",
             "registry+https://github.com/rust-lang/crates.io-index",
         ],
         [

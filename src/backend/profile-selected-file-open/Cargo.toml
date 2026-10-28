@@ -1,0 +1,20 @@
+[package]
+name = "atrament_profile_selected_file_open"
+version = "0.1.0"
+edition = "2024"
+publish = false
+license = "MIT"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+nix = { workspace = true }
+
+[lib]
+path = "adapter-outbound/lib.rs"
+test = false
+
+[lints]
+workspace = true
+
+[[test]]
+name = "profile_selected_file_open_adapter_outbound"
+path = "../../../tests/backend/profile-selected-file-open/adapter-outbound/lib.rs"

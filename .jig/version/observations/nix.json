@@ -1,0 +1,10 @@
+{
+  "authority": "nix",
+  "integrity_kind": "provider-response-sha256",
+  "integrity_sha256": "84b4c24b9b0350d47be1e5fd4bd8a6177b9e5c5ce29c8a5dc3f441b5808a3048",
+  "observed_on": "2026-10-28",
+  "provider": "crates-io",
+  "schema_version": 1,
+  "source": "https://crates.io/api/v1/crates/nix",
+  "stable": "0.31.3"
+}
