@@ -77,6 +77,7 @@ members = [
     "src/backend/physical-recovery-state",
     "src/backend/physical-page-profile",
     "src/backend/profile-export-assembly",
+    "src/backend/profile-export-retry-binding",
     "src/backend/profile-export-target-check",
     "src/backend/profile-file-commit",
     "src/backend/profile-file-reader",
@@ -168,6 +169,7 @@ atrament_one_shot_formatting_prompt = { path = "src/backend/one-shot-formatting-
 atrament_output_capability_matrix = { path = "src/backend/output-capability-matrix" }
 atrament_physical_page_profile = { path = "src/backend/physical-page-profile" }
 atrament_profile_export_assembly = { path = "src/backend/profile-export-assembly" }
+atrament_profile_export_retry_binding = { path = "src/backend/profile-export-retry-binding" }
 atrament_profile_export_target_check = { path = "src/backend/profile-export-target-check" }
 atrament_profile_file_commit = { path = "src/backend/profile-file-commit" }
 atrament_profile_file_reader = { path = "src/backend/profile-file-reader" }

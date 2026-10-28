@@ -1,0 +1,27 @@
+[package]
+name = "atrament_profile_export_retry_binding"
+version = "0.1.0"
+edition = "2024"
+publish = false
+license = "MIT"
+
+[dependencies]
+atrament_explicit_file_path_intent = { workspace = true }
+atrament_handwriting_profile_container = { workspace = true }
+atrament_profile_export_assembly = { workspace = true }
+atrament_semantic_notebook = { workspace = true }
+
+[dev-dependencies]
+atrament_profile_manifest_json_writer = { workspace = true }
+atrament_profile_stored_zip_writer = { workspace = true }
+
+[lib]
+path = "application/lib.rs"
+test = false
+
+[lints]
+workspace = true
+
+[[test]]
+name = "profile_export_retry_binding_application"
+path = "../../../tests/backend/profile-export-retry-binding/application/lib.rs"

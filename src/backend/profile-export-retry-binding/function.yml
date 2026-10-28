@@ -1,0 +1,9 @@
+identity:
+  id: function:profile-export-retry-binding
+  name: profile-export-retry-binding
+  path: src/backend/profile-export-retry-binding
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: application

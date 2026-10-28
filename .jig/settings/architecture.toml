@@ -337,6 +337,10 @@ depends_on = []
 # Import verification is used only by assembly tests.
 depends_on = ["atrament_handwriting_profile_container", "atrament_profile_entry_sha256", "atrament_profile_manifest_json_writer", "atrament_profile_stored_zip_writer", "atrament_profile_import_verification", "atrament_profile_import_preflight", "atrament_profile_manifest_json_codec", "atrament_profile_json_syntax", "atrament_profile_zip_reader", "atrament_explicit_file_path_intent"]
 
+[component.atrament_profile_export_retry_binding]
+# Manifest/ZIP writer and fixture output are test-only inputs.
+depends_on = ["atrament_explicit_file_path_intent", "atrament_handwriting_profile_container", "atrament_profile_export_assembly", "atrament_semantic_notebook", "atrament_profile_manifest_json_writer", "atrament_profile_stored_zip_writer"]
+
 [component.atrament_profile_export_target_check]
 # File commit, manifest JSON and ZIP writing are fixture-only dependencies.
 depends_on = ["atrament_explicit_file_path_intent", "atrament_handwriting_profile_container", "atrament_profile_export_assembly", "atrament_profile_file_reader", "atrament_profile_selected_file_open", "atrament_profile_file_commit", "atrament_profile_manifest_json_writer", "atrament_profile_stored_zip_writer"]

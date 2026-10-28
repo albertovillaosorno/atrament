@@ -76,6 +76,21 @@ cancellation state. A trusted application must bind those before invocation; it
 must not be wired directly to a model-supplied path. Non-Linux platforms
 still fail closed.
 
+The `atrament_profile_export_retry_binding` application now retains only a
+bounded, process-local mapping from a caller retry key to one normalized
+profile Export request. It binds accepted revision identity, exact opaque
+selected path and source classification, explicit overwrite intent, full ZIP
+and root SHA-256, and complete byte length. Reusing a key with different
+inputs is a typed conflict, while a truly identical reuse is only
+`SameBinding` and never evidence of a prior output effect.
+
+The ledger refuses invalid keys, excessive selected path lengths and record
+capacity exhaustion without replacing another binding. It never validates
+caller provenance or current revision, acquires target locks, commits bytes,
+tracks operation outcomes, or issues a receipt. Same-retry lost-receipt
+recovery therefore still requires session-owned outcome evidence and target
+drift verification; a key match cannot authorize blind Export replay.
+
 The read-only `atrament_profile_export_target_check` composition now compares
 an independently classified `ExportProfile` path against a complete sealed
 `ProfileExportArtifact`. It reuses secure no-symlink opening and a bounded,
