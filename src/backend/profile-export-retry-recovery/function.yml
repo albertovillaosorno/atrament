@@ -1,0 +1,9 @@
+identity:
+  id: function:profile-export-retry-recovery
+  name: profile-export-retry-recovery
+  path: src/backend/profile-export-retry-recovery
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: composition

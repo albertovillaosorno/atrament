@@ -91,6 +91,20 @@ tracks operation outcomes, or issues a receipt. Same-retry lost-receipt
 recovery therefore still requires session-owned outcome evidence and target
 drift verification; a key match cannot authorize blind Export replay.
 
+The pure `atrament_profile_export_retry_recovery` composition now combines
+retry binding disposition, session-owned file-commit outcome and a fresh
+read-only target observation. Only an identical bound request with a previously
+synced commit, matching byte count and matching full archive digest and length
+is a candidate for prior-receipt recovery. New bindings, missing original
+outcomes, known no-commit failures, uncertain post-rename durability, target
+drift and failed or inconsistent inspection remain distinct non-success
+states.
+
+This classifier issues no receipt, stores no prior effect, performs
+no I/O and never authorizes an Export retry. A trusted session application
+must still retain the original commit outcome and receipt, authenticate the
+caller and protect against concurrent target mutation.
+
 The read-only `atrament_profile_export_target_check` composition now compares
 an independently classified `ExportProfile` path against a complete sealed
 `ProfileExportArtifact`. It reuses secure no-symlink opening and a bounded,

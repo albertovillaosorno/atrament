@@ -570,6 +570,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "atrament_profile_export_retry_recovery"
+version = "0.1.0"
+dependencies = [
+ "atrament_explicit_file_path_intent",
+ "atrament_handwriting_profile_container",
+ "atrament_profile_export_assembly",
+ "atrament_profile_export_retry_binding",
+ "atrament_profile_export_target_check",
+ "atrament_profile_file_commit",
+ "atrament_profile_manifest_json_writer",
+ "atrament_profile_stored_zip_writer",
+ "atrament_semantic_notebook",
+]
+
+[[package]]
 name = "atrament_profile_export_target_check"
 version = "0.1.0"
 dependencies = [
