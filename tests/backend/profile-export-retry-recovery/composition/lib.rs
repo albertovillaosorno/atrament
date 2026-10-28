@@ -252,9 +252,14 @@ fn forged_commit_length_or_target_match_does_not_recover() {
 
 #[cfg(target_os = "linux")]
 #[test]
+#[expect(
+    clippy::too_many_lines,
+    reason = "one committed file, drift and symlink replay lifecycle"
+)]
 fn real_file_commit_then_exact_recovery_and_external_drift() {
     use std::env;
     use std::fs;
+    use std::os::unix::fs::symlink;
     use std::path::PathBuf;
     use std::process;
     use std::sync::atomic::{AtomicU64, Ordering};
@@ -338,5 +343,28 @@ fn real_file_commit_then_exact_recovery_and_external_drift() {
     assert_eq!(
         fs::read(&path).expect("read external change"),
         b"external change"
+    );
+
+    // A path swapped for a link cannot become recovered output evidence.
+    let linked = root.join("unrelated.atrament");
+    fs::write(&linked, b"must remain intact").expect("seed other file");
+    fs::remove_file(&path).expect("remove externally changed target");
+    symlink(&linked, &path).expect("substitute a link after commit");
+    let inspected =
+        check_profile_export_target(&intent, &zip, zip.bytes().len());
+    assert!(matches!(
+        assess(
+            bindings.bind("key", revision, &intent, &zip),
+            Prior::SyncedCommit(evidence),
+            Some(inspected),
+            &zip
+        ),
+        Decision::TargetInspectionFailed(
+            ProfileExportTargetCheckError::Open(_)
+        )
+    ));
+    assert_eq!(
+        fs::read(&linked).expect("read linked file"),
+        b"must remain intact"
     );
 }

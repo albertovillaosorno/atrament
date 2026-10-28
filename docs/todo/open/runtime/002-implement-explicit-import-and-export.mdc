@@ -103,7 +103,9 @@ states.
 This classifier issues no receipt, stores no prior effect, performs
 no I/O and never authorizes an Export retry. A trusted session application
 must still retain the original commit outcome and receipt, authenticate the
-caller and protect against concurrent target mutation.
+caller and protect against concurrent target mutation. A real-file fixture
+also refuses symlink substitution after a successful prior commit without
+opening or modifying the linked file.
 
 The read-only `atrament_profile_export_target_check` composition now compares
 an independently classified `ExportProfile` path against a complete sealed
