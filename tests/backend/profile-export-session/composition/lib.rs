@@ -39,15 +39,22 @@ mod linux {
     use std::cell::Cell;
     use std::env;
     use std::fs;
+    use std::io::{self, Read as _};
     use std::os::unix::fs::{MetadataExt as _, symlink};
     use std::panic::{AssertUnwindSafe, catch_unwind};
-    use std::process;
+    use std::process::{self, Command, Stdio};
     use std::sync::atomic::{AtomicU64, Ordering};
+    use std::thread;
+    use std::time::Duration;
 
     use super::*;
     use ExplicitOverwriteIntent::{PreserveExisting, ReplaceExisting};
 
     static NEXT: AtomicU64 = AtomicU64::new(0);
+
+    const CRASH_EXPORT_TARGET: &str = "ATRAMENT_TEST_CRASH_EXPORT_TARGET";
+    const CRASH_EXPORT_TEST: &str =
+        "linux::completed_export_survives_forced_process_death";
 
     struct OwnedDir(PathBuf);
     #[expect(clippy::missing_trait_methods, reason = "fixture cleanup only")]
@@ -456,6 +463,93 @@ mod linux {
         );
         assert_eq!(fs::read(&chosen).expect("external file"), tampered);
         assert_eq!(session.len(), 1);
+    }
+
+    #[test]
+    fn completed_export_survives_forced_process_death() {
+        // Run the exact same test binary in another process so its retry
+        // journal cannot remain reachable after termination.
+        if let Some(path) = env::var_os(CRASH_EXPORT_TARGET) {
+            let chosen = PathBuf::from(path);
+            let original = artifact("crash-survivor");
+            let request = intent(chosen.clone(), PreserveExisting);
+            let mut session = ProfileExportSession::new(1);
+            let result = session.export(
+                "crash-key", revision(), &request, &original, 8192,
+            );
+            assert!(matches!(result, Ok(Outcome::Committed(_))));
+            // The parent only kills the child once the synced commit is
+            // complete. No receipt or retry state is serialized here.
+            fs::write(chosen.with_extension("ready"), b"synced")
+                .expect("publish fixture commit marker");
+            let mut release = [0u8; 1];
+            let _release = io::stdin().read_exact(&mut release);
+            return;
+        }
+
+        let root = fixture();
+        let chosen = root.0.join("export.atrament");
+        let ready = chosen.with_extension("ready");
+        let executable = env::current_exe().expect("test executable");
+        let mut child = Command::new(executable)
+            .arg("--exact")
+            .arg(CRASH_EXPORT_TEST)
+            .env(CRASH_EXPORT_TARGET, &chosen)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::null())
+            .spawn()
+            .expect("spawn Export-owning process");
+        let mut synced = false;
+        for _ in 0..200u16 {
+            if ready.exists() {
+                synced = true;
+                break;
+            }
+            if child.try_wait().expect("child liveness").is_some() {
+                break;
+            }
+            thread::sleep(Duration::from_millis(50));
+        }
+        // Always reap the child before any fixture assertions can panic.
+        if synced {
+            child.kill().expect("force post-commit process death");
+        } else if child.try_wait().expect("child liveness").is_none() {
+            child.kill().expect("stop timed-out fixture process");
+        }
+        let status = child.wait().expect("reap Export process");
+        assert!(synced, "child never completed its explicit Export");
+        assert!(!status.success(), "the Export process was forcibly stopped");
+        assert_eq!(fs::read(&ready).expect("sync marker"), b"synced");
+        fs::remove_file(&ready).expect("remove test-only marker");
+        assert_eq!(fs::read_dir(&root.0).expect("export files").count(), 1);
+
+        let original = artifact("crash-survivor");
+        assert_eq!(
+            fs::read(&chosen).expect("surviving file"),
+            original.bytes(),
+        );
+        let import = classify_explicit_file_path_intent(
+            ExplicitFilePurpose::ImportProfile,
+            ExplicitFilePathSource::CallerSelection,
+            chosen.clone(),
+            PreserveExisting,
+        )
+        .expect("explicit selection after restart");
+        assert_eq!(
+            inspect_selected_profile_import(&import, &[], import_limits(),
+                |verified| verified.manifest().profile_identity.clone()),
+            Ok(String::from("crash-survivor")),
+        );
+
+        // A fresh process owner did not inherit the dead process's receipt.
+        let mut fresh = ProfileExportSession::new(1);
+        assert!(fresh.is_empty());
+        let request = intent(chosen.clone(), PreserveExisting);
+        assert_eq!(
+            fresh.export("crash-key", revision(), &request, &original, 8192),
+            Err(Error::Commit(ProfileFileCommitError::TargetExists)),
+        );
+        assert_eq!(fs::read(&chosen).expect("original file"), original.bytes());
     }
 
     #[test]

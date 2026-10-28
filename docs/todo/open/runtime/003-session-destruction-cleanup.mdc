@@ -123,6 +123,16 @@ retry without falsely announcing successful destruction. The Firefox suite
 asserts both outcomes and a successful subsequent retry, in addition to
 confirmation cancellation and cleanup.
 
+A Linux process fixture now completes an explicitly selected profile Export,
+forcibly kills its process after the synced file effect, and verifies that the
+exported ZIP remains readable through the independent secure selected-profile
+Import path in a fresh process owner. The new owner has no inherited Export
+retry receipt and cannot replay the same key over a preserve-existing target;
+no Export staging file remains after the successful commit. The readiness
+marker is test-only and removed before checking surviving directory entries.
+This covers **post-commit** forced termination, not a crash mid-write or
+cleanup of future media intermediates.
+
 The task remains open until temporary media exist and end-to-end fixtures also
-cover backend operation cancellation, media cleanup, and explicit-export
-survival.
+cover backend operation cancellation, media cleanup, and crashes during
+staging rather than only after a synced Export.
