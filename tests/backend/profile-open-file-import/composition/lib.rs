@@ -47,7 +47,9 @@ use atrament_profile_entry_sha256::sha256_profile_bytes;
 use atrament_profile_file_reader::{
     ProfileFileReadError, read_bounded_profile_file,
 };
-use atrament_profile_import_preflight::ProfileImportBudget;
+use atrament_profile_import_preflight::{
+    ProfileImportBudget, ProfileImportBudgetError, ProfileImportPreflightError,
+};
 use atrament_profile_import_verification::ProfileImportVerificationError;
 use atrament_profile_json_syntax::{
     ProfileJsonSyntaxError, ProfileJsonSyntaxLimits,
@@ -650,5 +652,83 @@ fn two_payload_open_file_admits_only_after_all_digest_checks() {
             )),
         );
     }
+    assert!(!inspected.get());
+}
+
+#[test]
+fn valid_file_framing_cannot_override_exact_manifest_inventory() {
+    let payload = b"entry";
+    let empty_root = concat!(
+        r#"{"container_version":"atrament.profile/1","#,
+        r#""profile_identity":"empty","required_features":[],"#,
+        r#""optional_features":[],"entries":[]}"#,
+    );
+    let with_undeclared =
+        OwnedTestFile::new(&zip(empty_root.as_bytes(), payload));
+    let with_missing = OwnedTestFile::new(
+        &write_stored_profile_zip(
+            &[ProfileStoredZipMember {
+                name: "manifest.json",
+                bytes: root(payload, "[]").as_bytes(),
+            }],
+            ProfileStoredZipWriteLimits {
+                maximum_archive_bytes: 16_384,
+                maximum_entries: 3,
+                maximum_entry_bytes: 8_192,
+                maximum_total_bytes: 12_000,
+            },
+        )
+        .expect("valid ZIP with a missing declared member"),
+    );
+    let intent = selected(ExplicitFilePurpose::ImportProfile);
+    let inspected = Cell::new(false);
+    for fixture in [&with_undeclared, &with_missing] {
+        assert!(matches!(
+            inspect_open_profile_import(
+                &intent,
+                |max| read_bounded_profile_file(fixture.open(), max),
+                &[],
+                limits(),
+                |_verified| inspected.set(true),
+            ),
+            Err(Error::Verification(
+                ProfileImportVerificationError::Preflight(
+                    ProfileImportPreflightError::EntryInventory(_),
+                )
+            )),
+        ));
+    }
+    assert!(!inspected.get());
+}
+
+#[test]
+fn declared_member_bytes_obey_import_budget_despite_valid_file_integrity() {
+    let payload = b"six123";
+    let fixture =
+        OwnedTestFile::new(&zip(root(payload, "[]").as_bytes(), payload));
+    let intent = selected(ExplicitFilePurpose::ImportProfile);
+    let mut config = limits();
+    config.import.maximum_entry_bytes = 5;
+    let inspected = Cell::new(false);
+    assert_eq!(
+        inspect_open_profile_import(
+            &intent,
+            |max| read_bounded_profile_file(fixture.open(), max),
+            &[],
+            config,
+            |_verified| inspected.set(true),
+        ),
+        Err(Error::Verification(
+            ProfileImportVerificationError::Preflight(
+                ProfileImportPreflightError::Budget(
+                    ProfileImportBudgetError::EntryBytesExceeded {
+                        declared: 6,
+                        index: 0,
+                        limit: 5,
+                    },
+                ),
+            )
+        )),
+    );
     assert!(!inspected.get());
 }
