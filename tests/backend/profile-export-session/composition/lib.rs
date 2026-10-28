@@ -395,7 +395,7 @@ mod linux {
     }
 
     #[test]
-    fn session_export_round_trips_through_selected_import_verifier() {
+    fn selected_import_round_trip_refuses_tampered_export_retry() {
         let root = fixture();
         let chosen = root.0.join("selected.atrament");
         let request = intent(chosen.clone(), PreserveExisting);
@@ -431,6 +431,30 @@ mod linux {
             original.bytes()
         );
         assert_eq!(fs::read_dir(&root.0).expect("only output").count(), 1);
+        assert_eq!(session.len(), 1);
+
+        // External tampering cannot pass Import or turn same-key Export into
+        // a new file effect, even though the original Export had succeeded.
+        let mut tampered = original.bytes().to_vec();
+        let first = tampered.first_mut().expect("nonempty sealed ZIP");
+        *first ^= 1;
+        fs::write(&chosen, &tampered).expect("external archive mutation");
+        let inspected = Cell::new(false);
+        let rejected = inspect_selected_profile_import(
+            &selected_import,
+            &[],
+            import_limits(),
+            |_verified| inspected.set(true),
+        );
+        assert!(matches!(rejected, Err(ProfileOpenFileImportError::Zip(_))));
+        assert!(!inspected.get());
+        assert_eq!(
+            session.export("roundtrip", accepted, &request, &original, 8192),
+            Err(Error::Retry(
+                ProfileExportRetryRecoveryDecision::ExternalTargetDrift
+            )),
+        );
+        assert_eq!(fs::read(&chosen).expect("external file"), tampered);
         assert_eq!(session.len(), 1);
     }
 
@@ -485,7 +509,8 @@ use atrament_profile_json_syntax::ProfileJsonSyntaxLimits;
 use atrament_profile_manifest_json_codec::ProfileManifestJsonLimits;
 use atrament_profile_manifest_json_writer::ProfileManifestJsonWriteLimits;
 use atrament_profile_open_file_import::{
-    ProfileOpenFileImportLimits, inspect_selected_profile_import,
+    ProfileOpenFileImportError, ProfileOpenFileImportLimits,
+    inspect_selected_profile_import,
 };
 use atrament_profile_stored_zip_writer::ProfileStoredZipWriteLimits;
 use atrament_profile_zip_reader::ProfileZipReadLimits;

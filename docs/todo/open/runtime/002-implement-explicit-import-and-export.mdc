@@ -155,7 +155,9 @@ A real-file cross-boundary regression also exports a canonical ZIP through
 the disposable session and securely reopens that same selected path with the
 existing strict Import verifier. It checks the decoded identity, complete
 member verification and byte/inode stability without accepting a profile into
-the session or granting any new file authority.
+the session or granting any new file authority. The same fixture then
+externally corrupts the ZIP and proves Import rejects it without exposing
+verified members and same-key Export recovery reports drift without rewriting.
 
 The journal reserves `NotRecorded` before invoking any cancellation callback
 or staging I/O. If a callback unwinds, no saved outcome is fabricated, and the
