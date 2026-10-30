@@ -142,12 +142,26 @@ pub enum ProfileChunkVerificationError {
 }
 
 /// Verification failure for a source that can separately report read errors.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Eq, PartialEq)]
 pub enum ProfileFallibleChunkVerificationError<E> {
     /// The upstream source failed, not a declared length or digest mismatch.
     Input(E),
     /// The admitted chunk data failed its separate SHA-256 or length check.
     Verification(ProfileChunkVerificationError),
+}
+
+// The upstream error type can contain private selected paths and arbitrary
+// messages. Never format that payload implicitly: typed callers retain E.
+impl<E> fmt::Debug for ProfileFallibleChunkVerificationError<E> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Input(_) => f.debug_tuple("Input").finish_non_exhaustive(),
+            Self::Verification(reason) => f
+                .debug_tuple("Verification")
+                .field(reason)
+                .finish(),
+        }
+    }
 }
 
 /// Fixed-memory incremental SHA-256 state for already bounded input chunks.

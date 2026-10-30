@@ -533,3 +533,36 @@ fn incremental_hash_state_debug_never_exposes_buffered_profile_bytes() {
     assert_eq!(second.finish(), sha256_profile_bytes(&expected));
     assert_eq!(first.bytes_hashed(), secret.len() as u64);
 }
+
+#[test]
+fn fallible_chunk_debug_redacts_arbitrary_transport_errors() {
+    struct PrivateTransportFailure {
+        selected_path: &'static str,
+    }
+
+    let entry = declaration(b"private member bytes");
+    let source = [Err::<&[u8], _>(PrivateTransportFailure {
+        selected_path: "path/private-reader-7591",
+    })];
+    let outcome = verify_profile_entry_chunks_fallible(&entry, source);
+    for printed in [format!("{outcome:?}"), format!("{outcome:#?}")] {
+        assert!(printed.contains("Input"));
+        assert!(!printed.contains("private-reader-7591"));
+    }
+    match outcome {
+        Err(ProfileFallibleChunkVerificationError::Input(reason)) => {
+            assert_eq!(reason.selected_path, "path/private-reader-7591");
+        }
+        other => panic!("expected typed source failure: {other:?}"),
+    }
+    type Failure =
+        ProfileFallibleChunkVerificationError<PrivateTransportFailure>;
+    let verification = Failure::Verification(
+        ProfileChunkVerificationError::Entry(
+            ProfileEntryVerificationError::DigestMismatch,
+        ),
+    );
+    let printed = format!("{verification:?}");
+    assert!(printed.contains("Verification"));
+    assert!(printed.contains("DigestMismatch"));
+}

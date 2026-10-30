@@ -214,6 +214,10 @@ for explicit typed inspection but redact its arbitrary error-message text
 from `Debug`. Error kind, fixed resource limits and structural verification
 reasons remain visible, without disclosing provider-supplied private paths.
 
+Generic fallible chunk-verification failures now suppress arbitrary
+upstream error payloads in `Debug` without imposing `E: Debug`, retaining
+typed `Input(E)` ownership and visible structural `Verification` reasons.
+
 A real-file cross-boundary regression also exports a canonical ZIP through
 the disposable session and securely reopens that same selected path with the
 existing strict Import verifier. It checks the decoded identity, complete
