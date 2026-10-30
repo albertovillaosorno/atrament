@@ -84,11 +84,14 @@ file writes can still change its bytes. The host must independently
 authenticate the selected path's original caller gesture or host-policy
 admission; the classified intent cannot prove that provenance itself.
 
-Twenty-four composition tests exercise open-descriptor and selected-path
+Twenty-six composition tests exercise open-descriptor and selected-path
 paths, source transport, malformed archives, and complete integrity gates.
 SHA-valid invalid section JSON or mislabeled JSON media type, duplicate
 decoded keys, independent section byte, depth, key, and value ceilings, and
-later invalid sections all refuse before inspection. A separately admitted
+later invalid sections all refuse before inspection. Contradictory required
+and optional declarations for the same exact feature also refuse before
+inspection through both the injected opened-file and secure selected-path
+entrypoints, even when the reader supports that feature. A separately admitted
 JSON section may coexist with an opaque, non-UTF-8 binary asset, whose bytes
 remain available without parsing.
 

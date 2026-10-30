@@ -604,6 +604,42 @@ fn contradictory_feature_requirements_refuse_before_file_inspection() {
     assert!(!inspected.get(), "no verified section can escape on ambiguity");
 }
 
+#[cfg(target_os = "linux")]
+#[test]
+fn selected_path_refuses_conflicting_features_without_inspection() {
+    let payload = br#"{"stroke":[1,2]}"#;
+    let valid = root(payload, r#"["stroke-vocabulary"]"#);
+    let conflicting = valid.replace(
+        "\"optional_features\":[]",
+        "\"optional_features\":[\"stroke-vocabulary\"]",
+    );
+    let file = OwnedTestFile::new(&zip(conflicting.as_bytes(), payload));
+    let chosen = classify_explicit_file_path_intent(
+        ExplicitFilePurpose::ImportProfile,
+        ExplicitFilePathSource::CallerSelection,
+        file.path.clone(),
+        ExplicitOverwriteIntent::PreserveExisting,
+    )
+    .expect("test-owned selected Import path");
+    let inspected = Cell::new(false);
+    assert_eq!(
+        inspect_selected_profile_import(
+            &chosen,
+            &["stroke-vocabulary"],
+            limits(),
+            |_verified| inspected.set(true),
+        ),
+        Err(Error::Verification(ProfileImportVerificationError::Preflight(
+            ProfileImportPreflightError::Manifest(
+                ProfileManifestError::ConflictingFeatureRequirement {
+                    feature: "stroke-vocabulary".into(),
+                },
+            ),
+        ))),
+    );
+    assert!(!inspected.get(), "no selected profile bytes were exposed");
+}
+
 #[test]
 fn empty_regular_file_reaches_zip_refusal_not_synthetic_eof() {
     let fixture = OwnedTestFile::new(b"");
