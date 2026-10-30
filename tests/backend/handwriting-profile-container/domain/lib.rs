@@ -865,6 +865,35 @@ fn required_and_optional_feature_overlap_refuses_before_any_entry_decoding() {
 }
 
 #[test]
+fn large_feature_lists_use_exact_membership_and_first_failure_order() {
+    let mut value = manifest(vec![]);
+    value.required_features = (0..4096)
+        .map(|index| format!("required-{index}"))
+        .collect();
+    value.optional_features = (0..4096)
+        .map(|index| format!("optional-{index}"))
+        .collect();
+    let supported = value.required_features
+        .iter()
+        .map(String::as_str)
+        .collect::<Vec<_>>();
+    assert_eq!(validate_profile_manifest(&value, &supported), Ok(()));
+    value.optional_features.push("required-4095".into());
+    assert_eq!(
+        validate_profile_manifest(&value, &supported),
+        Err(ProfileManifestError::ConflictingFeatureRequirement {
+            feature: "required-4095".into(),
+        }),
+    );
+    assert_eq!(
+        validate_profile_manifest(&value, &supported[..4095]),
+        Err(ProfileManifestError::UnsupportedRequiredFeature {
+            feature: "required-4095".into(),
+        }),
+    );
+}
+
+#[test]
 fn canonical_archive_order_includes_root_manifest_by_path() {
     let value = manifest(vec![
         entry("sections/z.json", "application/json", 3),

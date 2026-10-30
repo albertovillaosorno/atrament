@@ -726,16 +726,25 @@ pub fn validate_profile_manifest(
             observed: manifest.container_version.clone(),
         });
     }
+    // Index borrowed names once so large caller-admitted feature lists do not
+    // cause a quadratic membership scan. The original required-feature order
+    // still determines which typed failure is returned first.
+    let supported: BTreeSet<&str> =
+        supported_required_features.iter().copied().collect();
+    let optional: BTreeSet<&str> = manifest
+        .optional_features
+        .iter()
+        .map(String::as_str)
+        .collect();
     for feature in &manifest.required_features {
-        if !supported_required_features.contains(&feature.as_str()) {
+        if !supported.contains(feature.as_str()) {
             return Err(ProfileManifestError::UnsupportedRequiredFeature {
                 feature: feature.clone(),
             });
         }
-        // A feature must not be simultaneously mandatory and optional. This
-        // comparison is exact: unknown optional identifiers stay opaque and
-        // Unicode feature names are not normalized or case-folded.
-        if manifest.optional_features.contains(feature) {
+        // Feature identity is exact: unknown optional identifiers stay opaque,
+        // with no Unicode normalization or case folding.
+        if optional.contains(feature.as_str()) {
             return Err(ProfileManifestError::ConflictingFeatureRequirement {
                 feature: feature.clone(),
             });
