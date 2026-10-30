@@ -84,16 +84,19 @@ file writes can still change its bytes. The host must independently
 authenticate the selected path's original caller gesture or host-policy
 admission; the classified intent cannot prove that provenance itself.
 
-Twenty-six composition tests exercise open-descriptor and selected-path
+Twenty-seven composition tests exercise open-descriptor and selected-path
 paths, source transport, malformed archives, and complete integrity gates.
 SHA-valid invalid section JSON or mislabeled JSON media type, duplicate
 decoded keys, independent section byte, depth, key, and value ceilings, and
 later invalid sections all refuse before inspection. Contradictory required
 and optional declarations for the same exact feature also refuse before
 inspection through both the injected opened-file and secure selected-path
-entrypoints, even when the reader supports that feature. A separately admitted
-JSON section may coexist with an opaque, non-UTF-8 binary asset, whose bytes
-remain available without parsing.
+entrypoints, even when the reader supports that feature.
+
+Repeated optional feature identifiers also refuse before an open-file callback
+can inspect any verified data. A separately admitted JSON section may coexist
+with an opaque, non-UTF-8 binary asset, whose bytes remain available without
+parsing.
 
 Five path-open fixtures cover link policy, relative paths, nonregular sources
 and replacement after open. Missing selected sources, links and wrong purposes
@@ -128,12 +131,14 @@ feature and name ceilings. Unsupported required features and unsupported
 platforms still fail closed. These are command-specific protective limits,
 not portable format maxima or proof of a trusted picker gesture.
 
-The eleven runtime-bootstrap integration tests exercise the real CLI process:
+The fourteen runtime-bootstrap integration tests exercise the real CLI process:
 verified sections without opaque asset extraction, CRC-valid forged members,
 invalid section syntax, missing or symlinked selected paths, and bounded
 argument rejection. Linux fixtures additionally prove that opaque non-UTF-8
 caller-selected path bytes survive CLI argv and that a later invalid JSON
 section cannot publish even a previously valid section or manifest to stdout.
+A structurally valid ZIP with repeated optional feature metadata also refuses
+without revealing its manifest or verified section bytes on stdout.
 Browser launch recovery error behavior remains independently covered.
 
 ### Bounded stored-ZIP byte reader

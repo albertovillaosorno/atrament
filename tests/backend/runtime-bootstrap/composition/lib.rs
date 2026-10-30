@@ -139,11 +139,23 @@ fn profile_zip_with_media_type(
     declared_section: &[u8],
     media_type: &str,
 ) -> Vec<u8> {
+    profile_zip_with_optional_features(
+        section, asset, declared_section, media_type, "[]",
+    )
+}
+
+fn profile_zip_with_optional_features(
+    section: &[u8],
+    asset: &[u8],
+    declared_section: &[u8],
+    media_type: &str,
+    optional_features_json: &str,
+) -> Vec<u8> {
     let root = format!(
         concat!(
             r#"{{"container_version":"atrament.profile/1","#,
             r#""profile_identity":"writer","required_features":[],"#,
-            r#""optional_features":[],"entries":["#,
+            r#""optional_features":{},"entries":["#,
             r#"{{"path":"sections/writer.json","#,
             r#""media_type":"{}","#,
             r#""byte_length":{},"sha256":"{}"}},"#,
@@ -151,6 +163,7 @@ fn profile_zip_with_media_type(
             r#""media_type":"application/octet-stream","#,
             r#""byte_length":{},"sha256":"{}"}}]}}"#,
         ),
+        optional_features_json,
         media_type,
         declared_section.len(),
         digest_hex(declared_section),
@@ -454,6 +467,29 @@ fn cli_refuses_later_invalid_section_without_partial_stdout() {
         .arg(&owned.0)
         .output()
         .expect("run actually malformed second-section profile CLI");
+    assert!(!executed.status.success());
+    assert!(executed.stdout.is_empty());
+    assert!(!executed.stderr.is_empty());
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn cli_refuses_duplicate_optional_feature_without_partial_stdout() {
+    let section = br#"{"safe":true}"#;
+    let archive = profile_zip_with_optional_features(
+        section, b"opaque-private-asset", section,
+        "application/json", r#"["future","future"]"#,
+    );
+    let owned = OwnedProfileFile::new(&archive);
+    let error = bootstrap::inspect_profile(owned.0.clone())
+        .expect_err("repeated capabilities cannot be inspected");
+    assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+    assert!(error.to_string().contains("DuplicateFeatureIdentifier"));
+    let executed = Command::new(env!("CARGO_BIN_EXE_atrament"))
+        .args(["profile", "inspect"])
+        .arg(&owned.0)
+        .output()
+        .expect("run duplicate-feature profile CLI");
     assert!(!executed.status.success());
     assert!(executed.stdout.is_empty());
     assert!(!executed.stderr.is_empty());

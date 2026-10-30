@@ -38,7 +38,7 @@ read errors on a host-opened handle. The read-only Import composition
 rejects wrong purpose, invalid ZIP/JSON/schema, inventory and any
 declared SHA-256 mismatch before inspecting the bounded source.
 
-Twenty-four composition tests exercise real files, zero-size pseudo-files,
+Twenty-seven composition tests exercise real files, zero-size pseudo-files,
 count and byte ceilings, missing or undeclared entries, and equal-length
 CRC-valid payload substitutions. The common Import gate validates every
 SHA-verified `sections/` payload as independently bounded JSON object syntax,
@@ -60,7 +60,7 @@ A provisional `atrament profile inspect PATH` Linux CLI now displays the
 fully checked manifest and syntax-verified JSON objects under `sections/`,
 without emitting opaque asset bodies or opening a browser. Its independently
 bounded transport and JSON ceilings refuse forged SHA and malformed section
-sources before any stdout output. Eleven CLI regressions also check missing
+sources before any stdout output. Fourteen CLI regressions also check missing
 and symlinked sources, bounded argument dispatch, exact non-UTF-8 selected
 paths, and complete stdout refusal when a later declared section is invalid.
 Versioned handwriting sections and full cross-platform inspection remain open.
