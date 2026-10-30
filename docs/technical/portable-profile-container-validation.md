@@ -1078,9 +1078,12 @@ The profile-container TODO remains open for:
 - durable atomic Export, retry recovery and accepted-session Import.
 
 The complete profile artifact assembly refuses JSON section declarations
-whose media type differs from exact `application/json`. The owned writer,
-byte-count planner, and caller-owned writer share the same check, while opaque
-asset media types remain uninterpreted; typed section decoding remains open.
+whose media type differs from exact `application/json`. After verifying all
+member lengths and SHA-256 digests, it also validates every section as an
+independently bounded JSON object before emitting any artifact. The owned
+writer, byte-count planner, and caller-owned writer share the same gate, while
+opaque asset bodies remain uninterpreted; typed handwriting schemas remain
+open.
 
 Canonical JSON, ordinary stored-ZIP32 reading and writing, fixed writer ZIP
 metadata, whole-archive hashing and source-bound Import payload verification

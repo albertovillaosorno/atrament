@@ -46,7 +46,7 @@ use atrament_handwriting_profile_container::{
 };
 use atrament_profile_export_assembly::{
     ProfileExportArtifact, ProfileExportAssemblyLimits,
-    assemble_profile_export_artifact,
+    ProfileJsonSyntaxLimits, assemble_profile_export_artifact,
 };
 use atrament_profile_export_retry_binding::{
     MAXIMUM_PROFILE_RETRY_KEY_BYTES, MAXIMUM_PROFILE_RETRY_PATH_BYTES,
@@ -74,6 +74,12 @@ fn artifact(identity: &str) -> ProfileExportArtifact {
                 maximum_entries: 2,
                 maximum_features: 2,
                 maximum_string_bytes: 128,
+            },
+            section_json: ProfileJsonSyntaxLimits {
+                maximum_bytes: 4096,
+                maximum_nesting: 32,
+                maximum_object_members: 64,
+                maximum_values: 1024,
             },
             zip: ProfileStoredZipWriteLimits {
                 maximum_archive_bytes: 8192,

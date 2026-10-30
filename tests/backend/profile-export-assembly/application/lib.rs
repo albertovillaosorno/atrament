@@ -50,7 +50,9 @@ use atrament_profile_export_assembly::{
 };
 use atrament_profile_import_preflight::ProfileImportBudget;
 use atrament_profile_import_verification::verify_attached_profile_import;
-use atrament_profile_json_syntax::ProfileJsonSyntaxLimits;
+use atrament_profile_json_syntax::{
+    ProfileJsonSyntaxError, ProfileJsonSyntaxLimits,
+};
 use atrament_profile_manifest_json_codec::{
     ProfileManifestJsonLimits, decode_attached_profile_manifest_json,
 };
@@ -71,6 +73,12 @@ const fn limits() -> ProfileExportAssemblyLimits {
             maximum_entries: 8,
             maximum_features: 8,
             maximum_string_bytes: 256,
+        },
+        section_json: ProfileJsonSyntaxLimits {
+            maximum_bytes: 4096,
+            maximum_nesting: 32,
+            maximum_object_members: 64,
+            maximum_values: 1024,
         },
         zip: ProfileStoredZipWriteLimits {
             maximum_archive_bytes: 16384,
@@ -304,15 +312,100 @@ fn section_media_type_mismatch_refuses_all_writers_before_output() {
 }
 
 #[test]
+fn section_syntax_and_budget_refuse_all_export_paths_without_output() {
+    let asset = b"\xff\x00sample";
+    let mut buffer = [0xb7u8; 512];
+    for (section, reason) in [
+        (&b"[]"[..], ProfileJsonSyntaxError::RootNotObject),
+        (&b"{"[..], ProfileJsonSyntaxError::Malformed),
+        (&b"\xff"[..], ProfileJsonSyntaxError::InvalidUtf8),
+        (
+            &br#"{"a":1,"a":2}"#[..],
+            ProfileJsonSyntaxError::DuplicateObjectKey,
+        ),
+    ] {
+        let mut profile = manifest();
+        profile.entries = vec![
+            entry("sections/a.json", b"{}"),
+            entry("assets/raw.bin", asset),
+            entry("sections/z.json", section),
+        ];
+        let payloads = [
+            ProfileExportPayload {
+                path: "sections/z.json", bytes: section,
+            },
+            ProfileExportPayload {
+                path: "assets/raw.bin", bytes: asset,
+            },
+            ProfileExportPayload {
+                path: "sections/a.json", bytes: b"{}",
+            },
+        ];
+        let expected = Error::SectionJson { index: 2, reason };
+        assert_eq!(
+            assemble_profile_export_artifact(
+                &profile, &payloads, &["strokes"], limits(),
+            ).err(),
+            Some(expected.clone()),
+        );
+        assert_eq!(
+            planned_profile_export_artifact_bytes(
+                &profile, &payloads, &["strokes"], limits(),
+            ).err(),
+            Some(expected.clone()),
+        );
+        assert_eq!(
+            write_profile_export_artifact_into(
+                &profile, &payloads, &["strokes"], limits(), &mut buffer,
+            ).err(),
+            Some(expected),
+        );
+        assert_eq!(buffer, [0xb7; 512]);
+    }
+
+    let section = br#"{"ink":1}"#;
+    let mut profile = manifest();
+    profile.entries = vec![entry("sections/ink.json", section)];
+    let payloads = [ProfileExportPayload {
+        path: "sections/ink.json", bytes: section,
+    }];
+    let mut budget = limits();
+    budget.section_json.maximum_bytes = section.len() - 1;
+    let expected = Error::SectionJson {
+        index: 0,
+        reason: ProfileJsonSyntaxError::MaximumBytesExceeded,
+    };
+    assert_eq!(
+        assemble_profile_export_artifact(
+            &profile, &payloads, &["strokes"], budget,
+        ).err(),
+        Some(expected.clone()),
+    );
+    assert_eq!(
+        planned_profile_export_artifact_bytes(
+            &profile, &payloads, &["strokes"], budget,
+        ).err(),
+        Some(expected.clone()),
+    );
+    assert_eq!(
+        write_profile_export_artifact_into(
+            &profile, &payloads, &["strokes"], budget, &mut buffer,
+        ).err(),
+        Some(expected),
+    );
+    assert_eq!(buffer, [0xb7; 512]);
+}
+
+#[test]
 fn late_member_corruption_rejects_entire_archive() {
     let mut declared = manifest();
     declared.entries = vec![
         entry("assets/a.bin", b"aa"),
-        entry("sections/z.bin", b"zz"),
+        entry("sections/z.bin", b"{}"),
     ];
     let clean = [
         ProfileExportPayload { path: "assets/a.bin", bytes: b"aa" },
-        ProfileExportPayload { path: "sections/z.bin", bytes: b"zz" },
+        ProfileExportPayload { path: "sections/z.bin", bytes: b"{}" },
     ];
     let mut bytes = clean;
     bytes[1].bytes = b"zy";
@@ -555,7 +648,11 @@ fn generated_profile_archives_are_deterministic_and_sha_bound() {
             } else {
                 format!("sections/{index:02}-ñ.json")
             };
-            let data = vec![index as u8; (index + case) % 13];
+            let data = if name.starts_with("sections/") {
+                format!(r#"{{"case":{case},"index":{index}}}"#).into_bytes()
+            } else {
+                vec![index as u8; (index + case) % 13]
+            };
             profile.entries.push(entry(&name, &data));
             values.push((name, data));
         }

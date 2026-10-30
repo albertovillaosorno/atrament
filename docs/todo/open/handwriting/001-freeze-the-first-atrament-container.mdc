@@ -26,6 +26,10 @@ The pure typed manifest, canonical JSON writer, stored-ZIP byte writer and
 checked reader now exist, with SHA-256 verification of imported member bodies.
 The separate in-memory Export artifact assembly binds canonical root JSON to
 complete verified ZIP bytes and supports size planning and caller-owned output.
+Its three byte-output paths now reject misdeclared section media types and
+SHA-valid but syntactically invalid JSON sections before publishing output,
+using an independent section-size and structural budget.
+
 These are byte-format and read-only verification components, not selected-file
 Export, accepted-profile Import or an external persistence permission.
 

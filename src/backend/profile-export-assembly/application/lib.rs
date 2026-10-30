@@ -39,6 +39,10 @@ use atrament_handwriting_profile_container::{
 use atrament_profile_entry_sha256::{
     sha256_profile_bytes, verify_profile_entry_bytes,
 };
+use atrament_profile_json_syntax::{
+    ProfileJsonSyntaxError, validate_profile_json_object,
+};
+pub use atrament_profile_json_syntax::ProfileJsonSyntaxLimits;
 use atrament_profile_manifest_json_writer::{
     ProfileManifestJsonWriteError, ProfileManifestJsonWriteLimits,
     write_canonical_profile_manifest_json,
@@ -63,6 +67,8 @@ pub struct ProfileExportPayload<'bytes> {
 pub struct ProfileExportAssemblyLimits {
     /// Strict limits before allocating canonical manifest JSON.
     pub manifest_json: ProfileManifestJsonWriteLimits,
+    /// Independent object syntax limits for each SHA-verified JSON section.
+    pub section_json: ProfileJsonSyntaxLimits,
     /// Strict limits before allocating final stored ZIP framing.
     pub zip: ProfileStoredZipWriteLimits,
 }
@@ -92,6 +98,13 @@ pub enum ProfileExportAssemblyError {
         index: usize,
         /// Verified failure of one exact declared member.
         reason: ProfileEntryVerificationError,
+    },
+    /// A fully digest-verified section is not a bounded JSON object.
+    SectionJson {
+        /// Zero-based index in canonical manifest entry ordering.
+        index: usize,
+        /// JSON grammar or caller-owned structural budget failure.
+        reason: ProfileJsonSyntaxError,
     },
     /// A declared JSON section cannot be read by the first-release Import.
     SectionMediaType {
@@ -175,8 +188,9 @@ fn sorted_payloads<'bytes>(
 ///
 /// First checks typed manifest JSON, the exact supplied payload inventory,
 /// and JSON media types for every declared `sections/` member, then
-/// length-before-SHA-256 verifies **all** non-root bytes. Only after all
-/// payloads match does the canonical stored-ZIP writer allocate final output.
+/// length-before-SHA-256 verifies **all** non-root bytes. Every verified
+/// section must also pass an independently bounded JSON object syntax gate.
+/// Only after all checks does the stored-ZIP writer allocate final output.
 /// The independent JSON and ZIP limits include the root bytes. Caller payload
 /// order and manifest declaration order never change the resulting archive.
 ///
@@ -350,6 +364,20 @@ fn with_verified_members<T>(
                     index, reason,
                 }
             })?;
+    }
+    // Preserve the Import gate's all-digests-before-any-section semantics.
+    // No output writer is invoked unless every JSON section is admissible.
+    for (index, (entry, payload)) in
+        declared.iter().zip(&supplied).enumerate()
+    {
+        if entry.path.starts_with("sections/") {
+            let _syntax = validate_profile_json_object(
+                payload.bytes, limits.section_json,
+            )
+            .map_err(|reason| {
+                ProfileExportAssemblyError::SectionJson { index, reason }
+            })?;
+        }
     }
     let result = write(&members, limits.zip)
         .map_err(ProfileExportAssemblyError::Zip)?;

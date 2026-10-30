@@ -719,6 +719,12 @@ fn artifact(identity: &str) -> ProfileExportArtifact {
                 maximum_features: 2,
                 maximum_string_bytes: 128,
             },
+            section_json: ProfileJsonSyntaxLimits {
+                maximum_bytes: 4096,
+                maximum_nesting: 32,
+                maximum_object_members: 64,
+                maximum_values: 1024,
+            },
             zip: ProfileStoredZipWriteLimits {
                 maximum_archive_bytes: 8192,
                 maximum_entries: 2,
@@ -773,6 +779,12 @@ fn full_artifact(section_bytes: &[u8]) -> ProfileExportArtifact {
                 maximum_entries: 2,
                 maximum_features: 2,
                 maximum_string_bytes: 128,
+            },
+            section_json: ProfileJsonSyntaxLimits {
+                maximum_bytes: 4096,
+                maximum_nesting: 32,
+                maximum_object_members: 64,
+                maximum_values: 1024,
             },
             zip: ProfileStoredZipWriteLimits {
                 maximum_archive_bytes: 8192,
