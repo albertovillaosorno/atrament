@@ -615,3 +615,54 @@ fn sorted_and_general_import_preflight_share_all_early_gate_combinations() {
     assert!(rejected > 0);
     assert_eq!(accepted + rejected, cases);
 }
+
+#[test]
+fn sealed_import_preflight_debug_hides_private_nested_evidence() {
+    let path = classify_explicit_file_path_intent(
+        ExplicitFilePurpose::ImportProfile,
+        ExplicitFilePathSource::CallerSelection,
+        PathBuf::from("source/private-source-8502.atrament"),
+        ExplicitOverwriteIntent::PreserveExisting,
+    )
+    .expect("private selected profile path is valid");
+    let mut parsed = manifest();
+    parsed.profile_identity = String::from("private-identity-6419");
+    parsed.required_features = vec![String::from("private-required-2701")];
+    parsed.optional_features = vec![String::from("private-optional-9163")];
+    parsed.entries[0].path = String::from("assets/private-asset-7225.webp");
+    parsed.entries[1].path = String::from("sections/private-stroke-4568.json");
+    let observed = [
+        "assets/private-asset-7225.webp",
+        PROFILE_MANIFEST_PATH,
+        "sections/private-stroke-4568.json",
+    ];
+    let preflight = preflight_explicit_profile_import_sorted(
+        &path,
+        &parsed,
+        &["private-required-2701"],
+        &observed,
+        canonical_encoding(),
+        budget(),
+    )
+    .expect("exact private profile metadata is admitted");
+    for printed in [
+        format!("{preflight:?}"),
+        format!("{preflight:#?}"),
+        format!("{:?}", Ok::<_, ProfileImportPreflightError>(preflight)),
+    ] {
+        assert!(printed.contains("ProfileImportPreflight"));
+        for private in [
+            "private-source-8502",
+            "private-identity-6419",
+            "private-required-2701",
+            "private-optional-9163",
+            "private-asset-7225",
+            "private-stroke-4568",
+        ] {
+            assert!(!printed.contains(private));
+        }
+    }
+    assert_eq!(preflight.path().path(), path.path());
+    assert_eq!(preflight.inventory().manifest(), &parsed);
+    assert_eq!(preflight.inventory().observed_paths(), observed);
+}

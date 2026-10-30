@@ -236,6 +236,11 @@ markers in the earlier valid section, malformed late section, selected name
 and binary asset. The live CLI refuses without publishing any of those bytes
 on stderr or any earlier verified section on stdout.
 
+Composed constructor-sealed Import preflight evidence now has an aggregate
+plain/pretty `Debug` regression: nested source paths, typed profile identity,
+feature labels, and observed archive member names stay private even while
+typed getters retain exact admitted evidence.
+
 A real-file cross-boundary regression also exports a canonical ZIP through
 the disposable session and securely reopens that same selected path with the
 existing strict Import verifier. It checks the decoded identity, complete
