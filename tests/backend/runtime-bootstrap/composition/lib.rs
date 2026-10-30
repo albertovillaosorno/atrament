@@ -236,17 +236,14 @@ fn cli_rejects_infinite_argument_stream_after_four_values() {
 #[cfg(target_os = "linux")]
 #[test]
 fn cli_never_substitutes_a_missing_path_with_another_profile() {
-    let bytes = profile_zip(
-        br#"{"valid":true}"#, b"opaque", br#"{"valid":true}"#,
-    );
+    let section = br#"{"valid":"private-section-6421"}"#;
+    let bytes = profile_zip(section, b"private-asset-2851", section);
     let owned = OwnedProfileFile::new(&bytes);
-    let missing = owned.0.with_extension("missing");
-    assert_eq!(
-        bootstrap::inspect_profile(missing.clone())
-            .expect_err("missing source must refuse")
-            .kind(),
-        io::ErrorKind::InvalidData,
-    );
+    let missing = owned.0.with_extension("private-missing-selection-4852");
+    let error = bootstrap::inspect_profile(missing.clone())
+        .expect_err("missing source must refuse");
+    assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+    assert!(error.to_string().contains("NotFound"));
     let executed = Command::new(env!("CARGO_BIN_EXE_atrament"))
         .args(["profile", "inspect"])
         .arg(&missing)
@@ -254,17 +251,27 @@ fn cli_never_substitutes_a_missing_path_with_another_profile() {
         .expect("run missing-source profile CLI");
     assert!(!executed.status.success());
     assert!(executed.stdout.is_empty());
+    let stderr = String::from_utf8_lossy(&executed.stderr);
+    assert!(stderr.contains("NotFound"));
+    for private in [
+        "private-missing-selection-4852",
+        "private-section-6421",
+        "private-asset-2851",
+    ] {
+        assert!(!error.to_string().contains(private));
+        assert!(!stderr.contains(private));
+    }
 }
 
 #[cfg(target_os = "linux")]
 #[test]
 fn cli_rejects_symlinked_selection_before_any_output() {
     use std::os::unix::fs::symlink;
-    let section = br#"{"valid":true}"#;
+    let section = br#"{"valid":"private-link-section-3096"}"#;
     let owned = OwnedProfileFile::new(&profile_zip(
-        section, b"opaque", section,
+        section, b"private-link-asset-5742", section,
     ));
-    let link = owned.0.with_extension("linked");
+    let link = owned.0.with_extension("private-selected-link-8331");
     symlink(&owned.0, &link).expect("create test-owned symlink");
     let executed = Command::new(env!("CARGO_BIN_EXE_atrament"))
         .args(["profile", "inspect"])
@@ -274,6 +281,19 @@ fn cli_rejects_symlinked_selection_before_any_output() {
     fs::remove_file(&link).expect("remove test-owned symlink");
     assert!(!executed.status.success());
     assert!(executed.stdout.is_empty());
+    let stderr = String::from_utf8_lossy(&executed.stderr);
+    assert!(stderr.contains("SymlinkForbidden"));
+    for private in [
+        "private-selected-link-8331",
+        "private-link-section-3096",
+        "private-link-asset-5742",
+    ] {
+        assert!(!stderr.contains(private));
+    }
+    assert_eq!(
+        fs::read(&owned.0).expect("selected symlink never changed target"),
+        profile_zip(section, b"private-link-asset-5742", section),
+    );
 }
 
 #[cfg(target_os = "linux")]
