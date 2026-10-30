@@ -222,6 +222,10 @@ Syntax-admitted JSON path selection now also redacts arbitrary decoded
 member keys from `ProfileJsonPathSegment::Key` debug projections while
 preserving exact typed lookup and visible numeric array indices.
 
+Pre-serialization stored-ZIP member inputs now also redact caller-owned
+private archive paths and raw payload bytes in `Debug`, matching the typed
+Export payload and read-entry boundaries without altering ZIP serialization.
+
 A real-file cross-boundary regression also exports a canonical ZIP through
 the disposable session and securely reopens that same selected path with the
 existing strict Import verifier. It checks the decoded identity, complete

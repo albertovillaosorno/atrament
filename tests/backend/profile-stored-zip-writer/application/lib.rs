@@ -1295,3 +1295,19 @@ fn caller_owned_zip_output_checks_input_before_destination_capacity() {
         );
     }
 }
+
+#[test]
+fn input_member_debug_never_prints_private_archive_paths_or_payload() {
+    let entry = member(
+        "sections/private-path-marker-8571.json",
+        b"{\"private\":\"payload-secret-2765\"}",
+    );
+    for displayed in [format!("{entry:?}"), format!("{entry:#?}")] {
+        assert!(displayed.contains("ProfileStoredZipMember"));
+        assert!(!displayed.contains("private-path-marker-8571"));
+        assert!(!displayed.contains("payload-secret-2765"));
+        assert!(!displayed.contains("112, 97, 121, 108, 111, 97, 100"));
+    }
+    assert_eq!(entry.name, "sections/private-path-marker-8571.json");
+    assert_eq!(entry.bytes, b"{\"private\":\"payload-secret-2765\"}");
+}

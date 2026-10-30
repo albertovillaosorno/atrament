@@ -34,6 +34,8 @@
 
 //! Deterministic ordinary stored-ZIP frames, not a complete profile writer.
 
+use std::fmt;
+
 use atrament_handwriting_profile_container::{
     PROFILE_MANIFEST_PATH, profile_entry_kind,
 };
@@ -45,12 +47,20 @@ const LOCAL_CRC32_OFFSET: usize = 14;
 const MAX_ZIP32_VALUE: u32 = u32::MAX - 1;
 
 /// Already serialized entry name and complete payload bytes, not a profile.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+/// Debug output never prints the caller-owned private names or payloads.
+#[derive(Clone, Copy, Eq, PartialEq)]
 pub struct ProfileStoredZipMember<'bytes> {
     /// Exact uncompressed bytes to store without interpreting their contents.
     pub bytes: &'bytes [u8],
     /// Exact archive path. Only the root manifest or valid profile paths pass.
     pub name: &'bytes str,
+}
+
+impl fmt::Debug for ProfileStoredZipMember<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ProfileStoredZipMember")
+            .finish_non_exhaustive()
+    }
 }
 
 /// Independent bounds for serialized archive bytes and its member payloads.
