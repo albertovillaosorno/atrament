@@ -279,6 +279,81 @@ fn cli_inspects_verified_section_without_extracting_opaque_assets() {
 
 #[cfg(target_os = "linux")]
 #[test]
+fn cli_section_order_is_stable_across_manifest_declaration_orders() {
+    let first = br#"{"first":true}"#;
+    let last = br#"{"last":true}"#;
+    let entry = |name: &str, bytes: &[u8]| {
+        format!(
+            concat!(
+                r#"{{"path":"sections/{}.json","#,
+                r#""media_type":"application/json","byte_length":{},"#,
+                r#""sha256":"{}"}}"#,
+            ),
+            name, bytes.len(), digest_hex(bytes),
+        )
+    };
+    let first_entry = entry("a", first);
+    let last_entry = entry("z", last);
+    let mut outputs = Vec::new();
+    for declarations in [
+        format!("{last_entry},{first_entry}"),
+        format!("{first_entry},{last_entry}"),
+    ] {
+        let root = format!(
+            concat!(
+                r#"{{"container_version":"atrament.profile/1","#,
+                r#""profile_identity":"writer","required_features":[],"#,
+                r#""optional_features":[],"entries":[{}]}}"#,
+            ),
+            declarations,
+        );
+        let bytes = write_stored_profile_zip(
+            &[
+                ProfileStoredZipMember {
+                    name: "manifest.json",
+                    bytes: root.as_bytes(),
+                },
+                ProfileStoredZipMember {
+                    name: "sections/a.json",
+                    bytes: first,
+                },
+                ProfileStoredZipMember {
+                    name: "sections/z.json",
+                    bytes: last,
+                },
+            ],
+            ProfileStoredZipWriteLimits {
+                maximum_archive_bytes: 4096,
+                maximum_entries: 3,
+                maximum_entry_bytes: 2048,
+                maximum_total_bytes: 3000,
+            },
+        )
+        .expect("valid reordered declarations with sorted ZIP members");
+        let source = OwnedProfileFile::new(&bytes);
+        let inspected = bootstrap::inspect_profile(source.0.clone())
+            .expect("all entries verify before stable display");
+        let executed = Command::new(env!("CARGO_BIN_EXE_atrament"))
+            .args(["profile", "inspect"])
+            .arg(&source.0)
+            .output()
+            .expect("read-only CLI");
+        assert!(executed.status.success());
+        assert_eq!(executed.stdout, inspected.as_bytes());
+        outputs.push(inspected);
+    }
+    assert_eq!(outputs.len(), 2);
+    assert_eq!(outputs.first(), outputs.last());
+    let readable = outputs.first().expect("one admitted fixture");
+    assert!(
+        readable.find("sections/a.json").expect("first section")
+            < readable.find("sections/z.json").expect("last section"),
+        "readable sections must use canonical path order",
+    );
+}
+
+#[cfg(target_os = "linux")]
+#[test]
 fn cli_preserves_exact_non_utf8_selected_profile_path() {
     use std::os::unix::ffi::OsStringExt as _;
 

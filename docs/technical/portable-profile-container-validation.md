@@ -110,8 +110,9 @@ parsing verified payloads. Only after full admission does stdout receive
 canonical manifest JSON and verbatim section JSON.
 
 Opaque asset names remain visible in manifest declarations, but asset bodies
-are never printed. A malformed section fails before any stdout content;
-section JSON is not yet admitted to a versioned handwriting schema.
+are never printed. Section output uses path order independent of the original
+manifest declaration order. A malformed section fails before any stdout
+content; section JSON is not yet admitted to a versioned handwriting schema.
 
 This first CLI policy limits input archives to 4 MiB, including at most 64
 ZIP members and 2 MiB per member. It limits manifest root JSON to 128 KiB,

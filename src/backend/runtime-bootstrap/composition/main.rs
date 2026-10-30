@@ -208,10 +208,13 @@ pub(crate) fn inspect_profile(path: PathBuf) -> io::Result<String> {
             readable.push_str(from_utf8(&manifest)
                 .map_err(io::Error::other)?);
             readable.push('\n');
-            for entry in &verified.manifest().entries {
-                if !entry.path.starts_with("sections/") {
-                    continue;
-                }
+            // The manifest can declare entries in any order. Inspection
+            // should still be stable for the same admitted profile contents.
+            let mut sections = verified.manifest().entries.iter()
+                .filter(|entry| entry.path.starts_with("sections/"))
+                .collect::<Vec<_>>();
+            sections.sort_unstable_by(|left, right| left.path.cmp(&right.path));
+            for entry in sections {
                 let bytes = verified.verified_entry_bytes(&entry.path)
                     .ok_or_else(|| {
                         io::Error::other("missing verified section")
