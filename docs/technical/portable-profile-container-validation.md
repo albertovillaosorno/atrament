@@ -56,11 +56,13 @@ It rejects any other purpose before reading and enforces the strictest
 ZIP, typed-manifest and Import member-index ceiling before ZIP parsing.
 Only after source-bound ZIP CRC, bounded root JSON, typed manifest,
 exact inventory and every declared member SHA-256 pass does the composition
-syntax-check **every** `sections/` payload as a bounded JSON object.
+check the media type and bounded JSON object syntax of **every** `sections/`
+payload.
 
-Each section has independent byte, depth, object-key and value limits. Only
-then can the scoped inspection callback access any verified member bytes; a bad
-second section cannot expose the first. Assets remain opaque (but SHA-verified).
+Each section must declare exact `application/json` media type and has
+independent byte, depth, object-key and value limits. Only then can the scoped
+inspection callback access any verified member bytes; a bad second section
+cannot expose the first. Assets remain opaque (but SHA-verified).
 No typed handwriting section is decoded, no profile is accepted into a session
 and no file is written.
 
@@ -82,12 +84,13 @@ file writes can still change its bytes. The host must independently
 authenticate the selected path's original caller gesture or host-policy
 admission; the classified intent cannot prove that provenance itself.
 
-Twenty-three composition tests exercise open-descriptor and selected-path
+Twenty-four composition tests exercise open-descriptor and selected-path
 paths, source transport, malformed archives, and complete integrity gates.
-SHA-valid invalid section JSON, duplicate decoded keys, independent section
-byte, depth, key, and value ceilings, and a later invalid section all refuse
-before inspection. A separately admitted JSON section may coexist with an
-opaque, non-UTF-8 binary asset, whose bytes remain available without parsing.
+SHA-valid invalid section JSON or mislabeled JSON media type, duplicate
+decoded keys, independent section byte, depth, key, and value ceilings, and
+later invalid sections all refuse before inspection. A separately admitted
+JSON section may coexist with an opaque, non-UTF-8 binary asset, whose bytes
+remain available without parsing.
 
 Five path-open fixtures cover link policy, relative paths, nonregular sources
 and replacement after open. Missing selected sources, links and wrong purposes

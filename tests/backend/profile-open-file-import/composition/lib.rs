@@ -741,6 +741,47 @@ fn sha_valid_section_syntax_failure_refuses_before_generic_inspection() {
 }
 
 #[test]
+fn sha_valid_non_json_section_media_type_refuses_before_inspection() {
+    let section = br#"{"strokes":[]}"#;
+    let admitted_root = root(section, "[]");
+    let intent = selected(ExplicitFilePurpose::ImportProfile);
+    let called = Cell::new(false);
+    for mime in [
+        "text/plain", "image/png", "application/json; charset=utf-8",
+    ] {
+        let root = admitted_root.replacen("application/json", mime, 1);
+        let source = OwnedTestFile::new(&zip(root.as_bytes(), section));
+        assert_eq!(
+            inspect_open_profile_import(
+                &intent,
+                |max| read_bounded_profile_file(source.open(), max),
+                &[],
+                limits(),
+                |_verified| called.set(true),
+            ),
+            Err(Error::SectionMediaType { index: 0 }),
+            "SHA-valid, syntactically valid sections cannot misdeclare MIME",
+        );
+        assert!(!called.get());
+    }
+    let valid_source = OwnedTestFile::new(&zip(
+        admitted_root.as_bytes(), section,
+    ));
+    assert_eq!(
+        inspect_open_profile_import(
+            &intent,
+            |max| read_bounded_profile_file(valid_source.open(), max),
+            &[],
+            limits(),
+            |verified| {
+                verified.verified_entry_bytes(MEMBER).map(<[u8]>::to_vec)
+            },
+        ),
+        Ok(Some(section.to_vec())),
+    );
+}
+
+#[test]
 fn section_json_duplicate_keys_and_independent_budget_refuse_inspection() {
     let intent = selected(ExplicitFilePurpose::ImportProfile);
     let duplicate = br#"{"a":1,"\u0061":2}"#;
@@ -933,6 +974,43 @@ fn later_invalid_section_cannot_expose_prior_verified_section() {
             index: 1,
             reason: ProfileJsonSyntaxError::RootNotObject,
         }),
+    );
+    assert!(!called.get());
+
+    // A second section's misleading type must fail just as atomically as
+    // its bad syntax, even when all section bytes and digests are unchanged.
+    let mislabeled = manifest.replace(
+        r#""path":"sections/z.json","media_type":"application/json""#,
+        r#""path":"sections/z.json","media_type":"text/plain""#,
+    );
+    assert_ne!(mislabeled, manifest);
+    let mismatched_archive = write_stored_profile_zip(
+        &[
+            ProfileStoredZipMember {
+                name: "manifest.json",
+                bytes: mislabeled.as_bytes(),
+            },
+            ProfileStoredZipMember { name: MEMBER, bytes: first },
+            ProfileStoredZipMember { name: "sections/z.json", bytes: last },
+        ],
+        ProfileStoredZipWriteLimits {
+            maximum_archive_bytes: 16_384,
+            maximum_entries: 3,
+            maximum_entry_bytes: 8_192,
+            maximum_total_bytes: 12_000,
+        },
+    )
+    .expect("fully SHA-valid ZIP with late misdeclared type");
+    let mismatched_file = OwnedTestFile::new(&mismatched_archive);
+    assert_eq!(
+        inspect_open_profile_import(
+            &selected(ExplicitFilePurpose::ImportProfile),
+            |max| read_bounded_profile_file(mismatched_file.open(), max),
+            &[],
+            limits(),
+            |_verified| called.set(true),
+        ),
+        Err(Error::SectionMediaType { index: 1 }),
     );
     assert!(!called.get());
 }

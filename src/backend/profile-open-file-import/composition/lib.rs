@@ -108,6 +108,11 @@ pub enum ProfileOpenFileImportError {
         /// Syntax or resource ceiling failure before callback invocation.
         reason: ProfileJsonSyntaxError,
     },
+    /// Declared section media type is not the first-release JSON type.
+    SectionMediaType {
+        /// Original manifest index, without reflecting untrusted type text.
+        index: usize,
+    },
     /// The trusted host-opened source could not be read completely.
     Source(ProfileFileReadError),
     /// Features, inventory, declared budgets or SHA-256 did not match.
@@ -128,8 +133,9 @@ pub enum ProfileOpenFileImportError {
 /// The strictest ZIP, Import or schema count bound is enforced before
 /// ZIP member-index allocation; excess returns ZIP `ResourceLimit`.
 /// ZIP framing, JSON, manifest, inventory and every payload SHA-256 must all
-/// pass before any declared `sections/` member is checked as a bounded JSON
-/// object. The callback runs only after **all** sections pass syntax checks;
+/// pass before any declared `sections/` member is checked for its exact
+/// `application/json` media type and bounded JSON object syntax. The callback
+/// runs only after **all** sections pass both checks;
 /// opaque `assets/` members remain byte-verified but uninterpreted. This is
 /// not a typed handwriting section schema. Verified borrows cannot escape.
 /// Same-length concurrent file rewrites do not prove a stable disk snapshot.
@@ -206,6 +212,11 @@ where
     for (index, entry) in verified.manifest().entries.iter().enumerate() {
         if !entry.path.starts_with("sections/") {
             continue;
+        }
+        // First-release sections are JSON, not arbitrary opaque assets.
+        // Type checks follow all payload digests, before any inspection.
+        if entry.media_type != "application/json" {
+            return Err(ProfileOpenFileImportError::SectionMediaType { index });
         }
         let bytes = verified.verified_entry_bytes(&entry.path).ok_or(
             ProfileOpenFileImportError::MissingVerifiedSection { index },
