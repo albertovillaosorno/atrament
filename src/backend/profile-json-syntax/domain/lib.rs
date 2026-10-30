@@ -111,12 +111,23 @@ pub enum ProfileJsonValueKind {
 ///
 /// Keys compare decoded Unicode scalars without normalization; indices are
 /// zero-based and never silently interpreted as object member names.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Eq, PartialEq)]
 pub enum ProfileJsonPathSegment<'key> {
     /// Select an array element using a zero-based index.
     Index(usize),
     /// Select an exact decoded object member name.
     Key(&'key str),
+}
+
+// A selected member key may itself be private profile data. Keep its exact
+// borrow available to typed matching, not incidental diagnostic output.
+impl fmt::Debug for ProfileJsonPathSegment<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Index(index) => f.debug_tuple("Index").field(index).finish(),
+            Self::Key(_) => f.debug_tuple("Key").finish_non_exhaustive(),
+        }
+    }
 }
 
 /// Failure to copy decoded JSON string or member-name UTF-8 scalars.

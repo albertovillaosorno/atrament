@@ -1971,3 +1971,20 @@ fn admitted_json_debug_redacts_source_keys_values_and_escapes() {
         "private-4631"
     );
 }
+
+#[test]
+fn json_selection_segment_debug_omits_private_member_key() {
+    let private = "private-member-key-6251";
+    let key = ProfileJsonPathSegment::Key(private);
+    for displayed in [format!("{key:?}"), format!("{key:#?}")] {
+        assert!(displayed.contains("Key"));
+        assert!(!displayed.contains(private));
+    }
+    assert!(matches!(
+        key,
+        ProfileJsonPathSegment::Key(original) if original == private
+    ));
+    let index = ProfileJsonPathSegment::Index(37);
+    assert_eq!(format!("{index:?}"), "Index(37)");
+    assert_eq!(index, ProfileJsonPathSegment::Index(37));
+}
