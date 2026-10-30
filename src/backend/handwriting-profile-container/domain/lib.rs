@@ -459,7 +459,7 @@ pub enum ProfileFeatureList {
 }
 
 /// Typed manifest validation failure before any section is decoded.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq)]
 pub enum ProfileManifestError {
     /// One feature cannot be both mandatory and optional in the same profile.
     ConflictingFeatureRequirement {
@@ -508,7 +508,7 @@ pub enum ProfileManifestError {
 }
 
 /// Typed archive-inventory failure before any entry bytes are decoded.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq)]
 pub enum ProfileEntryInventoryError {
     /// The archive contains the same observed path more than once.
     DuplicateObservedEntryPath {
@@ -553,6 +553,74 @@ pub enum ProfileEntryInventoryError {
         /// Undeclared observed archive path retained exactly for diagnostics.
         path: String,
     },
+}
+
+// Rejections retain the exact offending strings for typed diagnostics, but
+// implicit Debug output must not log untrusted private profile metadata.
+impl fmt::Debug for ProfileManifestError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::ConflictingFeatureRequirement { .. } => f
+                .debug_struct("ConflictingFeatureRequirement")
+                .finish_non_exhaustive(),
+            Self::DuplicateEntryPath { .. } => f
+                .debug_struct("DuplicateEntryPath")
+                .finish_non_exhaustive(),
+            Self::DuplicateFeatureIdentifier { list, .. } => f
+                .debug_struct("DuplicateFeatureIdentifier")
+                .field("list", list)
+                .finish_non_exhaustive(),
+            Self::EmptyMediaType { .. } => f
+                .debug_struct("EmptyMediaType")
+                .finish_non_exhaustive(),
+            Self::InvalidEntryPath { reason, .. } => f
+                .debug_struct("InvalidEntryPath")
+                .field("reason", reason)
+                .finish_non_exhaustive(),
+            Self::InvalidMediaType { .. } => f
+                .debug_struct("InvalidMediaType")
+                .finish_non_exhaustive(),
+            Self::UnsupportedContainerVersion { .. } => f
+                .debug_struct("UnsupportedContainerVersion")
+                .finish_non_exhaustive(),
+            Self::UnsupportedRequiredFeature { .. } => f
+                .debug_struct("UnsupportedRequiredFeature")
+                .finish_non_exhaustive(),
+        }
+    }
+}
+
+impl fmt::Debug for ProfileEntryInventoryError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::DuplicateObservedEntryPath { .. } => f
+                .debug_struct("DuplicateObservedEntryPath")
+                .finish_non_exhaustive(),
+            Self::InvalidManifest { reason } => f
+                .debug_struct("InvalidManifest")
+                .field("reason", reason)
+                .finish(),
+            Self::InvalidObservedEntryPath { reason, .. } => f
+                .debug_struct("InvalidObservedEntryPath")
+                .field("reason", reason)
+                .finish_non_exhaustive(),
+            Self::MissingDeclaredEntry { .. } => f
+                .debug_struct("MissingDeclaredEntry")
+                .finish_non_exhaustive(),
+            Self::MissingManifest => f.write_str("MissingManifest"),
+            Self::NonCanonicalObservedEntryOrder { .. } => f
+                .debug_struct("NonCanonicalObservedEntryOrder")
+                .finish_non_exhaustive(),
+            Self::ObservedCountMismatch { expected, observed } => f
+                .debug_struct("ObservedCountMismatch")
+                .field("expected", expected)
+                .field("observed", observed)
+                .finish(),
+            Self::UndeclaredObservedEntry { .. } => f
+                .debug_struct("UndeclaredObservedEntry")
+                .finish_non_exhaustive(),
+        }
+    }
 }
 
 /// Exact independently observed evidence for one archive entry.

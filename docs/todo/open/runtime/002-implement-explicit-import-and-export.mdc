@@ -190,6 +190,11 @@ admission, inventory and verified-entry views now similarly redact private
 profile identities, feature strings and archive paths in `Debug`. Their
 explicit typed getters and diagnostic error values remain unchanged.
 
+Manifest and archive-inventory refusal variants now also redact offending
+feature identifiers, entry paths and version strings in implicit `Debug`.
+They preserve the named error variants, safe reason codes and byte counts,
+while exact offending text remains available through typed error fields.
+
 A real-file cross-boundary regression also exports a canonical ZIP through
 the disposable session and securely reopens that same selected path with the
 existing strict Import verifier. It checks the decoded identity, complete

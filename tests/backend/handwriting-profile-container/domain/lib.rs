@@ -1949,3 +1949,138 @@ fn manifest_metadata_debug_never_discloses_private_profile_fields() {
     assert_eq!(verified.entry(), &declaration);
     assert_eq!(verified.evidence().byte_length, 1);
 }
+
+#[test]
+fn private_manifest_and_inventory_errors_have_redacted_debug() {
+    let secret = "private-error-location-6921";
+    let manifest_cases = [
+        (
+            ProfileManifestError::ConflictingFeatureRequirement {
+                feature: secret.to_owned(),
+            },
+            "ConflictingFeatureRequirement",
+        ),
+        (
+            ProfileManifestError::DuplicateEntryPath {
+                path: secret.to_owned(),
+            },
+            "DuplicateEntryPath",
+        ),
+        (
+            ProfileManifestError::DuplicateFeatureIdentifier {
+                feature: secret.to_owned(),
+                list: ProfileFeatureList::Required,
+            },
+            "DuplicateFeatureIdentifier",
+        ),
+        (
+            ProfileManifestError::EmptyMediaType {
+                path: secret.to_owned(),
+            },
+            "EmptyMediaType",
+        ),
+        (
+            ProfileManifestError::InvalidEntryPath {
+                path: secret.to_owned(),
+                reason: ProfileEntryPathError::TraversalSegment,
+            },
+            "InvalidEntryPath",
+        ),
+        (
+            ProfileManifestError::InvalidMediaType {
+                path: secret.to_owned(),
+            },
+            "InvalidMediaType",
+        ),
+        (
+            ProfileManifestError::UnsupportedContainerVersion {
+                observed: secret.to_owned(),
+            },
+            "UnsupportedContainerVersion",
+        ),
+        (
+            ProfileManifestError::UnsupportedRequiredFeature {
+                feature: secret.to_owned(),
+            },
+            "UnsupportedRequiredFeature",
+        ),
+    ];
+    for (reason, variant) in manifest_cases {
+        let rendered = format!(
+            "{reason:?} {reason:#?} {:?}",
+            Err::<(), _>(reason.clone())
+        );
+        assert!(rendered.contains(variant), "variant must remain visible");
+        assert!(!rendered.contains(secret), "private string leaked");
+    }
+
+    let inventory_cases = [
+        (
+            ProfileEntryInventoryError::DuplicateObservedEntryPath {
+                path: secret.to_owned(),
+            },
+            "DuplicateObservedEntryPath",
+        ),
+        (
+            ProfileEntryInventoryError::InvalidManifest {
+                reason: ProfileManifestError::UnsupportedRequiredFeature {
+                    feature: secret.to_owned(),
+                },
+            },
+            "InvalidManifest",
+        ),
+        (
+            ProfileEntryInventoryError::InvalidObservedEntryPath {
+                path: secret.to_owned(),
+                reason: ProfileEntryPathError::ControlCharacter,
+            },
+            "InvalidObservedEntryPath",
+        ),
+        (
+            ProfileEntryInventoryError::MissingDeclaredEntry {
+                path: secret.to_owned(),
+            },
+            "MissingDeclaredEntry",
+        ),
+        (
+            ProfileEntryInventoryError::MissingManifest,
+            "MissingManifest",
+        ),
+        (
+            ProfileEntryInventoryError::NonCanonicalObservedEntryOrder {
+                earlier: secret.to_owned(),
+                later: secret.to_owned(),
+            },
+            "NonCanonicalObservedEntryOrder",
+        ),
+        (
+            ProfileEntryInventoryError::ObservedCountMismatch {
+                expected: 2,
+                observed: 3,
+            },
+            "ObservedCountMismatch",
+        ),
+        (
+            ProfileEntryInventoryError::UndeclaredObservedEntry {
+                path: secret.to_owned(),
+            },
+            "UndeclaredObservedEntry",
+        ),
+    ];
+    for (reason, variant) in inventory_cases {
+        let rendered = format!(
+            "{reason:?} {reason:#?} {:?}",
+            Err::<(), _>(reason.clone())
+        );
+        assert!(rendered.contains(variant), "variant must remain visible");
+        assert!(!rendered.contains(secret), "private string leaked");
+    }
+    // The full offending text is still available through typed matching.
+    let actual = ProfileManifestError::DuplicateEntryPath {
+        path: secret.to_owned(),
+    };
+    assert!(matches!(
+        actual,
+        ProfileManifestError::DuplicateEntryPath { path } if path == secret
+    ));
+}
