@@ -205,6 +205,10 @@ the exact selected path from `Debug` while retaining source, purpose and
 overwrite classification. Ordinary and non-UTF8 selected paths remain intact
 through their typed accessors; no logging capability is inferred from intent.
 
+Incremental SHA-256 state also redacts its pending private input block and
+internal chaining words from `Debug`, while preserving byte counting and
+streaming digest correctness across compression-block boundaries.
+
 A real-file cross-boundary regression also exports a canonical ZIP through
 the disposable session and securely reopens that same selected path with the
 existing strict Import verifier. It checks the decoded identity, complete

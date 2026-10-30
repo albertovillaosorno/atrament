@@ -35,6 +35,8 @@
 
 //! SHA-256 verification of exact, bounded portable-profile member bytes.
 
+use std::fmt;
+
 use atrament_handwriting_profile_container::{
     ProfileEntryEvidence, ProfileEntryVerificationError, ProfileManifestEntry,
     Sha256Digest, verify_profile_entry,
@@ -154,7 +156,7 @@ pub enum ProfileFallibleChunkVerificationError<E> {
 /// primitive performs no I/O, does not accept paths, and never authorizes
 /// a manifest, profile or section. `finish` consumes one state value, ending
 /// its update sequence before returning the digest.
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy)]
 pub struct ProfileSha256State {
     block: [u8; 64],
     buffered: usize,
@@ -221,6 +223,15 @@ impl EntryChunkAccumulator<'_> {
         self.hasher
             .update(chunk)
             .map_err(ProfileChunkVerificationError::Hasher)
+    }
+}
+
+// Buffered blocks contain untrusted profile bytes, including partial JSON
+// or opaque assets. Internal chaining words must not escape through logging.
+impl fmt::Debug for ProfileSha256State {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ProfileSha256State")
+            .finish_non_exhaustive()
     }
 }
 

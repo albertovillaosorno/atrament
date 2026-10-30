@@ -508,3 +508,28 @@ fn sha256_message_length_arithmetic_rejects_exact_overflow_without_allocating()
         }
     }
 }
+
+#[test]
+fn incremental_hash_state_debug_never_exposes_buffered_profile_bytes() {
+    let secret = b"private-stroke-vector-5168";
+    let mut hasher = ProfileSha256State::new();
+    hasher.update(secret).expect("first partial chunk");
+    let first = hasher;
+    hasher
+        .update(&[b'x'; 64])
+        .expect("cross one compression boundary");
+    let second = hasher;
+    for state in [first, second] {
+        for rendered in [format!("{state:?}"), format!("{state:#?}")] {
+            assert!(rendered.contains("ProfileSha256State"));
+            assert!(!rendered.contains("private-stroke-vector-5168"));
+            assert!(!rendered.contains("112, 114, 105, 118, 97, 116, 101"));
+            assert!(!rendered.contains("state:"));
+            assert!(!rendered.contains("block:"));
+        }
+    }
+    let mut expected = secret.to_vec();
+    expected.extend_from_slice(&[b'x'; 64]);
+    assert_eq!(second.finish(), sha256_profile_bytes(&expected));
+    assert_eq!(first.bytes_hashed(), secret.len() as u64);
+}
