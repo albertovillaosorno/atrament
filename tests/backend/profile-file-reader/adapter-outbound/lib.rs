@@ -88,6 +88,19 @@ fn bounded_file_source_rewinds_to_zero_and_preserves_exact_bytes() {
 }
 
 #[test]
+fn bounded_private_import_snapshot_is_redacted_from_debug() {
+    let contents = b"private-import-source-bytes-marker";
+    let fixture = OwnedTempFile::new(contents);
+    let snapshot = read_bounded_profile_file(fixture.open(), contents.len())
+        .expect("read private fixture");
+    assert_eq!(snapshot.bytes(), contents);
+    let debug = format!("{snapshot:?}");
+    assert!(debug.contains("ProfileOpenedFileBytes"));
+    assert!(!debug.contains("bytes:"));
+    assert!(!debug.contains(&format!("{contents:?}")));
+}
+
+#[test]
 fn transport_ceiling_refuses_one_byte_below_actual_file_length() {
     let fixture = OwnedTempFile::new(b"123456");
     assert_eq!(

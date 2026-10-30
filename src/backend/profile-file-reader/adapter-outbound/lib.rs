@@ -32,15 +32,23 @@
 
 //! File transport snapshot with exact length/EOF checks, no path authority.
 
+use std::fmt;
 use std::fs::File;
 use std::io::{self, Read as _, Seek as _, SeekFrom};
 
 const READ_BUFFER_BYTES: usize = 8 * 1024;
 
 /// One exact-length owned snapshot, not a stable disk snapshot or trusted path.
-#[derive(Debug)]
+/// Debug output excludes the complete private source bytes.
 pub struct ProfileOpenedFileBytes {
     bytes: Vec<u8>,
+}
+
+impl fmt::Debug for ProfileOpenedFileBytes {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ProfileOpenedFileBytes")
+            .finish_non_exhaustive()
+    }
 }
 
 impl ProfileOpenedFileBytes {

@@ -136,6 +136,30 @@ fn empty_profile_is_real_zip_with_exact_root_identity() {
 }
 
 #[test]
+fn debug_of_complete_export_and_borrowed_payload_redacts_private_bytes() {
+    let section = br#"{"private":"private-section-marker"}"#;
+    let mut profile = manifest();
+    profile.entries = vec![entry("sections/private.json", section)];
+    let payload = ProfileExportPayload {
+        bytes: section,
+        path: "sections/private.json",
+    };
+    let artifact = assemble_profile_export_artifact(
+        &profile, &[payload], &["strokes"], limits(),
+    ).expect("complete private ZIP bytes");
+    let archived_bytes = format!("{:?}", artifact.bytes());
+    let payload_bytes = format!("{:?}", section);
+    let debug = format!("{artifact:?} {payload:?}");
+    assert!(debug.contains("ProfileExportArtifact"));
+    assert!(debug.contains("ProfileExportPayload"));
+    assert!(!debug.contains("bytes:"));
+    assert!(!debug.contains(&archived_bytes));
+    assert!(!debug.contains(&payload_bytes));
+    assert!(!debug.contains("sections/private.json"));
+    assert!(!debug.contains("private-section-marker"));
+}
+
+#[test]
 fn complete_archive_is_order_independent_and_import_verifiable() {
     let asset = b"IMAGE";
     let strokes = b"{\"ink\":true}";

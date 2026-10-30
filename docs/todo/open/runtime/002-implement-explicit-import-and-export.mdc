@@ -167,6 +167,11 @@ retry keys or original content identifiers through routine error logging.
 Their explicit typed accessors continue to return the exact original receipt
 data to the owning application caller.
 
+The bounded opened-file Import snapshot, complete in-memory Export artifact,
+and borrowed Export payload inputs likewise redact private byte sequences and
+archive paths from `Debug`. Existing typed byte access remains available to
+the owning application caller; debug printing is not data access authority.
+
 A real-file cross-boundary regression also exports a canonical ZIP through
 the disposable session and securely reopens that same selected path with the
 existing strict Import verifier. It checks the decoded identity, complete

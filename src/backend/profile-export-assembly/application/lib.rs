@@ -32,6 +32,8 @@
 
 //! Complete canonical portable-profile framing without file or session effects.
 
+use std::fmt;
+
 use atrament_handwriting_profile_container::{
     PROFILE_MANIFEST_PATH, ProfileManifest, ProfileManifestEntry, Sha256Digest,
     ProfileEntryVerificationError,
@@ -54,12 +56,19 @@ use atrament_profile_stored_zip_writer::{
 };
 
 /// Caller-supplied non-manifest payload. Paths are exact, not normalized.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+/// Debug output does not expose private member bytes or archive paths.
+#[derive(Clone, Copy, Eq, PartialEq)]
 pub struct ProfileExportPayload<'bytes> {
     /// Exact payload bytes whose declared length and SHA-256 must match.
     pub bytes: &'bytes [u8],
     /// Exact declared ZIP entry path (never a filesystem target).
     pub path: &'bytes str,
+}
+
+impl fmt::Debug for ProfileExportPayload<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ProfileExportPayload").finish_non_exhaustive()
+    }
 }
 
 /// Independent JSON and complete-ZIP resource ceilings.
@@ -130,11 +139,17 @@ pub struct ProfileExportBufferEvidence {
 ///
 /// The complete archive and root fingerprints identify bytes, not identity of
 /// an external source or destination. This type accepts no session state.
-#[derive(Debug)]
+/// Debug output does not expose the archived profile's complete raw bytes.
 pub struct ProfileExportArtifact {
     archive_sha256: Sha256Digest,
     bytes: Vec<u8>,
     root_sha256: Sha256Digest,
+}
+
+impl fmt::Debug for ProfileExportArtifact {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ProfileExportArtifact").finish_non_exhaustive()
+    }
 }
 
 impl ProfileExportArtifact {
