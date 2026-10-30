@@ -209,6 +209,11 @@ Incremental SHA-256 state also redacts its pending private input block and
 internal chaining words from `Debug`, while preserving byte counting and
 streaming digest correctness across compression-block boundaries.
 
+Source-backed entry reader failures now retain the original `io::Error`
+for explicit typed inspection but redact its arbitrary error-message text
+from `Debug`. Error kind, fixed resource limits and structural verification
+reasons remain visible, without disclosing provider-supplied private paths.
+
 A real-file cross-boundary regression also exports a canonical ZIP through
 the disposable session and securely reopens that same selected path with the
 existing strict Import verifier. It checks the decoded identity, complete

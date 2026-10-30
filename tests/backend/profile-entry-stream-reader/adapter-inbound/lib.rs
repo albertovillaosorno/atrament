@@ -492,3 +492,53 @@ fn premature_zero_count_is_not_retried_into_hidden_later_bytes() {
     ));
     assert_eq!(source.calls, 1, "no later bytes were used to bypass EOF");
 }
+
+struct PrivateIoFailure;
+
+impl Read for PrivateIoFailure {
+    fn read(&mut self, _bytes: &mut [u8]) -> io::Result<usize> {
+        Err(io::Error::new(
+            ErrorKind::PermissionDenied,
+            "selected-private-path-7391: source payload inaccessible",
+        ))
+    }
+}
+
+#[test]
+fn source_error_debug_retains_kind_without_leaking_private_message() {
+    let entry = declaration(b"private section payload");
+    let mut source = PrivateIoFailure;
+    let failure = verify_profile_entry_from_reader(
+        &mut source,
+        &entry,
+        entry.byte_length,
+    )
+    .expect_err("input reader must fail");
+    for rendered in [format!("{failure:?}"), format!("{failure:#?}")] {
+        assert!(rendered.contains("Input"));
+        assert!(rendered.contains("PermissionDenied"));
+        assert!(!rendered.contains("selected-private-path-7391"));
+        assert!(!rendered.contains("source payload inaccessible"));
+    }
+    match failure {
+        ProfileEntryStreamReadError::Input(original) => {
+            assert_eq!(original.kind(), ErrorKind::PermissionDenied);
+            assert!(
+                original.to_string().contains("selected-private-path-7391")
+            );
+        }
+        other => panic!("expected source error: {other:?}"),
+    }
+    // Safe numeric diagnostics remain visible for non-I/O errors.
+    let mut source = PrivateIoFailure;
+    let oversized = verify_profile_entry_from_reader(
+        &mut source,
+        &entry,
+        entry.byte_length - 1,
+    )
+    .expect_err("byte budget must refuse before reading");
+    let rendered = format!("{oversized:?}");
+    assert!(rendered.contains("DeclaredLimitExceeded"));
+    assert!(rendered.contains("declared"));
+    assert!(rendered.contains("limit"));
+}

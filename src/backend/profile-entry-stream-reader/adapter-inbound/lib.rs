@@ -35,6 +35,7 @@
 
 //! Bounded SHA-256 verification of bytes from an already opened reader.
 
+use std::fmt;
 use std::io::{self, Read};
 
 use atrament_handwriting_profile_container::{
@@ -50,7 +51,6 @@ use atrament_profile_entry_sha256::{
 pub const PROFILE_STREAM_READ_BUFFER_BYTES: usize = 8192;
 
 /// Source or integrity failure while verifying one preopened reader.
-#[derive(Debug)]
 pub enum ProfileEntryStreamReadError {
     /// The typed declaration exceeds a separately chosen byte budget.
     DeclaredLimitExceeded {
@@ -63,6 +63,29 @@ pub enum ProfileEntryStreamReadError {
     Input(io::Error),
     /// A complete or partial stream failed the typed length/digest check.
     Verification(ProfileChunkVerificationError),
+}
+
+// Upstream readers may put private paths, file metadata or input text into
+// io::Error messages. Preserve that error for typed callers but never echo its
+// owned message in incidental debug formatting.
+impl fmt::Debug for ProfileEntryStreamReadError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::DeclaredLimitExceeded { declared, limit } => f
+                .debug_struct("DeclaredLimitExceeded")
+                .field("declared", declared)
+                .field("limit", limit)
+                .finish(),
+            Self::Input(error) => f
+                .debug_struct("Input")
+                .field("kind", &error.kind())
+                .finish_non_exhaustive(),
+            Self::Verification(reason) => f
+                .debug_tuple("Verification")
+                .field(reason)
+                .finish(),
+        }
+    }
 }
 
 /// Verify one already opened, individually bounded entry byte stream.
