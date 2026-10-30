@@ -40,7 +40,8 @@ use atrament_explicit_file_path_intent::{
 };
 use atrament_handwriting_profile_container::{
     PROFILE_CONTAINER_VERSION, ProfileEntryVerificationError,
-    ProfileManifest, ProfileManifestEntry,
+    ProfileFeatureList, ProfileManifest, ProfileManifestEntry,
+    ProfileManifestError,
 };
 use atrament_profile_entry_sha256::sha256_profile_bytes;
 use atrament_profile_export_assembly::{
@@ -444,6 +445,52 @@ fn late_member_corruption_rejects_entire_archive() {
     assert!(assemble_profile_export_artifact(
         &declared, &clean, &["strokes"], limits(),
     ).is_ok());
+}
+
+#[test]
+fn repeated_feature_identifiers_refuse_complete_export_without_output() {
+    for list in [ProfileFeatureList::Required, ProfileFeatureList::Optional] {
+        let mut profile = manifest();
+        let feature = match list {
+            ProfileFeatureList::Required => {
+                profile.required_features.push("strokes".into());
+                "strokes"
+            }
+            ProfileFeatureList::Optional => {
+                profile.optional_features.push("future".into());
+                "future"
+            }
+        };
+        let expected = Error::ManifestJson(
+            ProfileManifestJsonWriteError::Manifest(
+                ProfileManifestError::DuplicateFeatureIdentifier {
+                    feature: feature.into(),
+                    list,
+                },
+            ),
+        );
+        assert_eq!(
+            assemble_profile_export_artifact(
+                &profile, &[], &["strokes"], limits(),
+            ).err(),
+            Some(expected.clone()),
+        );
+        assert_eq!(
+            planned_profile_export_artifact_bytes(
+                &profile, &[], &["strokes"], limits(),
+            ).err(),
+            Some(expected.clone()),
+        );
+        let mut destination = [0xa3u8; 512];
+        assert_eq!(
+            write_profile_export_artifact_into(
+                &profile, &[], &["strokes"], limits(),
+                &mut destination,
+            ).err(),
+            Some(expected),
+        );
+        assert_eq!(destination, [0xa3; 512]);
+    }
 }
 
 #[test]
