@@ -93,6 +93,11 @@ pub enum ProfileExportAssemblyError {
         /// Verified failure of one exact declared member.
         reason: ProfileEntryVerificationError,
     },
+    /// A declared JSON section cannot be read by the first-release Import.
+    SectionMediaType {
+        /// Zero-based index in canonical manifest entry ordering.
+        index: usize,
+    },
     /// The canonical ZIP framing limits or invariants refuse output.
     Zip(ProfileStoredZipWriteError),
 }
@@ -168,8 +173,9 @@ fn sorted_payloads<'bytes>(
 
 /// Assemble complete verified profile ZIP bytes without importing or exporting.
 ///
-/// First checks typed manifest JSON and the exact supplied payload inventory,
-/// then length-before-SHA-256 verifies **all** non-root bytes. Only after all
+/// First checks typed manifest JSON, the exact supplied payload inventory,
+/// and JSON media types for every declared `sections/` member, then
+/// length-before-SHA-256 verifies **all** non-root bytes. Only after all
 /// payloads match does the canonical stored-ZIP writer allocate final output.
 /// The independent JSON and ZIP limits include the root bytes. Caller payload
 /// order and manifest declaration order never change the resulting archive.
@@ -288,6 +294,15 @@ fn with_verified_members<T>(
             return Err(ProfileExportAssemblyError::PayloadPathMismatch {
                 index,
             });
+        }
+    }
+    // The file Import gate requires exact JSON media types for sections.
+    // Avoid emitting a canonical Export artifact that it must reject.
+    for (index, entry) in declared.iter().enumerate() {
+        if entry.path.starts_with("sections/")
+            && entry.media_type != "application/json"
+        {
+            return Err(ProfileExportAssemblyError::SectionMediaType { index });
         }
     }
 

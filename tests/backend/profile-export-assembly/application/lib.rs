@@ -251,6 +251,59 @@ fn inventory_mismatch_refuses_before_digest_or_zip() {
 }
 
 #[test]
+fn section_media_type_mismatch_refuses_all_writers_before_output() {
+    let json = br#"{"ink":true}"#;
+    let opaque = b"\xff\x00bytes";
+    let mut profile = manifest();
+    profile.entries = vec![
+        entry("sections/notes.json", json),
+        entry("assets/image.bin", opaque),
+    ];
+    // Opaque asset MIME metadata remains permitted, but JSON sections
+    // must match the exact format admitted by selected-file Import.
+    profile.entries[1].media_type = "image/png".into();
+    let payloads = [
+        ProfileExportPayload {
+            path: "sections/notes.json", bytes: json,
+        },
+        ProfileExportPayload {
+            path: "assets/image.bin", bytes: opaque,
+        },
+    ];
+    assert!(assemble_profile_export_artifact(
+        &profile, &payloads, &["strokes"], limits(),
+    ).is_ok(), "opaque asset type is not interpreted");
+
+    for media_type in [
+        "text/plain", "image/png", "application/json; charset=utf-8",
+    ] {
+        profile.entries[0].media_type = media_type.into();
+        let expected = Error::SectionMediaType { index: 1 };
+        assert_eq!(
+            assemble_profile_export_artifact(
+                &profile, &payloads, &["strokes"], limits(),
+            ).err(),
+            Some(expected.clone()),
+        );
+        assert_eq!(
+            planned_profile_export_artifact_bytes(
+                &profile, &payloads, &["strokes"], limits(),
+            ).err(),
+            Some(expected.clone()),
+        );
+        let mut destination = [0xa9u8; 512];
+        assert_eq!(
+            write_profile_export_artifact_into(
+                &profile, &payloads, &["strokes"], limits(),
+                &mut destination,
+            ).err(),
+            Some(expected),
+        );
+        assert_eq!(destination, [0xa9; 512]);
+    }
+}
+
+#[test]
 fn late_member_corruption_rejects_entire_archive() {
     let mut declared = manifest();
     declared.entries = vec![

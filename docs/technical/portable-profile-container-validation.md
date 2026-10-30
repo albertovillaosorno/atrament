@@ -1076,6 +1076,11 @@ The profile-container TODO remains open for:
 - trusted selected-file origin and target admission;
 - durable atomic Export, retry recovery and accepted-session Import.
 
+The complete profile artifact assembly refuses JSON section declarations
+whose media type differs from exact `application/json`. The owned writer,
+byte-count planner, and caller-owned writer share the same check, while opaque
+asset media types remain uninterpreted; typed section decoding remains open.
+
 Canonical JSON, ordinary stored-ZIP32 reading and writing, fixed writer ZIP
 metadata, whole-archive hashing and source-bound Import payload verification
 are already covered by the current adapters and integration tests.
