@@ -35,6 +35,7 @@
 
 //! Read-only intent classification for explicit file import and export paths.
 
+use std::fmt;
 use std::path::{MAIN_SEPARATOR_STR, Path, PathBuf};
 
 /// Operation and file family for an explicitly selected local path.
@@ -98,12 +99,23 @@ pub enum ExplicitFilePathIntentError {
 }
 
 /// One immutable, source-classified request; it does not authorize I/O.
-#[derive(Clone, Debug, Eq, PartialEq)]
+/// Diagnostic formatting never prints the caller-selected filesystem path.
+#[derive(Clone, Eq, PartialEq)]
 pub struct ExplicitFilePathIntent {
     overwrite: ExplicitOverwriteIntent,
     path: PathBuf,
     purpose: ExplicitFilePurpose,
     source: ExplicitFilePathSource,
+}
+
+impl fmt::Debug for ExplicitFilePathIntent {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ExplicitFilePathIntent")
+            .field("purpose", &self.purpose)
+            .field("source", &self.source)
+            .field("overwrite", &self.overwrite)
+            .finish_non_exhaustive()
+    }
 }
 
 impl ExplicitFilePathIntent {

@@ -200,6 +200,11 @@ rejected private duplicate features cannot leak through stderr, even when
 the selected filename, section and asset contents also contain private
 markers. The CLI still names the typed rejection and publishes no stdout.
 
+All explicitly classified notebook/profile file-path intents now redact
+the exact selected path from `Debug` while retaining source, purpose and
+overwrite classification. Ordinary and non-UTF8 selected paths remain intact
+through their typed accessors; no logging capability is inferred from intent.
+
 A real-file cross-boundary regression also exports a canonical ZIP through
 the disposable session and securely reopens that same selected path with the
 existing strict Import verifier. It checks the decoded identity, complete

@@ -188,3 +188,61 @@ fn selected_non_utf8_paths_are_not_converted_or_normalized() {
     .expect("path classification does not require UTF-8");
     assert_eq!(classified.path(), selected.as_path());
 }
+
+#[test]
+fn debug_of_every_classified_path_omits_private_location() {
+    let secret = "caller-private-path-6294";
+    for purpose in PURPOSES {
+        for source in [
+            ExplicitFilePathSource::CallerSelection,
+            ExplicitFilePathSource::AdmittedHostPolicy,
+        ] {
+            let path = PathBuf::from(format!(
+                "/private/{secret}/selected-notebook.atrament"
+            ));
+            let overwrite = if purpose.is_export() {
+                ExplicitOverwriteIntent::ReplaceExisting
+            } else {
+                ExplicitOverwriteIntent::PreserveExisting
+            };
+            let selected = classify_explicit_file_path_intent(
+                purpose, source, path.clone(), overwrite,
+            )
+            .expect("trusted selected path is admitted");
+            for rendered in [
+                format!("{selected:?}"),
+                format!("{selected:#?}"),
+            ] {
+                assert!(rendered.contains("ExplicitFilePathIntent"));
+                assert!(rendered.contains(&format!("{purpose:?}")));
+                assert!(rendered.contains(&format!("{source:?}")));
+                assert!(rendered.contains(&format!("{overwrite:?}")));
+                assert!(!rendered.contains(secret));
+                assert!(!rendered.contains("/private/"));
+            }
+            assert_eq!(selected.path(), path.as_path());
+        }
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn debug_of_opaque_non_utf8_selected_path_never_exposes_name_bytes() {
+    use std::ffi::OsString;
+    use std::os::unix::ffi::OsStringExt as _;
+
+    let opaque = OsString::from_vec(b"private-location-6912-\xff".to_vec());
+    let path = PathBuf::from(opaque);
+    let intent = classify_explicit_file_path_intent(
+        ExplicitFilePurpose::ExportProfile,
+        ExplicitFilePathSource::CallerSelection,
+        path.clone(),
+        ExplicitOverwriteIntent::PreserveExisting,
+    )
+    .expect("opaque selected path remains valid");
+    for printed in [format!("{intent:?}"), format!("{intent:#?}")] {
+        assert!(!printed.contains("private-location-6912"));
+        assert!(!printed.contains("xff"));
+    }
+    assert_eq!(intent.path(), path.as_path());
+}
