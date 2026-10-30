@@ -41,7 +41,8 @@ use atrament_handwriting_profile_container::{
     ProfileContentChange, ProfileEntryEvidence,
     ProfileEntryInventoryError, ProfileEntryKind, ProfileEntryPathError,
     ProfileEntryVerificationError, ProfileManifest, ProfileManifestEntry,
-    ProfileManifestError, ProfileRewriteDisposition, ProfileZip64Requirement,
+    ProfileFeatureList, ProfileManifestError, ProfileRewriteDisposition,
+    ProfileZip64Requirement,
     ProfileZip64Use, Sha256Digest, canonical_profile_archive_paths,
     canonical_profile_entry_order, profile_entry_kind,
     profile_rewrite_disposition, profile_section_entries,
@@ -582,15 +583,35 @@ fn reference_manifest(
             observed: value.container_version.clone(),
         });
     }
+    let mut required_seen = Vec::new();
     for feature in &value.required_features {
         if !supported.contains(&feature.as_str()) {
             return Err(ProfileManifestError::UnsupportedRequiredFeature {
                 feature: feature.clone(),
             });
         }
-        if value.optional_features.iter().any(|optional| optional == feature) {
+        if value
+            .optional_features
+            .iter()
+            .any(|optional| optional == feature)
+        {
             return Err(ProfileManifestError::ConflictingFeatureRequirement {
                 feature: feature.clone(),
+            });
+        }
+        if required_seen.contains(&feature) {
+            return Err(ProfileManifestError::DuplicateFeatureIdentifier {
+                feature: feature.clone(),
+                list: ProfileFeatureList::Required,
+            });
+        }
+        required_seen.push(feature);
+    }
+    for (index, feature) in value.optional_features.iter().enumerate() {
+        if value.optional_features[..index].contains(&feature) {
+            return Err(ProfileManifestError::DuplicateFeatureIdentifier {
+                feature: feature.clone(),
+                list: ProfileFeatureList::Optional,
             });
         }
     }
@@ -675,6 +696,8 @@ fn generated_manifest_values_match_reference_admission_oracle() {
     let mut saw_unsupported_version = false;
     let mut saw_unsupported_feature = false;
     let mut saw_conflicting_feature_requirement = false;
+    let mut saw_duplicate_required_feature = false;
+    let mut saw_duplicate_optional_feature = false;
     for case in 0..CASES {
         let version_index =
             next_inventory_selector(&mut seed) % versions.len();
@@ -707,19 +730,27 @@ fn generated_manifest_values_match_reference_admission_oracle() {
                     .expect("generated entry count stays small"),
             ));
         }
+        let mut optional_features = if case.is_multiple_of(7) {
+            vec![String::from("stroke-vocabulary")]
+        } else {
+            vec![String::from("future-optional")]
+        };
+        if case.is_multiple_of(11) {
+            optional_features.push(optional_features[0].clone());
+        }
+        let mut required_features = feature_sets[feature_index]
+            .iter()
+            .map(|feature| String::from(*feature))
+            .collect::<Vec<_>>();
+        if case.is_multiple_of(13) {
+            required_features.push(required_features[0].clone());
+        }
         let value = ProfileManifest {
             container_version: String::from(versions[version_index]),
             entries,
-            optional_features: if case.is_multiple_of(7) {
-                vec![String::from("stroke-vocabulary")]
-            } else {
-                vec![String::from("future-optional")]
-            },
+            optional_features,
             profile_identity: String::from("writer-generated"),
-            required_features: feature_sets[feature_index]
-                .iter()
-                .map(|feature| String::from(*feature))
-                .collect(),
+            required_features,
         };
         let expected = reference_manifest(&value, &supported);
         match &expected {
@@ -727,6 +758,18 @@ fn generated_manifest_values_match_reference_admission_oracle() {
             Err(ProfileManifestError::ConflictingFeatureRequirement { .. }) => {
                 saw_conflicting_feature_requirement = true;
             },
+            Err(ProfileManifestError::DuplicateFeatureIdentifier {
+                list, ..
+            }) => {
+                match list {
+                    ProfileFeatureList::Required => {
+                        saw_duplicate_required_feature = true;
+                    }
+                    ProfileFeatureList::Optional => {
+                        saw_duplicate_optional_feature = true;
+                    }
+                }
+            }
             Err(ProfileManifestError::DuplicateEntryPath { .. }) => {
                 saw_duplicate_path = true;
             },
@@ -811,6 +854,8 @@ fn generated_manifest_values_match_reference_admission_oracle() {
     assert!(saw_unsupported_version);
     assert!(saw_unsupported_feature);
     assert!(saw_conflicting_feature_requirement);
+    assert!(saw_duplicate_required_feature);
+    assert!(saw_duplicate_optional_feature);
 }
 
 #[test]
@@ -865,6 +910,53 @@ fn required_and_optional_feature_overlap_refuses_before_any_entry_decoding() {
 }
 
 #[test]
+fn repeated_feature_identifiers_refuse_with_exact_list_and_first_failure() {
+    let mut value = manifest(vec![]);
+    value.required_features = vec!["strokes".into(), "strokes".into()];
+    value.optional_features = vec!["unknown".into()];
+    assert_eq!(
+        validate_profile_manifest(&value, &["strokes"]),
+        Err(ProfileManifestError::DuplicateFeatureIdentifier {
+            feature: "strokes".into(),
+            list: ProfileFeatureList::Required,
+        }),
+    );
+    value.required_features = vec!["strokes".into()];
+    value.optional_features = vec![
+        "unknown".into(), "future".into(), "unknown".into(),
+    ];
+    assert_eq!(
+        validate_profile_manifest(&value, &["strokes"]),
+        Err(ProfileManifestError::DuplicateFeatureIdentifier {
+            feature: "unknown".into(),
+            list: ProfileFeatureList::Optional,
+        }),
+    );
+    // First required-feature failure still wins over optional-list duplicates.
+    assert_eq!(
+        validate_profile_manifest(&value, &[]),
+        Err(ProfileManifestError::UnsupportedRequiredFeature {
+            feature: "strokes".into(),
+        }),
+    );
+    value.optional_features.push("strokes".into());
+    assert_eq!(
+        validate_profile_manifest(&value, &["strokes"]),
+        Err(ProfileManifestError::ConflictingFeatureRequirement {
+            feature: "strokes".into(),
+        }),
+    );
+    // Feature spelling is byte-exact; case and Unicode forms remain distinct.
+    value.optional_features = vec![
+        "future".into(),
+        "Future".into(),
+        "é".into(),
+        "e\u{301}".into(),
+    ];
+    assert_eq!(validate_profile_manifest(&value, &["strokes"]), Ok(()));
+}
+
+#[test]
 fn large_feature_lists_use_exact_membership_and_first_failure_order() {
     let mut value = manifest(vec![]);
     value.required_features = (0..4096)
@@ -873,11 +965,28 @@ fn large_feature_lists_use_exact_membership_and_first_failure_order() {
     value.optional_features = (0..4096)
         .map(|index| format!("optional-{index}"))
         .collect();
-    let supported = value.required_features
-        .iter()
-        .map(String::as_str)
-        .collect::<Vec<_>>();
+    let required_copy = value.required_features.clone();
+    let supported = required_copy.iter()
+        .map(String::as_str).collect::<Vec<_>>();
     assert_eq!(validate_profile_manifest(&value, &supported), Ok(()));
+    value.optional_features.push("optional-4095".into());
+    assert_eq!(
+        validate_profile_manifest(&value, &supported),
+        Err(ProfileManifestError::DuplicateFeatureIdentifier {
+            feature: "optional-4095".into(),
+            list: ProfileFeatureList::Optional,
+        }),
+    );
+    let _removed = value.optional_features.pop();
+    value.required_features.push("required-4095".into());
+    assert_eq!(
+        validate_profile_manifest(&value, &supported),
+        Err(ProfileManifestError::DuplicateFeatureIdentifier {
+            feature: "required-4095".into(),
+            list: ProfileFeatureList::Required,
+        }),
+    );
+    let _removed = value.required_features.pop();
     value.optional_features.push("required-4095".into());
     assert_eq!(
         validate_profile_manifest(&value, &supported),

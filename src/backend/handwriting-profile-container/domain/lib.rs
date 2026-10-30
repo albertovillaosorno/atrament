@@ -411,6 +411,15 @@ pub enum ProfileEntryPathError {
     UnsupportedRoot,
 }
 
+/// Feature-list location for an exact repeated identifier.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ProfileFeatureList {
+    /// Opaque capabilities old readers may preserve.
+    Optional,
+    /// Mandatory capabilities understood by the reader.
+    Required,
+}
+
 /// Typed manifest validation failure before any section is decoded.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ProfileManifestError {
@@ -423,6 +432,13 @@ pub enum ProfileManifestError {
     DuplicateEntryPath {
         /// Duplicate path retained exactly for diagnostics.
         path: String,
+    },
+    /// A feature identifier occurs twice within one requirement list.
+    DuplicateFeatureIdentifier {
+        /// Exact repeated feature identifier.
+        feature: String,
+        /// Which manifest feature list contains the duplicate.
+        list: ProfileFeatureList,
     },
     /// One entry has no media-type identity.
     EmptyMediaType {
@@ -715,7 +731,7 @@ fn validate_profile_entry_inventory_admitted(
 /// # Errors
 ///
 /// Returns a typed failure for a future container version, unsupported required
-/// feature, contradictory required/optional feature declaration, unsafe path,
+/// feature, duplicate or contradictory feature declarations, unsafe path,
 /// duplicate path, or missing media-type identity.
 pub fn validate_profile_manifest(
     manifest: &ProfileManifest,
@@ -731,11 +747,16 @@ pub fn validate_profile_manifest(
     // still determines which typed failure is returned first.
     let supported: BTreeSet<&str> =
         supported_required_features.iter().copied().collect();
-    let optional: BTreeSet<&str> = manifest
-        .optional_features
-        .iter()
-        .map(String::as_str)
-        .collect();
+    let mut optional = BTreeSet::new();
+    let mut first_optional_duplicate = None;
+    for feature in &manifest.optional_features {
+        if !optional.insert(feature.as_str())
+            && first_optional_duplicate.is_none()
+        {
+            first_optional_duplicate = Some(feature);
+        }
+    }
+    let mut required = BTreeSet::new();
     for feature in &manifest.required_features {
         if !supported.contains(feature.as_str()) {
             return Err(ProfileManifestError::UnsupportedRequiredFeature {
@@ -749,6 +770,18 @@ pub fn validate_profile_manifest(
                 feature: feature.clone(),
             });
         }
+        if !required.insert(feature.as_str()) {
+            return Err(ProfileManifestError::DuplicateFeatureIdentifier {
+                feature: feature.clone(),
+                list: ProfileFeatureList::Required,
+            });
+        }
+    }
+    if let Some(feature) = first_optional_duplicate {
+        return Err(ProfileManifestError::DuplicateFeatureIdentifier {
+            feature: feature.clone(),
+            list: ProfileFeatureList::Optional,
+        });
     }
     let mut paths = BTreeSet::new();
     for entry in &manifest.entries {

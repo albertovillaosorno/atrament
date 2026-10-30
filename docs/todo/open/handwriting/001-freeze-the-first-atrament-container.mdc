@@ -86,6 +86,13 @@ also classify typed `sections/` separately from opaque `assets/`, and a default
 path-sorted section projection excludes asset entries without deleting them from
 the manifest.
 
+Manifest admission now also refuses repeated identifiers within either the
+required or optional feature list, with list-specific errors. These lists
+represent capabilities, not multisets: duplicate identifiers previously
+allowed multiple different canonical ZIP byte identities for the same declared
+feature requirements. Unsupported required features and cross-list conflicts
+retain their prior first-failure precedence.
+
 The same domain returns deterministic path-sorted writer order for the complete
 archive, including root `manifest.json`, and verifies one entry's independently
 observed byte length before its SHA-256 digest. A constructor-sealed borrowed

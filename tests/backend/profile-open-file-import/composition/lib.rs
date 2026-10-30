@@ -43,7 +43,7 @@ use atrament_explicit_file_path_intent::{
     classify_explicit_file_path_intent,
 };
 use atrament_handwriting_profile_container::{
-    ProfileEntryVerificationError, ProfileManifestError,
+    ProfileEntryVerificationError, ProfileFeatureList, ProfileManifestError,
 };
 use atrament_profile_entry_sha256::sha256_profile_bytes;
 use atrament_profile_file_reader::{
@@ -602,6 +602,37 @@ fn contradictory_feature_requirements_refuse_before_file_inspection() {
         ))),
     );
     assert!(!inspected.get(), "no verified section can escape on ambiguity");
+}
+
+#[test]
+fn repeated_optional_features_refuse_before_any_file_inspection() {
+    let payload = br#"{"ink":true}"#;
+    let valid = root(payload, r#"["stroke-vocabulary"]"#);
+    let repeated = valid.replace(
+        "\"optional_features\":[]",
+        "\"optional_features\":[\"future\",\"future\"]",
+    );
+    let file = OwnedTestFile::new(&zip(repeated.as_bytes(), payload));
+    let intent = selected(ExplicitFilePurpose::ImportProfile);
+    let inspected = Cell::new(false);
+    assert_eq!(
+        inspect_open_profile_import(
+            &intent,
+            |max| read_bounded_profile_file(file.open(), max),
+            &["stroke-vocabulary"],
+            limits(),
+            |_verified| inspected.set(true),
+        ),
+        Err(Error::Verification(ProfileImportVerificationError::Preflight(
+            ProfileImportPreflightError::Manifest(
+                ProfileManifestError::DuplicateFeatureIdentifier {
+                    feature: "future".into(),
+                    list: ProfileFeatureList::Optional,
+                },
+            ),
+        ))),
+    );
+    assert!(!inspected.get());
 }
 
 #[cfg(target_os = "linux")]

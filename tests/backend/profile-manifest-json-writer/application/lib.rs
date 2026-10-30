@@ -40,8 +40,7 @@ use atrament_explicit_file_path_intent::{
 };
 use atrament_handwriting_profile_container::{
     PROFILE_CONTAINER_VERSION, ProfileManifest, ProfileManifestEntry,
-    ProfileManifestError,
-    Sha256Digest,
+    ProfileFeatureList, ProfileManifestError, Sha256Digest,
 };
 use atrament_profile_entry_sha256::sha256_profile_bytes;
 use atrament_profile_import_preflight::ProfileImportBudget;
@@ -299,6 +298,50 @@ fn contradictory_feature_requirements_cannot_be_canonically_serialized() {
         Err(expected),
     );
     assert_eq!(destination, [0xca; 1024]);
+}
+
+#[test]
+fn duplicated_features_cannot_escape_any_canonical_writer() {
+    for list in [ProfileFeatureList::Required, ProfileFeatureList::Optional] {
+        let mut profile = fixture();
+        let feature = match list {
+            ProfileFeatureList::Required => {
+                profile.required_features.push("layout".into());
+                "layout"
+            }
+            ProfileFeatureList::Optional => {
+                profile.optional_features.push("future".into());
+                "future"
+            }
+        };
+        let expected = Error::Manifest(
+            ProfileManifestError::DuplicateFeatureIdentifier {
+                feature: feature.into(),
+                list,
+            },
+        );
+        assert_eq!(
+            planned_canonical_profile_manifest_json_bytes(
+                &profile, &["strokes", "layout"], limits(),
+            ),
+            Err(expected.clone()),
+        );
+        assert_eq!(
+            write_canonical_profile_manifest_json(
+                &profile, &["strokes", "layout"], limits(),
+            ),
+            Err(expected.clone()),
+        );
+        let mut destination = [0xbcu8; 1024];
+        assert_eq!(
+            write_canonical_profile_manifest_json_into(
+                &profile, &["strokes", "layout"], limits(),
+                &mut destination,
+            ),
+            Err(expected),
+        );
+        assert_eq!(destination, [0xbc; 1024]);
+    }
 }
 
 #[test]
