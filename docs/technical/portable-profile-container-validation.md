@@ -782,6 +782,7 @@ one exact SHA-256 digest value.
 
 - the container version is not exactly `atrament.profile/1`;
 - a required feature is not in the caller-supplied supported feature set;
+- the same exact feature identifier is declared both required and optional;
 - a non-manifest path is unsafe, noncanonical, reserved, or outside the two
   admitted roots;
 - two entries declare the same canonical path;

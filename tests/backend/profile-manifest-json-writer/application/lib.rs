@@ -270,6 +270,38 @@ fn typed_admission_and_field_limits_refuse_before_serialization() {
 }
 
 #[test]
+fn contradictory_feature_requirements_cannot_be_canonically_serialized() {
+    let mut profile = fixture();
+    profile.optional_features.push("strokes".into());
+    let expected = Error::Manifest(
+        ProfileManifestError::ConflictingFeatureRequirement {
+            feature: "strokes".into(),
+        },
+    );
+    assert_eq!(
+        planned_canonical_profile_manifest_json_bytes(
+            &profile, &["strokes", "layout"], limits(),
+        ),
+        Err(expected.clone()),
+    );
+    assert_eq!(
+        write_canonical_profile_manifest_json(
+            &profile, &["strokes", "layout"], limits(),
+        ),
+        Err(expected.clone()),
+    );
+    let mut destination = [0xcau8; 1024];
+    assert_eq!(
+        write_canonical_profile_manifest_json_into(
+            &profile, &["strokes", "layout"], limits(),
+            &mut destination,
+        ),
+        Err(expected),
+    );
+    assert_eq!(destination, [0xca; 1024]);
+}
+
+#[test]
 fn canonical_manifest_in_stored_zip_passes_source_attached_hash_checks() {
     let payload = b"{\"stroke\":true}";
     let mut manifest = fixture();

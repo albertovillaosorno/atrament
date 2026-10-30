@@ -588,6 +588,11 @@ fn reference_manifest(
                 feature: feature.clone(),
             });
         }
+        if value.optional_features.iter().any(|optional| optional == feature) {
+            return Err(ProfileManifestError::ConflictingFeatureRequirement {
+                feature: feature.clone(),
+            });
+        }
     }
     let mut paths = Vec::new();
     for item in &value.entries {
@@ -669,6 +674,7 @@ fn generated_manifest_values_match_reference_admission_oracle() {
     let mut saw_manifest_unsupported_root = false;
     let mut saw_unsupported_version = false;
     let mut saw_unsupported_feature = false;
+    let mut saw_conflicting_feature_requirement = false;
     for case in 0..CASES {
         let version_index =
             next_inventory_selector(&mut seed) % versions.len();
@@ -704,7 +710,11 @@ fn generated_manifest_values_match_reference_admission_oracle() {
         let value = ProfileManifest {
             container_version: String::from(versions[version_index]),
             entries,
-            optional_features: vec![String::from("future-optional")],
+            optional_features: if case.is_multiple_of(7) {
+                vec![String::from("stroke-vocabulary")]
+            } else {
+                vec![String::from("future-optional")]
+            },
             profile_identity: String::from("writer-generated"),
             required_features: feature_sets[feature_index]
                 .iter()
@@ -714,6 +724,9 @@ fn generated_manifest_values_match_reference_admission_oracle() {
         let expected = reference_manifest(&value, &supported);
         match &expected {
             Ok(()) => saw_valid = true,
+            Err(ProfileManifestError::ConflictingFeatureRequirement { .. }) => {
+                saw_conflicting_feature_requirement = true;
+            },
             Err(ProfileManifestError::DuplicateEntryPath { .. }) => {
                 saw_duplicate_path = true;
             },
@@ -797,6 +810,7 @@ fn generated_manifest_values_match_reference_admission_oracle() {
     assert!(saw_manifest_unsupported_root);
     assert!(saw_unsupported_version);
     assert!(saw_unsupported_feature);
+    assert!(saw_conflicting_feature_requirement);
 }
 
 #[test]
@@ -810,6 +824,44 @@ fn manifest_admits_sections_assets_and_preserves_optional_features() {
         Ok(()),
     );
     assert_eq!(value.optional_features, ["future-optional"]);
+}
+
+#[test]
+fn required_and_optional_feature_overlap_refuses_before_any_entry_decoding() {
+    let mut value = manifest(vec![
+        entry("sections/a.json", "application/json", 1),
+    ]);
+    for feature in ["stroke-vocabulary", "future-optional", "ma\u{f1}ana"] {
+        value.required_features = vec![feature.to_string()];
+        value.optional_features = vec!["unknown-future".into(), feature.into()];
+        let admitted = validate_profile_manifest(&value, &[feature]);
+        assert_eq!(
+            admitted,
+            Err(ProfileManifestError::ConflictingFeatureRequirement {
+                feature: feature.into(),
+            }),
+        );
+        assert_eq!(
+            validate_profile_manifest_view(&value, &[feature]).err(),
+            admitted.err(),
+        );
+    }
+    // A feature is optional only when absent from the required list. Exact
+    // spelling matters; unknown optional identifiers remain uninterpreted.
+    value.required_features = vec!["stroke-vocabulary".into()];
+    value.optional_features = vec!["Stroke-vocabulary".into(), "future".into()];
+    assert_eq!(
+        validate_profile_manifest(&value, &["stroke-vocabulary"]),
+        Ok(()),
+    );
+    value.optional_features.push("stroke-vocabulary".into());
+    assert_eq!(
+        validate_profile_manifest(&value, &[]),
+        Err(ProfileManifestError::UnsupportedRequiredFeature {
+            feature: "stroke-vocabulary".into(),
+        }),
+        "unsupported mandatory features must still fail first",
+    );
 }
 
 #[test]

@@ -42,7 +42,9 @@ use atrament_explicit_file_path_intent::{
     ExplicitFilePathSource, ExplicitFilePurpose, ExplicitOverwriteIntent,
     classify_explicit_file_path_intent,
 };
-use atrament_handwriting_profile_container::ProfileEntryVerificationError;
+use atrament_handwriting_profile_container::{
+    ProfileEntryVerificationError, ProfileManifestError,
+};
 use atrament_profile_entry_sha256::sha256_profile_bytes;
 use atrament_profile_file_reader::{
     ProfileFileReadError, read_bounded_profile_file,
@@ -569,6 +571,37 @@ fn unsupported_features_and_crc_correct_sha_substitution_fail_closed() {
         )),
     ));
     assert!(!inspected.get());
+}
+
+#[test]
+fn contradictory_feature_requirements_refuse_before_file_inspection() {
+    let payload = br#"{"ink":true}"#;
+    let valid = root(payload, r#"["stroke-vocabulary"]"#);
+    let conflicting = valid.replace(
+        "\"optional_features\":[]",
+        "\"optional_features\":[\"stroke-vocabulary\"]",
+    );
+    assert_ne!(valid, conflicting);
+    let file = OwnedTestFile::new(&zip(conflicting.as_bytes(), payload));
+    let intent = selected(ExplicitFilePurpose::ImportProfile);
+    let inspected = Cell::new(false);
+    assert_eq!(
+        inspect_open_profile_import(
+            &intent,
+            |max| read_bounded_profile_file(file.open(), max),
+            &["stroke-vocabulary"],
+            limits(),
+            |_verified| { inspected.set(true); },
+        ),
+        Err(Error::Verification(ProfileImportVerificationError::Preflight(
+            ProfileImportPreflightError::Manifest(
+                ProfileManifestError::ConflictingFeatureRequirement {
+                    feature: "stroke-vocabulary".into(),
+                },
+            ),
+        ))),
+    );
+    assert!(!inspected.get(), "no verified section can escape on ambiguity");
 }
 
 #[test]

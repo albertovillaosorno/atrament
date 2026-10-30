@@ -414,6 +414,11 @@ pub enum ProfileEntryPathError {
 /// Typed manifest validation failure before any section is decoded.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub enum ProfileManifestError {
+    /// One feature cannot be both mandatory and optional in the same profile.
+    ConflictingFeatureRequirement {
+        /// The exact feature identifier with contradictory requirements.
+        feature: String,
+    },
     /// Two declared non-manifest entries use the same canonical path.
     DuplicateEntryPath {
         /// Duplicate path retained exactly for diagnostics.
@@ -710,7 +715,8 @@ fn validate_profile_entry_inventory_admitted(
 /// # Errors
 ///
 /// Returns a typed failure for a future container version, unsupported required
-/// feature, unsafe path, duplicate path, or missing media-type identity.
+/// feature, contradictory required/optional feature declaration, unsafe path,
+/// duplicate path, or missing media-type identity.
 pub fn validate_profile_manifest(
     manifest: &ProfileManifest,
     supported_required_features: &[&str],
@@ -723,6 +729,14 @@ pub fn validate_profile_manifest(
     for feature in &manifest.required_features {
         if !supported_required_features.contains(&feature.as_str()) {
             return Err(ProfileManifestError::UnsupportedRequiredFeature {
+                feature: feature.clone(),
+            });
+        }
+        // A feature must not be simultaneously mandatory and optional. This
+        // comparison is exact: unknown optional identifiers stay opaque and
+        // Unicode feature names are not normalized or case-folded.
+        if manifest.optional_features.contains(feature) {
+            return Err(ProfileManifestError::ConflictingFeatureRequirement {
                 feature: feature.clone(),
             });
         }
