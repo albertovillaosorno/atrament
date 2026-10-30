@@ -128,18 +128,30 @@ fn profile_zip(
     asset: &[u8],
     declared_section: &[u8],
 ) -> Vec<u8> {
+    profile_zip_with_media_type(
+        section, asset, declared_section, "application/json",
+    )
+}
+
+fn profile_zip_with_media_type(
+    section: &[u8],
+    asset: &[u8],
+    declared_section: &[u8],
+    media_type: &str,
+) -> Vec<u8> {
     let root = format!(
         concat!(
             r#"{{"container_version":"atrament.profile/1","#,
             r#""profile_identity":"writer","required_features":[],"#,
             r#""optional_features":[],"entries":["#,
             r#"{{"path":"sections/writer.json","#,
-            r#""media_type":"application/json","#,
+            r#""media_type":"{}","#,
             r#""byte_length":{},"sha256":"{}"}},"#,
             r#"{{"path":"assets/raw.bin","#,
             r#""media_type":"application/octet-stream","#,
             r#""byte_length":{},"sha256":"{}"}}]}}"#,
         ),
+        media_type,
         declared_section.len(),
         digest_hex(declared_section),
         asset.len(),
@@ -467,6 +479,30 @@ fn cli_refuses_crc_valid_sha_forgery_without_printing_manifest() {
     assert!(!executed.status.success());
     assert!(executed.stdout.is_empty());
     assert!(!executed.stderr.is_empty());
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn cli_refuses_sha_valid_json_with_non_json_type_without_stdout() {
+    let json = br#"{"strokes":[]}"#;
+    for media_type in ["image/png", "text/plain"] {
+        let archive = profile_zip_with_media_type(
+            json, b"\xff\x00opaque", json, media_type,
+        );
+        let owned = OwnedProfileFile::new(&archive);
+        let error = bootstrap::inspect_profile(owned.0.clone())
+            .expect_err("JSON section with misleading type cannot inspect");
+        assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+        assert!(error.to_string().contains("SectionMediaType { index: 0"));
+        let executed = Command::new(env!("CARGO_BIN_EXE_atrament"))
+            .args(["profile", "inspect"])
+            .arg(&owned.0)
+            .output()
+            .expect("run securely selected profile inspector");
+        assert!(!executed.status.success());
+        assert!(executed.stdout.is_empty());
+        assert!(!executed.stderr.is_empty());
+    }
 }
 
 #[cfg(target_os = "linux")]
