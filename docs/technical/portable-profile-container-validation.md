@@ -84,7 +84,7 @@ file writes can still change its bytes. The host must independently
 authenticate the selected path's original caller gesture or host-policy
 admission; the classified intent cannot prove that provenance itself.
 
-Twenty-seven composition tests exercise open-descriptor and selected-path
+Twenty-eight composition tests exercise open-descriptor and selected-path
 paths, source transport, malformed archives, and complete integrity gates.
 SHA-valid invalid section JSON or mislabeled JSON media type, duplicate
 decoded keys, independent section byte, depth, key, and value ceilings, and
@@ -94,7 +94,9 @@ inspection through both the injected opened-file and secure selected-path
 entrypoints, even when the reader supports that feature.
 
 Repeated optional feature identifiers also refuse before an open-file callback
-can inspect any verified data. A separately admitted JSON section may coexist
+can inspect any verified data. Repeated required identifiers are refused from
+the secure selected-path entrypoint before inspection, without changing the
+source file. A separately admitted JSON section may coexist
 with an opaque, non-UTF-8 binary asset, whose bytes remain available without
 parsing.
 
@@ -790,6 +792,7 @@ one exact SHA-256 digest value.
 
 - the container version is not exactly `atrament.profile/1`;
 - a required feature is not in the caller-supplied supported feature set;
+- a feature identifier occurs twice within either declaration list;
 - the same exact feature identifier is declared both required and optional;
 - a non-manifest path is unsafe, noncanonical, reserved, or outside the two
   admitted roots;

@@ -671,6 +671,46 @@ fn selected_path_refuses_conflicting_features_without_inspection() {
     assert!(!inspected.get(), "no selected profile bytes were exposed");
 }
 
+#[cfg(target_os = "linux")]
+#[test]
+fn selected_path_rejects_repeated_required_features_before_inspection() {
+    let section = br#"{"stroke":[1,2]}"#;
+    let duplicate_root = root(
+        section, r#"["stroke-vocabulary","stroke-vocabulary"]"#,
+    );
+    let archive = zip(duplicate_root.as_bytes(), section);
+    let file = OwnedTestFile::new(&archive);
+    let chosen = classify_explicit_file_path_intent(
+        ExplicitFilePurpose::ImportProfile,
+        ExplicitFilePathSource::CallerSelection,
+        file.path.clone(),
+        ExplicitOverwriteIntent::PreserveExisting,
+    )
+    .expect("classify selected profile file");
+    let inspected = Cell::new(false);
+    assert_eq!(
+        inspect_selected_profile_import(
+            &chosen,
+            &["stroke-vocabulary"],
+            limits(),
+            |_verified| inspected.set(true),
+        ),
+        Err(Error::Verification(ProfileImportVerificationError::Preflight(
+            ProfileImportPreflightError::Manifest(
+                ProfileManifestError::DuplicateFeatureIdentifier {
+                    feature: "stroke-vocabulary".into(),
+                    list: ProfileFeatureList::Required,
+                },
+            ),
+        ))),
+    );
+    assert!(!inspected.get());
+    assert_eq!(
+        std::fs::read(&file.path).expect("test-owned selected bytes"),
+        archive,
+    );
+}
+
 #[test]
 fn empty_regular_file_reaches_zip_refusal_not_synthetic_eof() {
     let fixture = OwnedTestFile::new(b"");
