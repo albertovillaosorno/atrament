@@ -430,9 +430,9 @@ fn cli_preserves_exact_non_utf8_selected_profile_path() {
 #[cfg(target_os = "linux")]
 #[test]
 fn cli_refuses_later_invalid_section_without_partial_stdout() {
-    let first = br#"{"valid":true}"#;
-    let later = b"[invalid-section]";
-    let opaque = b"\0\xffprivate sample";
+    let first = br#"{"valid":"private-early-section-8392"}"#;
+    let later = b"[private-invalid-late-section-4752]";
+    let opaque = b"\0\xffprivate-opaque-asset-2925";
     let manifest = format!(
         concat!(
             r#"{{"container_version":"atrament.profile/1","#,
@@ -477,7 +477,11 @@ fn cli_refuses_later_invalid_section_without_partial_stdout() {
         },
     )
     .expect("authentic fully SHA-verified two-section ZIP");
-    let owned = OwnedProfileFile::new(&archive);
+    let mut owned = OwnedProfileFile::new(&archive);
+    let selected = owned.0.with_extension("private-late-selected-6614");
+    fs::rename(&owned.0, &selected)
+        .expect("rename the only test-owned profile source");
+    owned.0 = selected;
     let error = bootstrap::inspect_profile(owned.0.clone())
         .expect_err("later invalid section refuses before any inspection");
     assert_eq!(error.kind(), io::ErrorKind::InvalidData);
@@ -489,7 +493,17 @@ fn cli_refuses_later_invalid_section_without_partial_stdout() {
         .expect("run actually malformed second-section profile CLI");
     assert!(!executed.status.success());
     assert!(executed.stdout.is_empty());
-    assert!(!executed.stderr.is_empty());
+    let stderr = String::from_utf8_lossy(&executed.stderr);
+    assert!(stderr.contains("SectionJson { index: 1"));
+    for private in [
+        "private-early-section-8392",
+        "private-invalid-late-section-4752",
+        "private-opaque-asset-2925",
+        "private-late-selected-6614",
+    ] {
+        assert!(!error.to_string().contains(private));
+        assert!(!stderr.contains(private));
+    }
 }
 
 #[cfg(target_os = "linux")]

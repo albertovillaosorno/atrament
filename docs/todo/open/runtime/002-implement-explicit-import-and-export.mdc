@@ -231,6 +231,11 @@ refusals now also assert error-type-only stderr: private selected path
 markers, uninspected sections and assets never leak, and symlink targets
 stay byte-for-byte unchanged.
 
+The later-section syntactic failure fixture also now supplies private
+markers in the earlier valid section, malformed late section, selected name
+and binary asset. The live CLI refuses without publishing any of those bytes
+on stderr or any earlier verified section on stdout.
+
 A real-file cross-boundary regression also exports a canonical ZIP through
 the disposable session and securely reopens that same selected path with the
 existing strict Import verifier. It checks the decoded identity, complete
