@@ -328,6 +328,12 @@ fn real_zip_root_decodes_to_typed_manifest_with_independent_payload_digest() {
     let attached_decoded = decode_attached_profile_manifest_json(
         &attached, codec_limits(),
     ).expect("type remains associated with source ZIP");
+    let debug = format!("{attached_decoded:?}");
+    assert!(debug.contains("DecodedProfileZipManifest"));
+    for private in ["ñote-1", "sections/strokes.json", "strokes"] {
+        assert!(!debug.contains(private));
+    }
+    assert!(!debug.contains(&format!("{zip:?}")));
     assert_eq!(attached_decoded.root_sha256(), original_sha);
     assert_eq!(attached_decoded.archive().source_sha256(),
         archive.source_sha256());

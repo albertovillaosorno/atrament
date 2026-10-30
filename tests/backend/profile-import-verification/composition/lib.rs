@@ -184,6 +184,12 @@ fn source_bound_success_releases_only_digest_verified_nonroot_bytes() {
         &path, &source, &["strokes"], budget(), &mut names,
     )
         .expect("complete source-bound admission");
+    let debug = format!("{result:?}");
+    assert!(debug.contains("VerifiedAttachedProfileImport"));
+    for private in ["selected", "unit-1", "source-bound", MEMBER] {
+        assert!(!debug.contains(private));
+    }
+    assert!(!debug.contains(&format!("{source_bytes:?}")));
     assert!(std::ptr::eq(result.path(), &path));
     assert!(std::ptr::eq(result.manifest(), source.manifest()));
     assert_eq!(result.root_sha256(), source.root_sha256());

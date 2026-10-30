@@ -33,6 +33,8 @@
 
 //! Schema-specific, read-only decoder of a syntax-admitted profile manifest.
 
+use std::fmt;
+
 use atrament_handwriting_profile_container::{
     ProfileManifest, ProfileManifestEntry, Sha256Digest,
 };
@@ -79,11 +81,18 @@ pub enum ProfileManifestJsonError {
 /// callers. The underlying source bytes, root syntax, and typed metadata stay
 /// tied together, but the declarations have not yet been checked against the
 /// ZIP member inventory and SHA-256 bytes. No filesystem source is authorized.
-#[derive(Debug)]
+/// Debug output excludes private decoded manifest and archive contents.
 pub struct DecodedProfileZipManifest<'archive, 'bytes> {
     archive: &'archive ProfileZipArchive<'bytes>,
     manifest: ProfileManifest,
     root_sha256: Sha256Digest,
+}
+
+impl fmt::Debug for DecodedProfileZipManifest<'_, '_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("DecodedProfileZipManifest")
+            .finish_non_exhaustive()
+    }
 }
 
 impl<'archive, 'bytes> DecodedProfileZipManifest<'archive, 'bytes> {

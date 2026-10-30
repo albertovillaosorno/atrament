@@ -34,6 +34,8 @@
 
 //! Read-only completion of source-bound profile Import verification.
 
+use std::fmt;
+
 use atrament_explicit_file_path_intent::{
     ExplicitFilePathIntent, ExplicitFilePurpose,
 };
@@ -65,11 +67,18 @@ pub enum ProfileImportVerificationError {
 /// The supplied path remains an **intent**, not a permission to open its
 /// target. This read-only evidence still lacks authenticated source selection,
 /// typed section decoding, profile acceptance and any filesystem effect.
-#[derive(Debug)]
+/// Debug output hides selected paths, typed identities and verified bytes.
 pub struct VerifiedAttachedProfileImport<'path, 'manifest, 'archive, 'bytes> {
     path: &'path ExplicitFilePathIntent,
     payloads: VerifiedProfileZipPayloads<'manifest, 'archive, 'bytes>,
     source: &'manifest DecodedProfileZipManifest<'archive, 'bytes>,
+}
+
+impl fmt::Debug for VerifiedAttachedProfileImport<'_, '_, '_, '_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("VerifiedAttachedProfileImport")
+            .finish_non_exhaustive()
+    }
 }
 
 impl<'path, 'manifest, 'bytes>

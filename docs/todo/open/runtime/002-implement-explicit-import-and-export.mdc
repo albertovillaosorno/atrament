@@ -176,6 +176,9 @@ The stored ZIP reader now redacts original source bytes and path names in
 its member, archive and paired-root `Debug` projections; its verified member
 view additionally hides the referenced typed manifest. Exact CRC/SHA-verified
 member access remains available through the explicit read-only methods.
+The subsequent decoded-manifest and fully verified Import wrappers also redact
+selection paths, profile identities and source payloads in `Debug` while
+preserving explicit verified data access.
 
 A real-file cross-boundary regression also exports a canonical ZIP through
 the disposable session and securely reopens that same selected path with the
