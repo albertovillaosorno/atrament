@@ -475,12 +475,23 @@ fn cli_refuses_later_invalid_section_without_partial_stdout() {
 #[cfg(target_os = "linux")]
 #[test]
 fn cli_refuses_duplicate_optional_feature_without_partial_stdout() {
-    let section = br#"{"safe":true}"#;
-    let archive = profile_zip_with_optional_features(
-        section, b"opaque-private-asset", section,
-        "application/json", r#"["future","future"]"#,
+    let section = br#"{"private":"section-payload-8621"}"#;
+    let asset = b"asset-payload-9345";
+    let secret_feature = "feature-private-7103";
+    let optional_features = format!(
+        r#"["{secret_feature}","{secret_feature}"]"#,
     );
-    let owned = OwnedProfileFile::new(&archive);
+    let archive = profile_zip_with_optional_features(
+        section, asset, section, "application/json", &optional_features,
+    );
+    let mut owned = OwnedProfileFile::new(&archive);
+    let private_path = owned
+        .0
+        .with_extension("private-selection-5218.atrament");
+    fs::rename(&owned.0, &private_path)
+        .expect("rename only owned profile to private selected path");
+    owned.0 = private_path;
+
     let error = bootstrap::inspect_profile(owned.0.clone())
         .expect_err("repeated capabilities cannot be inspected");
     assert_eq!(error.kind(), io::ErrorKind::InvalidData);
@@ -492,7 +503,17 @@ fn cli_refuses_duplicate_optional_feature_without_partial_stdout() {
         .expect("run duplicate-feature profile CLI");
     assert!(!executed.status.success());
     assert!(executed.stdout.is_empty());
-    assert!(!executed.stderr.is_empty());
+    let stderr = String::from_utf8_lossy(&executed.stderr);
+    assert!(stderr.contains("DuplicateFeatureIdentifier"));
+    for private in [
+        secret_feature,
+        "section-payload-8621",
+        "asset-payload-9345",
+        "private-selection-5218",
+    ] {
+        assert!(!error.to_string().contains(private));
+        assert!(!stderr.contains(private));
+    }
 }
 
 #[cfg(target_os = "linux")]

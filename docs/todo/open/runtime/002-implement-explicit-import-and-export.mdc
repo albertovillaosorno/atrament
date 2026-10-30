@@ -195,6 +195,11 @@ feature identifiers, entry paths and version strings in implicit `Debug`.
 They preserve the named error variants, safe reason codes and byte counts,
 while exact offending text remains available through typed error fields.
 
+A real `atrament profile inspect` subprocess regression now verifies that
+rejected private duplicate features cannot leak through stderr, even when
+the selected filename, section and asset contents also contain private
+markers. The CLI still names the typed rejection and publishes no stdout.
+
 A real-file cross-boundary regression also exports a canonical ZIP through
 the disposable session and securely reopens that same selected path with the
 existing strict Import verifier. It checks the decoded identity, complete
