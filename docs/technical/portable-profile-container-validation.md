@@ -96,7 +96,10 @@ entrypoints, even when the reader supports that feature.
 Repeated optional feature identifiers also refuse before an open-file callback
 can inspect any verified data. Repeated required identifiers are refused from
 the secure selected-path entrypoint before inspection, without changing the
-source file. A separately admitted JSON section may coexist
+source file. Both lists reject identifiers that become duplicates only after
+JSON escape decoding.
+
+A separately admitted JSON section may coexist
 with an opaque, non-UTF-8 binary asset, whose bytes remain available without
 parsing.
 

@@ -608,31 +608,36 @@ fn contradictory_feature_requirements_refuse_before_file_inspection() {
 fn repeated_optional_features_refuse_before_any_file_inspection() {
     let payload = br#"{"ink":true}"#;
     let valid = root(payload, r#"["stroke-vocabulary"]"#);
-    let repeated = valid.replace(
-        "\"optional_features\":[]",
-        "\"optional_features\":[\"future\",\"future\"]",
-    );
-    let file = OwnedTestFile::new(&zip(repeated.as_bytes(), payload));
     let intent = selected(ExplicitFilePurpose::ImportProfile);
-    let inspected = Cell::new(false);
-    assert_eq!(
-        inspect_open_profile_import(
-            &intent,
-            |max| read_bounded_profile_file(file.open(), max),
-            &["stroke-vocabulary"],
-            limits(),
-            |_verified| inspected.set(true),
-        ),
-        Err(Error::Verification(ProfileImportVerificationError::Preflight(
-            ProfileImportPreflightError::Manifest(
-                ProfileManifestError::DuplicateFeatureIdentifier {
-                    feature: "future".into(),
-                    list: ProfileFeatureList::Optional,
-                },
+    for optional in [
+        r#""optional_features":["future","future"]"#,
+        r#""optional_features":["future","\u0066uture"]"#,
+    ] {
+        let repeated = valid.replace("\"optional_features\":[]", optional);
+        let file = OwnedTestFile::new(&zip(repeated.as_bytes(), payload));
+        let inspected = Cell::new(false);
+        assert_eq!(
+            inspect_open_profile_import(
+                &intent,
+                |max| read_bounded_profile_file(file.open(), max),
+                &["stroke-vocabulary"],
+                limits(),
+                |_verified| inspected.set(true),
             ),
-        ))),
-    );
-    assert!(!inspected.get());
+            Err(Error::Verification(
+                ProfileImportVerificationError::Preflight(
+                    ProfileImportPreflightError::Manifest(
+                        ProfileManifestError::DuplicateFeatureIdentifier {
+                            feature: "future".into(),
+                            list: ProfileFeatureList::Optional,
+                        },
+                    ),
+                ),
+            )),
+            "optional feature wire spelling {optional}",
+        );
+        assert!(!inspected.get());
+    }
 }
 
 #[cfg(target_os = "linux")]
@@ -676,7 +681,7 @@ fn selected_path_refuses_conflicting_features_without_inspection() {
 fn selected_path_rejects_repeated_required_features_before_inspection() {
     let section = br#"{"stroke":[1,2]}"#;
     let duplicate_root = root(
-        section, r#"["stroke-vocabulary","stroke-vocabulary"]"#,
+        section, r#"["stroke-vocabulary","stroke-\u0076ocabulary"]"#,
     );
     let archive = zip(duplicate_root.as_bytes(), section);
     let file = OwnedTestFile::new(&archive);
