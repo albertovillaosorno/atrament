@@ -1912,3 +1912,62 @@ fn generated_unicode_name_and_value_copies_agree_on_scalar_bytes() {
     }
     assert!(exercised > 4_800, "crosses all relevant UTF-8 widths");
 }
+
+#[test]
+fn admitted_json_debug_redacts_source_keys_values_and_escapes() {
+    let source = concat!(
+        r#"{"private-key-7391":{"secret":"value-8127", "#,
+        r#""items":["\u0070rivate-4631",true]}}"#,
+    )
+    .as_bytes();
+    let root = validate_profile_json_object(source, limits())
+        .expect("source contains a valid nested object");
+    let object_fields = root.root_fields();
+    let field = root.root_field("private-key-7391").expect("private key");
+    let value = field.value();
+    let nested_fields = value.object_fields().expect("nested object");
+    let string = value.object_member("secret").expect("private value");
+    let chars = string.string_chars().expect("string scalar iterator");
+    let array = value.object_member("items").expect("private array");
+    let elements = array.array_elements().expect("array iterator");
+    let array_value = array.array_element(0).expect("first array item");
+
+    for printed in [
+        format!("{root:?} {root:#?}"),
+        format!("{object_fields:?} {object_fields:#?}"),
+        format!("{field:?} {field:#?}"),
+        format!("{value:?} {value:#?}"),
+        format!("{nested_fields:?} {nested_fields:#?}"),
+        format!("{string:?} {string:#?}"),
+        format!("{chars:?} {chars:#?}"),
+        format!("{array:?} {array:#?}"),
+        format!("{elements:?} {elements:#?}"),
+        format!("{array_value:?} {array_value:#?}"),
+    ] {
+        for private in [
+            "private-key-7391",
+            "value-8127",
+            "private-4631",
+            "0070rivate-4631",
+            "secret",
+            "items",
+        ] {
+            assert!(
+                !printed.contains(private),
+                "leaked {private} in {printed}"
+            );
+        }
+    }
+    // Redacting incidental formatting must not change the explicit source
+    // accessors or decoded Unicode scalar iteration.
+    assert_eq!(root.bytes(), source);
+    assert_eq!(field.value().bytes(), value.bytes());
+    assert_eq!(
+        string.string_chars().unwrap().collect::<String>(),
+        "value-8127"
+    );
+    assert_eq!(
+        array_value.string_chars().unwrap().collect::<String>(),
+        "private-4631"
+    );
+}

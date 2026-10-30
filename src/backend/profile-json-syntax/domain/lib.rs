@@ -34,6 +34,7 @@
 
 //! Resource-bounded JSON object syntax checks for profile manifest bytes.
 
+use std::fmt;
 use std::iter::FusedIterator;
 use std::str::from_utf8;
 
@@ -81,7 +82,7 @@ pub enum ProfileJsonSyntaxError {
 ///
 /// Duplicate decoded keys have been rejected in every object. Wire field
 /// mapping, digest decoding and a typed manifest's provenance are not checked.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Eq, PartialEq)]
 pub struct ValidatedProfileJsonObject<'bytes> {
     bytes: &'bytes [u8],
     values: usize,
@@ -135,7 +136,7 @@ pub enum ProfileJsonStringCopyError {
 /// Traversal never confers manifest field names, canonical encoding, or
 /// Import authority. The original document had its complete grammar, Unicode,
 /// duplicate-key, byte, member, depth, and value budgets checked first.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Eq, PartialEq)]
 pub struct ValidatedProfileJsonValue<'bytes> {
     bytes: &'bytes [u8],
     document_values: usize,
@@ -145,7 +146,7 @@ pub struct ValidatedProfileJsonValue<'bytes> {
 ///
 /// The iterator borrows source bytes and keeps no collection of JSON values.
 /// It is available only after the complete parent JSON root was validated.
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct ValidatedProfileJsonArrayElements<'bytes> {
     bytes: &'bytes [u8],
     cursor: usize,
@@ -200,7 +201,7 @@ impl FusedIterator for ValidatedProfileJsonArrayElements<'_> {}
 ///
 /// This includes decoded escapes and surrogate pairs without normalizing
 /// Unicode, reading files, or creating a heap-backed string.
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct ValidatedProfileJsonStringChars<'bytes> {
     cursor: usize,
     interior: &'bytes [u8],
@@ -229,7 +230,7 @@ impl FusedIterator for ValidatedProfileJsonStringChars<'_> {}
 ///
 /// The original key spelling remains available for opaque preservation;
 /// decoded scalar comparison is exact, with no implicit normalization.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Eq, PartialEq)]
 pub struct ValidatedProfileJsonField<'bytes> {
     key_bytes: &'bytes [u8],
     member_bytes: &'bytes [u8],
@@ -297,13 +298,57 @@ impl<'bytes> ValidatedProfileJsonField<'bytes> {
 /// Fused one-pass member iterator from a syntax-admitted JSON object.
 ///
 /// Member names and values remain borrowed and unchanged in source order.
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct ValidatedProfileJsonObjectFields<'bytes> {
     bytes: &'bytes [u8],
     cursor: usize,
     document_values: usize,
     finished: bool,
     started: bool,
+}
+
+// Syntax evidence borrows untrusted profile JSON. Debug formatting must not
+// disclose its keys, values or original escaped byte spellings.
+impl fmt::Debug for ValidatedProfileJsonObject<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ValidatedProfileJsonObject")
+            .finish_non_exhaustive()
+    }
+}
+
+impl fmt::Debug for ValidatedProfileJsonValue<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ValidatedProfileJsonValue")
+            .finish_non_exhaustive()
+    }
+}
+
+impl fmt::Debug for ValidatedProfileJsonArrayElements<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ValidatedProfileJsonArrayElements")
+            .finish_non_exhaustive()
+    }
+}
+
+impl fmt::Debug for ValidatedProfileJsonStringChars<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ValidatedProfileJsonStringChars")
+            .finish_non_exhaustive()
+    }
+}
+
+impl fmt::Debug for ValidatedProfileJsonField<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ValidatedProfileJsonField")
+            .finish_non_exhaustive()
+    }
+}
+
+impl fmt::Debug for ValidatedProfileJsonObjectFields<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ValidatedProfileJsonObjectFields")
+            .finish_non_exhaustive()
+    }
 }
 
 impl<'bytes> ValidatedProfileJsonObjectFields<'bytes> {

@@ -180,6 +180,11 @@ The subsequent decoded-manifest and fully verified Import wrappers also redact
 selection paths, profile identities and source payloads in `Debug` while
 preserving explicit verified data access.
 
+The source-backed JSON syntax views and their field, string and array
+iterators now also redact borrowed private keys, values and raw JSON escapes
+from `Debug` output. Explicit source-byte and decoded-text accessors remain
+unchanged; plain and pretty debug regression fixtures cover every view.
+
 A real-file cross-boundary regression also exports a canonical ZIP through
 the disposable session and securely reopens that same selected path with the
 existing strict Import verifier. It checks the decoded identity, complete
