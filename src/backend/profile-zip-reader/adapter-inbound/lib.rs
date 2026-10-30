@@ -34,6 +34,7 @@
 
 //! Read-only, bounded ordinary stored ZIP framing for portable profiles.
 
+use std::fmt;
 use std::num::NonZeroUsize;
 use std::slice::Chunks;
 use std::str::from_utf8;
@@ -124,11 +125,18 @@ pub enum ProfileZipManifestSyntaxError {
 }
 
 /// One borrowed member with verified local/central size and CRC evidence.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+/// Debug output hides member paths and private payload bytes.
+#[derive(Clone, Copy, Eq, PartialEq)]
 pub struct ProfileZipEntry<'bytes> {
     bytes: &'bytes [u8],
     crc32: u32,
     name: &'bytes str,
+}
+
+impl fmt::Debug for ProfileZipEntry<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ProfileZipEntry").finish_non_exhaustive()
+    }
 }
 
 impl<'bytes> ProfileZipEntry<'bytes> {
@@ -152,7 +160,8 @@ impl<'bytes> ProfileZipEntry<'bytes> {
 }
 
 /// Constructor-sealed ordinary stored ZIP index, not an imported profile.
-#[derive(Clone, Debug, Eq, PartialEq)]
+/// Debug output never includes the complete source or member payload bytes.
+#[derive(Clone, Eq, PartialEq)]
 pub struct ProfileZipArchive<'bytes> {
     entries: Vec<ProfileZipEntry<'bytes>>,
     source: &'bytes [u8],
@@ -166,10 +175,23 @@ pub struct ProfileZipArchive<'bytes> {
 /// downstream code inspects this root. It does not prove that an independently
 /// constructed typed manifest was decoded from these bytes; that separate
 /// admission and authorization gate remains unimplemented.
-#[derive(Debug)]
+/// Debug output never exposes the archive or original root JSON source.
 pub struct ValidatedProfileZipRootJson<'archive, 'bytes> {
     archive: &'archive ProfileZipArchive<'bytes>,
     root: ValidatedProfileJsonObject<'bytes>,
+}
+
+impl fmt::Debug for ProfileZipArchive<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ProfileZipArchive").finish_non_exhaustive()
+    }
+}
+
+impl fmt::Debug for ValidatedProfileZipRootJson<'_, '_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ValidatedProfileZipRootJson")
+            .finish_non_exhaustive()
+    }
 }
 
 impl<'archive, 'bytes> ValidatedProfileZipRootJson<'archive, 'bytes> {
@@ -407,10 +429,17 @@ pub enum ProfileZipPayloadVerificationError {
 ///
 /// This does not prove the supplied manifest was parsed from this ZIP root,
 /// nor grant path authority, decode sections or commit an imported profile.
-#[derive(Debug)]
+/// Debug output excludes verified payload bytes and manifest metadata.
 pub struct VerifiedProfileZipPayloads<'manifest, 'archive, 'bytes> {
     archive: &'archive ProfileZipArchive<'bytes>,
     manifest: &'manifest ProfileManifest,
+}
+
+impl fmt::Debug for VerifiedProfileZipPayloads<'_, '_, '_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("VerifiedProfileZipPayloads")
+            .finish_non_exhaustive()
+    }
 }
 
 impl<'manifest, 'bytes> VerifiedProfileZipPayloads<'manifest, '_, 'bytes> {

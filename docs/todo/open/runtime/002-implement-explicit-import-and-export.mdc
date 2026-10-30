@@ -172,6 +172,11 @@ and borrowed Export payload inputs likewise redact private byte sequences and
 archive paths from `Debug`. Existing typed byte access remains available to
 the owning application caller; debug printing is not data access authority.
 
+The stored ZIP reader now redacts original source bytes and path names in
+its member, archive and paired-root `Debug` projections; its verified member
+view additionally hides the referenced typed manifest. Exact CRC/SHA-verified
+member access remains available through the explicit read-only methods.
+
 A real-file cross-boundary regression also exports a canonical ZIP through
 the disposable session and securely reopens that same selected path with the
 existing strict Import verifier. It checks the decoded identity, complete

@@ -153,6 +153,32 @@ fn central_start(bytes: &[u8]) -> usize {
 }
 
 #[test]
+fn sealed_zip_debug_hides_source_bytes_and_archive_entry_names() {
+    let bytes = make_zip(&ENTRIES);
+    let archive = read_stored_profile_zip(&bytes, limits())
+        .expect("CRC-checked fixture");
+    let root = archive.admitted_root_json(ProfileJsonSyntaxLimits {
+        maximum_bytes: 1024,
+        maximum_nesting: 8,
+        maximum_object_members: 16,
+        maximum_values: 100,
+    }).expect("admitted manifest JSON");
+    let debug = format!(
+        "{archive:?} {:?} {root:?}", archive.entries()[1],
+    );
+    assert!(debug.contains("ProfileZipArchive"));
+    assert!(debug.contains("ProfileZipEntry"));
+    assert!(debug.contains("ValidatedProfileZipRootJson"));
+    for private in ["manifest.json", "sections/strokes.json"] {
+        assert!(!debug.contains(private));
+    }
+    assert!(!debug.contains("source:"));
+    assert!(!debug.contains("bytes:"));
+    assert!(!debug.contains(&format!("{bytes:?}")));
+    assert!(!debug.contains(&format!("{:?}", ENTRIES[1].1)));
+}
+
+#[test]
 fn borrowed_entries_are_exact_crc_verified_and_manifest_readable() {
     let bytes = make_zip(&ENTRIES);
     let admitted = read_stored_profile_zip(&bytes, limits())
@@ -606,6 +632,11 @@ fn admitted_zip_payloads_require_all_exact_member_hashes() {
     let verified = verify_admitted_profile_zip_payloads(
         &archive, admitted.inventory(),
     ).expect("known entry SHA-256 matches its declared digest");
+    let debug = format!("{verified:?}");
+    assert!(debug.contains("VerifiedProfileZipPayloads"));
+    assert!(!debug.contains("typed-unbound-to-root"));
+    assert!(!debug.contains("sections/strokes.json"));
+    assert!(!debug.contains(&format!("{bytes:?}")));
     assert_eq!(verified.verified_entry_count(), 1);
     assert_eq!(
         verified.verified_entry_bytes("sections/strokes.json"),
