@@ -40,6 +40,7 @@
 //! Portable `.atrament` handwriting-profile container invariants.
 
 use std::collections::BTreeSet;
+use std::fmt;
 
 /// First-release portable handwriting-profile format identity.
 pub const PROFILE_CONTAINER_VERSION: &str = "atrament.profile/1";
@@ -161,7 +162,7 @@ pub enum ProfileRewriteDisposition {
 }
 
 /// One non-manifest entry declared by a portable profile manifest.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq)]
 pub struct ProfileManifestEntry {
     /// Declared uncompressed byte length.
     pub byte_length: u64,
@@ -174,7 +175,7 @@ pub struct ProfileManifestEntry {
 }
 
 /// Transport-neutral manifest values required by the accepted container ADR.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq)]
 pub struct ProfileManifest {
     /// Portable profile container behavior identity.
     pub container_version: String,
@@ -190,17 +191,54 @@ pub struct ProfileManifest {
 }
 
 /// Constructor-sealed admission evidence for one exact parsed manifest.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Eq, PartialEq)]
 pub struct ValidatedProfileManifest<'manifest> {
     manifest: &'manifest ProfileManifest,
 }
 
 /// Constructor-sealed evidence that one admitted non-manifest entry matches
 /// independently observed framing and digest evidence.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Eq, PartialEq)]
 pub struct VerifiedProfileEntry<'manifest> {
     entry: &'manifest ProfileManifestEntry,
     evidence: ProfileEntryEvidence,
+}
+
+// Manifest metadata includes private writer identities, feature labels and
+// archive paths. Debug is not an implicit data-disclosure capability.
+impl fmt::Debug for ProfileManifestEntry {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ProfileManifestEntry")
+            .finish_non_exhaustive()
+    }
+}
+
+impl fmt::Debug for ProfileManifest {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ProfileManifest")
+            .finish_non_exhaustive()
+    }
+}
+
+impl fmt::Debug for ValidatedProfileManifest<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ValidatedProfileManifest")
+            .finish_non_exhaustive()
+    }
+}
+
+impl fmt::Debug for VerifiedProfileEntry<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("VerifiedProfileEntry")
+            .finish_non_exhaustive()
+    }
+}
+
+impl fmt::Debug for ValidatedProfileEntryInventory<'_, '_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ValidatedProfileEntryInventory")
+            .finish_non_exhaustive()
+    }
 }
 
 impl<'manifest> VerifiedProfileEntry<'manifest> {
@@ -219,7 +257,7 @@ impl<'manifest> VerifiedProfileEntry<'manifest> {
 
 /// Sealed evidence that observed archive names exactly match one admitted
 /// manifest.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Eq, PartialEq)]
 pub struct ValidatedProfileEntryInventory<'manifest, 'observed> {
     manifest: &'manifest ProfileManifest,
     observed_paths: &'observed [&'observed str],

@@ -1892,3 +1892,60 @@ fn generated_sorted_inventory_admission_matches_general_success_semantics() {
         }),
     ));
 }
+
+#[test]
+fn manifest_metadata_debug_never_discloses_private_profile_fields() {
+    let secret_path = "sections/private-strokes-9471.json";
+    let declaration = entry(secret_path, "application/private-3507", 1);
+    let manifest = ProfileManifest {
+        container_version: PROFILE_CONTAINER_VERSION.to_owned(),
+        entries: vec![declaration.clone()],
+        optional_features: vec!["optional-secret-1003".to_owned()],
+        profile_identity: "writer-private-7349".to_owned(),
+        required_features: vec!["required-secret-2805".to_owned()],
+    };
+    let admitted = validate_profile_manifest_view(
+        &manifest,
+        &["required-secret-2805"],
+    )
+    .expect("valid private metadata");
+    let paths = [PROFILE_MANIFEST_PATH, secret_path];
+    let inventory = admitted
+        .admit_sorted_entry_inventory(&paths)
+        .expect("exact inventory");
+    let verified = inventory
+        .verify_entry(
+            secret_path,
+            ProfileEntryEvidence {
+                byte_length: 1,
+                digest: digest(1),
+            },
+        )
+        .expect("verified matching SHA evidence")
+        .expect("declared entry exists");
+    for printed in [
+        format!("{declaration:?} {declaration:#?}"),
+        format!("{manifest:?} {manifest:#?}"),
+        format!("{admitted:?} {admitted:#?}"),
+        format!("{inventory:?} {inventory:#?}"),
+        format!("{verified:?} {verified:#?}"),
+    ] {
+        for private in [
+            secret_path,
+            "application/private-3507",
+            "writer-private-7349",
+            "required-secret-2805",
+            "optional-secret-1003",
+        ] {
+            assert!(
+                !printed.contains(private),
+                "Debug leaked {private}: {printed}"
+            );
+        }
+    }
+    assert_eq!(manifest.entries[0], declaration);
+    assert_eq!(admitted.manifest(), &manifest);
+    assert_eq!(inventory.observed_paths(), paths);
+    assert_eq!(verified.entry(), &declaration);
+    assert_eq!(verified.evidence().byte_length, 1);
+}

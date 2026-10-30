@@ -185,6 +185,11 @@ iterators now also redact borrowed private keys, values and raw JSON escapes
 from `Debug` output. Explicit source-byte and decoded-text accessors remain
 unchanged; plain and pretty debug regression fixtures cover every view.
 
+Typed profile manifest values, entry declarations and their constructor-sealed
+admission, inventory and verified-entry views now similarly redact private
+profile identities, feature strings and archive paths in `Debug`. Their
+explicit typed getters and diagnostic error values remain unchanged.
+
 A real-file cross-boundary regression also exports a canonical ZIP through
 the disposable session and securely reopens that same selected path with the
 existing strict Import verifier. It checks the decoded identity, complete
