@@ -35,6 +35,7 @@
 //! Session-scoped profile Export effects and retained, recoverable receipts.
 
 use std::collections::BTreeMap;
+use std::fmt;
 use std::path::{Path, PathBuf};
 
 use atrament_explicit_file_path_intent::{
@@ -79,7 +80,8 @@ use atrament_semantic_notebook::RevisionIdentity;
 /// successful effect, not a guarantee that an external file still exists.
 /// Overwrite and retry identity preserve the original normalized intent; they
 /// do not independently authorize new filesystem operations.
-#[derive(Clone, Debug, Eq, PartialEq)]
+/// Debug output deliberately omits all receipt identities and selected paths.
+#[derive(Clone, Eq, PartialEq)]
 pub struct ProfileExportReceipt {
     /// SHA-256 of the exact complete ZIP committed.
     archive_sha256: Sha256Digest,
@@ -97,6 +99,12 @@ pub struct ProfileExportReceipt {
     root_sha256: Sha256Digest,
     /// Host-classified source (not, by itself, evidence of selection).
     source: ExplicitFilePathSource,
+}
+
+impl fmt::Debug for ProfileExportReceipt {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ProfileExportReceipt").finish_non_exhaustive()
+    }
 }
 
 impl ProfileExportReceipt {
@@ -171,7 +179,7 @@ pub enum ProfileExportSessionError {
     Retry(ProfileExportRetryRecoveryDecision),
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 struct ProfileExportAttempt {
     effect: ProfileExportPriorEffect,
     receipt: Option<ProfileExportReceipt>,
@@ -187,10 +195,16 @@ struct ProfileExportAttempt {
 /// Unknown post-rename durability is retained as uncertain, not repaired by
 /// target equality. Only the original successful writer result creates a
 /// receipt, and replay requires an independent read-only exact-byte check.
-#[derive(Debug)]
+/// Debug output never reveals retained keys, paths, receipts or artifact data.
 pub struct ProfileExportSession {
     attempts: BTreeMap<String, ProfileExportAttempt>,
     bindings: ProfileExportRetryBindings,
+}
+
+impl fmt::Debug for ProfileExportSession {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ProfileExportSession").finish_non_exhaustive()
+    }
 }
 
 impl ProfileExportSession {

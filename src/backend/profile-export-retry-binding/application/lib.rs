@@ -36,6 +36,7 @@
 //! Pure, bounded retry identity binding; no Export effect or receipt authority.
 
 use std::collections::BTreeMap;
+use std::fmt;
 use std::path::PathBuf;
 
 // Complete ZIP fixture dependencies are only needed by integration tests.
@@ -81,7 +82,7 @@ pub enum ProfileRetryBindingError {
     WrongPathPurpose,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Eq, PartialEq)]
 struct NormalizedProfileExport {
     archive_sha256: Sha256Digest,
     byte_length: usize,
@@ -96,10 +97,17 @@ struct NormalizedProfileExport {
 ///
 /// Drop the instance on session destruction. No record is persisted and no
 /// state in this map can prove a file commit or authorize a retry response.
-#[derive(Debug)]
+/// Debug output excludes retry identities and all normalized Export inputs.
 pub struct ProfileExportRetryBindings {
     maximum_records: usize,
     records: BTreeMap<String, NormalizedProfileExport>,
+}
+
+impl fmt::Debug for ProfileExportRetryBindings {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ProfileExportRetryBindings")
+            .finish_non_exhaustive()
+    }
 }
 
 impl ProfileExportRetryBindings {

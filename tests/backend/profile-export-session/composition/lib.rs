@@ -138,6 +138,44 @@ mod linux {
     }
 
     #[test]
+    fn debug_of_export_session_and_receipts_redacts_private_identifiers() {
+        let root = fixture();
+        let selected_name = "private-selected-path-marker.atrament";
+        let key = "private-retry-key-marker";
+        let chosen = root.0.join(selected_name);
+        let request = intent(chosen.clone(), PreserveExisting);
+        let original = artifact("private-profile-marker");
+        let accepted = revision();
+        let mut session = ProfileExportSession::new(2);
+        let committed = session.export(
+            key, accepted, &request, &original, original.bytes().len(),
+        ).expect("commit test profile");
+        let Outcome::Committed(receipt) = committed.clone() else {
+            panic!("a first profile commit should produce a receipt");
+        };
+        assert_eq!(receipt.path(), chosen);
+        assert_eq!(receipt.retry_key(), key);
+        let recovered = session.export(
+            key, accepted, &request, &original, original.bytes().len(),
+        ).expect("recover original receipt");
+        assert_eq!(recovered, Outcome::Recovered(receipt.clone()));
+        let debug = format!(
+            "{session:?} {receipt:?} {committed:?} {recovered:?}",
+        );
+        assert!(debug.contains("ProfileExportSession"));
+        assert!(debug.contains("ProfileExportReceipt"));
+        assert!(debug.contains("Committed"));
+        assert!(debug.contains("Recovered"));
+        for private in [key, selected_name, "private-profile-marker"] {
+            assert!(!debug.contains(private));
+        }
+        assert_eq!(
+            fs::read(&chosen).expect("committed profile persists"),
+            original.bytes(),
+        );
+    }
+
+    #[test]
     fn failed_preserve_existing_never_later_recovers_from_matching_bytes() {
         let root = fixture();
         let chosen = root.0.join("existing.atrament");

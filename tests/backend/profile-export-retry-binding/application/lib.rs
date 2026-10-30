@@ -138,6 +138,30 @@ fn fresh_then_identical_key_never_implies_prior_export_effect() {
 }
 
 #[test]
+fn retry_journal_debug_hides_exact_selected_path_and_retry_key() {
+    let (revision, _) = revisions();
+    let key = "private-retry-key-marker";
+    let target = "private-selected-path-marker.atrament";
+    let file = export_intent(target);
+    let zip = artifact("private-profile-marker");
+    let mut journal = ProfileExportRetryBindings::new(2);
+    assert_eq!(
+        journal.bind(key, revision, &file, &zip),
+        Ok(Disposition::NewBinding),
+    );
+    let debug = format!("{journal:?}");
+    assert!(debug.contains("ProfileExportRetryBindings"));
+    for private in [key, target, "private-profile-marker"] {
+        assert!(!debug.contains(private));
+    }
+    assert_eq!(journal.len(), 1);
+    assert_eq!(
+        journal.bind(key, revision, &file, &zip),
+        Ok(Disposition::SameBinding),
+    );
+}
+
+#[test]
 fn switching_revision_on_same_key_is_conflict_and_does_not_insert() {
     let (first, second) = revisions();
     let file = export_intent("chosen.atrament");
