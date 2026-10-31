@@ -35,18 +35,18 @@
 
 use atrament_autonomous_progress_evidence::AutonomousProgressEvidenceClass;
 use atrament_autonomous_repeated_input_progress_projection::{
-    AutonomousIterationInputs, autonomous_repeated_input_progress_evidence,
+    autonomous_repeated_input_progress_evidence, AutonomousIterationInputs,
 };
 
 #[test]
 fn all_16_repeated_input_states_match_frozen_non_progress_rule() {
     let previous = AutonomousIterationInputs {
-        blocking_evidence: 1_u8,
-        intent: 1_u16,
-        revision: 1_u32,
+        blocking_evidence: 1u8,
+        intent: 1u16,
+        revision: 1u32,
     };
-    let mut combinations = 0_usize;
-    let mut repeated = 0_usize;
+    let mut combinations = 0usize;
+    let mut repeated = 0usize;
     for same_blocking_evidence in [false, true] {
         for same_intent in [false, true] {
             for same_revision in [false, true] {

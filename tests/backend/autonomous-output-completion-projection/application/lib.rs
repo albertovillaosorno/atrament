@@ -32,10 +32,8 @@
 
 //! Autonomous output completion projection application regression tests.
 
-use atrament_autonomous_completion_admission::
-    AutonomousRequestedOutputItemCompletion as OutputItemCompletion;
-use atrament_autonomous_output_completion_projection::
-    autonomous_requested_output_completion;
+use atrament_autonomous_completion_admission as admission;
+use atrament_autonomous_output_completion_projection as output_completion;
 use atrament_derived_output_result::{
     DerivedOutputOperation, DerivedOutputResultClass,
 };
@@ -59,6 +57,8 @@ const RESULTS: [DerivedOutputResultClass; 11] = [
     DerivedOutputResultClass::StaleOrUnavailableRevision,
 ];
 
+type OutputItemCompletion = admission::AutonomousRequestedOutputItemCompletion;
+
 fn applies(
     operation: DerivedOutputOperation,
     result: DerivedOutputResultClass,
@@ -79,7 +79,7 @@ fn applies(
         | DerivedOutputResultClass::ExternalTargetDriftConflict
         | DerivedOutputResultClass::IdempotentExportReplay => {
             operation == DerivedOutputOperation::Export
-        },
+        }
     }
 }
 
@@ -95,7 +95,7 @@ fn expected(
         | DerivedOutputResultClass::Exported
         | DerivedOutputResultClass::IdempotentExportReplay => {
             Some(OutputItemCompletion::Complete)
-        },
+        }
         DerivedOutputResultClass::CancelledBeforeResultOrEffect
         | DerivedOutputResultClass::CapabilityOrValidationRejection
         | DerivedOutputResultClass::ExportOverwriteConflict
@@ -105,19 +105,21 @@ fn expected(
         | DerivedOutputResultClass::InternalFailureKnownNoEffect
         | DerivedOutputResultClass::StaleOrUnavailableRevision => {
             Some(OutputItemCompletion::Incomplete)
-        },
+        }
     }
 }
 
 #[test]
 fn all_33_output_result_pairs_match_completion_projection() {
-    let mut combinations = 0_usize;
-    let mut complete = 0_usize;
+    let mut combinations = 0usize;
+    let mut complete = 0usize;
     for operation in OPERATIONS {
         for result in RESULTS {
             let expected = expected(operation, result);
             assert_eq!(
-                autonomous_requested_output_completion(operation, result),
+                output_completion::autonomous_requested_output_completion(
+                    operation, result
+                ),
                 expected
             );
             combinations += 1;

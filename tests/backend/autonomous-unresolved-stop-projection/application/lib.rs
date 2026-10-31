@@ -35,7 +35,7 @@
 
 use atrament_autonomous_goal_outcome::AutonomousGoalTerminalClass;
 use atrament_autonomous_unresolved_stop_projection::{
-    AutonomousUnresolvedResolution, autonomous_unresolved_terminal_outcome,
+    autonomous_unresolved_terminal_outcome, AutonomousUnresolvedResolution,
 };
 use atrament_semantic_notebook_port::SemanticCommandResultClass;
 
@@ -76,8 +76,8 @@ fn expected(
 
 #[test]
 fn all_30_result_resolution_states_require_explicit_unresolved_stop() {
-    let mut combinations = 0_usize;
-    let mut terminal_stops = 0_usize;
+    let mut combinations = 0usize;
+    let mut terminal_stops = 0usize;
     for result in RESULTS {
         for resolution in RESOLUTIONS {
             let expected = expected(result, resolution);

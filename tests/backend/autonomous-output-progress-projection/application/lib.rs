@@ -33,10 +33,8 @@
 //! Autonomous output progress projection application regression tests.
 
 use atrament_autonomous_output_intent::AutonomousOutputIntentSource;
-use atrament_autonomous_output_progress_projection::
-    autonomous_requested_output_progress_evidence;
-use atrament_autonomous_progress_evidence::
-    AutonomousProgressEvidenceClass as ProgressEvidence;
+use atrament_autonomous_output_progress_projection as projection;
+use atrament_autonomous_progress_evidence as progress_evidence;
 use atrament_derived_output_result::{
     DerivedOutputOperation, DerivedOutputResultClass,
 };
@@ -65,6 +63,8 @@ const SOURCES: [AutonomousOutputIntentSource; 3] = [
     AutonomousOutputIntentSource::UntrustedSemanticContent,
 ];
 
+type ProgressEvidence = progress_evidence::AutonomousProgressEvidenceClass;
+
 fn applies(
     operation: DerivedOutputOperation,
     result: DerivedOutputResultClass,
@@ -85,7 +85,7 @@ fn applies(
         | DerivedOutputResultClass::ExternalTargetDriftConflict
         | DerivedOutputResultClass::IdempotentExportReplay => {
             operation == DerivedOutputOperation::Export
-        },
+        }
     }
 }
 
@@ -103,10 +103,10 @@ fn expected(
         DerivedOutputResultClass::CompletedProjection
         | DerivedOutputResultClass::Exported => {
             Some(ProgressEvidence::ExplicitRequestedOutputCompleted)
-        },
+        }
         DerivedOutputResultClass::IdempotentExportReplay => {
             Some(ProgressEvidence::IdempotentReplayRecovery)
-        },
+        }
         DerivedOutputResultClass::CancelledBeforeResultOrEffect
         | DerivedOutputResultClass::CapabilityOrValidationRejection
         | DerivedOutputResultClass::ExportOverwriteConflict
@@ -120,15 +120,15 @@ fn expected(
 
 #[test]
 fn all_99_output_result_intent_combinations_match_progress_projection() {
-    let mut combinations = 0_usize;
-    let mut progress = 0_usize;
-    let mut recovery = 0_usize;
+    let mut combinations = 0usize;
+    let mut progress = 0usize;
+    let mut recovery = 0usize;
     for operation in OPERATIONS {
         for result in RESULTS {
             for source in SOURCES {
                 let expected = expected(operation, result, source);
                 assert_eq!(
-                    autonomous_requested_output_progress_evidence(
+                    projection::autonomous_requested_output_progress_evidence(
                         operation, result, source
                     ),
                     expected
@@ -139,9 +139,8 @@ fn all_99_output_result_intent_combinations_match_progress_projection() {
                 {
                     progress += 1;
                 }
-                if expected == Some(
-                    ProgressEvidence::IdempotentReplayRecovery,
-                ) {
+                if expected == Some(ProgressEvidence::IdempotentReplayRecovery)
+                {
                     recovery += 1;
                 }
             }

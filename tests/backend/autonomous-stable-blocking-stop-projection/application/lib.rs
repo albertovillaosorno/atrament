@@ -37,9 +37,9 @@
 use atrament_autonomous_goal_outcome::AutonomousGoalTerminalClass;
 use atrament_autonomous_progress_evidence::AutonomousProgressEvidenceClass;
 use atrament_autonomous_stable_blocking_stop_projection::{
-    AutonomousStableBlockingObservation,
     autonomous_stable_blocking_progress_evidence,
     autonomous_stable_blocking_terminal_outcome,
+    AutonomousStableBlockingObservation,
 };
 
 const EVIDENCE: [AutonomousProgressEvidenceClass; 9] = [
@@ -56,7 +56,7 @@ const EVIDENCE: [AutonomousProgressEvidenceClass; 9] = [
 
 #[test]
 fn only_repeated_stable_blocking_evidence_maps_to_terminal_stop() {
-    let mut stops = 0_usize;
+    let mut stops = 0usize;
     for evidence in EVIDENCE {
         let actual = autonomous_stable_blocking_terminal_outcome(evidence);
         let expected = if evidence
@@ -77,12 +77,12 @@ fn only_repeated_stable_blocking_evidence_maps_to_terminal_stop() {
 #[test]
 fn all_16_blocking_observation_states_match_stability_rule() {
     let previous = AutonomousStableBlockingObservation {
-        diagnostic: 1_u8,
-        intent: 1_u16,
-        revision: 1_u32,
+        diagnostic: 1u8,
+        intent: 1u16,
+        revision: 1u32,
     };
-    let mut combinations = 0_usize;
-    let mut repeated = 0_usize;
+    let mut combinations = 0usize;
+    let mut repeated = 0usize;
     for same_diagnostic in [false, true] {
         for same_intent in [false, true] {
             for same_revision in [false, true] {

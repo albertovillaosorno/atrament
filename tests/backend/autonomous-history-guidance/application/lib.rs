@@ -35,7 +35,7 @@
 //! Autonomous history guidance application regression tests.
 
 use atrament_autonomous_history_guidance::{
-    AutonomousHistoryGuidance, autonomous_history_guidance,
+    autonomous_history_guidance, AutonomousHistoryGuidance,
 };
 use atrament_semantic_history_result::SemanticHistoryResultClass;
 
@@ -48,22 +48,22 @@ const RESULTS: [SemanticHistoryResultClass; 6] = [
     SemanticHistoryResultClass::Traversed,
 ];
 
-fn expected(
+const fn expected(
     result: SemanticHistoryResultClass,
 ) -> Option<AutonomousHistoryGuidance> {
     match result {
         SemanticHistoryResultClass::HistoryBoundary => {
             Some(AutonomousHistoryGuidance::StopAtHistoryBoundary)
-        },
+        }
         SemanticHistoryResultClass::IdempotentReplay => {
             Some(AutonomousHistoryGuidance::RecoveredPriorCompletion)
-        },
+        }
         SemanticHistoryResultClass::StaleCurrentRevision => {
             Some(AutonomousHistoryGuidance::FreshInspection)
-        },
+        }
         SemanticHistoryResultClass::Traversed => {
             Some(AutonomousHistoryGuidance::ContinueFromReportedRevision)
-        },
+        }
         SemanticHistoryResultClass::CancelledBeforeCommit
         | SemanticHistoryResultClass::KnownNoCommitFailure => None,
     }
@@ -71,7 +71,7 @@ fn expected(
 
 #[test]
 fn all_six_history_results_match_frozen_partial_guidance() {
-    let mut classified = 0_usize;
+    let mut classified = 0usize;
     for result in RESULTS {
         let expected = expected(result);
         assert_eq!(autonomous_history_guidance(result), expected);

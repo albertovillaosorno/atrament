@@ -33,8 +33,7 @@
 
 //! Autonomous history progress projection application regression tests.
 
-use atrament_autonomous_history_progress_projection::
-    autonomous_history_result_progress_evidence;
+use atrament_autonomous_history_progress_projection as history_progress;
 use atrament_autonomous_progress_evidence::AutonomousProgressEvidenceClass;
 use atrament_semantic_history_result::SemanticHistoryResultClass;
 
@@ -47,16 +46,16 @@ const RESULTS: [SemanticHistoryResultClass; 6] = [
     SemanticHistoryResultClass::Traversed,
 ];
 
-fn expected(
+const fn expected(
     result: SemanticHistoryResultClass,
 ) -> Option<AutonomousProgressEvidenceClass> {
     match result {
         SemanticHistoryResultClass::IdempotentReplay => {
             Some(AutonomousProgressEvidenceClass::IdempotentReplayRecovery)
-        },
+        }
         SemanticHistoryResultClass::Traversed => {
             Some(AutonomousProgressEvidenceClass::AcceptedHistoryRevisionChange)
-        },
+        }
         SemanticHistoryResultClass::CancelledBeforeCommit
         | SemanticHistoryResultClass::HistoryBoundary
         | SemanticHistoryResultClass::KnownNoCommitFailure
@@ -66,11 +65,13 @@ fn expected(
 
 #[test]
 fn all_six_history_results_match_direct_progress_projection() {
-    let mut classified = 0_usize;
+    let mut classified = 0usize;
     for result in RESULTS {
         let expected = expected(result);
         assert_eq!(
-            autonomous_history_result_progress_evidence(result),
+            history_progress::autonomous_history_result_progress_evidence(
+                result
+            ),
             expected
         );
         if expected.is_some() {
