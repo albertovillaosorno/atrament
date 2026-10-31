@@ -33,9 +33,11 @@
 //! Explicit, read-only portable profile Import preflight regression evidence.
 
 use std::path::PathBuf;
+use std::ptr;
 
 use atrament_explicit_file_path_intent::{
-    ExplicitFilePathIntent, ExplicitFilePathSource, ExplicitFilePurpose,
+    ExplicitFilePathIntent, ExplicitFilePathIntentError,
+    ExplicitFilePathSource, ExplicitFilePurpose,
     ExplicitOverwriteIntent, classify_explicit_file_path_intent,
 };
 use atrament_handwriting_profile_container::{
@@ -54,14 +56,41 @@ use atrament_profile_import_preflight::{
     validate_profile_import_budget,
 };
 
-fn selected(purpose: ExplicitFilePurpose) -> ExplicitFilePathIntent {
+// Test-only guards retain explicit failure assertions at fixture boundaries.
+macro_rules! require_ok {
+    ($expression:expr) => {{
+        let result = $expression;
+        assert!(
+            result.is_ok(),
+            "fixture must be admitted: {:?}", result.as_ref().err(),
+        );
+        let Ok(value) = result else { return; };
+        value
+    }};
+}
+
+macro_rules! require_some {
+    ($expression:expr) => {{
+        let selected = $expression;
+        assert!(selected.is_some(), "fixture entry must be present");
+        let Some(value) = selected else { return; };
+        value
+    }};
+}
+
+const OBSERVED: &[&str] = &[
+    "sections/strokes.json", PROFILE_MANIFEST_PATH, "assets/source.webp",
+];
+
+fn selected(
+    purpose: ExplicitFilePurpose,
+) -> Result<ExplicitFilePathIntent, ExplicitFilePathIntentError> {
     classify_explicit_file_path_intent(
         purpose,
         ExplicitFilePathSource::CallerSelection,
         PathBuf::from("selected/profile.atrament"),
         ExplicitOverwriteIntent::PreserveExisting,
     )
-    .expect("independent trusted file selection")
 }
 
 const fn canonical_encoding() -> ProfileArchiveEncodingEvidence {
@@ -104,21 +133,16 @@ fn manifest() -> ProfileManifest {
     }
 }
 
-const OBSERVED: &[&str] = &[
-    "sections/strokes.json", PROFILE_MANIFEST_PATH, "assets/source.webp",
-];
-
 #[test]
 fn valid_explicit_import_seals_exact_entries_but_no_imported_profile() {
-    let path = selected(ExplicitFilePurpose::ImportProfile);
+    let path = require_ok!(selected(ExplicitFilePurpose::ImportProfile));
     let parsed = manifest();
-    let admitted = preflight_explicit_profile_import(
+    let admitted = require_ok!(preflight_explicit_profile_import(
         &path, &parsed, &["strokes"], OBSERVED, canonical_encoding(),
         budget(),
-    )
-    .expect("all structural preflight checks accept");
-    assert!(std::ptr::eq(admitted.path(), &path));
-    assert!(std::ptr::eq(admitted.inventory().manifest(), &parsed));
+    ));
+    assert!(ptr::eq(admitted.path(), &raw const path));
+    assert!(ptr::eq(admitted.inventory().manifest(), &raw const parsed));
     assert_eq!(admitted.inventory().observed_paths(), OBSERVED);
     assert_eq!(admitted.archive_encoding().evidence(), canonical_encoding());
     assert_eq!(admitted.budget(), budget());
@@ -130,12 +154,12 @@ fn valid_explicit_import_seals_exact_entries_but_no_imported_profile() {
         byte_length: 29,
         digest: Sha256Digest::from_bytes([17; 32]),
     };
-    let entry = admitted
-        .verify_entry("sections/strokes.json", evidence)
-        .expect("digest and length match")
-        .expect("entry exists");
-    assert_eq!(entry.entry().path, "sections/strokes.json");
-    assert_eq!(entry.evidence(), evidence);
+    let entry = require_ok!(admitted.verify_entry(
+        "sections/strokes.json", evidence,
+    ));
+    let verified_entry = require_some!(entry);
+    assert_eq!(verified_entry.entry().path, "sections/strokes.json");
+    assert_eq!(verified_entry.evidence(), evidence);
     assert_eq!(
         admitted.verify_entry("sections/%73trokes.json", evidence),
         Ok(None),
@@ -172,7 +196,7 @@ fn only_profile_import_purpose_can_reach_archive_preflight() {
         ExplicitFilePurpose::ExportNotebook,
         ExplicitFilePurpose::ExportProfile,
     ] {
-        let path = selected(purpose);
+        let path = require_ok!(selected(purpose));
         assert_eq!(
             preflight_explicit_profile_import(
                 &path, &parsed, &["strokes"], OBSERVED,
@@ -182,7 +206,7 @@ fn only_profile_import_purpose_can_reach_archive_preflight() {
             Err(ProfileImportPreflightError::WrongPathPurpose),
         );
     }
-    let path = selected(ExplicitFilePurpose::ImportProfile);
+    let path = require_ok!(selected(ExplicitFilePurpose::ImportProfile));
     assert!(matches!(
         preflight_explicit_profile_import(
             &path, &parsed, &["strokes"], OBSERVED,
@@ -197,7 +221,7 @@ fn only_profile_import_purpose_can_reach_archive_preflight() {
 
 #[test]
 fn all_canonical_zip_encoding_cases_preserve_observation_failures() {
-    let path = selected(ExplicitFilePurpose::ImportProfile);
+    let path = require_ok!(selected(ExplicitFilePurpose::ImportProfile));
     let parsed = manifest();
     let mut cases = 0usize;
     let mut admitted = 0usize;
@@ -238,11 +262,19 @@ fn all_canonical_zip_encoding_cases_preserve_observation_failures() {
                         },
                         (
                             Err(
-                                ProfileImportPreflightError::ArchiveEncoding(a)
+                                ProfileImportPreflightError::ArchiveEncoding(
+                                    actual_error,
+                                )
                             ),
-                            Err(b),
-                        ) => assert_eq!(a, b),
-                        other => panic!("encoding disagreement: {other:?}"),
+                            Err(expected_error),
+                        ) => assert_eq!(actual_error, expected_error),
+                        (actual, expected_evidence) => assert_eq!(
+                            actual.map(|_| ()),
+                            expected_evidence.map_err(
+                                ProfileImportPreflightError::ArchiveEncoding,
+                            ),
+                            "encoding admission must match exact evidence",
+                        ),
                     }
                     cases += 1;
                 }
@@ -255,7 +287,7 @@ fn all_canonical_zip_encoding_cases_preserve_observation_failures() {
 
 #[test]
 fn manifest_rejection_precedes_observed_inventory_mismatch() {
-    let path = selected(ExplicitFilePurpose::ImportProfile);
+    let path = require_ok!(selected(ExplicitFilePurpose::ImportProfile));
     let mut parsed = manifest();
     parsed.required_features = vec![String::from("unsupported")];
     let outcome = preflight_explicit_profile_import(
@@ -270,10 +302,10 @@ fn manifest_rejection_precedes_observed_inventory_mismatch() {
             },
         )),
     );
-    let parsed = manifest();
+    let valid_manifest = manifest();
     assert_eq!(
         preflight_explicit_profile_import(
-            &path, &parsed, &["strokes"], &["assets/source.webp"],
+            &path, &valid_manifest, &["strokes"], &["assets/source.webp"],
             canonical_encoding(),
             budget(),
         ),
@@ -283,7 +315,7 @@ fn manifest_rejection_precedes_observed_inventory_mismatch() {
     );
     assert_eq!(
         preflight_explicit_profile_import(
-            &path, &parsed, &["strokes"],
+            &path, &valid_manifest, &["strokes"],
             &[PROFILE_MANIFEST_PATH, "assets/source.webp"],
             canonical_encoding(),
             budget(),
@@ -337,7 +369,7 @@ fn resource_budget_admits_exact_boundaries_and_rejects_member_counts() {
             observed: 2,
         }),
     );
-    let path = selected(ExplicitFilePurpose::ImportProfile);
+    let path = require_ok!(selected(ExplicitFilePurpose::ImportProfile));
     assert_eq!(
         preflight_explicit_profile_import(
             &path, &parsed, &["strokes"], OBSERVED,
@@ -378,7 +410,7 @@ fn resource_budget_rejects_individual_and_aggregate_bytes() {
             limit: 37,
         }),
     );
-    let path = selected(ExplicitFilePurpose::ImportProfile);
+    let path = require_ok!(selected(ExplicitFilePurpose::ImportProfile));
     assert_eq!(
         preflight_explicit_profile_import(
             &path, &parsed, &["strokes"], OBSERVED,
@@ -396,8 +428,8 @@ fn resource_budget_rejects_individual_and_aggregate_bytes() {
 #[test]
 fn resource_budget_sum_overflow_fails_without_wraparound() {
     let mut parsed = manifest();
-    parsed.entries[0].byte_length = u64::MAX;
-    parsed.entries[1].byte_length = 1;
+    require_some!(parsed.entries.get_mut(0)).byte_length = u64::MAX;
+    require_some!(parsed.entries.get_mut(1)).byte_length = 1;
     let largest = ProfileImportBudget {
         maximum_declared_bytes: u64::MAX,
         maximum_entry_bytes: u64::MAX,
@@ -407,7 +439,7 @@ fn resource_budget_sum_overflow_fails_without_wraparound() {
         validate_profile_import_budget(&parsed, largest),
         Err(ProfileImportBudgetError::TotalOverflow),
     );
-    let path = selected(ExplicitFilePurpose::ImportProfile);
+    let path = require_ok!(selected(ExplicitFilePurpose::ImportProfile));
     assert_eq!(
         preflight_explicit_profile_import(
             &path, &parsed, &["strokes"], OBSERVED,
@@ -451,7 +483,7 @@ fn resource_budget_allows_zero_entries_but_zero_bytes_fail_closed() {
 
 #[test]
 fn resource_budget_checks_observed_archive_names_before_allocating_inventory() {
-    let path = selected(ExplicitFilePurpose::ImportProfile);
+    let path = require_ok!(selected(ExplicitFilePurpose::ImportProfile));
     let parsed = manifest();
     let exact = ProfileImportBudget {
         maximum_entries: 2,
@@ -487,19 +519,21 @@ fn sorted_import_preflight_preserves_early_gates_and_exact_admission() {
     let sorted = [
         "assets/source.webp", "manifest.json", "sections/strokes.json",
     ];
-    let selected_path = selected(ExplicitFilePurpose::ImportProfile);
-    let original = preflight_explicit_profile_import(
+    let selected_path = require_ok!(selected(
+        ExplicitFilePurpose::ImportProfile,
+    ));
+    let original = require_ok!(preflight_explicit_profile_import(
         &selected_path, &parsed, &["strokes"], &sorted,
         canonical_encoding(), budget(),
-    ).expect("general inventory accepts exact declaration set");
-    let optimized = preflight_explicit_profile_import_sorted(
+    ));
+    let optimized = require_ok!(preflight_explicit_profile_import_sorted(
         &selected_path, &parsed, &["strokes"], &sorted,
         canonical_encoding(), budget(),
-    ).expect("sorted inventory uses the same preflight gates");
+    ));
     assert_eq!(optimized, original);
     assert_eq!(optimized.inventory().observed_paths(), sorted);
-    assert!(std::ptr::eq(optimized.path(), &selected_path));
-    assert!(std::ptr::eq(optimized.inventory().manifest(), &parsed));
+    assert!(ptr::eq(optimized.path(), &raw const selected_path));
+    assert!(ptr::eq(optimized.inventory().manifest(), &raw const parsed));
     assert_eq!(preflight_explicit_profile_import_sorted(
         &selected_path, &parsed, &["strokes"], OBSERVED,
         canonical_encoding(), budget(),
@@ -513,7 +547,7 @@ fn sorted_import_preflight_preserves_early_gates_and_exact_admission() {
         &selected_path, &parsed, &["strokes"], OBSERVED,
         canonical_encoding(), budget(),
     ).is_ok(), "general API retains arbitrary-order support");
-    let wrong = selected(ExplicitFilePurpose::ExportProfile);
+    let wrong = require_ok!(selected(ExplicitFilePurpose::ExportProfile));
     assert_eq!(preflight_explicit_profile_import_sorted(
         &wrong, &parsed, &["strokes"], OBSERVED,
         canonical_encoding(), budget(),
@@ -557,7 +591,7 @@ fn sorted_and_general_import_preflight_share_all_early_gate_combinations() {
         ExplicitFilePurpose::ImportNotebook,
         ExplicitFilePurpose::ExportNotebook,
     ] {
-        let selection = selected(purpose);
+        let selection = require_ok!(selected(purpose));
         for entry_encoding in [
             ProfileArchiveEntryEncoding::Stored,
             ProfileArchiveEntryEncoding::Compressed,
@@ -618,33 +652,33 @@ fn sorted_and_general_import_preflight_share_all_early_gate_combinations() {
 
 #[test]
 fn sealed_import_preflight_debug_hides_private_nested_evidence() {
-    let path = classify_explicit_file_path_intent(
+    let path = require_ok!(classify_explicit_file_path_intent(
         ExplicitFilePurpose::ImportProfile,
         ExplicitFilePathSource::CallerSelection,
         PathBuf::from("source/private-source-8502.atrament"),
         ExplicitOverwriteIntent::PreserveExisting,
-    )
-    .expect("private selected profile path is valid");
+    ));
     let mut parsed = manifest();
     parsed.profile_identity = String::from("private-identity-6419");
     parsed.required_features = vec![String::from("private-required-2701")];
     parsed.optional_features = vec![String::from("private-optional-9163")];
-    parsed.entries[0].path = String::from("assets/private-asset-7225.webp");
-    parsed.entries[1].path = String::from("sections/private-stroke-4568.json");
+    require_some!(parsed.entries.get_mut(0)).path =
+        String::from("assets/private-asset-7225.webp");
+    require_some!(parsed.entries.get_mut(1)).path =
+        String::from("sections/private-stroke-4568.json");
     let observed = [
         "assets/private-asset-7225.webp",
         PROFILE_MANIFEST_PATH,
         "sections/private-stroke-4568.json",
     ];
-    let preflight = preflight_explicit_profile_import_sorted(
+    let preflight = require_ok!(preflight_explicit_profile_import_sorted(
         &path,
         &parsed,
         &["private-required-2701"],
         &observed,
         canonical_encoding(),
         budget(),
-    )
-    .expect("exact private profile metadata is admitted");
+    ));
     for printed in [
         format!("{preflight:?}"),
         format!("{preflight:#?}"),
