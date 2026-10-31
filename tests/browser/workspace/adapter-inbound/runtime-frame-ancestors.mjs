@@ -47,6 +47,7 @@ import net from "node:net";
 import path from "node:path";
 import { PassThrough } from "node:stream";
 import test from "node:test";
+import { runInNewContext } from "node:vm";
 
 const FIREFOX_AVAILABLE = process.platform === "linux"
     && spawnSync(
@@ -1459,13 +1460,54 @@ async function navigateFromDocument(client, context, url) {
     });
 }
 
+test("observedWithin releases timers after settlement", async () => {
+    const source = fs.readFileSync(new URL(import.meta.url), "utf8");
+    const start = source.lastIndexOf("async function observedWithin(");
+    const end = source.indexOf("async function initializeBidiSession(", start);
+    assert.ok(start >= 0 && end > start);
+    const timers = new Map();
+    let nextTimerId = 0;
+    const observed = runInNewContext(
+        `${source.slice(start, end)}; observedWithin`,
+        {
+            Error,
+            Promise,
+            setTimeout(callback, duration) {
+                assert.equal(duration, 5_000);
+                const id = ++nextTimerId;
+                timers.set(id, callback);
+                return id;
+            },
+            clearTimeout(id) { timers.delete(id); },
+        },
+    );
+    assert.equal(await observed(Promise.resolve("seen"), "early"), "seen");
+    assert.equal(timers.size, 0, "resolved observation must clear timer");
+
+    const failure = new Error("request failed early");
+    await assert.rejects(observed(Promise.reject(failure), "error"),
+        (error) => error === failure);
+    assert.equal(timers.size, 0, "rejected observation must clear timer");
+
+    const timedOut = observed(new Promise(() => {}), "late");
+    assert.equal(timers.size, 1);
+    [...timers.values()][0]();
+    await assert.rejects(timedOut, /late request was not observed/);
+    assert.equal(timers.size, 0, "expired timer must be cleared");
+});
+
 async function observedWithin(observation, label) {
-    return Promise.race([
-        observation,
-        new Promise((_resolve, reject) => setTimeout(() => {
+    let timer;
+    const deadline = new Promise((_resolve, reject) => {
+        timer = setTimeout(() => {
             reject(new Error(`${label} request was not observed`));
-        }, 5_000)),
-    ]);
+        }, 5_000);
+    });
+    try {
+        return await Promise.race([observation, deadline]);
+    } finally {
+        clearTimeout(timer);
+    }
 }
 
 async function initializeBidiSession(bidi) {
