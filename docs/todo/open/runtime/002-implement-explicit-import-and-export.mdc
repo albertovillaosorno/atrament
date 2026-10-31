@@ -54,6 +54,14 @@ A real process regression compares byte-exact canonical output for a verified
 130 KiB JSON section and verifies its selected source remains unchanged.
 This is bounded presentation, not typed handwriting profile acceptance.
 
+The inspect-only terminal presentation now renders Unicode bidirectional
+formatting controls as printable JSON Unicode escapes in manifest text, section
+names and section JSON, including after complete verification. This prevents
+verified but untrusted content from visually reordering terminal output; the
+stored ZIP, SHA checks, section contents and ordinary Unicode remain unchanged.
+The exact preallocated output length accounts for the additional escapes.
+A real-process regression exercises controls in all three display locations.
+
 A separate Linux `atrament profile verify PATH` CLI now runs the same
 fully bounded, secure selected-source and SHA/section-syntax gate as profile
 inspection, then emits only a fixed success confirmation. Unlike inspection,

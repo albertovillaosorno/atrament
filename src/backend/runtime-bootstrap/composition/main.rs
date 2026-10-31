@@ -38,6 +38,7 @@
 
 use std::env;
 use std::ffi::{OsStr, OsString};
+use std::fmt::Write as _;
 use std::io::{self, Write as _};
 use std::path::PathBuf;
 use std::str::from_utf8;
@@ -213,6 +214,42 @@ const fn profile_repack_limits() -> ProfileExportAssemblyLimits {
             maximum_entry_bytes: PROFILE_INSPECT_MAX_MEMBER_BYTES_U64,
             maximum_total_bytes: PROFILE_INSPECT_MAX_ARCHIVE_BYTES_U64,
         },
+    }
+}
+
+// Raw Unicode bidi controls can visually reorder CLI inspection labels and
+// JSON text even after ZIP, SHA and JSON syntax admission. They are valid
+// JSON string content but must be escaped only in terminal presentation.
+const fn is_unicode_bidi_control(character: char) -> bool {
+    matches!(
+        character,
+        '\u{061c}' | '\u{200e}' | '\u{200f}'
+            | '\u{202a}'..='\u{202e}'
+            | '\u{2066}'..='\u{2069}'
+    )
+}
+
+fn terminal_safe_text_len(value: &str) -> Option<usize> {
+    value.chars().try_fold(0usize, |total, character| {
+        total.checked_add(if is_unicode_bidi_control(character) {
+            // Every Unicode Bidi_Control scalar is in the BMP, so its JSON
+            // \uXXXX spelling is exactly six printable ASCII bytes.
+            6
+        } else {
+            character.len_utf8()
+        })
+    })
+}
+
+fn append_terminal_safe_text(output: &mut String, value: &str) {
+    for character in value.chars() {
+        if is_unicode_bidi_control(character) {
+            // Formatting to String is infallible. Capacity was reserved for
+            // the complete exact transformed length before any append.
+            let _formatted = write!(output, "\\u{:04x}", u32::from(character));
+        } else {
+            output.push(character);
+        }
     }
 }
 
@@ -457,20 +494,26 @@ pub(crate) fn inspect_profile(path: PathBuf) -> io::Result<String> {
             }
             sections.sort_unstable_by(|left, right| left.0.cmp(right.0));
 
-            // Exact planned output length includes section path labels and
-            // newlines. Fallible one-time allocation precedes all writes;
-            // every subsequent append fits the already reserved capacity.
+            // Exact planned output length includes escaped bidi controls in
+            // root JSON, section paths and section JSON. Fallible one-time
+            // allocation precedes all writes and never grows afterward.
             let length_error = || {
                 io::Error::other("profile inspection output length refused")
             };
+            let manifest_len = terminal_safe_text_len(manifest_text)
+                .ok_or_else(length_error)?;
             let mut output_len = MANIFEST_LABEL.len()
-                .checked_add(manifest_text.len())
+                .checked_add(manifest_len)
                 .and_then(|length| length.checked_add(1))
                 .ok_or_else(length_error)?;
             for (section_path, value) in &sections {
-                output_len = output_len.checked_add(section_path.len())
+                let path_len = terminal_safe_text_len(section_path)
+                    .ok_or_else(length_error)?;
+                let value_len = terminal_safe_text_len(value)
+                    .ok_or_else(length_error)?;
+                output_len = output_len.checked_add(path_len)
                     .and_then(|length| length.checked_add(SECTION_LABEL.len()))
-                    .and_then(|length| length.checked_add(value.len()))
+                    .and_then(|length| length.checked_add(value_len))
                     .and_then(|length| length.checked_add(1))
                     .ok_or_else(length_error)?;
             }
@@ -479,14 +522,18 @@ pub(crate) fn inspect_profile(path: PathBuf) -> io::Result<String> {
                 io::Error::other("profile inspection output allocation refused")
             })?;
             readable.push_str(MANIFEST_LABEL);
-            readable.push_str(manifest_text);
+            append_terminal_safe_text(&mut readable, manifest_text);
             readable.push('\n');
             for (section_path, value) in sections {
-                readable.push_str(section_path);
+                append_terminal_safe_text(&mut readable, section_path);
                 readable.push_str(SECTION_LABEL);
-                readable.push_str(value);
+                append_terminal_safe_text(&mut readable, value);
                 readable.push('\n');
             }
+            debug_assert_eq!(
+                readable.len(), output_len,
+                "planned inspection output must match complete emission",
+            );
             Ok(readable)
         },
     )

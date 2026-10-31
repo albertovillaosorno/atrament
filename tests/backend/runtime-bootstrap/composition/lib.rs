@@ -1505,6 +1505,79 @@ fn cli_inspection_preserves_exact_large_section_after_output_planning() {
 
 #[cfg(target_os = "linux")]
 #[test]
+fn cli_inspection_escapes_bidi_controls_in_verified_json_and_names() {
+    let section_path = format!("sections/rtl{}name.json", '\u{200f}');
+    let bidi_controls = [
+        '\u{061c}', '\u{200e}', '\u{200f}', '\u{202a}',
+        '\u{202b}', '\u{202c}', '\u{202d}', '\u{202e}',
+        '\u{2066}', '\u{2067}', '\u{2068}', '\u{2069}',
+    ];
+    let all_bidi = bidi_controls.into_iter().collect::<String>();
+    let section = format!(
+        r#"{{"normal":"café","spoof":"left{}right{}end","all":"{}"}}"#,
+        '\u{202e}', '\u{2069}', all_bidi,
+    );
+    let root = format!(
+        concat!(
+            r#"{{"container_version":"atrament.profile/1","#,
+            r#""profile_identity":"writer{}verified","#,
+            r#""required_features":[],"optional_features":[],"entries":["#,
+            r#"{{"path":"{}","media_type":"application/json","#,
+            r#""byte_length":{},"sha256":"{}"}}]}}"#,
+        ),
+        '\u{2066}',
+        section_path,
+        section.len(),
+        digest_hex(section.as_bytes()),
+    );
+    let archive = write_stored_profile_zip(
+        &[
+            ProfileStoredZipMember {
+                name: "manifest.json", bytes: root.as_bytes(),
+            },
+            ProfileStoredZipMember {
+                name: &section_path, bytes: section.as_bytes(),
+            },
+        ],
+        ProfileStoredZipWriteLimits {
+            maximum_archive_bytes: 4096,
+            maximum_entries: 2,
+            maximum_entry_bytes: 2048,
+            maximum_total_bytes: 3000,
+        },
+    ).expect("valid UTF-8 names and JSON may contain bidi controls");
+    let source = OwnedProfileFile::new(&archive);
+    bootstrap::verify_profile(source.0.clone())
+        .expect("bidi controls are valid verified JSON content");
+
+    let inspected = Command::new(env!("CARGO_BIN_EXE_atrament"))
+        .args(["profile", "inspect"])
+        .arg(&source.0)
+        .output()
+        .expect("inspect completely verified source");
+    assert!(inspected.status.success());
+    assert!(inspected.stderr.is_empty());
+    let display = String::from_utf8(inspected.stdout)
+        .expect("inspection output is UTF-8");
+    assert!(display.contains(r#""profile_identity":"writer\u2066verified""#));
+    assert!(display.contains(
+        r"sections/rtl\u200fname.json (syntax-checked; untyped):",
+    ));
+    assert!(display.contains(r#""spoof":"left\u202eright\u2069end""#));
+    assert!(display.contains("\"normal\":\"caf\u{e9}\""));
+    let complete_bidi_set = concat!(
+        r#""all":"\u061c\u200e\u200f\u202a\u202b\u202c"#,
+        r#"\u202d\u202e\u2066\u2067\u2068\u2069""#,
+    );
+    assert!(display.contains(complete_bidi_set));
+    for control in bidi_controls {
+        assert!(!display.contains(control), "unescaped bidi control");
+    }
+    assert_eq!(fs::read(&source.0).expect("original survives"), archive);
+}
+
+#[cfg(target_os = "linux")]
+#[test]
 fn cli_section_order_is_stable_across_manifest_declaration_orders() {
     let first = br#"{"first":true}"#;
     let last = br#"{"last":true}"#;
