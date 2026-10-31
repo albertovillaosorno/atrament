@@ -347,6 +347,8 @@ test("end-session warning survives drafts that settle afterward", async () => {
     );
     for (const [phase, draftStatus, expected] of [
         ["armed", 204, "Ending discards this notebook"],
+        ["armed", 503, "Ending discards this notebook"],
+        ["armed", 413, "Ending discards this notebook"],
         ["failed", 204, "End session failed · retry"],
         ["failed", 503, "End session failed · retry"],
     ]) {
@@ -380,6 +382,7 @@ test("end-session warning survives drafts that settle afterward", async () => {
                     draftMutationHeaders: () => ({}),
                     draftReadHeaders: () => ({}),
                     isDraftDiagnosticContentType: () => true,
+                    isResourceLimit: () => false,
                 };
                 function draftSyncIsCurrent(secret, generation) {
                     return sessionSecret === secret
@@ -411,9 +414,14 @@ test("end-session warning survives drafts that settle afterward", async () => {
                 const before = sessionStatus.textContent;
                 finishDraft(new Response(null, { status: writeStatus }));
                 await write;
+                const after = sessionStatus.textContent;
+                if (mode === "armed") {
+                    handlers.blur();
+                }
                 return {
                     before,
-                    after: sessionStatus.textContent,
+                    after,
+                    afterDisarm: sessionStatus.textContent,
                     button: endSession.textContent,
                 };
             })()
@@ -425,6 +433,14 @@ test("end-session warning survives drafts that settle afterward", async () => {
         assert.equal(result.before, expected, `${phase} initial warning`);
         assert.equal(result.after, expected,
             `${phase} warning after draft HTTP ${draftStatus}`);
+        if (phase === "armed") {
+            const disarmedStatus = draftStatus === 204
+                ? "Session ready" : draftStatus === 413
+                    ? "Invalid draft diagnostic"
+                    : "Draft sync rejected · retry edit";
+            assert.equal(result.afterDisarm, disarmedStatus,
+                `disarming must reveal draft HTTP ${draftStatus} state`);
+        }
     }
 });
 

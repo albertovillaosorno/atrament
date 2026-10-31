@@ -115,6 +115,17 @@ fixture holds a draft POST, returns `503` for End, then acknowledges the
 pending draft and verifies the failed-end message remains visible. This
 protects UI state reporting, not a claim that a failed End erased data.
 
+A second red-first regression found that a rejected draft POST could hide the
+explicit **End session** confirmation warning while it was armed. The browser
+now keeps the destruction warning visible through a late draft failure; when
+confirmation is dismissed, it reveals that failure and retains the edit retry.
+A later successful synchronization instead restores `Session ready` only after
+all draft writes settle.
+
+An extracted-adapter test and a real Firefox fixture both reproduce the prior
+incorrect warning and verify the corrected order. This is UI confirmation
+integrity, not backend erasure evidence.
+
 A real socket regression verifies that an unauthorized attempt cannot end the
 session and that an authorized request releases the exact endpoint. Firefox
 coverage verifies confirmation before any mutation, authenticated termination,

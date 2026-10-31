@@ -6554,6 +6554,139 @@ test(
 );
 
 test(
+    "Firefox keeps end confirmation visible after a late draft rejection",
+    { skip: !FIREFOX_AVAILABLE, timeout: FIREFOX_CASE_TIMEOUT_MS },
+    async () => {
+        fs.mkdirSync(".temp", { recursive: true });
+        const profile = fs.mkdtempSync(".temp/session-end-armed-race-");
+        const apiRequests = [];
+        let markDraftStarted;
+        const draftStarted = new Promise((resolve) => {
+            markDraftStarted = resolve;
+        });
+        let rejectDraft;
+        const server = createSessionFixtureServer(
+            apiRequests,
+            (request, response, field) => {
+                assert.equal(field, "task");
+                request.resume();
+                request.once("end", () => {
+                    rejectDraft = () => {
+                        response.writeHead(503, {
+                            "Cache-Control": "no-store",
+                        });
+                        response.end();
+                    };
+                    markDraftStarted();
+                });
+            },
+        );
+        const children = [];
+        let bidi;
+        try {
+            server.listen(0, "127.0.0.1");
+            await once(server, "listening");
+            const address = server.address();
+            assert.notEqual(address, null);
+            assert.notEqual(typeof address, "string");
+            bidi = await startBidiFirefox(profile, children);
+            const tab = await bidi.command("browsingContext.create", {
+                type: "tab",
+            });
+            await bidi.command("browsingContext.navigate", {
+                context: tab.context,
+                url: `http://127.0.0.1:${address.port}/` +
+                    `#session=${REFRESH_SECRET}`,
+                wait: "complete",
+            });
+            await waitForSessionStatus(bidi, tab.context, "Session ready");
+            const edit = await bidi.command("script.evaluate", {
+                awaitPromise: false,
+                expression: `(() => {
+                    const nativeFetch = window.fetch.bind(window);
+                    globalThis.__draftRejectSeen = false;
+                    window.fetch = (url, options) => nativeFetch(url, options)
+                        .then((response) => {
+                            if (url === "./api/session/task"
+                                && options?.method === "POST") {
+                                globalThis.__draftRejectSeen = true;
+                            }
+                            return response;
+                        });
+                    const task = document.getElementById("task-input");
+                    task.value = "pending private draft";
+                    task.dispatchEvent(new Event("input"));
+                })()`,
+                resultOwnership: "none",
+                target: { context: tab.context },
+            });
+            assert.equal(edit.type, "success");
+            await observedWithin(draftStarted, "pending private draft request");
+            const arm = await bidi.command("script.evaluate", {
+                awaitPromise: false,
+                expression: 'document.getElementById("end-session").click()',
+                resultOwnership: "none",
+                target: { context: tab.context },
+            });
+            assert.equal(arm.type, "success");
+            rejectDraft();
+            const settled = await bidi.command("script.evaluate", {
+                awaitPromise: true,
+                expression: `new Promise((resolve) => {
+                    const deadline = Date.now() + 2000;
+                    function inspect() {
+                        if (globalThis.__draftRejectSeen) {
+                            setTimeout(() => resolve(true), 100);
+                        } else if (Date.now() >= deadline) {
+                            resolve(false);
+                        } else {
+                            setTimeout(inspect, 20);
+                        }
+                    }
+                    inspect();
+                })`,
+                resultOwnership: "none",
+                target: { context: tab.context },
+            });
+            assert.deepEqual(settled.result, {
+                type: "boolean", value: true,
+            });
+            const armed = await evaluateSessionDocument(bidi, tab.context);
+            assert.equal(armed.status, "Ending discards this notebook");
+            assert.equal(armed.task.value, "pending private draft");
+            const cancel = await bidi.command("script.evaluate", {
+                awaitPromise: false,
+                expression: `(() => {
+                    const end = document.getElementById("end-session");
+                    end.dispatchEvent(new KeyboardEvent("keydown", {
+                        key: "Escape", bubbles: true,
+                    }));
+                })()`,
+                resultOwnership: "none",
+                target: { context: tab.context },
+            });
+            assert.equal(cancel.type, "success");
+            const disarmed = await evaluateSessionDocument(bidi, tab.context);
+            assert.equal(disarmed.status, "Draft sync rejected · retry edit");
+            assert.deepEqual(apiRequests, [
+                "POST /api/handshake",
+                "GET /api/session/task",
+                "GET /api/session/source",
+                "GET /api/session/candidate",
+                "POST /api/session/task",
+            ]);
+        } finally {
+            bidi?.close();
+            await closeFixtureServer(server);
+            for (const child of children.reverse()) {
+                await stopChild(child);
+            }
+            fs.rmSync(profile, { recursive: true, force: true });
+        }
+    },
+);
+
+test(
     "Firefox preserves failed end warning after a pending draft completes",
     { skip: !FIREFOX_AVAILABLE, timeout: FIREFOX_CASE_TIMEOUT_MS },
     async () => {

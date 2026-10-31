@@ -538,8 +538,12 @@ function recordDraftSyncFailure(field, message, retryable = false) {
         retryableDraftFields.delete(field);
         hideResolvedDraftRetry();
     }
-    // A failed explicit erasure must not be hidden by a later draft result.
-    if (!endSessionFailurePending) {
+    // A late draft failure must not replace the destruction warning while
+    // End session is armed. Disarming still reveals the actual edit failure.
+    if (endSessionConfirmed && !endSessionFailurePending) {
+        endSessionPreviousStatus = message;
+    }
+    else if (!endSessionFailurePending) {
         setTextIfChanged(sessionStatus, message);
     }
 }
@@ -770,10 +774,14 @@ async function syncDraftField(field, input, secret) {
         else if (current
             && syncingDraftFields.size === 0
             && failedDraftFields.size === 0
-            && !endSessionConfirmed
             && !endSessionFailurePending) {
             hideSessionRetry();
-            setTextIfChanged(sessionStatus, "Session ready");
+            if (endSessionConfirmed) {
+                endSessionPreviousStatus = "Session ready";
+            }
+            else {
+                setTextIfChanged(sessionStatus, "Session ready");
+            }
         }
     }
 }
