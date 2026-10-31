@@ -36,6 +36,11 @@
 
 //! Handwriting glyph coverage test coverage.
 
+#![expect(
+    clippy::expect_used,
+    reason = "bounded exact seven-axis fixture and inventory index checks"
+)]
+
 use atrament_english_spanish_grapheme_inventory::REQUIRED_TEXT_GRAPHEMES;
 use atrament_handwriting_glyph_coverage::{
     HandwritingCoverage, HandwritingCoverageProfile, HandwritingCoverageQuery,
@@ -43,14 +48,14 @@ use atrament_handwriting_glyph_coverage::{
     missing_handwriting_coverage,
 };
 
-fn profile(
-) -> HandwritingCoverageProfile<&'static str, &'static str, &'static str> {
+fn profile()
+-> HandwritingCoverageProfile<&'static str, &'static str, &'static str> {
     HandwritingCoverageProfile {
         compositional_rules: vec![
             "latin-base-plus-acute",
             "latin-base-plus-tilde",
         ],
-        exact_graphemes: vec!["a", "á", "¿", "—"],
+        exact_graphemes: vec!["a", "\u{e1}", "\u{bf}", "\u{2014}"],
         profile_identity: "writer-profile-7",
     }
 }
@@ -59,7 +64,10 @@ fn profile(
 fn profile_identity_and_declarations_remain_explicit() {
     let profile = profile();
     assert_eq!(profile.profile_identity, "writer-profile-7");
-    assert_eq!(profile.exact_graphemes, ["a", "á", "¿", "—"]);
+    assert_eq!(
+        profile.exact_graphemes,
+        ["a", "\u{e1}", "\u{bf}", "\u{2014}"]
+    );
     assert_eq!(profile.compositional_rules.len(), 2);
 }
 
@@ -69,7 +77,7 @@ fn exact_grapheme_declaration_takes_precedence_over_rule_evidence() {
     assert_eq!(
         classify_handwriting_coverage(
             &profile,
-            &"á",
+            &"\u{e1}",
             Some(&"latin-base-plus-acute"),
         ),
         HandwritingCoverage::Exact,
@@ -82,7 +90,7 @@ fn exact_grapheme_precedes_undeclared_rule_evidence() {
     assert_eq!(
         classify_handwriting_coverage(
             &profile,
-            &"á",
+            &"\u{e1}",
             Some(&"generic-font-fallback"),
         ),
         HandwritingCoverage::Exact,
@@ -108,26 +116,25 @@ fn declared_compositional_rule_can_admit_non_exact_grapheme() {
 fn absent_or_undeclared_rule_evidence_leaves_coverage_missing() {
     let profile = profile();
     assert_eq!(
-        classify_handwriting_coverage(&profile, &"ø", None),
+        classify_handwriting_coverage(&profile, &"\u{f8}", None),
         HandwritingCoverage::Missing,
     );
     assert_eq!(
         classify_handwriting_coverage(
             &profile,
-            &"ø",
+            &"\u{f8}",
             Some(&"generic-font-fallback"),
         ),
         HandwritingCoverage::Missing,
     );
 }
 
-
 #[test]
 fn missing_report_preserves_query_order_and_duplicate_occurrences() {
     let profile = profile();
-    let first = "ø";
+    let first = "\u{f8}";
     let covered = "a";
-    let second = "ø";
+    let second = "\u{f8}";
     let queries = [
         HandwritingCoverageQuery {
             grapheme: &first,
@@ -190,7 +197,7 @@ fn compact_classification_states_match_exact_rule_missing_oracle() {
     let grapheme = "target";
     let declared_rule = "declared-rule";
     let other_rule = "other-rule";
-    let mut cases = 0_u8;
+    let mut cases = 0u8;
     let mut outcomes = [false; 3];
     for exact_declared in [false, true] {
         for rule_declared in [false, true] {
@@ -204,7 +211,7 @@ fn compact_classification_states_match_exact_rule_missing_oracle() {
                         .then_some(grapheme)
                         .into_iter()
                         .collect(),
-                    profile_identity: 7_u8,
+                    profile_identity: 7u8,
                 };
                 let expected = if exact_declared {
                     outcomes[0] = true;
@@ -212,7 +219,10 @@ fn compact_classification_states_match_exact_rule_missing_oracle() {
                 } else if rule_declared && matched_rule == Some(declared_rule) {
                     outcomes[1] = true;
                     HandwritingCoverage::Compositional {
-                        rule: &profile.compositional_rules[0],
+                        rule: profile
+                            .compositional_rules
+                            .first()
+                            .expect("declared rule present"),
                     }
                 } else {
                     outcomes[2] = true;
@@ -225,10 +235,7 @@ fn compact_classification_states_match_exact_rule_missing_oracle() {
                         matched_rule.as_ref(),
                     ),
                     expected,
-                    "exact {}, rule {}, matched {:?}",
-                    exact_declared,
-                    rule_declared,
-                    matched_rule,
+                    "x={exact_declared} r={rule_declared} m={matched_rule:?}",
                 );
                 cases = cases.saturating_add(1);
             }
@@ -242,16 +249,16 @@ fn compact_classification_states_match_exact_rule_missing_oracle() {
 fn all_64_six_query_missing_masks_preserve_exact_occurrences_and_order() {
     let profile = HandwritingCoverageProfile {
         compositional_rules: Vec::<u8>::new(),
-        exact_graphemes: vec![1_u8],
-        profile_identity: 7_u8,
+        exact_graphemes: vec![1u8],
+        profile_identity: 7u8,
     };
-    let covered = 1_u8;
-    let missing = 2_u8;
-    let mut cases = 0_u8;
-    for mask in 0_u8..64 {
-        let values = (0..6)
+    let covered = 1u8;
+    let missing = 2u8;
+    let mut cases = 0u8;
+    for mask in 0u8..64 {
+        let values = (0i32..6i32)
             .map(|index| {
-                if mask & (1_u8 << index) == 0 {
+                if mask & (1u8 << index) == 0 {
                     &covered
                 } else {
                     &missing
@@ -301,9 +308,12 @@ fn required_bilingual_inventory_is_never_omitted_from_missing_report() {
     };
     let missing = missing_handwriting_coverage(&empty_profile, &queries);
     assert_eq!(missing.len(), REQUIRED_TEXT_GRAPHEMES.len());
-    for (index, missing) in missing.iter().enumerate() {
-        assert_eq!(missing.query_index, index);
-        assert_eq!(*missing.grapheme, required[index]);
+    for (index, item) in missing.iter().enumerate() {
+        assert_eq!(item.query_index, index);
+        assert_eq!(
+            *item.grapheme,
+            *required.get(index).expect("required inventory index"),
+        );
     }
 
     let complete_profile = HandwritingCoverageProfile {
@@ -311,9 +321,7 @@ fn required_bilingual_inventory_is_never_omitted_from_missing_report() {
         exact_graphemes: required.clone(),
         profile_identity: "complete-bilingual-profile",
     };
-    let complete_missing = missing_handwriting_coverage(
-        &complete_profile,
-        &queries,
-    );
+    let complete_missing =
+        missing_handwriting_coverage(&complete_profile, &queries);
     assert!(complete_missing.is_empty());
 }

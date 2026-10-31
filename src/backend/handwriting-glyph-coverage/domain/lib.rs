@@ -36,6 +36,9 @@
 
 //! Explicit handwriting-profile grapheme coverage before rendering.
 
+#[cfg(test)]
+use atrament_english_spanish_grapheme_inventory as _;
+
 /// Handwriting coverage declarations owned by one profile identity.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct HandwritingCoverageProfile<ProfileIdentity, Grapheme, Rule> {
@@ -85,9 +88,16 @@ pub struct MissingHandwritingCoverage<'query, Grapheme> {
 /// This domain verifies only that the supplied rule is declared by the profile;
 /// it does not decide whether the rule correctly applies to the grapheme.
 #[must_use]
-pub fn classify_handwriting_coverage<'profile, ProfileIdentity, Grapheme, Rule>(
+pub fn classify_handwriting_coverage<
+    'profile,
+    ProfileIdentity,
+    Grapheme,
+    Rule,
+>(
     profile: &'profile HandwritingCoverageProfile<
-        ProfileIdentity, Grapheme, Rule,
+        ProfileIdentity,
+        Grapheme,
+        Rule,
     >,
     grapheme: &Grapheme,
     matched_compositional_rule: Option<&Rule>,
@@ -121,9 +131,7 @@ where
 /// normalization, deduplication, semantic-location mapping, or fallback choice.
 #[must_use]
 pub fn missing_handwriting_coverage<'query, ProfileIdentity, Grapheme, Rule>(
-    profile: &HandwritingCoverageProfile<
-        ProfileIdentity, Grapheme, Rule,
-    >,
+    profile: &HandwritingCoverageProfile<ProfileIdentity, Grapheme, Rule>,
     queries: &[HandwritingCoverageQuery<'query, Grapheme, Rule>],
 ) -> Vec<MissingHandwritingCoverage<'query, Grapheme>>
 where
