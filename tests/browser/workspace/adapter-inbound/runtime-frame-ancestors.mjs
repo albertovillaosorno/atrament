@@ -5085,6 +5085,50 @@ test(
                 "/csp-script", "/csp-image", "/csp-style",
             ], "protected document must not emit cross-origin asset requests");
 
+            // An injected inline script or <base> must not acquire
+            // execution authority from the no-meta document.
+            const hostileBase = JSON.stringify(
+                `${hostileOrigin}/injected-base/`,
+            );
+            const probeDomPolicy = `(() => {
+                const inline = document.createElement("script");
+                inline.textContent =
+                    "window.atramentInlineCspProbe = true;";
+                document.body.append(inline);
+                const base = document.createElement("base");
+                base.href = ${hostileBase};
+                document.head.append(base);
+                return JSON.stringify({
+                    baseChanged: document.baseURI === ${hostileBase},
+                    inlineExecuted:
+                        window.atramentInlineCspProbe === true,
+                });
+            })()`;
+            const controlDomPolicy = await bidi.command(
+                "script.evaluate", {
+                    awaitPromise: false,
+                    expression: probeDomPolicy,
+                    resultOwnership: "none",
+                    target: { context: networkControl.context },
+                },
+            );
+            assert.equal(controlDomPolicy.type, "success");
+            assert.deepEqual(JSON.parse(controlDomPolicy.result.value), {
+                baseChanged: true, inlineExecuted: true,
+            }, "permissive control permits DOM script and base injection");
+            const blockedDomPolicy = await bidi.command(
+                "script.evaluate", {
+                    awaitPromise: false,
+                    expression: probeDomPolicy,
+                    resultOwnership: "none",
+                    target: { context: headerOnly.context },
+                },
+            );
+            assert.equal(blockedDomPolicy.type, "success");
+            assert.deepEqual(JSON.parse(blockedDomPolicy.result.value), {
+                baseChanged: false, inlineExecuted: false,
+            }, "HTTP CSP alone must reject inline script and foreign base");
+
             const direct = await bidi.command("browsingContext.create", {
                 type: "tab",
             });
