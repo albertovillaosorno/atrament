@@ -424,6 +424,14 @@ response showed those unnegotiated flags were previously ignored; all three
 variants now close the peer and reject the pending command. This is a
 WebDriver fixture invariant rather than a browser-runtime protocol change.
 
+The same automation handshake now rejects extension and subprotocol offers
+that its client never requested. Red-first fixtures also proved that the BiDi
+frame parser accepted short JSON success messages encoded with extended 16-bit
+or 64-bit length fields. It now requires the shortest permitted RFC 6455
+length encoding before accepting payload bytes; valid extended frames still
+assemble normally. These guards protect test evidence from malformed peers,
+not production session transport or launcher credential handling.
+
 A full-browser stress run exposed that a 2-second forced-kill reap deadline
 was too short under workstation memory pressure. The bounded SIGKILL window
 is now 10 seconds, while a separate delayed-exit fixture proves successful

@@ -672,6 +672,11 @@ function validateWebSocketUpgrade(head, key) {
         .update(`${key}258EAFA5-E914-47DA-95CA-C5AB0DC85B11`)
         .digest("base64");
     assert.equal(headers.get("sec-websocket-accept"), expected);
+    // No extension or subprotocol was offered in the client request.
+    assert.ok(!headers.has("sec-websocket-extensions"),
+        "unrequested WebSocket extension");
+    assert.ok(!headers.has("sec-websocket-protocol"),
+        "unrequested WebSocket subprotocol");
 }
 
 class BidiClient {
@@ -816,12 +821,20 @@ class BidiClient {
                     return;
                 }
                 length = this.buffer.readUInt16BE(2);
+                if (length < 126) {
+                    this.close(new Error("nonminimal WebDriver BiDi length"));
+                    return;
+                }
                 offset = 4;
             } else if (length === 127) {
                 if (this.buffer.length < 10) {
                     return;
                 }
                 const declared = this.buffer.readBigUInt64BE(2);
+                if (declared < 65_536n) {
+                    this.close(new Error("nonminimal WebDriver BiDi length"));
+                    return;
+                }
                 if (declared > BigInt(MAX_BIDI_FRAME_BYTES)) {
                     this.close(new Error("WebDriver BiDi frame too large"));
                     return;
@@ -988,6 +1001,24 @@ test("WebSocket upgrade rejects false status and forged accept headers",
     },
 );
 
+test("WebSocket upgrade refuses unsolicited extension and subprotocol", () => {
+    const key = "dGhlIHNhbXBsZSBub25jZQ==";
+    const accepted = [
+        "HTTP/1.1 101 Switching Protocols",
+        "Upgrade: websocket",
+        "Connection: Upgrade",
+        "Sec-WebSocket-Accept: s3pPLMBiTxaQ9kYGzzhZRbK+xOo=",
+    ].join("\r\n");
+    for (const header of [
+        "Sec-WebSocket-Extensions: permessage-deflate",
+        "Sec-WebSocket-Protocol: webdriver-bidi",
+    ]) {
+        assert.throws(() => validateWebSocketUpgrade(
+            `${accepted}\r\n${header}`, key,
+        ), /unrequested WebSocket/);
+    }
+});
+
 test(
     "WebDriver client rejects invalid upgrade status and closes its socket",
     { timeout: 5_000 },
@@ -1089,6 +1120,36 @@ test("WebDriver BiDi refuses unnegotiated reserved frame bits", async () => {
         client.buffer = frame;
         client.drain();
         await assert.rejects(pending, /reserved WebDriver BiDi frame bits/);
+        assert.equal(client.closed, true);
+        assert.equal(client.pending.size, 0);
+        assert.equal(destroyed, 1);
+    }
+});
+
+test("WebDriver BiDi refuses nonminimal length encodings", async () => {
+    const message = Buffer.from(JSON.stringify({
+        id: 1, type: "success", result: { accepted: true },
+    }));
+    assert.ok(message.length < 126);
+    for (const wide of [false, true]) {
+        const length = wide ? 127 : 126;
+        const prefix = Buffer.alloc(wide ? 10 : 4);
+        prefix[0] = 0x81;
+        prefix[1] = length;
+        if (wide) {
+            prefix.writeBigUInt64BE(BigInt(message.length), 2);
+        } else {
+            prefix.writeUInt16BE(message.length, 2);
+        }
+        const client = new BidiClient("ws://127.0.0.1:1234/session");
+        let destroyed = 0;
+        client.socket = {
+            write: () => {}, destroy: () => { destroyed += 1; },
+        };
+        const pending = client.command("script.evaluate", {}, 30_000);
+        client.buffer = Buffer.concat([prefix, message]);
+        client.drain();
+        await assert.rejects(pending, /nonminimal WebDriver BiDi length/);
         assert.equal(client.closed, true);
         assert.equal(client.pending.size, 0);
         assert.equal(destroyed, 1);
