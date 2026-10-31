@@ -84,3 +84,9 @@ fail-closed reference tests already rejected arrays; red-first regressions
 confirm the former implementation incorrectly accepted augmented JavaScript
 arrays as compatible handshakes or known draft resource-limit errors. These
 shape guards do not change how valid JSON object payloads are interpreted.
+
+The browser diagnostic-set adapter also rejects holes and inherited indexed
+diagnostic items. A red-first regression showed that `Array.every` skipped a
+sparse slot and accepted metadata without the required item record. The parser
+now checks own occupied slots, including arrays constructed in-process; this
+does not imply such sparse shapes can arrive through JSON transport.

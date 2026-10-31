@@ -59,6 +59,15 @@ function isDiagnosticItem(value: unknown): value is DiagnosticItem {
         && value.code !== "";
 }
 
+function hasValidDiagnosticItems(items: unknown[]): items is DiagnosticItem[] {
+    for (let index = 0; index < items.length; index += 1) {
+        if (!Object.hasOwn(items, index) || !isDiagnosticItem(items[index])) {
+            return false;
+        }
+    }
+    return true;
+}
+
 export function parseDiagnosticSet(
     value: unknown,
 ): DiagnosticSetMetadata | null {
@@ -69,7 +78,7 @@ export function parseDiagnosticSet(
         value.version !== DIAGNOSTIC_VERSION
         || !isCompleteness(value.completeness)
         || !Array.isArray(value.items)
-        || !value.items.every(isDiagnosticItem)
+        || !hasValidDiagnosticItems(value.items)
     ) {
         return null;
     }

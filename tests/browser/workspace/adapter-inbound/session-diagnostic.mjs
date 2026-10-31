@@ -114,6 +114,25 @@ test("diagnostic parser rejects arrays posing as records", () => {
     }
 });
 
+test("diagnostic parser rejects sparse and inherited diagnostic slots", () => {
+    const validItem = { code: "atrament.example.condition" };
+    const sparse = Array(1);
+    const trailingHole = [validItem, ,];
+    const inherited = Array(1);
+    const prototype = Object.create(Array.prototype);
+    prototype[0] = validItem;
+    Object.setPrototypeOf(inherited, prototype);
+    for (const items of [sparse, trailingHole, inherited]) {
+        const value = {
+            version: DIAGNOSTIC_VERSION,
+            completeness: "complete",
+            items,
+        };
+        assert.equal(referenceDiagnosticSet(value), null);
+        assert.equal(parseDiagnosticSet(value), null);
+    }
+});
+
 function referenceDiagnosticSet(value) {
     if (typeof value !== "object" || value === null || Array.isArray(value)) {
         return null;
@@ -125,7 +144,10 @@ function referenceDiagnosticSet(value) {
     ) {
         return null;
     }
-    for (const item of value.items) {
+    for (const [index, item] of value.items.entries()) {
+        if (!Object.hasOwn(value.items, index)) {
+            return null;
+        }
         if (
             typeof item !== "object"
             || item === null

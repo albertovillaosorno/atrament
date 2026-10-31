@@ -44,6 +44,14 @@ function isDiagnosticItem(value) {
         && typeof value.code === "string"
         && value.code !== "";
 }
+function hasValidDiagnosticItems(items) {
+    for (let index = 0; index < items.length; index += 1) {
+        if (!Object.hasOwn(items, index) || !isDiagnosticItem(items[index])) {
+            return false;
+        }
+    }
+    return true;
+}
 export function parseDiagnosticSet(value) {
     if (!isRecord(value)) {
         return null;
@@ -51,7 +59,7 @@ export function parseDiagnosticSet(value) {
     if (value.version !== DIAGNOSTIC_VERSION
         || !isCompleteness(value.completeness)
         || !Array.isArray(value.items)
-        || !value.items.every(isDiagnosticItem)) {
+        || !hasValidDiagnosticItems(value.items)) {
         return null;
     }
     return {
