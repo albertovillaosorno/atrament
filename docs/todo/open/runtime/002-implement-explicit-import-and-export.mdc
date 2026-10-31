@@ -73,8 +73,9 @@ paths, root-only profiles, private output permissions, and byte-for-byte
 canonical repack idempotence. Additional subprocess fixtures exercise
 explicit replacement of a prior target, self-target repack, malformed-source
 replacement refusal with exact target preservation, symlink-victim refusal,
-and extra argument refusal before any source opening. They establish local
-CLI intent only, not session Export authorization.
+non-UTF8 selected target creation and replacement in explicit mode, and extra
+argument refusal before any source opening. They establish local CLI intent
+only, not session Export authorization.
 
 Current export design evidence freezes accepted-revision binding, caller-owned
 or explicit host-policy output intent, explicit path and overwrite behavior,

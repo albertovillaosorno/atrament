@@ -637,6 +637,56 @@ fn cli_repack_preserves_exact_non_utf8_destination_selection() {
 
 #[cfg(target_os = "linux")]
 #[test]
+fn cli_repack_replace_preserves_raw_non_utf8_target_in_both_states() {
+    use std::os::unix::ffi::{OsStrExt as _, OsStringExt as _};
+
+    let section = br#"{"verified":"raw-output-selection-9631"}"#;
+    let source = OwnedProfileFile::new(&profile_zip(
+        section, b"raw-destination-asset-3015", section,
+    ));
+    let mut name = source.0.file_name()
+        .expect("test-owned source name").as_bytes().to_vec();
+    name.extend_from_slice(b"-replace-");
+    name.push(0xff);
+    name.extend_from_slice(b".atrament");
+    let destination = OwnedProfileDestination(
+        source.0.with_file_name(OsString::from_vec(name)),
+    );
+    assert!(!destination.0.exists());
+    let mut first = None;
+    for replace_existing in [false, true] {
+        if replace_existing {
+            fs::write(&destination.0, b"old target bytes must be replaced")
+                .expect("explicit replacement target exists");
+        }
+        let output = Command::new(env!("CARGO_BIN_EXE_atrament"))
+            .args(["profile", "repack", "--replace"])
+            .arg(&source.0)
+            .arg(&destination.0)
+            .output()
+            .expect("selected non-UTF8 destination is passed as OS argv");
+        assert!(output.status.success());
+        assert_eq!(
+            output.stdout,
+            b"profile repacked (verified; no session import)\n",
+        );
+        assert!(output.stderr.is_empty());
+        let canonical = fs::read(&destination.0)
+            .expect("complete canonical output selected by raw path");
+        if let Some(previous) = &first {
+            assert_eq!(&canonical, previous, "stable canonical output bytes");
+        } else {
+            first = Some(canonical);
+        }
+        let verified = bootstrap::inspect_profile(destination.0.clone())
+            .expect("raw-byte target can be selected for secure import");
+        assert!(verified.contains("raw-output-selection-9631"));
+        assert!(!verified.contains("raw-destination-asset-3015"));
+    }
+}
+
+#[cfg(target_os = "linux")]
+#[test]
 fn cli_repack_refuses_existing_target_without_replacing_private_bytes() {
     let section = br#"{"private":"profile-secret-1954"}"#;
     let original = profile_zip(section, b"asset-secret-5688", section);
