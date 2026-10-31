@@ -55,9 +55,7 @@ fn first_release_clipboard_content_kinds_are_explicit() {
 
 #[test]
 fn source_provenance_remains_separate_from_decoded_content() {
-    let evidence = ClipboardIntakeEvidence::<
-        _, _, &'static str, &'static str,
-    > {
+    let evidence = ClipboardIntakeEvidence::<_, _, &'static str, &'static str> {
         content: "x^2 + y^2",
         kind: ClipboardContentKind::Formula,
         provenance: "clipboard-paste-17",
@@ -88,12 +86,12 @@ fn retention_issues_preserve_exact_detail_and_order() {
     };
     assert_eq!(evidence.retention_issues.len(), 2);
     assert_eq!(
-        evidence.retention_issues[0].detail,
-        "merged-cell-border-style",
+        evidence.retention_issues.first().map(|issue| issue.detail),
+        Some("merged-cell-border-style"),
     );
     assert_eq!(
-        evidence.retention_issues[1].kind,
-        ClipboardRetentionIssueKind::Metadata,
+        evidence.retention_issues.get(1).map(|issue| issue.kind),
+        Some(ClipboardRetentionIssueKind::Metadata),
     );
 }
 
