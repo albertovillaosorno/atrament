@@ -989,3 +989,15 @@ mtime match the saved output, then rejects same-key recovery solely because
 ctime differs. Both overwrite dispositions leave the externally rewritten file
 untouched. Change time narrows, but does not eliminate, mutable-filesystem
 history uncertainty.
+
+
+The Linux profile file-commit transport now repeats its no-follow replacement
+entry-type inspection after anonymous staging and the final cancellation probe,
+before linking the staged inode under any name. Deterministic races replace an
+initial regular target with a symlink or directory, or insert a symlink after
+an initially absent target; all three refuse as `InvalidExistingTarget` while
+retaining the new entry and unrelated target bytes. The initial type check,
+private staging and positive stable replacement behavior remain intact. This
+closes observed prelink link/special-file substitutions but does not lock the
+entry against a change after the second check or solve the replacement
+link-before-rename crash window.

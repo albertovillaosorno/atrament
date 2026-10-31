@@ -678,7 +678,7 @@ mod linux {
     }
 
     #[test]
-    fn replacement_target_swap_never_follows_new_symlink() {
+    fn replacement_target_swap_to_symlink_refuses_before_link() {
         let dir = OwnedDir::new();
         let target = dir.target();
         let victim = dir.0.join("victim");
@@ -700,21 +700,50 @@ mod linux {
                 false
             },
         );
-        assert_eq!(
-            committed.expect("atomic replacement").byte_length,
-            9,
-        );
+        assert_eq!(committed, Err(Error::InvalidExistingTarget));
         assert_eq!(observations, 3);
         assert_eq!(
             fs::read(&victim).expect("unrelated file"),
             b"unrelated bytes",
         );
-        assert_eq!(fs::read(&target).expect("replacement"), b"new bytes");
+        assert_eq!(
+            fs::read_link(&target).expect("late symlink preserved"),
+            victim,
+        );
         assert_eq!(dir.entries().len(), 2);
-        assert!(!fs::symlink_metadata(&target)
-            .expect("replaced target entry")
-            .file_type()
-            .is_symlink());
+    }
+
+    #[test]
+    fn newly_created_symlink_during_replace_stage_is_not_removed() {
+        let dir = OwnedDir::new();
+        let target = dir.target();
+        let victim = dir.0.join("victim");
+        fs::write(&victim, b"unrelated bytes").expect("seed victim");
+        let mut observations = 0usize;
+        let result = commit_profile_file_cancellable(
+            &target,
+            b"new bytes",
+            9,
+            Mode::ReplaceExisting,
+            || {
+                observations += 1;
+                if observations == 3 {
+                    symlink(&victim, &target).expect("insert late link");
+                }
+                false
+            },
+        );
+        assert_eq!(result, Err(Error::InvalidExistingTarget));
+        assert_eq!(observations, 3);
+        assert_eq!(
+            fs::read_link(&target).expect("late link preserved"),
+            victim,
+        );
+        assert_eq!(
+            fs::read(&victim).expect("victim untouched"),
+            b"unrelated bytes",
+        );
+        assert_eq!(dir.entries().len(), 2);
     }
 
     #[test]
@@ -738,7 +767,7 @@ mod linux {
                 false
             },
         );
-        assert!(matches!(denied, Err(Error::FileIo(_))));
+        assert_eq!(denied, Err(Error::InvalidExistingTarget));
         assert_eq!(observations, 3);
         assert!(target.is_dir());
         assert_eq!(dir.entries(), vec![String::from("chosen.atrament")]);

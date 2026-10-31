@@ -38,6 +38,8 @@ use std::io;
 use std::path::{Component, Path};
 
 #[cfg(target_os = "linux")]
+use std::ffi::OsStr;
+#[cfg(target_os = "linux")]
 use std::fs::File;
 
 #[cfg(target_os = "linux")]
@@ -67,7 +69,7 @@ pub enum ProfileFileCommitError {
     CommittedPathUnverified,
     /// Initial staging, commit I/O or cleanup failed.
     FileIo(io::ErrorKind),
-    /// Existing replacement target is a link or non-regular file.
+    /// Replacement target is observed as a link or non-regular file.
     InvalidExistingTarget,
     /// Missing file name or forbidden parent traversal.
     InvalidTarget,
@@ -178,6 +180,10 @@ pub fn commit_profile_file(
 /// is reopened before linking and after directory sync; device/inode drift
 /// before the link refuses without effect, while post-link drift is uncertain.
 /// For relative targets, the process CWD must still match its original anchor.
+/// Replacement also rechecks the selected entry without following links
+/// after staging, refusing an observed late symlink or non-regular target
+/// before publishing a name. Another actor can change the entry after this
+/// check; the recheck is not an atomic compare-and-replace guarantee.
 /// Linux stages bytes through `O_TMPFILE`, so cancellation or process death
 /// during writing cannot
 /// leave a named temporary file. Preserve-existing links the completed file
@@ -285,6 +291,28 @@ fn selected_parent_is_same_directory(
 }
 
 #[cfg(target_os = "linux")]
+fn check_replace_target_type(
+    directory: &File,
+    name: &OsStr,
+) -> Result<(), ProfileFileCommitError> {
+    use nix::fcntl::AtFlags;
+    use nix::sys::stat::{SFlag, fstatat};
+
+    match fstatat(directory, name, AtFlags::AT_SYMLINK_NOFOLLOW) {
+        Ok(metadata)
+            if SFlag::from_bits_truncate(metadata.st_mode) & SFlag::S_IFMT
+                != SFlag::S_IFREG =>
+        {
+            Err(ProfileFileCommitError::InvalidExistingTarget)
+        }
+        Err(Errno::ENOENT) | Ok(_) => Ok(()),
+        Err(error) => Err(ProfileFileCommitError::FileIo(
+            io::Error::from(error).kind(),
+        )),
+    }
+}
+
+#[cfg(target_os = "linux")]
 #[expect(
     clippy::too_many_lines,
     reason = "single atomic file lifecycle with unified error paths"
@@ -302,7 +330,7 @@ fn commit_platform(
         AtFlags, OFlag, OpenHow, RenameFlags, ResolveFlag, openat, openat2,
         renameat2,
     };
-    use nix::sys::stat::{Mode, SFlag, fstatat};
+    use nix::sys::stat::Mode;
 
     // The only filesystem root for the operation is the exact selected
     // parent, secured before creating anything. This protects all ancestor
@@ -340,25 +368,10 @@ fn commit_platform(
         .file_name()
         .ok_or(ProfileFileCommitError::InvalidTarget)?;
 
-    // For explicit replacement, reject an already observed link or special
-    // file without dereferencing. renameat2 never follows a final symlink;
-    // a concurrent replacement of that directory entry cannot redirect bytes.
+    // A selected replacement target must be absent or an ordinary file.
+    // Never dereference a selected link, including one introduced later.
     if disposition == ProfileFileCommitDisposition::ReplaceExisting {
-        match fstatat(&directory, name, AtFlags::AT_SYMLINK_NOFOLLOW) {
-            Ok(metadata)
-                if SFlag::from_bits_truncate(metadata.st_mode)
-                    & SFlag::S_IFMT
-                    != SFlag::S_IFREG =>
-            {
-                return Err(ProfileFileCommitError::InvalidExistingTarget);
-            }
-            Err(Errno::ENOENT) | Ok(_) => {}
-            Err(error) => {
-                return Err(ProfileFileCommitError::FileIo(
-                    io::Error::from(error).kind(),
-                ));
-            }
-        }
+        check_replace_target_type(&directory, name)?;
     }
 
     // An unnamed inode cannot survive process death as a directory entry.
@@ -408,6 +421,13 @@ fn commit_platform(
         !target.is_absolute(),
     ) {
         return Err(ProfileFileCommitError::SelectedParentChanged);
+    }
+
+    // Staging and the final cancellation callback can race an external
+    // link or special-file insertion. Recheck before publishing even the
+    // temporary replacement name; no filesystem-name lock is implied.
+    if disposition == ProfileFileCommitDisposition::ReplaceExisting {
+        check_replace_target_type(&directory, name)?;
     }
 
     match disposition {
