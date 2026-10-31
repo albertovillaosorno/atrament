@@ -243,3 +243,10 @@ Independent Node fixtures exercise all three stalled readers and pin deadline
 coverage for the explicit End session fetch. This protects browser request
 lifetime only; the
 remaining backend media cancellation and cleanup proof is still open.
+
+A real Firefox explicit-End fixture also withholds all response headers. Its
+request deadline aborts the stalled socket without reporting successful
+session erasure or clearing the user's editable draft. A fresh confirmed End
+in the same tab succeeds and then clears the page's private text. The first
+request's backend outcome is unknown, so this does not demonstrate server-side
+idempotency or actual media cleanup after an interrupted End operation.

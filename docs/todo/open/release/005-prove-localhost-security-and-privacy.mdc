@@ -442,3 +442,11 @@ retry. The
 explicit End session request has the same finite deadline and does not claim
 backend erasure if its outcome remains unknown. This is browser lifetime
 hardening, not proof of backend operation cancellation or media-file cleanup.
+
+A separate Firefox fixture now stalls the explicit End session response before
+sending any headers, with no response body to decode. The six-second client
+request deadline aborts that connection; the UI preserves the private draft
+and reports failure instead of claiming erasure. After the same-tab user
+confirms End again, a valid response clears session authority and draft text.
+This verifies client retry semantics, not backend destruction after an unknown
+prior request outcome.

@@ -1595,6 +1595,7 @@ function createSessionFixtureServer(
     onHandshakeBody = null,
     onHandshakeResponse = null,
     onDraftResponse = null,
+    onEndResponse = null,
 ) {
     const generated = new Set([
         "main.js",
@@ -1648,6 +1649,9 @@ function createSessionFixtureServer(
             ) {
                 response.writeHead(401);
                 response.end();
+                return;
+            }
+            if (onEndResponse?.(request, response) === true) {
                 return;
             }
             const status = onSessionEnd?.() ?? 204;
@@ -6321,6 +6325,110 @@ test(
             bidi?.close();
             await closeFixtureServer(server);
             for (const child of children.reverse()) await stopChild(child);
+            fs.rmSync(profile, { recursive: true, force: true });
+        }
+    },
+);
+
+test(
+    "Firefox stalled explicit end never claims erasure and permits retry",
+    { skip: !FIREFOX_AVAILABLE, timeout: FIREFOX_CASE_TIMEOUT_MS },
+    async () => {
+        fs.mkdirSync(".temp", { recursive: true });
+        const profile = fs.mkdtempSync(".temp/session-end-timeout-");
+        const apiRequests = [];
+        let endAttempts = 0;
+        let signalClosed;
+        const firstEndClosed = new Promise((resolve) => {
+            signalClosed = resolve;
+        });
+        const server = createSessionFixtureServer(
+            apiRequests, null, null, null, null, null, null, null, null,
+            null, null,
+            (_request, response) => {
+                if (++endAttempts !== 1) {
+                    return false;
+                }
+                // No response headers: the client must bound fetch itself,
+                // not only the successful response-body decoder.
+                response.once("close", signalClosed);
+                return true;
+            },
+        );
+        const children = [];
+        let bidi;
+        try {
+            server.listen(0, "127.0.0.1");
+            await once(server, "listening");
+            const address = server.address();
+            assert.notEqual(address, null);
+            assert.notEqual(typeof address, "string");
+            const origin = `http://127.0.0.1:${address.port}`;
+            bidi = await startBidiFirefox(profile, children);
+            const tab = await bidi.command("browsingContext.create", {
+                type: "tab",
+            });
+            await bidi.command("browsingContext.navigate", {
+                context: tab.context,
+                url: `${origin}/#session=${REFRESH_SECRET}`,
+                wait: "complete",
+            });
+            const initial = await waitForSessionStatus(
+                bidi, tab.context, "Session ready",
+            );
+            assert.equal(initial.hash, "");
+            const confirmEnd = async () => {
+                const response = await bidi.command("script.evaluate", {
+                    awaitPromise: false,
+                    expression: `(() => {
+                        const end = document.getElementById("end-session");
+                        if (end.disabled) {
+                            throw Error("session end unexpectedly disabled");
+                        }
+                        end.click();
+                        end.click();
+                    })()`,
+                    resultOwnership: "none",
+                    target: { context: tab.context },
+                });
+                assert.equal(response.type, "success");
+            };
+            await confirmEnd();
+            const failed = await waitForSessionStatus(
+                bidi, tab.context, "End session failed · retry", 400,
+            );
+            assert.equal(failed.hash, "");
+            for (const field of ["task", "source", "candidate"]) {
+                assert.deepEqual(failed[field], {
+                    disabled: false, value: REFRESH_DRAFT[field],
+                });
+            }
+            await observedWithin(firstEndClosed, "stalled session end abort");
+            assert.equal(endAttempts, 1);
+            await confirmEnd();
+            const ended = await waitForSessionStatus(
+                bidi, tab.context, "Session ended",
+            );
+            for (const field of ["task", "source", "candidate"]) {
+                assert.deepEqual(ended[field], {
+                    disabled: true, value: "",
+                });
+            }
+            assert.equal(endAttempts, 2);
+            assert.deepEqual(apiRequests, [
+                "POST /api/handshake",
+                "GET /api/session/task",
+                "GET /api/session/source",
+                "GET /api/session/candidate",
+                "POST /api/session/end",
+                "POST /api/session/end",
+            ]);
+        } finally {
+            bidi?.close();
+            await closeFixtureServer(server);
+            for (const child of children.reverse()) {
+                await stopChild(child);
+            }
             fs.rmSync(profile, { recursive: true, force: true });
         }
     },
