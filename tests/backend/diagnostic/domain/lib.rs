@@ -132,8 +132,8 @@ fn operation_context_and_relational_locations_keep_semantic_owners() {
     };
     assert_eq!(diagnostic.locations.len(), 2);
     assert_eq!(
-        diagnostic.locations[1].relationship,
-        Some(RelationshipKind::Collision),
+        diagnostic.locations.get(1).map(|location| location.relationship),
+        Some(Some(RelationshipKind::Collision)),
     );
     assert_eq!(diagnostic.operation.contexts.len(), 1);
     let set = DiagnosticSet {
@@ -169,9 +169,12 @@ fn layout_overflow_has_typed_edge_and_physical_amount_evidence() {
         remediations: vec![Remediation::ChangeConstraint],
         severity: Severity::Error,
     };
-    assert_eq!(diagnostic.evidence[0], Evidence::PhysicalBoundary {
-        edge: PhysicalBoundaryEdge::Bottom,
-    },);
+    assert_eq!(
+        diagnostic.evidence.first(),
+        Some(&Evidence::PhysicalBoundary {
+            edge: PhysicalBoundaryEdge::Bottom,
+        }),
+    );
     assert_eq!(diagnostic.operation.operation, Operation::Layout);
 }
 
@@ -223,9 +226,18 @@ fn semantic_command_precondition_diagnostic_keeps_typed_failure_evidence() {
         }],
     );
     assert_eq!(diagnostic.locations.len(), 3);
-    assert_eq!(diagnostic.locations[0].kind, LocationKind::Command);
-    assert_eq!(diagnostic.locations[1].kind, LocationKind::Object);
-    assert_eq!(diagnostic.locations[2].kind, LocationKind::Field);
+    assert_eq!(
+        diagnostic.locations.first().map(|location| &location.kind),
+        Some(&LocationKind::Command),
+    );
+    assert_eq!(
+        diagnostic.locations.get(1).map(|location| &location.kind),
+        Some(&LocationKind::Object),
+    );
+    assert_eq!(
+        diagnostic.locations.get(2).map(|location| &location.kind),
+        Some(&LocationKind::Field),
+    );
     assert_eq!(
         diagnostic.operation.operation,
         Operation::SemanticValidate,

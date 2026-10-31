@@ -33,13 +33,14 @@
 //! Public session-handshake regression tests.
 
 use atrament_diagnostic::{
-    BlockingDisposition, Completeness, DiagnosticCode, Evidence, LocationKind,
-    LocationRole, Operation, Remediation, Severity,
+    BlockingDisposition, Completeness, Diagnostic, DiagnosticCode,
+    DiagnosticSet, Evidence, LocationKind, LocationRole, Operation,
+    OperationBinding, Remediation, SemanticLocation, Severity,
 };
 use atrament_handwriting_profile_container as _;
 use atrament_one_shot_formatting_prompt::FORMATTING_PROMPT_VERSION;
 use atrament_session_handshake_port::{
-    HandshakeResult, SessionHandshake, VersionDimension, Versions,
+    HandshakeResult, SessionHandshake as _, VersionDimension, Versions,
 };
 
 use atrament_session_handshake as handshake;
@@ -100,42 +101,151 @@ fn every_required_version_mismatch_blocks_with_its_dimension() {
     ];
 
     for (dimension, versions) in cases {
-        let result = service.evaluate(versions);
-        let HandshakeResult::Incompatible {
-            diagnostics,
-            dimension: actual,
-            expected,
-            observed,
-        } = result
-        else {
-            panic!("mismatched version must remain an incompatible result");
+        let (expected, observed) = match dimension {
+            VersionDimension::Capability => {
+                (current.capability, versions.capability)
+            },
+            VersionDimension::Product => (current.product, versions.product),
+            VersionDimension::Profile => (current.profile, versions.profile),
+            VersionDimension::Prompt => (current.prompt, versions.prompt),
+            VersionDimension::Protocol => (current.protocol, versions.protocol),
+            VersionDimension::Renderer => (current.renderer, versions.renderer),
         };
-        assert_eq!(actual, dimension);
         assert_ne!(expected, observed);
-        assert_eq!(diagnostics.completeness, Completeness::Complete);
-        let [diagnostic] = diagnostics.diagnostics.as_slice() else {
-            panic!("version mismatch must return one diagnostic");
+        assert_eq!(
+            service.evaluate(versions),
+            HandshakeResult::Incompatible {
+                diagnostics: DiagnosticSet {
+                    completeness: Completeness::Complete,
+                    diagnostics: vec![Diagnostic {
+                        code: DiagnosticCode::HandshakeVersionMismatch,
+                        disposition: BlockingDisposition::Blocking,
+                        evidence: vec![Evidence::RequiredVersion {
+                            dimension: version_dimension_name(dimension),
+                            expected,
+                        }],
+                        locations: vec![SemanticLocation {
+                            identity: format!(
+                                "handshake:{}",
+                                version_dimension_name(dimension),
+                            ),
+                            kind: LocationKind::Capability,
+                            relationship: None,
+                            role: LocationRole::Primary,
+                        }],
+                        operation: OperationBinding {
+                            contexts: vec![],
+                            operation: Operation::SessionHandshake,
+                        },
+                        remediations: vec![Remediation::UseCompatibleClient],
+                        severity: Severity::Error,
+                    }],
+                },
+                dimension,
+                expected,
+                observed,
+            },
+        );
+    }
+}
+
+#[test]
+fn all_version_mismatch_combinations_choose_the_first_required_dimension() {
+    let service = HandshakeService;
+    let current = HandshakeService::current_versions();
+    let product_mismatch = if current.product == "0.0.0" {
+        "atrament-test-product-mismatch"
+    } else {
+        "0.0.0"
+    };
+    // The six bits are in backend rejection priority, not wire field order.
+    for mask in 0u8..=63 {
+        let offered = Versions {
+            capability: if mask & 0b10_0000 == 0 {
+                current.capability
+            } else {
+                "atrament.capability/0"
+            },
+            product: if mask & 0b00_0001 == 0 {
+                current.product
+            } else {
+                product_mismatch
+            },
+            profile: if mask & 0b00_1000 == 0 {
+                current.profile
+            } else {
+                "atrament.profile/0"
+            },
+            prompt: if mask & 0b00_0100 == 0 {
+                current.prompt
+            } else {
+                "atrament.prompt/0"
+            },
+            protocol: if mask & 0b00_0010 == 0 {
+                current.protocol
+            } else {
+                "atrament.runtime/0"
+            },
+            renderer: if mask & 0b01_0000 == 0 {
+                current.renderer
+            } else {
+                "atrament.renderer/0"
+            },
         };
-        assert_eq!(diagnostic.code, DiagnosticCode::HandshakeVersionMismatch);
-        assert_eq!(diagnostic.disposition, BlockingDisposition::Blocking);
-        assert_eq!(diagnostic.operation.operation, Operation::SessionHandshake);
-        assert_eq!(diagnostic.remediations, [Remediation::UseCompatibleClient]);
-        assert_eq!(diagnostic.severity, Severity::Error);
-        assert!(matches!(
-            diagnostic.evidence.as_slice(),
-            [Evidence::RequiredVersion {
-                dimension: evidence_dimension,
-                expected: evidence_expected,
-            }] if *evidence_dimension == version_dimension_name(dimension)
-                && *evidence_expected == expected
-        ));
-        assert!(matches!(
-            diagnostic.locations.as_slice(),
-            [location]
-                if location.kind == LocationKind::Capability
-                    && location.role == LocationRole::Primary
-                    && location.relationship.is_none()
-        ));
+        let priority = [
+            (
+                0b00_0001,
+                VersionDimension::Product,
+                current.product,
+                offered.product,
+            ),
+            (
+                0b00_0010,
+                VersionDimension::Protocol,
+                current.protocol,
+                offered.protocol,
+            ),
+            (
+                0b00_0100,
+                VersionDimension::Prompt,
+                current.prompt,
+                offered.prompt,
+            ),
+            (
+                0b00_1000,
+                VersionDimension::Profile,
+                current.profile,
+                offered.profile,
+            ),
+            (
+                0b01_0000,
+                VersionDimension::Renderer,
+                current.renderer,
+                offered.renderer,
+            ),
+            (
+                0b10_0000,
+                VersionDimension::Capability,
+                current.capability,
+                offered.capability,
+            ),
+        ];
+        let expected = priority
+            .into_iter()
+            .find(|(bit, _, _, _)| mask & bit != 0)
+            .map(|(_, dimension, required, supplied)| {
+                (dimension, required, supplied)
+            });
+        let actual = match service.evaluate(offered) {
+            HandshakeResult::Compatible { .. } => None,
+            HandshakeResult::Incompatible {
+                dimension,
+                expected: required,
+                observed,
+                ..
+            } => Some((dimension, required, observed)),
+        };
+        assert_eq!(actual, expected, "priority mismatch for mask {mask:06b}");
     }
 }
 

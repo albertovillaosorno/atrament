@@ -36,49 +36,49 @@
 //! Public session-draft regression tests.
 
 use atrament_diagnostic::{
-    BlockingDisposition, Completeness, DiagnosticCode, Evidence, EvidenceUnit,
-    LocationKind, LocationRole, Operation, Remediation, Severity,
+    BlockingDisposition, Completeness, Diagnostic, DiagnosticCode,
+    DiagnosticSet, Evidence, EvidenceUnit, LocationKind, LocationRole,
+    Operation, OperationBinding, Remediation, SemanticLocation, Severity,
 };
-use atrament_session_draft_port::{DraftField, DraftMutation, SessionDraft};
+use atrament_session_draft_port::{DraftField, DraftMutation, SessionDraft as _};
 
 use atrament_session_draft as draft;
 
 fn assert_resource_limit(
-    result: DraftMutation,
+    result: &DraftMutation,
     expected_identity: &str,
     observed: u64,
 ) {
-    let DraftMutation::ResourceLimit { diagnostics } = result else {
-        panic!("over-limit draft replacement must remain ResourceLimit");
-    };
-    assert_eq!(diagnostics.completeness, Completeness::Complete);
-    let [diagnostic] = diagnostics.diagnostics.as_slice() else {
-        panic!("resource limit must return one diagnostic");
-    };
-    assert_eq!(diagnostic.code, DiagnosticCode::SessionDraftResourceLimit);
-    assert_eq!(diagnostic.disposition, BlockingDisposition::Blocking);
     assert_eq!(
-        diagnostic.operation.operation,
-        Operation::SessionDraftReplace
+        result,
+        &DraftMutation::ResourceLimit {
+            diagnostics: DiagnosticSet {
+                completeness: Completeness::Complete,
+                diagnostics: vec![Diagnostic {
+                    code: DiagnosticCode::SessionDraftResourceLimit,
+                    disposition: BlockingDisposition::Blocking,
+                    evidence: vec![Evidence::LimitExceeded {
+                        maximum: 1_048_576,
+                        observed,
+                        unit: EvidenceUnit::Bytes,
+                    }],
+                    locations: vec![SemanticLocation {
+                        identity: String::from(expected_identity),
+                        kind: LocationKind::Field,
+                        relationship: None,
+                        role: LocationRole::Primary,
+                    }],
+                    operation: OperationBinding {
+                        contexts: vec![],
+                        operation: Operation::SessionDraftReplace,
+                    },
+                    remediations: vec![Remediation::ReduceInput],
+                    severity: Severity::Error,
+                }],
+            },
+        },
+        "resource-limit rejection must return one exact typed diagnostic",
     );
-    assert_eq!(diagnostic.remediations, [Remediation::ReduceInput]);
-    assert_eq!(diagnostic.severity, Severity::Error);
-    assert!(matches!(
-        diagnostic.evidence.as_slice(),
-        [Evidence::LimitExceeded {
-            maximum: 1_048_576,
-            observed: actual,
-            unit: EvidenceUnit::Bytes,
-        }] if *actual == observed
-    ));
-    assert!(matches!(
-        diagnostic.locations.as_slice(),
-        [location]
-            if location.identity == expected_identity
-                && location.kind == LocationKind::Field
-                && location.role == LocationRole::Primary
-                && location.relationship.is_none()
-    ));
 }
 
 #[test]
@@ -93,7 +93,7 @@ fn draft_fields_start_empty_and_replace_independently() {
         DraftMutation::Applied,
     );
     assert_eq!(
-        service.replace(DraftField::Source, String::from("x² + y²")),
+        service.replace(DraftField::Source, String::from("x\u{b2} + y\u{b2}")),
         DraftMutation::Applied,
     );
     assert_eq!(
@@ -101,7 +101,7 @@ fn draft_fields_start_empty_and_replace_independently() {
         DraftMutation::Applied,
     );
     assert_eq!(service.value(DraftField::Task), "format these notes");
-    assert_eq!(service.value(DraftField::Source), "x² + y²");
+    assert_eq!(service.value(DraftField::Source), "x\u{b2} + y\u{b2}");
     assert_eq!(service.value(DraftField::Candidate), "untrusted model");
 }
 
@@ -114,26 +114,53 @@ fn over_limit_replacement_does_not_change_current_value() {
     );
     let over_limit = "a".repeat(draft::MAX_DRAFT_FIELD_BYTES + 1);
     let result = service.replace(DraftField::Source, over_limit);
-    assert_resource_limit(result, "session-draft:source", 1_048_577);
+    assert_resource_limit(&result, "session-draft:source", 1_048_577);
     assert_eq!(service.value(DraftField::Source), "accepted draft");
 }
 
 #[test]
-fn replacement_uses_utf8_byte_limit_without_truncation() {
-    let mut service = draft::SessionDraftService::default();
-    let exact = "á".repeat(draft::MAX_DRAFT_FIELD_BYTES / 2);
-    assert_eq!(exact.len(), draft::MAX_DRAFT_FIELD_BYTES);
-    assert_eq!(
-        service.replace(DraftField::Candidate, exact),
-        DraftMutation::Applied,
-    );
-    let over_limit = "á".repeat((draft::MAX_DRAFT_FIELD_BYTES / 2) + 1);
-    let result = service.replace(DraftField::Candidate, over_limit);
-    assert_resource_limit(result, "session-draft:candidate", 1_048_578);
-    assert_eq!(
-        service.value(DraftField::Candidate).len(),
-        draft::MAX_DRAFT_FIELD_BYTES,
-    );
+fn every_field_enforces_utf8_byte_limit_without_truncation() {
+    // Three-byte text needs an ASCII suffix to reach the exact byte cap.
+    let codepoints = [
+        ("a", 1_048_576, "", 1_048_577, 1_048_577),
+        ("\u{e1}", 524_288, "", 524_289, 1_048_578),
+        ("\u{20ac}", 349_525, "a", 349_526, 1_048_578),
+        ("\u{1f4dd}", 262_144, "", 262_145, 1_048_580),
+    ];
+    for (field, identity) in [
+        (DraftField::Candidate, "session-draft:candidate"),
+        (DraftField::Source, "session-draft:source"),
+        (DraftField::Task, "session-draft:task"),
+    ] {
+        let other = if field == DraftField::Task {
+            DraftField::Source
+        } else {
+            DraftField::Task
+        };
+        for (codepoint, count, suffix, over_count, observed) in codepoints {
+            let mut service = draft::SessionDraftService::default();
+            assert_eq!(
+                service.replace(other, String::from("preserve")),
+                DraftMutation::Applied,
+            );
+            let mut exact = codepoint.repeat(count);
+            exact.push_str(suffix);
+            assert_eq!(exact.len(), draft::MAX_DRAFT_FIELD_BYTES);
+            assert_eq!(
+                service.replace(field, exact.clone()),
+                DraftMutation::Applied,
+            );
+            let over_limit = codepoint.repeat(over_count);
+            assert_eq!(
+                u64::try_from(over_limit.len()),
+                Ok(observed),
+            );
+            let result = service.replace(field, over_limit);
+            assert_resource_limit(&result, identity, observed);
+            assert_eq!(service.value(field), exact);
+            assert_eq!(service.value(other), "preserve");
+        }
+    }
 }
 
 #[test]
