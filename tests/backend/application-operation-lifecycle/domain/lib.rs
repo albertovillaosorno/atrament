@@ -93,7 +93,7 @@ fn all_18_operation_cancellation_states_match_frozen_boundary_rule() {
         ApplicationCancellationObservation::RequestOnly,
         ApplicationCancellationObservation::TookEffectBeforeBoundary,
     ];
-    let mut cases = 0_usize;
+    let mut cases = 0usize;
     for operation in operations {
         let boundary = application_operation_effect_boundary(operation);
         for observation in observations {
@@ -143,8 +143,8 @@ fn all_30_operation_completion_observations_match_frozen_authority_rule() {
         ApplicationOperationCompletionObservation::SameRetryRecovery,
         ApplicationOperationCompletionObservation::TransportTermination,
     ];
-    let mut cases = 0_usize;
-    let mut incompatible = 0_usize;
+    let mut cases = 0usize;
+    let mut incompatible = 0usize;
     for operation in operations {
         for observation in observations {
             let expected = match observation {
@@ -192,4 +192,102 @@ fn all_30_operation_completion_observations_match_frozen_authority_rule() {
     }
     assert_eq!(cases, 30);
     assert_eq!(incompatible, 3);
+}
+
+#[test]
+fn completion_observations_cannot_change_cancellation_authority() {
+    let operations = [
+        ApplicationOperationClass::Apply,
+        ApplicationOperationClass::Export,
+        ApplicationOperationClass::HistoryTraversal,
+        ApplicationOperationClass::Plan,
+        ApplicationOperationClass::Render,
+        ApplicationOperationClass::Validate,
+    ];
+    let cancellations = [
+        ApplicationCancellationObservation::EffectBoundaryCrossed,
+        ApplicationCancellationObservation::RequestOnly,
+        ApplicationCancellationObservation::TookEffectBeforeBoundary,
+    ];
+    let completions = [
+        ApplicationOperationCompletionObservation::CancellationRequest,
+        ApplicationOperationCompletionObservation::FinalTypedResultOrReceipt,
+        ApplicationOperationCompletionObservation::ProgressObservation,
+        ApplicationOperationCompletionObservation::SameRetryRecovery,
+        ApplicationOperationCompletionObservation::TransportTermination,
+    ];
+    let mut cases = 0usize;
+    let mut request_only = 0usize;
+    let mut effect_crossed = 0usize;
+    for operation in operations {
+        let boundary = application_operation_effect_boundary(operation);
+        for cancellation in cancellations {
+            let expected_cancellation = match cancellation {
+                ApplicationCancellationObservation::RequestOnly => None,
+                ApplicationCancellationObservation::EffectBoundaryCrossed => {
+                    Some(ApplicationCancellationResolution {
+                        boundary,
+                        disposition: ApplicationCancellationDisposition::
+                            EffectRemainsAuthoritative,
+                    })
+                },
+                ApplicationCancellationObservation::
+                    TookEffectBeforeBoundary => Some(
+                    ApplicationCancellationResolution {
+                        boundary,
+                        disposition: ApplicationCancellationDisposition::
+                            CancelledBeforeEffect,
+                    },
+                ),
+            };
+            for completion in completions {
+                // The completion signal is independent of the qualified
+                // cancellation observation. Even a final receipt cannot
+                // promote a request alone into cancellation evidence.
+                assert_eq!(
+                    application_cancellation_resolution(
+                        operation,
+                        cancellation,
+                    ),
+                    expected_cancellation,
+                    "operation={operation:?} cancellation={cancellation:?} \
+                     completion={completion:?}",
+                );
+                if cancellation
+                    == ApplicationCancellationObservation::RequestOnly
+                {
+                    request_only += 1;
+                }
+                if cancellation
+                    == ApplicationCancellationObservation::EffectBoundaryCrossed
+                {
+                    effect_crossed += 1;
+                }
+                if matches!(
+                    completion,
+                    ApplicationOperationCompletionObservation::
+                        CancellationRequest
+                        | ApplicationOperationCompletionObservation::
+                            ProgressObservation
+                        | ApplicationOperationCompletionObservation::
+                            TransportTermination
+                ) {
+                    assert_eq!(
+                        application_operation_completion_disposition(
+                            operation,
+                            completion,
+                        ),
+                        Some(
+                            ApplicationOperationCompletionDisposition::
+                                NotEstablished,
+                        ),
+                    );
+                }
+                cases += 1;
+            }
+        }
+    }
+    assert_eq!(cases, 90);
+    assert_eq!(request_only, 30);
+    assert_eq!(effect_crossed, 30);
 }
