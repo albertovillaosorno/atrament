@@ -1660,20 +1660,37 @@ fn cli_inspection_escapes_c1_and_unicode_line_separators() {
 #[cfg(target_os = "linux")]
 #[test]
 fn cli_inspection_escapes_opaque_asset_metadata_without_revealing_bytes() {
+    // These are distinct verified ZIP names, but the zero-width character
+    // makes them look the same unless the inspection display escapes it.
     let asset_path = format!("assets/{}opaque.bin", '\u{2029}');
+    let invisible_path = format!(
+        "assets/{}opa{}que.bin", '\u{2029}', '\u{200b}',
+    );
     let opaque_asset = b"\x1b[31mprivate-opaque-91413\xff";
+    let other_asset = b"hidden-private-asset-91414";
+    let declaration = |path: &str, bytes: &[u8]| {
+        format!(
+            concat!(
+                r#"{{"path":"{}","media_type":"application/octet-stream","#,
+                r#""byte_length":{},"sha256":"{}"}}"#,
+            ),
+            path, bytes.len(), digest_hex(bytes),
+        )
+    };
+    let entries = format!(
+        "{},{}",
+        declaration(&asset_path, opaque_asset),
+        declaration(&invisible_path, other_asset),
+    );
     let root = format!(
         concat!(
             r#"{{"container_version":"atrament.profile/1","#,
-            r#""profile_identity":"asset-only","required_features":[],"#,
-            r#""optional_features":["opaque{}capability"],"entries":["#,
-            r#"{{"path":"{}","media_type":"application/octet-stream","#,
-            r#""byte_length":{},"sha256":"{}"}}]}}"#,
+            r#""profile_identity":"asset{}only","required_features":[],"#,
+            r#""optional_features":["opaque{}capability","hidden{}name","#,
+            r#""mark{}name","bom{}name"],"entries":[{}]}}"#,
         ),
-        '\u{009b}',
-        asset_path,
-        opaque_asset.len(),
-        digest_hex(opaque_asset),
+        '\u{034f}', '\u{009b}', '\u{2060}', '\u{00ad}',
+        '\u{feff}', entries,
     );
     let archive = write_stored_profile_zip(
         &[
@@ -1681,16 +1698,19 @@ fn cli_inspection_escapes_opaque_asset_metadata_without_revealing_bytes() {
                 name: &asset_path, bytes: opaque_asset,
             },
             ProfileStoredZipMember {
+                name: &invisible_path, bytes: other_asset,
+            },
+            ProfileStoredZipMember {
                 name: "manifest.json", bytes: root.as_bytes(),
             },
         ],
         ProfileStoredZipWriteLimits {
             maximum_archive_bytes: 4096,
-            maximum_entries: 2,
+            maximum_entries: 3,
             maximum_entry_bytes: 2048,
             maximum_total_bytes: 3000,
         },
-    ).expect("valid opaque asset has no implicit section decoder");
+    ).expect("two distinct opaque asset names must stay distinct");
     let source = OwnedProfileFile::new(&archive);
     bootstrap::verify_profile(source.0.clone())
         .expect("full payload digest checks do not interpret opaque assets");
@@ -1705,13 +1725,27 @@ fn cli_inspection_escapes_opaque_asset_metadata_without_revealing_bytes() {
         .expect("terminal-safe UTF-8 display");
     assert!(text.starts_with("manifest.json (verified):\n"));
     assert!(text.contains(r#""path":"assets/\u2029opaque.bin""#));
-    assert!(text.contains(r#""opaque\u009bcapability""#));
+    assert!(text.contains(r#""path":"assets/\u2029opa\u200bque.bin""#));
+    for displayed in [
+        r#""asset\u034fonly""#,
+        r#""opaque\u009bcapability""#,
+        r#""hidden\u2060name""#,
+        r#""mark\u00adname""#,
+        r#""bom\ufeffname""#,
+    ] {
+        assert!(text.contains(displayed), "formatted metadata is visible");
+    }
     assert!(!text.contains(" (syntax-checked; untyped):"));
-    assert!(!text.contains("private-opaque-91413"));
-    for control in ['\u{2029}', '\u{009b}', '\u{001b}'] {
+    for opaque in ["private-opaque-91413", "hidden-private-asset-91414"] {
+        assert!(!text.contains(opaque), "opaque bytes cannot leak");
+    }
+    for control in [
+        '\u{2029}', '\u{009b}', '\u{001b}', '\u{034f}',
+        '\u{200b}', '\u{2060}', '\u{00ad}', '\u{feff}',
+    ] {
         assert!(
             !text.contains(control),
-            "asset metadata cannot inject terminal controls",
+            "asset metadata cannot inject invisible terminal characters",
         );
     }
     assert_eq!(fs::read(&source.0).expect("input remains exact"), archive);

@@ -217,16 +217,17 @@ const fn profile_repack_limits() -> ProfileExportAssemblyLimits {
     }
 }
 
-// Raw bidi controls, Unicode line/paragraph separators and C1 controls can
-// visually alter verified profile CLI output. Escape only their presentation;
-// never change the SHA-verified ZIP or its JSON source bytes.
+// Nonprinting controls and common zero-width format characters can either
+// reorder labels, split lines, or make distinct verified names look identical.
+// Escape only the terminal presentation, never the verified ZIP source bytes.
 const fn is_terminal_control(character: char) -> bool {
     character.is_control() || matches!(
         character,
-        '\u{061c}' | '\u{200e}' | '\u{200f}'
-            | '\u{202a}'..='\u{202e}'
-            | '\u{2028}'..='\u{2029}'
-            | '\u{2066}'..='\u{2069}'
+        '\u{00ad}' | '\u{034f}' | '\u{061c}' | '\u{180e}'
+            | '\u{200b}'..='\u{200f}'
+            | '\u{2028}'..='\u{202e}'
+            | '\u{2060}'..='\u{206f}'
+            | '\u{feff}'
     )
 }
 

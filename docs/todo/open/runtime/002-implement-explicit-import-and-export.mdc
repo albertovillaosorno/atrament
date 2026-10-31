@@ -73,6 +73,9 @@ complete expected display still matches and the source remains unchanged.
 An asset-only profile regression confirms verified opaque payloads remain
 unprinted even when their archive names contain Unicode separators, and that
 optional-feature metadata containing a raw C1 terminal control is escaped.
+Common zero-width formatting characters are also escaped, so distinct verified
+asset names remain visually distinguishable and invisible feature identifiers
+are not silently hidden by the terminal display.
 
 A separate Linux `atrament profile verify PATH` CLI now runs the same
 fully bounded, secure selected-source and SHA/section-syntax gate as profile
