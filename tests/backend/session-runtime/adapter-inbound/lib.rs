@@ -3723,6 +3723,36 @@ fn authenticated_draft_reads_return_exact_private_text() {
 }
 
 #[test]
+fn authenticated_draft_replace_read_preserves_leading_bom() {
+    let authorization = format!("Bearer {EXPECTED_SECRET}");
+    let source = "\u{feff}source \u{feff}body";
+    let mut draft = SessionDraftService::default();
+    let write_request = draft_replace_request(
+        "/api/session/source",
+        Some(&authorization),
+        Some(EXPECTED_ORIGIN),
+        source.as_bytes(),
+    );
+    let write_response =
+        route_with_draft(&write_request, EXPECTED_HOST, &mut draft);
+    assert_eq!(status_line(&write_response), "HTTP/1.1 204 No Content");
+    assert_eq!(draft.value(DraftField::Source), source);
+
+    let read_request = draft_read_request(
+        "/api/session/source",
+        Some(&authorization),
+        None,
+    );
+    let read_response =
+        route_with_draft(&read_request, EXPECTED_HOST, &mut draft);
+    let (head, body) = response_parts(&read_response);
+    assert!(head.starts_with("HTTP/1.1 200 OK\r\n"));
+    assert!(head.contains("Content-Type: text/plain; charset=utf-8"));
+    assert_eq!(body, source.as_bytes());
+    assert_eq!(&body[..3], &[0xef, 0xbb, 0xbf]);
+}
+
+#[test]
 fn draft_read_admission_failure_is_uniform_and_private() {
     let authorization = format!("Bearer {EXPECTED_SECRET}");
     let wrong_authorization = format!("Bearer {}", "b".repeat(64));

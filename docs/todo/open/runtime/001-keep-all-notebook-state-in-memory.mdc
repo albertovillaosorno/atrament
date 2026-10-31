@@ -195,3 +195,10 @@ byte sequences. A red-first browser-module fixture and a real Firefox loopback
 case verify byte-exact recovery after a valid retry and atomic editing refusal
 for invalid source bytes. This is transport fidelity for pre-acceptance drafts,
 not a claim that all notebook source and media inputs have been implemented.
+
+An independent authenticated runtime draft route regression now posts a source
+whose first UTF-8 bytes are EF BB BF, then reads that draft and compares the
+entire response body with the exact submitted bytes. The in-memory draft value
+also preserves both initial and interior U+FEFF characters. This pins backend
+transport fidelity alongside the browser's fatal decoder, not accepted
+notebook or media lifecycle authority.
