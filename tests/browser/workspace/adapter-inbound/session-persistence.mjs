@@ -50,6 +50,9 @@ const {
 } = await import(
     new URL("session-draft.js", MAIN_MODULE).href,
 );
+const { parseBoundedJsonResponse } = await import(
+    new URL("session-diagnostic.js", MAIN_MODULE).href,
+);
 
 test("static workspace starts session controls disabled", async () => {
     const source = await readFile(INDEX_HTML, "utf8");
@@ -270,7 +273,9 @@ test(
         assert.notEqual(start, -1, "draft sync function must exist");
         assert.notEqual(end, -1, "draft sync function must be bounded");
         const draftSync = source.slice(start, end);
-        const responseJson = draftSync.indexOf("await response.json();");
+        const responseJson = draftSync.indexOf(
+            "await parseBoundedJsonResponse(response);",
+        );
         const jsonCatch = draftSync.indexOf("catch {", responseJson);
         const catchCurrent = draftSync.indexOf(
             "if (draftSyncIsCurrent(secret, generation))",
@@ -409,6 +414,7 @@ test("draft 413 media refusal precedes diagnostic body parsing", async () => {
                 const retryableDraftFields = new Set();
                 const syncingDraftFields = new Set();
                 const failures = [];
+                const parseBoundedJsonResponse = (response) => response.json();
                 const sessionDraft = {
                     draftMutationTarget: () => "./api/session/task",
                     draftMutationHeaders: () => ({}),
@@ -507,7 +513,9 @@ test(
         const admittedStatuses = handshake.indexOf(
             "response.status !== 200 && response.status !== 409",
         );
-        const bodyRead = handshake.indexOf("await response.json();");
+        const bodyRead = handshake.indexOf(
+            "await parseBoundedJsonResponse(response);",
+        );
         assert.ok(
             unauthorized !== -1
                 && admittedStatuses !== -1
@@ -553,6 +561,7 @@ test("handshake response media is checked before JSON admission", async () => {
                 const sessionSecret = "secret";
                 const sessionRequests = { signal: {} };
                 const sessionStatus = { textContent: "" };
+                const parseBoundedJsonResponse = (response) => response.json();
                 const sessionHandshake = {
                     handshakeHeaders: () => ({}),
                     parseHandshakePayload: () => ({ kind: "compatible" }),
@@ -589,6 +598,126 @@ test("handshake response media is checked before JSON admission", async () => {
             assert.equal(result,
                 "Invalid backend handshake · editing disabled");
         }
+    }
+});
+
+test("handshake overlong JSON cannot authorize draft hydration", async () => {
+    const source = await readFile(MAIN_MODULE, "utf8");
+    const start = source.indexOf(
+        "async function completeSessionHandshake(secret) {",
+    );
+    const end = source.indexOf("const failedDraftFields", start);
+    assert.ok(start >= 0 && end > start);
+    const handshake = source.slice(start, end);
+    const valid = JSON.stringify({
+        result: "compatible",
+        versions: {
+            capability: "atrament.capability/1",
+            product: "0.1.0",
+            profile: "atrament.profile/1",
+            prompt: "atrament.prompt/1",
+            protocol: "atrament.runtime/1",
+            renderer: "atrament.renderer/1",
+        },
+    });
+    for (const [payload, allowed] of [
+        [valid, true],
+        [valid + " ".repeat(16_385), false],
+    ]) {
+        let hydrations = 0;
+        const response = new Response(payload, {
+            status: 200,
+            headers: { "Content-Type": "application/json; charset=utf-8" },
+        });
+        const status = await runInNewContext(`
+            (async () => {
+                const sessionSecret = "secret";
+                const sessionRequests = { signal: {} };
+                const sessionStatus = { textContent: "" };
+                const sessionHandshake = {
+                    handshakeHeaders: () => ({}),
+                    parseHandshakePayload: (value) =>
+                        value?.result === "compatible"
+                            ? { kind: "compatible" }
+                            : { kind: "invalid" },
+                    isHandshakeContentType: (value) =>
+                        value === "application/json; charset=utf-8",
+                };
+                function hideSessionRetry() {}
+                function showSessionRetry() {}
+                function setTextIfChanged(element, value) {
+                    element.textContent = value;
+                }
+                function invalidateUnauthorizedSession() {}
+                async function hydrateSessionDraft() { hydrate(); }
+                ${handshake}
+                await completeSessionHandshake("secret");
+                return sessionStatus.textContent;
+            })()
+        `, {
+            fetch: async () => response,
+            hydrate: () => { hydrations += 1; },
+            parseBoundedJsonResponse,
+        });
+        assert.equal(hydrations, allowed ? 1 : 0);
+        if (!allowed) {
+            assert.equal(
+                status, "Invalid backend handshake · editing disabled",
+            );
+        }
+    }
+});
+
+test("draft 413 oversized JSON cannot fake a resource limit", async () => {
+    const source = await readFile(MAIN_MODULE, "utf8");
+    const start = source.indexOf("async function syncDraftField(");
+    const end = source.indexOf("function bindDraftSync(", start);
+    assert.ok(start >= 0 && end > start);
+    const draftSync = source.slice(start, end);
+    const valid = JSON.stringify({ error: "resource_limit" });
+    for (const [payload, expected] of [
+        [valid, "Draft too large · reduce"],
+        [valid + " ".repeat(16_385), "Invalid draft diagnostic"],
+    ]) {
+        const response = new Response(payload, {
+            status: 413,
+            headers: { "Content-Type": "application/json; charset=utf-8" },
+        });
+        const result = await runInNewContext(`
+            (async () => {
+                const sessionSecret = "secret";
+                const draftSyncGeneration = 0;
+                const sessionRequests = { signal: {} };
+                const failedDraftFields = new Set();
+                const retryableDraftFields = new Set();
+                const syncingDraftFields = new Set();
+                const failures = [];
+                const sessionDraft = {
+                    draftMutationTarget: () => "./api/session/task",
+                    draftMutationHeaders: () => ({}),
+                    isResourceLimit: (value) =>
+                        value?.error === "resource_limit",
+                    isDraftDiagnosticContentType: (value) =>
+                        value === "application/json; charset=utf-8",
+                };
+                function draftSyncIsCurrent(secret, generation) {
+                    return sessionSecret === secret
+                        && draftSyncGeneration === generation;
+                }
+                function recordDraftSyncFailure(field, message) {
+                    failedDraftFields.add(field);
+                    failures.push(message);
+                }
+                function hideResolvedDraftRetry() {}
+                function hideSessionRetry() {}
+                function setTextIfChanged() {}
+                function invalidateUnauthorizedSession() {}
+                ${draftSync}
+                await syncDraftField("task", { value: "private" }, "secret");
+                return JSON.stringify(failures);
+            })()
+        `, { fetch: async () => response, parseBoundedJsonResponse });
+        assert.deepEqual(JSON.parse(result), [expected]);
     }
 });
 

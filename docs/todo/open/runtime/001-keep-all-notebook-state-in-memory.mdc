@@ -202,3 +202,15 @@ entire response body with the exact submitted bytes. The in-memory draft value
 also preserves both initial and interior U+FEFF characters. This pins backend
 transport fidelity alongside the browser's fatal decoder, not accepted
 notebook or media lifecycle authority.
+
+Browser handshakes now admit only at most 16,384 UTF-8 response bytes before
+parsing JSON. Previously `Response.json()` buffered an unbounded success or
+version-mismatch body after media-type admission.
+
+A red-first fixture verifies early declared-length refusal, unknown-length
+stream cancellation, malformed UTF-8 rejection, and exact-limit success. A
+runtime module fixture confirms an overlong compatible-looking handshake never
+grants draft access. Firefox independently refuses the overlong handshake with
+all draft fields disabled and no draft requests, then accepts a new correctly
+bounded handshake. This guards browser transport allocation and admission,
+not backend-issued notebook content or persistent state.

@@ -165,3 +165,18 @@ a otherwise valid resource-limit JSON body, followed by a correctly declared
 JSON diagnostic after a fresh edit. The first reports invalid metadata without
 losing the user's draft, while the second reports the known byte-limit class.
 This tests network and DOM behavior beyond the extracted browser parser.
+
+Browser handshake and draft-write 413 responses now share a bounded, fatal
+UTF-8 reader before `JSON.parse()`. The control JSON cap is 16,384 bytes;
+malformed or oversized bodies remain invalid instead of being interpreted as
+a known diagnostic.
+
+An isolated adapter fixture proves that an overlong 413 with otherwise
+compatible resource-limit JSON stays invalid, while valid small JSON retains
+its known diagnostic class. Firefox confirms that a sequence of wrong-media,
+overlong correctly declared, and valid 413 payloads preserves the unsaved
+draft and reports the respective invalid/known statuses.
+
+The larger 1,048,576-byte draft-text read limit remains independent, now
+using the same streaming decoder. This is client-side diagnostic transport
+admission, not completion of all backend diagnostic producers.

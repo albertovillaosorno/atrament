@@ -563,3 +563,65 @@ test("generated handshake payloads match fail-closed reference", () => {
         ["compatible", "incompatible", "invalid"],
     );
 });
+
+const { parseBoundedJsonResponse } = await import(
+    `${GENERATED_ROOT}session-diagnostic.js`,
+);
+
+test("control JSON rejects declared overlong bodies early", async () => {
+    let cancelled = false;
+    let pulls = 0;
+    const response = new Response(new ReadableStream({
+        pull(controller) {
+            pulls += 1;
+            controller.enqueue(Uint8Array.of(0x7b));
+        },
+        cancel() { cancelled = true; },
+    }), { headers: { "Content-Length": "16385" } });
+    assert.equal(await parseBoundedJsonResponse(response), null);
+    assert.equal(pulls, 0);
+    assert.equal(cancelled, true);
+});
+
+test("control-plane JSON bounds unknown-length streams", async () => {
+    let cancelled = false;
+    let pulls = 0;
+    const response = new Response(new ReadableStream({
+        pull(controller) {
+            pulls += 1;
+            controller.enqueue(new Uint8Array(8_192).fill(0x20));
+        },
+        cancel() { cancelled = true; },
+    }));
+    assert.equal(await parseBoundedJsonResponse(response), null);
+    assert.equal(cancelled, true);
+    assert.ok(pulls <= 4, "stop reading after the byte budget");
+});
+
+test("control JSON admits exact UTF-8 and rejects corruption", async () => {
+    const valid = { result: "compatible", label: "niño 📝" };
+    const encoded = new TextEncoder().encode(JSON.stringify(valid));
+    assert.deepEqual(
+        await parseBoundedJsonResponse(new Response(encoded)), valid,
+    );
+    const bom = new Uint8Array([0xef, 0xbb, 0xbf, ...encoded]);
+    assert.deepEqual(await parseBoundedJsonResponse(new Response(bom)), valid);
+    assert.equal(await parseBoundedJsonResponse(
+        new Response(Uint8Array.of(0x7b, 0xc3, 0x28, 0x7d)),
+    ), null);
+    assert.equal(
+        await parseBoundedJsonResponse(new Response("{bad json")), null,
+    );
+    const exact = " ".repeat(16_382) + "{}";
+    assert.deepEqual(await parseBoundedJsonResponse(new Response(exact)), {});
+    assert.equal(await parseBoundedJsonResponse(
+        new Response(exact + " "),
+    ), null);
+});
+
+test("control-plane JSON preserves transport errors", async () => {
+    const broken = new Response(new ReadableStream({
+        start(controller) { controller.error(new Error("network failed")); },
+    }));
+    await assert.rejects(parseBoundedJsonResponse(broken), /network failed/);
+});

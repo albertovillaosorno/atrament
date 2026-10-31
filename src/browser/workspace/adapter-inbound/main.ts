@@ -31,6 +31,7 @@
 // - Defaults:
 //   - Uses only same-origin session APIs and persists no browser state.
 //
+import { parseBoundedJsonResponse } from "./session-diagnostic.js";
 import * as sessionDraft from "./session-draft.js";
 import * as sessionHandshake from "./session-handshake.js";
 import { sessionSecretFromFragment } from "./session-fragment.js";
@@ -521,7 +522,7 @@ async function completeSessionHandshake(secret: string): Promise<void> {
     }
     let payload: unknown;
     try {
-        payload = await response.json();
+        payload = await parseBoundedJsonResponse(response);
     } catch {
         payload = null;
     }
@@ -779,7 +780,7 @@ async function syncDraftField(
                 }
                 let payload: unknown;
                 try {
-                    payload = await response.json();
+                    payload = await parseBoundedJsonResponse(response);
                 } catch {
                     if (draftSyncIsCurrent(secret, generation)) {
                         const invalidMessage = "Invalid draft diagnostic";

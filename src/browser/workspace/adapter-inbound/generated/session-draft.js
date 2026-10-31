@@ -34,6 +34,7 @@
 // - Defaults:
 //   - Uses text/plain UTF-8 bodies and no ambient browser credentials.
 //
+import { decodeBoundedUtf8Response } from "./session-diagnostic.js";
 import { ownDataField, parseDiagnosticSet } from "./session-diagnostic.js";
 export function draftReadHeaders(sessionSecret) {
     return {
@@ -75,56 +76,7 @@ export function decodeDraftReadBytes(bytes) {
 // complete three-field snapshot can be admitted.
 const MAX_DRAFT_READ_BYTES = 1_048_576;
 export async function decodeDraftReadResponse(response) {
-    const declaredLength = response.headers.get("content-length");
-    if (declaredLength !== null
-        && (!/^(0|[1-9][0-9]*)$/.test(declaredLength)
-            || Number(declaredLength) > MAX_DRAFT_READ_BYTES)) {
-        void response.body?.cancel().catch(() => { });
-        return null;
-    }
-    // Browser fetch has a streamed body, including for unknown lengths.
-    // The fallback handles null/absent bodies and isolated transport stubs.
-    if (!response.body) {
-        const bytes = await response.arrayBuffer();
-        return bytes.byteLength > MAX_DRAFT_READ_BYTES
-            ? null
-            : decodeDraftReadBytes(bytes);
-    }
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder("utf-8", {
-        fatal: true,
-        ignoreBOM: true,
-    });
-    let receivedBytes = 0;
-    let result = "";
-    try {
-        for (;;) {
-            const { done, value } = await reader.read();
-            if (done) {
-                try {
-                    return result + decoder.decode();
-                }
-                catch {
-                    return null;
-                }
-            }
-            if (value.byteLength > MAX_DRAFT_READ_BYTES - receivedBytes) {
-                void reader.cancel().catch(() => { });
-                return null;
-            }
-            receivedBytes += value.byteLength;
-            try {
-                result += decoder.decode(value, { stream: true });
-            }
-            catch {
-                void reader.cancel().catch(() => { });
-                return null;
-            }
-        }
-    }
-    finally {
-        reader.releaseLock();
-    }
+    return decodeBoundedUtf8Response(response, MAX_DRAFT_READ_BYTES);
 }
 // A resource-limit diagnostic is not authority without a declared JSON body.
 export function isDraftDiagnosticContentType(value) {
