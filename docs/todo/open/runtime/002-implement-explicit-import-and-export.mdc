@@ -38,6 +38,15 @@ Deterministic source-metadata regressions cover an unchanged file, same-length
 rewrites, restored mtime and distinct inodes. This is extra race detection,
 **not** an atomic snapshot guarantee against concurrent filesystem writers.
 
+The read-only profile inspector now reserves its section reference inventory
+fallibly and plans the exact complete display length, including canonical root,
+section names, labels and line breaks, before writing any display text.
+One fallible output reservation precedes all appends; oversized or unavailable
+storage cannot cause unchecked allocation growth after partial construction.
+A real process regression compares byte-exact canonical output for a verified
+130 KiB JSON section and verifies its selected source remains unchanged.
+This is bounded presentation, not typed handwriting profile acceptance.
+
 A separate Linux `atrament profile verify PATH` CLI now runs the same
 fully bounded, secure selected-source and SHA/section-syntax gate as profile
 inspection, then emits only a fixed success confirmation. Unlike inspection,

@@ -345,6 +345,9 @@ pub(crate) fn inspect_profile(path: PathBuf) -> io::Result<String> {
         &[],
         profile_inspection_limits(),
         |verified| -> io::Result<String> {
+            const MANIFEST_LABEL: &str = "manifest.json (verified):\n";
+            const SECTION_LABEL: &str = " (syntax-checked; untyped):\n";
+
             let manifest = write_canonical_profile_manifest_json(
                 verified.manifest(),
                 &[],
@@ -353,25 +356,57 @@ pub(crate) fn inspect_profile(path: PathBuf) -> io::Result<String> {
             .map_err(|error| io::Error::other(format!(
                 "cannot encode admitted manifest: {error:?}",
             )))?;
-            let mut readable = String::from("manifest.json (verified):\n");
-            readable.push_str(from_utf8(&manifest)
-                .map_err(io::Error::other)?);
-            readable.push('\n');
-            // The manifest can declare entries in any order. Inspection
-            // should still be stable for the same admitted profile contents.
-            let mut sections = verified.manifest().entries.iter()
-                .filter(|entry| entry.path.starts_with("sections/"))
-                .collect::<Vec<_>>();
-            sections.sort_unstable_by(|left, right| left.path.cmp(&right.path));
-            for entry in sections {
+            let manifest_text = from_utf8(&manifest).map_err(io::Error::other)?;
+            // Reserve the bounded section index fallibly. No unchecked Vec
+            // growth is allowed from an untrusted declared inventory.
+            let mut sections = Vec::new();
+            sections.try_reserve_exact(verified.manifest().entries.len())
+                .map_err(|_error| io::Error::other(
+                    "profile inspection section allocation refused",
+                ))?;
+            for entry in &verified.manifest().entries {
+                if !entry.path.starts_with("sections/") {
+                    continue;
+                }
                 let bytes = verified.verified_entry_bytes(&entry.path)
                     .ok_or_else(|| {
                         io::Error::other("missing verified section")
                     })?;
-                readable.push_str(&entry.path);
-                readable.push_str(" (syntax-checked; untyped):\n");
-                readable.push_str(from_utf8(bytes)
-                    .map_err(io::Error::other)?);
+                sections.push((
+                    entry.path.as_str(),
+                    from_utf8(bytes).map_err(io::Error::other)?,
+                ));
+            }
+            sections.sort_unstable_by(|left, right| left.0.cmp(right.0));
+
+            // Exact planned output length includes section path labels and
+            // newlines. Fallible one-time allocation precedes all writes;
+            // every subsequent append fits the already reserved capacity.
+            let length_error = || {
+                io::Error::other("profile inspection output length refused")
+            };
+            let mut output_len = MANIFEST_LABEL.len()
+                .checked_add(manifest_text.len())
+                .and_then(|length| length.checked_add(1))
+                .ok_or_else(length_error)?;
+            for (section_path, value) in &sections {
+                output_len = output_len.checked_add(section_path.len())
+                    .and_then(|length| length.checked_add(SECTION_LABEL.len()))
+                    .and_then(|length| length.checked_add(value.len()))
+                    .and_then(|length| length.checked_add(1))
+                    .ok_or_else(length_error)?;
+            }
+            let mut readable = String::new();
+            readable.try_reserve_exact(output_len).map_err(|_error| {
+                io::Error::other("profile inspection output allocation refused")
+            })?;
+            readable.push_str(MANIFEST_LABEL);
+            readable.push_str(manifest_text);
+            readable.push('\n');
+            for (section_path, value) in sections {
+                readable.push_str(section_path);
+                readable.push_str(SECTION_LABEL);
+                readable.push_str(value);
                 readable.push('\n');
             }
             Ok(readable)

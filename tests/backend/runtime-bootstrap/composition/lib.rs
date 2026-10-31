@@ -1301,6 +1301,71 @@ fn cli_inspects_verified_section_without_extracting_opaque_assets() {
 
 #[cfg(target_os = "linux")]
 #[test]
+fn cli_inspection_preserves_exact_large_section_after_output_planning() {
+    let section = format!(r#"{{"large":"{}"}}"#, "v".repeat(130_000));
+    let digest = digest_hex(section.as_bytes());
+    let source_root = format!(
+        concat!(
+            r#"{{"profile_identity":"writer","required_features":[],"#,
+            r#""optional_features":[],"entries":[{{"#,
+            r#""path":"sections/long.json","#,
+            r#""sha256":"{}","byte_length":{},"#,
+            r#""media_type":"application/json"}}],"#,
+            r#""container_version":"atrament.profile/1"}}"#,
+        ),
+        digest, section.len(),
+    );
+    let canonical_root = format!(
+        concat!(
+            r#"{{"container_version":"atrament.profile/1","#,
+            r#""entries":[{{"byte_length":{},"#,
+            r#""media_type":"application/json","#,
+            r#""path":"sections/long.json","sha256":"{}"}}],"#,
+            r#""optional_features":[],"profile_identity":"writer","#,
+            r#""required_features":[]}}"#,
+        ),
+        section.len(), digest,
+    );
+    let archive = write_stored_profile_zip(
+        &[
+            ProfileStoredZipMember {
+                name: "manifest.json",
+                bytes: source_root.as_bytes(),
+            },
+            ProfileStoredZipMember {
+                name: "sections/long.json",
+                bytes: section.as_bytes(),
+            },
+        ],
+        ProfileStoredZipWriteLimits {
+            maximum_archive_bytes: 4 * 1024 * 1024,
+            maximum_entries: 2,
+            maximum_entry_bytes: 2 * 1024 * 1024,
+            maximum_total_bytes: 4 * 1024 * 1024,
+        },
+    )
+    .expect("long JSON section stays inside bounded profile size");
+    let owned = OwnedProfileFile::new(&archive);
+    let expected = format!(
+        "manifest.json (verified):\n{canonical_root}\nsections/long.json \
+         (syntax-checked; untyped):\n{section}\n",
+    );
+    let readable = bootstrap::inspect_profile(owned.0.clone())
+        .expect("all reserved output bytes remain intact");
+    assert_eq!(readable, expected);
+    let executed = Command::new(env!("CARGO_BIN_EXE_atrament"))
+        .args(["profile", "inspect"])
+        .arg(&owned.0)
+        .output()
+        .expect("inspect one large verified section in a real CLI");
+    assert!(executed.status.success());
+    assert!(executed.stderr.is_empty());
+    assert_eq!(executed.stdout, expected.as_bytes());
+    assert_eq!(fs::read(&owned.0).expect("source not modified"), archive);
+}
+
+#[cfg(target_os = "linux")]
+#[test]
 fn cli_section_order_is_stable_across_manifest_declaration_orders() {
     let first = br#"{"first":true}"#;
     let last = br#"{"last":true}"#;
