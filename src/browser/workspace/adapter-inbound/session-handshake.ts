@@ -115,7 +115,8 @@ export function handshakeHeaders(
 // The runtime handshake contract is JSON with an explicit UTF-8 declaration.
 // Do not parse a misrouted HTML/plain-text success as compatibility authority.
 export function isHandshakeContentType(value: string | null): boolean {
-    return value?.trim().toLowerCase() === "application/json; charset=utf-8";
+    return value?.replace(/^[ \t]+|[ \t]+$/gu, "").toLowerCase()
+        === "application/json; charset=utf-8";
 }
 
 export function parseHandshakePayload(value: unknown): HandshakeOutcome {

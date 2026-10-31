@@ -65,6 +65,7 @@ test("handshake bodies require declared UTF-8 JSON", () => {
         "application/json; charset=utf-8",
         "Application/Json; Charset=UTF-8",
         " application/json; charset=utf-8 ",
+        "\tapplication/json; charset=utf-8\t",
     ]) {
         assert.equal(isHandshakeContentType(valid), true, valid);
     }
@@ -76,6 +77,10 @@ test("handshake bodies require declared UTF-8 JSON", () => {
         "text/plain; charset=utf-8",
         "application/json; charset=latin1",
         "application/json; charset=utf-8; extra=yes",
+        "\u00a0application/json; charset=utf-8\u00a0",
+        "\uFEFFapplication/json; charset=utf-8",
+        "\u000bapplication/json; charset=utf-8\u000b",
+        "\napplication/json; charset=utf-8\n",
     ]) {
         assert.equal(isHandshakeContentType(invalid), false, String(invalid));
     }

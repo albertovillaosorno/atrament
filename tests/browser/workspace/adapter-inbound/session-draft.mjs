@@ -82,6 +82,7 @@ test("draft reads admit only declared UTF-8 plain text", () => {
         "text/plain; charset=utf-8",
         "Text/Plain; Charset=UTF-8",
         " text/plain; charset=utf-8 ",
+        "\ttext/plain; charset=utf-8\t",
     ]) {
         assert.equal(isDraftReadContentType(valid), true, valid);
     }
@@ -93,6 +94,10 @@ test("draft reads admit only declared UTF-8 plain text", () => {
         "application/json; charset=utf-8",
         "text/plain; charset=iso-8859-1",
         "text/plain; charset=utf-8; extra=yes",
+        "\u00a0text/plain; charset=utf-8\u00a0",
+        "\uFEFFtext/plain; charset=utf-8",
+        "\u000btext/plain; charset=utf-8\u000b",
+        "\ntext/plain; charset=utf-8\n",
     ]) {
         assert.equal(isDraftReadContentType(invalid), false, String(invalid));
     }
@@ -210,6 +215,7 @@ test("draft resource-limit diagnostics require UTF-8 JSON media", () => {
         "application/json; charset=utf-8",
         "Application/JSON; Charset=UTF-8",
         " application/json; charset=utf-8 ",
+        "\tapplication/json; charset=utf-8\t",
     ]) {
         assert.equal(isDraftDiagnosticContentType(valid), true, valid);
     }
@@ -221,6 +227,10 @@ test("draft resource-limit diagnostics require UTF-8 JSON media", () => {
         "text/plain; charset=utf-8",
         "application/json; charset=latin1",
         "application/json; charset=utf-8; extra=yes",
+        "\u00a0application/json; charset=utf-8\u00a0",
+        "\uFEFFapplication/json; charset=utf-8",
+        "\u000bapplication/json; charset=utf-8\u000b",
+        "\napplication/json; charset=utf-8\n",
     ]) {
         assert.equal(
             isDraftDiagnosticContentType(invalid), false, String(invalid),

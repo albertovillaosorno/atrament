@@ -56,7 +56,8 @@ export function draftMutationTarget(field) {
 // A successful backend draft read must be a declared UTF-8 text resource.
 // Do not treat a same-origin HTML/error page with HTTP 200 as draft state.
 export function isDraftReadContentType(value) {
-    return value?.trim().toLowerCase() === "text/plain; charset=utf-8";
+    return value?.replace(/^[ \t]+|[ \t]+$/gu, "").toLowerCase()
+        === "text/plain; charset=utf-8";
 }
 // Preserve every admitted UTF-8 code point, including an initial U+FEFF.
 // Response.text() removes a leading BOM and silently replaces invalid bytes.
@@ -80,7 +81,8 @@ export async function decodeDraftReadResponse(response) {
 }
 // A resource-limit diagnostic is not authority without a declared JSON body.
 export function isDraftDiagnosticContentType(value) {
-    return value?.trim().toLowerCase() === "application/json; charset=utf-8";
+    return value?.replace(/^[ \t]+|[ \t]+$/gu, "").toLowerCase()
+        === "application/json; charset=utf-8";
 }
 function isRecord(value) {
     return typeof value === "object"

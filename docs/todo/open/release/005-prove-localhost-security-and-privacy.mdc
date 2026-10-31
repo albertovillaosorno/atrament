@@ -547,3 +547,12 @@ A separate red-first fixture proved that unsuccessful `SIGTERM` and
 teardown. Those failures now reject promptly, clear process observers, and
 cancel both shutdown deadlines. Neither change alters the actual browser
 launcher or resolves its launch URL credential exposure.
+
+Browser media-type admission now trims only HTTP's ASCII outer optional
+whitespace (space and horizontal tab), rather than JavaScript's wider Unicode
+whitespace set. Red-first Node regressions found that NBSP, U+FEFF, vertical
+tab, and line breaks could previously turn malformed handshake, draft-read,
+and draft-diagnostic content types into accepted media declarations. The
+corrected paths retain case-insensitive matching and valid ASCII outer OWS.
+This narrows browser response metadata admission; it does not authenticate a
+misrouted response or alter backend media validation.
