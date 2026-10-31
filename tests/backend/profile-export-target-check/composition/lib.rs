@@ -151,6 +151,81 @@ mod linux {
     }
 
     #[test]
+    fn opened_probe_refuses_identical_bytes_after_parent_directory_replacement()
+    {
+        let dir = OwnedDir::new();
+        let original = artifact("parent-replacement");
+        let selected_parent = dir.0.join("selected-parent");
+        fs::create_dir_all(&selected_parent).expect("first parent");
+        let selected = intent(
+            selected_parent.join("selected.atrament"),
+            ExplicitFilePurpose::ExportProfile,
+        );
+        fs::write(selected.path(), original.bytes())
+            .expect("original selected target");
+        let opened = open_profile_export_target_probe(
+            &selected,
+            &original,
+            original.bytes().len(),
+        )
+        .expect("open selected target under first parent")
+        .expect("target exists");
+        let parked_parent = dir.0.join("parked-parent");
+        fs::rename(&selected_parent, &parked_parent)
+            .expect("detach first parent");
+        fs::create_dir_all(&selected_parent).expect("new selected parent");
+        fs::write(selected.path(), original.bytes())
+            .expect("identical ZIP in replacement directory");
+        assert_ne!(
+            fs::metadata(parked_parent.join("selected.atrament"))
+                .expect("original inode")
+                .ino(),
+            fs::metadata(selected.path()).expect("new inode").ino(),
+        );
+        assert_eq!(opened.verify(), Ok(Status::Drifted));
+        assert_eq!(
+            fs::read(parked_parent.join("selected.atrament"))
+                .expect("old target stays intact"),
+            original.bytes(),
+        );
+    }
+
+    #[test]
+    fn opened_probe_refuses_parent_symlink_rebinding_to_original_inode() {
+        let dir = OwnedDir::new();
+        let original = artifact("parent-link-replacement");
+        let selected_parent = dir.0.join("selected-parent");
+        fs::create_dir_all(&selected_parent).expect("first parent");
+        let selected = intent(
+            selected_parent.join("selected.atrament"),
+            ExplicitFilePurpose::ExportProfile,
+        );
+        fs::write(selected.path(), original.bytes())
+            .expect("original selected target");
+        let opened = open_profile_export_target_probe(
+            &selected,
+            &original,
+            original.bytes().len(),
+        )
+        .expect("open selected target under first parent")
+        .expect("target exists");
+        let parked_parent = dir.0.join("parked-parent");
+        fs::rename(&selected_parent, &parked_parent)
+            .expect("detach first parent");
+        symlink(&parked_parent, &selected_parent)
+            .expect("alias selected parent to original target");
+        assert_eq!(
+            opened.verify(),
+            Err(Error::Open(ProfileSelectedFileOpenError::SymlinkForbidden)),
+        );
+        assert_eq!(
+            fs::read(parked_parent.join("selected.atrament"))
+                .expect("original bytes stay intact"),
+            original.bytes(),
+        );
+    }
+
+    #[test]
     fn opened_probe_reports_missing_if_selected_target_removed_during_check() {
         let dir = OwnedDir::new();
         let original = artifact("A");
