@@ -106,3 +106,17 @@ valid identities and be invoked during validation, despite the earlier
 prototype-field guard. Descriptor-only reads now reject those shapes without
 executing the getters; ordinary decoded JSON remains accepted. This is an
 in-process parser integrity rule, not a claim of remote code execution.
+
+Browser diagnostic-set metadata now also bounds the number of decoded items it
+will inspect to 128, before walking array slots. A red-first fixture showed
+that 129 otherwise valid entries were previously admitted. An oversized
+in-process sparse-array proxy fixture proves the parser rejects by declared
+length without invoking any slot descriptors; the exact 128-item boundary
+remains admitted.
+
+A separate red-first proxy fixture also showed ordinary `items.length` access
+could invoke in-process getter traps. Reading the array's own data descriptor
+now avoids that getter path for admitted metadata. Current localhost handshake
+and draft responses still emit only one application diagnostic each. This is
+CPU-work bounding for the browser parser, not evidence that the backend can
+transmit huge diagnostic arrays or that downstream schemas are complete.

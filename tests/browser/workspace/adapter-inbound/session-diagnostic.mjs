@@ -133,6 +133,57 @@ test("diagnostic parser rejects sparse and inherited diagnostic slots", () => {
     }
 });
 
+test("diagnostic admission limits item work before inspecting entries", () => {
+    const item = { code: "atrament.example.condition" };
+    const payload = (items) => ({
+        version: DIAGNOSTIC_VERSION,
+        completeness: "complete",
+        items,
+    });
+    const atLimit = Array.from({ length: 128 }, () => item);
+    assert.equal(parseDiagnosticSet(payload(atLimit))?.items.length, 128);
+    assert.equal(parseDiagnosticSet(payload([...atLimit, item])), null);
+
+    // The descriptor trap stands in for an in-process array whose reported
+    // length is huge. Rejection must not walk its attacker-supplied slots.
+    let inspected = 0;
+    const hugeItems = new Proxy(new Array(1_000_000_000), {
+        getOwnPropertyDescriptor(_target, key) {
+            if (key !== "length") {
+                inspected += 1;
+                if (inspected > 8) {
+                    throw new Error("diagnostic parser walked oversized items");
+                }
+                return {
+                    configurable: true,
+                    enumerable: true,
+                    writable: true,
+                    value: item,
+                };
+            }
+            return Reflect.getOwnPropertyDescriptor(_target, key);
+        },
+    });
+    assert.equal(parseDiagnosticSet(payload(hugeItems)), null);
+    assert.equal(inspected, 0, "oversize must refuse before reading slots");
+
+    // An actual Array has an own data `length`, even when wrapped in an
+    // in-process Proxy that would execute code on ordinary property access.
+    let lengthReads = 0;
+    const guardedLength = new Proxy([item], {
+        get(target, key, receiver) {
+            if (key === "length") {
+                lengthReads += 1;
+                return Reflect.get(target, key, receiver);
+            }
+            return Reflect.get(target, key, receiver);
+        },
+    });
+    assert.equal(parseDiagnosticSet(payload(guardedLength))?.completeness,
+        "complete");
+    assert.equal(lengthReads, 0, "array length admission must read own data");
+});
+
 test("diagnostic metadata requires own wire fields", () => {
     const validItem = { code: "atrament.example.condition" };
     const valid = {

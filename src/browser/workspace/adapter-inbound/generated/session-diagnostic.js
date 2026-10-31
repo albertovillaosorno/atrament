@@ -31,6 +31,9 @@
 //   - Accepts only the first-release diagnostic namespace identity.
 //
 export const DIAGNOSTIC_VERSION = "atrament.diagnostic/1";
+// Browser metadata is explanatory, not an unbounded decoded JSON work queue.
+// Current handshake and draft transports emit exactly one diagnostic each.
+const MAX_DIAGNOSTIC_ITEMS = 128;
 function isRecord(value) {
     return typeof value === "object"
         && value !== null
@@ -55,7 +58,16 @@ function isDiagnosticItem(value) {
     return typeof code === "string" && code !== "";
 }
 function hasValidDiagnosticItems(items) {
-    for (let index = 0; index < items.length; index += 1) {
+    // Avoid property getters even when an in-process caller wraps its Array.
+    // Ordinary decoded JSON arrays always have an own data length.
+    const length = ownDataField(items, "length");
+    if (typeof length !== "number"
+        || !Number.isSafeInteger(length)
+        || length < 0
+        || length > MAX_DIAGNOSTIC_ITEMS) {
+        return false;
+    }
+    for (let index = 0; index < length; index += 1) {
         if (!isDiagnosticItem(ownDataField(items, String(index)))) {
             return false;
         }
