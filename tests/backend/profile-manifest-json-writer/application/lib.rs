@@ -33,6 +33,7 @@
 //! Canonical profile manifest encoding from admitted typed metadata.
 
 use std::path::PathBuf;
+use std::str::from_utf8;
 
 use atrament_explicit_file_path_intent::{
     ExplicitFilePathSource, ExplicitFilePurpose, ExplicitOverwriteIntent,
@@ -45,7 +46,9 @@ use atrament_handwriting_profile_container::{
 use atrament_profile_entry_sha256::sha256_profile_bytes;
 use atrament_profile_import_preflight::ProfileImportBudget;
 use atrament_profile_import_verification::verify_attached_profile_import;
-use atrament_profile_json_syntax::ProfileJsonSyntaxLimits;
+use atrament_profile_json_syntax::{
+    ProfileJsonSyntaxLimits, validate_profile_json_object,
+};
 use atrament_profile_manifest_json_codec::{
     ProfileManifestJsonLimits, decode_attached_profile_manifest_json,
     decode_profile_manifest_json,
@@ -64,6 +67,29 @@ use atrament_profile_zip_reader::{
     ProfileZipReadLimits, read_stored_profile_zip,
 };
 
+// Test-only guards preserve an explicit failed expectation on bad input.
+macro_rules! require_ok {
+    ($expression:expr) => {{
+        let outcome = $expression;
+        assert!(
+            outcome.is_ok(),
+            "expected valid manifest: {:?}",
+            outcome.as_ref().err(),
+        );
+        let Ok(value) = outcome else { return; };
+        value
+    }};
+}
+
+macro_rules! require_some {
+    ($expression:expr) => {{
+        let selected = $expression;
+        assert!(selected.is_some(), "expected fixture entry or byte range");
+        let Some(value) = selected else { return; };
+        value
+    }};
+}
+
 const fn limits() -> ProfileManifestJsonWriteLimits {
     ProfileManifestJsonWriteLimits {
         maximum_bytes: 8192,
@@ -75,17 +101,17 @@ const fn limits() -> ProfileManifestJsonWriteLimits {
 
 fn fixture() -> ProfileManifest {
     ProfileManifest {
-        container_version: PROFILE_CONTAINER_VERSION.to_string(),
+        container_version: String::from(PROFILE_CONTAINER_VERSION),
         entries: vec![],
-        optional_features: vec!["mañana".into(), "future".into()],
-        profile_identity: "Writer 🖋".into(),
+        optional_features: vec!["ma\u{f1}ana".into(), "future".into()],
+        profile_identity: "Writer \u{1f58b}".into(),
         required_features: vec!["strokes".into(), "layout".into()],
     }
 }
 
 fn entry(path: &str, payload: &[u8]) -> ProfileManifestEntry {
     ProfileManifestEntry {
-        byte_length: u64::try_from(payload.len()).unwrap(),
+        byte_length: u64::try_from(payload.len()).unwrap_or(u64::MAX),
         digest: sha256_profile_bytes(payload),
         media_type: "application/json".into(),
         path: path.into(),
@@ -93,14 +119,18 @@ fn entry(path: &str, payload: &[u8]) -> ProfileManifestEntry {
 }
 
 fn encode(manifest: &ProfileManifest) -> Vec<u8> {
-    write_canonical_profile_manifest_json(
+    let result = write_canonical_profile_manifest_json(
         manifest, &["strokes", "layout"], limits(),
-    )
-        .expect("valid fixture writes as deterministic JSON")
+    );
+    assert!(
+        result.is_ok(),
+        "canonical fixture must encode: {:?}", result.as_ref().err(),
+    );
+    result.unwrap_or_default()
 }
 
 fn decode(bytes: &[u8]) -> ProfileManifest {
-    let root = atrament_profile_json_syntax::validate_profile_json_object(
+    let parsed_root = validate_profile_json_object(
         bytes,
         ProfileJsonSyntaxLimits {
             maximum_bytes: 8192,
@@ -108,17 +138,19 @@ fn decode(bytes: &[u8]) -> ProfileManifest {
             maximum_object_members: 32,
             maximum_values: 128,
         },
-    )
-    .expect("writer bytes are accepted by independent JSON grammar");
-    decode_profile_manifest_json(
+    );
+    assert!(parsed_root.is_ok(), "writer output must pass JSON syntax");
+    let Ok(root) = parsed_root else { return fixture(); };
+    let decoded = decode_profile_manifest_json(
         root,
         ProfileManifestJsonLimits {
             maximum_entries: 8,
             maximum_features: 8,
             maximum_string_bytes: 256,
         },
-    )
-    .expect("writer schema is accepted by independent typed decoder")
+    );
+    assert!(decoded.is_ok(), "writer output must pass typed decoding");
+    decoded.unwrap_or_else(|_| fixture())
 }
 
 #[test]
@@ -128,7 +160,7 @@ fn golden_root_only_json_has_fixed_key_and_feature_order() {
     manifest.optional_features.clear();
     let actual = encode(&manifest);
     assert_eq!(
-        std::str::from_utf8(&actual).unwrap(),
+        from_utf8(&actual).unwrap_or(""),
         concat!(
             r#"{"container_version":"atrament.profile/1","entries":[],"#,
             r#""optional_features":[],"profile_identity":"writer-1","#,
@@ -152,9 +184,9 @@ fn input_order_cannot_change_canonical_byte_identity() {
     let bytes = encode(&first);
     assert_eq!(bytes, encode(&second));
     let decoded = decode(&bytes);
-    assert_eq!(decoded.entries[0].path, "assets/b.bin");
-    assert_eq!(decoded.entries[1].path, "sections/z.json");
-    assert_eq!(decoded.optional_features, ["future", "mañana"]);
+    assert_eq!(require_some!(decoded.entries.first()).path, "assets/b.bin");
+    assert_eq!(require_some!(decoded.entries.get(1)).path, "sections/z.json");
+    assert_eq!(decoded.optional_features, ["future", "ma\u{f1}ana"]);
     assert_eq!(decoded.required_features, ["layout", "strokes"]);
     assert_eq!(encode(&decoded), bytes);
 }
@@ -163,24 +195,30 @@ fn input_order_cannot_change_canonical_byte_identity() {
 fn strings_escape_controls_but_retain_unicode_and_hex_digest_bytes() {
     let mut manifest = fixture();
     manifest.profile_identity = concat!(
-        "ñ 🖋 \" \\ \0 \u{001f}",
+        "\u{f1} \u{1f58b} \" \\ \0 \u{001f}",
         "\n\r\t\u{0008}\u{000c}",
     ).into();
     manifest.entries.push(ProfileManifestEntry {
         byte_length: u64::MAX,
         digest: Sha256Digest::from_bytes([0xab; 32]),
         media_type: "application/json".into(),
-        path: "assets/ñ.json".into(),
+        path: "assets/\u{f1}.json".into(),
     });
     let bytes = encode(&manifest);
-    let text = std::str::from_utf8(&bytes).unwrap();
-    assert!(text.contains(r#"ñ 🖋 \" \\ \u0000 \u001f\n\r\t\b\f"#));
+    let text = require_ok!(from_utf8(&bytes));
+    assert!(text.contains(concat!(
+        "\u{f1} \u{1f58b} ",
+        r#"\" \\ \u0000 \u001f\n\r\t\b\f"#,
+    )));
     assert!(text.contains("18446744073709551615"));
     assert!(text.contains(&"ab".repeat(32)));
     let decoded = decode(&bytes);
     assert_eq!(decoded.profile_identity, manifest.profile_identity);
-    assert_eq!(decoded.entries[0].byte_length, u64::MAX);
-    assert_eq!(decoded.entries[0].digest, manifest.entries[0].digest);
+    assert_eq!(require_some!(decoded.entries.first()).byte_length, u64::MAX);
+    assert_eq!(
+        require_some!(decoded.entries.first()).digest,
+        require_some!(manifest.entries.first()).digest,
+    );
     assert_eq!(encode(&decoded), bytes);
 }
 
@@ -194,27 +232,27 @@ fn every_decimal_width_preserves_plan_owned_and_buffer_bytes() {
         lengths.extend([boundary - 1, boundary]);
     }
     for length in lengths {
-        manifest.entries[0].byte_length = length;
-        let planned = planned_canonical_profile_manifest_json_bytes(
+        require_some!(manifest.entries.first_mut()).byte_length = length;
+        let planned = require_ok!(planned_canonical_profile_manifest_json_bytes(
             &manifest, &["strokes", "layout"], limits(),
-        ).expect("exact decimal framing plan");
+        ));
         let owned = encode(&manifest);
         assert_eq!(owned.len(), planned);
-        let readable = std::str::from_utf8(&owned)
-            .expect("ASCII decimal in UTF-8 JSON");
+        let readable = require_ok!(from_utf8(&owned));
         assert!(
             readable.contains(&format!(r#""byte_length":{length}"#)),
             "canonical decimal was not exact: {length}",
         );
-        assert_eq!(decode(&owned).entries[0].byte_length, length);
+        let decoded = decode(&owned);
+        assert_eq!(require_some!(decoded.entries.first()).byte_length, length);
         let mut destination = vec![0xa5; planned + 7];
-        let written = write_canonical_profile_manifest_json_into(
+        let written = require_ok!(write_canonical_profile_manifest_json_into(
             &manifest, &["strokes", "layout"], limits(),
             &mut destination,
-        ).expect("caller-owned output admits exact decimal bytes");
+        ));
         assert_eq!(written, planned);
-        assert_eq!(&destination[..written], owned);
-        assert_eq!(&destination[written..], &[0xa5; 7]);
+        assert_eq!(destination.get(..written), Some(owned.as_slice()));
+        assert_eq!(destination.get(written..), Some(&[0xa5; 7][..]));
         let mut tighter = limits();
         tighter.maximum_bytes = planned - 1;
         assert_eq!(
@@ -236,7 +274,7 @@ fn output_budget_matches_exact_escape_aware_count() {
         write_canonical_profile_manifest_json(
             &manifest, &["layout", "strokes"], allowed,
         ),
-        Ok(actual.clone()),
+        Ok(actual),
     );
     allowed.maximum_bytes -= 1;
     assert_eq!(
@@ -289,7 +327,7 @@ fn typed_admission_and_field_limits_refuse_before_serialization() {
             ProfileManifestError::UnsupportedRequiredFeature { .. }
         )),
     ));
-    manifest.entries[0].path = "assets/../bad".into();
+    require_some!(manifest.entries.first_mut()).path = "assets/../bad".into();
     assert!(matches!(
         write_canonical_profile_manifest_json(
             &manifest, &["strokes", "layout"], bounds,
@@ -298,8 +336,10 @@ fn typed_admission_and_field_limits_refuse_before_serialization() {
             ProfileManifestError::InvalidEntryPath { .. }
         )),
     ));
-    manifest.entries[0].path = "sections/strokes.json".into();
-    manifest.entries.push(manifest.entries[0].clone());
+    require_some!(manifest.entries.first_mut()).path =
+        "sections/strokes.json".into();
+    let duplicate = require_some!(manifest.entries.first()).clone();
+    manifest.entries.push(duplicate);
     assert!(matches!(
         write_canonical_profile_manifest_json(
             &manifest, &["strokes", "layout"], bounds,
@@ -404,7 +444,7 @@ fn canonical_manifest_in_stored_zip_passes_source_attached_hash_checks() {
             name: "sections/strokes.json",
         },
     ];
-    let zip = write_stored_profile_zip(
+    let zip = require_ok!(write_stored_profile_zip(
         &members,
         ProfileStoredZipWriteLimits {
             maximum_archive_bytes: 16_384,
@@ -412,9 +452,8 @@ fn canonical_manifest_in_stored_zip_passes_source_attached_hash_checks() {
             maximum_entry_bytes: 8_192,
             maximum_total_bytes: 16_384,
         },
-    )
-    .expect("canonical ZIP framing");
-    let archive = read_stored_profile_zip(
+    ));
+    let archive = require_ok!(read_stored_profile_zip(
         &zip,
         ProfileZipReadLimits {
             maximum_archive_bytes: zip.len(),
@@ -422,34 +461,30 @@ fn canonical_manifest_in_stored_zip_passes_source_attached_hash_checks() {
             maximum_entry_bytes: 8_192,
             maximum_total_bytes: 16_384,
         },
-    )
-    .expect("checked CRC-framed ZIP");
-    let root = archive
+    ));
+    let root = require_ok!(archive
         .admitted_root_json(ProfileJsonSyntaxLimits {
             maximum_bytes: 8192,
             maximum_nesting: 16,
             maximum_object_members: 32,
             maximum_values: 128,
-        })
-        .expect("attached syntax-admitted ZIP root");
-    let source = decode_attached_profile_manifest_json(
+        }));
+    let source = require_ok!(decode_attached_profile_manifest_json(
         &root,
         ProfileManifestJsonLimits {
             maximum_entries: 8,
             maximum_features: 8,
             maximum_string_bytes: 256,
         },
-    )
-    .expect("source-backed typed manifest");
-    let path = classify_explicit_file_path_intent(
+    ));
+    let path = require_ok!(classify_explicit_file_path_intent(
         ExplicitFilePurpose::ImportProfile,
         ExplicitFilePathSource::CallerSelection,
         PathBuf::from("test.atrament"),
         ExplicitOverwriteIntent::PreserveExisting,
-    )
-    .expect("synthetic path intent, not file authority");
+    ));
     let mut names = [""; 2];
-    let verified = verify_attached_profile_import(
+    let verified = require_ok!(verify_attached_profile_import(
         &path,
         &source,
         &["strokes", "layout"],
@@ -459,8 +494,7 @@ fn canonical_manifest_in_stored_zip_passes_source_attached_hash_checks() {
             maximum_entry_bytes: 64,
         },
         &mut names,
-    )
-    .expect("typed source-bound complete payload verification");
+    ));
     assert_eq!(
         verified.verified_entry_bytes("sections/strokes.json"),
         Some(&payload[..])
@@ -475,9 +509,9 @@ fn canonical_manifest_in_stored_zip_passes_source_attached_hash_checks() {
 fn caller_owned_output_is_atomic_on_short_and_invalid_inputs() {
     let manifest = fixture();
     let bytes = encode(&manifest);
-    let required = planned_canonical_profile_manifest_json_bytes(
+    let required = require_ok!(planned_canonical_profile_manifest_json_bytes(
         &manifest, &["layout", "strokes"], limits(),
-    ).unwrap();
+    ));
     assert_eq!(required, bytes.len());
 
     for size in [0, 1, required - 1] {
@@ -501,8 +535,10 @@ fn caller_owned_output_is_atomic_on_short_and_invalid_inputs() {
             ),
             Ok(required),
         );
-        assert_eq!(&destination[..required], &bytes);
-        assert!(destination[required..].iter().all(|&b| b == 0x5a));
+        assert_eq!(destination.get(..required), Some(bytes.as_slice()));
+        assert!(destination.get(required..).is_some_and(|tail| {
+            tail.iter().all(|&byte| byte == 0x5a)
+        }));
     }
 
     let mut destination = vec![0x5au8; required + 16];
@@ -523,7 +559,7 @@ fn caller_owned_output_is_atomic_on_short_and_invalid_inputs() {
     );
     assert!(destination.iter().all(|&byte| byte == 0x5a));
 
-    let mut invalid = manifest.clone();
+    let mut invalid = manifest;
     invalid.required_features.push("unknown".into());
     assert!(matches!(
         write_canonical_profile_manifest_json_into(
@@ -540,14 +576,14 @@ fn caller_owned_output_is_atomic_on_short_and_invalid_inputs() {
 #[test]
 fn caller_owned_and_allocating_outputs_agree_across_512_manifests() {
     let mut state = 0x4930_fab2_7511_280du64;
-    for iteration in 0..512 {
+    for iteration in 0usize..512 {
         state = state
-            .wrapping_mul(6364136223846793005)
-            .wrapping_add(1442695040888963407);
+            .wrapping_mul(6_364_136_223_846_793_005)
+            .wrapping_add(1_442_695_040_888_963_407);
         let mut manifest = fixture();
         manifest.profile_identity = format!(
-            "profile-{iteration}-{}-\n\u{0000}🖋ñ\\\"",
-            state % 10_000,
+            "profile-{iteration}-{}-\n\u{0000}\u{1f58b}\u{f1}\\\"",
+            state.rem_euclid(10_000),
         );
         if state & 1 != 0 {
             manifest.required_features.reverse();
@@ -555,17 +591,18 @@ fn caller_owned_and_allocating_outputs_agree_across_512_manifests() {
         if state & 2 != 0 {
             manifest.optional_features.reverse();
         }
-        let count = usize::try_from((state >> 4) % 5).unwrap();
-        for index in 0..count {
+        let count = require_ok!(usize::try_from((state >> 4).rem_euclid(5)));
+        for index in 0usize..count {
             let path = if (state >> (index + 10)) & 1 == 0 {
-                format!("sections/{index:02}-ñ.json")
+                format!("sections/{index:02}-\u{f1}.json")
             } else {
-                format!("assets/{index:02}-🖋.bin")
+                format!("assets/{index:02}-\u{1f58b}.bin")
             };
             let mut declaration = entry(&path, b"payload");
-            declaration.byte_length = u64::MAX - index as u64;
+            declaration.byte_length = u64::MAX
+                .saturating_sub(u64::try_from(index).unwrap_or(u64::MAX));
             declaration.digest = Sha256Digest::from_bytes(
-                [u8::try_from(index * 17).unwrap(); 32],
+                [u8::try_from(index.saturating_mul(17)).unwrap_or(u8::MAX); 32],
             );
             manifest.entries.push(declaration);
         }
@@ -573,9 +610,11 @@ fn caller_owned_and_allocating_outputs_agree_across_512_manifests() {
             manifest.entries.reverse();
         }
         let owned = encode(&manifest);
-        let required = planned_canonical_profile_manifest_json_bytes(
-            &manifest, &["layout", "strokes"], limits(),
-        ).unwrap();
+        let required = require_ok!(
+            planned_canonical_profile_manifest_json_bytes(
+                &manifest, &["layout", "strokes"], limits(),
+            )
+        );
         assert_eq!(required, owned.len(), "iteration {iteration}");
         let mut destination = vec![0xa5; required + 7];
         assert_eq!(
@@ -585,8 +624,12 @@ fn caller_owned_and_allocating_outputs_agree_across_512_manifests() {
             ),
             Ok(required),
         );
-        assert_eq!(&destination[..required], &owned, "iteration {iteration}");
-        assert_eq!(&destination[required..], &[0xa5; 7]);
-        assert_eq!(encode(&decode(&destination[..required])), owned);
+        assert_eq!(
+            destination.get(..required), Some(owned.as_slice()),
+            "iteration {iteration}",
+        );
+        assert_eq!(destination.get(required..), Some(&[0xa5; 7][..]));
+        let verified_bytes = require_some!(destination.get(..required));
+        assert_eq!(encode(&decode(verified_bytes)), owned);
     }
 }
