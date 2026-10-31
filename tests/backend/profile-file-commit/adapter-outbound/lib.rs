@@ -416,6 +416,52 @@ mod linux {
     }
 
     #[test]
+    fn empty_artifact_still_rechecks_selected_parent_before_link() {
+        for mode in [Mode::PreserveExisting, Mode::ReplaceExisting] {
+            let dir = OwnedDir::new();
+            let selected_parent = dir.0.join("selected");
+            let relocated_parent = dir.0.join("relocated");
+            fs::create_dir_all(&selected_parent).expect("selected parent");
+            let target = selected_parent.join("chosen.atrament");
+            if mode == Mode::ReplaceExisting {
+                fs::write(&target, b"original").expect("original target");
+            }
+            let mut observations = 0usize;
+            let result = commit_profile_file_cancellable(
+                &target,
+                b"",
+                0,
+                mode,
+                || {
+                    observations += 1;
+                    if observations == 2 {
+                        // With no write chunks, the second cancellation
+                        // observation follows anonymous-file sync directly.
+                        fs::rename(&selected_parent, &relocated_parent)
+                            .expect("move original parent");
+                        fs::create_dir_all(&selected_parent)
+                            .expect("replace selected parent");
+                    }
+                    false
+                },
+            );
+            assert_eq!(result, Err(Error::SelectedParentChanged));
+            assert_eq!(observations, 2);
+            assert!(!target.exists());
+            let relocated = relocated_parent.join("chosen.atrament");
+            if mode == Mode::ReplaceExisting {
+                assert_eq!(fs::read(&relocated).expect("original"), b"original");
+            } else {
+                assert!(!relocated.exists());
+            }
+            assert_eq!(
+                fs::read_dir(&relocated_parent).expect("no unnamed leak").count(),
+                usize::from(mode == Mode::ReplaceExisting),
+            );
+        }
+    }
+
+    #[test]
     fn refused_oversize_preserves_target_without_creating_intermediate() {
         let dir = OwnedDir::new();
         let target = dir.target();

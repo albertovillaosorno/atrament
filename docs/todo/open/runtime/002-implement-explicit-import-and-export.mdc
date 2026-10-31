@@ -883,6 +883,9 @@ uncertain prior effect rather than a successful receipt or retry permission.
 An additional two-disposition fixture redirects that renamed parent to an
 unrelated directory through a symlink; the selected-path no-symlink recheck
 rejects it without touching the unrelated target or displaced original.
+A zero-byte artifact fixture separately covers the no-write-chunk path: its
+second cancellation probe can replace the parent, but the same prelink check
+refuses both overwrite modes without creating any file effect.
 
 These checks narrow the observable directory-rename race; they do not lock an
 external pathname, prevent changes after either check, or solve the brief
