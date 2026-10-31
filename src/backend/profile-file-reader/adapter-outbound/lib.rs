@@ -34,7 +34,11 @@
 
 use std::fmt;
 use std::fs::{File, Metadata};
-use std::io::{self, Read as _, Seek as _, SeekFrom};
+use std::io;
+#[cfg(not(unix))]
+use std::io::{Read as _, Seek as _, SeekFrom};
+#[cfg(unix)]
+use std::os::unix::fs::FileExt as _;
 
 const READ_BUFFER_BYTES: usize = 8 * 1024;
 
@@ -76,12 +80,34 @@ pub enum ProfileFileReadError {
     NotRegularFile,
 }
 
+// Positional reads avoid changing a duplicated descriptor's shared offset.
+// Another holder's seek cannot redirect this reader into the wrong chunks.
+#[cfg(unix)]
 fn read_retry(
-    source: &mut File,
+    source: &File,
     destination: &mut [u8],
+    offset: u64,
 ) -> Result<usize, io::ErrorKind> {
     loop {
-        match source.read(destination) {
+        match source.read_at(destination, offset) {
+            Err(error) if error.kind() == io::ErrorKind::Interrupted => {}
+            Err(error) => return Err(error.kind()),
+            Ok(count) => return Ok(count),
+        }
+    }
+}
+
+// Preserve portable seek/read behavior until other platforms have a secure
+// position-independent file read primitive with equivalent validation.
+#[cfg(not(unix))]
+fn read_retry(
+    source: &File,
+    destination: &mut [u8],
+    _offset: u64,
+) -> Result<usize, io::ErrorKind> {
+    let mut reader = source;
+    loop {
+        match reader.read(destination) {
             Err(error) if error.kind() == io::ErrorKind::Interrupted => {}
             Err(error) => return Err(error.kind()),
             Ok(count) => return Ok(count),
@@ -127,7 +153,9 @@ pub(crate) fn source_metadata_unchanged(
 /// matching the original file length and rechecks descriptor metadata after
 /// the exact EOF probe. Observed even-length rewrites refuse, but unchanged
 /// metadata cannot prove a snapshot against all simultaneous writers.
-/// Rewind begins at byte zero regardless of the caller's initial file cursor.
+/// Reading begins at byte zero regardless of the caller's file cursor. On
+/// Unix, positional reads also leave duplicated descriptors' shared offset
+/// untouched; another holder's seek cannot redirect the source read.
 /// The caller must still check ZIP framing, typed metadata and SHA-256.
 ///
 /// # Errors
@@ -136,7 +164,7 @@ pub(crate) fn source_metadata_unchanged(
 /// unexpected bytes after the declared end (including zero-length files),
 /// and changes to the opened file's metadata across the read.
 pub fn read_bounded_profile_file(
-    mut source: File,
+    source: File,
     maximum_bytes: usize,
 ) -> Result<ProfileOpenedFileBytes, ProfileFileReadError> {
     let metadata = source
@@ -150,7 +178,8 @@ pub fn read_bounded_profile_file(
     if expected > maximum_bytes {
         return Err(ProfileFileReadError::FileTooLarge);
     }
-    let _position = source
+    #[cfg(not(unix))]
+    let _position = (&source)
         .seek(SeekFrom::Start(0))
         .map_err(|error| ProfileFileReadError::FileIo(error.kind()))?;
     let mut bytes = Vec::new();
@@ -160,11 +189,14 @@ pub fn read_bounded_profile_file(
     let mut buffer = [0u8; READ_BUFFER_BYTES];
     while bytes.len() < expected {
         let remaining = expected.saturating_sub(bytes.len());
+        let offset = u64::try_from(bytes.len())
+            .map_err(|_error| ProfileFileReadError::FileTooLarge)?;
         let count = read_retry(
-            &mut source,
+            &source,
             buffer
                 .get_mut(..remaining.min(READ_BUFFER_BYTES))
                 .ok_or(ProfileFileReadError::AllocationFailed)?,
+            offset,
         )
         .map_err(ProfileFileReadError::FileIo)?;
         if count == 0 {
@@ -178,10 +210,11 @@ pub fn read_bounded_profile_file(
     }
     // A truncated view can manufacture EOF; probe the underlying handle.
     if read_retry(
-        &mut source,
+        &source,
         buffer
             .get_mut(..1)
             .ok_or(ProfileFileReadError::AllocationFailed)?,
+        metadata.len(),
     )
     .map_err(ProfileFileReadError::FileIo)?
         != 0
@@ -196,5 +229,7 @@ pub fn read_bounded_profile_file(
     if !source_metadata_unchanged(&metadata, &after) {
         return Err(ProfileFileReadError::FileMetadataChanged);
     }
+    // Release the owned descriptor before exposing the verified byte buffer.
+    drop(source);
     Ok(ProfileOpenedFileBytes { bytes })
 }

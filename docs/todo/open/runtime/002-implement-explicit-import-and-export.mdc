@@ -63,6 +63,18 @@ Deterministic source-metadata regressions cover an unchanged file, same-length
 rewrites, restored mtime and distinct inodes. This is extra race detection,
 **not** an atomic snapshot guarantee against concurrent filesystem writers.
 
+The bounded opened-profile reader now uses explicit-offset Unix reads instead
+of seek-then-read on a potentially shared open file description. A red-first,
+multichunk file-descriptor-clone regression proved that the former reader
+changed another holder's cursor; the corrected reader leaves it unchanged.
+An independently duplicated holder can no longer redirect the Import reader's
+chunk offsets by seeking.
+
+This does not prevent simultaneous content writes, or replace the existing
+length, metadata and SHA verification requirements. Non-Unix readers retain
+the previous seek/read behavior until an equivalent positional-read
+implementation is independently admitted.
+
 The low-level selected-profile opener now refuses empty, directory-marked
 and embedded-NUL names before filesystem access, independently of the
 higher-level source-intent classifier. Linux also reports missing or

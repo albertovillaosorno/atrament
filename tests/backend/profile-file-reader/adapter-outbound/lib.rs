@@ -102,6 +102,29 @@ fn bounded_file_source_rewinds_to_zero_and_preserves_exact_bytes() {
     assert_eq!(verified.bytes(), contents);
 }
 
+#[cfg(unix)]
+#[test]
+fn bounded_reader_does_not_change_a_cloned_descriptors_cursor() {
+    // File::try_clone shares one open file description and its seek offset.
+    // A second holder must not be able to redirect this reader's chunks by
+    // seeking elsewhere while the file bytes and metadata remain unchanged.
+    let contents = b"private-multichunk-profile-data".repeat(1100);
+    let fixture = OwnedTempFile::new(&contents);
+    let opened = fixture.open();
+    let mut parallel_reader = opened.try_clone().expect("duplicate source fd");
+    let original_offset = parallel_reader
+        .seek(SeekFrom::Start(17))
+        .expect("position independent holder");
+    let snapshot = read_bounded_profile_file(opened, contents.len())
+        .expect("bounded full-file read");
+    assert_eq!(snapshot.bytes(), contents);
+    assert_eq!(
+        parallel_reader.stream_position().expect("shared cursor after read"),
+        original_offset,
+        "profile reads must not disturb a duplicated descriptor's offset",
+    );
+}
+
 #[test]
 fn bounded_private_import_snapshot_is_redacted_from_debug() {
     let contents = b"private-import-source-bytes-marker";
