@@ -438,6 +438,12 @@ async function completeSessionHandshake(secret) {
         }
         return;
     }
+    const handshakeMediaType = response.headers.get("content-type");
+    if (!sessionHandshake.isHandshakeContentType(handshakeMediaType)) {
+        const invalidMessage = "Invalid backend handshake · editing disabled";
+        setTextIfChanged(sessionStatus, invalidMessage);
+        return;
+    }
     let payload;
     try {
         payload = await response.json();

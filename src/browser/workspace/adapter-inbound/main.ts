@@ -513,6 +513,12 @@ async function completeSessionHandshake(secret: string): Promise<void> {
         }
         return;
     }
+    const handshakeMediaType = response.headers.get("content-type");
+    if (!sessionHandshake.isHandshakeContentType(handshakeMediaType)) {
+        const invalidMessage = "Invalid backend handshake · editing disabled";
+        setTextIfChanged(sessionStatus, invalidMessage);
+        return;
+    }
     let payload: unknown;
     try {
         payload = await response.json();

@@ -454,6 +454,78 @@ test(
 );
 
 
+test("handshake response media is checked before JSON admission", async () => {
+    const source = await readFile(MAIN_MODULE, "utf8");
+    const start = source.indexOf(
+        "async function completeSessionHandshake(secret) {",
+    );
+    const end = source.indexOf("const failedDraftFields", start);
+    assert.ok(start >= 0 && end > start, "handshake must be extractable");
+    const handshake = source.slice(start, end);
+    const compatible = {
+        result: "compatible",
+        versions: {
+            capability: "atrament.capability/1",
+            product: "0.1.0",
+            profile: "atrament.profile/1",
+            prompt: "atrament.prompt/1",
+            protocol: "atrament.runtime/1",
+            renderer: "atrament.renderer/1",
+        },
+    };
+    for (const [status, mediaType, allow] of [
+        [200, "text/html; charset=utf-8", false],
+        [200, null, false],
+        [409, "text/plain; charset=utf-8", false],
+        [409, "application/json; charset=latin1", false],
+        [200, "application/json; charset=utf-8", true],
+    ]) {
+        let bodyReads = 0;
+        let hydrations = 0;
+        const result = await runInNewContext(`
+            (async () => {
+                const sessionSecret = "secret";
+                const sessionRequests = { signal: {} };
+                const sessionStatus = { textContent: "" };
+                const sessionHandshake = {
+                    handshakeHeaders: () => ({}),
+                    parseHandshakePayload: () => ({ kind: "compatible" }),
+                    isHandshakeContentType: (value) =>
+                        value === "application/json; charset=utf-8",
+                };
+                function hideSessionRetry() {}
+                function showSessionRetry() {}
+                function setTextIfChanged(element, value) {
+                    element.textContent = value;
+                }
+                function invalidateUnauthorizedSession() {}
+                async function hydrateSessionDraft() { hydrate(); }
+                ${handshake}
+                await completeSessionHandshake("secret");
+                return sessionStatus.textContent;
+            })()
+        `, {
+            hydrate: () => { hydrations += 1; },
+            fetch: async () => ({
+                status,
+                headers: { get: () => mediaType },
+                json: async () => {
+                    bodyReads += 1;
+                    return compatible;
+                },
+            }),
+        });
+        assert.equal(hydrations, allow ? 1 : 0,
+            `status=${status} media=${mediaType}`);
+        assert.equal(bodyReads, allow ? 1 : 0,
+            "misdeclared handshake bodies must not be parsed");
+        if (!allow) {
+            assert.equal(result,
+                "Invalid backend handshake · editing disabled");
+        }
+    }
+});
+
 test("draft hydration rejects wrong media without body read", async () => {
     const source = await readFile(MAIN_MODULE, "utf8");
     const start = source.indexOf("async function readDraftField(");

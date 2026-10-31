@@ -1567,6 +1567,7 @@ function createSessionFixtureServer(
     onHandshake = null,
     onDraftRead = null,
     onDraftContentType = null,
+    onHandshakeContentType = null,
 ) {
     const generated = new Set([
         "main.js",
@@ -1644,7 +1645,8 @@ function createSessionFixtureServer(
             const status = onHandshake?.() ?? 200;
             response.writeHead(status, {
                 "Cache-Control": "no-store",
-                "Content-Type": "application/json; charset=utf-8",
+                "Content-Type": onHandshakeContentType?.()
+                    ?? "application/json; charset=utf-8",
             });
             response.end(status === 200 ? COMPATIBLE_HANDSHAKE : "");
             return;
@@ -4569,6 +4571,85 @@ test(
                 "POST /api/session/task",
                 "POST /api/session/task",
                 "POST /api/session/task",
+            ]);
+        } finally {
+            bidi?.close();
+            await closeFixtureServer(server);
+            for (const child of children.reverse()) {
+                await stopChild(child);
+            }
+            fs.rmSync(profile, { recursive: true, force: true });
+        }
+    },
+);
+
+test(
+    "Firefox rejects compatible JSON mislabeled as an HTML handshake",
+    { skip: !FIREFOX_AVAILABLE, timeout: FIREFOX_CASE_TIMEOUT_MS },
+    async () => {
+        fs.mkdirSync(".temp", { recursive: true });
+        const profile = fs.mkdtempSync(".temp/session-handshake-media-");
+        const apiRequests = [];
+        let handshakes = 0;
+        const server = createSessionFixtureServer(
+            apiRequests, null, null, null, null, null,
+            () => ++handshakes === 1
+                ? "text/html; charset=utf-8"
+                : "application/json; charset=utf-8",
+        );
+        const children = [];
+        let bidi;
+        try {
+            server.listen(0, "127.0.0.1");
+            await once(server, "listening");
+            const address = server.address();
+            assert.notEqual(address, null);
+            assert.notEqual(typeof address, "string");
+            const origin = `http://127.0.0.1:${address.port}`;
+
+            bidi = await startBidiFirefox(profile, children);
+            const firstTab = await bidi.command("browsingContext.create", {
+                type: "tab",
+            });
+            await bidi.command("browsingContext.navigate", {
+                context: firstTab.context,
+                url: `${origin}/#session=${REFRESH_SECRET}`,
+                wait: "complete",
+            });
+            const rejected = await waitForSessionStatus(
+                bidi, firstTab.context,
+                "Invalid backend handshake · editing disabled",
+            );
+            assert.equal(rejected.hash, "");
+            for (const field of ["task", "source", "candidate"]) {
+                assert.deepEqual(rejected[field], {
+                    disabled: true, value: "",
+                });
+            }
+            assert.deepEqual(apiRequests, ["POST /api/handshake"]);
+
+            const secondTab = await bidi.command("browsingContext.create", {
+                type: "tab",
+            });
+            await bidi.command("browsingContext.navigate", {
+                context: secondTab.context,
+                url: `${origin}/#session=${REFRESH_SECRET}`,
+                wait: "complete",
+            });
+            const accepted = await waitForSessionStatus(
+                bidi, secondTab.context, "Session ready",
+            );
+            for (const field of ["task", "source", "candidate"]) {
+                assert.deepEqual(accepted[field], {
+                    disabled: false, value: REFRESH_DRAFT[field],
+                });
+            }
+            assert.deepEqual(apiRequests, [
+                "POST /api/handshake",
+                "POST /api/handshake",
+                "GET /api/session/task",
+                "GET /api/session/source",
+                "GET /api/session/candidate",
             ]);
         } finally {
             bidi?.close();

@@ -82,6 +82,11 @@ export function handshakeHeaders(sessionSecret) {
         "X-Atrament-Renderer-Version": RENDERER_VERSION,
     };
 }
+// The runtime handshake contract is JSON with an explicit UTF-8 declaration.
+// Do not parse a misrouted HTML/plain-text success as compatibility authority.
+export function isHandshakeContentType(value) {
+    return value?.trim().toLowerCase() === "application/json; charset=utf-8";
+}
 export function parseHandshakePayload(value) {
     // Descriptor traps from in-process objects are invalid payloads.
     try {

@@ -172,3 +172,18 @@ error. A red-first runtime-extracted browser fixture reproduced the stale
 button with zero retryable fields, then verified that another outstanding
 retryable field keeps the control available. The terminal failure and its
 status remain visible; no failed draft is silently declared synchronized.
+
+The browser now requires `application/json; charset=utf-8` on both HTTP 200
+and 409 handshake bodies before attempting JSON parsing. A red-first browser
+adapter regression showed that a `200 text/html` carrying otherwise compatible
+JSON previously authorized draft hydration. The corrected path leaves editing
+disabled and the mismatched body unread. Focused parser coverage pins exact
+media admission, mixed-case variants, missing declarations, and wrong charsets.
+
+A real Firefox fixture confirms a `200 text/html` handshake carrying valid
+compatible JSON leaves all draft fields blank and disabled, emits no draft
+reads, and consumes the launch fragment. A distinct new tab with a correctly
+declared JSON handshake then hydrates normally.
+
+This is client-side fail-closed transport evidence; it does not extend the
+backend's available capabilities or prove later notebook acceptance.

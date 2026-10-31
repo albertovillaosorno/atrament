@@ -34,7 +34,7 @@ import test from "node:test";
 
 const GENERATED_ROOT =
     "../../../../src/browser/workspace/adapter-inbound/generated/";
-const { handshakeHeaders, parseHandshakePayload } =
+const { handshakeHeaders, isHandshakeContentType, parseHandshakePayload } =
     await import(`${GENERATED_ROOT}session-handshake.js`);
 
 const CURRENT_VERSIONS = {
@@ -58,6 +58,27 @@ test("handshake headers bind the credential and six versions", () => {
         "X-Atrament-Protocol-Version": CURRENT_VERSIONS.protocol,
         "X-Atrament-Renderer-Version": CURRENT_VERSIONS.renderer,
     });
+});
+
+test("handshake bodies require declared UTF-8 JSON", () => {
+    for (const valid of [
+        "application/json; charset=utf-8",
+        "Application/Json; Charset=UTF-8",
+        " application/json; charset=utf-8 ",
+    ]) {
+        assert.equal(isHandshakeContentType(valid), true, valid);
+    }
+    for (const invalid of [
+        null,
+        "",
+        "application/json",
+        "text/html; charset=utf-8",
+        "text/plain; charset=utf-8",
+        "application/json; charset=latin1",
+        "application/json; charset=utf-8; extra=yes",
+    ]) {
+        assert.equal(isHandshakeContentType(invalid), false, String(invalid));
+    }
 });
 
 test("compatible payload requires all six exact backend versions", () => {
