@@ -799,6 +799,12 @@ class BidiClient {
         while (this.buffer.length >= 2) {
             const opcode = this.buffer[0] & 0x0f;
             const final = (this.buffer[0] & 0x80) !== 0;
+            // No WebSocket extensions were requested in the client upgrade.
+            // An RSV bit cannot be interpreted as an ordinary text frame.
+            if ((this.buffer[0] & 0x70) !== 0) {
+                this.close(new Error("reserved WebDriver BiDi frame bits set"));
+                return;
+            }
             if ((this.buffer[1] & 0x80) !== 0) {
                 this.close(new Error("masked WebDriver server frame refused"));
                 return;
@@ -1066,6 +1072,28 @@ function testServerFrame(payload, opcode = 0x1, final = true) {
     prefix.writeBigUInt64BE(BigInt(bytes.length), 2);
     return Buffer.concat([prefix, bytes]);
 }
+
+test("WebDriver BiDi refuses unnegotiated reserved frame bits", async () => {
+    const response = JSON.stringify({
+        id: 1, type: "success", result: { accepted: true },
+    });
+    for (const bit of [0x40, 0x20, 0x10]) {
+        const client = new BidiClient("ws://127.0.0.1:1234/session");
+        let destroyed = 0;
+        client.socket = {
+            write: () => {}, destroy: () => { destroyed += 1; },
+        };
+        const pending = client.command("script.evaluate", {}, 30_000);
+        const frame = testServerFrame(response);
+        frame[0] |= bit;
+        client.buffer = frame;
+        client.drain();
+        await assert.rejects(pending, /reserved WebDriver BiDi frame bits/);
+        assert.equal(client.closed, true);
+        assert.equal(client.pending.size, 0);
+        assert.equal(destroyed, 1);
+    }
+});
 
 test("WebDriver BiDi refuses gigantic declared and masked inbound frames",
     async () => {

@@ -418,6 +418,12 @@ bytes, split TCP headers, malformed sequencing and a synthetic over-limit
 fragment total without allocating a giant input. This remains automation
 framing only, not a production WebSocket or runtime protocol implementation.
 
+The automation client also refuses RSV1, RSV2, and RSV3 frame flags because
+its WebSocket upgrade negotiates no extensions. A red-first synthetic success
+response showed those unnegotiated flags were previously ignored; all three
+variants now close the peer and reject the pending command. This is a
+WebDriver fixture invariant rather than a browser-runtime protocol change.
+
 A full-browser stress run exposed that a 2-second forced-kill reap deadline
 was too short under workstation memory pressure. The bounded SIGKILL window
 is now 10 seconds, while a separate delayed-exit fixture proves successful
