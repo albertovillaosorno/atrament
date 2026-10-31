@@ -39,8 +39,11 @@ use atrament_session_secret as session_secret;
 
 #[test]
 fn generated_secret_has_the_frozen_transport_shape() {
-    let secret = SessionSecret::generate()
-        .expect("operating-system randomness is available");
+    let generated = SessionSecret::generate();
+    assert!(generated.is_ok(), "OS randomness must be available");
+    let Ok(secret) = generated else {
+        return;
+    };
     let encoded = secret.encoded();
     assert_eq!(encoded.len(), 64);
     assert!(encoded.bytes().all(|byte| byte.is_ascii_hexdigit()));
@@ -49,17 +52,26 @@ fn generated_secret_has_the_frozen_transport_shape() {
 
 #[test]
 fn independent_generations_do_not_reuse_the_same_credential() {
-    let first = SessionSecret::generate()
-        .expect("first operating-system random secret");
-    let second = SessionSecret::generate()
-        .expect("second operating-system random secret");
+    let generated_first = SessionSecret::generate();
+    assert!(generated_first.is_ok(), "first OS random secret");
+    let Ok(first) = generated_first else {
+        return;
+    };
+    let generated_second = SessionSecret::generate();
+    assert!(generated_second.is_ok(), "second OS random secret");
+    let Ok(second) = generated_second else {
+        return;
+    };
     assert_ne!(first.encoded(), second.encoded());
 }
 
 #[test]
 fn debug_output_redacts_the_session_secret() {
-    let secret = SessionSecret::generate()
-        .expect("operating-system randomness is available");
+    let generated = SessionSecret::generate();
+    assert!(generated.is_ok(), "OS randomness must be available");
+    let Ok(secret) = generated else {
+        return;
+    };
     let debug = format!("{secret:?}");
     assert_eq!(debug, "SessionSecret([REDACTED])");
     assert!(!debug.contains(secret.encoded()));
