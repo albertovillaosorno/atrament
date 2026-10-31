@@ -34,6 +34,13 @@
 
 //! Handwriting variation quality evidence domain regression tests.
 
+#![expect(
+    clippy::expect_used,
+    reason = "fail-fast assertions over complete seven-axis fixtures"
+)]
+
+use std::ptr;
+
 use atrament_handwriting_variation_quality_evidence::{
     HandwritingVariationQualityAxis, HandwritingVariationQualityEvidence,
     HandwritingVariationQualityEvidenceError,
@@ -54,8 +61,7 @@ const AXES: [HandwritingVariationQualityAxis; 7] = [
 ];
 
 fn complete_evidence() -> Vec<HandwritingVariationQualityEvidence> {
-    AXES
-        .into_iter()
+    AXES.into_iter()
         .map(|axis| HandwritingVariationQualityEvidence {
             axis,
             finding: HandwritingVariationQualityFinding::ArtifactNotDetected,
@@ -74,7 +80,7 @@ fn every_todo_and_adr_artifact_axis_is_required_independently() {
     let validated =
         validate_handwriting_variation_quality_evidence_view(&evidence)
             .expect("complete evidence seals exact report");
-    assert!(std::ptr::eq(validated.evidence(), evidence.as_slice()));
+    assert!(ptr::eq(validated.evidence(), evidence.as_slice()));
     assert!(validated.detected_artifacts().is_empty());
     assert_eq!(
         detected_handwriting_variation_artifacts(&evidence),
@@ -87,10 +93,9 @@ fn missing_axis_rejects_when_other_axes_have_no_detected_artifact() {
     for missing in AXES {
         let mut evidence = complete_evidence();
         evidence.retain(|item| item.axis != missing);
-        let expected =
-            HandwritingVariationQualityEvidenceError::MissingAxis {
-                axis: missing,
-            };
+        let expected = HandwritingVariationQualityEvidenceError::MissingAxis {
+            axis: missing,
+        };
         assert_eq!(
             validate_handwriting_variation_quality_evidence(&evidence),
             Err(expected),
@@ -133,18 +138,20 @@ fn each_duplicate_axis_rejects_before_completeness_is_claimed() {
 
 #[test]
 fn all_128_finding_masks_return_exact_detected_axes_in_canonical_order() {
-    let mut cases = 0_u16;
+    let mut cases = 0u16;
     let mut saw_axis_detected = [false; 7];
-    for mask in 0_u8..128 {
+    for mask in 0u8..128 {
         let mut evidence = AXES
             .into_iter()
             .enumerate()
             .map(|(index, axis)| HandwritingVariationQualityEvidence {
                 axis,
-                finding: if mask & (1_u8 << index) == 0 {
+                finding: if mask & (1u8 << index) == 0 {
                     HandwritingVariationQualityFinding::ArtifactNotDetected
                 } else {
-                    saw_axis_detected[index] = true;
+                    *saw_axis_detected
+                        .get_mut(index)
+                        .expect("seven quality axes") = true;
                     HandwritingVariationQualityFinding::ArtifactDetected
                 },
             })
@@ -154,7 +161,7 @@ fn all_128_finding_masks_return_exact_detected_axes_in_canonical_order() {
             .into_iter()
             .enumerate()
             .filter_map(|(index, axis)| {
-                (mask & (1_u8 << index) != 0).then_some(axis)
+                (mask & (1u8 << index) != 0).then_some(axis)
             })
             .collect::<Vec<_>>();
         assert_eq!(
@@ -165,7 +172,7 @@ fn all_128_finding_masks_return_exact_detected_axes_in_canonical_order() {
         let validated =
             validate_handwriting_variation_quality_evidence_view(&evidence)
                 .expect("every finding mask remains structurally complete");
-        assert!(std::ptr::eq(validated.evidence(), evidence.as_slice()));
+        assert!(ptr::eq(validated.evidence(), evidence.as_slice()));
         assert_eq!(
             validated.detected_artifacts(),
             expected,

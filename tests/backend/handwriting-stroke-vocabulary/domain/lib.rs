@@ -57,7 +57,7 @@ fn vocabulary_entry_retains_geometry_and_connection_evidence() {
             contour: "contour-evidence-7",
         },
         provenance: StrokeVocabularyProvenance {
-            confidence: 91_u8,
+            confidence: 91u8,
             sample_provenance: ["sample-region-4", "sample-region-8"],
         },
     };
@@ -82,8 +82,8 @@ fn vocabulary_entry_retains_form_confidence_and_sample_provenance() {
             ligatures: vec!["n-to-a", "n-to-o"],
         },
         geometry: StrokeVocabularyGeometry {
-            centerline: vec![(0_i16, 0_i16), (1_i16, 2_i16)],
-            contour: vec![(0_i16, 1_i16), (1_i16, 3_i16)],
+            centerline: vec![(0i16, 0i16), (1i16, 2i16)],
+            contour: vec![(0i16, 1i16), (1i16, 3i16)],
         },
         provenance: StrokeVocabularyProvenance {
             confidence: "observed-confidence-4",
@@ -94,5 +94,8 @@ fn vocabulary_entry_retains_form_confidence_and_sample_provenance() {
     assert_eq!(entry.forms.diacritics, ["tilde"]);
     assert_eq!(entry.forms.ligatures, ["n-to-a", "n-to-o"]);
     assert_eq!(entry.provenance.confidence, "observed-confidence-4");
-    assert_eq!(entry.provenance.sample_provenance, ["sample-11", "sample-12"]);
+    assert_eq!(
+        entry.provenance.sample_provenance,
+        ["sample-11", "sample-12"]
+    );
 }
