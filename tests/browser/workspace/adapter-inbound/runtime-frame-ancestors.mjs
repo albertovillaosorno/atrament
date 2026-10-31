@@ -4782,7 +4782,7 @@ test(
 );
 
 test(
-    "Firefox enforces localhost frame, referrer, and connection policy",
+    "Firefox enforces localhost frame, referrer, and resource policy",
     { skip: !FIREFOX_AVAILABLE, timeout: FIREFOX_CASE_TIMEOUT_MS },
     async () => {
         fs.mkdirSync(".temp", { recursive: true });
@@ -4792,6 +4792,7 @@ test(
         let outboundRequests = 0;
         const assetRequests = [];
         let workerRequests = 0;
+        let fontRequests = 0;
         let mediaRequests = 0;
         let frameChildRequests = 0;
         let formSubmissions = 0;
@@ -4898,6 +4899,17 @@ test(
             wave.write("data", 36);
             wave.writeUInt32LE(wave.length - 44, 40);
             permissive = http.createServer((request, response) => {
+                if (request.url === "/csp-font.woff2") {
+                    fontRequests += 1;
+                    response.writeHead(200, {
+                        "Cache-Control": "no-store",
+                        "Content-Type": "font/woff2",
+                    });
+                    // Deliberately malformed: this probes fetch admission,
+                    // not the font decoder or font-display layout.
+                    response.end("not-a-woff2-font");
+                    return;
+                }
                 if (request.url === "/csp-media.wav") {
                     mediaRequests += 1;
                     response.writeHead(200, {
@@ -5236,6 +5248,45 @@ test(
                 "HTTP worker-src must refuse even same-origin workers");
             assert.equal(workerRequests, 1,
                 "CSP rejection must send no worker script request");
+
+            // A malformed same-origin font must still be fetched in the
+            // permissive control; font-src 'none' prevents even that GET.
+            const fontUrl = JSON.stringify(
+                `${permissiveOrigin}/csp-font.woff2`,
+            );
+            const probeFont = `(async () => {
+                const font = new FontFace(
+                    "AtramentCspProbe", "url(" + ${fontUrl} + ")"
+                );
+                try {
+                    await font.load();
+                } catch {
+                    // Both pages reject malformed WOFF2 decoding; only the
+                    // protected page must refuse the resource request.
+                }
+                return font.status;
+            })()`;
+            const controlFont = await bidi.command("script.evaluate", {
+                awaitPromise: true,
+                expression: probeFont,
+                resultOwnership: "none",
+                target: { context: networkControl.context },
+            });
+            assert.equal(controlFont.type, "success");
+            assert.equal(controlFont.result.value, "error");
+            assert.ok(fontRequests > 0,
+                "permissive control must request the font before decode");
+            const requestsBeforeBlockedFont = fontRequests;
+            const blockedFont = await bidi.command("script.evaluate", {
+                awaitPromise: true,
+                expression: probeFont,
+                resultOwnership: "none",
+                target: { context: headerOnly.context },
+            });
+            assert.equal(blockedFont.type, "success");
+            assert.equal(blockedFont.result.value, "error");
+            assert.equal(fontRequests, requestsBeforeBlockedFont,
+                "HTTP font-src must refuse same-origin font requests");
 
             // media-src 'none' denies even same-origin media. A valid WAV
             // must load in the control without relying on audio playback.

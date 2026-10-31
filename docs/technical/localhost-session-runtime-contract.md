@@ -136,6 +136,11 @@ be refused without a network request by the header-only page's
 `media-src 'none'` directive. Relaxing the directive to `'self'` must break
 the media regression independently of the other resource checks.
 
+A malformed same-origin WOFF2 font must be requested through `FontFace.load()`
+by the unprotected control before decoding rejects it. The header-only page
+must block that request under `font-src 'none'`; relaxing the directive to
+`'self'` must cause an additional request and fail the Firefox regression.
+
 These checks establish browser enforcement, not browser-opener credential
 secrecy or general host process isolation.
 

@@ -69,6 +69,12 @@ request, and deliberately relaxing `media-src 'none'` to `'self'` makes the
 regression fail. This isolates HTTP media enforcement without testing audio
 playback or claiming to secure the platform browser opener.
 
+A same-origin WOFF2 resource is also fetched by the permissive tab through
+`FontFace.load()` despite an intentionally invalid font payload. The protected
+tab makes no font request; relaxing `font-src 'none'` to `'self'` causes an
+additional request and fails the regression. This proves font fetch refusal,
+not custom-font decoding or rendering.
+
 This is browser enforcement evidence for the HTTP boundary, not a claim about
 browser-opener credentials or arbitrary outbound desktop programs.
 
