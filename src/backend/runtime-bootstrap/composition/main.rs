@@ -425,8 +425,13 @@ pub(crate) fn inspect_cli_args(
             } else {
                 (source.as_deref(), destination.as_deref())
             };
+            // A trailing bare option token is not a caller-selected target.
+            // To address a file literally named `--replace`, the caller can
+            // supply an unambiguous path such as `./--replace` instead.
             if let (Some(repack_source), Some(repack_destination)) =
                 (candidate_source, candidate_target)
+                && repack_source != OsStr::new("--replace")
+                && repack_destination != OsStr::new("--replace")
                 && arguments.next().is_none()
             {
                 repack_profile(

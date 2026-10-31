@@ -269,6 +269,74 @@ fn cli_args_reject_unknown_and_incomplete_commands_without_startup() {
 }
 
 #[test]
+fn repack_cli_refuses_ambiguous_bare_option_as_file_path() {
+    for arguments in [
+        vec!["profile", "repack", "not-a-file", "--replace"],
+        vec!["profile", "repack", "--replace", "--replace", "target"],
+        vec!["profile", "repack", "--replace", "not-a-file", "--replace"],
+    ] {
+        assert_eq!(
+            bootstrap::inspect_cli_args(
+                arguments.into_iter().map(OsString::from)
+            )
+            .expect_err("an ambiguous option token cannot select a file")
+            .kind(),
+            io::ErrorKind::InvalidInput,
+        );
+    }
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn repack_cli_requires_unambiguous_path_for_option_named_target() {
+    let section = br#"{"safe":"literal-option-target"}"#;
+    let source = OwnedProfileFile::new(&profile_zip(
+        section, b"private-opaque-option-9013", section,
+    ));
+    let folder = OwnedProfileDirectory::new(source.0.with_extension(
+        "option-destination-folder",
+    ));
+    let target = OwnedProfileDestination(folder.0.join("--replace"));
+    let rejected = Command::new(env!("CARGO_BIN_EXE_atrament"))
+        .current_dir(&folder.0)
+        .args(["profile", "repack"])
+        .arg(&source.0)
+        .arg("--replace")
+        .output()
+        .expect("run misplaced bare replacement option");
+    assert!(!rejected.status.success());
+    assert!(rejected.stdout.is_empty());
+    assert!(String::from_utf8_lossy(&rejected.stderr).contains("usage:"));
+    assert!(!target.0.exists(), "misplaced option created no target");
+
+    let accepted = Command::new(env!("CARGO_BIN_EXE_atrament"))
+        .current_dir(&folder.0)
+        .args(["profile", "repack"])
+        .arg(&source.0)
+        .arg("./--replace")
+        .output()
+        .expect("run explicitly disambiguated destination");
+    assert!(accepted.status.success());
+    assert_eq!(
+        accepted.stdout,
+        b"profile repacked (verified; no session import)\n",
+    );
+    assert!(accepted.stderr.is_empty());
+    let repacked = fs::read(&target.0).expect("literal option target exists");
+    let archive = read_stored_profile_zip(
+        &repacked,
+        ProfileZipReadLimits {
+            maximum_archive_bytes: 4096,
+            maximum_entries: 3,
+            maximum_entry_bytes: 2048,
+            maximum_total_bytes: 3000,
+        },
+    )
+    .expect("literal target contains a complete verified ZIP");
+    assert_eq!(archive.entries().len(), 3);
+}
+
+#[test]
 fn cli_rejects_infinite_argument_stream_after_four_values() {
     let pulls = Cell::new(0usize);
     let source = iter::from_fn(|| {
