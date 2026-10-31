@@ -35,6 +35,11 @@
 
 //! Read-only Export prerequisite projection without file-effect authority.
 
+// Integration-test-only dev dependencies also appear in the library test
+// target; record their use without adding production dependencies.
+#[cfg(test)]
+use atrament_diagnostic as _;
+
 use atrament_autonomous_output_intent::{
     AutonomousOutputClass, AutonomousOutputIntentAdmission,
     AutonomousOutputIntentSource, autonomous_output_intent_admission,

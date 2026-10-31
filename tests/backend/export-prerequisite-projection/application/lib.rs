@@ -32,6 +32,7 @@
 
 //! Read-only Export prerequisite projection regression fixtures.
 
+use std::fmt::Debug;
 use std::path::PathBuf;
 
 use atrament_autonomous_output_intent::AutonomousOutputIntentSource;
@@ -69,11 +70,19 @@ const PATH_SOURCES: [ExplicitFilePathSource; 2] = [
     ExplicitFilePathSource::CallerSelection,
 ];
 
-fn revision_fixture() -> AcceptedRevision {
+fn required<T, E>(result: Result<T, E>, context: &str) -> Option<T>
+where
+    E: Debug,
+{
+    assert!(result.is_ok(), "{context}: {:?}", result.as_ref().err());
+    result.ok()
+}
+
+fn revision_fixture() -> Option<AcceptedRevision> {
     let identities = IdentityAllocator::new();
-    let id = identities.allocate_revision().expect("revision id");
-    let notebook_id = identities.allocate_accepted().expect("notebook id");
-    AcceptedRevision {
+    let id = required(identities.allocate_revision(), "revision id")?;
+    let notebook_id = required(identities.allocate_accepted(), "notebook id")?;
+    Some(AcceptedRevision {
         id,
         notebook: Notebook {
             assets: vec![],
@@ -86,10 +95,10 @@ fn revision_fixture() -> AcceptedRevision {
             provenance: vec![],
             styles: vec![],
         },
-    }
+    })
 }
 
-fn diagnostics(completeness: Completeness) -> DiagnosticSet {
+const fn diagnostics(completeness: Completeness) -> DiagnosticSet {
     DiagnosticSet {
         completeness,
         diagnostics: vec![],
@@ -98,21 +107,35 @@ fn diagnostics(completeness: Completeness) -> DiagnosticSet {
 
 #[test]
 fn independently_selected_export_path_and_real_layout_gate_remain_pending() {
-    let current = revision_fixture();
+    let Some(current) = revision_fixture() else {
+        return;
+    };
     let complete = diagnostics(Completeness::Complete);
-    let bound = RevisionLayoutDiagnostics::bind(current.id, &complete)
-        .expect("empty complete evidence binds to requested revision");
-    let layout = preflight_layout_for_export(&current, current.id, bound)
-        .expect("current revision matches layout evidence");
+    let Some(bound) = required(
+        RevisionLayoutDiagnostics::bind(current.id, &complete),
+        "empty complete evidence binds to requested revision",
+    ) else {
+        return;
+    };
+    let Some(layout) = required(
+        preflight_layout_for_export(&current, current.id, bound),
+        "current revision matches layout evidence",
+    ) else {
+        return;
+    };
     assert!(matches!(layout, ExportLayoutPreflightResult::Ready { .. }));
     let path = PathBuf::from("./explicit-output.atrament");
-    let intent = classify_explicit_file_path_intent(
-        ExplicitFilePurpose::ExportNotebook,
-        ExplicitFilePathSource::CallerSelection,
-        path.clone(),
-        ExplicitOverwriteIntent::PreserveExisting,
-    )
-    .expect("trusted selection is a valid file path");
+    let Some(intent) = required(
+        classify_explicit_file_path_intent(
+            ExplicitFilePurpose::ExportNotebook,
+            ExplicitFilePathSource::CallerSelection,
+            path.clone(),
+            ExplicitOverwriteIntent::PreserveExisting,
+        ),
+        "trusted selection is a valid file path",
+    ) else {
+        return;
+    };
     assert_eq!(
         project_export_prerequisites(
             AutonomousOutputIntentSource::CallerExplicitGoal,
@@ -128,19 +151,33 @@ fn independently_selected_export_path_and_real_layout_gate_remain_pending() {
 
 #[test]
 fn incomplete_real_layout_preflight_cannot_advance_export() {
-    let current = revision_fixture();
+    let Some(current) = revision_fixture() else {
+        return;
+    };
     let incomplete = diagnostics(Completeness::Incomplete);
-    let bound = RevisionLayoutDiagnostics::bind(current.id, &incomplete)
-        .expect("incomplete evidence still has a revision binding");
-    let layout = preflight_layout_for_export(&current, current.id, bound)
-        .expect("current revision matches layout evidence");
-    let intent = classify_explicit_file_path_intent(
-        ExplicitFilePurpose::ExportProfile,
-        ExplicitFilePathSource::AdmittedHostPolicy,
-        PathBuf::from("profile.atrament"),
-        ExplicitOverwriteIntent::ReplaceExisting,
-    )
-    .expect("policy independently selected profile export");
+    let Some(bound) = required(
+        RevisionLayoutDiagnostics::bind(current.id, &incomplete),
+        "incomplete evidence still has a revision binding",
+    ) else {
+        return;
+    };
+    let Some(layout) = required(
+        preflight_layout_for_export(&current, current.id, bound),
+        "current revision matches layout evidence",
+    ) else {
+        return;
+    };
+    let Some(intent) = required(
+        classify_explicit_file_path_intent(
+            ExplicitFilePurpose::ExportProfile,
+            ExplicitFilePathSource::AdmittedHostPolicy,
+            PathBuf::from("profile.atrament"),
+            ExplicitOverwriteIntent::ReplaceExisting,
+        ),
+        "policy independently selected profile export",
+    ) else {
+        return;
+    };
     assert_eq!(
         project_export_prerequisites(
             AutonomousOutputIntentSource::IndependentAdmittedHostPolicy,
@@ -153,7 +190,9 @@ fn incomplete_real_layout_preflight_cannot_advance_export() {
 
 #[test]
 fn all_source_purpose_and_layout_combinations_preserve_precedence() {
-    let current = revision_fixture();
+    let Some(current) = revision_fixture() else {
+        return;
+    };
     let complete = diagnostics(Completeness::Complete);
     let incomplete = diagnostics(Completeness::Incomplete);
     let scenarios = [
@@ -174,13 +213,17 @@ fn all_source_purpose_and_layout_combinations_preserve_precedence() {
     for goal in GOAL_SOURCES {
         for purpose in PURPOSES {
             for selected_source in PATH_SOURCES {
-                let intent = classify_explicit_file_path_intent(
-                    purpose,
-                    selected_source,
-                    PathBuf::from("chosen-output.atrament"),
-                    ExplicitOverwriteIntent::PreserveExisting,
-                )
-                .expect("path source independently admitted");
+                let Some(intent) = required(
+                    classify_explicit_file_path_intent(
+                        purpose,
+                        selected_source,
+                        PathBuf::from("chosen-output.atrament"),
+                        ExplicitOverwriteIntent::PreserveExisting,
+                    ),
+                    "path source independently admitted",
+                ) else {
+                    return;
+                };
                 for (scenario, layout) in scenarios.iter().enumerate() {
                     let expected = if matches!(
                         goal,

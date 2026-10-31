@@ -55,16 +55,16 @@ const RESULTS: [SemanticCommandResultClass; 15] = [
     SemanticCommandResultClass::WritableScopeViolation,
 ];
 
-fn expected(
+const fn expected(
     result: SemanticCommandResultClass,
 ) -> Option<AutonomousProgressEvidenceClass> {
     match result {
         SemanticCommandResultClass::Applied => {
             Some(AutonomousProgressEvidenceClass::AcceptedApplyRevisionChange)
-        },
+        }
         SemanticCommandResultClass::IdempotentReplay => {
             Some(AutonomousProgressEvidenceClass::IdempotentReplayRecovery)
-        },
+        }
         SemanticCommandResultClass::CancelledBeforeCommit
         | SemanticCommandResultClass::CommandContextMismatch
         | SemanticCommandResultClass::DependencyGraphRejection
@@ -83,7 +83,7 @@ fn expected(
 
 #[test]
 fn all_15_semantic_results_match_direct_progress_projection() {
-    let mut classified = 0_usize;
+    let mut classified = 0usize;
     for result in RESULTS {
         let expected = expected(result);
         assert_eq!(

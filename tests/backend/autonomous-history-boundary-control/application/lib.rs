@@ -46,9 +46,21 @@ use atrament_semantic_notebook_port::{
 #[test]
 fn current_history_outcomes_preserve_exact_boundary_direction_only() {
     let identities = IdentityAllocator::new();
-    let base = identities.allocate_revision().expect("base revision");
-    let current = identities.allocate_revision().expect("current revision");
-    let traversed = identities.allocate_revision().expect("result revision");
+    let allocated_base = identities.allocate_revision();
+    assert!(allocated_base.is_ok(), "base revision allocates");
+    let Ok(base) = allocated_base else {
+        return;
+    };
+    let allocated_current = identities.allocate_revision();
+    assert!(allocated_current.is_ok(), "current revision allocates");
+    let Ok(current) = allocated_current else {
+        return;
+    };
+    let allocated_traversed = identities.allocate_revision();
+    assert!(allocated_traversed.is_ok(), "traversed revision allocates");
+    let Ok(traversed) = allocated_traversed else {
+        return;
+    };
     let cases = [
         (
             HistoryTraversalOutcome::Boundary {
@@ -98,17 +110,20 @@ fn current_history_outcomes_preserve_exact_boundary_direction_only() {
 #[test]
 fn all_ten_read_only_availability_cases_preserve_boundary_and_absence() {
     let identities = IdentityAllocator::new();
-    let revision = identities.allocate_revision().expect("revision identity");
-    let mut cases = 0_usize;
+    let allocated_revision = identities.allocate_revision();
+    assert!(allocated_revision.is_ok(), "revision revision allocates");
+    let Ok(revision) = allocated_revision else {
+        return;
+    };
+    let mut cases = 0usize;
     for can_redo in [false, true] {
         for can_undo in [false, true] {
-            let availability = HistoryAvailabilityOutcome::Available(
-                HistoryAvailability {
+            let availability =
+                HistoryAvailabilityOutcome::Available(HistoryAvailability {
                     can_redo,
                     can_undo,
                     revision,
-                },
-            );
+                });
             for direction in [HistoryDirection::Redo, HistoryDirection::Undo] {
                 let admitted = match direction {
                     HistoryDirection::Redo => can_redo,
@@ -121,7 +136,8 @@ fn all_ten_read_only_availability_cases_preserve_boundary_and_absence() {
                 };
                 assert_eq!(
                     autonomous_history_direction_control(
-                        &availability, direction
+                        &availability,
+                        direction
                     ),
                     expected
                 );

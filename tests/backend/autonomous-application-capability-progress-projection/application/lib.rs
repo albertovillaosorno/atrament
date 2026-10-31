@@ -47,7 +47,7 @@ const CAPABILITIES: [CommandApplicationCapability; 4] = [
     CommandApplicationCapability::Validate,
 ];
 
-fn admission(
+const fn admission(
     capability: CommandApplicationCapability,
     admitted: bool,
 ) -> SemanticCommandApplicationAdmission {
@@ -78,8 +78,8 @@ fn expected(
 
 #[test]
 fn all_64_application_admission_transitions_match_exact_progress_rule() {
-    let mut combinations = 0_usize;
-    let mut progress = 0_usize;
+    let mut combinations = 0usize;
+    let mut progress = 0usize;
     for previous_capability in CAPABILITIES {
         for previous_admitted in [false, true] {
             for current_capability in CAPABILITIES {

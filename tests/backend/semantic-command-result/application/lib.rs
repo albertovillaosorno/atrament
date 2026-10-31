@@ -34,7 +34,6 @@
 //! Semantic command result application regression tests.
 
 use atrament_application_operation_lifecycle as lifecycle;
-use lifecycle::ApplicationCancellationObservation;
 use atrament_semantic_command_result::{
     SemanticCommandOperation, classify_semantic_apply_cancellation_result,
     semantic_command_commit_disposition, semantic_command_result_applies_to,
@@ -42,6 +41,7 @@ use atrament_semantic_command_result::{
 use atrament_semantic_notebook_port::{
     SemanticCommandCommitDisposition, SemanticCommandResultClass,
 };
+use lifecycle::ApplicationCancellationObservation;
 
 const ALL_CORE_RESULT_CLASSES: [SemanticCommandResultClass; 15] = [
     SemanticCommandResultClass::Applied,
@@ -112,14 +112,13 @@ fn all_three_apply_cancellation_observations_preserve_commit_semantics() {
     }
 }
 
-
 #[test]
 fn all_30_operation_result_pairs_match_frozen_applicability() {
     const OPERATIONS: [SemanticCommandOperation; 2] = [
         SemanticCommandOperation::Apply,
         SemanticCommandOperation::Validate,
     ];
-    let mut cases = 0_usize;
+    let mut cases = 0usize;
     for operation in OPERATIONS {
         for result in ALL_CORE_RESULT_CLASSES {
             let expected = match result {
@@ -129,10 +128,10 @@ fn all_30_operation_result_pairs_match_frozen_applicability() {
                 | SemanticCommandResultClass::NoOp
                 | SemanticCommandResultClass::RetryConflict => {
                     operation == SemanticCommandOperation::Apply
-                },
+                }
                 SemanticCommandResultClass::SuccessfulValidation => {
                     operation == SemanticCommandOperation::Validate
-                },
+                }
                 SemanticCommandResultClass::CommandContextMismatch
                 | SemanticCommandResultClass::DependencyGraphRejection
                 | SemanticCommandResultClass::InternalFailureKnownNoCommit

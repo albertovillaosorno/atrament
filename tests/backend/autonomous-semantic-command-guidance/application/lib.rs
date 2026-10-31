@@ -58,7 +58,7 @@ const RESULTS: [SemanticCommandResultClass; 15] = [
     SemanticCommandResultClass::WritableScopeViolation,
 ];
 
-fn expected(
+const fn expected(
     result: SemanticCommandResultClass,
 ) -> Option<AutonomousSemanticCommandGuidance> {
     match result {
@@ -68,19 +68,19 @@ fn expected(
         ),
         SemanticCommandResultClass::NoOp => {
             Some(AutonomousSemanticCommandGuidance::InspectGoalSatisfaction)
-        },
+        }
         SemanticCommandResultClass::CommandContextMismatch
         | SemanticCommandResultClass::StaleBase => {
             Some(AutonomousSemanticCommandGuidance::FreshInspectionOrContext)
-        },
+        }
         SemanticCommandResultClass::DependencyGraphRejection
         | SemanticCommandResultClass::SemanticValidationRejection
         | SemanticCommandResultClass::WritableScopeViolation => {
             Some(AutonomousSemanticCommandGuidance::CorrectRequestOrContext)
-        },
+        }
         SemanticCommandResultClass::ResourceLimitRejection => {
             Some(AutonomousSemanticCommandGuidance::SmallerOrAlternateWorkflow)
-        },
+        }
         SemanticCommandResultClass::RetryConflict => Some(
             AutonomousSemanticCommandGuidance::CorrectRetryBookkeepingOrStop,
         ),
@@ -89,7 +89,7 @@ fn expected(
         ),
         SemanticCommandResultClass::UnsupportedProtocolOrCapability => {
             Some(AutonomousSemanticCommandGuidance::CompatibilityNegotiation)
-        },
+        }
         SemanticCommandResultClass::CancelledBeforeCommit
         | SemanticCommandResultClass::InternalFailureKnownNoCommit
         | SemanticCommandResultClass::SuccessfulValidation => None,
@@ -98,7 +98,7 @@ fn expected(
 
 #[test]
 fn all_15_result_classes_match_frozen_partial_guidance() {
-    let mut classified = 0_usize;
+    let mut classified = 0usize;
     for result in RESULTS {
         let expected = expected(result);
         assert_eq!(autonomous_semantic_command_guidance(result), expected);

@@ -34,6 +34,11 @@
 
 //! Application semantics for frozen semantic history result classes.
 
+// Integration-test-only dev dependencies also appear in the library test
+// target; record their use without adding production dependencies.
+#[cfg(test)]
+use atrament_semantic_notebook as _;
+
 use atrament_application_operation_lifecycle::{
     ApplicationCancellationDisposition, ApplicationCancellationObservation,
     ApplicationOperationClass, application_cancellation_resolution,

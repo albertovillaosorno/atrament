@@ -33,6 +33,11 @@
 
 //! Direction-aware local stop control for semantic history boundaries.
 
+// Integration-test-only dev dependencies also appear in the library test
+// target; record their use without adding production dependencies.
+#[cfg(test)]
+use atrament_semantic_notebook as _;
+
 use atrament_semantic_notebook_port::{
     HistoryAvailabilityOutcome, HistoryDirection, HistoryTraversalOutcome,
 };

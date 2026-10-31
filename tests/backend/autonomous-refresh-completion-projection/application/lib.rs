@@ -91,8 +91,8 @@ fn expected(
 
 #[test]
 fn all_90_refreshed_completion_combinations_match_frozen_contract() {
-    let mut combinations = 0_usize;
-    let mut completions = 0_usize;
+    let mut combinations = 0usize;
+    let mut completions = 0usize;
     for result in RESULTS {
         for semantic in SEMANTICS {
             for output in OUTPUTS {

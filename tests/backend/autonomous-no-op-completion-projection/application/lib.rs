@@ -85,8 +85,8 @@ fn expected(
 
 #[test]
 fn all_90_no_op_completion_combinations_match_frozen_fixture() {
-    let mut combinations = 0_usize;
-    let mut completions = 0_usize;
+    let mut combinations = 0usize;
+    let mut completions = 0usize;
     for result in RESULTS {
         for semantic in SEMANTICS {
             for output in OUTPUTS {
