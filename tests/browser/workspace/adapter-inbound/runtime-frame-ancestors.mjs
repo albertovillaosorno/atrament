@@ -656,7 +656,9 @@ test("WebSocket upgrade rejects missing or oversized response headers",
 // A successful HTTP status alone does not establish a WebSocket peer.
 function validateWebSocketUpgrade(head, key) {
     const lines = head.split("\r\n");
-    assert.match(lines[0], /^HTTP\/1\.1 101(?:\s|$)/);
+    // A valid HTTP/1.1 status line has two space separators. Bare control
+    // characters cannot convert a malformed reply into an accepted upgrade.
+    assert.match(lines[0], /^HTTP\/1\.1 101 [\t\x20-\x7e\x80-\xff]*$/);
     const headers = new Map();
     for (const line of lines.slice(1)) {
         const colon = line.indexOf(":");
@@ -932,6 +934,18 @@ class BidiClient {
                 this.close(new Error("invalid WebDriver BiDi message value"));
                 return;
             }
+            if (message.type === "success") {
+                // Every BiDi command success has an object result. A bare
+                // success marker must not confirm test session readiness.
+                if (message.result === null
+                    || typeof message.result !== "object"
+                    || Array.isArray(message.result)) {
+                    this.close(new Error(
+                        "invalid WebDriver BiDi success result",
+                    ));
+                    return;
+                }
+            }
             if (message.type === "success" || message.type === "error") {
                 const pending = this.pending.get(message.id);
                 if (pending === undefined) {
@@ -1000,6 +1014,26 @@ test("WebSocket upgrade rejects false status and forged accept headers",
         ));
     },
 );
+
+test("WebSocket upgrade refuses malformed status-line controls", () => {
+    const key = "dGhlIHNhbXBsZSBub25jZQ==";
+    const accepted = [
+        "HTTP/1.1 101 Switching Protocols",
+        "Upgrade: websocket",
+        "Connection: Upgrade",
+        "Sec-WebSocket-Accept: s3pPLMBiTxaQ9kYGzzhZRbK+xOo=",
+    ].join("\r\n");
+    for (const replacement of [
+        "101\nSwitching Protocols",
+        "101\tSwitching Protocols",
+        "101 Switching\u0000Protocols",
+        "101",
+    ]) {
+        assert.throws(() => validateWebSocketUpgrade(
+            accepted.replace("101 Switching Protocols", replacement), key,
+        ));
+    }
+});
 
 test("WebSocket upgrade refuses unsolicited extension and subprotocol", () => {
     const key = "dGhlIHNhbXBsZSBub25jZQ==";
@@ -1196,6 +1230,32 @@ test("WebDriver BiDi rejects malformed JSON, null data and close frames",
             await assert.rejects(pending, expected);
             assert.equal(client.pending.size, 0);
             assert.equal(client.closed, true);
+        }
+    },
+);
+
+test("WebDriver BiDi rejects malformed successful command results",
+    async () => {
+        const malformed = [
+            { id: 1, type: "success" },
+            ...[null, [], "accepted", 17, true].map((result) => ({
+                id: 1, type: "success", result,
+            })),
+        ];
+        for (const message of malformed) {
+            const client = new BidiClient("ws://127.0.0.1:1234/session");
+            let destroyed = 0;
+            client.socket = {
+                write: () => {}, destroy: () => { destroyed += 1; },
+            };
+            const pending = client.command("session.new", {}, 30_000);
+            client.buffer = testServerFrame(JSON.stringify(message));
+            client.drain();
+            await assert.rejects(pending,
+                /invalid WebDriver BiDi success result/);
+            assert.equal(client.closed, true);
+            assert.equal(client.pending.size, 0);
+            assert.equal(destroyed, 1);
         }
     },
 );
