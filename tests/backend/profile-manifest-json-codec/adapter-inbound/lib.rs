@@ -32,13 +32,17 @@
 
 //! Read-only typed profile manifest codec integration and adversarial fixtures.
 
+use std::fmt::Write as _;
 use std::path::PathBuf;
+use std::ptr;
 
 use atrament_explicit_file_path_intent::{
     ExplicitFilePathSource, ExplicitFilePurpose, ExplicitOverwriteIntent,
     classify_explicit_file_path_intent,
 };
-use atrament_handwriting_profile_container::validate_profile_manifest;
+use atrament_handwriting_profile_container::{
+    Sha256Digest, ValidatedProfileEntryInventory, validate_profile_manifest,
+};
 use atrament_profile_import_preflight::{
     ProfileImportBudget, preflight_explicit_profile_import_sorted,
 };
@@ -60,6 +64,28 @@ use atrament_profile_zip_reader::{
     ProfileZipReadLimits, read_stored_profile_zip,
     verify_admitted_profile_zip_payloads,
 };
+
+// Test fixture checks explicitly assert missing source evidence.
+macro_rules! require_ok {
+    ($expression:expr) => {{
+        let result = $expression;
+        assert!(
+            result.is_ok(),
+            "expected admitted fixture: {:?}", result.as_ref().err(),
+        );
+        let Ok(value) = result else { return; };
+        value
+    }};
+}
+
+macro_rules! require_some {
+    ($expression:expr) => {{
+        let selected = $expression;
+        assert!(selected.is_some(), "expected fixture evidence");
+        let Some(value) = selected else { return; };
+        value
+    }};
+}
 
 const ZERO_SHA: &str = concat!(
     "00000000000000000000000000000000",
@@ -87,12 +113,12 @@ fn base_json() -> String {
     format!(
         concat!(
             r#"{{"container_version":"atrament.profile/1","#,
-            r#""profile_identity":"ñote-1","required_features":["strokes"],"#,
+            r#""profile_identity":"{}ote-1","required_features":["strokes"],"#,
             r#""optional_features":[],"#,
             r#""entries":[{{"path":"sections/strokes.json","media_type":""#,
             r#"application/json","byte_length":2,"sha256":"{}"}}]}}"#,
         ),
-        ZERO_SHA
+        "\u{f1}", ZERO_SHA
     )
 }
 
@@ -101,7 +127,7 @@ fn decode(
     limits: ProfileManifestJsonLimits,
 ) -> Result<atrament_handwriting_profile_container::ProfileManifest, Error> {
     let syntax = validate_profile_json_object(input.as_bytes(), syntax_limits())
-        .expect("fixtures must have valid JSON grammar");
+        .map_err(|_syntax_error| Error::WrongType("fixture JSON syntax"))?;
     decode_profile_manifest_json(syntax, limits)
 }
 
@@ -109,18 +135,27 @@ fn decode(
 fn full_manifest_decodes_every_field_without_losing_optional_features() {
     let input = base_json().replace(
         "\"optional_features\":[]",
-        "\"optional_features\":[\"future.feature\",\"mañana\"]",
+        "\"optional_features\":[\"future.feature\",\"ma\u{f1}ana\"]",
     );
-    let manifest = decode(&input, codec_limits()).expect("all fields decoded");
+    let manifest = require_ok!(decode(&input, codec_limits()));
     assert_eq!(manifest.container_version, "atrament.profile/1");
-    assert_eq!(manifest.profile_identity, "ñote-1");
+    assert_eq!(manifest.profile_identity, "\u{f1}ote-1");
     assert_eq!(manifest.required_features, ["strokes"]);
-    assert_eq!(manifest.optional_features, ["future.feature", "mañana"]);
+    assert_eq!(manifest.optional_features, ["future.feature", "ma\u{f1}ana"]);
     assert_eq!(manifest.entries.len(), 1);
-    assert_eq!(manifest.entries[0].path, "sections/strokes.json");
-    assert_eq!(manifest.entries[0].media_type, "application/json");
-    assert_eq!(manifest.entries[0].byte_length, 2);
-    assert_eq!(manifest.entries[0].digest.bytes(), [0u8; 32]);
+    assert_eq!(
+        require_some!(manifest.entries.first()).path,
+        "sections/strokes.json",
+    );
+    assert_eq!(
+        require_some!(manifest.entries.first()).media_type,
+        "application/json",
+    );
+    assert_eq!(require_some!(manifest.entries.first()).byte_length, 2);
+    assert_eq!(
+        require_some!(manifest.entries.first()).digest.bytes(),
+        [0u8; 32],
+    );
     assert_eq!(validate_profile_manifest(&manifest, &["strokes"]), Ok(()));
     assert!(validate_profile_manifest(&manifest, &[]).is_err());
 }
@@ -131,17 +166,17 @@ fn decoded_utf8_respects_exact_byte_budget_with_large_caller_limits() {
         r#"{"container_version":"v1", "#,
         r#""profile_identity":"\uD83D\uDD8B\u00f1", "#,
         r#""required_features":["\u00f1"], "#,
-        r#""optional_features":["é"],"entries":[]}"#,
+        r#""optional_features":[""#, "\u{e9}", r#""],"entries":[]}"#,
     );
     let mut limits = codec_limits();
     limits.maximum_entries = usize::MAX;
     limits.maximum_features = usize::MAX;
     limits.maximum_string_bytes = 6;
-    let manifest = decode(source, limits).expect("decoded UTF-8 fits exactly");
-    assert_eq!(manifest.profile_identity, "🖋ñ");
+    let manifest = require_ok!(decode(source, limits));
+    assert_eq!(manifest.profile_identity, "\u{1f58b}\u{f1}");
     assert_eq!(manifest.profile_identity.len(), 6);
-    assert_eq!(manifest.required_features, ["ñ"]);
-    assert_eq!(manifest.optional_features, ["é"]);
+    assert_eq!(manifest.required_features, ["\u{f1}"]);
+    assert_eq!(manifest.optional_features, ["\u{e9}"]);
 
     limits.maximum_string_bytes = 5;
     assert_eq!(
@@ -170,7 +205,7 @@ fn bounded_metadata_vectors_admit_all_entries_at_exact_limit() {
         features = features,
         entries = entries,
     );
-    let syntax = validate_profile_json_object(
+    let syntax = require_ok!(validate_profile_json_object(
         source.as_bytes(),
         ProfileJsonSyntaxLimits {
             maximum_bytes: source.len(),
@@ -178,14 +213,13 @@ fn bounded_metadata_vectors_admit_all_entries_at_exact_limit() {
             maximum_object_members: 20,
             maximum_values: 512,
         },
-    ).expect("large manifest syntax fits its explicit limits");
+    ));
     let limits = ProfileManifestJsonLimits {
         maximum_entries: 32,
         maximum_features: 32,
         maximum_string_bytes: 64,
     };
-    let admitted = decode_profile_manifest_json(syntax, limits)
-        .expect("bounded entries and features allocate within limits");
+    let admitted = require_ok!(decode_profile_manifest_json(syntax, limits));
     assert_eq!(admitted.entries.len(), 32);
     assert_eq!(admitted.required_features.len(), 32);
     assert!(admitted.entries.iter().all(|entry| entry.byte_length == 2));
@@ -215,14 +249,14 @@ fn bounded_metadata_vectors_admit_all_entries_at_exact_limit() {
 fn keys_and_strings_decode_json_escapes_without_coercion() {
     let input = base_json()
         .replace(
-            "\"profile_identity\":\"ñote-1\"",
+            "\"profile_identity\":\"\u{f1}ote-1\"",
             r#""profile_\u0069dentity":"\u00f1ote-1""#,
         )
         .replace("\"sha256\":", "\"sha\\u003256\":");
     // The escaped key above actually decodes to `sha256`.
-    let manifest = decode(&input, codec_limits()).expect("decoded exact keys");
-    assert_eq!(manifest.profile_identity, "ñote-1");
-    assert_eq!(manifest.entries[0].digest.bytes(), [0; 32]);
+    let manifest = require_ok!(decode(&input, codec_limits()));
+    assert_eq!(manifest.profile_identity, "\u{f1}ote-1");
+    assert_eq!(require_some!(manifest.entries.first()).digest.bytes(), [0; 32]);
     let ambiguous = input.replace(
         r#""profile_\u0069dentity":"\u00f1ote-1""#,
         r#""profile_identity":"new","profile_\u0069dentity":"old""#,
@@ -238,7 +272,7 @@ fn missing_unknown_and_wrong_kind_fields_fail_closed() {
     let valid = base_json();
     let invalid_entries_kind = format!(
         "{}\"entries\":{{}}}}",
-        valid.split("\"entries\":").next().unwrap()
+        require_some!(valid.split("\"entries\":").next())
     );
     let cases = [
         (
@@ -270,7 +304,7 @@ fn missing_unknown_and_wrong_kind_fields_fail_closed() {
         ),
         (
             valid.replace(
-                "\"profile_identity\":\"ñote-1\"",
+                "\"profile_identity\":\"\u{f1}ote-1\"",
                 "\"profile_identity\":false",
             ),
             Error::WrongType("profile_identity"),
@@ -316,9 +350,10 @@ fn string_and_array_limits_refuse_excess_without_partial_admission() {
         decode(&two, limits),
         Err(Error::ArrayLimitExceeded("required_features"))
     );
-    let entry = valid.split("\"entries\":[")
-        .nth(1).expect("fixture entries field")
-        .strip_suffix("]}").expect("fixture entries array");
+    let entry = require_some!(
+        require_some!(valid.split("\"entries\":[").nth(1))
+            .strip_suffix("]}")
+    );
     let second = valid.replace(entry, &format!("{entry},{entry}"));
     limits.maximum_entries = 1;
     limits.maximum_features = 4;
@@ -327,7 +362,7 @@ fn string_and_array_limits_refuse_excess_without_partial_admission() {
         Err(Error::ArrayLimitExceeded("entries"))
     );
     limits.maximum_entries = 2;
-    assert_eq!(decode(&second, limits).unwrap().entries.len(), 2);
+    assert_eq!(require_ok!(decode(&second, limits)).entries.len(), 2);
 }
 
 #[test]
@@ -343,7 +378,7 @@ fn unsigned_lengths_and_exact_lowercase_hashes_reject_ambiguous_values() {
         );
     }
     for bad in ["a", "A", "g", "0"]
-        .map(str::to_string)
+        .map(String::from)
         .into_iter()
         .chain(["0".repeat(63), "0".repeat(65)])
     {
@@ -360,9 +395,71 @@ fn unsigned_lengths_and_exact_lowercase_hashes_reject_ambiguous_values() {
     let decimal = valid.replace(
         "\"byte_length\":2", "\"byte_length\":18446744073709551615",
     );
+    let decoded = require_ok!(decode(&decimal, codec_limits()));
     assert_eq!(
-        decode(&decimal, codec_limits()).unwrap().entries[0].byte_length,
+        require_some!(decoded.entries.first()).byte_length,
         u64::MAX
+    );
+}
+
+fn verify_altered_payload_refused(
+    root: &str,
+    original_sha: Sha256Digest,
+    original_archive_sha: Sha256Digest,
+    inventory: ValidatedProfileEntryInventory<'_, '_>,
+) {
+    // The stored ZIP writer computes a new CRC for substituted bytes.
+    // Root JSON is unchanged and remains schema-valid, but its SHA-256
+    // declaration must reject a same-length payload alteration.
+    let tampered_members = [
+        ProfileStoredZipMember {
+            name: "manifest.json",
+            bytes: root.as_bytes(),
+        },
+        ProfileStoredZipMember { name: "sections/strokes.json", bytes: b"ho" },
+    ];
+    let changed_zip = require_ok!(write_stored_profile_zip(
+        &tampered_members,
+        ProfileStoredZipWriteLimits {
+            maximum_archive_bytes: 16_384,
+            maximum_entries: 2,
+            maximum_entry_bytes: 8_192,
+            maximum_total_bytes: 8_192,
+        },
+    ));
+    let changed_archive = require_ok!(read_stored_profile_zip(
+        &changed_zip,
+        ProfileZipReadLimits {
+            maximum_archive_bytes: 16_384,
+            maximum_entries: 2,
+            maximum_entry_bytes: 8_192,
+            maximum_total_bytes: 8_192,
+        },
+    ));
+    let changed_root = require_ok!(changed_archive.admitted_root_json(
+        syntax_limits(),
+    ));
+    let changed_decoded = require_ok!(decode_attached_profile_manifest_json(
+        &changed_root, codec_limits(),
+    ));
+    assert!(
+        ptr::eq(changed_decoded.archive(), &raw const changed_archive),
+        "changed typed root must borrow its changed archive",
+    );
+    assert_eq!(
+        changed_decoded.root_sha256(), original_sha,
+        "unchanged manifest keeps its root digest",
+    );
+    assert_ne!(
+        changed_decoded.archive().source_sha256(),
+        original_archive_sha,
+        "altered member must change the archive digest",
+    );
+    assert!(
+        verify_admitted_profile_zip_payloads(
+            &changed_archive, inventory,
+        ).is_err(),
+        "tampered member must fail source-bound digest verification",
     );
 }
 
@@ -370,11 +467,11 @@ fn unsigned_lengths_and_exact_lowercase_hashes_reject_ambiguous_values() {
 fn real_zip_root_decodes_to_typed_manifest_with_independent_payload_digest() {
     let payload = b"hi";
     let sha = sha256_profile_bytes(payload);
-    let hex: String = sha
-        .bytes()
-        .iter()
-        .map(|byte| format!("{byte:02x}"))
-        .collect();
+    let mut hex = String::with_capacity(64);
+    for byte in sha.bytes() {
+        let written = write!(&mut hex, "{byte:02x}");
+        assert!(written.is_ok(), "hash digest writes as lowercase hex");
+    }
     let root = base_json().replace(ZERO_SHA, &hex);
     let members = [
         ProfileStoredZipMember {
@@ -386,7 +483,7 @@ fn real_zip_root_decodes_to_typed_manifest_with_independent_payload_digest() {
             bytes: payload,
         },
     ];
-    let zip = write_stored_profile_zip(
+    let zip = require_ok!(write_stored_profile_zip(
         &members,
         ProfileStoredZipWriteLimits {
             maximum_archive_bytes: 16_384,
@@ -394,9 +491,8 @@ fn real_zip_root_decodes_to_typed_manifest_with_independent_payload_digest() {
             maximum_entry_bytes: 8_192,
             maximum_total_bytes: 8_192,
         },
-    )
-    .expect("canonical stored framing");
-    let archive = read_stored_profile_zip(
+    ));
+    let archive = require_ok!(read_stored_profile_zip(
         &zip,
         ProfileZipReadLimits {
             maximum_archive_bytes: 16_384,
@@ -404,91 +500,55 @@ fn real_zip_root_decodes_to_typed_manifest_with_independent_payload_digest() {
             maximum_entry_bytes: 8_192,
             maximum_total_bytes: 8_192,
         },
-    )
-    .expect("checked archive framing");
-    let attached = archive
-        .admitted_root_json(syntax_limits())
-        .expect("source-backed JSON root");
+    ));
+    let attached = require_ok!(archive.admitted_root_json(syntax_limits()));
     assert_eq!(attached.archive().source_sha256(), archive.source_sha256());
     let original_sha = attached.source_sha256();
-    let attached_decoded = decode_attached_profile_manifest_json(
+    let attached_decoded = require_ok!(decode_attached_profile_manifest_json(
         &attached, codec_limits(),
-    ).expect("type remains associated with source ZIP");
+    ));
     let debug = format!("{attached_decoded:?}");
     assert!(debug.contains("DecodedProfileZipManifest"));
-    for private in ["ñote-1", "sections/strokes.json", "strokes"] {
+    for private in ["\u{f1}ote-1", "sections/strokes.json", "strokes"] {
         assert!(!debug.contains(private));
     }
     assert!(!debug.contains(&format!("{zip:?}")));
     assert_eq!(attached_decoded.root_sha256(), original_sha);
     assert_eq!(attached_decoded.archive().source_sha256(),
         archive.source_sha256());
-    assert!(std::ptr::eq(attached_decoded.archive(), &archive));
+    assert!(ptr::eq(attached_decoded.archive(), &raw const archive));
     let manifest = attached_decoded.manifest();
-    assert_eq!(manifest.entries[0].digest, sha);
-    assert_eq!(manifest.entries[0].byte_length, payload.len() as u64);
+    assert_eq!(require_some!(manifest.entries.first()).digest, sha);
+    assert_eq!(
+        require_some!(manifest.entries.first()).byte_length,
+        u64::try_from(payload.len()).unwrap_or(u64::MAX),
+    );
     assert_eq!(validate_profile_manifest(manifest, &["strokes"]), Ok(()));
-    let selected = classify_explicit_file_path_intent(
+    let selected = require_ok!(classify_explicit_file_path_intent(
         ExplicitFilePurpose::ImportProfile,
         ExplicitFilePathSource::CallerSelection,
         PathBuf::from("selected/profile.atrament"),
         ExplicitOverwriteIntent::PreserveExisting,
-    ).expect("synthetic caller selection for read-only preflight");
+    ));
     let mut paths = [""; 2];
-    let count = archive.copy_observed_paths(&mut paths)
-        .expect("names sourced from this ZIP");
-    let preflight = preflight_explicit_profile_import_sorted(
-        &selected, manifest, &["strokes"], &paths[..count],
+    let count = require_ok!(archive.copy_observed_paths(&mut paths));
+    let preflight = require_ok!(preflight_explicit_profile_import_sorted(
+        &selected, manifest, &["strokes"], require_some!(paths.get(..count)),
         archive.encoding_evidence(), ProfileImportBudget {
             maximum_declared_bytes: 2,
             maximum_entries: 1,
             maximum_entry_bytes: 2,
         },
-    ).expect("typed root agrees with actual archive inventory");
-    let verified = verify_admitted_profile_zip_payloads(
+    ));
+    let verified = require_ok!(verify_admitted_profile_zip_payloads(
         &archive, preflight.inventory(),
-    ).expect("declared digest agrees with exact ZIP member bytes");
+    ));
     assert_eq!(verified.verified_entry_bytes("sections/strokes.json"),
         Some(payload.as_slice()));
 
-    // The stored ZIP writer computes a new CRC for substituted bytes.
-    // Root JSON is unchanged and remains schema-valid, but its SHA-256
-    // declaration must reject a same-length payload alteration.
-    let tampered_members = [
-        ProfileStoredZipMember {
-            name: "manifest.json",
-            bytes: root.as_bytes(),
-        },
-        ProfileStoredZipMember { name: "sections/strokes.json", bytes: b"ho" },
-    ];
-    let changed_zip = write_stored_profile_zip(&tampered_members,
-        ProfileStoredZipWriteLimits {
-            maximum_archive_bytes: 16_384,
-            maximum_entries: 2,
-            maximum_entry_bytes: 8_192,
-            maximum_total_bytes: 8_192,
-        },
-    ).expect("CRC-correct altered ZIP");
-    let changed_archive = read_stored_profile_zip(&changed_zip,
-        ProfileZipReadLimits {
-            maximum_archive_bytes: 16_384,
-            maximum_entries: 2,
-            maximum_entry_bytes: 8_192,
-            maximum_total_bytes: 8_192,
-        },
-    ).expect("same framing still passes");
-    let changed_root = changed_archive.admitted_root_json(syntax_limits())
-        .expect("the same root stays schema-admissible");
-    let changed_decoded = decode_attached_profile_manifest_json(
-        &changed_root, codec_limits(),
-    ).expect("the other ZIP also has a typed manifest");
-    assert!(std::ptr::eq(changed_decoded.archive(), &changed_archive));
-    assert_eq!(changed_decoded.root_sha256(), original_sha);
-    assert_ne!(changed_decoded.archive().source_sha256(),
-        attached_decoded.archive().source_sha256());
-    assert!(verify_admitted_profile_zip_payloads(
-        &changed_archive, preflight.inventory(),
-    ).is_err());
+    verify_altered_payload_refused(
+        &root, original_sha, archive.source_sha256(), preflight.inventory(),
+    );
     // No selected filesystem source has been opened or session mutated.
 }
 
@@ -497,7 +557,7 @@ fn deterministic_manifest_mutations_never_escape_sealed_schema_gates() {
     // These inputs model untrusted root bytes before file-source admission.
     // Syntax and typed admission must agree on every repeated observation.
     let base = base_json().into_bytes();
-    let mut state = 0x4c52_4f4f_u64;
+    let mut state = 0x4c52_4f4fu64;
     let mut syntax_rejected = 0usize;
     let mut schema_rejected = 0usize;
     let mut admitted = 0usize;
@@ -505,48 +565,58 @@ fn deterministic_manifest_mutations_never_escape_sealed_schema_gates() {
     for case in 0usize..4_096 {
         state = state.wrapping_mul(6_364_136_223_846_793_005u64)
             .wrapping_add(1_442_695_040_888_963_407u64);
-        let offset = usize::try_from(state >> 32u32)
-            .expect("high LCG half fits usize") % base.len();
-        let mutation = case % observed_operations.len();
+        let offset = require_ok!(usize::try_from(state >> 32u32))
+            .rem_euclid(base.len());
+        let mutation = case.rem_euclid(observed_operations.len());
         if let Some(count) = observed_operations.get_mut(mutation) {
             *count = count.saturating_add(1);
         }
         let mut raw = base.clone();
+        assert!(mutation < observed_operations.len());
         match mutation {
-            0 => raw[offset] = [b'"', b'\\', b'[', b'{', 0xff]
-                .get(case % 5).copied().expect("bounded selection"),
+            0 => {
+                let replacement = [b'"', b'\\', b'[', b'{', 0xff]
+                    .get(case.rem_euclid(5))
+                    .copied()
+                    .unwrap_or(0xff);
+                *require_some!(raw.get_mut(offset)) = replacement;
+            },
             1 => { let _removed = raw.remove(offset); }
             2 => raw.insert(offset, b'0'),
             3 => raw.insert(offset, b' '),
             4 => {
-                let next = raw.get(offset).copied().expect("bounded offset");
+                let next = require_some!(raw.get(offset).copied());
                 raw.insert(offset, next);
             }
             5 => raw = base_json().replace(
                 "\"byte_length\":2", &format!(
-                    "\"byte_length\":{}", case % 11,
+                    "\"byte_length\":{}", case.rem_euclid(11),
                 ),
             ).into_bytes(),
             6 => raw = base_json().replace(
-                ZERO_SHA, &format!("{:064x}", case),
+                ZERO_SHA, &format!("{case:064x}"),
             ).into_bytes(),
             7 => raw = base_json().replace(
                 "\"optional_features\":[]",
                 "\"optional_features\":[\"unknown\\u0000future\"]",
             ).into_bytes(),
-            _ => unreachable!("the operation index is bounded"),
+            _ => {},
         }
-        let first = validate_profile_json_object(&raw, syntax_limits());
-        let second = validate_profile_json_object(&raw, syntax_limits());
-        assert_eq!(first, second, "case={case}, mutation={mutation}");
-        let Ok(root) = first else {
+        let first_syntax = validate_profile_json_object(&raw, syntax_limits());
+        let second_syntax = validate_profile_json_object(&raw, syntax_limits());
+        assert_eq!(
+            first_syntax, second_syntax, "case={case}, mutation={mutation}",
+        );
+        let Ok(root) = first_syntax else {
             syntax_rejected = syntax_rejected.saturating_add(1);
             continue;
         };
-        let first = decode_profile_manifest_json(root, codec_limits());
-        let second = decode_profile_manifest_json(root, codec_limits());
-        assert_eq!(first, second, "case={case}, mutation={mutation}");
-        match first {
+        let first_schema = decode_profile_manifest_json(root, codec_limits());
+        let second_schema = decode_profile_manifest_json(root, codec_limits());
+        assert_eq!(
+            first_schema, second_schema, "case={case}, mutation={mutation}",
+        );
+        match first_schema {
             Ok(manifest) => {
                 admitted = admitted.saturating_add(1);
                 assert!(
