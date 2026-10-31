@@ -177,3 +177,18 @@ source bytes after a valid task read: all three draft inputs remain blank and
 disabled, and the candidate read is never sent. An explicit retry with a valid
 leading U+FEFF source body restores all fields with that character intact.
 This tests browser decoding and retry, not backend media-file cleanup.
+
+A red-first browser adapter fixture found that an otherwise valid UTF-8 draft
+GET could hydrate more than the backend's 1,048,576-byte per-field ceiling.
+Browser draft reads now enforce that same limit from declared response length
+and from actual streamed bytes, cancelling an overlong body without first
+buffering its entire response. The incremental fatal UTF-8 decoder preserves a
+leading U+FEFF and code points split across network chunks; interrupted reads
+remain unavailable rather than becoming accepted partial text.
+
+Focused tests
+cover exact-limit admission, over-limit rejection, early declared-size refusal,
+malformed UTF-8, and transport failure. A real Firefox fixture now refuses
+both corrupt and oversized source responses without hydrating any of the three
+fields, then accepts a valid retry. This is a browser draft ingress bound, not
+proof of backend media conversion or temporary-file cleanup.

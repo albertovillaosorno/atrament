@@ -45,6 +45,7 @@ const {
     isDraftReadContentType,
     isDraftDiagnosticContentType,
     decodeDraftReadBytes,
+    decodeDraftReadResponse,
 } = await import(`${GENERATED_ROOT}session-draft.js`);
 
 test("draft targets are same-origin and contain no credential", () => {
@@ -110,6 +111,73 @@ test("draft byte decoder preserves BOM and refuses corrupt UTF-8", () => {
         assert.equal(decodeDraftReadBytes(bytes.buffer), null);
     }
 });
+
+test("streamed draft reads retain split UTF-8 sequences and BOM", async () => {
+    const chunks = [
+        Uint8Array.of(0xef),
+        Uint8Array.of(0xbb, 0xbf, 0xf0, 0x9f),
+        Uint8Array.of(0x8c, 0x9e),
+    ];
+    const stream = new ReadableStream({
+        start(controller) {
+            for (const chunk of chunks) controller.enqueue(chunk);
+            controller.close();
+        },
+    });
+    const response = new Response(stream, {
+        headers: { "Content-Length": "7" },
+    });
+    assert.equal(await decodeDraftReadResponse(response), "\uFEFF🌞");
+});
+
+test("streamed draft reads enforce the exact backend byte limit", async () => {
+    const cap = 1_048_576;
+    const exact = new Response(new Uint8Array(cap).fill(0x61));
+    assert.equal(await decodeDraftReadResponse(exact), "a".repeat(cap));
+
+    let cancelled = false;
+    let pulls = 0;
+    const overlong = new Response(new ReadableStream({
+        pull(controller) {
+            pulls += 1;
+            controller.enqueue(new Uint8Array(524_288).fill(0x61));
+        },
+        cancel() { cancelled = true; },
+    }));
+    assert.equal(await decodeDraftReadResponse(overlong), null);
+    assert.equal(cancelled, true, "oversized stream is cancelled");
+    assert.ok(pulls <= 4, "stream must not be exhausted beyond the limit");
+});
+
+test(
+    "declared overlong draft response refuses before body consumption",
+    async () => {
+    let cancelled = false;
+    const oversized = new Response(new ReadableStream({
+        cancel() { cancelled = true; },
+    }), { headers: { "Content-Length": "1048577" } });
+    assert.equal(await decodeDraftReadResponse(oversized), null);
+    assert.equal(cancelled, true);
+    },
+);
+
+test(
+    "draft streams reject malformed UTF-8 and preserve network errors",
+    async () => {
+    const corrupt = new Response(new ReadableStream({
+        start(controller) {
+            controller.enqueue(Uint8Array.of(0xc3));
+            controller.enqueue(Uint8Array.of(0x28));
+            controller.close();
+        },
+    }));
+    assert.equal(await decodeDraftReadResponse(corrupt), null);
+    const failed = new Response(new ReadableStream({
+        start(controller) { controller.error(new Error("broken transport")); },
+    }));
+    await assert.rejects(decodeDraftReadResponse(failed), /broken transport/);
+    },
+);
 
 test("draft resource-limit diagnostics require UTF-8 JSON media", () => {
     for (const valid of [

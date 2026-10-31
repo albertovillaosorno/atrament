@@ -4864,20 +4864,22 @@ test(
 );
 
 test(
-    "Firefox rejects corrupt draft bytes and restores a leading BOM on retry",
+    "Firefox rejects corrupt and oversized draft bytes before a valid retry",
     { skip: !FIREFOX_AVAILABLE, timeout: FIREFOX_CASE_TIMEOUT_MS },
     async () => {
         fs.mkdirSync(".temp", { recursive: true });
         const profile = fs.mkdtempSync(".temp/session-draft-utf8-");
         const apiRequests = [];
-        let healthySource = false;
+        let sourceMode = "corrupt";
         const sourceText = "\uFEFFNotebook";
         const server = createSessionFixtureServer(
             apiRequests, null, null, null, null, null, null,
             (field) => field === "source"
-                ? (healthySource
+                ? (sourceMode === "healthy"
                     ? sourceText
-                    : Buffer.from([0xc3, 0x28]))
+                    : sourceMode === "oversized"
+                        ? Buffer.alloc(1_048_577, 0x61)
+                        : Buffer.from([0xc3, 0x28]))
                 : null,
         );
         const children = [];
@@ -4912,7 +4914,39 @@ test(
                 "GET /api/session/task",
                 "GET /api/session/source",
             ]);
-            healthySource = true;
+            sourceMode = "oversized";
+            const oversizeRetry = await bidi.command("script.evaluate", {
+                awaitPromise: false,
+                expression: `(() => {
+                    const button = document.getElementById("retry-session");
+                    const active = !button.hidden && !button.disabled;
+                    if (active) button.click();
+                    return active;
+                })()`,
+                resultOwnership: "none",
+                target: { context: tab.context },
+            });
+            assert.equal(oversizeRetry.type, "success");
+            assert.deepEqual(oversizeRetry.result, {
+                type: "boolean", value: true,
+            });
+            const tooLarge = await waitForSessionStatus(
+                bidi, tab.context, "Draft load rejected · editing off",
+            );
+            for (const field of ["task", "source", "candidate"]) {
+                assert.deepEqual(tooLarge[field], {
+                    disabled: true, value: "",
+                });
+            }
+            assert.deepEqual(apiRequests, [
+                "POST /api/handshake",
+                "GET /api/session/task",
+                "GET /api/session/source",
+                "POST /api/handshake",
+                "GET /api/session/task",
+                "GET /api/session/source",
+            ]);
+            sourceMode = "healthy";
             const retry = await bidi.command("script.evaluate", {
                 awaitPromise: false,
                 expression: `(() => {
@@ -4939,6 +4973,9 @@ test(
                 disabled: false, value: REFRESH_DRAFT.candidate,
             });
             assert.deepEqual(apiRequests, [
+                "POST /api/handshake",
+                "GET /api/session/task",
+                "GET /api/session/source",
                 "POST /api/handshake",
                 "GET /api/session/task",
                 "GET /api/session/source",

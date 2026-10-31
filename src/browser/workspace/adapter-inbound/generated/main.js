@@ -557,11 +557,10 @@ async function readDraftField(field, secret, generation) {
         return { kind: "rejected" };
     }
     try {
-        const bytes = await response.arrayBuffer();
+        const value = await sessionDraft.decodeDraftReadResponse(response);
         if (!draftSyncIsCurrent(secret, generation)) {
             return { kind: "stale" };
         }
-        const value = sessionDraft.decodeDraftReadBytes(bytes);
         return value === null
             ? { kind: "rejected" }
             : { kind: "available", value };

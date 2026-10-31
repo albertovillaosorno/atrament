@@ -44,7 +44,10 @@ const MAIN_MODULE = new URL(
     "../../../../src/browser/workspace/adapter-inbound/generated/main.js",
     import.meta.url,
 );
-const { isDraftReadContentType, decodeDraftReadBytes } = await import(
+const {
+    isDraftReadContentType,
+    decodeDraftReadResponse,
+} = await import(
     new URL("session-draft.js", MAIN_MODULE).href,
 );
 
@@ -616,17 +619,19 @@ test("draft hydration rejects wrong media without body read", async () => {
                     draftReadTarget: () => "./api/session/task",
                     draftReadHeaders: () => ({}),
                     isDraftReadContentType,
-                    decodeDraftReadBytes,
+                    decodeDraftReadResponse,
                 };
                 ${readDraftField}
                 return readDraftField("task", "secret", 0);
             })()
         `, {
             isDraftReadContentType,
-            decodeDraftReadBytes,
+            decodeDraftReadResponse,
             fetch: async () => ({
                 status: 200,
-                headers: { get: () => mediaType },
+                headers: {
+                    get: (name) => name === "content-type" ? mediaType : null,
+                },
                 arrayBuffer: async () => {
                     reads += 1;
                     return new TextEncoder().encode("private draft").buffer;
@@ -643,6 +648,49 @@ test("draft hydration rejects wrong media without body read", async () => {
         }
     }
 });
+
+test(
+    "draft hydration refuses a response beyond backend field limit",
+    async () => {
+    const source = await readFile(MAIN_MODULE, "utf8");
+    const start = source.indexOf("async function readDraftField(");
+    const end = source.indexOf("async function hydrateSessionDraft(", start);
+    assert.ok(start >= 0 && end > start);
+    const readDraftField = source.slice(start, end);
+    const oversized = new TextEncoder().encode("x".repeat(1_048_577));
+    const result = await runInNewContext(`
+        (async () => {
+            const sessionSecret = "secret";
+            const draftSyncGeneration = 0;
+            const sessionRequests = { signal: {} };
+            function draftSyncIsCurrent(secret, generation) {
+                return sessionSecret === secret
+                    && draftSyncGeneration === generation;
+            }
+            const sessionDraft = {
+                draftReadTarget: () => "./api/session/task",
+                draftReadHeaders: () => ({}),
+                isDraftReadContentType,
+                decodeDraftReadResponse,
+            };
+            ${readDraftField}
+            return readDraftField("task", "secret", 0);
+        })()
+    `, {
+        isDraftReadContentType,
+        decodeDraftReadResponse,
+        fetch: async () => ({
+            status: 200,
+            headers: {
+                get: (name) => name === "content-type"
+                    ? "text/plain; charset=utf-8" : null,
+            },
+            arrayBuffer: async () => oversized.buffer,
+        }),
+    });
+    assert.equal(result.kind, "rejected");
+    },
+);
 
 test("draft hydration preserves BOM and rejects invalid UTF-8", async () => {
     const source = await readFile(MAIN_MODULE, "utf8");
@@ -669,17 +717,20 @@ test("draft hydration preserves BOM and rejects invalid UTF-8", async () => {
                     draftReadTarget: () => "./api/session/task",
                     draftReadHeaders: () => ({}),
                     isDraftReadContentType,
-                    decodeDraftReadBytes,
+                    decodeDraftReadResponse,
                 };
                 ${readDraftField}
                 return readDraftField("task", "secret", 0);
             })()
         `, {
             isDraftReadContentType,
-            decodeDraftReadBytes,
+            decodeDraftReadResponse,
             fetch: async () => ({
                 status: 200,
-                headers: { get: () => "text/plain; charset=utf-8" },
+                headers: {
+                    get: (name) => name === "content-type"
+                        ? "text/plain; charset=utf-8" : null,
+                },
                 text: () => new Response(body).text(),
                 arrayBuffer: () => new Response(body).arrayBuffer(),
             }),
