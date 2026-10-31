@@ -1659,6 +1659,66 @@ fn cli_inspection_escapes_c1_and_unicode_line_separators() {
 
 #[cfg(target_os = "linux")]
 #[test]
+fn cli_inspection_escapes_opaque_asset_metadata_without_revealing_bytes() {
+    let asset_path = format!("assets/{}opaque.bin", '\u{2029}');
+    let opaque_asset = b"\x1b[31mprivate-opaque-91413\xff";
+    let root = format!(
+        concat!(
+            r#"{{"container_version":"atrament.profile/1","#,
+            r#""profile_identity":"asset-only","required_features":[],"#,
+            r#""optional_features":["opaque{}capability"],"entries":["#,
+            r#"{{"path":"{}","media_type":"application/octet-stream","#,
+            r#""byte_length":{},"sha256":"{}"}}]}}"#,
+        ),
+        '\u{009b}',
+        asset_path,
+        opaque_asset.len(),
+        digest_hex(opaque_asset),
+    );
+    let archive = write_stored_profile_zip(
+        &[
+            ProfileStoredZipMember {
+                name: &asset_path, bytes: opaque_asset,
+            },
+            ProfileStoredZipMember {
+                name: "manifest.json", bytes: root.as_bytes(),
+            },
+        ],
+        ProfileStoredZipWriteLimits {
+            maximum_archive_bytes: 4096,
+            maximum_entries: 2,
+            maximum_entry_bytes: 2048,
+            maximum_total_bytes: 3000,
+        },
+    ).expect("valid opaque asset has no implicit section decoder");
+    let source = OwnedProfileFile::new(&archive);
+    bootstrap::verify_profile(source.0.clone())
+        .expect("full payload digest checks do not interpret opaque assets");
+    let process = Command::new(env!("CARGO_BIN_EXE_atrament"))
+        .args(["profile", "inspect"])
+        .arg(&source.0)
+        .output()
+        .expect("inspect fully verified asset-only profile");
+    assert!(process.status.success());
+    assert!(process.stderr.is_empty());
+    let text = String::from_utf8(process.stdout)
+        .expect("terminal-safe UTF-8 display");
+    assert!(text.starts_with("manifest.json (verified):\n"));
+    assert!(text.contains(r#""path":"assets/\u2029opaque.bin""#));
+    assert!(text.contains(r#""opaque\u009bcapability""#));
+    assert!(!text.contains(" (syntax-checked; untyped):"));
+    assert!(!text.contains("private-opaque-91413"));
+    for control in ['\u{2029}', '\u{009b}', '\u{001b}'] {
+        assert!(
+            !text.contains(control),
+            "asset metadata cannot inject terminal controls",
+        );
+    }
+    assert_eq!(fs::read(&source.0).expect("input remains exact"), archive);
+}
+
+#[cfg(target_os = "linux")]
+#[test]
 fn cli_section_order_is_stable_across_manifest_declaration_orders() {
     let first = br#"{"first":true}"#;
     let last = br#"{"last":true}"#;

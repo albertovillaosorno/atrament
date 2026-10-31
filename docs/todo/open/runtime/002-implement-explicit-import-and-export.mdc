@@ -70,6 +70,10 @@ The large-section CLI fixture also checks a near-2 MiB SHA-verified JSON
 payload that expands to nearly 4 MiB of printable terminal escapes. The
 complete expected display still matches and the source remains unchanged.
 
+An asset-only profile regression confirms verified opaque payloads remain
+unprinted even when their archive names contain Unicode separators, and that
+optional-feature metadata containing a raw C1 terminal control is escaped.
+
 A separate Linux `atrament profile verify PATH` CLI now runs the same
 fully bounded, secure selected-source and SHA/section-syntax gate as profile
 inspection, then emits only a fixed success confirmation. Unlike inspection,
