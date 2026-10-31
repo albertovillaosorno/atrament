@@ -33,19 +33,21 @@
 
 //! Digital paper note plan domain regression tests.
 
+use std::ptr;
+
 use atrament_digital_paper_note_plan::{
-    DigitalPaperNoteContrast, DigitalPaperNotePlan, DigitalPaperNotePlanError,
     validate_digital_paper_note_plan, validate_digital_paper_note_plan_view,
+    DigitalPaperNoteContrast, DigitalPaperNotePlan, DigitalPaperNotePlanError,
 };
 
 #[test]
 fn digital_note_retains_fill_fold_stack_and_soft_shadow_intent() {
     let plan = DigitalPaperNotePlan {
         fill: "warm-paper-fill",
-        fold: ("top-right", 14_u8),
+        fold: ("top-right", 14u8),
         readable_contrast: DigitalPaperNoteContrast::Readable,
-        shadow: ("soft-shadow", 9_u8),
-        stack_order: 3_i16,
+        shadow: ("soft-shadow", 9u8),
+        stack_order: 3i16,
     };
     assert_eq!(plan.fill, "warm-paper-fill");
     assert_eq!(plan.fold, ("top-right", 14));
@@ -57,11 +59,11 @@ fn digital_note_retains_fill_fold_stack_and_soft_shadow_intent() {
 #[test]
 fn missing_readable_contrast_evidence_rejects_without_style_interpretation() {
     let plan = DigitalPaperNotePlan {
-        fill: 101_u32,
-        fold: 202_u32,
+        fill: 101u32,
+        fold: 202u32,
         readable_contrast: DigitalPaperNoteContrast::NotEstablished,
-        shadow: 303_u32,
-        stack_order: 404_u32,
+        shadow: 303u32,
+        stack_order: 404u32,
     };
     assert_eq!(
         validate_digital_paper_note_plan(&plan),
@@ -75,7 +77,7 @@ fn missing_readable_contrast_evidence_rejects_without_style_interpretation() {
 
 #[test]
 fn readability_result_is_independent_of_caller_owned_effect_values() {
-    for value in 0_u8..=31 {
+    for value in 0u8..=31 {
         let readable = DigitalPaperNotePlan {
             fill: value,
             fold: value,
@@ -88,9 +90,11 @@ fn readability_result_is_independent_of_caller_owned_effect_values() {
             ..readable.clone()
         };
         assert_eq!(validate_digital_paper_note_plan(&readable), Ok(()));
-        let validated = validate_digital_paper_note_plan_view(&readable)
-            .expect("readable note seals");
-        assert!(std::ptr::eq(validated.plan(), &readable));
+        let validated = validate_digital_paper_note_plan_view(&readable);
+        assert!(validated.is_ok(), "readable note must seal");
+        if let Ok(sealed) = validated {
+            assert!(ptr::eq(sealed.plan(), ptr::from_ref(&readable)));
+        }
         let reason = DigitalPaperNotePlanError::ReadableContrastNotEstablished;
         assert_eq!(
             validate_digital_paper_note_plan(&not_established),
