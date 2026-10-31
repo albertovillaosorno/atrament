@@ -44,6 +44,33 @@ use atrament_transcript_structure::{
     TranscriptStructureError, review_transcript_structure,
 };
 
+// Explicitly assert all fixed fixture spans rather than indexing unchecked.
+macro_rules! require_some {
+    ($expression:expr) => {{
+        let selected = $expression;
+        assert!(selected.is_some(), "expected fixture element or span");
+        let Some(value) = selected else {
+            return;
+        };
+        value
+    }};
+}
+
+macro_rules! require_ok {
+    ($expression:expr) => {{
+        let outcome = $expression;
+        assert!(
+            outcome.is_ok(),
+            "expected admitted transcript review: {:?}",
+            outcome.as_ref().err(),
+        );
+        let Ok(value) = outcome else {
+            return;
+        };
+        value
+    }};
+}
+
 type Word = TranscriptWord<u8, &'static str, &'static str, (u32, u32)>;
 type Unresolved = UnresolvedTranscriptFragment<u8, &'static str, (u32, u32)>;
 type Origin = TranscriptOrigin<&'static str, &'static str, &'static str>;
@@ -91,11 +118,10 @@ fn reviewed_structure_keeps_complete_transcript_provenance() {
     let spans = vec![ReviewedTranscriptSpan {
         role: ReviewedTranscriptRole::Section,
         source: ReviewedTranscriptSource::ResolvedWords(
-            &transcript.words[0..1],
+            require_some!(transcript.words.get(0..1)),
         ),
     }];
-    let reviewed = review_transcript_structure(&transcript, spans)
-        .expect("resolved section review is admitted");
+    let reviewed = require_ok!(review_transcript_structure(&transcript, spans));
     assert_eq!(
         reviewed.transcript().origin.media_identity,
         "lecture-video-3",
@@ -115,33 +141,39 @@ fn reviewed_roles_preserve_resolved_word_evidence_exactly() {
         ReviewedTranscriptSpan {
             role: ReviewedTranscriptRole::Definition,
             source: ReviewedTranscriptSource::ResolvedWords(
-                &transcript.words[0..2],
+                require_some!(transcript.words.get(0..2)),
             ),
         },
         ReviewedTranscriptSpan {
             role: ReviewedTranscriptRole::Example,
             source: ReviewedTranscriptSource::ResolvedWords(
-                &transcript.words[1..2],
+                require_some!(transcript.words.get(1..2)),
             ),
         },
         ReviewedTranscriptSpan {
             role: ReviewedTranscriptRole::Formula,
             source: ReviewedTranscriptSource::ResolvedWords(
-                &transcript.words[2..3],
+                require_some!(transcript.words.get(2..3)),
             ),
         },
     ];
-    let reviewed = review_transcript_structure(&transcript, spans)
-        .expect("resolved semantic roles are admitted");
-    let ReviewedTranscriptSource::ResolvedWords(definition) =
-        reviewed.spans()[0].source
+    let reviewed = require_ok!(review_transcript_structure(&transcript, spans));
+    let definition_source = &require_some!(reviewed.spans().first()).source;
+    assert!(
+        matches!(definition_source, ReviewedTranscriptSource::ResolvedWords(_)),
+        "definition source must remain resolved words",
+    );
+    let ReviewedTranscriptSource::ResolvedWords(definition) = definition_source
     else {
-        panic!("definition source must remain resolved words");
+        return;
     };
-    assert_eq!(definition[0].confidence, Some(96));
-    assert_eq!(definition[0].speaker, Some("teacher"));
-    assert_eq!(definition[0].time_range, Some((1_000, 1_220)));
-    assert_eq!(definition[0].text, "Definition");
+    assert_eq!(require_some!(definition.first()).confidence, Some(96));
+    assert_eq!(require_some!(definition.first()).speaker, Some("teacher"));
+    assert_eq!(
+        require_some!(definition.first()).time_range,
+        Some((1_000, 1_220)),
+    );
+    assert_eq!(require_some!(definition.first()).text, "Definition");
     assert_eq!(
         reviewed.locations(),
         [
@@ -159,14 +191,17 @@ fn reviewed_roles_preserve_resolved_word_evidence_exactly() {
             },
         ],
     );
-    let ReviewedTranscriptSource::ResolvedWords(formula) =
-        reviewed.spans()[2].source
-    else {
-        panic!("formula source must remain resolved words");
+    let formula_source = &require_some!(reviewed.spans().get(2)).source;
+    assert!(
+        matches!(formula_source, ReviewedTranscriptSource::ResolvedWords(_)),
+        "formula source must remain resolved words",
+    );
+    let ReviewedTranscriptSource::ResolvedWords(formula) = formula_source else {
+        return;
     };
-    assert_eq!(formula[0].confidence, None);
-    assert_eq!(formula[0].speaker, None);
-    assert_eq!(formula[0].text, "v=dx/dt");
+    assert_eq!(require_some!(formula.first()).confidence, None);
+    assert_eq!(require_some!(formula.first()).speaker, None);
+    assert_eq!(require_some!(formula.first()).text, "v=dx/dt");
 }
 
 #[test]
@@ -175,15 +210,22 @@ fn unresolved_fragment_keeps_text_timing_and_confidence() {
     let spans = vec![ReviewedTranscriptSpan {
         role: ReviewedTranscriptRole::Unresolved,
         source: ReviewedTranscriptSource::UnresolvedFragment(
-            &transcript.unresolved_fragments[0],
+            require_some!(transcript.unresolved_fragments.first()),
         ),
     }];
-    let reviewed = review_transcript_structure(&transcript, spans)
-        .expect("unresolved review is admitted");
+    let reviewed = require_ok!(review_transcript_structure(&transcript, spans));
+    let unresolved_source = &require_some!(reviewed.spans().first()).source;
+    assert!(
+        matches!(
+            unresolved_source,
+            ReviewedTranscriptSource::UnresolvedFragment(_),
+        ),
+        "unresolved source must remain an unresolved fragment",
+    );
     let ReviewedTranscriptSource::UnresolvedFragment(fragment) =
-        reviewed.spans()[0].source
+        unresolved_source
     else {
-        panic!("unresolved source must remain an unresolved fragment");
+        return;
     };
     assert_eq!(fragment.text, "[inaudible denominator]");
     assert_eq!(fragment.confidence, Some(21));
@@ -203,24 +245,23 @@ fn overlapping_and_repeated_review_spans_keep_exact_source_ranges() {
         ReviewedTranscriptSpan {
             role: ReviewedTranscriptRole::Definition,
             source: ReviewedTranscriptSource::ResolvedWords(
-                &transcript.words[0..2],
+                require_some!(transcript.words.get(0..2)),
             ),
         },
         ReviewedTranscriptSpan {
             role: ReviewedTranscriptRole::Example,
             source: ReviewedTranscriptSource::ResolvedWords(
-                &transcript.words[1..3],
+                require_some!(transcript.words.get(1..3)),
             ),
         },
         ReviewedTranscriptSpan {
             role: ReviewedTranscriptRole::Section,
             source: ReviewedTranscriptSource::ResolvedWords(
-                &transcript.words[0..2],
+                require_some!(transcript.words.get(0..2)),
             ),
         },
     ];
-    let reviewed = review_transcript_structure(&transcript, spans)
-        .expect("overlap and repeated review remain caller-owned");
+    let reviewed = require_ok!(review_transcript_structure(&transcript, spans));
     assert_eq!(
         reviewed.locations(),
         [
@@ -246,7 +287,9 @@ fn reviewed_sources_must_borrow_from_the_supplied_transcript() {
     let foreign = transcript_fixture();
     let foreign_words = vec![ReviewedTranscriptSpan {
         role: ReviewedTranscriptRole::Section,
-        source: ReviewedTranscriptSource::ResolvedWords(&foreign.words[0..1]),
+        source: ReviewedTranscriptSource::ResolvedWords(
+            require_some!(foreign.words.get(0..1)),
+        ),
     }];
     assert_eq!(
         review_transcript_structure(&transcript, foreign_words),
@@ -256,7 +299,7 @@ fn reviewed_sources_must_borrow_from_the_supplied_transcript() {
     let foreign_unresolved = vec![ReviewedTranscriptSpan {
         role: ReviewedTranscriptRole::Unresolved,
         source: ReviewedTranscriptSource::UnresolvedFragment(
-            &foreign.unresolved_fragments[0],
+            require_some!(foreign.unresolved_fragments.first()),
         ),
     }];
     assert_eq!(
@@ -273,7 +316,7 @@ fn empty_resolved_words_cannot_claim_source_provenance() {
     let spans = vec![ReviewedTranscriptSpan {
         role: ReviewedTranscriptRole::Section,
         source: ReviewedTranscriptSource::ResolvedWords(
-            &transcript.words[1..1],
+            require_some!(transcript.words.get(1..1)),
         ),
     }];
     assert_eq!(
@@ -295,7 +338,7 @@ fn empty_resolved_words_cannot_claim_source_provenance() {
     };
     let empty_span = vec![ReviewedTranscriptSpan {
         role: ReviewedTranscriptRole::Section,
-        source: ReviewedTranscriptSource::ResolvedWords(&empty.words[..]),
+        source: ReviewedTranscriptSource::ResolvedWords(empty.words.as_slice()),
     }];
     assert_eq!(
         review_transcript_structure(&empty, empty_span),
@@ -319,7 +362,9 @@ fn zero_sized_evidence_cannot_claim_source_provenance() {
     };
     let spans = vec![ReviewedTranscriptSpan {
         role: ReviewedTranscriptRole::Section,
-        source: ReviewedTranscriptSource::ResolvedWords(&transcript.words[..]),
+        source: ReviewedTranscriptSource::ResolvedWords(
+            transcript.words.as_slice(),
+        ),
     }];
     assert_eq!(
         review_transcript_structure(&transcript, spans),
@@ -330,7 +375,7 @@ fn zero_sized_evidence_cannot_claim_source_provenance() {
     let unresolved = vec![ReviewedTranscriptSpan {
         role: ReviewedTranscriptRole::Unresolved,
         source: ReviewedTranscriptSource::UnresolvedFragment(
-            &transcript.unresolved_fragments[0],
+            require_some!(transcript.unresolved_fragments.first()),
         ),
     }];
     assert_eq!(
@@ -348,13 +393,13 @@ fn explicit_unresolved_fragment_cannot_be_promoted_silently() {
         ReviewedTranscriptSpan {
             role: ReviewedTranscriptRole::Section,
             source: ReviewedTranscriptSource::ResolvedWords(
-                &transcript.words[0..1],
+                require_some!(transcript.words.get(0..1)),
             ),
         },
         ReviewedTranscriptSpan {
             role: ReviewedTranscriptRole::Formula,
             source: ReviewedTranscriptSource::UnresolvedFragment(
-                &transcript.unresolved_fragments[0],
+                require_some!(transcript.unresolved_fragments.first()),
             ),
         },
     ];
@@ -372,12 +417,14 @@ fn resolved_words_may_remain_semantically_unresolved_after_review() {
     let spans = vec![ReviewedTranscriptSpan {
         role: ReviewedTranscriptRole::Unresolved,
         source: ReviewedTranscriptSource::ResolvedWords(
-            &transcript.words[2..3],
+            require_some!(transcript.words.get(2..3)),
         ),
     }];
-    let reviewed = review_transcript_structure(&transcript, spans)
-        .expect("review may retain semantic uncertainty");
-    assert_eq!(reviewed.spans()[0].role, ReviewedTranscriptRole::Unresolved);
+    let reviewed = require_ok!(review_transcript_structure(&transcript, spans));
+    assert_eq!(
+        require_some!(reviewed.spans().first()).role,
+        ReviewedTranscriptRole::Unresolved,
+    );
 }
 
 #[test]
@@ -390,17 +437,18 @@ fn every_review_role_matches_resolved_and_unresolved_source_oracle() {
         ReviewedTranscriptRole::Unresolved,
     ];
     let transcript = transcript_fixture();
-    let mut cases = 0_u8;
+    let mut cases = 0u8;
     for role in roles {
         let resolved = vec![ReviewedTranscriptSpan {
             role,
             source: ReviewedTranscriptSource::ResolvedWords(
-                &transcript.words[0..1],
+                require_some!(transcript.words.get(0..1)),
             ),
         }];
-        let reviewed = review_transcript_structure(&transcript, resolved)
-            .expect("every reviewed role may retain resolved evidence");
-        assert_eq!(reviewed.spans()[0].role, role);
+        let reviewed = require_ok!(review_transcript_structure(
+            &transcript, resolved
+        ));
+        assert_eq!(require_some!(reviewed.spans().first()).role, role);
         assert_eq!(
             reviewed.locations(),
             [ReviewedTranscriptSourceLocation::ResolvedWords {
@@ -413,15 +461,18 @@ fn every_review_role_matches_resolved_and_unresolved_source_oracle() {
         let unresolved = vec![ReviewedTranscriptSpan {
             role,
             source: ReviewedTranscriptSource::UnresolvedFragment(
-                &transcript.unresolved_fragments[0],
+                require_some!(transcript.unresolved_fragments.first()),
             ),
         }];
         if role == ReviewedTranscriptRole::Unresolved {
-            let reviewed = review_transcript_structure(&transcript, unresolved)
-                .expect("unresolved source may remain explicitly unresolved");
-            assert_eq!(reviewed.spans()[0].role, role);
+            let reviewed_unresolved = require_ok!(review_transcript_structure(
+                &transcript, unresolved
+            ));
             assert_eq!(
-                reviewed.locations(),
+                require_some!(reviewed_unresolved.spans().first()).role, role
+            );
+            assert_eq!(
+                reviewed_unresolved.locations(),
                 [ReviewedTranscriptSourceLocation::UnresolvedFragment {
                     fragment_index: 0,
                 }],
