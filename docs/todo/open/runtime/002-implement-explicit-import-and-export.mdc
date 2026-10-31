@@ -228,6 +228,15 @@ retry keys or original content identifiers through routine error logging.
 Their explicit typed accessors continue to return the exact original receipt
 data to the owning application caller.
 
+The Export session now prepares both owned synced-receipt copies before the
+irreversible file effect. After the writer returns success, it only moves the
+prepared values and updates the actual committed byte count; no path or retry
+key allocation remains between commit and recorded/returned receipts.
+An exact maximum-length retry key and opaque non-UTF8 destination regression
+confirms the retained receipt survives read-only same-key recovery unchanged.
+This hardens recovery against post-commit allocation failure but does not make
+file durability atomic across hardware failure or authenticate host selection.
+
 The bounded opened-file Import snapshot, complete in-memory Export artifact,
 and borrowed Export payload inputs likewise redact private byte sequences and
 archive paths from `Debug`. Existing typed byte access remains available to

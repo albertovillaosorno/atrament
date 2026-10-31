@@ -54,7 +54,7 @@ use atrament_profile_export_retry_recovery::{
 use atrament_profile_export_target_check::check_profile_export_target;
 use atrament_profile_file_commit::{
     ProfileFileCommitDisposition, ProfileFileCommitError,
-    ProfileFileCommitEvidence, commit_profile_file_cancellable,
+    commit_profile_file_cancellable,
 };
 #[cfg(test)]
 use atrament_profile_entry_sha256 as _;
@@ -277,6 +277,22 @@ impl ProfileExportSession {
                         ProfileFileCommitDisposition::ReplaceExisting
                     }
                 };
+                // Prepare both owned receipt copies before the irreversible
+                // file operation. A successful file sync must not be followed
+                // by fallible allocations for path/key copies or journal
+                // cloning; only allocation-free moves and field updates may
+                // occur between commit and the returned synced receipt.
+                let mut retained_receipt = ProfileExportReceipt {
+                    archive_sha256: artifact.archive_sha256(),
+                    byte_length: artifact.bytes().len(),
+                    overwrite: intent.overwrite(),
+                    path: intent.path().to_path_buf(),
+                    retry_key: String::from(retry_key),
+                    revision,
+                    root_sha256: artifact.root_sha256(),
+                    source: intent.source(),
+                };
+                let mut returned_receipt = retained_receipt.clone();
                 self.reserve_attempt(retry_key)?;
                 let result = commit_profile_file_cancellable(
                     intent.path(),
@@ -285,41 +301,35 @@ impl ProfileExportSession {
                     overwrite,
                     is_cancelled,
                 );
-                let (effect, receipt) = match result {
-                    Ok(ProfileFileCommitEvidence { byte_length }) => {
-                        let receipt = ProfileExportReceipt {
-                            archive_sha256: artifact.archive_sha256(),
-                            byte_length,
-                            overwrite: intent.overwrite(),
-                            path: intent.path().to_path_buf(),
-                            retry_key: String::from(retry_key),
-                            revision,
-                            root_sha256: artifact.root_sha256(),
-                            source: intent.source(),
-                        };
-                        let evidence =
-                            ProfileFileCommitEvidence { byte_length };
-                        (
-                            ProfileExportPriorEffect::SyncedCommit(evidence),
-                            Some(receipt),
-                        )
-                    }
-                    Err(
-                        ProfileFileCommitError::CommittedDurabilityUnknown(_),
-                    ) => (ProfileExportPriorEffect::DurabilityUnknown, None),
-                    Err(_) => (ProfileExportPriorEffect::KnownNoCommit, None),
-                };
                 let attempt = self
                     .attempts
                     .get_mut(retry_key)
                     .ok_or(ProfileExportSessionError::JournalInconsistent)?;
-                attempt.effect = effect;
-                attempt.receipt.clone_from(&receipt);
                 match result {
-                    Ok(_) => receipt
-                        .map(ProfileExportSessionOutcome::Committed)
-                        .ok_or(ProfileExportSessionError::JournalInconsistent),
-                    Err(error) => Err(ProfileExportSessionError::Commit(error)),
+                    Ok(evidence) => {
+                        retained_receipt.byte_length = evidence.byte_length;
+                        returned_receipt.byte_length = evidence.byte_length;
+                        attempt.effect = ProfileExportPriorEffect::SyncedCommit(
+                            evidence,
+                        );
+                        attempt.receipt = Some(retained_receipt);
+                        Ok(ProfileExportSessionOutcome::Committed(
+                            returned_receipt,
+                        ))
+                    }
+                    Err(error) => {
+                        use ProfileFileCommitError::CommittedDurabilityUnknown;
+
+                        let durability_unknown = matches!(
+                            error, CommittedDurabilityUnknown(_)
+                        );
+                        attempt.effect = if durability_unknown {
+                            ProfileExportPriorEffect::DurabilityUnknown
+                        } else {
+                            ProfileExportPriorEffect::KnownNoCommit
+                        };
+                        Err(ProfileExportSessionError::Commit(error))
+                    }
                 }
             }
             ProfileRetryBindingDisposition::SameBinding => {

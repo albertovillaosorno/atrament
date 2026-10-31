@@ -38,8 +38,10 @@
 mod linux {
     use std::cell::Cell;
     use std::env;
+    use std::ffi::OsString;
     use std::fs;
     use std::io::{self, Read as _};
+    use std::os::unix::ffi::OsStringExt as _;
     use std::os::unix::fs::{MetadataExt as _, symlink};
     use std::panic::{AssertUnwindSafe, catch_unwind};
     use std::process::{self, Command, Stdio};
@@ -138,6 +140,41 @@ mod linux {
     }
 
     #[test]
+    fn synced_receipt_retains_exact_opaque_target_and_maximum_retry_key() {
+        let root = fixture();
+        let mut name = b"selected-opaque-".to_vec();
+        name.push(0xff);
+        let chosen = root.0.join(OsString::from_vec(name));
+        let request = intent(chosen.clone(), ReplaceExisting);
+        let key = "r".repeat(128);
+        let original = artifact("writer-long-retry");
+        let accepted = revision();
+        let mut session = ProfileExportSession::new(1);
+        let first = session.export(
+            &key, accepted, &request, &original, 8192,
+        ).expect("complete first commit before publishing receipt");
+        assert!(matches!(first, Outcome::Committed(_)));
+        let receipt = match first {
+            Outcome::Committed(value) | Outcome::Recovered(value) => value,
+        };
+        assert_eq!(receipt.path(), chosen);
+        assert_eq!(receipt.retry_key(), key);
+        assert_eq!(receipt.revision(), accepted);
+        assert_eq!(receipt.byte_length(), original.bytes().len());
+        assert_eq!(receipt.archive_sha256(), original.archive_sha256());
+        assert_eq!(receipt.root_sha256(), original.root_sha256());
+        assert_eq!(receipt.overwrite(), ReplaceExisting);
+        let inode = fs::metadata(&chosen).expect("committed inode").ino();
+        let second = session.export(
+            &key, accepted, &request, &original, 8192,
+        ).expect("recover exactly the originally retained receipt");
+        assert_eq!(second, Outcome::Recovered(receipt));
+        assert_eq!(fs::metadata(&chosen).expect("same inode").ino(), inode);
+        assert_eq!(fs::read(&chosen).expect("exact bytes"), original.bytes());
+        assert_eq!(session.len(), 1);
+    }
+
+    #[test]
     fn debug_of_export_session_and_receipts_redacts_private_identifiers() {
         let root = fixture();
         let selected_name = "private-selected-path-marker.atrament";
@@ -150,8 +187,9 @@ mod linux {
         let committed = session.export(
             key, accepted, &request, &original, original.bytes().len(),
         ).expect("commit test profile");
-        let Outcome::Committed(receipt) = committed.clone() else {
-            panic!("a first profile commit should produce a receipt");
+        assert!(matches!(committed, Outcome::Committed(_)));
+        let receipt = match committed.clone() {
+            Outcome::Committed(value) | Outcome::Recovered(value) => value,
         };
         assert_eq!(receipt.path(), chosen);
         assert_eq!(receipt.retry_key(), key);
