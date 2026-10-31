@@ -887,6 +887,14 @@ A zero-byte artifact fixture separately covers the no-write-chunk path: its
 second cancellation probe can replace the parent, but the same prelink check
 refuses both overwrite modes without creating any file effect.
 
+A subprocess-only relative-path regression changes its working directory
+after anonymous staging while keeping the originally opened parent intact.
+The selected pathname would now resolve elsewhere; relative Export therefore
+rechecks the process CWD device/inode against its initial anchor as well as
+checking the parent. Both overwrite modes refuse before linking without
+altering the old location or the alternate directory's unrelated file.
+A successful unchanged-CWD relative commit is the fixture's positive control.
+
 These checks narrow the observable directory-rename race; they do not lock an
 external pathname, prevent changes after either check, or solve the brief
 replacement link-before-rename crash window that can leave a named stage.

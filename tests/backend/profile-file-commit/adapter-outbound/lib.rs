@@ -58,6 +58,10 @@ mod linux {
     const CRASH_STAGE_AFTER_SYNC: &str = "ATRAMENT_TEST_AFTER_STAGE_SYNC";
     const CRASH_STAGE_TEST: &str =
         "linux::forced_death_during_write_leaves_no_named_stage";
+    const CWD_DRIFT_ALTERNATE: &str = "ATRAMENT_TEST_EXPORT_CWD_DRIFT_ALTERNATE";
+    const CWD_DRIFT_REPLACE: &str = "ATRAMENT_TEST_EXPORT_CWD_DRIFT_REPLACE";
+    const CWD_DRIFT_TEST: &str =
+        "linux::relative_cwd_change_during_stage_refuses_selected_destination";
 
     struct OwnedDir(PathBuf);
     #[expect(
@@ -457,6 +461,96 @@ mod linux {
             assert_eq!(
                 fs::read_dir(&relocated_parent).expect("no unnamed leak").count(),
                 usize::from(mode == Mode::ReplaceExisting),
+            );
+        }
+    }
+
+    #[test]
+    fn relative_cwd_change_during_stage_refuses_selected_destination() {
+        if let Some(alternate) = env::var_os(CWD_DRIFT_ALTERNATE) {
+            let mode = if env::var_os(CWD_DRIFT_REPLACE).is_some() {
+                Mode::ReplaceExisting
+            } else {
+                Mode::PreserveExisting
+            };
+            let stable = Path::new("nested/stable.atrament");
+            assert_eq!(
+                commit_profile_file(
+                    stable,
+                    b"stable",
+                    6,
+                    Mode::PreserveExisting,
+                )
+                .expect("unchanged CWD admits relative output")
+                .byte_length,
+                6,
+            );
+            let mut observations = 0usize;
+            let result = commit_profile_file_cancellable(
+                Path::new("nested/chosen.atrament"),
+                b"complete relative output",
+                64,
+                mode,
+                || {
+                    observations += 1;
+                    if observations == 3 {
+                        // Child-only process CWD mutation avoids changing
+                        // the shared test runner's working directory.
+                        env::set_current_dir(&alternate)
+                            .expect("change relative path resolution");
+                    }
+                    false
+                },
+            );
+            assert_eq!(result, Err(Error::SelectedParentChanged));
+            assert_eq!(observations, 3);
+            return;
+        }
+        for mode in [Mode::PreserveExisting, Mode::ReplaceExisting] {
+            let dir = OwnedDir::new();
+            let original_cwd = dir.0.join("original-cwd");
+            let alternate_cwd = dir.0.join("alternate-cwd");
+            let original_parent = original_cwd.join("nested");
+            let alternate_parent = alternate_cwd.join("nested");
+            fs::create_dir_all(&original_parent).expect("selected relative directory");
+            fs::create_dir_all(&alternate_parent).expect("alternate relative directory");
+            let original = original_parent.join("chosen.atrament");
+            let victim = alternate_parent.join("chosen.atrament");
+            fs::write(&victim, b"unrelated bytes").expect("unrelated target");
+            if mode == Mode::ReplaceExisting {
+                fs::write(&original, b"original bytes")
+                    .expect("selected original");
+            }
+            let mut command = Command::new(env::current_exe().expect("test executable"));
+            let _configured = command
+                .arg("--exact")
+                .arg(CWD_DRIFT_TEST)
+                .env(CWD_DRIFT_ALTERNATE, &alternate_cwd)
+                .env_remove(CWD_DRIFT_REPLACE)
+                .current_dir(&original_cwd);
+            if mode == Mode::ReplaceExisting {
+                let _mode = command.env(CWD_DRIFT_REPLACE, "yes");
+            }
+            let output = command.output().expect("run isolated cwd child");
+            assert!(
+                output.status.success(),
+                "child must refuse relative output after cwd drift: {}",
+                String::from_utf8_lossy(&output.stderr),
+            );
+            assert_eq!(fs::read(&victim).expect("victim untouched"), b"unrelated bytes");
+            assert_eq!(
+                fs::read(original_parent.join("stable.atrament"))
+                    .expect("unchanged relative control"),
+                b"stable",
+            );
+            if mode == Mode::ReplaceExisting {
+                assert_eq!(fs::read(&original).expect("original"), b"original bytes");
+            } else {
+                assert!(!original.exists());
+            }
+            assert_eq!(
+                fs::read_dir(&original_parent).expect("no named stage").count(),
+                1 + usize::from(mode == Mode::ReplaceExisting),
             );
         }
     }

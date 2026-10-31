@@ -73,7 +73,7 @@ pub enum ProfileFileCommitError {
     InvalidTarget,
     /// Random staging name generation failed.
     RandomUnavailable,
-    /// The selected parent was replaced before any permanent file effect.
+    /// The selected parent or relative CWD changed before any file effect.
     SelectedParentChanged,
     /// Existing target conflicts with preserve-existing intent.
     TargetExists,
@@ -169,6 +169,7 @@ pub fn commit_profile_file(
 /// before the first permanent directory entry is created. The selected parent
 /// is reopened before linking and after directory sync; device/inode drift
 /// before the link refuses without effect, while post-link drift is uncertain.
+/// For relative targets, the process CWD must still match its original anchor.
 /// Linux stages bytes through `O_TMPFILE`, so cancellation or process death
 /// during writing cannot
 /// leave a named temporary file. Preserve-existing links the completed file
@@ -235,14 +236,38 @@ fn commit_platform(
 }
 
 #[cfg(target_os = "linux")]
+fn same_opened_directory_identity(first: &File, second: &File) -> bool {
+    use std::os::unix::fs::MetadataExt as _;
+
+    let Ok(original) = first.metadata() else {
+        return false;
+    };
+    let Ok(current) = second.metadata() else {
+        return false;
+    };
+    original.dev() == current.dev() && original.ino() == current.ino()
+}
+
+#[cfg(target_os = "linux")]
 fn selected_parent_is_same_directory(
     root: &File,
     parent_path: &Path,
     selected_directory: &File,
+    relative_target: bool,
 ) -> bool {
     use nix::fcntl::{OFlag, OpenHow, ResolveFlag, openat2};
-    use std::os::unix::fs::MetadataExt as _;
 
+    // A relative target's external pathname is also bound to process CWD.
+    // Reopening only beneath the original descriptor would mistake a
+    // post-selection chdir for a successful write at the selected pathname.
+    if relative_target {
+        let Ok(current_cwd) = File::open(".") else {
+            return false;
+        };
+        if !same_opened_directory_identity(root, &current_cwd) {
+            return false;
+        }
+    }
     let how = OpenHow::new()
         .flags(OFlag::O_RDONLY | OFlag::O_DIRECTORY | OFlag::O_CLOEXEC)
         .resolve(
@@ -251,13 +276,7 @@ fn selected_parent_is_same_directory(
     let Ok(reopened) = openat2(root, parent_path, how) else {
         return false;
     };
-    let Ok(original) = selected_directory.metadata() else {
-        return false;
-    };
-    let Ok(current) = File::from(reopened).metadata() else {
-        return false;
-    };
-    original.dev() == current.dev() && original.ino() == current.ino()
+    same_opened_directory_identity(selected_directory, &File::from(reopened))
 }
 
 #[cfg(target_os = "linux")]
@@ -370,7 +389,12 @@ fn commit_platform(
     }
     // The selected directory may have been renamed/replaced during staging.
     // Do not link the anonymous inode to a detached, now-unselected parent.
-    if !selected_parent_is_same_directory(&root, directory_path, &directory) {
+    if !selected_parent_is_same_directory(
+        &root,
+        directory_path,
+        &directory,
+        !target.is_absolute(),
+    ) {
         return Err(ProfileFileCommitError::SelectedParentChanged);
     }
 
@@ -450,7 +474,12 @@ fn commit_platform(
     // Path resolution is external mutable state. Recheck after the file
     // effect: if its parent moved since the precommit check, never issue a
     // success receipt for an output no longer at the selected pathname.
-    if !selected_parent_is_same_directory(&root, directory_path, &directory) {
+    if !selected_parent_is_same_directory(
+        &root,
+        directory_path,
+        &directory,
+        !target.is_absolute(),
+    ) {
         return Err(ProfileFileCommitError::CommittedPathUnverified);
     }
     Ok(())
