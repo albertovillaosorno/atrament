@@ -4797,6 +4797,8 @@ test(
         let fontRequests = 0;
         let mediaRequests = 0;
         let objectRequests = 0;
+        let sniffControlRequests = 0;
+        let sniffProtectedRequests = 0;
         let frameChildRequests = 0;
         let formSubmissions = 0;
         let permissive;
@@ -4880,6 +4882,10 @@ test(
                 "content-security-policy",
             );
             assert.equal(typeof responseCsp, "string");
+            const responseNoSniff = runtimeResponse.headers.get(
+                "x-content-type-options",
+            );
+            assert.equal(responseNoSniff, "nosniff");
             await runtimeResponse.body?.cancel();
 
             let resolveControlForm;
@@ -4902,6 +4908,28 @@ test(
             wave.write("data", 36);
             wave.writeUInt32LE(wave.length - 44, 40);
             permissive = http.createServer((request, response) => {
+                if (request.url?.startsWith("/csp-mime-") === true) {
+                    const protectedScript =
+                        request.url === "/csp-mime-protected.js";
+                    if (protectedScript) {
+                        sniffProtectedRequests += 1;
+                    } else if (request.url === "/csp-mime-control.js") {
+                        sniffControlRequests += 1;
+                    } else {
+                        response.writeHead(404);
+                        response.end();
+                        return;
+                    }
+                    response.writeHead(200, {
+                        "Cache-Control": "no-store",
+                        "Content-Type": "text/plain; charset=utf-8",
+                        ...(protectedScript ? {
+                            "X-Content-Type-Options": responseNoSniff,
+                        } : {}),
+                    });
+                    response.end("window.atramentSniffProbe = true;");
+                    return;
+                }
                 if (request.url === "/csp-font.woff2") {
                     fontRequests += 1;
                     response.writeHead(200, {
@@ -5169,6 +5197,52 @@ test(
             assert.deepEqual(assetRequests, [
                 "/csp-script", "/csp-image", "/csp-style",
             ], "protected document must not emit cross-origin asset requests");
+
+            // Both scripts are allowed by script-src 'self'. The same-origin
+            // text/plain variant without nosniff must execute in Firefox;
+            // with the exact runtime nosniff header it must be refused.
+            const mimeProbe = (url) => `(async () => {
+                delete window.atramentSniffProbe;
+                const node = document.createElement("script");
+                node.src = ${JSON.stringify(url)};
+                const outcome = await new Promise((resolve) => {
+                    const timer = setTimeout(() => resolve(false), 3000);
+                    const finish = () => {
+                        clearTimeout(timer);
+                        resolve(window.atramentSniffProbe === true);
+                    };
+                    node.onload = finish;
+                    node.onerror = finish;
+                    document.body.append(node);
+                });
+                node.remove();
+                return outcome;
+            })()`;
+            const controlSniff = await bidi.command("script.evaluate", {
+                awaitPromise: true,
+                expression: mimeProbe(
+                    `${permissiveOrigin}/csp-mime-control.js`,
+                ),
+                resultOwnership: "none",
+                target: { context: networkControl.context },
+            });
+            assert.equal(controlSniff.type, "success");
+            assert.equal(controlSniff.result.value, true,
+                "control script must execute without nosniff");
+            assert.equal(sniffControlRequests, 1);
+            const blockedSniff = await bidi.command("script.evaluate", {
+                awaitPromise: true,
+                expression: mimeProbe(
+                    `${permissiveOrigin}/csp-mime-protected.js`,
+                ),
+                resultOwnership: "none",
+                target: { context: headerOnly.context },
+            });
+            assert.equal(blockedSniff.type, "success");
+            assert.equal(blockedSniff.result.value, false,
+                "runtime nosniff must deny misdeclared same-origin script");
+            assert.equal(sniffProtectedRequests, 1,
+                "MIME refusal must occur after the permitted script fetch");
 
             // An injected inline script or <base> must not acquire
             // execution authority from the no-meta document.

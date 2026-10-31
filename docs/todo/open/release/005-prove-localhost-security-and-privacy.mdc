@@ -81,6 +81,14 @@ neither loads it nor requests the resource. Changing only `object-src 'none'` to
 `'self'` makes the regression fail, independently pinning the HTTP directive
 rather than the default same-origin resource policy.
 
+The Firefox fixture also copies the runtime response's
+`X-Content-Type-Options: nosniff` value onto a synthetic same-origin script
+served with `text/plain`. A control without the header executes that script;
+the resource with the runtime header is fetched but not executed. Removing
+only `nosniff` makes the assertion fail. This checks independent browser MIME
+enforcement using a rehosted resource, not a claim that Atrament serves
+misdeclared scripts in production.
+
 This is browser enforcement evidence for the HTTP boundary, not a claim about
 browser-opener credentials or arbitrary outbound desktop programs.
 
