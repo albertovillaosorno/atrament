@@ -55,6 +55,7 @@ use std::{env, process};
 
 use atrament_profile_selected_file_open::{
     ProfileSelectedFileOpenError as Error, open_selected_profile_file,
+    open_selected_profile_file_from_cwd,
 };
 
 #[cfg(target_os = "linux")]
@@ -159,6 +160,83 @@ fn relative_path_is_resolved_under_cwd_without_link_traversal() {
     let mut bytes = Vec::new();
     let _count = source.read_to_end(&mut bytes).expect("read source");
     assert_eq!(bytes, b"literal file data");
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn selected_cwd_anchor_refuses_redirection_to_different_process_cwd() {
+    const CHILD: &str = "ATRAMENT_TEST_SELECTED_CWD_ANCHOR";
+    if env::var_os(CHILD).is_none() {
+        let result = process::Command::new(
+            env::current_exe().expect("running test executable"),
+        )
+        .arg("--exact")
+        .arg("selected_cwd_anchor_refuses_redirection_to_different_process_cwd")
+        .env(CHILD, "yes")
+        .output()
+        .expect("isolated child process for CWD mutation");
+        assert!(
+            result.status.success(),
+            "selected-CWD regression child failed: {}",
+            String::from_utf8_lossy(&result.stderr),
+        );
+        return;
+    }
+
+    // Changing CWD is process-global. The dedicated child isolates this
+    // fixture from parallel tests while retaining realistic Linux descriptors.
+    let owned = OwnedTestDirectory::new(false);
+    let first = owned.0.join("first");
+    let second = owned.0.join("second");
+    fs::create_dir(&first).expect("first candidate working directory");
+    fs::create_dir(&second).expect("second candidate working directory");
+    fs::write(first.join("chosen.atrament"), b"first")
+        .expect("first candidate source");
+    fs::write(second.join("chosen.atrament"), b"second")
+        .expect("second candidate source");
+    let original = env::current_dir().expect("original cwd");
+
+    env::set_current_dir(&first).expect("choose first cwd");
+    let captured = File::open(".").expect("capture original selected cwd");
+    env::set_current_dir(&second).expect("change process cwd");
+    assert_eq!(
+        open_selected_profile_file_from_cwd(
+            Path::new("chosen.atrament"),
+            &captured,
+        )
+        .expect_err("stale CWD selection must refuse"),
+        Error::WorkingDirectoryChanged,
+    );
+    assert_eq!(
+        open_selected_profile_file_from_cwd(
+            &first.join("chosen.atrament"),
+            &captured,
+        )
+        .expect_err("absolute path cannot claim relative CWD authority"),
+        Error::InvalidSelectedPath,
+    );
+
+    env::set_current_dir(&first).expect("restore selected cwd");
+    let mut stable = open_selected_profile_file_from_cwd(
+        Path::new("chosen.atrament"),
+        &captured,
+    )
+    .expect("original selected cwd still resolves exactly");
+    let mut bytes = Vec::new();
+    let _read = stable.read_to_end(&mut bytes).expect("read selected source");
+    assert_eq!(bytes, b"first");
+
+    env::set_current_dir(&second).expect("switch for absolute selection");
+    let mut absolute = open_selected_profile_file(
+        &first.join("chosen.atrament"),
+    )
+    .expect("absolute path independent of process cwd");
+    bytes.clear();
+    let _absolute_read = absolute
+        .read_to_end(&mut bytes)
+        .expect("read absolute source");
+    assert_eq!(bytes, b"first");
+    env::set_current_dir(original).expect("restore test process cwd");
 }
 
 #[cfg(target_os = "linux")]

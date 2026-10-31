@@ -45,6 +45,15 @@ unsupported `openat2` policy features as a typed fail-closed refusal,
 without falling back to an ordinary path open. Unit and file-path
 regressions cover malformed source preflight without granting Import.
 
+Relative Linux selected-profile opening now compares its working-directory
+anchor with the process CWD before and after the selected file open. A process
+CWD change observed during path resolution refuses with a typed drift error
+instead of admitting an obsolete relative selection. Trusted callers may also
+supply a previously opened CWD descriptor to a separate relative-only opener:
+a child-process regression verifies a moved CWD refuses, a restored CWD still
+opens exact bytes, and absolute selection remains independent. This observation
+is not atomic with later changes and does not authenticate Import.
+
 The read-only profile inspector now reserves its section reference inventory
 fallibly and plans the exact complete display length, including canonical root,
 section names, labels and line breaks, before writing any display text.
