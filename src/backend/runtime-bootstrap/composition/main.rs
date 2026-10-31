@@ -217,14 +217,16 @@ const fn profile_repack_limits() -> ProfileExportAssemblyLimits {
     }
 }
 
-// Controls and default-ignorable Unicode scalars can reorder labels or make
-// distinct verified names look the same. Include Unicode's reserved
-// supplementary ignorable range and the visually blank U+2800, plus Unicode
-// line/paragraph separators. Escape only the terminal display, not ZIP bytes.
+// Controls, non-ASCII Unicode whitespace and default-ignorable scalars can
+// reorder labels or make distinct verified names look the same. Include
+// reserved supplementary ignorables and visually blank U+2800 as well.
+// Escape only the terminal display, never verified ZIP or section bytes.
 const fn is_terminal_control(character: char) -> bool {
     character.is_control() || matches!(
         character,
-        '\u{00ad}' | '\u{034f}' | '\u{061c}'
+        '\u{00ad}' | '\u{00a0}' | '\u{034f}' | '\u{061c}'
+            | '\u{1680}' | '\u{2000}'..='\u{200a}'
+            | '\u{202f}' | '\u{205f}' | '\u{3000}'
             | '\u{115f}'..='\u{1160}'
             | '\u{17b4}'..='\u{17b5}'
             | '\u{180b}'..='\u{180f}'

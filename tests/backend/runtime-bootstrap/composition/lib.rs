@@ -1895,6 +1895,46 @@ fn cli_inspection_escapes_visually_blank_unicode_metadata() {
 
 #[cfg(target_os = "linux")]
 #[test]
+fn cli_inspection_escapes_non_ascii_unicode_spaces() {
+    // Unicode White_Space includes printable-looking separators that are not
+    // controls or Default_Ignorable_Code_Point. Ordinary ASCII spaces stay.
+    let spaces = [
+        '\u{00a0}', '\u{1680}', '\u{2000}', '\u{2001}',
+        '\u{2002}', '\u{2003}', '\u{2004}', '\u{2005}',
+        '\u{2006}', '\u{2007}', '\u{2008}', '\u{2009}',
+        '\u{200a}', '\u{202f}', '\u{205f}', '\u{3000}',
+    ];
+    let joined: String = spaces.into_iter().collect();
+    let section = format!(r#"{{"spaces":"{joined}","plain":"a b"}}"#);
+    let archive = profile_zip(
+        section.as_bytes(), b"opaque", section.as_bytes(),
+    );
+    let source = OwnedProfileFile::new(&archive);
+    bootstrap::verify_profile(source.0.clone())
+        .expect("non-ASCII whitespace is valid section JSON");
+    let process = Command::new(env!("CARGO_BIN_EXE_atrament"))
+        .args(["profile", "inspect"])
+        .arg(&source.0)
+        .output()
+        .expect("inspect exact verified Unicode whitespace profile");
+    assert!(process.status.success());
+    assert!(process.stderr.is_empty());
+    let display = String::from_utf8(process.stdout)
+        .expect("terminal display remains UTF-8");
+    let mut escaped = String::new();
+    for character in spaces {
+        let scalar = u32::from(character);
+        write!(&mut escaped, "\\u{scalar:04x}")
+            .expect("format expected ASCII escape");
+        assert!(!display.contains(character), "raw Unicode space in display");
+    }
+    assert!(display.contains(&format!(r#""spaces":"{escaped}""#)));
+    assert!(display.contains(r#""plain":"a b""#));
+    assert_eq!(fs::read(&source.0).expect("source unchanged"), archive);
+}
+
+#[cfg(target_os = "linux")]
+#[test]
 fn cli_inspection_escapes_default_ignorable_unicode_ranges() {
     // Enumerate the full current Default_Ignorable_Code_Point range table,
     // including reserved supplementary scalars, not just range endpoints.

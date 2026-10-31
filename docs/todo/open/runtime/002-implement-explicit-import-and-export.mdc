@@ -1150,3 +1150,10 @@ invisible scalars, and unchanged fully SHA-verified source. This table
 supplements the Rust control-character predicate, U+2800 braille blank and
 line separators;
 it is not a guarantee against every possible visually confusable glyph.
+
+Terminal-only profile inspection now also escapes all 16 non-ASCII Unicode
+White_Space separators that are not already control characters or default
+ignorables. A real CLI red-first fixture showed verified section JSON could
+print these visually ambiguous characters raw, even with SHA-verification.
+The display writes their exact JSON escapes while retaining ordinary ASCII
+spaces and leaving verified source profile bytes unchanged.
