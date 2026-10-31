@@ -1664,7 +1664,8 @@ fn cli_inspection_escapes_opaque_asset_metadata_without_revealing_bytes() {
     // makes them look the same unless the inspection display escapes it.
     let asset_path = format!("assets/{}opaque.bin", '\u{2029}');
     let invisible_path = format!(
-        "assets/{}opa{}que.bin", '\u{2029}', '\u{200b}',
+        "assets/{}opa{}{}que.bin", '\u{2029}', '\u{200b}',
+        '\u{e0100}',
     );
     let opaque_asset = b"\x1b[31mprivate-opaque-91413\xff";
     let other_asset = b"hidden-private-asset-91414";
@@ -1687,10 +1688,10 @@ fn cli_inspection_escapes_opaque_asset_metadata_without_revealing_bytes() {
             r#"{{"container_version":"atrament.profile/1","#,
             r#""profile_identity":"asset{}only","required_features":[],"#,
             r#""optional_features":["opaque{}capability","hidden{}name","#,
-            r#""mark{}name","bom{}name"],"entries":[{}]}}"#,
+            r#""mark{}name","bom{}name","tag{}hidden"],"entries":[{}]}}"#,
         ),
         '\u{034f}', '\u{009b}', '\u{2060}', '\u{00ad}',
-        '\u{feff}', entries,
+        '\u{feff}', '\u{e0061}', entries,
     );
     let archive = write_stored_profile_zip(
         &[
@@ -1725,13 +1726,16 @@ fn cli_inspection_escapes_opaque_asset_metadata_without_revealing_bytes() {
         .expect("terminal-safe UTF-8 display");
     assert!(text.starts_with("manifest.json (verified):\n"));
     assert!(text.contains(r#""path":"assets/\u2029opaque.bin""#));
-    assert!(text.contains(r#""path":"assets/\u2029opa\u200bque.bin""#));
+    assert!(text.contains(
+        r#""path":"assets/\u2029opa\u200b\udb40\udd00que.bin""#,
+    ));
     for displayed in [
         r#""asset\u034fonly""#,
         r#""opaque\u009bcapability""#,
         r#""hidden\u2060name""#,
         r#""mark\u00adname""#,
         r#""bom\ufeffname""#,
+        r#""tag\udb40\udc61hidden""#,
     ] {
         assert!(text.contains(displayed), "formatted metadata is visible");
     }
@@ -1742,6 +1746,7 @@ fn cli_inspection_escapes_opaque_asset_metadata_without_revealing_bytes() {
     for control in [
         '\u{2029}', '\u{009b}', '\u{001b}', '\u{034f}',
         '\u{200b}', '\u{2060}', '\u{00ad}', '\u{feff}',
+        '\u{e0061}', '\u{e0100}',
     ] {
         assert!(
             !text.contains(control),

@@ -228,15 +228,17 @@ const fn is_terminal_control(character: char) -> bool {
             | '\u{2028}'..='\u{202e}'
             | '\u{2060}'..='\u{206f}'
             | '\u{feff}'
+            | '\u{e0000}'..='\u{e007f}'
+            | '\u{e0100}'..='\u{e01ef}'
     )
 }
 
 fn terminal_safe_text_len(value: &str) -> Option<usize> {
     value.chars().try_fold(0usize, |total, character| {
         total.checked_add(if is_terminal_control(character) {
-            // All escaped scalars fit in the BMP, so the visible \uXXXX
-            // escape takes exactly six printable ASCII bytes.
-            6
+            // Supplementary invisible format scalars require two UTF-16
+            // surrogate escapes; BMP controls require just one.
+            if u32::from(character) > 0xffff { 12 } else { 6 }
         } else {
             character.len_utf8()
         })
@@ -248,7 +250,19 @@ fn append_terminal_safe_text(output: &mut String, value: &str) {
         if is_terminal_control(character) {
             // Formatting to String is infallible. Capacity was reserved for
             // the complete exact transformed length before any append.
-            let _formatted = write!(output, "\\u{:04x}", u32::from(character));
+            let scalar = u32::from(character);
+            if scalar <= 0xffff {
+                let _formatted = write!(output, "\\u{scalar:04x}");
+            } else {
+                // `char` excludes surrogate codepoints and 0x10ffff+;
+                // the matched supplemental range always admits this offset.
+                let supplementary = scalar.saturating_sub(0x1_0000);
+                let high = 0xd800u32 | (supplementary >> 10u32);
+                let low = 0xdc00u32 | (supplementary & 0x03ff);
+                let _formatted = write!(
+                    output, "\\u{high:04x}\\u{low:04x}",
+                );
+            }
         } else {
             output.push(character);
         }
