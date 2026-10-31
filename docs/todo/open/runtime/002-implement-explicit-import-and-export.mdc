@@ -207,6 +207,17 @@ no-overwrite; an explicit replacement creates a randomized sibling hard link
 only for the final `renameat2`, then syncs the directory. A filesystem without
 secure anonymous staging refuses rather than leaking partial files on crash.
 
+The anonymous Linux stage now explicitly sets descriptor mode `0600`
+before writing any artifact bytes. `O_TMPFILE` creation alone inherits the
+process umask and could otherwise publish an unreadable `000` file under an
+unusually restrictive host. An isolated subprocess fixture sets umask `0777`
+and verifies both preserve-existing and replacement commits remain private,
+owner-readable, complete, and free of named temporary entries.
+
+The test first reproduced an unreadable committed target without the fix.
+This is file mode correctness, not caller admission or protection against later
+external chmod.
+
 The low-level file-commit adapter now also checks the selected destination
 leaf after directory sync. It observes that leaf without following links and
 compares its device, inode, byte length, modification time and metadata-change

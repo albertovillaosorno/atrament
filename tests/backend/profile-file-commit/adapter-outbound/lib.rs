@@ -39,6 +39,7 @@ mod linux {
     use super::*;
     use getrandom as _;
     use nix::libc::SIGKILL;
+    use nix::sys::stat::{Mode as FileMode, umask};
     use std::env;
     use std::ffi::OsString;
     use std::fs::{self, OpenOptions};
@@ -145,6 +146,60 @@ mod linux {
                 & 0o777,
             0o600
         );
+    }
+
+    #[test]
+    fn committed_permissions_ignore_restrictive_process_umask() {
+        const CHILD: &str = "ATRAMENT_TEST_COMMIT_UMASK_CHILD";
+        const SELF: &str =
+            "linux::committed_permissions_ignore_restrictive_process_umask";
+        if env::var_os(CHILD).is_none() {
+            let result = Command::new(
+                env::current_exe().expect("running test executable"),
+            )
+            .arg("--exact")
+            .arg(SELF)
+            .env(CHILD, "yes")
+            .output()
+            .expect("isolated child for process-wide umask mutation");
+            assert!(
+                result.status.success(),
+                "umask child refused:\nstdout: {}\nstderr: {}",
+                String::from_utf8_lossy(&result.stdout),
+                String::from_utf8_lossy(&result.stderr),
+            );
+            return;
+        }
+
+        // Create and seed test directories *before* making the process umask
+        // restrictive. The child changes global state with no other tests.
+        let preserve = OwnedDir::new();
+        let replace = OwnedDir::new();
+        fs::write(replace.target(), b"previous target")
+            .expect("preexisting replace target");
+        let previous = umask(
+            FileMode::from_bits_truncate(0o777),
+        );
+        let payload = b"complete, private profile";
+        for (dir, disposition) in [
+            (&preserve, Mode::PreserveExisting),
+            (&replace, Mode::ReplaceExisting),
+        ] {
+            let target = dir.target();
+            let evidence = commit_profile_file(
+                &target, payload, payload.len(), disposition,
+            ).expect("commit under restrictive process umask");
+            assert_eq!(evidence.byte_length, payload.len());
+            assert_eq!(fs::read(&target).expect("complete file"), payload);
+            assert_eq!(
+                fs::metadata(&target).expect("output metadata")
+                    .permissions().mode() & 0o777,
+                0o600,
+                "selected output mode must not depend on process umask",
+            );
+            assert_eq!(dir.entries(), vec![String::from("chosen.atrament")]);
+        }
+        let _restored = umask(previous);
     }
 
     #[test]

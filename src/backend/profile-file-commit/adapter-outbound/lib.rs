@@ -353,8 +353,9 @@ fn commit_platform(
     disposition: ProfileFileCommitDisposition,
     is_cancelled: &mut dyn FnMut() -> bool,
 ) -> Result<ProfileFileCommitEvidence, ProfileFileCommitError> {
+    use std::fs::Permissions;
     use std::io::Write as _;
-    use std::os::unix::fs::MetadataExt as _;
+    use std::os::unix::fs::{MetadataExt as _, PermissionsExt as _};
 
     use nix::fcntl::{
         AtFlags, OFlag, OpenHow, RenameFlags, ResolveFlag, openat, openat2,
@@ -426,6 +427,15 @@ fn commit_platform(
             ProfileFileCommitError::FileIo(io::Error::from(error).kind())
         }
     })?);
+    // O_TMPFILE creation is still subject to the process umask. Reassert
+    // private, owner-readable 0600 on the unlinked descriptor so restrictive
+    // host umasks cannot turn a successful Export into an unreadable file.
+    // This happens before any bytes are written or published by a link.
+    output
+        .set_permissions(Permissions::from_mode(0o600))
+        .map_err(|error| {
+            ProfileFileCommitError::FileIo(error.kind())
+        })?;
     for chunk in artifact.chunks(64 * 1024) {
         if is_cancelled() {
             return Err(ProfileFileCommitError::CancelledBeforeCommit);
