@@ -1139,3 +1139,14 @@ explicit JSON Unicode escapes in profile identity, optional-feature names,
 section paths and JSON text. The independently verified source ZIP remains
 byte-exact and unchanged; this is display spoofing hardening, not a new Import
 or Export permission, nor a claim to enumerate every invisible Unicode scalar.
+
+A follow-up red-first real CLI case extended the terminal-only display rule
+to the remaining default-ignorable Unicode ranges observed in the current
+Unicode property inventory, including Khmer and Mongolian formatting,
+BMP variation selectors, special-use formatting, shorthand/music formatting,
+and the reserved supplementary ignorable range. A complete 4,174-scalar
+real CLI fixture pins exact ASCII Unicode/surrogate escape output, no raw
+invisible scalars, and unchanged fully SHA-verified source. This table
+supplements the Rust control-character predicate, U+2800 braille blank and
+line separators;
+it is not a guarantee against every possible visually confusable glyph.

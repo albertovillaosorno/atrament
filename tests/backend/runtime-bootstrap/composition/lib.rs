@@ -51,6 +51,7 @@ mod bootstrap;
 use std::cell::Cell;
 use std::env;
 use std::ffi::OsString;
+use std::fmt::Write as _;
 use std::fs::{self, OpenOptions};
 use std::io::{self, Write as _};
 use std::iter;
@@ -1890,6 +1891,80 @@ fn cli_inspection_escapes_visually_blank_unicode_metadata() {
         assert!(!display.contains(blank), "raw visually blank metadata");
     }
     assert_eq!(fs::read(&source.0).expect("source unchanged"), archive);
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn cli_inspection_escapes_default_ignorable_unicode_ranges() {
+    // Enumerate the full current Default_Ignorable_Code_Point range table,
+    // including reserved supplementary scalars, not just range endpoints.
+    let ranges: [(u32, u32); 17] = [
+        (0x00ad, 0x00ad), (0x034f, 0x034f), (0x061c, 0x061c),
+        (0x115f, 0x1160), (0x17b4, 0x17b5), (0x180b, 0x180f),
+        (0x200b, 0x200f), (0x202a, 0x202e), (0x2060, 0x206f),
+        (0x3164, 0x3164), (0xfe00, 0xfe0f), (0xfeff, 0xfeff),
+        (0xffa0, 0xffa0), (0xfff0, 0xfff8),
+        (0x1bca0, 0x1bca3), (0x1d173, 0x1d17a),
+        (0xe0000, 0xe0fff),
+    ];
+    let invisible: String = ranges.into_iter()
+        .flat_map(|(start, end)| (start..=end).filter_map(char::from_u32))
+        .collect();
+    assert_eq!(invisible.chars().count(), 4_174);
+    let section = format!(r#"{{"special":"{invisible}"}}"#);
+    let root = format!(
+        concat!(
+            r#"{{"container_version":"atrament.profile/1","#,
+            r#""profile_identity":"writer","required_features":[],"#,
+            r#""optional_features":[],"entries":[{{"#,
+            r#""path":"sections/format.json","media_type":"application/json","#,
+            r#""byte_length":{},"sha256":"{}"}}]}}"#,
+        ),
+        section.len(), digest_hex(section.as_bytes()),
+    );
+    let archive = write_stored_profile_zip(
+        &[
+            ProfileStoredZipMember {
+                name: "manifest.json", bytes: root.as_bytes(),
+            },
+            ProfileStoredZipMember {
+                name: "sections/format.json", bytes: section.as_bytes(),
+            },
+        ],
+        ProfileStoredZipWriteLimits {
+            maximum_archive_bytes: 64 * 1024,
+            maximum_entries: 2,
+            maximum_entry_bytes: 32 * 1024,
+            maximum_total_bytes: 64 * 1024,
+        },
+    ).expect("valid JSON may contain ignorable Unicode scalars");
+    let source = OwnedProfileFile::new(&archive);
+    bootstrap::verify_profile(source.0.clone())
+        .expect("verified bytes can contain default-ignorable scalars");
+    let process = Command::new(env!("CARGO_BIN_EXE_atrament"))
+        .args(["profile", "inspect"])
+        .arg(&source.0)
+        .output()
+        .expect("inspect default-ignorable profile in a real CLI");
+    assert!(process.status.success());
+    assert!(process.stderr.is_empty());
+    let display = String::from_utf8(process.stdout)
+        .expect("terminal display remains UTF-8");
+    // Independently encode exact UTF-16 code units to printable JSON text.
+    let mut escaped = String::new();
+    for scalar in invisible.chars() {
+        let mut buffer = [0u16; 2];
+        for unit in scalar.encode_utf16(&mut buffer) {
+            write!(&mut escaped, "\\u{unit:04x}")
+                .expect("string formatting cannot fail");
+        }
+    }
+    assert!(display.contains(&format!(r#""special":"{escaped}""#)));
+    assert!(display.is_ascii(), "all profile text is ASCII escaped");
+    for scalar in invisible.chars() {
+        assert!(!display.contains(scalar), "no invisible scalars remain");
+    }
+    assert_eq!(fs::read(&source.0).expect("source remains exact"), archive);
 }
 
 #[cfg(target_os = "linux")]

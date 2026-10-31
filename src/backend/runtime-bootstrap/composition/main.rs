@@ -217,22 +217,27 @@ const fn profile_repack_limits() -> ProfileExportAssemblyLimits {
     }
 }
 
-// Nonprinting controls and common zero-width format characters can either
-// reorder labels, split lines, or make distinct verified names look identical.
-// Escape only the terminal presentation, never the verified ZIP source bytes.
+// Controls and default-ignorable Unicode scalars can reorder labels or make
+// distinct verified names look the same. Include Unicode's reserved
+// supplementary ignorable range and the visually blank U+2800, plus Unicode
+// line/paragraph separators. Escape only the terminal display, not ZIP bytes.
 const fn is_terminal_control(character: char) -> bool {
     character.is_control() || matches!(
         character,
         '\u{00ad}' | '\u{034f}' | '\u{061c}'
             | '\u{115f}'..='\u{1160}'
-            | '\u{180e}'
+            | '\u{17b4}'..='\u{17b5}'
+            | '\u{180b}'..='\u{180f}'
             | '\u{200b}'..='\u{200f}'
             | '\u{2028}'..='\u{202e}'
             | '\u{2060}'..='\u{206f}'
             | '\u{2800}' | '\u{3164}'
+            | '\u{fe00}'..='\u{fe0f}'
             | '\u{feff}' | '\u{ffa0}'
-            | '\u{e0000}'..='\u{e007f}'
-            | '\u{e0100}'..='\u{e01ef}'
+            | '\u{fff0}'..='\u{fff8}'
+            | '\u{1bca0}'..='\u{1bca3}'
+            | '\u{1d173}'..='\u{1d17a}'
+            | '\u{e0000}'..='\u{e0fff}'
     )
 }
 
