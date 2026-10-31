@@ -9,11 +9,11 @@
 //
 // Boundary-Contract:
 // - Owns:
-//   - Operating-system browser launch for the canonical localhost origin.
+//   - Operating-system browser launch for the backend-selected localhost URL.
 // - Must-Not:
-//   - Rewrite the origin, persist launch state, or weaken runtime admission.
+//   - Rewrite the launch URL, persist state, or weaken runtime admission.
 // - Allows:
-//   - Inputs: One backend-selected canonical localhost HTTP origin.
+//   - Inputs: One backend-selected localhost URL with a session fragment.
 //   - Outputs: Typed launch success or recovery-safe launch failure.
 //   - Side effects: Starting the platform browser opener process.
 // - Split-When:
@@ -29,6 +29,7 @@
 // - Defaults:
 //   - Uses the platform opener and refuses Linux launch without a GUI session.
 //   - Bounds opener completion to five seconds before failing startup closed.
+//   - Currently exposes the fragment in opener argv (known P1 defect).
 //
 
 //! Operating-system browser launch for the disposable Atrament runtime.
@@ -127,14 +128,18 @@ impl Error for LaunchError {
     }
 }
 
-/// Open the canonical Atrament origin with the current platform browser opener.
+/// Open the backend-selected localhost URL with the platform browser opener.
+///
+/// Production supplies a session credential in the URL fragment. The current
+/// argv handoff exposes that credential to unrelated same-user processes; null
+/// standard streams and bounded launch time do not fix this known P1 defect.
 ///
 /// # Errors
 ///
 /// Returns a typed error when the platform is unsupported, no graphical Linux
 /// session is available, or the selected opener cannot complete successfully.
-pub fn launch(origin: &str) -> Result<(), LaunchError> {
-    launch_with_timeout(platform_opener()?, origin, DEFAULT_LAUNCH_TIMEOUT)
+pub fn launch(url: &str) -> Result<(), LaunchError> {
+    launch_with_timeout(platform_opener()?, url, DEFAULT_LAUNCH_TIMEOUT)
 }
 
 #[cfg(target_os = "linux")]
@@ -179,7 +184,7 @@ fn platform_opener() -> Result<&'static OsStr, LaunchError> {
     Err(LaunchError::UnsupportedPlatform)
 }
 
-/// Open `origin` with an explicit opener program.
+/// Open the supplied launch URL with an explicit opener program.
 ///
 /// This surface exists so platform-launch behavior can be regression-tested
 /// without starting a real browser.
@@ -188,8 +193,8 @@ fn platform_opener() -> Result<&'static OsStr, LaunchError> {
 ///
 /// Returns a typed error when the opener cannot start, times out, or exits
 /// unsuccessfully.
-pub fn launch_with(program: &OsStr, origin: &str) -> Result<(), LaunchError> {
-    launch_with_timeout(program, origin, DEFAULT_LAUNCH_TIMEOUT)
+pub fn launch_with(program: &OsStr, url: &str) -> Result<(), LaunchError> {
+    launch_with_timeout(program, url, DEFAULT_LAUNCH_TIMEOUT)
 }
 
 fn launch_status(status: ExitStatus) -> Result<(), LaunchError> {
@@ -210,15 +215,17 @@ fn terminate_after_launch_error(child: &mut Child) {
 
 pub(crate) fn launch_with_timeout(
     program: &OsStr,
-    origin: &str,
+    url: &str,
     timeout: Duration,
 ) -> Result<(), LaunchError> {
     // Admission precedes spawning: an exhausted budget cannot own a child.
     if timeout.is_zero() {
         return Err(LaunchError::TimedOut);
     }
+    // The credential-bearing production URL is currently visible in argv.
+    // Do not interpret null stdio as confidential process handoff.
     let mut child = Command::new(program)
-        .arg(origin)
+        .arg(url)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null())

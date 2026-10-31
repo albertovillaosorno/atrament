@@ -13,7 +13,7 @@
 // - Must-Not:
 //   - Start a real browser or alter session admission.
 // - Allows:
-//   - Inputs: Deterministic command names and one canonical loopback origin.
+//   - Inputs: Deterministic opener names and synthetic localhost launch URLs.
 //   - Outputs: Assertions over typed launch outcomes.
 //   - Side effects: Short-lived no-op test process execution.
 // - Split-When:
