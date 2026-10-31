@@ -41,10 +41,11 @@ bytes at a newly selected destination; it does **not** import typed
 handwriting sections, bind an accepted session revision, or authorize
 notebook/PDF or session-profile Export.
 
-Linux subprocess fixtures separately exercise source-symlink and destination-symlink refusal, same-file and
-pre-existing target preservation, malformed late sections, SHA forgery,
-non-UTF8 destination paths, root-only profiles, private output permissions,
-and byte-for-byte canonical repack idempotence.
+Linux subprocess fixtures separately exercise source-symlink and
+destination-symlink refusal, same-file and pre-existing target
+preservation, malformed late sections, SHA forgery, non-UTF8 destination
+paths, root-only profiles, private output permissions, and byte-for-byte
+canonical repack idempotence.
 
 Current export design evidence freezes accepted-revision binding, caller-owned
 or explicit host-policy output intent, explicit path and overwrite behavior,
