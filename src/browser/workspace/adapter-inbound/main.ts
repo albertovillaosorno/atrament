@@ -47,7 +47,7 @@ function consumeSessionSecretFragment(): string | null {
     }
     const localUrl = fragmentFreeLocalUrl();
     try {
-        window.history.replaceState(window.history.state, "", localUrl);
+        window.history.replaceState(null, "", localUrl);
     } catch {
         window.location.replace(localUrl);
         return null;
@@ -916,7 +916,7 @@ function discardLocalNavigationFragment(): boolean {
     }
     try {
         const localUrl = fragmentFreeLocalUrl();
-        window.history.replaceState(window.history.state, "", localUrl);
+        window.history.replaceState(null, "", localUrl);
     } catch {
         // The delayed reset below still contains late fragment scrolling.
     }

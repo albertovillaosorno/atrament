@@ -105,3 +105,11 @@ media decoding, format validation, clipboard or file intake, or temporary
 conversion files. The task remains open until the remaining preview and
 diagnostic producers, renders, plans, and media operations join the same
 lifecycle invariant.
+
+The browser's one-time launch-fragment cleanup and subsequent local navigation
+fragment cleanup now use `history.replaceState(null, ...)`. They deliberately
+discard any pre-existing History API state rather than serializing it into the
+replacement entry while removing the URL fragment. A red-first browser-module
+fixture showed the previous implementation propagated a private sentinel in
+`history.state`; it also verifies cleanup does not read a throwing state getter.
+These are isolated browser policy checks, not proof of all engine persistence.

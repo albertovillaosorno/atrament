@@ -34,6 +34,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+import { runInNewContext } from "node:vm";
 
 const INDEX_HTML = new URL(
     "../../../../src/browser/workspace/adapter-inbound/index.html",
@@ -453,6 +454,91 @@ test(
 );
 
 
+test("fragment cleanup wipes pre-existing history state", async () => {
+    const source = await readFile(MAIN_MODULE, "utf8");
+    const helperStart = source.indexOf("function fragmentFreeLocalUrl() {");
+    const handoffStart = source.indexOf(
+        "function consumeSessionSecretFragment() {",
+    );
+    const handoffEnd = source.indexOf(
+        "\nlet sessionSecret = consumeSessionSecretFragment();",
+        handoffStart,
+    );
+    const localStart = source.indexOf(
+        "function discardLocalNavigationFragment() {",
+    );
+    const localEnd = source.indexOf(
+        '\nwindow.addEventListener("pageshow"', localStart,
+    );
+    assert.ok(
+        helperStart >= 0 && handoffStart > helperStart
+            && handoffEnd > handoffStart
+            && localStart > handoffEnd && localEnd > localStart,
+    );
+    const helper = source.slice(helperStart, handoffStart);
+    const handoff = source.slice(handoffStart, handoffEnd);
+    const localNavigation = source.slice(localStart, localEnd);
+    const secret = "a".repeat(64);
+    const replaced = [];
+    const fakeWindow = {
+        location: {
+            hash: `#session=${secret}`,
+            pathname: "/index.html",
+            search: "?view=1",
+            replace() { throw Error("unexpected navigation fallback"); },
+        },
+        history: {
+            state: { private: "never-persist-this" },
+            replaceState(state, title, url) {
+                replaced.push({ state, title, url });
+            },
+        },
+    };
+    const accepted = runInNewContext(
+        `${helper}${handoff}\nconsumeSessionSecretFragment();`,
+        {
+            window: fakeWindow,
+            sessionSecretFromFragment: () => secret,
+        },
+    );
+    assert.equal(accepted, secret);
+    assert.deepEqual(replaced, [{
+        state: null,
+        title: "",
+        url: "/index.html?view=1",
+    }]);
+
+    replaced.length = 0;
+    Object.defineProperty(fakeWindow.history, "state", {
+        get() { throw Error("history state must not be read"); },
+    });
+    const noHistoryRead = runInNewContext(
+        `${helper}${handoff}\nconsumeSessionSecretFragment();`,
+        {
+            window: fakeWindow,
+            sessionSecretFromFragment: () => secret,
+        },
+    );
+    assert.equal(noHistoryRead, secret);
+    assert.equal(replaced[0]?.state, null);
+
+    replaced.length = 0;
+    fakeWindow.location.hash = "#source-panel";
+    const discarded = runInNewContext(
+        `${helper}${localNavigation}\ndiscardLocalNavigationFragment();`,
+        {
+            window: fakeWindow,
+            document: { getElementById: () => ({}) },
+        },
+    );
+    assert.equal(discarded, true);
+    assert.deepEqual(replaced, [{
+        state: null,
+        title: "",
+        url: "/index.html?view=1",
+    }]);
+});
+
 test("session credential fragment is one-time browser handoff", async () => {
     const source = await readFile(MAIN_MODULE, "utf8");
     const urlStart = source.indexOf("function fragmentFreeLocalUrl() {");
@@ -484,7 +570,7 @@ test("session credential fragment is one-time browser handoff", async () => {
         'const hash = window.location.hash;',
         'hash.startsWith("#session=")',
         "const localUrl = fragmentFreeLocalUrl();",
-        'window.history.replaceState(window.history.state, "", localUrl);',
+        'window.history.replaceState(null, "", localUrl);',
         "window.location.replace(localUrl);",
         "return sessionSecret;",
     ]) {
