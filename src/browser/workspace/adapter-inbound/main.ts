@@ -525,6 +525,12 @@ function draftSyncIsCurrent(secret: string, generation: number): boolean {
     return sessionSecret === secret && draftSyncGeneration === generation;
 }
 
+function hideResolvedDraftRetry(): void {
+    if (retryableDraftFields.size === 0 && retryPurpose === "draft") {
+        hideSessionRetry();
+    }
+}
+
 function recordDraftSyncFailure(
     field: sessionDraft.DraftField,
     message: string,
@@ -536,9 +542,7 @@ function recordDraftSyncFailure(
         showSessionRetry("draft");
     } else {
         retryableDraftFields.delete(field);
-        if (retryableDraftFields.size === 0 && retryPurpose === "draft") {
-            hideSessionRetry();
-        }
+        hideResolvedDraftRetry();
     }
     setTextIfChanged(sessionStatus, message);
 }
@@ -715,6 +719,7 @@ async function syncDraftField(
             if (response.status === 204) {
                 failedDraftFields.delete(field);
                 retryableDraftFields.delete(field);
+                hideResolvedDraftRetry();
                 if (input.value === attemptedValue) {
                     return;
                 }

@@ -450,6 +450,11 @@ function invalidateDraftSync() {
 function draftSyncIsCurrent(secret, generation) {
     return sessionSecret === secret && draftSyncGeneration === generation;
 }
+function hideResolvedDraftRetry() {
+    if (retryableDraftFields.size === 0 && retryPurpose === "draft") {
+        hideSessionRetry();
+    }
+}
 function recordDraftSyncFailure(field, message, retryable = false) {
     failedDraftFields.add(field);
     if (retryable) {
@@ -458,9 +463,7 @@ function recordDraftSyncFailure(field, message, retryable = false) {
     }
     else {
         retryableDraftFields.delete(field);
-        if (retryableDraftFields.size === 0 && retryPurpose === "draft") {
-            hideSessionRetry();
-        }
+        hideResolvedDraftRetry();
     }
     setTextIfChanged(sessionStatus, message);
 }
@@ -603,6 +606,7 @@ async function syncDraftField(field, input, secret) {
             if (response.status === 204) {
                 failedDraftFields.delete(field);
                 retryableDraftFields.delete(field);
+                hideResolvedDraftRetry();
                 if (input.value === attemptedValue) {
                     return;
                 }

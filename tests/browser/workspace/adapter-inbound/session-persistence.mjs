@@ -304,6 +304,83 @@ test(
 );
 
 
+test("retry control follows remaining retryable draft failures", async () => {
+    const source = await readFile(MAIN_MODULE, "utf8");
+    function extract(start, end) {
+        const first = source.indexOf(start);
+        const last = source.indexOf(end, first);
+        assert.ok(first >= 0 && last > first, `missing ${start}`);
+        return source.slice(first, last);
+    }
+    const retryControls = extract(
+        "function showSessionRetry(purpose) {",
+        "function clearSessionText() {",
+    );
+    const recordFailure = extract(
+        "function hideResolvedDraftRetry() {",
+        "function invalidateUnauthorizedSession() {",
+    );
+    const synchronize = extract(
+        "async function syncDraftField(",
+        "function bindDraftSync(",
+    );
+    for (const secondary of [
+        { retryable: false, message: "Draft too large" },
+        { retryable: true, message: "Draft offline source" },
+    ]) {
+        const result = await runInNewContext(`
+        (async () => {
+            let retryPurpose = null;
+            const retrySession = { hidden: true, disabled: true };
+            const sessionStatus = { textContent: "" };
+            const sessionSecret = "secret";
+            const draftSyncGeneration = 0;
+            const failedDraftFields = new Set();
+            const retryableDraftFields = new Set();
+            const syncingDraftFields = new Set();
+            const sessionRequests = { signal: {} };
+            const sessionDraft = {
+                draftMutationTarget: () => "./api/session/task",
+                draftMutationHeaders: () => ({}),
+            };
+            function setTextIfChanged(element, value) {
+                element.textContent = value;
+            }
+            function draftSyncIsCurrent(secret, generation) {
+                return sessionSecret === secret
+                    && draftSyncGeneration === generation;
+            }
+            ${retryControls}
+            ${recordFailure}
+            ${synchronize}
+            recordDraftSyncFailure("task", "Draft offline", true);
+            recordDraftSyncFailure(
+                "source", secondary.message, secondary.retryable,
+            );
+            const visibleBefore = !retrySession.hidden;
+            await syncDraftField("task", { value: "recovered" }, "secret");
+            return JSON.stringify({
+                visibleBefore,
+                visibleAfter: !retrySession.hidden,
+                retryableFields: [...retryableDraftFields],
+                failedFields: [...failedDraftFields],
+                status: sessionStatus.textContent,
+            });
+        })()
+        `, {
+            secondary,
+            fetch: async () => ({ status: 204 }),
+        });
+        assert.deepEqual(JSON.parse(result), {
+            visibleBefore: true,
+            visibleAfter: secondary.retryable,
+            retryableFields: secondary.retryable ? ["source"] : [],
+            failedFields: ["source"],
+            status: secondary.message,
+        });
+    }
+});
+
 test("page session network requests are cancellable on exit", async () => {
     const source = await readFile(MAIN_MODULE, "utf8");
     const signalUses = source.match(/signal: sessionRequests\.signal,/gu) ?? [];

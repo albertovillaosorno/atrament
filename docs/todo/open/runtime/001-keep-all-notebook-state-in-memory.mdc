@@ -134,3 +134,10 @@ response emission, and draft state in the same connection. Authenticated
 missing or unrelated media types receive 400 and preserve the full private
 draft, while the expected UTF-8 text media type receives 204 and replaces only
 the task field.
+
+The browser draft retry control now hides as soon as its final retryable
+field succeeds, even when a different field remains blocked by a non-retryable
+error. A red-first runtime-extracted browser fixture reproduced the stale
+button with zero retryable fields, then verified that another outstanding
+retryable field keeps the control available. The terminal failure and its
+status remain visible; no failed draft is silently declared synchronized.
