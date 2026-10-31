@@ -3044,6 +3044,65 @@ fn draft_media_type_name_and_value_refuse_every_altered_byte() {
 }
 
 #[test]
+fn loopback_draft_mutation_requires_declared_utf8_text_media_type() {
+    for (media_type, accepted) in [
+        ("", false),
+        ("Content-Type: application/json\r\n", false),
+        ("Content-Type: text/plain; charset=utf-8\r\n", true),
+    ] {
+        let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0))
+            .expect("ephemeral loopback listener binds");
+        let address = listener.local_addr()
+            .expect("test listener address");
+        let host = format!("127.0.0.1:{}", address.port());
+        let origin = format!("http://{host}");
+        let request = format!(
+            concat!(
+                "POST /api/session/task HTTP/1.1\r\n",
+                "Host: {}\r\nOrigin: {}\r\n",
+                "Authorization: Bearer {}\r\n",
+                "{}Content-Length: 1\r\n\r\nx",
+            ),
+            host, origin, EXPECTED_SECRET, media_type,
+        );
+        let mut client = TcpStream::connect(address)
+            .expect("test client connects");
+        client.set_read_timeout(Some(Duration::from_secs(1)))
+            .expect("client response deadline configures");
+        client.write_all(request.as_bytes())
+            .expect("test request writes");
+        let (mut server, _) = listener.accept()
+            .expect("test server accepts");
+        runtime::configure_connection_deadline(&server)
+            .expect("server deadline configures");
+        let context = runtime::RouteRequestContext::new(
+            &host, &origin, EXPECTED_SECRET, &HANDSHAKE,
+        );
+        let mut draft = seeded_private_draft();
+        assert!(!runtime::serve_connection(&mut server, &context, &mut draft)
+            .expect("one request receives a response"));
+        drop(server);
+        let mut response = Vec::new();
+        let _count = client.read_to_end(&mut response)
+            .expect("server response reads to EOF");
+        assert_eq!(
+            status_line(&response),
+            if accepted {
+                "HTTP/1.1 204 No Content"
+            } else {
+                "HTTP/1.1 400 Bad Request"
+            },
+            "media type {media_type:?}",
+        );
+        if accepted {
+            assert_eq!(draft.value(DraftField::Task), "x");
+        } else {
+            assert_private_draft_unchanged(&draft);
+        }
+    }
+}
+
+#[test]
 fn authenticated_draft_mutations_replace_only_requested_field() {
     let authorization = format!("Bearer {EXPECTED_SECRET}");
     let cases = [

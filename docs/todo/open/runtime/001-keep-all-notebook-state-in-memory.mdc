@@ -128,3 +128,9 @@ A deterministic byte-mutation regression now varies every byte of the
 authenticated draft `Content-Type` field name and declared media type. Only
 case-equivalent spelling is admitted; every other mutation leaves all
 session-owned draft fields intact, including an existing task value.
+
+An independent loopback socket regression exercises request framing,
+response emission, and draft state in the same connection. Authenticated
+missing or unrelated media types receive 400 and preserve the full private
+draft, while the expected UTF-8 text media type receives 204 and replaces only
+the task field.
