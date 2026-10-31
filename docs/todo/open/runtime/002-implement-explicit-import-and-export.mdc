@@ -89,6 +89,12 @@ secure anonymous staging refuses rather than leaking partial files on crash.
 The adapter refuses observed symlinks and nonregular replacement targets,
 cleans any late-linked replacement staging path on ordinary refusal, and
 distinguishes an uncertain post-link/rename sync failure from no commit.
+
+It also rejects embedded-NUL target paths during preflight, before a
+cancellation callback or any filesystem access, in both preservation and
+replacement modes. This protects direct low-level callers independently of
+the higher-level path-intent classifier.
+
 Real-file regressions cover complete writes, conflicts, replacement, traversal,
 links, byte ceilings, opaque names and concurrent preserve writers. Two
 post-preflight replacement-swap tests now show that a symlink is replaced

@@ -171,6 +171,7 @@ where
         return Err(ProfileFileCommitError::ArtifactTooLarge);
     }
     if target.file_name().is_none()
+        || target.as_os_str().as_encoded_bytes().contains(&0)
         || target.as_os_str().as_encoded_bytes().ends_with(b"/")
         || target.as_os_str().as_encoded_bytes().ends_with(b"/.")
         || target.as_os_str().as_encoded_bytes().ends_with(b"/..")

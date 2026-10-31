@@ -519,6 +519,37 @@ mod linux {
     }
 
     #[test]
+    fn embedded_nul_target_refuses_before_cancellation_or_file_io() {
+        use std::os::unix::ffi::OsStringExt as _;
+
+        let dir = OwnedDir::new();
+        for name in [
+            b"bad\0name.atrament".as_slice(),
+            b"part\0name/file".as_slice(),
+        ] {
+            let target = dir.0.join(OsString::from_vec(name.to_vec()));
+            for mode in [Mode::PreserveExisting, Mode::ReplaceExisting] {
+                let mut cancellation_checks = 0usize;
+                assert_eq!(
+                    commit_profile_file_cancellable(
+                        &target,
+                        b"private profile bytes",
+                        21,
+                        mode,
+                        || {
+                            cancellation_checks += 1;
+                            false
+                        },
+                    ),
+                    Err(Error::InvalidTarget),
+                );
+                assert_eq!(cancellation_checks, 0);
+            }
+        }
+        assert!(dir.entries().is_empty());
+    }
+
+    #[test]
     fn cancellation_preflight_refuses_without_file_io() {
         let dir = OwnedDir::new();
         let target = dir.target();
