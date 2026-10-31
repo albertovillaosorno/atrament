@@ -867,3 +867,19 @@ secure selected-file Import verifier independently authenticates both exact
 member bytes and archive identity from that committed file. Replacing it
 externally with another valid same-size archive changes the admitted section
 but cannot turn same-key Export recovery into a receipt or another write.
+
+A deterministic Linux Export regression now renames and replaces the selected
+parent after its directory descriptor has been opened and the anonymous output
+fully synced, but before the final file link. The low-level commit reopens the
+selected parent and compares device/inode before linking, so preserve-existing
+and explicit replacement both refuse with `SelectedParentChanged` without
+leaving a named output or damaging the moved original. The process-scoped
+Export session retains this as a known no-commit attempt: same-key replay still
+cannot write, while a fresh independently admitted key can export to the new
+selected directory. A second parent identity observation after directory sync
+classifies path drift as `CommittedPathUnverified`, which is treated as an
+uncertain prior effect rather than a successful receipt or retry permission.
+
+These checks narrow the observable directory-rename race; they do not lock an
+external pathname, prevent changes after either check, or solve the brief
+replacement link-before-rename crash window that can leave a named stage.

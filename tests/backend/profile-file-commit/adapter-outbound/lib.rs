@@ -293,6 +293,76 @@ mod linux {
     }
 
     #[test]
+    fn effect_classification_exhaustively_distinguishes_postcommit_errors() {
+        assert!(Error::CommittedDurabilityUnknown(io::ErrorKind::Other)
+            .may_have_committed());
+        assert!(Error::CommittedPathUnverified.may_have_committed());
+        for no_effect in [
+            Error::ArtifactTooLarge,
+            Error::CancelledBeforeCommit,
+            Error::FileIo(io::ErrorKind::Other),
+            Error::InvalidExistingTarget,
+            Error::InvalidTarget,
+            Error::RandomUnavailable,
+            Error::SelectedParentChanged,
+            Error::TargetExists,
+            Error::UnsupportedPlatform,
+        ] {
+            assert!(!no_effect.may_have_committed(), "{no_effect:?}");
+        }
+    }
+
+    #[test]
+    fn renamed_selected_parent_never_reports_success_for_another_directory() {
+        for disposition in [Mode::PreserveExisting, Mode::ReplaceExisting] {
+            let dir = OwnedDir::new();
+            let selected_parent = dir.0.join("selected");
+            let relocated_parent = dir.0.join("relocated");
+            fs::create_dir_all(&selected_parent).expect("selected parent");
+            let target = selected_parent.join("chosen.atrament");
+            if disposition == Mode::ReplaceExisting {
+                fs::write(&target, b"old").expect("original target");
+            }
+            let mut observations = 0usize;
+            let outcome = commit_profile_file_cancellable(
+                &target,
+                b"new complete artifact",
+                64,
+                disposition,
+                || {
+                    observations += 1;
+                    if observations == 3 {
+                        // Deterministic race after the directory was opened
+                        // and the anonymous file fully synced, before link.
+                        fs::rename(&selected_parent, &relocated_parent)
+                            .expect("move original selected directory");
+                        fs::create_dir_all(&selected_parent)
+                            .expect("replace selected directory");
+                    }
+                    false
+                },
+            );
+            assert_eq!(outcome, Err(Error::SelectedParentChanged));
+            assert_eq!(observations, 3);
+            assert!(!target.exists());
+            assert_eq!(fs::read_dir(&selected_parent).expect("new directory").count(), 0);
+            let original_in_relocated = relocated_parent.join("chosen.atrament");
+            if disposition == Mode::ReplaceExisting {
+                assert_eq!(
+                    fs::read(&original_in_relocated).expect("original unchanged"),
+                    b"old"
+                );
+            } else {
+                assert!(!original_in_relocated.exists());
+            }
+            assert_eq!(
+                fs::read_dir(&relocated_parent).expect("no staged output").count(),
+                usize::from(disposition == Mode::ReplaceExisting),
+            );
+        }
+    }
+
+    #[test]
     fn refused_oversize_preserves_target_without_creating_intermediate() {
         let dir = OwnedDir::new();
         let target = dir.target();

@@ -63,6 +63,8 @@ pub enum ProfileFileCommitError {
     CancelledBeforeCommit,
     /// The target changed but directory sync did not prove durability.
     CommittedDurabilityUnknown(io::ErrorKind),
+    /// A committed file may no longer resolve through its selected parent.
+    CommittedPathUnverified,
     /// Initial staging, commit I/O or cleanup failed.
     FileIo(io::ErrorKind),
     /// Existing replacement target is a link or non-regular file.
@@ -71,10 +73,36 @@ pub enum ProfileFileCommitError {
     InvalidTarget,
     /// Random staging name generation failed.
     RandomUnavailable,
+    /// The selected parent was replaced before any permanent file effect.
+    SelectedParentChanged,
     /// Existing target conflicts with preserve-existing intent.
     TargetExists,
     /// Secure operation is unavailable on this platform.
     UnsupportedPlatform,
+}
+
+impl ProfileFileCommitError {
+    /// Whether this refusal may follow a permanent directory-entry effect.
+    ///
+    /// Caller retry journals must retain uncertainty for these outcomes,
+    /// never record an ordinary no-commit refusal. Exhaustive matching makes
+    /// future transport error kinds choose their effect classification.
+    #[must_use]
+    pub const fn may_have_committed(self) -> bool {
+        match self {
+            Self::CommittedDurabilityUnknown(_)
+            | Self::CommittedPathUnverified => true,
+            Self::ArtifactTooLarge
+            | Self::CancelledBeforeCommit
+            | Self::FileIo(_)
+            | Self::InvalidExistingTarget
+            | Self::InvalidTarget
+            | Self::RandomUnavailable
+            | Self::SelectedParentChanged
+            | Self::TargetExists
+            | Self::UnsupportedPlatform => false,
+        }
+    }
 }
 
 /// A successful exact, synced file commit (not an application Export receipt).
@@ -138,8 +166,11 @@ pub fn commit_profile_file(
 ///
 /// A caller-supplied predicate is checked after byte/path preflight and before
 /// any filesystem effects, before each 64 KiB write, and after file sync just
-/// before the first permanent directory entry is created. Linux stages bytes
-/// through `O_TMPFILE`, so cancellation or process death during writing cannot
+/// before the first permanent directory entry is created. The selected parent
+/// is reopened before linking and after directory sync; device/inode drift
+/// before the link refuses without effect, while post-link drift is uncertain.
+/// Linux stages bytes through `O_TMPFILE`, so cancellation or process death
+/// during writing cannot
 /// leave a named temporary file. Preserve-existing links the completed file
 /// directly to the chosen target; replacement links a random sibling for the
 /// shortest possible rename window. Crash after that link but before rename
@@ -150,8 +181,11 @@ pub fn commit_profile_file(
 /// A predicate that becomes true **after** the final check cannot revoke a
 /// completed commit. A directory-sync failure after linking/rename remains
 /// uncertain; the caller must not blindly retry.
-/// Only Linux has the secure directory-relative implementation. Other
-/// platforms refuse without a weak fallback.
+/// Pathname checks reduce the rename/replacement window but cannot lock an
+/// external pathname: a concurrent actor can still move the directory after
+/// either observation, and a failed postcommit observation does not undo a
+/// preceding file effect. Only Linux has the secure directory-relative
+/// implementation. Other platforms refuse without a weak fallback.
 ///
 /// # Errors
 ///
@@ -198,6 +232,32 @@ fn commit_platform(
     _is_cancelled: &mut dyn FnMut() -> bool,
 ) -> Result<(), ProfileFileCommitError> {
     Err(ProfileFileCommitError::UnsupportedPlatform)
+}
+
+#[cfg(target_os = "linux")]
+fn selected_parent_is_same_directory(
+    root: &File,
+    parent_path: &Path,
+    selected_directory: &File,
+) -> bool {
+    use nix::fcntl::{OFlag, OpenHow, ResolveFlag, openat2};
+    use std::os::unix::fs::MetadataExt as _;
+
+    let how = OpenHow::new()
+        .flags(OFlag::O_RDONLY | OFlag::O_DIRECTORY | OFlag::O_CLOEXEC)
+        .resolve(
+            ResolveFlag::RESOLVE_BENEATH | ResolveFlag::RESOLVE_NO_SYMLINKS,
+        );
+    let Ok(reopened) = openat2(root, parent_path, how) else {
+        return false;
+    };
+    let Ok(original) = selected_directory.metadata() else {
+        return false;
+    };
+    let Ok(current) = File::from(reopened).metadata() else {
+        return false;
+    };
+    original.dev() == current.dev() && original.ino() == current.ino()
 }
 
 #[cfg(target_os = "linux")]
@@ -308,6 +368,11 @@ fn commit_platform(
     if is_cancelled() {
         return Err(ProfileFileCommitError::CancelledBeforeCommit);
     }
+    // The selected directory may have been renamed/replaced during staging.
+    // Do not link the anonymous inode to a detached, now-unselected parent.
+    if !selected_parent_is_same_directory(&root, directory_path, &directory) {
+        return Err(ProfileFileCommitError::SelectedParentChanged);
+    }
 
     match disposition {
         ProfileFileCommitDisposition::PreserveExisting => {
@@ -382,5 +447,11 @@ fn commit_platform(
     directory.sync_all().map_err(|error| {
         ProfileFileCommitError::CommittedDurabilityUnknown(error.kind())
     })?;
+    // Path resolution is external mutable state. Recheck after the file
+    // effect: if its parent moved since the precommit check, never issue a
+    // success receipt for an output no longer at the selected pathname.
+    if !selected_parent_is_same_directory(&root, directory_path, &directory) {
+        return Err(ProfileFileCommitError::CommittedPathUnverified);
+    }
     Ok(())
 }

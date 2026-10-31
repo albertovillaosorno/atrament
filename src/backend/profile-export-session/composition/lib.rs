@@ -318,11 +318,7 @@ impl ProfileExportSession {
                         ))
                     }
                     Err(error) => {
-                        use ProfileFileCommitError::CommittedDurabilityUnknown;
-
-                        let durability_unknown = matches!(
-                            error, CommittedDurabilityUnknown(_)
-                        );
+                        let durability_unknown = error.may_have_committed();
                         attempt.effect = if durability_unknown {
                             ProfileExportPriorEffect::DurabilityUnknown
                         } else {

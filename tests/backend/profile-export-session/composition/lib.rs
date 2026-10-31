@@ -293,6 +293,67 @@ mod linux {
     }
 
     #[test]
+    fn selected_parent_replacement_refuses_receipt_and_same_key_replay() {
+        for overwrite in [PreserveExisting, ReplaceExisting] {
+            let root = fixture();
+            let selected_parent = root.0.join("selected");
+            let relocated_parent = root.0.join("relocated");
+            fs::create_dir_all(&selected_parent).expect("selected parent");
+            let chosen = selected_parent.join("profile.atrament");
+            if overwrite == ReplaceExisting {
+                fs::write(&chosen, b"original").expect("original file");
+            }
+            let request = intent(chosen.clone(), overwrite);
+            let original = artifact("writer-parent-drift");
+            let accepted = revision();
+            let mut session = ProfileExportSession::new(2);
+            let mut observations = 0usize;
+            let refused = session.export_cancellable(
+                "first-key",
+                accepted,
+                &request,
+                &original,
+                original.bytes().len(),
+                || {
+                    observations += 1;
+                    if observations == 3 {
+                        fs::rename(&selected_parent, &relocated_parent)
+                            .expect("relocate selected directory");
+                        fs::create_dir_all(&selected_parent)
+                            .expect("replace selected directory");
+                    }
+                    false
+                },
+            );
+            assert_eq!(
+                refused,
+                Err(Error::Commit(ProfileFileCommitError::SelectedParentChanged)),
+            );
+            assert_eq!(observations, 3);
+            assert_eq!(session.len(), 1);
+            assert!(!chosen.exists());
+            let relocated = relocated_parent.join("profile.atrament");
+            if overwrite == ReplaceExisting {
+                assert_eq!(fs::read(&relocated).expect("original"), b"original");
+            } else {
+                assert!(!relocated.exists());
+            }
+            assert_eq!(
+                session.export("first-key", accepted, &request, &original, 8192),
+                Err(Error::Retry(
+                    ProfileExportRetryRecoveryDecision::PriorKnownNoCommit
+                )),
+            );
+            assert!(!chosen.exists());
+            assert!(matches!(
+                session.export("fresh-key", accepted, &request, &original, 8192),
+                Ok(Outcome::Committed(_)),
+            ));
+            assert_eq!(fs::read(&chosen).expect("new authorized effect"), original.bytes());
+        }
+    }
+
+    #[test]
     fn drift_and_link_swap_refuse_replace_retry() {
         let root = fixture();
         let chosen = root.0.join("selected.atrament");
