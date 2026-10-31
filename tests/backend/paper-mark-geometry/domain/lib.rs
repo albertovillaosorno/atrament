@@ -35,10 +35,16 @@
 
 //! Paper mark geometry regression tests.
 
+#![expect(
+    clippy::expect_used,
+    clippy::panic,
+    reason = "known bounded geometry fixtures must fail fast on wrong variants"
+)]
+
 use atrament_paper_mark_geometry::{
-    AxisSeries, GeometryError, PaperMarkGeometry, ProfilePaperMarksError,
-    RulerOffset, RulerSample, RulerSampleError, compile_nominal_marks,
-    compile_profile_marks, validate_ruler_sample, validate_ruler_sample_view,
+    compile_nominal_marks, compile_profile_marks, validate_ruler_sample,
+    validate_ruler_sample_view, AxisSeries, GeometryError, PaperMarkGeometry,
+    ProfilePaperMarksError, RulerOffset, RulerSample, RulerSampleError,
 };
 use atrament_physical_page_profile::{
     BindingEdge, BorderShape, Length, Orientation, PageProfile,
@@ -48,7 +54,7 @@ use atrament_physical_page_profile::{
 
 const FIVE_MM: Length = Length::from_micrometres(5_000);
 
-fn page_profile() -> PageProfile {
+const fn page_profile() -> PageProfile {
     PageProfile {
         binding_edge: BindingEdge::Left,
         border_shape: BorderShape::Rectangle,
@@ -75,7 +81,7 @@ fn page_profile() -> PageProfile {
     }
 }
 
-fn region() -> Rect {
+const fn region() -> Rect {
     Rect {
         height: Length::from_micrometres(12_000),
         width: Length::from_micrometres(17_000),
@@ -84,7 +90,7 @@ fn region() -> Rect {
     }
 }
 
-fn rounded_appearance(maximum_error: Length) -> PaperMarkAppearance {
+const fn rounded_appearance(maximum_error: Length) -> PaperMarkAppearance {
     PaperMarkAppearance {
         join: PaperMarkJoin::Rounded {
             radius: Length::from_micrometres(250),
@@ -93,7 +99,7 @@ fn rounded_appearance(maximum_error: Length) -> PaperMarkAppearance {
     }
 }
 
-fn next_mark_value(seed: &mut u64) -> u64 {
+const fn next_mark_value(seed: &mut u64) -> u64 {
     *seed = seed
         .wrapping_mul(6_364_136_223_846_793_005)
         .wrapping_add(1_442_695_040_888_963_407);
@@ -107,8 +113,14 @@ fn assert_axis_series(
     spacing: u64,
     case: usize,
 ) {
-    let expected_count = extent / spacing + 1;
-    let expected_last = first + spacing * (expected_count - 1);
+    assert_ne!(spacing, 0, "case {case} nonzero nominal spacing");
+    let expected_count = extent
+        .checked_div(spacing)
+        .unwrap_or_default()
+        .saturating_add(1);
+    let expected_last = first.saturating_add(
+        spacing.saturating_mul(expected_count.saturating_sub(1)),
+    );
     assert_eq!(series.first, Length::from_micrometres(first), "case {case}");
     assert_eq!(
         series.spacing,
@@ -122,7 +134,7 @@ fn assert_axis_series(
         "case {case}",
     );
     assert_eq!(
-        series.coordinate(expected_count - 1),
+        series.coordinate(expected_count.saturating_sub(1)),
         Some(Length::from_micrometres(expected_last)),
         "case {case}",
     );
@@ -132,14 +144,14 @@ fn assert_axis_series(
 #[test]
 fn repeated_marks_match_compact_series_reference_oracle() {
     const CASES: usize = 20_000;
-    let mut seed = 0x5eed_6a1d_2026_u64;
+    let mut seed = 0x5eed_6a1d_2026u64;
     let mut seen_patterns = [false; 3];
     for case in 0..CASES {
-        let x = next_mark_value(&mut seed) % 1_000;
-        let y = next_mark_value(&mut seed) % 1_000;
-        let width = next_mark_value(&mut seed) % 1_000 + 1;
-        let height = next_mark_value(&mut seed) % 1_000 + 1;
-        let spacing = next_mark_value(&mut seed) % 200 + 1;
+        let x = next_mark_value(&mut seed).rem_euclid(1_000);
+        let y = next_mark_value(&mut seed).rem_euclid(1_000);
+        let width = next_mark_value(&mut seed).rem_euclid(1_000) + 1;
+        let height = next_mark_value(&mut seed).rem_euclid(1_000) + 1;
+        let spacing = next_mark_value(&mut seed).rem_euclid(200) + 1;
         let region = Rect {
             height: Length::from_micrometres(height),
             width: Length::from_micrometres(width),
@@ -147,24 +159,30 @@ fn repeated_marks_match_compact_series_reference_oracle() {
             y: Length::from_micrometres(y),
         };
         let spacing_length = Length::from_micrometres(spacing);
-        let pattern_index = (next_mark_value(&mut seed) % 3) as usize;
-        seen_patterns[pattern_index] = true;
+        let pattern_index =
+            usize::try_from(next_mark_value(&mut seed).rem_euclid(3))
+                .expect("modulo-three pattern ordinal fits usize");
+        if let Some(seen) = seen_patterns.get_mut(pattern_index) {
+            *seen = true;
+        }
         match pattern_index {
             0 => {
-                let PaperMarkGeometry::Dotted { horizontal, vertical } =
-                    compile_nominal_marks(
-                        region,
-                        PaperPattern::Dotted {
-                            spacing: spacing_length,
-                        },
-                    )
-                    .expect("generated dotted geometry")
+                let PaperMarkGeometry::Dotted {
+                    horizontal,
+                    vertical,
+                } = compile_nominal_marks(
+                    region,
+                    PaperPattern::Dotted {
+                        spacing: spacing_length,
+                    },
+                )
+                .expect("generated dotted geometry")
                 else {
                     panic!("generated dotted case must remain dotted");
                 };
                 assert_axis_series(horizontal, y, height, spacing, case);
                 assert_axis_series(vertical, x, width, spacing, case);
-            },
+            }
             1 => {
                 let PaperMarkGeometry::Ruled { horizontal, span } =
                     compile_nominal_marks(
@@ -179,8 +197,11 @@ fn repeated_marks_match_compact_series_reference_oracle() {
                 };
                 assert_axis_series(horizontal, y, height, spacing, case);
                 assert_eq!(span.start, Length::from_micrometres(x));
-                assert_eq!(span.end, Length::from_micrometres(x + width));
-            },
+                assert_eq!(
+                    span.end,
+                    Length::from_micrometres(x.saturating_add(width))
+                );
+            }
             _ => {
                 let PaperMarkGeometry::Squared {
                     horizontal,
@@ -202,14 +223,14 @@ fn repeated_marks_match_compact_series_reference_oracle() {
                 assert_eq!(horizontal_span.start, Length::from_micrometres(x));
                 assert_eq!(
                     horizontal_span.end,
-                    Length::from_micrometres(x + width),
+                    Length::from_micrometres(x.saturating_add(width)),
                 );
                 assert_eq!(vertical_span.start, Length::from_micrometres(y));
                 assert_eq!(
                     vertical_span.end,
-                    Length::from_micrometres(y + height),
+                    Length::from_micrometres(y.saturating_add(height)),
                 );
-            },
+            }
         }
     }
     assert!(seen_patterns.into_iter().all(|seen| seen));
@@ -218,17 +239,18 @@ fn repeated_marks_match_compact_series_reference_oracle() {
 #[test]
 fn ruler_samples_match_bounded_reference_oracle() {
     const CASES: usize = 20_000;
-    let mut seed = 0x5eed_7a1e_2026_u64;
+    let mut seed = 0x5eed_7a1e_2026u64;
     let mut saw_outside_span = false;
     let mut saw_error_bound = false;
     let mut saw_valid = false;
     for case in 0..CASES {
-        let maximum = next_mark_value(&mut seed) % 501;
-        let line_length = next_mark_value(&mut seed) % 1_001;
-        let along = next_mark_value(&mut seed) % 1_201;
-        let signed = i64::try_from(next_mark_value(&mut seed) % 1_401)
-            .expect("small generated offset")
-            - 700;
+        let maximum = next_mark_value(&mut seed).rem_euclid(501);
+        let line_length = next_mark_value(&mut seed).rem_euclid(1_001);
+        let along = next_mark_value(&mut seed).rem_euclid(1_201);
+        let signed =
+            i64::try_from(next_mark_value(&mut seed).rem_euclid(1_401))
+                .expect("small generated offset")
+                .saturating_sub(700);
         let sample = RulerSample {
             along: Length::from_micrometres(along),
             normal_offset: RulerOffset::from_micrometres(signed),
@@ -247,21 +269,20 @@ fn ruler_samples_match_bounded_reference_oracle() {
             saw_valid = true;
             Ok(sample)
         };
-        let line_length = Length::from_micrometres(line_length);
+        let typed_line_length = Length::from_micrometres(line_length);
         assert_eq!(
-            validate_ruler_sample(sample, line_length, appearance),
+            validate_ruler_sample(sample, typed_line_length, appearance),
             expected,
             "ruler oracle mismatch in generated case {case}",
         );
         assert_eq!(
-            validate_ruler_sample_view(sample, line_length, appearance).map(
-                |validated| (
+            validate_ruler_sample_view(sample, typed_line_length, appearance)
+                .map(|validated| (
                     validated.sample(),
                     validated.line_length(),
                     validated.appearance(),
-                ),
-            ),
-            expected.map(|admitted| (admitted, line_length, appearance)),
+                ),),
+            expected.map(|admitted| (admitted, typed_line_length, appearance)),
             "sealed ruler oracle mismatch in generated case {case}",
         );
     }
@@ -288,11 +309,16 @@ fn custom_paper_requires_profile_owned_geometry() {
 
 #[test]
 fn dotted_geometry_uses_exact_independent_axis_series() {
-    let geometry = compile_nominal_marks(region(), PaperPattern::Dotted {
-        spacing: FIVE_MM,
-    })
+    let geometry = compile_nominal_marks(
+        region(),
+        PaperPattern::Dotted { spacing: FIVE_MM },
+    )
     .expect("dotted geometry");
-    let PaperMarkGeometry::Dotted { horizontal, vertical } = geometry else {
+    let PaperMarkGeometry::Dotted {
+        horizontal,
+        vertical,
+    } = geometry
+    else {
         panic!("fixture must compile as dotted geometry");
     };
 
@@ -319,9 +345,10 @@ fn dotted_geometry_uses_exact_independent_axis_series() {
 
 #[test]
 fn ruled_geometry_preserves_full_horizontal_span_and_nominal_spacing() {
-    let geometry = compile_nominal_marks(region(), PaperPattern::Ruled {
-        spacing: FIVE_MM,
-    })
+    let geometry = compile_nominal_marks(
+        region(),
+        PaperPattern::Ruled { spacing: FIVE_MM },
+    )
     .expect("ruled geometry");
     let PaperMarkGeometry::Ruled { horizontal, span } = geometry else {
         panic!("fixture must compile as ruled geometry");
@@ -334,9 +361,10 @@ fn ruled_geometry_preserves_full_horizontal_span_and_nominal_spacing() {
 
 #[test]
 fn squared_grid_keeps_identical_spacing_on_both_nominal_axes() {
-    let geometry = compile_nominal_marks(region(), PaperPattern::Squared {
-        spacing: FIVE_MM,
-    })
+    let geometry = compile_nominal_marks(
+        region(),
+        PaperPattern::Squared { spacing: FIVE_MM },
+    )
     .expect("squared geometry");
     let PaperMarkGeometry::Squared {
         horizontal,
@@ -366,9 +394,10 @@ fn squared_grid_keeps_identical_spacing_on_both_nominal_axes() {
 
 #[test]
 fn ruler_deviation_is_bounded_without_mutating_nominal_grid_anchors() {
-    let geometry = compile_nominal_marks(region(), PaperPattern::Squared {
-        spacing: FIVE_MM,
-    })
+    let geometry = compile_nominal_marks(
+        region(),
+        PaperPattern::Squared { spacing: FIVE_MM },
+    )
     .expect("squared geometry");
     let sample = RulerSample {
         along: Length::from_micrometres(8_000),
@@ -386,9 +415,10 @@ fn ruler_deviation_is_bounded_without_mutating_nominal_grid_anchors() {
     );
     assert_eq!(
         geometry,
-        compile_nominal_marks(region(), PaperPattern::Squared {
-            spacing: FIVE_MM
-        },)
+        compile_nominal_marks(
+            region(),
+            PaperPattern::Squared { spacing: FIVE_MM },
+        )
         .expect("same nominal geometry"),
     );
 }
@@ -500,9 +530,13 @@ fn sealed_ruler_sample_preserves_all_typed_rejections() {
             RulerSampleError::ErrorBoundExceeded,
         ),
     ];
-    for (sample, appearance, expected) in cases {
+    for (sample, candidate_appearance, expected) in cases {
         assert_eq!(
-            validate_ruler_sample_view(sample, line_length, appearance),
+            validate_ruler_sample_view(
+                sample,
+                line_length,
+                candidate_appearance
+            ),
             Err(expected),
         );
     }
@@ -517,9 +551,12 @@ fn invalid_region_and_spacing_fail_without_partial_geometry() {
         Err(GeometryError::EmptyRegion),
     );
     assert_eq!(
-        compile_nominal_marks(region(), PaperPattern::Ruled {
-            spacing: Length::ZERO,
-        },),
+        compile_nominal_marks(
+            region(),
+            PaperPattern::Ruled {
+                spacing: Length::ZERO,
+            },
+        ),
         Err(GeometryError::SpacingIsZero),
     );
 
@@ -544,9 +581,12 @@ fn compact_series_reports_unrepresentable_anchor_count_instead_of_allocating() {
         y: Length::ZERO,
     };
     assert_eq!(
-        compile_nominal_marks(huge, PaperPattern::Dotted {
-            spacing: Length::from_micrometres(1),
-        },),
+        compile_nominal_marks(
+            huge,
+            PaperPattern::Dotted {
+                spacing: Length::from_micrometres(1),
+            },
+        ),
         Err(GeometryError::RegionOverflow),
     );
 }
@@ -557,7 +597,11 @@ fn profile_plan_keeps_pattern_appearance_and_layer_from_one_profile() {
     let plan = compile_profile_marks(region(), profile).expect("profile marks");
     assert_eq!(plan.appearance, profile.paper_mark_appearance);
     assert_eq!(plan.layer, profile.paper_mark_layer);
-    let PaperMarkGeometry::Squared { horizontal, vertical, .. } = plan.geometry
+    let PaperMarkGeometry::Squared {
+        horizontal,
+        vertical,
+        ..
+    } = plan.geometry
     else {
         panic!("profile pattern must compile as squared geometry");
     };

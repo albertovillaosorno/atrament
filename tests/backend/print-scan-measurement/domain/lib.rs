@@ -34,11 +34,24 @@
 
 //! Print scan measurement domain regression tests.
 
+use std::ptr;
+
 use atrament_print_scan_measurement::{
+    validate_print_scan_evidence, validate_print_scan_evidence_view,
     PrintScanEvidence, PrintScanEvidenceError, PrintScanMeasurement,
-    PrintScanMeasurementKind, validate_print_scan_evidence,
-    validate_print_scan_evidence_view,
+    PrintScanMeasurementKind,
 };
+
+const REQUIRED_KINDS: [PrintScanMeasurementKind; 8] = [
+    PrintScanMeasurementKind::PhysicalScale,
+    PrintScanMeasurementKind::Clipping,
+    PrintScanMeasurementKind::Margins,
+    PrintScanMeasurementKind::GridRegistration,
+    PrintScanMeasurementKind::ColorShift,
+    PrintScanMeasurementKind::PhotoPlacement,
+    PrintScanMeasurementKind::LineWeight,
+    PrintScanMeasurementKind::ScannerDistortion,
+];
 
 #[test]
 fn first_release_pdf_round_trip_measurement_families_are_explicit() {
@@ -61,7 +74,7 @@ fn measurement_retains_source_unit_and_value_without_interpretation() {
         kind: PrintScanMeasurementKind::PhysicalScale,
         source: "printer-a/scanner-b/run-7",
         unit: "caller-owned-ratio-unit",
-        value: (999_u32, 1000_u32),
+        value: (999u32, 1000u32),
     };
     assert_eq!(measurement.source, "printer-a/scanner-b/run-7");
     assert_eq!(measurement.unit, "caller-owned-ratio-unit");
@@ -76,78 +89,67 @@ fn evidence_keeps_output_identity_and_measurement_order() {
                 kind: PrintScanMeasurementKind::GridRegistration,
                 source: "scan-1",
                 unit: "micrometre-like-caller-unit",
-                value: 12_i32,
+                value: 12i32,
             },
             PrintScanMeasurement {
                 kind: PrintScanMeasurementKind::PhotoPlacement,
                 source: "scan-1",
                 unit: "micrometre-like-caller-unit",
-                value: -4_i32,
+                value: -4i32,
             },
         ],
         output_identity: "render-output-22",
     };
     assert_eq!(evidence.output_identity, "render-output-22");
     assert_eq!(
-        evidence.measurements[0].kind,
-        PrintScanMeasurementKind::GridRegistration,
+        evidence.measurements.first().map(|sample| sample.kind),
+        Some(PrintScanMeasurementKind::GridRegistration),
     );
     assert_eq!(
-        evidence.measurements[1].kind,
-        PrintScanMeasurementKind::PhotoPlacement,
+        evidence.measurements.get(1).map(|sample| sample.kind),
+        Some(PrintScanMeasurementKind::PhotoPlacement),
     );
 }
 
-
-const REQUIRED_KINDS: [PrintScanMeasurementKind; 8] = [
-    PrintScanMeasurementKind::PhysicalScale,
-    PrintScanMeasurementKind::Clipping,
-    PrintScanMeasurementKind::Margins,
-    PrintScanMeasurementKind::GridRegistration,
-    PrintScanMeasurementKind::ColorShift,
-    PrintScanMeasurementKind::PhotoPlacement,
-    PrintScanMeasurementKind::LineWeight,
-    PrintScanMeasurementKind::ScannerDistortion,
-];
-
 #[test]
 fn all_256_measurement_presence_masks_match_completeness_oracle() {
-    let mut cases = 0_u16;
+    let mut cases = 0u16;
     let mut saw_complete = false;
     let mut saw_missing = [false; 8];
-    for mask in 0_u16..256 {
+    for mask in 0u16..256 {
         let evidence = PrintScanEvidence {
             measurements: REQUIRED_KINDS
                 .into_iter()
                 .enumerate()
-                .filter_map(|(index, kind)| {
-                    (mask & (1_u16 << index) != 0).then_some(
+                .zip(0u8..)
+                .filter_map(|((index, kind), ordinal)| {
+                    (mask & (1u16 << index) != 0).then_some(
                         PrintScanMeasurement {
                             kind,
-                            source: index as u8,
+                            source: ordinal,
                             unit: (),
-                            value: index as i16,
+                            value: i16::from(ordinal),
                         },
                     )
                 })
                 .collect(),
-            output_identity: 22_u8,
+            output_identity: 22u8,
         };
-        let expected = REQUIRED_KINDS
-            .into_iter()
-            .enumerate()
-            .find_map(|(index, kind)| {
-                (mask & (1_u16 << index) == 0).then_some((index, kind))
-            });
-        let expected_result = match expected {
-            Some((index, kind)) => {
-                saw_missing[index] = true;
-                Err(PrintScanEvidenceError::MissingMeasurement { kind })
-            },
-            None => {
-                saw_complete = true;
-                Ok(())
-            },
+        let expected =
+            REQUIRED_KINDS
+                .into_iter()
+                .enumerate()
+                .find_map(|(index, kind)| {
+                    (mask & (1u16 << index) == 0).then_some((index, kind))
+                });
+        let expected_result = if let Some((index, kind)) = expected {
+            if let Some(seen) = saw_missing.get_mut(index) {
+                *seen = true;
+            }
+            Err(PrintScanEvidenceError::MissingMeasurement { kind })
+        } else {
+            saw_complete = true;
+            Ok(())
         };
         assert_eq!(
             validate_print_scan_evidence(&evidence),
@@ -156,10 +158,15 @@ fn all_256_measurement_presence_masks_match_completeness_oracle() {
         );
         match expected_result {
             Ok(()) => {
-                let validated = validate_print_scan_evidence_view(&evidence)
-                    .expect("complete evidence seals");
-                assert!(std::ptr::eq(validated.evidence(), &evidence));
-            },
+                let validation = validate_print_scan_evidence_view(&evidence);
+                assert!(validation.is_ok(), "complete evidence must seal");
+                if let Ok(sealed) = validation {
+                    assert!(ptr::eq(
+                        sealed.evidence(),
+                        ptr::from_ref(&evidence)
+                    ));
+                }
+            }
             Err(reason) => assert_eq!(
                 validate_print_scan_evidence_view(&evidence),
                 Err(reason),
@@ -178,15 +185,15 @@ fn repeated_measurements_remain_valid_after_complete_coverage() {
     let mut evidence = PrintScanEvidence {
         measurements: REQUIRED_KINDS
             .into_iter()
-            .enumerate()
-            .map(|(index, kind)| PrintScanMeasurement {
+            .zip(0u8..)
+            .map(|(kind, ordinal)| PrintScanMeasurement {
                 kind,
-                source: index as u8,
+                source: ordinal,
                 unit: (),
-                value: index as i16,
+                value: i16::from(ordinal),
             })
             .collect::<Vec<_>>(),
-        output_identity: 22_u8,
+        output_identity: 22u8,
     };
     evidence.measurements.push(PrintScanMeasurement {
         kind: PrintScanMeasurementKind::PhysicalScale,

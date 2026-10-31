@@ -35,7 +35,8 @@
 //! Render manifest domain regression tests.
 
 use atrament_render_manifest::{
-    RenderAppearanceInputs, RenderBehaviorInputs, RenderManifest, RenderSourceInputs,
+    RenderAppearanceInputs, RenderBehaviorInputs, RenderManifest,
+    RenderSourceInputs,
 };
 
 #[test]
@@ -104,14 +105,12 @@ fn manifest_preserves_caller_owned_asset_and_model_order() {
 
 fn next_index_permutation(values: &mut [u8]) -> bool {
     let Some((pivot, pivot_value)) =
-        values
-            .windows(2)
-            .enumerate()
-            .rev()
-            .find_map(|(index, pair)| match pair {
+        values.windows(2).enumerate().rev().find_map(
+            |(index, pair)| match pair {
                 [left, right] if left < right => Some((index, *left)),
                 _ => None,
-            })
+            },
+        )
     else {
         return false;
     };
