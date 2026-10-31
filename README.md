@@ -188,6 +188,7 @@ The present `atrament` binary offers three explicit local profile operations:
 atrament profile verify SOURCE.atrament
 atrament profile inspect SOURCE.atrament
 atrament profile repack SOURCE.atrament NEW-TARGET.atrament
+atrament profile repack --replace SOURCE.atrament EXISTING-TARGET.atrament
 ```
 
 Verification checks a bounded archive, manifest, member digests, and
@@ -196,10 +197,13 @@ revealing profile content. Inspection performs the same checks before
 displaying the manifest and readable sections.
 
 Repack performs those same checks, then writes canonical ZIP bytes to a
-newly selected destination using atomic, synchronized file creation. Repack
-**never overwrites** an existing target; it preserves verified opaque assets
-and unknown optional features. Unsupported required features and malformed
-sections refuse.
+caller-selected destination using atomic, synchronized file creation. By
+default, repack never overwrites an existing target. The explicit `--replace`
+flag authorizes atomic replacement of an existing regular target (including
+the selected source itself), or creation of an absent target, but never follows
+symlinks. Both modes preserve verified opaque assets and unknown
+optional features. Unsupported required features and malformed sections refuse
+without changing an existing target.
 
 These are independent command-line utilities; none accepts typed handwriting
 sections into the active workspace, creates a session Export receipt, or

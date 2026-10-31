@@ -48,19 +48,27 @@ handwriting Import or accepted session state.
 An explicit Linux `atrament profile repack SOURCE TARGET` CLI now composes
 caller-supplied OS argument selections, no-symlink verified source opening,
 full ZIP/manifest/SHA and bounded JSON section verification, in-memory
-canonical reassembly, and a synced atomic preserve-existing file commit. It
-preserves unknown optional features and opaque asset contents; it never
-extracts archive paths as filesystem paths. Failure leaves stdout empty and
-never replaces an existing target. This narrowly reserializes verified source
-bytes at a newly selected destination; it does **not** import typed
-handwriting sections, bind an accepted session revision, or authorize
-notebook/PDF or session-profile Export.
+canonical reassembly, and a synced atomic file commit. It preserves unknown
+optional features and opaque asset contents; it never extracts archive paths
+as filesystem paths. The default command preserves any existing target. An
+explicit positional `--replace` instruction independently authorizes atomic
+replacement of a selected regular target (including the selected source)
+with complete verified bytes, or creation of an absent target; invalid source
+input refuses before any target effect, and no symlink is followed.
+Failures leave stdout empty. This narrowly reserializes verified source bytes
+at a selected destination; it does **not** import typed handwriting sections,
+bind an accepted session revision, or authorize notebook/PDF or session-profile
+Export.
 
 Linux subprocess fixtures separately exercise source-symlink and
 destination-symlink refusal, same-file and pre-existing target
 preservation, malformed late sections, SHA forgery, non-UTF8 destination
 paths, root-only profiles, private output permissions, and byte-for-byte
-canonical repack idempotence.
+canonical repack idempotence. Additional subprocess fixtures exercise
+explicit replacement of a prior target, self-target repack, malformed-source
+replacement refusal with exact target preservation, symlink-victim refusal,
+and extra argument refusal before any source opening. They establish local
+CLI intent only, not session Export authorization.
 
 Current export design evidence freezes accepted-revision binding, caller-owned
 or explicit host-policy output intent, explicit path and overwrite behavior,

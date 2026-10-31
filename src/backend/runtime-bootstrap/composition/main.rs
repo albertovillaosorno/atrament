@@ -18,7 +18,7 @@
 //   - Outputs: Secret-free startup, verification, inspection, or
 //     repack completion.
 //   - Side effects: Stdout/stderr, runtime coordination, verified Import and
-//     caller-selected, preserve-existing canonical profile repack only.
+//     caller-selected, explicit-overwrite canonical profile repack only.
 // - Split-When:
 //   - Profile CLI grows independent typed-section or session policy.
 // - Merge-When:
@@ -28,7 +28,7 @@
 // - Description:
 //   - Keeps cross-adapter orchestration in the process composition root.
 // - Usage:
-//   - Run atrament, profile verify/inspect PATH or repack SRC DEST.
+//   - Run atrament, profile verify/inspect PATH or repack [--replace] SRC DEST.
 // - Defaults:
 //   - Reject unexpected command arguments before opening a browser.
 //   - Never publishes the session credential for manual recovery.
@@ -201,7 +201,8 @@ const fn profile_repack_limits() -> ProfileExportAssemblyLimits {
 /// any output commit. Unknown optional features and opaque asset bytes are
 /// preserved, but no handwriting sections are typed or accepted into session
 /// state. The output is a new canonical archive, not a profile modification
-/// or revision-bound session Export. Existing targets are never overwritten.
+/// or revision-bound session Export. Targets are preserved unless the caller
+/// explicitly supplies `--replace` as a separate CLI overwrite instruction.
 ///
 /// # Errors
 ///
@@ -210,6 +211,7 @@ const fn profile_repack_limits() -> ProfileExportAssemblyLimits {
 pub(crate) fn repack_profile(
     source_path: PathBuf,
     destination_path: PathBuf,
+    overwrite: ExplicitOverwriteIntent,
 ) -> io::Result<()> {
     let source = classify_explicit_file_path_intent(
         ExplicitFilePurpose::ImportProfile,
@@ -224,7 +226,7 @@ pub(crate) fn repack_profile(
         ExplicitFilePurpose::ExportProfile,
         ExplicitFilePathSource::CallerSelection,
         destination_path,
-        ExplicitOverwriteIntent::PreserveExisting,
+        overwrite,
     ).map_err(|error| io::Error::new(
         io::ErrorKind::InvalidInput,
         format!("invalid profile destination: {error:?}"),
@@ -268,7 +270,14 @@ pub(crate) fn repack_profile(
         destination.path(),
         artifact.bytes(),
         PROFILE_INSPECT_MAX_ARCHIVE_BYTES,
-        ProfileFileCommitDisposition::PreserveExisting,
+        match destination.overwrite() {
+            ExplicitOverwriteIntent::PreserveExisting => {
+                ProfileFileCommitDisposition::PreserveExisting
+            }
+            ExplicitOverwriteIntent::ReplaceExisting => {
+                ProfileFileCommitDisposition::ReplaceExisting
+            }
+        },
     ).map_err(|error| io::Error::other(format!(
         "profile repack target refused: {error:?}",
     )))?;
@@ -384,8 +393,8 @@ pub(crate) fn inspect_profile(path: PathBuf) -> io::Result<String> {
 /// # Errors
 ///
 /// Rejects incomplete or unknown arguments before opening a browser. No more
-/// than five arguments are read; failed verification and repack publish no
-/// success message.
+/// than five arguments are read for a default command, or six with explicit
+/// `repack --replace`; failed verification and repack publish no success.
 pub(crate) fn inspect_cli_args(
     args: impl IntoIterator<Item = OsString>,
 ) -> io::Result<Option<String>> {
@@ -408,18 +417,31 @@ pub(crate) fn inspect_cli_args(
                 )));
             }
         }
-        if action.as_deref() == Some(OsStr::new("repack"))
-            && let (Some(repack_source), Some(repack_destination)) =
+        if action.as_deref() == Some(OsStr::new("repack")) {
+            let replace = source.as_deref() == Some(OsStr::new("--replace"));
+            let extra_target = if replace { arguments.next() } else { None };
+            let (candidate_source, candidate_target) = if replace {
+                (destination.as_deref(), extra_target.as_deref())
+            } else {
                 (source.as_deref(), destination.as_deref())
-            && arguments.next().is_none()
-        {
-            repack_profile(
-                PathBuf::from(repack_source),
-                PathBuf::from(repack_destination),
-            )?;
-            return Ok(Some(String::from(
-                "profile repacked (verified; no session import)\n",
-            )));
+            };
+            if let (Some(repack_source), Some(repack_destination)) =
+                (candidate_source, candidate_target)
+                && arguments.next().is_none()
+            {
+                repack_profile(
+                    PathBuf::from(repack_source),
+                    PathBuf::from(repack_destination),
+                    if replace {
+                        ExplicitOverwriteIntent::ReplaceExisting
+                    } else {
+                        ExplicitOverwriteIntent::PreserveExisting
+                    },
+                )?;
+                return Ok(Some(String::from(
+                    "profile repacked (verified; no session import)\n",
+                )));
+            }
         }
     }
     if command.is_none() {
@@ -429,7 +451,7 @@ pub(crate) fn inspect_cli_args(
         io::ErrorKind::InvalidInput,
         concat!(
             "usage: atrament [profile verify PATH | profile inspect PATH | ",
-            "profile repack SOURCE TARGET]",
+            "profile repack [--replace] SOURCE TARGET]",
         ),
     ))
 }

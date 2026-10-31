@@ -9,13 +9,13 @@
 //
 // Boundary-Contract:
 // - Owns:
-//   - Browser launch recovery and real read-only profile CLI regressions.
+//   - Browser launch recovery and real selected-profile CLI regressions.
 // - Must-Not:
 //   - Launch a browser, bind a listener or expose a session secret.
 // - Allows:
 //   - Inputs: Typed launch errors, test-owned ZIP files and CLI arguments.
 //   - Outputs: Assertions over recovery and verified profile inspection.
-//   - Side effects: Test-owned temporary files and read-only subprocesses.
+//   - Side effects: Test-owned files and bounded CLI subprocesses only.
 // - Split-When:
 //   - Profile CLI grows separate argument or section-decoding policies.
 // - Merge-When:
@@ -23,7 +23,7 @@
 // - Summary:
 //   - Verifies no browser/session startup or opaque assets on profile CLI.
 // - Description:
-//   - Pins recovery and real ZIP/section rejection before stdout publication.
+//   - Pins ZIP/section refusal and exact opt-in output commit behavior.
 // - Usage:
 //   - Run cargo test -p atrament_runtime_bootstrap.
 // - Defaults:
@@ -229,6 +229,9 @@ fn cli_args_reject_unknown_and_incomplete_commands_without_startup() {
         vec!["profile", "repack"],
         vec!["profile", "repack", "a"],
         vec!["profile", "repack", "a", "b", "extra"],
+        vec!["profile", "repack", "--replace"],
+        vec!["profile", "repack", "--replace", "a"],
+        vec!["profile", "repack", "--replace", "a", "b", "extra"],
     ] {
         assert_eq!(
             bootstrap::inspect_cli_args(
@@ -273,6 +276,26 @@ fn repack_cli_rejects_extra_argument_before_any_source_open() {
         io::ErrorKind::InvalidInput,
     );
     assert_eq!(pulls.get(), 1usize, "at most fifth item inspected");
+}
+
+#[test]
+fn repack_replace_cli_rejects_extra_argument_before_any_source_open() {
+    let pulls = Cell::new(0usize);
+    let source = [
+        "profile", "repack", "--replace", "not-a-file", "not-a-target",
+    ]
+    .into_iter().map(OsString::from)
+    .chain(iter::from_fn(|| {
+        pulls.set(pulls.get() + 1usize);
+        Some(OsString::from("unexpected extra argument"))
+    }));
+    assert_eq!(
+        bootstrap::inspect_cli_args(source)
+            .expect_err("extra argument cannot authorize replacement")
+            .kind(),
+        io::ErrorKind::InvalidInput,
+    );
+    assert_eq!(pulls.get(), 1usize, "at most sixth item inspected");
 }
 
 #[cfg(target_os = "linux")]
@@ -641,6 +664,155 @@ fn cli_repack_refuses_existing_target_without_replacing_private_bytes() {
     for private in ["profile-secret-1954", "asset-secret-5688"] {
         assert!(!stderr.contains(private));
     }
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn cli_repack_requires_explicit_replace_to_update_existing_target() {
+    use std::os::unix::fs::PermissionsExt as _;
+
+    let section = br#"{"verified":"new-section-content-1633"}"#;
+    let asset = b"new-opaque-asset-content-1105";
+    let original = profile_zip(section, asset, section);
+    let source = OwnedProfileFile::new(&original);
+    let destination = OwnedProfileDestination(
+        source.0.with_extension("explicit-replace.atrament"),
+    );
+    fs::write(&destination.0, b"older profile artifact")
+        .expect("existing selected destination");
+    let executed = Command::new(env!("CARGO_BIN_EXE_atrament"))
+        .args(["profile", "repack", "--replace"])
+        .arg(&source.0)
+        .arg(&destination.0)
+        .output()
+        .expect("explicitly replace selected output");
+    assert!(executed.status.success());
+    assert_eq!(
+        executed.stdout,
+        b"profile repacked (verified; no session import)\n",
+    );
+    assert!(executed.stderr.is_empty());
+    let rewritten = fs::read(&destination.0).expect("complete replacement");
+    assert_ne!(rewritten, b"older profile artifact");
+    assert_eq!(fs::read(&source.0).expect("source unchanged"), original);
+    let archived = read_stored_profile_zip(
+        &rewritten,
+        ProfileZipReadLimits {
+            maximum_archive_bytes: 4096,
+            maximum_entries: 3,
+            maximum_entry_bytes: 2048,
+            maximum_total_bytes: 3000,
+        },
+    ).expect("complete canonical output");
+    assert!(archived.matches_stored_writer_framing());
+    let inspected = bootstrap::inspect_profile(destination.0.clone())
+        .expect("replaced file re-verifies independently");
+    assert!(inspected.contains("new-section-content-1633"));
+    assert!(!inspected.contains("new-opaque-asset-content-1105"));
+    assert_eq!(
+        fs::metadata(&destination.0).expect("new metadata")
+            .permissions().mode() & 0o777,
+        0o600,
+    );
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn cli_repack_replace_can_canonicalize_the_selected_source_in_place() {
+    let section = br#"{"verified":"in-place-7591"}"#;
+    let original = profile_zip(section, b"private-asset-1107", section);
+    let source = OwnedProfileFile::new(&original);
+    let executed = Command::new(env!("CARGO_BIN_EXE_atrament"))
+        .args(["profile", "repack", "--replace"])
+        .arg(&source.0)
+        .arg(&source.0)
+        .output()
+        .expect("explicit in-place repack");
+    assert!(executed.status.success());
+    assert!(executed.stderr.is_empty());
+    assert_eq!(
+        executed.stdout,
+        b"profile repacked (verified; no session import)\n",
+    );
+    let canonical = fs::read(&source.0).expect("canonical source replacement");
+    assert_ne!(canonical, original, "canonical ZIP bytes replace source");
+    let inspected = bootstrap::inspect_profile(source.0.clone())
+        .expect("self-repacked profile remains independently verifiable");
+    assert!(inspected.contains("in-place-7591"));
+    assert!(!inspected.contains("private-asset-1107"));
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn cli_repack_replace_refuses_invalid_source_without_touching_target() {
+    let actual = br#"{"private":"wrong-content-3275"}"#;
+    let claimed = br#"{"private":"other-content-2841"}"#;
+    assert_eq!(actual.len(), claimed.len());
+    let source = OwnedProfileFile::new(&profile_zip(
+        actual, b"private-asset-5938", claimed,
+    ));
+    let destination = OwnedProfileDestination(
+        source.0.with_extension("invalid-replace.atrament"),
+    );
+    let previous = b"existing output must stay byte-exact";
+    fs::write(&destination.0, previous).expect("selected existing output");
+    let executed = Command::new(env!("CARGO_BIN_EXE_atrament"))
+        .args(["profile", "repack", "--replace"])
+        .arg(&source.0)
+        .arg(&destination.0)
+        .output()
+        .expect("attempt invalid replace source");
+    assert!(!executed.status.success());
+    assert!(executed.stdout.is_empty());
+    assert_eq!(fs::read(&destination.0).expect("target survived"), previous);
+    let stderr = String::from_utf8_lossy(&executed.stderr);
+    assert!(stderr.contains("DigestMismatch"));
+    for private in [
+        "wrong-content-3275", "other-content-2841", "private-asset-5938",
+        "invalid-replace.atrament",
+    ] {
+        assert!(!stderr.contains(private));
+    }
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn cli_repack_replace_refuses_symlink_target_without_following_victim() {
+    use std::os::unix::fs::symlink;
+
+    let section = br#"{"private":"replacement-secret-3769"}"#;
+    let source = OwnedProfileFile::new(&profile_zip(
+        section, b"private-asset-3379", section,
+    ));
+    let victim = OwnedProfileDestination(
+        source.0.with_extension("replace-victim.atrament"),
+    );
+    fs::write(&victim.0, b"victim original")
+        .expect("test-owned unrelated victim");
+    let destination = OwnedProfileDestination(
+        source.0.with_extension("replace-link.atrament"),
+    );
+    symlink(&victim.0, &destination.0).expect("test-owned link");
+    let executed = Command::new(env!("CARGO_BIN_EXE_atrament"))
+        .args(["profile", "repack", "--replace"])
+        .arg(&source.0)
+        .arg(&destination.0)
+        .output()
+        .expect("replace request must refuse linked target");
+    assert!(!executed.status.success());
+    assert!(executed.stdout.is_empty());
+    let stderr = String::from_utf8_lossy(&executed.stderr);
+    assert!(stderr.contains("InvalidExistingTarget"));
+    assert!(!stderr.contains("replacement-secret-3769"));
+    assert!(!stderr.contains("private-asset-3379"));
+    assert_eq!(
+        fs::read(&victim.0).expect("victim unchanged"),
+        b"victim original",
+    );
+    assert_eq!(
+        fs::read_link(&destination.0).expect("link unchanged"),
+        victim.0,
+    );
 }
 
 #[cfg(target_os = "linux")]
