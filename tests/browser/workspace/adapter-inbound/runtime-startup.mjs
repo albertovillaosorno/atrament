@@ -69,11 +69,40 @@ function buildRuntime() {
 // The child process is not an unlimited or trusted source of readiness
 // records. Bound its complete UTF-8 output and fail without quoting it.
 const MAX_STARTUP_OUTPUT_BYTES = 65_536;
+const STARTUP_STATES = ["starting", "listening", "ready"];
+const STARTUP_FIELDS = [
+    "origin", "process_version", "product", "protocol_version", "state",
+];
+
+function canonicalStartupOrigin(value) {
+    if (typeof value !== "string") {
+        return false;
+    }
+    const port = /^http:\/\/127\.0\.0\.1:([1-9][0-9]{0,4})$/u.exec(value);
+    return port !== null && Number(port[1]) <= 65_535;
+}
+
+function validStartupRecord(record, phase, previousOrigin) {
+    return record !== null
+        && typeof record === "object"
+        && !Array.isArray(record)
+        && Object.keys(record).length === STARTUP_FIELDS.length
+        && STARTUP_FIELDS.every((field) => Object.hasOwn(record, field))
+        && record.product === "atrament"
+        && record.process_version === "0.1.0"
+        && record.protocol_version === "atrament.runtime/1"
+        && record.state === STARTUP_STATES[phase]
+        && (phase === 0 ? record.origin === null
+            : canonicalStartupOrigin(record.origin))
+        && (phase !== 2 || record.origin === previousOrigin);
+}
 
 function waitForReady(child) {
     return new Promise((resolve, reject) => {
         let buffered = "";
         let receivedBytes = 0;
+        let nextPhase = 0;
+        let listeningOrigin = null;
         let settled = false;
         const decoder = new TextDecoder("utf-8", { fatal: true });
         const cleanup = () => {
@@ -131,10 +160,13 @@ function waitForReady(child) {
                     finish(new Error("invalid runtime readiness record"));
                     return;
                 }
-                if (record === null || typeof record !== "object"
-                    || Array.isArray(record)) {
+                if (!validStartupRecord(record, nextPhase, listeningOrigin)) {
                     finish(new Error("invalid runtime readiness record"));
                     return;
+                }
+                nextPhase += 1;
+                if (record.state === "listening") {
+                    listeningOrigin = record.origin;
                 }
                 if (record.state === "ready") {
                     finish(null, record);
@@ -208,30 +240,35 @@ test(
 test("startup readiness accepts fragmented finite JSON output", async () => {
     const child = fixtureReadinessChild();
     const pending = waitForReady(child);
-    child.stdout.write('{"state":"sta');
-    child.stdout.write('rting"}\n{"state":"rea');
-    child.stdout.write('dy","origin":"http://127.0.0.1:1234"}\n');
+    const startup = [
+        startupRecord("starting"),
+        startupRecord("listening", "http://127.0.0.1:1234"),
+        startupRecord("ready", "http://127.0.0.1:1234"),
+    ];
+    const bytes = startup.map((record) => JSON.stringify(record))
+        .join("\n") + "\n";
+    const split = bytes.indexOf('"ready"') + 3;
+    child.stdout.write(bytes.slice(0, split));
+    child.stdout.write(bytes.slice(split));
     const ready = await pending;
-    assert.deepEqual(ready, {
-        state: "ready", origin: "http://127.0.0.1:1234",
-    });
+    assert.deepEqual(ready, startup[2]);
     assert.equal(child.stdout.listenerCount("data"), 0);
     assert.equal(child.listenerCount("exit"), 0);
     child.stdout.destroy();
 });
 
 test(
-    "startup readiness decodes fragmented UTF-8 without substitution",
+    "startup readiness rejects unexpected UTF-8 fields and invalid bytes",
     async () => {
         const child = fixtureReadinessChild();
         const pending = waitForReady(child);
-        const expected = { state: "ready", marker: "á👩‍🔬" };
-        const bytes = Buffer.from(`${JSON.stringify(expected)}\n`);
+        const unexpected = { ...startupRecord("starting"), marker: "á👩‍🔬" };
+        const bytes = Buffer.from(`${JSON.stringify(unexpected)}\n`);
         const split = bytes.indexOf(Buffer.from("á"));
         assert.ok(split > 0);
         child.stdout.write(bytes.subarray(0, split + 1));
         child.stdout.write(bytes.subarray(split + 1));
-        assert.deepEqual(await pending, expected);
+        await assert.rejects(pending, /invalid runtime readiness record/);
         child.stdout.destroy();
 
         const invalid = fixtureReadinessChild();
@@ -242,6 +279,54 @@ test(
         ]));
         await assert.rejects(rejected, /invalid runtime readiness encoding/);
         invalid.stdout.destroy();
+    },
+);
+
+function startupRecord(state, origin = null) {
+    return {
+        product: "atrament",
+        process_version: "0.1.0",
+        protocol_version: "atrament.runtime/1",
+        origin,
+        state,
+    };
+}
+
+test("startup readiness requires ordered secret-free loopback records",
+    async () => {
+        const starting = startupRecord("starting");
+        const listening = startupRecord("listening",
+            "http://127.0.0.1:1234");
+        const ready = startupRecord("ready", listening.origin);
+        const rejectedCases = [
+            [ready],
+            [starting, ready],
+            [starting, listening, { ...ready, origin: "http://example.com" }],
+            [starting, listening, {
+                ...ready, origin: "http://127.0.0.1:1235",
+            }],
+            [starting, { ...listening, origin: "http://127.0.0.1:65536" },
+                ready],
+            [starting, listening, { ...ready, product: "another-product" }],
+            [starting, listening, { ...ready, process_version: "" }],
+            [starting, listening, { ...ready, protocol_version: "unknown" }],
+            [starting, listening, {
+                ...ready, session_secret: "secret-marker",
+            }],
+            [starting, { ...listening, secret: "secret-marker" }, ready],
+            [starting, { ...listening, state: "starting" }, ready],
+            [starting, listening, listening, ready],
+        ];
+        for (const records of rejectedCases) {
+            const child = fixtureReadinessChild();
+            const pending = waitForReady(child);
+            child.stdout.end(records.map((record) =>
+                JSON.stringify(record)).join("\n") + "\n");
+            await assert.rejects(pending, /invalid runtime readiness record/,
+                JSON.stringify(records));
+            assert.equal(child.stdout.listenerCount("data"), 0);
+            assert.equal(child.listenerCount("exit"), 0);
+        }
     },
 );
 

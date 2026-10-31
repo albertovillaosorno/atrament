@@ -157,6 +157,14 @@ stderr. On Linux, absent or empty `DISPLAY` and `WAYLAND_DISPLAY` markers are
 unavailable; an empty-marker process fixture still fails before `ready` even
 when its fake opener would succeed.
 
+The live Linux startup fixture also treats readiness text as untrusted:
+only the exact five-field, secret-free `starting`, `listening`, `ready`
+sequence establishes a session. The two latter records must publish the same
+canonical IPv4 loopback origin and valid port. Red-first tests demonstrated
+that a premature `ready`, inconsistent origins, wrong product/version, extra
+credential fields, and malformed phase order previously passed the fixture.
+This strengthens automation evidence, not the product's launcher handoff.
+
 The opener process now receives null stdin, stdout, and stderr. Before that
 change, a synthetic opener that echoed its URL copied the credential-bearing
 fragment into both Atrament output streams; the same probe is now silent. A live
