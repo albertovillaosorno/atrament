@@ -15,7 +15,8 @@
 //     typed handwriting Import or revision-bound session Export.
 // - Allows:
 //   - Inputs: Runtime startup results or exact local profile CLI arguments.
-//   - Outputs: Secret-free startup, verified inspection, or repack completion.
+//   - Outputs: Secret-free startup, verification, inspection, or
+//     repack completion.
 //   - Side effects: Stdout/stderr, runtime coordination, verified Import and
 //     caller-selected, preserve-existing canonical profile repack only.
 // - Split-When:
@@ -27,7 +28,7 @@
 // - Description:
 //   - Keeps cross-adapter orchestration in the process composition root.
 // - Usage:
-//   - Run atrament normally, profile inspect PATH or profile repack SRC DEST.
+//   - Run atrament, profile verify/inspect PATH or repack SRC DEST.
 // - Defaults:
 //   - Reject unexpected command arguments before opening a browser.
 //   - Never publishes the session credential for manual recovery.
@@ -274,7 +275,41 @@ pub(crate) fn repack_profile(
     Ok(())
 }
 
-/// Verify an explicitly selected local profile before exposing readable JSON.
+/// Verify an explicitly selected profile without exposing any profile text.
+///
+/// The deliberate CLI pathname is the only selected source. Full bounded
+/// ZIP, manifest, inventory, SHA-256 and section JSON admission must succeed
+/// before the caller can report success. Unlike inspection, this command
+/// does not publish manifest identities, section paths or content. It does
+/// not import handwriting into a session or grant profile Export authority.
+///
+/// # Errors
+///
+/// Refuses malformed or unsafe selected input without publishing bytes.
+pub(crate) fn verify_profile(path: PathBuf) -> io::Result<()> {
+    let intent = classify_explicit_file_path_intent(
+        ExplicitFilePurpose::ImportProfile,
+        ExplicitFilePathSource::CallerSelection,
+        path,
+        ExplicitOverwriteIntent::PreserveExisting,
+    )
+    .map_err(|error| io::Error::new(
+        io::ErrorKind::InvalidInput,
+        format!("invalid profile selection: {error:?}"),
+    ))?;
+    inspect_selected_profile_import(
+        &intent,
+        &[],
+        profile_inspection_limits(),
+        |_verified| (),
+    )
+    .map_err(|error| io::Error::new(
+        io::ErrorKind::InvalidData,
+        format!("profile verification refused: {error:?}"),
+    ))
+}
+
+/// Inspect an explicitly selected local profile before exposing readable JSON.
 ///
 /// The local command arguments are the caller's selection. Archive paths are
 /// never treated as filesystem paths. Only complete ZIP, manifest, inventory
@@ -342,14 +377,15 @@ pub(crate) fn inspect_profile(path: PathBuf) -> io::Result<String> {
 /// Dispatch bounded CLI arguments before starting the disposable session.
 ///
 /// `None` means normal browser startup; `Some` holds printable output from
-/// an inspected profile or a successfully committed, independent repack.
+/// inspected profile, completed verification or independent repack.
 /// Repack arguments are exact OS-level local caller selections; no profile
 /// archive path can determine the selected filesystem target.
 ///
 /// # Errors
 ///
 /// Rejects incomplete or unknown arguments before opening a browser. No more
-/// than five arguments are read; failed repacks publish no success message.
+/// than five arguments are read; failed verification and repack publish no
+/// success message.
 pub(crate) fn inspect_cli_args(
     args: impl IntoIterator<Item = OsString>,
 ) -> io::Result<Option<String>> {
@@ -359,11 +395,18 @@ pub(crate) fn inspect_cli_args(
     let source = arguments.next();
     let destination = arguments.next();
     if command.as_deref() == Some(OsStr::new("profile")) {
-        if action.as_deref() == Some(OsStr::new("inspect"))
-            && let Some(path) = source.as_deref()
+        if let Some(path) = source.as_deref()
             && destination.is_none()
         {
-            return inspect_profile(PathBuf::from(path)).map(Some);
+            if action.as_deref() == Some(OsStr::new("inspect")) {
+                return inspect_profile(PathBuf::from(path)).map(Some);
+            }
+            if action.as_deref() == Some(OsStr::new("verify")) {
+                verify_profile(PathBuf::from(path))?;
+                return Ok(Some(String::from(
+                    "profile verified (no session import)\n",
+                )));
+            }
         }
         if action.as_deref() == Some(OsStr::new("repack"))
             && let (Some(repack_source), Some(repack_destination)) =
@@ -384,7 +427,10 @@ pub(crate) fn inspect_cli_args(
     }
     Err(io::Error::new(
         io::ErrorKind::InvalidInput,
-        "usage: atrament [profile inspect PATH | profile repack SOURCE TARGET]",
+        concat!(
+            "usage: atrament [profile verify PATH | profile inspect PATH | ",
+            "profile repack SOURCE TARGET]",
+        ),
     ))
 }
 

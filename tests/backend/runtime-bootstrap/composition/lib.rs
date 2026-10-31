@@ -222,6 +222,8 @@ fn cli_args_reject_unknown_and_incomplete_commands_without_startup() {
         vec!["profile"],
         vec!["inspect", "missing"],
         vec!["profile", "inspect"],
+        vec!["profile", "verify"],
+        vec!["profile", "verify", "a", "extra"],
         vec!["profile", "inspect", "a", "extra"],
         vec!["profile", "repack"],
         vec!["profile", "repack", "a"],
@@ -274,6 +276,113 @@ fn repack_cli_rejects_extra_argument_before_any_source_open() {
 
 #[cfg(target_os = "linux")]
 #[test]
+fn cli_verify_reports_only_fixed_success_after_full_source_admission() {
+    let section = br#"{"private":"section-secret-65018"}"#;
+    let asset = b"\xff\0opaque-private-24915";
+    let source = OwnedProfileFile::new(&profile_zip_with_optional_features(
+        section, asset, section, "application/json",
+        r#"["private-optional-feature-72281"]"#,
+    ));
+    bootstrap::verify_profile(source.0.clone())
+        .expect("valid profile can be verified without inspection");
+    let executed = Command::new(env!("CARGO_BIN_EXE_atrament"))
+        .args(["profile", "verify"])
+        .arg(&source.0)
+        .output()
+        .expect("run private selected-profile verification");
+    assert!(executed.status.success());
+    assert_eq!(
+        executed.stdout,
+        b"profile verified (no session import)\n",
+    );
+    assert!(executed.stderr.is_empty());
+    assert_eq!(fs::read(&source.0).expect("no mutation"),
+        profile_zip_with_optional_features(
+            section, asset, section, "application/json",
+            r#"["private-optional-feature-72281"]"#,
+        ));
+    for private in [
+        "section-secret-65018",
+        "opaque-private-24915",
+        "private-optional-feature-72281",
+        "sections/writer.json",
+        "assets/raw.bin",
+        "writer",
+    ] {
+        assert!(!String::from_utf8_lossy(&executed.stdout).contains(private));
+    }
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn cli_verify_refuses_invalid_source_before_any_stdout() {
+    let authentic = br#"{"private":"profile-secret-9638"}"#;
+    let forged = br#"{"private":"profile-secret-9368"}"#;
+    assert_eq!(authentic.len(), forged.len());
+    let invalid_json = b"[private-invalid-section-1147]";
+    let sources = [
+        (profile_zip(forged, b"private-asset-6419", authentic),
+            "DigestMismatch"),
+        (profile_zip(invalid_json, b"private-asset-6419", invalid_json),
+            "SectionJson"),
+    ];
+    for (source_bytes, diagnostic) in sources {
+        let source = OwnedProfileFile::new(&source_bytes);
+        let error = bootstrap::verify_profile(source.0.clone())
+            .expect_err("invalid profile is not verified");
+        assert_eq!(error.kind(), io::ErrorKind::InvalidData);
+        assert!(error.to_string().contains(diagnostic));
+        let executed = Command::new(env!("CARGO_BIN_EXE_atrament"))
+            .args(["profile", "verify"])
+            .arg(&source.0)
+            .output()
+            .expect("run rejected private source verification");
+        assert!(!executed.status.success());
+        assert!(executed.stdout.is_empty());
+        let stderr = String::from_utf8_lossy(&executed.stderr);
+        assert!(stderr.contains(diagnostic));
+        for private in [
+            "profile-secret-9638",
+            "profile-secret-9368",
+            "private-invalid-section-1147",
+            "private-asset-6419",
+        ] {
+            assert!(!stderr.contains(private));
+        }
+        assert_eq!(fs::read(&source.0).expect("read-only verification"),
+            source_bytes);
+    }
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn cli_verify_refuses_symlinked_selected_source_without_path_leak() {
+    use std::os::unix::fs::symlink;
+    let section = br#"{"private":"source-59018"}"#;
+    let source = OwnedProfileFile::new(&profile_zip(
+        section, b"opaque-60228", section,
+    ));
+    let link = OwnedProfileDestination(
+        source.0.with_extension("private-link-2190"),
+    );
+    symlink(&source.0, &link.0).expect("create test-owned selection link");
+    let executed = Command::new(env!("CARGO_BIN_EXE_atrament"))
+        .args(["profile", "verify"])
+        .arg(&link.0)
+        .output()
+        .expect("verify rejects source symlink");
+    assert!(!executed.status.success());
+    assert!(executed.stdout.is_empty());
+    let stderr = String::from_utf8_lossy(&executed.stderr);
+    assert!(stderr.contains("Open("));
+    assert!(!stderr.contains("private-link-2190"));
+    assert!(!stderr.contains("source-59018"));
+    assert!(!stderr.contains("opaque-60228"));
+    assert!(link.0.is_symlink());
+}
+
+#[cfg(target_os = "linux")]
+#[test]
 fn cli_repack_handles_root_only_profile_without_phantom_members() {
     let root = concat!(
         r#"{"required_features":[],"profile_identity":"empty-writer", "#,
@@ -292,6 +401,14 @@ fn cli_repack_handles_root_only_profile_without_phantom_members() {
         },
     ).expect("root-only input is valid ZIP");
     let source = OwnedProfileFile::new(&original);
+    let verified = Command::new(env!("CARGO_BIN_EXE_atrament"))
+        .args(["profile", "verify"])
+        .arg(&source.0)
+        .output()
+        .expect("root-only profile verification");
+    assert!(verified.status.success());
+    assert_eq!(verified.stdout, b"profile verified (no session import)\n");
+    assert!(verified.stderr.is_empty());
     let destination = OwnedProfileDestination(
         source.0.with_extension("empty-repack.atrament"),
     );
@@ -829,6 +946,14 @@ fn cli_preserves_exact_non_utf8_selected_profile_path() {
     assert!(executed.status.success());
     assert_eq!(executed.stdout, inspected.as_bytes());
     assert!(executed.stderr.is_empty());
+    let verified = Command::new(env!("CARGO_BIN_EXE_atrament"))
+        .args(["profile", "verify"])
+        .arg(&owned.0)
+        .output()
+        .expect("verify exact non-UTF8 selected path");
+    assert!(verified.status.success());
+    assert_eq!(verified.stdout, b"profile verified (no session import)\n");
+    assert!(verified.stderr.is_empty());
 }
 
 #[cfg(target_os = "linux")]
@@ -899,6 +1024,15 @@ fn cli_refuses_later_invalid_section_without_partial_stdout() {
     assert!(executed.stdout.is_empty());
     let stderr = String::from_utf8_lossy(&executed.stderr);
     assert!(stderr.contains("SectionJson { index: 1"));
+    let verification = Command::new(env!("CARGO_BIN_EXE_atrament"))
+        .args(["profile", "verify"])
+        .arg(&owned.0)
+        .output()
+        .expect("verify must reject invalid later section too");
+    assert!(!verification.status.success());
+    assert!(verification.stdout.is_empty());
+    let verification_stderr = String::from_utf8_lossy(&verification.stderr);
+    assert!(verification_stderr.contains("SectionJson { index: 1"));
     for private in [
         "private-early-section-8392",
         "private-invalid-late-section-4752",
@@ -907,6 +1041,7 @@ fn cli_refuses_later_invalid_section_without_partial_stdout() {
     ] {
         assert!(!error.to_string().contains(private));
         assert!(!stderr.contains(private));
+        assert!(!verification_stderr.contains(private));
     }
 }
 

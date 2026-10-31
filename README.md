@@ -182,22 +182,26 @@ fallback.
 
 ### Current local profile utilities (Linux)
 
-The present `atrament` binary offers two explicit local profile operations:
+The present `atrament` binary offers three explicit local profile operations:
 
 ```sh
+atrament profile verify SOURCE.atrament
 atrament profile inspect SOURCE.atrament
 atrament profile repack SOURCE.atrament NEW-TARGET.atrament
 ```
 
-Inspection verifies a bounded source archive, manifest, entry digests, and
-JSON-section syntax before displaying the manifest and readable sections.
+Verification checks a bounded archive, manifest, member digests, and
+JSON-section syntax, then reports only a fixed success message, without
+revealing profile content. Inspection performs the same checks before
+displaying the manifest and readable sections.
+
 Repack performs those same checks, then writes canonical ZIP bytes to a
 newly selected destination using atomic, synchronized file creation. Repack
 **never overwrites** an existing target; it preserves verified opaque assets
 and unknown optional features. Unsupported required features and malformed
 sections refuse.
 
-These are independent command-line utilities; neither accepts typed handwriting
+These are independent command-line utilities; none accepts typed handwriting
 sections into the active workspace, creates a session Export receipt, or
 provides a notebook/PDF Export path.
 

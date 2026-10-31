@@ -109,19 +109,26 @@ refuse before inspection; a CRC-valid same-length forged member still fails
 SHA-256. Typed profile sections, session Import acceptance, authentic caller
 selection and atomic Export remain open.
 
-### Local read-only profile inspection CLI (Linux)
+### Local read-only profile verification and inspection CLI (Linux)
 
-`atrament profile inspect PATH` is an opt-in, local CLI operation. With no
-arguments `atrament` still starts its usual disposable browser session;
+`atrament profile verify PATH` and `atrament profile inspect PATH` are
+opt-in local CLI operations. Verify uses the exact same bounded secure-open,
+ZIP, manifest, inventory, SHA-256 and section-syntax admission as inspection,
+but prints only `profile verified (no session import)` after full success.
+It never publishes profile identities, member paths or private section bodies;
+any rejected source leaves stdout empty. Neither mode accepts handwriting
+sections into a session.
+
+With no arguments, `atrament` still starts its disposable browser session;
 unknown or incomplete arguments refuse before that session starts. The
-inspection path itself never launches a browser, publishes a credential,
-extracts a member to disk, or modifies session state.
+verification and inspection paths never launch a browser, publish a credential,
+extract a member to disk, or modify session state.
 
-The command passes its explicit path through the selected-file opener and
+Both commands pass their explicit paths through the selected-file opener and
 complete bounded ZIP, JSON manifest, inventory, SHA-256 and section-syntax
 gate. The CLI reuses the central bounded section check instead of separately
-parsing verified payloads. Only after full admission does stdout receive
-canonical manifest JSON and verbatim section JSON.
+parsing verified payloads. Only inspection outputs canonical manifest JSON and
+verbatim section JSON after full admission.
 
 Opaque asset names remain visible in manifest declarations, but asset bodies
 are never printed. Section output uses path order independent of the original
@@ -136,14 +143,17 @@ feature and name ceilings. Unsupported required features and unsupported
 platforms still fail closed. These are command-specific protective limits,
 not portable format maxima or proof of a trusted picker gesture.
 
-The fourteen runtime-bootstrap integration tests exercise the real CLI process:
+Runtime-bootstrap integration tests exercise the real CLI process:
 verified sections without opaque asset extraction, CRC-valid forged members,
 invalid section syntax, missing or symlinked selected paths, and bounded
 argument rejection. Linux fixtures additionally prove that opaque non-UTF-8
 caller-selected path bytes survive CLI argv and that a later invalid JSON
 section cannot publish even a previously valid section or manifest to stdout.
+
 A structurally valid ZIP with repeated optional feature metadata also refuses
-without revealing its manifest or verified section bytes on stdout.
+without revealing its manifest or verified section bytes on stdout. Verify
+additionally exercises fixed-output success, forged data, malformed sections,
+root-only archives, opaque selected paths and symlink refusal in a real process.
 Browser launch recovery error behavior remains independently covered.
 
 ### Bounded stored-ZIP byte reader

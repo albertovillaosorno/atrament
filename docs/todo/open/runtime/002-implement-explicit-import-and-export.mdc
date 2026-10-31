@@ -30,6 +30,13 @@ into background persistence. Keep paths mentioned only in notebook, source,
 diagnostic, clipboard, or model-response text as data rather than Export
 authority.
 
+A separate Linux `atrament profile verify PATH` CLI now runs the same
+fully bounded, secure selected-source and SHA/section-syntax gate as profile
+inspection, then emits only a fixed success confirmation. Unlike inspection,
+its stdout never includes private profile identities, member names or section
+text. Invalid or unsafe files fail before stdout; verification is not typed
+handwriting Import or accepted session state.
+
 An explicit Linux `atrament profile repack SOURCE TARGET` CLI now composes
 caller-supplied OS argument selections, no-symlink verified source opening,
 full ZIP/manifest/SHA and bounded JSON section verification, in-memory
