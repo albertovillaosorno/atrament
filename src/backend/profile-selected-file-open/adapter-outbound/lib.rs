@@ -112,6 +112,147 @@ pub fn open_selected_profile_file_from_cwd(
     open_relative_from_cwd(path, selected_cwd)
 }
 
+/// Securely open the directory containing a selected profile source.
+///
+/// A probe can retain this handle and compare it with a freshly opened
+/// parent after reading. An existing hard link can keep the leaf's inode and
+/// timestamps unchanged when the selected parent is replaced. This is an
+/// additional pathname observation, never a lock or selection authority.
+/// The same symlink and CWD restrictions as the selected-file opener apply.
+///
+/// # Errors
+///
+/// Refuses invalid paths, link traversal, unsupported policies and I/O.
+pub fn open_selected_profile_parent_directory(
+    path: &Path,
+) -> Result<File, ProfileSelectedFileOpenError> {
+    validate_selected_path(path)?;
+    open_parent_without_links(path)
+}
+
+/// Open the selected parent relative to an already captured process CWD.
+///
+/// The file name must be relative; the directory anchor must still match
+/// the current CWD before and after resolving its parent components.
+///
+/// # Errors
+///
+/// Refuses invalid selections, moved CWDs or insecure path resolution.
+pub fn open_selected_profile_parent_directory_from_cwd(
+    path: &Path,
+    selected_cwd: &File,
+) -> Result<File, ProfileSelectedFileOpenError> {
+    validate_selected_path(path)?;
+    if path.is_absolute() {
+        return Err(ProfileSelectedFileOpenError::InvalidSelectedPath);
+    }
+    open_parent_from_cwd(path, selected_cwd)
+}
+
+/// Compare already opened parent descriptors, never pathname strings.
+///
+/// A false result also covers an unavailable metadata observation. On
+/// non-Linux the secure openers fail closed before comparison is possible.
+#[must_use]
+pub fn same_selected_profile_parent_directory(
+    first: &File,
+    second: &File,
+) -> bool {
+    #[cfg(target_os = "linux")]
+    {
+        use std::os::unix::fs::MetadataExt as _;
+        let (Ok(original), Ok(current)) =
+            (first.metadata(), second.metadata())
+        else {
+            return false;
+        };
+        original.is_dir()
+            && current.is_dir()
+            && original.dev() == current.dev()
+            && original.ino() == current.ino()
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _unused = (first, second);
+        false
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+fn open_parent_without_links(
+    _path: &Path,
+) -> Result<File, ProfileSelectedFileOpenError> {
+    Err(ProfileSelectedFileOpenError::UnsupportedOpenPolicy)
+}
+
+#[cfg(not(target_os = "linux"))]
+fn open_parent_from_cwd(
+    _path: &Path,
+    _selected_cwd: &File,
+) -> Result<File, ProfileSelectedFileOpenError> {
+    Err(ProfileSelectedFileOpenError::UnsupportedOpenPolicy)
+}
+
+#[cfg(target_os = "linux")]
+fn open_parent_without_links(
+    path: &Path,
+) -> Result<File, ProfileSelectedFileOpenError> {
+    let (anchor, relative) = if path.is_absolute() {
+        (
+            "/",
+            path.strip_prefix("/")
+                .map_err(|_error| {
+                    ProfileSelectedFileOpenError::ParentTraversal
+                })?,
+        )
+    } else {
+        (".", path)
+    };
+    let directory =
+        File::open(anchor).map_err(|error| {
+            ProfileSelectedFileOpenError::FileIo(error.kind())
+        })?;
+    open_parent_from_anchor(relative, &directory, !path.is_absolute())
+}
+
+#[cfg(target_os = "linux")]
+fn open_parent_from_cwd(
+    path: &Path,
+    selected_cwd: &File,
+) -> Result<File, ProfileSelectedFileOpenError> {
+    open_parent_from_anchor(path, selected_cwd, true)
+}
+
+#[cfg(target_os = "linux")]
+fn open_parent_from_anchor(
+    relative: &Path,
+    directory: &File,
+    check_relative_cwd: bool,
+) -> Result<File, ProfileSelectedFileOpenError> {
+    use nix::fcntl::{OFlag, OpenHow, ResolveFlag, openat2};
+
+    if check_relative_cwd {
+        check_cwd_anchor(directory)?;
+    }
+    let parent = relative
+        .parent()
+        .filter(|value| !value.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    let how = OpenHow::new()
+        .flags(OFlag::O_RDONLY | OFlag::O_DIRECTORY | OFlag::O_CLOEXEC)
+        .resolve(
+            ResolveFlag::RESOLVE_BENEATH | ResolveFlag::RESOLVE_NO_SYMLINKS,
+        );
+    let opened = File::from(
+        openat2(directory, parent, how)
+            .map_err(classify_linux_open_error)?,
+    );
+    if check_relative_cwd {
+        check_cwd_anchor(directory)?;
+    }
+    Ok(opened)
+}
+
 fn validate_selected_path(
     path: &Path,
 ) -> Result<(), ProfileSelectedFileOpenError> {

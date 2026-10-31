@@ -43,6 +43,18 @@ modifies selected bytes. This narrows observed source pathname rebinding without
 locking external paths, proving an atomic snapshot, authenticating the caller
 or implementing typed handwriting profile acceptance.
 
+Profile Import and read-only Export target probes now also retain a
+symlink-free descriptor of the selected parent directory. They securely
+reopen that directory before and after opening the selected file and again
+before declaring verified Import content or matching Export bytes. A prepared
+hard link in a replacement parent can have the exact same file inode, bytes,
+mtime and ctime as the originally selected leaf; red-first Linux fixtures
+proved both probes previously accepted such a swap, and now refuse it.
+
+Relative selections use the original pinned CWD for every parent lookup.
+This is an observed parent identity guard, not an atomic filesystem lock,
+trusted path-selection provenance or accepted profile-session authority.
+
 The opened-profile file reader now checks descriptor metadata again after
 its exact EOF probe, rejecting observed in-place rewrites even when size and
 EOF remain unchanged. On Unix it compares device, inode, high-resolution

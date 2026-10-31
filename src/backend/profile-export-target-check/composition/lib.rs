@@ -59,6 +59,9 @@ use atrament_profile_file_reader::{
 use atrament_profile_selected_file_open::{
     ProfileSelectedFileOpenError, open_selected_profile_file,
     open_selected_profile_file_from_cwd,
+    open_selected_profile_parent_directory,
+    open_selected_profile_parent_directory_from_cwd,
+    same_selected_profile_parent_directory,
 };
 
 /// Observed target bytes at this instant, not a prior Export receipt.
@@ -94,6 +97,8 @@ pub enum ProfileExportTargetCheckError {
     Open(ProfileSelectedFileOpenError),
     /// The opened file could not be read as one bounded complete source.
     Read(ProfileFileReadError),
+    /// The selected parent changed between initial parent and leaf opens.
+    SelectedParentChanged,
     /// A notebook or Import path cannot stand in for a profile Export target.
     WrongPathPurpose,
 }
@@ -112,6 +117,7 @@ pub struct ProfileExportTargetProbe<'selection> {
     opened: File,
     original_metadata: Metadata,
     selected_cwd: Option<File>,
+    selected_parent: File,
     selected_path: &'selection Path,
 }
 
@@ -148,6 +154,29 @@ impl ProfileExportTargetProbe<'_> {
                 }
             };
         if source.bytes() != self.artifact.bytes() {
+            return Ok(ProfileExportTargetStatus::Drifted);
+        }
+        let reopened_parent = self.selected_cwd.as_ref().map_or_else(
+            || open_selected_profile_parent_directory(self.selected_path),
+            |cwd| open_selected_profile_parent_directory_from_cwd(
+                self.selected_path, cwd,
+            ),
+        );
+        let current_parent = match reopened_parent {
+            Ok(parent) => parent,
+            Err(ProfileSelectedFileOpenError::FileIo(
+                io::ErrorKind::NotFound,
+            )) => {
+                return Ok(ProfileExportTargetStatus::Missing);
+            }
+            Err(error) => {
+                return Err(ProfileExportTargetCheckError::Open(error));
+            }
+        };
+        if !same_selected_profile_parent_directory(
+            &self.selected_parent,
+            &current_parent,
+        ) {
             return Ok(ProfileExportTargetStatus::Drifted);
         }
         let reopened = self.selected_cwd.as_ref().map_or_else(
@@ -237,6 +266,21 @@ pub fn open_profile_export_target_probe<'selection>(
                 ProfileSelectedFileOpenError::FileIo(error.kind()),
             )
         })?;
+    let open_parent = || {
+        selected_cwd.as_ref().map_or_else(
+            || open_selected_profile_parent_directory(intent.path()),
+            |cwd| open_selected_profile_parent_directory_from_cwd(
+                intent.path(), cwd,
+            ),
+        )
+    };
+    let selected_parent = match open_parent() {
+        Ok(parent) => parent,
+        Err(ProfileSelectedFileOpenError::FileIo(io::ErrorKind::NotFound)) => {
+            return Ok(None);
+        }
+        Err(error) => return Err(ProfileExportTargetCheckError::Open(error)),
+    };
     let opened_result = selected_cwd.as_ref().map_or_else(
         || open_selected_profile_file(intent.path()),
         |cwd| open_selected_profile_file_from_cwd(intent.path(), cwd),
@@ -248,6 +292,14 @@ pub fn open_profile_export_target_probe<'selection>(
         }
         Err(error) => return Err(ProfileExportTargetCheckError::Open(error)),
     };
+    let parent_after_open = open_parent()
+        .map_err(ProfileExportTargetCheckError::Open)?;
+    if !same_selected_profile_parent_directory(
+        &selected_parent,
+        &parent_after_open,
+    ) {
+        return Err(ProfileExportTargetCheckError::SelectedParentChanged);
+    }
     let original_metadata = opened.metadata().map_err(|error| {
         ProfileExportTargetCheckError::Read(ProfileFileReadError::FileIo(
             error.kind(),
@@ -259,6 +311,7 @@ pub fn open_profile_export_target_probe<'selection>(
         opened,
         original_metadata,
         selected_cwd,
+        selected_parent,
         selected_path: intent.path(),
     }))
 }

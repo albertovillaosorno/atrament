@@ -204,6 +204,50 @@ mod linux {
     }
 
     #[test]
+    fn opened_probe_refuses_parent_swap_with_preexisting_same_inode_hardlink() {
+        let dir = OwnedDir::new();
+        let original = artifact("parent-hardlink-replacement");
+        let selected_parent = dir.0.join("selected-parent");
+        let alternate_parent = dir.0.join("alternate-parent");
+        let parked_parent = dir.0.join("parked-parent");
+        fs::create_dir_all(&selected_parent).expect("selected directory");
+        fs::create_dir_all(&alternate_parent).expect("alternate directory");
+        let selected = intent(
+            selected_parent.join("selected.atrament"),
+            ExplicitFilePurpose::ExportProfile,
+        );
+        fs::write(selected.path(), original.bytes()).expect("original ZIP");
+        fs::hard_link(
+            selected.path(), alternate_parent.join("selected.atrament"),
+        )
+            .expect("prepared hard link before first observation");
+        let initial = fs::metadata(selected.path()).expect("original metadata");
+        let opened = open_profile_export_target_probe(
+            &selected, &original, original.bytes().len(),
+        )
+            .expect("securely open target")
+            .expect("selected exists");
+        fs::rename(&selected_parent, &parked_parent)
+            .expect("park original selected directory");
+        fs::rename(&alternate_parent, &selected_parent)
+            .expect("put prelinked target under selected name");
+        let replacement = fs::metadata(selected.path()).expect("same file");
+        assert_eq!(initial.ino(), replacement.ino());
+        assert_eq!(initial.ctime(), replacement.ctime());
+        assert_eq!(initial.ctime_nsec(), replacement.ctime_nsec());
+        assert_eq!(opened.verify(), Ok(Status::Drifted));
+        assert_eq!(
+            fs::read(selected.path()).expect("new path"),
+            original.bytes()
+        );
+        assert_eq!(
+            fs::read(parked_parent.join("selected.atrament"))
+                .expect("old path"),
+            original.bytes(),
+        );
+    }
+
+    #[test]
     fn opened_probe_refuses_parent_symlink_rebinding_to_original_inode() {
         let dir = OwnedDir::new();
         let original = artifact("parent-link-replacement");

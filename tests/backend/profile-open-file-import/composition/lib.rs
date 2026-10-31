@@ -419,6 +419,50 @@ fn selected_probe_rechecks_parent_rebinding_before_inspection() {
 
 #[cfg(target_os = "linux")]
 #[test]
+fn selected_probe_refuses_parent_swap_with_preexisting_same_inode_hardlink() {
+    use std::os::unix::fs::MetadataExt as _;
+
+    let owned = OwnedProbeDirectory::new();
+    let selected_dir = owned.path.join("selected-parent");
+    let alternate_dir = owned.path.join("alternate-parent");
+    let parked_dir = owned.path.join("parked-parent");
+    fs::create_dir_all(&selected_dir).expect("selected directory");
+    fs::create_dir_all(&alternate_dir).expect("alternate directory");
+    let selected_path = selected_dir.join("source.atrament");
+    let alternate_path = alternate_dir.join("source.atrament");
+    let payload = br#"{"strokes":[]}"#;
+    let bytes = zip(root(payload, "[]").as_bytes(), payload);
+    fs::write(&selected_path, &bytes).expect("selected bytes");
+    // Establish both links BEFORE the first observation: no later leaf
+    // modification, inode or ctime change can reveal the parent swap.
+    fs::hard_link(&selected_path, &alternate_path)
+        .expect("alternate path to the same source inode");
+    let initial = fs::metadata(&selected_path).expect("original metadata");
+    let intent = selected_probe_intent(selected_path.clone());
+    let probe = open_selected_profile_import_probe(&intent)
+        .expect("open initial selection");
+    fs::rename(&selected_dir, &parked_dir).expect("park selected directory");
+    fs::rename(&alternate_dir, &selected_dir)
+        .expect("replace selected directory with prepared hardlink");
+    let replacement = fs::metadata(&selected_path).expect("same inode");
+    assert_eq!(initial.ino(), replacement.ino());
+    assert_eq!(initial.ctime(), replacement.ctime());
+    assert_eq!(initial.ctime_nsec(), replacement.ctime_nsec());
+    let inspected = Cell::new(false);
+    assert_eq!(
+        probe.inspect(&[], limits(), |_verified| inspected.set(true)),
+        Err(Error::SelectedSourceChanged),
+    );
+    assert!(!inspected.get());
+    assert_eq!(fs::read(&selected_path).expect("selected source"), bytes);
+    assert_eq!(
+        fs::read(parked_dir.join("source.atrament")).expect("old source"),
+        bytes,
+    );
+}
+
+#[cfg(target_os = "linux")]
+#[test]
 fn selected_probe_refuses_inplace_timestamp_drift_before_inspection() {
     use std::time::SystemTime;
 

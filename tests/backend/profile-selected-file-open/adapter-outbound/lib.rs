@@ -58,6 +58,9 @@ use std::{env, process};
 use atrament_profile_selected_file_open::{
     ProfileSelectedFileOpenError as Error, open_selected_profile_file,
     open_selected_profile_file_from_cwd,
+    open_selected_profile_parent_directory,
+    open_selected_profile_parent_directory_from_cwd,
+    same_selected_profile_parent_directory,
 };
 
 #[cfg(target_os = "linux")]
@@ -160,6 +163,65 @@ fn relative_path_is_resolved_under_cwd_without_link_traversal() {
     let mut bytes = Vec::new();
     let _count = source.read_to_end(&mut bytes).expect("read source");
     assert_eq!(bytes, b"literal file data");
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn selected_parent_descriptor_detects_replacement_and_forbids_links() {
+    let owned = OwnedTestDirectory::new(false);
+    let selected_parent = owned.0.join("selected-parent");
+    let parked_parent = owned.0.join("parked-parent");
+    fs::create_dir(&selected_parent).expect("first directory");
+    let selected = owned.write("selected-parent/source.atrament", b"bytes");
+    let captured = open_selected_profile_parent_directory(&selected)
+        .expect("secure parent descriptor");
+    let same = open_selected_profile_parent_directory(&selected)
+        .expect("same secure parent");
+    assert!(same_selected_profile_parent_directory(&captured, &same));
+
+    // A parent pathname can switch without changing any file inode.
+    fs::rename(&selected_parent, &parked_parent).expect("move parent");
+    fs::create_dir(&selected_parent).expect("replacement directory");
+    let replaced = open_selected_profile_parent_directory(&selected)
+        .expect("new selected directory");
+    assert!(!same_selected_profile_parent_directory(&captured, &replaced));
+
+    let alias = owned.0.join("linked-parent");
+    symlink(&parked_parent, &alias).expect("parent symlink");
+    assert_eq!(
+        open_selected_profile_parent_directory(&alias.join("source.atrament"))
+            .expect_err("secure parent lookup forbids symlink"),
+        Error::SymlinkForbidden,
+    );
+    assert_eq!(
+        open_selected_profile_parent_directory(Path::new("file\0.atrament"))
+            .expect_err("malformed path refuses before opening"),
+        Error::InvalidSelectedPath,
+    );
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn relative_parent_lookup_respects_pinned_cwd() {
+    let owned = OwnedTestDirectory::new(true);
+    let _selected = owned.write("profile.atrament", b"bytes");
+    let selected = owned.0
+        .strip_prefix(env::current_dir().expect("test CWD"))
+        .expect("test directory under CWD")
+        .join("profile.atrament");
+    let captured_cwd = File::open(".").expect("pin CWD");
+    let original = open_selected_profile_parent_directory_from_cwd(
+        &selected, &captured_cwd,
+    ).expect("parent under captured CWD");
+    let refreshed = open_selected_profile_parent_directory(&selected)
+        .expect("parent under live CWD");
+    assert!(same_selected_profile_parent_directory(&original, &refreshed));
+    assert_eq!(
+        open_selected_profile_parent_directory_from_cwd(
+            Path::new("/absolute.atrament"), &captured_cwd,
+        ).expect_err("absolute selection requires root opener"),
+        Error::InvalidSelectedPath,
+    );
 }
 
 #[cfg(target_os = "linux")]

@@ -64,6 +64,9 @@ use atrament_profile_manifest_json_codec::{
 use atrament_profile_selected_file_open::{
     ProfileSelectedFileOpenError, open_selected_profile_file,
     open_selected_profile_file_from_cwd,
+    open_selected_profile_parent_directory,
+    open_selected_profile_parent_directory_from_cwd,
+    same_selected_profile_parent_directory,
 };
 #[cfg(test)]
 use atrament_profile_stored_zip_writer as _;
@@ -142,6 +145,7 @@ pub struct ProfileSelectedImportProbe<'selection> {
     opened: File,
     original_metadata: Metadata,
     selected_cwd: Option<File>,
+    selected_parent: File,
 }
 
 impl fmt::Debug for ProfileSelectedImportProbe<'_> {
@@ -176,6 +180,7 @@ impl ProfileSelectedImportProbe<'_> {
             opened,
             original_metadata,
             selected_cwd,
+            selected_parent,
         } = self;
         // Retain the original descriptor through verification so the
         // selected inode cannot be reclaimed and reused during the recheck.
@@ -190,6 +195,27 @@ impl ProfileSelectedImportProbe<'_> {
             supported_required_features,
             limits,
             |verified| {
+                let current_parent = selected_cwd
+                    .as_ref()
+                    .map_or_else(
+                        || {
+                            open_selected_profile_parent_directory(
+                                intent.path(),
+                            )
+                        },
+                        |cwd| open_selected_profile_parent_directory_from_cwd(
+                            intent.path(), cwd,
+                        ),
+                    )
+                    .map_err(ProfileOpenFileImportError::Open)?;
+                if !same_selected_profile_parent_directory(
+                    &selected_parent,
+                    &current_parent,
+                ) {
+                    return Err(
+                        ProfileOpenFileImportError::SelectedSourceChanged
+                    );
+                }
                 let current = selected_cwd
                     .as_ref()
                     .map_or_else(
@@ -397,6 +423,16 @@ pub fn open_selected_profile_import_probe(
                 ProfileSelectedFileOpenError::FileIo(error.kind()),
             )
         })?;
+    let open_parent = || {
+        selected_cwd.as_ref().map_or_else(
+            || open_selected_profile_parent_directory(intent.path()),
+            |cwd| open_selected_profile_parent_directory_from_cwd(
+                intent.path(), cwd,
+            ),
+        )
+    };
+    let selected_parent = open_parent()
+        .map_err(ProfileOpenFileImportError::Open)?;
     let opened = selected_cwd
         .as_ref()
         .map_or_else(
@@ -404,6 +440,14 @@ pub fn open_selected_profile_import_probe(
             |cwd| open_selected_profile_file_from_cwd(intent.path(), cwd),
         )
         .map_err(ProfileOpenFileImportError::Open)?;
+    let parent_after_open = open_parent()
+        .map_err(ProfileOpenFileImportError::Open)?;
+    if !same_selected_profile_parent_directory(
+        &selected_parent,
+        &parent_after_open,
+    ) {
+        return Err(ProfileOpenFileImportError::SelectedSourceChanged);
+    }
     let original_metadata = opened.metadata().map_err(|error| {
         ProfileOpenFileImportError::Open(
             ProfileSelectedFileOpenError::FileIo(error.kind()),
@@ -414,6 +458,7 @@ pub fn open_selected_profile_import_probe(
         opened,
         original_metadata,
         selected_cwd,
+        selected_parent,
     })
 }
 
