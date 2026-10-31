@@ -1568,6 +1568,7 @@ function createSessionFixtureServer(
     onDraftRead = null,
     onDraftContentType = null,
     onHandshakeContentType = null,
+    onDraftBody = null,
 ) {
     const generated = new Set([
         "main.js",
@@ -1687,7 +1688,9 @@ function createSessionFixtureServer(
                 "Cache-Control": "no-store",
                 "Content-Type": contentType,
             });
-            response.end(status === 200 ? REFRESH_DRAFT[field] : "");
+            response.end(status === 200
+                ? (onDraftBody?.(field) ?? REFRESH_DRAFT[field])
+                : "");
             return;
         }
         response.writeHead(404);
@@ -4840,6 +4843,101 @@ test(
                 });
             }
             assert.equal(sourceReads, 2);
+            assert.deepEqual(apiRequests, [
+                "POST /api/handshake",
+                "GET /api/session/task",
+                "GET /api/session/source",
+                "POST /api/handshake",
+                "GET /api/session/task",
+                "GET /api/session/source",
+                "GET /api/session/candidate",
+            ]);
+        } finally {
+            bidi?.close();
+            await closeFixtureServer(server);
+            for (const child of children.reverse()) {
+                await stopChild(child);
+            }
+            fs.rmSync(profile, { recursive: true, force: true });
+        }
+    },
+);
+
+test(
+    "Firefox rejects corrupt draft bytes and restores a leading BOM on retry",
+    { skip: !FIREFOX_AVAILABLE, timeout: FIREFOX_CASE_TIMEOUT_MS },
+    async () => {
+        fs.mkdirSync(".temp", { recursive: true });
+        const profile = fs.mkdtempSync(".temp/session-draft-utf8-");
+        const apiRequests = [];
+        let healthySource = false;
+        const sourceText = "\uFEFFNotebook";
+        const server = createSessionFixtureServer(
+            apiRequests, null, null, null, null, null, null,
+            (field) => field === "source"
+                ? (healthySource
+                    ? sourceText
+                    : Buffer.from([0xc3, 0x28]))
+                : null,
+        );
+        const children = [];
+        let bidi;
+        try {
+            server.listen(0, "127.0.0.1");
+            await once(server, "listening");
+            const address = server.address();
+            assert.notEqual(address, null);
+            assert.notEqual(typeof address, "string");
+            const origin = `http://127.0.0.1:${address.port}`;
+            bidi = await startBidiFirefox(profile, children);
+            const tab = await bidi.command("browsingContext.create", {
+                type: "tab",
+            });
+            await bidi.command("browsingContext.navigate", {
+                context: tab.context,
+                url: `${origin}/#session=${REFRESH_SECRET}`,
+                wait: "complete",
+            });
+            const rejected = await waitForSessionStatus(
+                bidi, tab.context, "Draft load rejected · editing off",
+            );
+            assert.equal(rejected.hash, "");
+            for (const field of ["task", "source", "candidate"]) {
+                assert.deepEqual(rejected[field], {
+                    disabled: true, value: "",
+                });
+            }
+            assert.deepEqual(apiRequests, [
+                "POST /api/handshake",
+                "GET /api/session/task",
+                "GET /api/session/source",
+            ]);
+            healthySource = true;
+            const retry = await bidi.command("script.evaluate", {
+                awaitPromise: false,
+                expression: `(() => {
+                    const button = document.getElementById("retry-session");
+                    const active = !button.hidden && !button.disabled;
+                    if (active) button.click();
+                    return active;
+                })()`,
+                resultOwnership: "none",
+                target: { context: tab.context },
+            });
+            assert.equal(retry.type, "success");
+            assert.deepEqual(retry.result, { type: "boolean", value: true });
+            const ready = await waitForSessionStatus(
+                bidi, tab.context, "Session ready",
+            );
+            assert.deepEqual(ready.task, {
+                disabled: false, value: REFRESH_DRAFT.task,
+            });
+            assert.deepEqual(ready.source, {
+                disabled: false, value: sourceText,
+            });
+            assert.deepEqual(ready.candidate, {
+                disabled: false, value: REFRESH_DRAFT.candidate,
+            });
             assert.deepEqual(apiRequests, [
                 "POST /api/handshake",
                 "GET /api/session/task",

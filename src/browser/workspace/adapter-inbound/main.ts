@@ -662,11 +662,14 @@ async function readDraftField(
         return { kind: "rejected" };
     }
     try {
-        const value = await response.text();
-        return sessionSecret === secret
-            && draftSyncGeneration === generation
-            ? { kind: "available", value }
-            : { kind: "stale" };
+        const bytes = await response.arrayBuffer();
+        if (!draftSyncIsCurrent(secret, generation)) {
+            return { kind: "stale" };
+        }
+        const value = sessionDraft.decodeDraftReadBytes(bytes);
+        return value === null
+            ? { kind: "rejected" }
+            : { kind: "available", value };
     } catch {
         return sessionSecret === secret
             && draftSyncGeneration === generation

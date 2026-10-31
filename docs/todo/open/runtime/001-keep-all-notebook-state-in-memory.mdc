@@ -187,3 +187,11 @@ declared JSON handshake then hydrates normally.
 
 This is client-side fail-closed transport evidence; it does not extend the
 backend's available capabilities or prove later notebook acceptance.
+
+Browser draft reads now decode the declared UTF-8 body with a fatal decoder
+that preserves the leading U+FEFF code point. The previous `Response.text()`
+path silently removed that valid character and substituted U+FFFD for malformed
+byte sequences. A red-first browser-module fixture and a real Firefox loopback
+case verify byte-exact recovery after a valid retry and atomic editing refusal
+for invalid source bytes. This is transport fidelity for pre-acceptance drafts,
+not a claim that all notebook source and media inputs have been implemented.

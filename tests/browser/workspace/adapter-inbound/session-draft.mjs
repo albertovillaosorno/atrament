@@ -44,6 +44,7 @@ const {
     isResourceLimit,
     isDraftReadContentType,
     isDraftDiagnosticContentType,
+    decodeDraftReadBytes,
 } = await import(`${GENERATED_ROOT}session-draft.js`);
 
 test("draft targets are same-origin and contain no credential", () => {
@@ -93,6 +94,20 @@ test("draft reads admit only declared UTF-8 plain text", () => {
         "text/plain; charset=utf-8; extra=yes",
     ]) {
         assert.equal(isDraftReadContentType(invalid), false, String(invalid));
+    }
+});
+
+test("draft byte decoder preserves BOM and refuses corrupt UTF-8", () => {
+    const enc = new TextEncoder();
+    for (const value of ["", "plain", "\uFEFFprefix", "niño 📝", "a\uFFFDb"]) {
+        assert.equal(decodeDraftReadBytes(enc.encode(value).buffer), value);
+    }
+    for (const bytes of [
+        Uint8Array.of(0xc3, 0x28),
+        Uint8Array.of(0xe2, 0x82),
+        Uint8Array.of(0xed, 0xa0, 0x80),
+    ]) {
+        assert.equal(decodeDraftReadBytes(bytes.buffer), null);
     }
 });
 

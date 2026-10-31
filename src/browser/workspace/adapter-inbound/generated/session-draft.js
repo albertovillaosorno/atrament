@@ -57,6 +57,19 @@ export function draftMutationTarget(field) {
 export function isDraftReadContentType(value) {
     return value?.trim().toLowerCase() === "text/plain; charset=utf-8";
 }
+// Preserve every admitted UTF-8 code point, including an initial U+FEFF.
+// Response.text() removes a leading BOM and silently replaces invalid bytes.
+export function decodeDraftReadBytes(bytes) {
+    try {
+        return new TextDecoder("utf-8", {
+            fatal: true,
+            ignoreBOM: true,
+        }).decode(bytes);
+    }
+    catch {
+        return null;
+    }
+}
 // A resource-limit diagnostic is not authority without a declared JSON body.
 export function isDraftDiagnosticContentType(value) {
     return value?.trim().toLowerCase() === "application/json; charset=utf-8";

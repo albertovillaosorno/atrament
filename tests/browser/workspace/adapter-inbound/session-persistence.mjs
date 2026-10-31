@@ -44,7 +44,7 @@ const MAIN_MODULE = new URL(
     "../../../../src/browser/workspace/adapter-inbound/generated/main.js",
     import.meta.url,
 );
-const { isDraftReadContentType } = await import(
+const { isDraftReadContentType, decodeDraftReadBytes } = await import(
     new URL("session-draft.js", MAIN_MODULE).href,
 );
 
@@ -608,22 +608,28 @@ test("draft hydration rejects wrong media without body read", async () => {
                 const sessionSecret = "secret";
                 const draftSyncGeneration = 0;
                 const sessionRequests = { signal: {} };
+                function draftSyncIsCurrent(secret, generation) {
+                    return sessionSecret === secret
+                        && draftSyncGeneration === generation;
+                }
                 const sessionDraft = {
                     draftReadTarget: () => "./api/session/task",
                     draftReadHeaders: () => ({}),
                     isDraftReadContentType,
+                    decodeDraftReadBytes,
                 };
                 ${readDraftField}
                 return readDraftField("task", "secret", 0);
             })()
         `, {
             isDraftReadContentType,
+            decodeDraftReadBytes,
             fetch: async () => ({
                 status: 200,
                 headers: { get: () => mediaType },
-                text: async () => {
+                arrayBuffer: async () => {
                     reads += 1;
-                    return "private draft";
+                    return new TextEncoder().encode("private draft").buffer;
                 },
             }),
         });
@@ -635,6 +641,50 @@ test("draft hydration rejects wrong media without body read", async () => {
             assert.equal(result.kind, "rejected", String(mediaType));
             assert.equal(reads, 0, "untrusted body must remain unread");
         }
+    }
+});
+
+test("draft hydration preserves BOM and rejects invalid UTF-8", async () => {
+    const source = await readFile(MAIN_MODULE, "utf8");
+    const start = source.indexOf("async function readDraftField(");
+    const end = source.indexOf("async function hydrateSessionDraft(", start);
+    assert.ok(start >= 0 && end > start, "draft read must be extractable");
+    const readDraftField = source.slice(start, end);
+    for (const [body, expected] of [
+        [Uint8Array.of(0xef, 0xbb, 0xbf, 0x54), {
+            kind: "available", value: "\uFEFFT",
+        }],
+        [Uint8Array.of(0xc3, 0x28), { kind: "rejected" }],
+    ]) {
+        const result = await runInNewContext(`
+            (async () => {
+                const sessionSecret = "secret";
+                const draftSyncGeneration = 0;
+                const sessionRequests = { signal: {} };
+                function draftSyncIsCurrent(secret, generation) {
+                    return sessionSecret === secret
+                        && draftSyncGeneration === generation;
+                }
+                const sessionDraft = {
+                    draftReadTarget: () => "./api/session/task",
+                    draftReadHeaders: () => ({}),
+                    isDraftReadContentType,
+                    decodeDraftReadBytes,
+                };
+                ${readDraftField}
+                return readDraftField("task", "secret", 0);
+            })()
+        `, {
+            isDraftReadContentType,
+            decodeDraftReadBytes,
+            fetch: async () => ({
+                status: 200,
+                headers: { get: () => "text/plain; charset=utf-8" },
+                text: () => new Response(body).text(),
+                arrayBuffer: () => new Response(body).arrayBuffer(),
+            }),
+        });
+        assert.deepEqual(JSON.parse(JSON.stringify(result)), expected);
     }
 });
 

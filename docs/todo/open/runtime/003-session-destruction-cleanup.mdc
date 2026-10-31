@@ -170,3 +170,10 @@ it still does not cover a crash in the later link-before-rename window.
 The task remains open until temporary media exist and end-to-end fixtures also
 cover backend operation cancellation, media cleanup, and late-link crash
 recovery rather than only anonymous-stage and post-sync termination.
+
+Browser draft hydration now refuses malformed UTF-8 instead of displaying a
+lossily decoded partial snapshot. A Firefox loopback fixture serves invalid
+source bytes after a valid task read: all three draft inputs remain blank and
+disabled, and the candidate read is never sent. An explicit retry with a valid
+leading U+FEFF source body restores all fields with that character intact.
+This tests browser decoding and retry, not backend media-file cleanup.
