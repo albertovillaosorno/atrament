@@ -99,7 +99,8 @@ impl Drop for OwnedTestDirectory {
 fn parent_traversal_refuses_before_open() {
     let escape = PathBuf::from("local/../missing.atrament");
     assert_eq!(
-        open_selected_profile_file(&escape).expect_err("parent component refuses"),
+        open_selected_profile_file(&escape)
+            .expect_err("parent component refuses"),
         Error::ParentTraversal,
     );
 }
@@ -126,7 +127,8 @@ fn symlinked_file_and_parent_directory_are_both_forbidden() {
     let leaf = owned.0.join("alias.atrament");
     symlink(&real, &leaf).expect("leaf symlink");
     assert_eq!(
-        open_selected_profile_file(&leaf).expect_err("must not follow final link"),
+        open_selected_profile_file(&leaf)
+            .expect_err("must not follow final link"),
         Error::SymlinkForbidden,
     );
     let nested = owned.0.join("nested");
@@ -151,7 +153,8 @@ fn relative_path_is_resolved_under_cwd_without_link_traversal() {
         .strip_prefix(env::current_dir().expect("test cwd"))
         .expect("test directory under cwd")
         .join("notes.atrament");
-    let file = open_selected_profile_file(&relative).expect("relative path under cwd");
+    let file =
+        open_selected_profile_file(&relative).expect("relative path under cwd");
     let mut source = file;
     let mut bytes = Vec::new();
     let _count = source.read_to_end(&mut bytes).expect("read source");
@@ -167,7 +170,8 @@ fn selected_directory_and_missing_file_are_not_admitted() {
         Error::NotRegularFile,
     );
     assert_eq!(
-        open_selected_profile_file(&owned.0.join("absent")).expect_err("source does not exist"),
+        open_selected_profile_file(&owned.0.join("absent"))
+            .expect_err("source does not exist"),
         Error::FileIo(io::ErrorKind::NotFound),
     );
 }
@@ -177,7 +181,8 @@ fn selected_directory_and_missing_file_are_not_admitted() {
 fn already_opened_descriptor_is_not_redirected_by_name_replacement() {
     let owned = OwnedTestDirectory::new(false);
     let path = owned.write("selected.atrament", b"original bytes");
-    let opened = open_selected_profile_file(&path).expect("selected original source");
+    let opened =
+        open_selected_profile_file(&path).expect("selected original source");
     fs::rename(&path, owned.0.join("moved.atrament")).expect("move old name");
     let _replacement = owned.write("selected.atrament", b"replaced bytes");
     let mut source = opened;
@@ -193,7 +198,8 @@ fn already_opened_descriptor_is_not_redirected_by_name_replacement() {
 fn platform_without_verified_open_policy_refuses() {
     let selected = PathBuf::from("profile.atrament");
     assert_eq!(
-        open_selected_profile_file(&selected).expect_err("no insecure fallback"),
+        open_selected_profile_file(&selected)
+            .expect_err("no insecure fallback"),
         Error::UnsupportedOpenPolicy,
     );
 }

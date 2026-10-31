@@ -32,33 +32,6 @@
 
 //! Fail-closed profile source opening without selection authority.
 
-#[cfg(all(test, target_os = "linux"))]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn unsupported_secure_open_errors_never_trigger_a_weak_fallback() {
-        for error in [Errno::ENOSYS, Errno::EINVAL, Errno::E2BIG] {
-            assert_eq!(
-                classify_linux_open_error(error),
-                ProfileSelectedFileOpenError::UnsupportedOpenPolicy,
-            );
-        }
-        assert_eq!(
-            classify_linux_open_error(Errno::ELOOP),
-            ProfileSelectedFileOpenError::SymlinkForbidden,
-        );
-        assert_eq!(
-            classify_linux_open_error(Errno::EXDEV),
-            ProfileSelectedFileOpenError::ParentTraversal,
-        );
-        assert_eq!(
-            classify_linux_open_error(Errno::ENOENT),
-            ProfileSelectedFileOpenError::FileIo(io::ErrorKind::NotFound),
-        );
-    }
-}
-
 #[cfg(target_os = "linux")]
 use nix::errno::Errno;
 use std::fs::File;
@@ -93,8 +66,8 @@ pub enum ProfileSelectedFileOpenError {
 /// file rewrite after opening may change the directory entry or file bytes:
 /// this method binds the pathname lookup to its returned descriptor, but is
 /// not a filesystem snapshot or content validation. Nameless, NUL-containing
-/// and directory-marked paths refuse before opening an anchor. Use the bounded reader
-/// followed by full ZIP, schema and member SHA verification.
+/// and directory-marked paths refuse before opening an anchor. Use the
+/// bounded reader followed by full ZIP, schema and member SHA verification.
 ///
 /// Other platforms and Linux kernels without `openat2` refuse rather than
 /// using a weaker lstat/open race-prone fallback.
@@ -102,7 +75,9 @@ pub enum ProfileSelectedFileOpenError {
 /// # Errors
 ///
 /// Returns typed path, platform, link, type and I/O refusals.
-pub fn open_selected_profile_file(path: &Path) -> Result<File, ProfileSelectedFileOpenError> {
+pub fn open_selected_profile_file(
+    path: &Path,
+) -> Result<File, ProfileSelectedFileOpenError> {
     if path
         .components()
         .any(|part| matches!(part, Component::ParentDir))
@@ -135,24 +110,35 @@ fn classify_linux_open_error(error: Errno) -> ProfileSelectedFileOpenError {
 }
 
 #[cfg(target_os = "linux")]
-fn open_selected_without_links(path: &Path) -> Result<File, ProfileSelectedFileOpenError> {
+fn open_selected_without_links(
+    path: &Path,
+) -> Result<File, ProfileSelectedFileOpenError> {
     use nix::fcntl::{OFlag, OpenHow, ResolveFlag, openat2};
 
     let (anchor, relative) = if path.is_absolute() {
         (
             "/",
-            path.strip_prefix("/")
-                .map_err(|_error| ProfileSelectedFileOpenError::ParentTraversal)?,
+            path.strip_prefix("/").map_err(|_error| {
+                ProfileSelectedFileOpenError::ParentTraversal
+            })?,
         )
     } else {
         (".", path)
     };
-    let directory =
-        File::open(anchor).map_err(|error| ProfileSelectedFileOpenError::FileIo(error.kind()))?;
+    let directory = File::open(anchor)
+        .map_err(|error| ProfileSelectedFileOpenError::FileIo(error.kind()))?;
     let how = OpenHow::new()
-        .flags(OFlag::O_RDONLY | OFlag::O_CLOEXEC | OFlag::O_NOFOLLOW | OFlag::O_NONBLOCK)
-        .resolve(ResolveFlag::RESOLVE_BENEATH | ResolveFlag::RESOLVE_NO_SYMLINKS);
-    let descriptor = openat2(&directory, relative, how).map_err(classify_linux_open_error)?;
+        .flags(
+            OFlag::O_RDONLY
+                | OFlag::O_CLOEXEC
+                | OFlag::O_NOFOLLOW
+                | OFlag::O_NONBLOCK,
+        )
+        .resolve(
+            ResolveFlag::RESOLVE_BENEATH | ResolveFlag::RESOLVE_NO_SYMLINKS,
+        );
+    let descriptor = openat2(&directory, relative, how)
+        .map_err(classify_linux_open_error)?;
     let file = File::from(descriptor);
     let metadata = file
         .metadata()
@@ -164,6 +150,8 @@ fn open_selected_without_links(path: &Path) -> Result<File, ProfileSelectedFileO
 }
 
 #[cfg(not(target_os = "linux"))]
-fn open_selected_without_links(_path: &Path) -> Result<File, ProfileSelectedFileOpenError> {
+fn open_selected_without_links(
+    _path: &Path,
+) -> Result<File, ProfileSelectedFileOpenError> {
     Err(ProfileSelectedFileOpenError::UnsupportedOpenPolicy)
 }

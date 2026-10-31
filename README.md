@@ -182,10 +182,11 @@ fallback.
 
 ### Current local profile utilities (Linux)
 
-The present `atrament` binary offers three explicit local profile operations:
+The present `atrament` binary offers four explicit local profile operations:
 
 ```sh
 atrament profile verify SOURCE.atrament
+atrament profile check-canonical SOURCE.atrament
 atrament profile inspect SOURCE.atrament
 atrament profile repack SOURCE.atrament NEW-TARGET.atrament
 atrament profile repack --replace SOURCE.atrament EXISTING-TARGET.atrament
@@ -193,8 +194,12 @@ atrament profile repack --replace SOURCE.atrament EXISTING-TARGET.atrament
 
 Verification checks a bounded archive, manifest, member digests, and
 JSON-section syntax, then reports only a fixed success message, without
-revealing profile content. Inspection performs the same checks before
-displaying the manifest and readable sections.
+revealing profile content. The read-only `check-canonical` operation performs
+those checks and compares all original ZIP bytes with the deterministic
+first-release encoding. Valid but noncanonical archives refuse without stdout;
+it does not rewrite the source or display any private profile data. Inspection
+performs the same integrity checks before displaying the manifest and readable
+sections.
 
 Repack performs those same checks, then writes canonical ZIP bytes to a
 caller-selected destination using atomic, synchronized file creation. By
@@ -207,7 +212,7 @@ Bare dash-prefixed tokens are treated as options in every profile command,
 not source or output filenames. Prefix `./` to select a file such as
 `./--replace`.
 
-Both modes preserve verified opaque assets and unknown
+Canonical repack preserves verified opaque assets and unknown
 optional features. Unsupported required features and malformed sections refuse
 without changing an existing target.
 

@@ -32,7 +32,14 @@
 
 //! Integration fixtures for attached, read-only profile Import verification.
 
+#![expect(
+    clippy::expect_used,
+    clippy::format_collect,
+    reason = "fail-fast, generated in-memory ZIP and digest test fixtures"
+)]
+
 use std::path::PathBuf;
+use std::ptr;
 
 use atrament_explicit_file_path_intent::{
     ExplicitFilePathIntent, ExplicitFilePathSource, ExplicitFilePurpose,
@@ -190,10 +197,15 @@ fn source_bound_success_releases_only_digest_verified_nonroot_bytes() {
         assert!(!debug.contains(private));
     }
     assert!(!debug.contains(&format!("{source_bytes:?}")));
-    assert!(std::ptr::eq(result.path(), &path));
-    assert!(std::ptr::eq(result.manifest(), source.manifest()));
+    assert!(ptr::eq(result.path(), &raw const path));
+    assert!(ptr::eq(result.manifest(), source.manifest()));
     assert_eq!(result.root_sha256(), source.root_sha256());
     assert_eq!(result.archive_sha256(), archive.source_sha256());
+    assert_eq!(result.verified_archive_bytes(), source_bytes);
+    assert!(ptr::eq(
+        result.verified_archive_bytes().as_ptr(),
+        source_bytes.as_ptr(),
+    ));
     assert_eq!(result.verified_entry_count(), 1);
     assert_eq!(
         result.verified_entry_bytes(MEMBER),

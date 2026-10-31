@@ -59,6 +59,7 @@ use std::process::{self, Command};
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use atrament_browser_launch::LaunchError;
+use atrament_explicit_file_path_intent::ExplicitOverwriteIntent;
 use atrament_profile_entry_sha256::sha256_profile_bytes;
 use atrament_profile_stored_zip_writer::{
     ProfileStoredZipMember, ProfileStoredZipWriteLimits,
@@ -248,6 +249,8 @@ fn cli_args_reject_unknown_and_incomplete_commands_without_startup() {
         vec!["inspect", "missing"],
         vec!["profile", "inspect"],
         vec!["profile", "verify"],
+        vec!["profile", "check-canonical"],
+        vec!["profile", "check-canonical", "a", "extra"],
         vec!["profile", "verify", "a", "extra"],
         vec!["profile", "inspect", "a", "extra"],
         vec!["profile", "repack"],
@@ -561,6 +564,136 @@ fn cli_verify_refuses_symlinked_selected_source_without_path_leak() {
 
 #[cfg(target_os = "linux")]
 #[test]
+fn cli_check_canonical_distinguishes_integrity_from_canonical_bytes() {
+    let section = br#"{"private":"canonical-only-49352"}"#;
+    let asset = b"private-opaque-canonical-49252\xff";
+    let original = profile_zip(section, asset, section);
+    let source = OwnedProfileFile::new(&original);
+    let initial = fs::metadata(&source.0).expect("original source metadata");
+
+    // ZIP metadata is already deterministic, but manifest keys are not.
+    bootstrap::verify_profile(source.0.clone())
+        .expect("noncanonical source still has valid CRC and SHA-256");
+    let rejected = Command::new(env!("CARGO_BIN_EXE_atrament"))
+        .args(["profile", "check-canonical"])
+        .arg(&source.0)
+        .output()
+        .expect("check noncanonical verified source");
+    assert!(!rejected.status.success());
+    assert!(rejected.stdout.is_empty());
+    let error = String::from_utf8_lossy(&rejected.stderr);
+    assert!(error.contains("verified but not canonically encoded"));
+    assert!(!error.contains("canonical-only-49352"));
+    assert!(!error.contains("private-opaque-canonical-49252"));
+    assert_eq!(fs::read(&source.0).expect("unchanged source"), original);
+    assert_eq!(
+        fs::metadata(&source.0).expect("still original")
+            .modified().expect("unchanged modification time"),
+        initial.modified().expect("initial modification time"),
+    );
+
+    let target = OwnedProfileDestination(
+        source.0.with_extension("canonical-check.atrament"),
+    );
+    bootstrap::repack_profile(
+        source.0.clone(), target.0.clone(),
+        ExplicitOverwriteIntent::PreserveExisting,
+    ).expect("verified noncanonical profile can be repacked");
+    let expected = fs::read(&target.0).expect("canonical output exists");
+    assert_ne!(expected, original, "root canonicalization changed bytes");
+    let canonical = Command::new(env!("CARGO_BIN_EXE_atrament"))
+        .args(["profile", "check-canonical"])
+        .arg(&target.0)
+        .output()
+        .expect("check complete canonical profile");
+    assert!(canonical.status.success());
+    assert_eq!(
+        canonical.stdout,
+        b"profile canonical (verified; no session import)\n",
+    );
+    assert!(canonical.stderr.is_empty());
+    assert_eq!(fs::read(&target.0).expect("check is read-only"), expected);
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn cli_check_canonical_never_publishes_forged_source_bytes() {
+    let authentic = br#"{"private":"canonical-integrity-70165"}"#;
+    let forged = br#"{"private":"canonical-integrity-70166"}"#;
+    assert_eq!(authentic.len(), forged.len());
+    let bytes = profile_zip(
+        forged, b"opaque-integrity-70165", authentic,
+    );
+    let source = OwnedProfileFile::new(&bytes);
+    let rejected = Command::new(env!("CARGO_BIN_EXE_atrament"))
+        .args(["profile", "check-canonical"])
+        .arg(&source.0)
+        .output()
+        .expect("reject digest-forged source before canonicality check");
+    assert!(!rejected.status.success());
+    assert!(rejected.stdout.is_empty());
+    let diagnostic = String::from_utf8_lossy(&rejected.stderr);
+    assert!(diagnostic.contains("DigestMismatch"));
+    for private in [
+        "canonical-integrity-70165",
+        "canonical-integrity-70166",
+        "opaque-integrity-70165",
+    ] {
+        assert!(!diagnostic.contains(private));
+    }
+    assert_eq!(
+        fs::read(&source.0).expect("canonicality cannot alter forged source"),
+        bytes,
+    );
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn cli_check_canonical_rejects_legacy_zip_metadata_even_with_canonical_root() {
+    let section = br#"{"private":"legacy-writer-metadata-51235"}"#;
+    let initial = OwnedProfileFile::new(&profile_zip(
+        section, b"private-asset-51235", section,
+    ));
+    let canonical_path = OwnedProfileDestination(
+        initial.0.with_extension("metadata-canonical.atrament"),
+    );
+    bootstrap::repack_profile(
+        initial.0.clone(), canonical_path.0.clone(),
+        ExplicitOverwriteIntent::PreserveExisting,
+    ).expect("obtain independently verified canonical ZIP");
+    let mut legacy = fs::read(&canonical_path.0)
+        .expect("canonical writer ZIP");
+    let trailer_offset = legacy.len().checked_sub(6)
+        .expect("ZIP trailer directory offset is present");
+    let directory_bytes = legacy.get(trailer_offset..trailer_offset + 4)
+        .expect("ZIP directory offset bytes");
+    let directory = usize::try_from(u32::from_le_bytes(
+        directory_bytes.try_into().expect("four directory offset bytes"),
+    )).expect("ZIP directory offset fits usize");
+    legacy.get_mut(4..6).expect("first local version slot")
+        .copy_from_slice(&10u16.to_le_bytes());
+    legacy.get_mut(directory + 6..directory + 8)
+        .expect("first central version slot")
+        .copy_from_slice(&10u16.to_le_bytes());
+    let source = OwnedProfileFile::new(&legacy);
+    bootstrap::verify_profile(source.0.clone())
+        .expect("legacy metadata does not invalidate the verified archive");
+    let result = Command::new(env!("CARGO_BIN_EXE_atrament"))
+        .args(["profile", "check-canonical"])
+        .arg(&source.0)
+        .output()
+        .expect("check legacy header framing");
+    assert!(!result.status.success());
+    assert!(result.stdout.is_empty());
+    let error = String::from_utf8_lossy(&result.stderr);
+    assert!(error.contains("verified but not canonically encoded"));
+    assert!(!error.contains("legacy-writer-metadata-51235"));
+    assert!(!error.contains("private-asset-51235"));
+    assert_eq!(fs::read(&source.0).expect("source remains unchanged"), legacy);
+}
+
+#[cfg(target_os = "linux")]
+#[test]
 fn cli_repack_handles_root_only_profile_without_phantom_members() {
     let root = concat!(
         r#"{"required_features":[],"profile_identity":"empty-writer", "#,
@@ -623,6 +756,8 @@ fn cli_repack_handles_root_only_profile_without_phantom_members() {
         .expect("root-only export independently reimports");
     assert!(inspection.contains("empty-writer"));
     assert!(!inspection.contains("sections/"));
+    bootstrap::check_canonical_profile(destination.0.clone())
+        .expect("repacked empty profile is exactly canonical");
 }
 
 #[cfg(target_os = "linux")]

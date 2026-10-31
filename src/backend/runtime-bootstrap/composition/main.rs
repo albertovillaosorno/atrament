@@ -55,6 +55,7 @@ use atrament_profile_file_commit::{
     ProfileFileCommitDisposition, commit_profile_file,
 };
 use atrament_profile_import_preflight::ProfileImportBudget;
+use atrament_profile_import_verification::VerifiedAttachedProfileImport;
 use atrament_profile_json_syntax::ProfileJsonSyntaxLimits;
 use atrament_profile_manifest_json_codec::ProfileManifestJsonLimits;
 use atrament_profile_manifest_json_writer::{
@@ -193,6 +194,34 @@ const fn profile_repack_limits() -> ProfileExportAssemblyLimits {
     }
 }
 
+// This is the one canonical framing step shared by write and read-only
+// checks. Its inputs have already passed complete attached source verification;
+// the returned artifact remains in memory and carries no file authority.
+fn canonical_artifact_from_verified_profile(
+    verified: &VerifiedAttachedProfileImport<'_, '_, '_, '_>,
+) -> io::Result<ProfileExportArtifact> {
+    let mut payloads = Vec::new();
+    payloads.try_reserve_exact(verified.manifest().entries.len())
+        .map_err(|_error| io::Error::other(
+            "profile payload inventory allocation refused",
+        ))?;
+    for entry in &verified.manifest().entries {
+        let bytes = verified.verified_entry_bytes(&entry.path)
+            .ok_or_else(|| io::Error::other(
+                "missing SHA-verified profile member",
+            ))?;
+        payloads.push(ProfileExportPayload {
+            path: &entry.path,
+            bytes,
+        });
+    }
+    assemble_profile_export_artifact(
+        verified.manifest(), &payloads, &[], profile_repack_limits(),
+    ).map_err(|error| io::Error::other(format!(
+        "profile canonicalization refused: {error:?}",
+    )))
+}
+
 /// Repack a fully verified, explicitly selected profile at a new exact path.
 ///
 /// The two local CLI arguments are caller selections, not paths extracted
@@ -238,29 +267,7 @@ pub(crate) fn repack_profile(
         &source,
         &[],
         profile_inspection_limits(),
-        |verified| -> io::Result<ProfileExportArtifact> {
-            let mut payloads = Vec::new();
-            payloads.try_reserve_exact(verified.manifest().entries.len())
-                .map_err(|_error| io::Error::other(
-                    "profile payload inventory allocation refused",
-                ))?;
-            for entry in &verified.manifest().entries {
-                let bytes = verified.verified_entry_bytes(&entry.path)
-                    .ok_or_else(|| io::Error::other(
-                        "missing SHA-verified profile member",
-                    ))?;
-                payloads.push(ProfileExportPayload {
-                    path: &entry.path,
-                    bytes,
-                });
-            }
-            assemble_profile_export_artifact(
-                verified.manifest(), &payloads, &[],
-                profile_repack_limits(),
-            ).map_err(|error| io::Error::other(format!(
-                "profile canonicalization refused: {error:?}",
-            )))
-        },
+        canonical_artifact_from_verified_profile,
     ).map_err(|error| io::Error::new(
         io::ErrorKind::InvalidData,
         format!("profile repack source refused: {error:?}"),
@@ -316,6 +323,50 @@ pub(crate) fn verify_profile(path: PathBuf) -> io::Result<()> {
         io::ErrorKind::InvalidData,
         format!("profile verification refused: {error:?}"),
     ))
+}
+
+/// Check exact canonical ZIP bytes without modifying or disclosing source.
+///
+/// A verified ordinary stored ZIP can have valid payload hashes but still
+/// differ from the deterministic first-release writer. This gate fully
+/// verifies every member, canonicalizes the typed manifest and verified
+/// payloads in bounded memory, then compares the *whole exact source bytes*,
+/// not CRC or a digest alone. No destination is opened, no session is imported,
+/// and a noncanonical source is never silently rewritten.
+///
+/// # Errors
+///
+/// Refuses unsafe selection, any Import/Export validation failure, or a
+/// byte-for-byte mismatch with the canonical framing after verification.
+pub(crate) fn check_canonical_profile(path: PathBuf) -> io::Result<()> {
+    let intent = classify_explicit_file_path_intent(
+        ExplicitFilePurpose::ImportProfile,
+        ExplicitFilePathSource::CallerSelection,
+        path,
+        ExplicitOverwriteIntent::PreserveExisting,
+    ).map_err(|error| io::Error::new(
+        io::ErrorKind::InvalidInput,
+        format!("invalid profile selection: {error:?}"),
+    ))?;
+    inspect_selected_profile_import(
+        &intent,
+        &[],
+        profile_inspection_limits(),
+        |verified| {
+            let canonical = canonical_artifact_from_verified_profile(verified)?;
+            if canonical.bytes() == verified.verified_archive_bytes() {
+                Ok(())
+            } else {
+                Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "profile is verified but not canonically encoded",
+                ))
+            }
+        },
+    ).map_err(|error| io::Error::new(
+        io::ErrorKind::InvalidData,
+        format!("profile canonicality source refused: {error:?}"),
+    ))?
 }
 
 /// Inspect an explicitly selected local profile before exposing readable JSON.
@@ -452,6 +503,12 @@ pub(crate) fn inspect_cli_args(
                     "profile verified (no session import)\n",
                 )));
             }
+            if action.as_deref() == Some(OsStr::new("check-canonical")) {
+                check_canonical_profile(PathBuf::from(path))?;
+                return Ok(Some(String::from(
+                    "profile canonical (verified; no session import)\n",
+                )));
+            }
         }
         if action.as_deref() == Some(OsStr::new("repack")) {
             let replace = source.as_deref() == Some(OsStr::new("--replace"));
@@ -491,6 +548,7 @@ pub(crate) fn inspect_cli_args(
         io::ErrorKind::InvalidInput,
         concat!(
             "usage: atrament [profile verify PATH | profile inspect PATH | ",
+            "profile check-canonical PATH | ",
             "profile repack [--replace] SOURCE TARGET]",
         ),
     ))

@@ -78,6 +78,15 @@ and symlinked sources, bounded argument dispatch, exact non-UTF-8 selected
 paths, and complete stdout refusal when a later declared section is invalid.
 Versioned handwriting sections and full cross-platform inspection remain open.
 
+The Linux `atrament profile check-canonical PATH` command now checks
+full Import integrity before comparing the exact source ZIP bytes to the
+complete canonical artifact assembled from the same verified manifest and
+payloads. It is read-only, prints a fixed success confirmation, and refuses
+valid but noncanonical source bytes without leaking private section text.
+Fixtures distinguish noncanonical root JSON and legacy header metadata from
+true SHA or section failures, and prove root-only repacks pass. Byte access
+comes from sealed, fully SHA-verified archive evidence, not an inferred path.
+
 Typed handwriting section schemas and encoders, migration/ZIP64 support,
 physical path authority and the application-level Import/Export lifecycle
 remain open. Earlier sections below retain their historical step-by-step

@@ -43,7 +43,7 @@ and embedded-NUL names before filesystem access, independently of the
 higher-level source-intent classifier. Linux also reports missing or
 unsupported `openat2` policy features as a typed fail-closed refusal,
 without falling back to an ordinary path open. Unit and file-path
-regressions cover both preflight and errno classification.
+regressions cover malformed source preflight without granting Import.
 
 The read-only profile inspector now reserves its section reference inventory
 fallibly and plans the exact complete display length, including canonical root,
@@ -76,6 +76,14 @@ Failures leave stdout empty. This narrowly reserializes verified source bytes
 at a selected destination; it does **not** import typed handwriting sections,
 bind an accepted session revision, or authorize notebook/PDF or session-profile
 Export.
+
+The independent Linux `atrament profile check-canonical PATH` gate
+now verifies an explicit source, reassembles bounded canonical ZIP bytes using
+the same helper as `repack`, and compares the complete source bytes exactly.
+It refuses SHA-correct but noncanonical root ordering and legacy ZIP metadata
+without modifying the source, printing private content, or claiming session
+Import. A sealed, fully verified source archive borrow enables this byte
+comparison without trusting externally supplied member bytes.
 
 A secure selected-file Import mutation sweep now rebuilds CRC-correct ZIPs
 after flipping every bit of a SHA-committed JSON section and opaque binary

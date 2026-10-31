@@ -40,6 +40,12 @@ use atrament_explicit_file_path_intent::{
     ExplicitFilePathIntent, ExplicitFilePurpose,
 };
 use atrament_handwriting_profile_container::{ProfileManifest, Sha256Digest};
+#[cfg(test)]
+use atrament_profile_entry_sha256 as _;
+#[cfg(test)]
+use atrament_profile_json_syntax as _;
+#[cfg(test)]
+use atrament_profile_stored_zip_writer as _;
 use atrament_profile_import_preflight::{
     ProfileImportBudget, ProfileImportPreflightError,
     preflight_explicit_profile_import_sorted,
@@ -106,6 +112,17 @@ impl<'path, 'manifest, 'bytes>
     #[must_use]
     pub const fn root_sha256(&self) -> Sha256Digest {
         self.source.root_sha256()
+    }
+
+    /// Borrow the complete exact source ZIP after all member integrity gates.
+    ///
+    /// This never normalizes or reserializes bytes. It supports read-only,
+    /// byte-exact canonicality comparison against a separately produced ZIP,
+    /// but does not prove the caller selected the file or authorize Import.
+    /// Incidental `Debug` formatting still redacts this private source.
+    #[must_use]
+    pub const fn verified_archive_bytes(&self) -> &'bytes [u8] {
+        self.source.archive().source_bytes()
     }
 
     /// Exact declared member bytes, available only after complete verification.

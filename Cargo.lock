@@ -761,6 +761,7 @@ dependencies = [
  "atrament_profile_export_assembly",
  "atrament_profile_file_commit",
  "atrament_profile_import_preflight",
+ "atrament_profile_import_verification",
  "atrament_profile_json_syntax",
  "atrament_profile_manifest_json_codec",
  "atrament_profile_manifest_json_writer",
