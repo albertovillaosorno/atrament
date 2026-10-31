@@ -39,8 +39,8 @@ mod linux {
     use super::*;
     use std::env;
     use std::fs;
-    use std::os::unix::fs::symlink;
-    use std::process;
+    use std::os::unix::fs::{MetadataExt as _, symlink};
+    use std::process::{self, Command};
     use std::sync::atomic::{AtomicU64, Ordering};
 
     use atrament_profile_file_commit::{
@@ -49,6 +49,9 @@ mod linux {
     use atrament_profile_selected_file_open::ProfileSelectedFileOpenError;
 
     static NEXT: AtomicU64 = AtomicU64::new(0);
+    const PROBE_CWD_ALTERNATE: &str = "ATRAMENT_TARGET_PROBE_CWD_ALTERNATE";
+    const PROBE_CWD_TEST: &str =
+        "linux::opened_relative_probe_refuses_changed_cwd_even_for_same_inode";
 
     struct OwnedDir(PathBuf);
 
@@ -74,6 +77,167 @@ mod linux {
         fn drop(&mut self) {
             fs::remove_dir_all(&self.0).expect("remove test-owned dir");
         }
+    }
+
+    #[test]
+    fn opened_probe_refuses_identical_bytes_after_pathname_rebinding() {
+        let dir = OwnedDir::new();
+        let original = artifact("private-rebound-profile");
+        let selected = intent(dir.target(), ExplicitFilePurpose::ExportProfile);
+        fs::write(selected.path(), original.bytes())
+            .expect("selected original bytes");
+        let opened = open_profile_export_target_probe(
+            &selected,
+            &original,
+            original.bytes().len(),
+        )
+        .expect("secure first open")
+        .expect("selected target exists");
+        let debug = format!("{opened:?}");
+        assert!(!debug.contains("private-rebound-profile"));
+        assert!(!debug.contains("selected.atrament"));
+        let parked = dir.0.join("original-inode");
+        fs::rename(selected.path(), &parked).expect("move opened inode away");
+        fs::write(selected.path(), original.bytes())
+            .expect("substitute identical-byte target");
+        assert_ne!(
+            fs::metadata(&parked).expect("old inode").ino(),
+            fs::metadata(selected.path()).expect("new inode").ino(),
+        );
+        assert_eq!(opened.verify(), Ok(Status::Drifted));
+        // A fresh unbound byte check cannot attest a historical commit.
+        assert_eq!(
+            check_profile_export_target(
+                &selected,
+                &original,
+                original.bytes().len(),
+            ),
+            Ok(Status::Matches {
+                archive_sha256: original.archive_sha256(),
+                byte_length: original.bytes().len(),
+            })
+        );
+        assert_eq!(
+            fs::read(&parked).expect("parked original unchanged"),
+            original.bytes(),
+        );
+    }
+
+    #[test]
+    fn opened_probe_refuses_symlink_swapped_after_secure_first_open() {
+        let dir = OwnedDir::new();
+        let original = artifact("A");
+        let selected = intent(dir.target(), ExplicitFilePurpose::ExportProfile);
+        fs::write(selected.path(), original.bytes())
+            .expect("selected original bytes");
+        let opened = open_profile_export_target_probe(
+            &selected,
+            &original,
+            original.bytes().len(),
+        )
+        .expect("secure first open")
+        .expect("selected target exists");
+        let parked = dir.0.join("original-inode");
+        fs::rename(selected.path(), &parked).expect("move opened inode away");
+        symlink(&parked, selected.path()).expect("inject final symlink");
+        assert_eq!(
+            opened.verify(),
+            Err(Error::Open(ProfileSelectedFileOpenError::SymlinkForbidden)),
+        );
+        assert_eq!(
+            fs::read(&parked).expect("original remains intact"),
+            original.bytes(),
+        );
+    }
+
+    #[test]
+    fn opened_probe_reports_missing_if_selected_target_removed_during_check() {
+        let dir = OwnedDir::new();
+        let original = artifact("A");
+        let selected = intent(dir.target(), ExplicitFilePurpose::ExportProfile);
+        fs::write(selected.path(), original.bytes())
+            .expect("selected original bytes");
+        let opened = open_profile_export_target_probe(
+            &selected,
+            &original,
+            original.bytes().len(),
+        )
+        .expect("secure first open")
+        .expect("selected target exists");
+        fs::remove_file(selected.path()).expect("remove selected name");
+        assert_eq!(opened.verify(), Ok(Status::Missing));
+        assert!(!selected.path().exists());
+    }
+
+    #[test]
+    fn opened_relative_probe_refuses_changed_cwd_even_for_same_inode() {
+        if let Some(alternate) = env::var_os(PROBE_CWD_ALTERNATE) {
+            let profile = artifact("relative-probe");
+            let selected = intent(
+                PathBuf::from("selected.atrament"),
+                ExplicitFilePurpose::ExportProfile,
+            );
+            let original_probe = open_profile_export_target_probe(
+                &selected,
+                &profile,
+                profile.bytes().len(),
+            )
+            .expect("open relative target under initial CWD")
+            .expect("relative target exists");
+            assert_eq!(
+                original_probe.verify(),
+                Ok(Status::Matches {
+                    archive_sha256: profile.archive_sha256(),
+                    byte_length: profile.bytes().len(),
+                }),
+            );
+            let after_move_probe = open_profile_export_target_probe(
+                &selected,
+                &profile,
+                profile.bytes().len(),
+            )
+            .expect("open another probe in unchanged CWD")
+            .expect("relative target exists");
+            env::set_current_dir(alternate).expect("change child CWD");
+            assert_eq!(
+                after_move_probe.verify(),
+                Err(Error::Open(
+                    ProfileSelectedFileOpenError::WorkingDirectoryChanged,
+                )),
+            );
+            return;
+        }
+        let dir = OwnedDir::new();
+        let first = dir.0.join("first-cwd");
+        let alternate = dir.0.join("second-cwd");
+        fs::create_dir_all(&first).expect("first CWD");
+        fs::create_dir_all(&alternate).expect("second CWD");
+        let profile = artifact("relative-probe");
+        let original = first.join("selected.atrament");
+        let other = alternate.join("selected.atrament");
+        fs::write(&original, profile.bytes()).expect("initial target");
+        fs::hard_link(&original, &other).expect("same inode at other CWD");
+        assert_eq!(
+            fs::metadata(&original).expect("original inode").ino(),
+            fs::metadata(&other).expect("other inode").ino(),
+        );
+        let output = Command::new(env::current_exe().expect("test executable"))
+            .arg("--exact")
+            .arg(PROBE_CWD_TEST)
+            .env(PROBE_CWD_ALTERNATE, &alternate)
+            .current_dir(&first)
+            .output()
+            .expect("isolated relative probe child");
+        assert!(
+            output.status.success(),
+            "child refused changed CWD: {}",
+            String::from_utf8_lossy(&output.stdout),
+        );
+        assert_eq!(
+            fs::read(original).expect("original remains"),
+            profile.bytes()
+        );
+        assert_eq!(fs::read(other).expect("hardlink remains"), profile.bytes());
     }
 
     #[test]
@@ -362,6 +526,7 @@ use atrament_profile_export_assembly::{
 use atrament_profile_export_target_check::{
     ProfileExportTargetCheckError as Error,
     ProfileExportTargetStatus as Status, check_profile_export_target,
+    open_profile_export_target_probe,
 };
 use atrament_profile_file_reader as _;
 use atrament_profile_manifest_json_writer::ProfileManifestJsonWriteLimits;

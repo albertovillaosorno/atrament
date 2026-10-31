@@ -261,8 +261,24 @@ a different complete file, including a same-length valid ZIP replacement or
 an oversized one, is `Drifted`.
 
 Unsafe links, nonregular sources, unsupported platforms and unstable reads
-refuse without asserting a match. Ten real-file checks include parity with
-the atomic file writer and prove that comparison never rewrites targets.
+refuse without asserting a match. Real-file checks include parity with the
+atomic file writer and prove that comparison never rewrites targets.
+
+Export target comparison now keeps the initial securely opened descriptor and
+its metadata while consuming the bounded bytes. Before reporting an exact
+match, it securely reopens the same selected pathname and compares device,
+inode, length, modification time and change time. A new file with identical
+bytes, a symlink replacement or removal between those observations now
+refuses an old-probe match. Relative probes also retain their first opened
+CWD anchor and reject a move to another working directory even when its
+relative filename is a hardlink to the very same inode.
+
+A sealed, one-use read-only probe permits deterministic fixtures for all
+these interleavings without inventing
+an Export retry receipt or permitting arbitrary opened handles to bypass path
+policy. Fresh comparisons can still match externally substituted identical
+bytes, and external mutation after the last observation remains possible:
+there is no pathname lock or historical commit proof.
 
 The returned digest and length describe a matched artifact, **not** a prior
 file-commit receipt:
