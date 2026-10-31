@@ -39,6 +39,21 @@ use atrament_explicit_file_path_intent::{
     ExplicitOverwriteIntent, classify_explicit_file_path_intent,
 };
 
+macro_rules! admitted {
+    ($result:expr) => {{
+        let result = $result;
+        assert!(
+            result.is_ok(),
+            "trusted path selection must classify: {:?}",
+            result.as_ref().err(),
+        );
+        let Ok(value) = result else {
+            return;
+        };
+        value
+    }};
+}
+
 const PURPOSES: [ExplicitFilePurpose; 4] = [
     ExplicitFilePurpose::ImportNotebook,
     ExplicitFilePurpose::ImportProfile,
@@ -92,8 +107,12 @@ fn every_source_purpose_and_overwrite_combination_is_classified() {
                         "source={source:?} purpose={purpose:?}",
                     );
                 } else {
+                    assert!(
+                        classified.is_ok(),
+                        "trusted selection must classify: {source:?}",
+                    );
                     let Ok(intent) = classified else {
-                        panic!("trusted selection must classify: {source:?}");
+                        return;
                     };
                     assert_eq!(intent.path(), path.as_path());
                     assert_eq!(intent.purpose(), purpose);
@@ -104,6 +123,46 @@ fn every_source_purpose_and_overwrite_combination_is_classified() {
         }
     }
     assert_eq!(cases, 48);
+}
+
+#[test]
+fn untrusted_sources_are_rejected_before_path_and_overwrite_checks() {
+    let mut cases = 0usize;
+    for source in SOURCES {
+        if matches!(
+            source,
+            ExplicitFilePathSource::CallerSelection
+                | ExplicitFilePathSource::AdmittedHostPolicy
+        ) {
+            continue;
+        }
+        for purpose in PURPOSES {
+            for overwrite in OVERWRITES {
+                for selected in [
+                    "",
+                    ".",
+                    "filename\0x",
+                    "directory/",
+                    "../..",
+                    "normal.atrament",
+                ] {
+                    assert_eq!(
+                        classify_explicit_file_path_intent(
+                            purpose,
+                            source,
+                            PathBuf::from(selected),
+                            overwrite,
+                        ),
+                        Err(ExplicitFilePathIntentError::UntrustedSource),
+                        "source={source:?} purpose={purpose:?} \
+                         overwrite={overwrite:?} path={selected:?}",
+                    );
+                    cases += 1;
+                }
+            }
+        }
+    }
+    assert_eq!(cases, 192);
 }
 
 #[test]
@@ -159,14 +218,15 @@ fn embedded_nul_never_reaches_file_target_classification() {
 
 #[test]
 fn selected_paths_remain_opaque_without_normalization() {
-    let selected = PathBuf::from("./données/cuaderno ñ/plan🖋.atrament");
-    let intent = classify_explicit_file_path_intent(
+    let selected = PathBuf::from(
+        "./donn\u{e9}es/cuaderno \u{f1}/plan\u{1f58b}.atrament",
+    );
+    let intent = admitted!(classify_explicit_file_path_intent(
         ExplicitFilePurpose::ExportProfile,
         ExplicitFilePathSource::CallerSelection,
         selected.clone(),
         ExplicitOverwriteIntent::ReplaceExisting,
-    )
-    .expect("explicit path classification succeeds without file I/O");
+    ));
     assert_eq!(intent.path(), selected.as_path());
 }
 
@@ -179,13 +239,12 @@ fn selected_non_utf8_paths_are_not_converted_or_normalized() {
     let mut bytes = b"artifacts/snapshot-".to_vec();
     bytes.push(0xff);
     let selected = PathBuf::from(OsString::from_vec(bytes));
-    let classified = classify_explicit_file_path_intent(
+    let classified = admitted!(classify_explicit_file_path_intent(
         ExplicitFilePurpose::ImportNotebook,
         ExplicitFilePathSource::AdmittedHostPolicy,
         selected.clone(),
         ExplicitOverwriteIntent::PreserveExisting,
-    )
-    .expect("path classification does not require UTF-8");
+    ));
     assert_eq!(classified.path(), selected.as_path());
 }
 
@@ -205,10 +264,9 @@ fn debug_of_every_classified_path_omits_private_location() {
             } else {
                 ExplicitOverwriteIntent::PreserveExisting
             };
-            let selected = classify_explicit_file_path_intent(
+            let selected = admitted!(classify_explicit_file_path_intent(
                 purpose, source, path.clone(), overwrite,
-            )
-            .expect("trusted selected path is admitted");
+            ));
             for rendered in [
                 format!("{selected:?}"),
                 format!("{selected:#?}"),
@@ -233,13 +291,12 @@ fn debug_of_opaque_non_utf8_selected_path_never_exposes_name_bytes() {
 
     let opaque = OsString::from_vec(b"private-location-6912-\xff".to_vec());
     let path = PathBuf::from(opaque);
-    let intent = classify_explicit_file_path_intent(
+    let intent = admitted!(classify_explicit_file_path_intent(
         ExplicitFilePurpose::ExportProfile,
         ExplicitFilePathSource::CallerSelection,
         path.clone(),
         ExplicitOverwriteIntent::PreserveExisting,
-    )
-    .expect("opaque selected path remains valid");
+    ));
     for printed in [format!("{intent:?}"), format!("{intent:#?}")] {
         assert!(!printed.contains("private-location-6912"));
         assert!(!printed.contains("xff"));
