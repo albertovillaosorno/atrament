@@ -38,6 +38,13 @@ Deterministic source-metadata regressions cover an unchanged file, same-length
 rewrites, restored mtime and distinct inodes. This is extra race detection,
 **not** an atomic snapshot guarantee against concurrent filesystem writers.
 
+The low-level selected-profile opener now refuses empty, directory-marked
+and embedded-NUL names before filesystem access, independently of the
+higher-level source-intent classifier. Linux also reports missing or
+unsupported `openat2` policy features as a typed fail-closed refusal,
+without falling back to an ordinary path open. Unit and file-path
+regressions cover both preflight and errno classification.
+
 The read-only profile inspector now reserves its section reference inventory
 fallibly and plans the exact complete display length, including canonical root,
 section names, labels and line breaks, before writing any display text.
