@@ -119,6 +119,28 @@ test("incomplete draft diagnostics still preserve known resource limit", () => {
     );
 });
 
+test("draft resource-limit ignores input-array property getters", () => {
+    const item = { code: "atrament.session-draft.resource-limit" };
+    let reads = 0;
+    const items = new Proxy([item], {
+        get(target, key, receiver) {
+            if (key === "0" || key === "length") {
+                reads += 1;
+            }
+            return Reflect.get(target, key, receiver);
+        },
+    });
+    assert.equal(isResourceLimit({
+        error: "resource_limit",
+        diagnostics: {
+            version: "atrament.diagnostic/1",
+            completeness: "complete",
+            items,
+        },
+    }), true);
+    assert.equal(reads, 0, "validated array slots must be owned snapshots");
+});
+
 test("draft resource-limit response refuses array-shaped roots", () => {
     const forged = Object.assign([], {
         error: "resource_limit",

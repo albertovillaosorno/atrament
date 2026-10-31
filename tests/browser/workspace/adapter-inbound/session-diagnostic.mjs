@@ -179,9 +179,20 @@ test("diagnostic admission limits item work before inspecting entries", () => {
             return Reflect.get(target, key, receiver);
         },
     });
-    assert.equal(parseDiagnosticSet(payload(guardedLength))?.completeness,
-        "complete");
+    const guardedMetadata = parseDiagnosticSet(payload(guardedLength));
+    assert.equal(guardedMetadata?.completeness, "complete");
+    assert.notEqual(guardedMetadata?.items, guardedLength,
+        "admitted metadata must not retain a caller-owned array");
+    assert.equal(guardedMetadata?.items.length, 1);
+    assert.equal(guardedMetadata?.items[0], item);
     assert.equal(lengthReads, 0, "array length admission must read own data");
+
+    // Changes to an original array slot after validation cannot change the
+    // route-specific diagnostic observed by handshake or draft consumers.
+    const mutableItems = [item];
+    const admitted = parseDiagnosticSet(payload(mutableItems));
+    mutableItems[0] = { code: "unrelated" };
+    assert.equal(admitted?.items[0], item);
 });
 
 test("diagnostic metadata requires own wire fields", () => {

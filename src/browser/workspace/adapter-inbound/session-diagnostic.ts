@@ -77,7 +77,7 @@ function isDiagnosticItem(value: unknown): value is DiagnosticItem {
     return typeof code === "string" && code !== "";
 }
 
-function hasValidDiagnosticItems(items: unknown[]): items is DiagnosticItem[] {
+function admittedDiagnosticItems(items: unknown[]): DiagnosticItem[] | null {
     // Avoid property getters even when an in-process caller wraps its Array.
     // Ordinary decoded JSON arrays always have an own data length.
     const length = ownDataField(items, "length");
@@ -87,14 +87,20 @@ function hasValidDiagnosticItems(items: unknown[]): items is DiagnosticItem[] {
         || length < 0
         || length > MAX_DIAGNOSTIC_ITEMS
     ) {
-        return false;
+        return null;
     }
+    // The route consumers read `items[0]` directly. Return a snapshot so
+    // subsequent access cannot invoke a Proxy getter on the input array or
+    // observe a changed source slot after validation.
+    const admitted: DiagnosticItem[] = [];
     for (let index = 0; index < length; index += 1) {
-        if (!isDiagnosticItem(ownDataField(items, String(index)))) {
-            return false;
+        const item = ownDataField(items, String(index));
+        if (!isDiagnosticItem(item)) {
+            return null;
         }
+        admitted.push(item);
     }
-    return true;
+    return admitted;
 }
 
 export function parseDiagnosticSet(
@@ -110,9 +116,11 @@ export function parseDiagnosticSet(
         version !== DIAGNOSTIC_VERSION
         || !isCompleteness(completeness)
         || !Array.isArray(items)
-        || !hasValidDiagnosticItems(items)
     ) {
         return null;
     }
-    return { completeness, items };
+    const admittedItems = admittedDiagnosticItems(items);
+    return admittedItems === null
+        ? null
+        : { completeness, items: admittedItems };
 }

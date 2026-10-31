@@ -117,6 +117,36 @@ test("typed incompatibility requires the stable diagnostic shape", () => {
     );
 });
 
+test("handshake mismatch ignores input-array property getters", () => {
+    const item = {
+        code: "atrament.handshake.version-mismatch",
+        dimension: "prompt",
+        expected: CURRENT_VERSIONS.prompt,
+    };
+    let reads = 0;
+    const items = new Proxy([item], {
+        get(target, key, receiver) {
+            if (key === "0" || key === "length") {
+                reads += 1;
+            }
+            return Reflect.get(target, key, receiver);
+        },
+    });
+    assert.deepEqual(parseHandshakePayload({
+        result: "incompatible",
+        diagnostics: {
+            version: "atrament.diagnostic/1",
+            completeness: "complete",
+            items,
+        },
+    }), {
+        kind: "incompatible",
+        dimension: "prompt",
+        expected: CURRENT_VERSIONS.prompt,
+    });
+    assert.equal(reads, 0, "validated array slots must be owned snapshots");
+});
+
 test("typed incompatibility requires the dimension's current version", () => {
     for (const expected of [
         "arbitrary-version",
