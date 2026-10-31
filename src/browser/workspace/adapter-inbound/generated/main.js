@@ -859,7 +859,8 @@ endSession.addEventListener("click", () => {
                 redirect: "error",
                 referrerPolicy: "origin",
                 signal: AbortSignal.any([
-                    requestAbort.signal, requestDeadline,
+                    sessionRequests.signal, requestAbort.signal,
+                    requestDeadline,
                 ]),
             });
             if (sessionSecret !== secret) {

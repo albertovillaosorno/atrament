@@ -593,9 +593,9 @@ test("page session network requests are cancellable on exit", async () => {
     const signalUses = source.match(
         /sessionRequests\.signal, requestAbort\.signal,/gu,
     ) ?? [];
-    assert.equal(signalUses.length, 3,
-        "handshake, draft reads, and writes retain page-session abort "
-            + "alongside per-request abort");
+    assert.equal(signalUses.length, 4,
+        "handshake, draft reads, writes, and explicit End retain the "
+            + "page-session abort alongside each per-request abort");
     const draftStart = source.indexOf("async function syncDraftField(");
     const draftEnd = source.indexOf("function bindDraftSync(", draftStart);
     assert.notEqual(draftStart, -1, "draft sync function must exist");
@@ -1501,6 +1501,26 @@ function recordingAbortController(abortCalls) {
         }
     };
 }
+
+test("explicit session end joins page-lifetime cancellation", async () => {
+    const source = await readFile(MAIN_MODULE, "utf8");
+    const start = source.indexOf('fetch("./api/session/end"');
+    const end = source.indexOf('window.addEventListener("pagehide"', start);
+    assert.ok(start >= 0 && end > start);
+    const request = source.slice(start, end);
+    const signalStart = request.indexOf("signal: AbortSignal.any([");
+    const signalEnd = request.indexOf("]),", signalStart);
+    assert.ok(signalStart >= 0 && signalEnd > signalStart);
+    const signals = request.slice(signalStart, signalEnd);
+    for (const required of [
+        "sessionRequests.signal",
+        "requestAbort.signal",
+        "requestDeadline",
+    ]) {
+        assert.ok(signals.includes(required),
+            `explicit End must retain ${required}`);
+    }
+});
 
 test("every browser session fetch has a finite request deadline", async () => {
     const source = await readFile(MAIN_MODULE, "utf8");

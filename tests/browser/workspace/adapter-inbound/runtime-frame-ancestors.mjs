@@ -6450,6 +6450,101 @@ test(
 );
 
 test(
+    "Firefox pagehide aborts a pending explicit session end request",
+    { skip: !FIREFOX_AVAILABLE, timeout: FIREFOX_CASE_TIMEOUT_MS },
+    async () => {
+        fs.mkdirSync(".temp", { recursive: true });
+        const profile = fs.mkdtempSync(".temp/session-end-pagehide-");
+        const apiRequests = [];
+        let markEndStarted;
+        const endStarted = new Promise((resolve) => {
+            markEndStarted = resolve;
+        });
+        let markEndClosed;
+        const endClosed = new Promise((resolve) => {
+            markEndClosed = resolve;
+        });
+        let pendingResponse = null;
+        const server = createSessionFixtureServer(
+            apiRequests, null, null, null, null, null, null, null, null,
+            null, null,
+            (_request, response) => {
+                pendingResponse = response;
+                response.once("close", markEndClosed);
+                markEndStarted();
+                return true;
+            },
+        );
+        const children = [];
+        let bidi;
+        try {
+            server.listen(0, "127.0.0.1");
+            await once(server, "listening");
+            const address = server.address();
+            assert.notEqual(address, null);
+            assert.notEqual(typeof address, "string");
+            bidi = await startBidiFirefox(profile, children);
+            const tab = await bidi.command("browsingContext.create", {
+                type: "tab",
+            });
+            await bidi.command("browsingContext.navigate", {
+                context: tab.context,
+                url: `http://127.0.0.1:${address.port}/` +
+                    `#session=${REFRESH_SECRET}`,
+                wait: "complete",
+            });
+            await waitForSessionStatus(bidi, tab.context, "Session ready");
+            const confirm = await bidi.command("script.evaluate", {
+                awaitPromise: false,
+                expression: `(() => {
+                    const end = document.getElementById("end-session");
+                    end.click();
+                    end.click();
+                })()`,
+                resultOwnership: "none",
+                target: { context: tab.context },
+            });
+            assert.equal(confirm.type, "success");
+            await observedWithin(endStarted, "pending explicit end request");
+            const before = await evaluateSessionDocument(bidi, tab.context);
+            assert.equal(before.status, "Ending discards this notebook");
+            assert.equal(before.task.value, REFRESH_DRAFT.task);
+            // A synthetic pagehide exercises the browser's own lifetime
+            // handler without actual navigation implicitly canceling fetch.
+            const exit = await bidi.command("script.evaluate", {
+                awaitPromise: false,
+                expression: 'window.dispatchEvent(new Event("pagehide"))',
+                resultOwnership: "none",
+                target: { context: tab.context },
+            });
+            assert.equal(exit.type, "success");
+            await observedWithin(endClosed, "pagehide end cancellation");
+            const after = await evaluateSessionDocument(bidi, tab.context);
+            assert.equal(after.task.value, "");
+            assert.equal(after.task.disabled, true);
+            assert.notEqual(after.status, "Session ended");
+            assert.deepEqual(apiRequests, [
+                "POST /api/handshake",
+                "GET /api/session/task",
+                "GET /api/session/source",
+                "GET /api/session/candidate",
+                "POST /api/session/end",
+            ]);
+        } finally {
+            if (pendingResponse !== null && !pendingResponse.destroyed) {
+                pendingResponse.destroy();
+            }
+            bidi?.close();
+            await closeFixtureServer(server);
+            for (const child of children.reverse()) {
+                await stopChild(child);
+            }
+            fs.rmSync(profile, { recursive: true, force: true });
+        }
+    },
+);
+
+test(
     "Firefox stalled explicit end never claims erasure and permits retry",
     { skip: !FIREFOX_AVAILABLE, timeout: FIREFOX_CASE_TIMEOUT_MS },
     async () => {

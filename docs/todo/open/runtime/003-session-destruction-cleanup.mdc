@@ -126,6 +126,15 @@ An extracted-adapter test and a real Firefox fixture both reproduce the prior
 incorrect warning and verify the corrected order. This is UI confirmation
 integrity, not backend erasure evidence.
 
+Unlike handshake and draft requests, the confirmed End fetch previously
+omitted the page-lifetime abort signal. A red-first source contract now requires
+that signal alongside the per-request abort and six-second deadline.
+
+A real Firefox fixture withholds End response headers, then dispatches
+`pagehide` without navigation and observes socket closure and private draft
+scrubbing. This proves client teardown without relying on browser navigation
+behavior; it does not prove backend erasure or rollback.
+
 A real socket regression verifies that an unauthorized attempt cannot end the
 session and that an authorized request releases the exact endpoint. Firefox
 coverage verifies confirmation before any mutation, authenticated termination,
