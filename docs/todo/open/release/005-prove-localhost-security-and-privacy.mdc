@@ -52,9 +52,13 @@ response blocks foreign JavaScript, images, and stylesheets without an HTML
 meta tag. A permissive control tab successfully fetches those same three
 resources, while the protected tab emits zero additional requests. The same
 header-only tab also rejects an inserted inline script and a hostile `<base>`
-URL; a permissive tab executes the script and changes its base URL. This is
-browser enforcement evidence for the HTTP boundary, not a claim about browser
-opener credentials or arbitrary outbound desktop programs.
+URL; a permissive tab executes the script and changes its base URL. A
+same-origin JavaScript worker also runs in the permissive tab but is refused
+without any worker request in the header-only tab, independently exercising
+`worker-src 'none'`.
+
+This is browser enforcement evidence for the HTTP boundary, not a claim about
+browser-opener credentials or arbitrary outbound desktop programs.
 
 Browser privacy regression evidence also pins the generated workspace to exactly
 four admitted same-origin `fetch` call sites: handshake, draft read,

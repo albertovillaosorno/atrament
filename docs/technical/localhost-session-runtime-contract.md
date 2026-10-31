@@ -124,6 +124,8 @@ A real Firefox fixture must load the workspace directly while a distinct
 loopback origin cannot embed it. A separate header-only document must refuse
 cross-origin scripts, images and stylesheets, inserted inline scripts, and
 hostile base URL changes; an unprotected control must allow the same probes.
+A same-origin JavaScript worker must run in the control but be refused without
+a network request by the header-only page's `worker-src 'none'` directive.
 These checks establish browser enforcement, not browser-opener credential
 secrecy or general host process isolation.
 

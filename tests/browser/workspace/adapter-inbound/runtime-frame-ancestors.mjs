@@ -4791,6 +4791,7 @@ test(
         let hostile;
         let outboundRequests = 0;
         const assetRequests = [];
+        let workerRequests = 0;
         let permissive;
         let bidi;
         try {
@@ -4875,6 +4876,15 @@ test(
             await runtimeResponse.body?.cancel();
 
             permissive = http.createServer((request, response) => {
+                if (request.url === "/csp-worker.js") {
+                    workerRequests += 1;
+                    response.writeHead(200, {
+                        "Cache-Control": "no-store",
+                        "Content-Type": "text/javascript; charset=utf-8",
+                    });
+                    response.end('self.postMessage("ready");');
+                    return;
+                }
                 if (request.url === "/csp-header-only") {
                     response.writeHead(200, {
                         "Cache-Control": "no-store",
@@ -5128,6 +5138,56 @@ test(
             assert.deepEqual(JSON.parse(blockedDomPolicy.result.value), {
                 baseChanged: false, inlineExecuted: false,
             }, "HTTP CSP alone must reject inline script and foreign base");
+
+            // A same-origin Worker is permitted by default-src 'self' but
+            // must be refused by the explicit worker-src 'none' directive.
+            const workerUrl = JSON.stringify(
+                `${permissiveOrigin}/csp-worker.js`,
+            );
+            const probeWorker = `(async () => {
+                let worker;
+                try {
+                    worker = new Worker(${workerUrl});
+                    return await new Promise((resolve) => {
+                        const timer = setTimeout(() => resolve(false), 3000);
+                        const finish = (value) => {
+                            clearTimeout(timer);
+                            resolve(value);
+                        };
+                        worker.addEventListener("message", (event) => {
+                            finish(event.data === "ready");
+                        }, { once: true });
+                        worker.addEventListener("error", () => {
+                            finish(false);
+                        }, { once: true });
+                    });
+                } catch {
+                    return false;
+                } finally {
+                    worker?.terminate();
+                }
+            })()`;
+            const controlWorker = await bidi.command("script.evaluate", {
+                awaitPromise: true,
+                expression: probeWorker,
+                resultOwnership: "none",
+                target: { context: networkControl.context },
+            });
+            assert.equal(controlWorker.type, "success");
+            assert.equal(controlWorker.result.value, true);
+            assert.equal(workerRequests, 1,
+                "permissive control must request and start the worker");
+            const blockedWorker = await bidi.command("script.evaluate", {
+                awaitPromise: true,
+                expression: probeWorker,
+                resultOwnership: "none",
+                target: { context: headerOnly.context },
+            });
+            assert.equal(blockedWorker.type, "success");
+            assert.equal(blockedWorker.result.value, false,
+                "HTTP worker-src must refuse even same-origin workers");
+            assert.equal(workerRequests, 1,
+                "CSP rejection must send no worker script request");
 
             const direct = await bidi.command("browsingContext.create", {
                 type: "tab",
