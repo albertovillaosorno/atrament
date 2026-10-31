@@ -225,3 +225,9 @@ Valid incompatible version responses remain terminal, and authorization
 failure still erases the session. This guards browser transport allocation,
 admission, and recoverability, not backend-issued notebook content or
 persistent state.
+
+An additional browser-module regression exercises the actual version-mismatch
+parser through HTTP `409`: a valid diagnostic shows the expected protocol
+version without offering a retry or hydrating private drafts. The same
+mismatch on HTTP `200`, or a malformed mismatch on `409`, remains fail-closed
+and retryable rather than silently accepting an inconsistent status.

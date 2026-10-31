@@ -53,6 +53,9 @@ const {
 const { parseBoundedJsonResponse } = await import(
     new URL("session-diagnostic.js", MAIN_MODULE).href,
 );
+const { parseHandshakePayload } = await import(
+    new URL("session-handshake.js", MAIN_MODULE).href,
+);
 
 test("static workspace starts session controls disabled", async () => {
     const source = await readFile(INDEX_HTML, "utf8");
@@ -655,6 +658,76 @@ test("handshake response media is checked before JSON admission", async () => {
             assert.equal(result,
                 "Invalid backend handshake · editing disabled");
         }
+    }
+});
+
+test("typed incompatibility on HTTP 409 remains terminal", async () => {
+    const source = await readFile(MAIN_MODULE, "utf8");
+    const start = source.indexOf(
+        "async function completeSessionHandshake(secret) {",
+    );
+    const end = source.indexOf("const failedDraftFields", start);
+    assert.ok(start >= 0 && end > start);
+    const handshake = source.slice(start, end);
+    const incompatible = {
+        result: "incompatible",
+        diagnostics: {
+            version: "atrament.diagnostic/1",
+            completeness: "complete",
+            items: [{
+                code: "atrament.handshake.version-mismatch",
+                dimension: "prompt",
+                expected: "atrament.prompt/1",
+            }],
+        },
+    };
+    for (const [httpStatus, payload, expectedStatus, expectedRetries] of [
+        [409, incompatible,
+            "Incompatible prompt · expected atrament.prompt/1", []],
+        [200, incompatible, "Invalid backend handshake · editing disabled",
+            ["connection"]],
+        [409, { result: "incompatible" },
+            "Invalid backend handshake · editing disabled", ["connection"]],
+    ]) {
+        const retries = [];
+        let hydrations = 0;
+        const response = new Response(JSON.stringify(payload), {
+            status: httpStatus,
+            headers: { "Content-Type": "application/json; charset=utf-8" },
+        });
+        const status = await runInNewContext(`
+            (async () => {
+                const sessionSecret = "secret";
+                const sessionRequests = { signal: {} };
+                const sessionStatus = { textContent: "" };
+                const sessionHandshake = {
+                    handshakeHeaders: () => ({}),
+                    parseHandshakePayload: parseProvidedHandshake,
+                    isHandshakeContentType: (value) =>
+                        value === "application/json; charset=utf-8",
+                };
+                function hideSessionRetry() {}
+                function showSessionRetry(reason) { onRetry(reason); }
+                function setTextIfChanged(element, value) {
+                    element.textContent = value;
+                }
+                function invalidateUnauthorizedSession() {}
+                async function hydrateSessionDraft() { hydrate(); }
+                ${handshake}
+                await completeSessionHandshake("secret");
+                return sessionStatus.textContent;
+            })()
+        `, {
+            fetch: async () => response,
+            parseBoundedJsonResponse,
+            parseProvidedHandshake: parseHandshakePayload,
+            hydrate: () => { hydrations += 1; },
+            onRetry: (reason) => retries.push(reason),
+        });
+        assert.equal(status, expectedStatus);
+        assert.deepEqual(retries, expectedRetries);
+        assert.equal(hydrations, 0,
+            "version conflict must never authorize private draft reads");
     }
 });
 
