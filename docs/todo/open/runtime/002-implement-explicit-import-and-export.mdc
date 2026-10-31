@@ -238,6 +238,18 @@ otherwise anonymous staged inode after sync but before linking, retaining the
 exact length. Both preserve and replace now refuse with `StagedFileChanged`
 while the selected original is absent or untouched and no named stage remains.
 
+The anonymous staging inode must also have zero directory links at its
+completed sync and just before selected-path publication. A named hard link
+created by another actor through an accessible process descriptor before
+staging sync previously allowed an Export success with a second pathname to
+the same bytes. A red-first fixture demonstrates this for both no-overwrite
+and replacement. The writer now refuses with `StagedFileChanged` without
+changing the selected target.
+
+A successful commit additionally requires exactly one link after publication.
+An extra link observed during final verification is uncertain committed-path
+evidence. The writer cannot revoke an external link created by another actor.
+
 Postlink drift remains an uncertain effect, not a proven no-commit refusal.
 Neither prelink nor postlink observation locks the pathname against later
 writers.

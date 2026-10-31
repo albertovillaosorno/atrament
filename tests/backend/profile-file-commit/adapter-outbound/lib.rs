@@ -271,6 +271,80 @@ mod linux {
     }
 
     #[test]
+    fn externally_linked_anonymous_stage_must_not_publish_selected_entry() {
+        use nix::fcntl::AtFlags;
+        use nix::unistd::linkat;
+
+        for disposition in [Mode::PreserveExisting, Mode::ReplaceExisting] {
+            let dir = OwnedDir::new();
+            let target = dir.target();
+            if disposition == Mode::ReplaceExisting {
+                fs::write(&target, b"previous target")
+                    .expect("seed selected original");
+            }
+            let private_link = dir.0.join("external.atrament");
+            let destination = fs::File::open(&dir.0)
+                .expect("test-owned parent directory");
+            let mut observations = 0usize;
+            let payload = b"sealed, private profile artifact";
+            let result = commit_profile_file_cancellable(
+                &target,
+                payload,
+                payload.len(),
+                disposition,
+                || {
+                    observations += 1;
+                    if observations == 2 {
+                        // Deliberately expose another name for the unnamed
+                        // inode before the writer takes its synced snapshot.
+                        // The rogue name must never become a successful Export
+                        // of the still-selected pathname.
+                        let stage = fs::read_dir("/proc/self/fd")
+                            .expect("inspect process descriptors")
+                            .find_map(|candidate| {
+                                let entry = candidate.ok()?;
+                                let path = fs::read_link(entry.path()).ok()?;
+                                (path.starts_with(&dir.0)
+                                    && path.to_string_lossy().ends_with(
+                                        " (deleted)",
+                                    ))
+                                .then(|| entry.path())
+                            })
+                            .expect("test-owned anonymous staging fd");
+                        let leaked_fd = OpenOptions::new()
+                            .read(true)
+                            .open(stage)
+                            .expect("open test-owned stage through proc fd");
+                        linkat(
+                            &leaked_fd,
+                            "",
+                            &destination,
+                            "external.atrament",
+                            AtFlags::AT_EMPTY_PATH,
+                        )
+                        .expect("create attacker-controlled prelinked name");
+                    }
+                    false
+                },
+            );
+            assert_eq!(result, Err(Error::StagedFileChanged));
+            assert!(observations >= 2);
+            if disposition == Mode::ReplaceExisting {
+                assert_eq!(
+                    fs::read(&target).expect("old target stays"),
+                    b"previous target",
+                );
+            } else {
+                assert!(!target.exists());
+            }
+            assert_eq!(
+                fs::read(&private_link).expect("attacker link remains"),
+                payload,
+            );
+        }
+    }
+
+    #[test]
     fn forced_death_during_write_leaves_no_named_stage() {
         // The child test process runs this same test function. Its parent
         // chooses which precommit boundary blocks until a forced SIGKILL.
