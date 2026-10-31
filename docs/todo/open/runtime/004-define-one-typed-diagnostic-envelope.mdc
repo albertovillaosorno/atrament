@@ -180,3 +180,10 @@ draft and reports the respective invalid/known statuses.
 The larger 1,048,576-byte draft-text read limit remains independent, now
 using the same streaming decoder. This is client-side diagnostic transport
 admission, not completion of all backend diagnostic producers.
+
+The shared control-JSON reader now bounds zero-byte stream progress as well as
+its 16 KiB payload. An independent red-first response stream with sixty-five
+empty chunks followed by valid JSON previously parsed as a compatible payload;
+now it cancels and refuses, while sixty-four empty chunks followed by valid
+JSON remain admitted. The same bound covers the larger draft reader and does
+not change backend diagnostic authority.

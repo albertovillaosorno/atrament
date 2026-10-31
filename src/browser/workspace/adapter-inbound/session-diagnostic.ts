@@ -36,6 +36,9 @@ export const DIAGNOSTIC_VERSION = "atrament.diagnostic/1";
 // Reject misrouted giant bodies before they reach JSON.parse(). Draft text
 // uses a separate, larger session-owned limit.
 const MAX_CONTROL_JSON_BYTES = 16_384;
+// Empty chunks consume neither byte allowance nor UTF-8 state. A broken
+// stream must not hold an authenticated page in an unbounded read loop.
+const MAX_EMPTY_STREAM_CHUNKS = 64;
 
 // Do not use Response.text()/json(): they buffer the entire body, replace
 // malformed UTF-8 and discard an initial U+FEFF. The caller chooses the
@@ -78,6 +81,7 @@ export async function decodeBoundedUtf8Response(
 
     const reader = response.body.getReader();
     let receivedBytes = 0;
+    let emptyChunks = 0;
     let result = "";
     try {
         for (;;) {
@@ -88,6 +92,14 @@ export async function decodeBoundedUtf8Response(
                 } catch {
                     return null;
                 }
+            }
+            if (value.byteLength === 0) {
+                emptyChunks += 1;
+                if (emptyChunks > MAX_EMPTY_STREAM_CHUNKS) {
+                    void reader.cancel().catch(() => {});
+                    return null;
+                }
+                continue;
             }
             if (value.byteLength > maxBytes - receivedBytes) {
                 void reader.cancel().catch(() => {});

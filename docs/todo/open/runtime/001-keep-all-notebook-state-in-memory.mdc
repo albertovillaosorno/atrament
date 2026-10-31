@@ -97,7 +97,10 @@ variants add zero writable regular-file descriptors beyond descriptors
 inherited from the test harness while all of that state is live.
 
 Browser edits send complete authenticated replacements and use no browser
-persistence API.
+persistence API. A control-handshake `408` now offers an explicit connection
+retry without parsing an irrelevant response body or resubmitting a draft,
+matching the existing retry path for server errors. A red-first browser-module
+fixture distinguishes that transient timeout from an ordinary `403` refusal.
 
 This evidence establishes raw-byte ownership after a separate ingestion
 boundary and several semantic review lifecycles; it does not implement

@@ -528,6 +528,59 @@ test(
 );
 
 
+test("transient handshake HTTP 408 offers retry without parsing", async () => {
+    const source = await readFile(MAIN_MODULE, "utf8");
+    const start = source.indexOf(
+        "async function completeSessionHandshake(secret) {",
+    );
+    const end = source.indexOf("const failedDraftFields", start);
+    assert.ok(start >= 0 && end > start);
+    const handshake = source.slice(start, end);
+    for (const [status, expectedRetry] of [
+        [408, true],
+        [500, true],
+        [403, false],
+    ]) {
+        const result = await runInNewContext(`
+            (async () => {
+                const sessionSecret = "secret";
+                const sessionRequests = { signal: {} };
+                const sessionStatus = { textContent: "" };
+                const retries = [];
+                const sessionHandshake = {
+                    handshakeHeaders: () => ({}),
+                };
+                function hideSessionRetry() {}
+                function showSessionRetry(reason) { retries.push(reason); }
+                function setTextIfChanged(element, value) {
+                    element.textContent = value;
+                }
+                function invalidateUnauthorizedSession() {
+                    throw new Error("unexpected authorization loss");
+                }
+                async function hydrateSessionDraft() {
+                    throw new Error("unexpected draft hydration");
+                }
+                ${handshake}
+                await completeSessionHandshake("secret");
+                return JSON.stringify({
+                    message: sessionStatus.textContent,
+                    retries,
+                });
+            })()
+        `, {
+            fetch: async () => ({
+                status,
+                headers: { get: () => { throw new Error("body read"); } },
+            }),
+        });
+        assert.deepEqual(JSON.parse(result), {
+            message: "Invalid backend handshake · editing disabled",
+            retries: expectedRetry ? ["connection"] : [],
+        }, `HTTP ${status}`);
+    }
+});
+
 test("handshake response media is checked before JSON admission", async () => {
     const source = await readFile(MAIN_MODULE, "utf8");
     const start = source.indexOf(

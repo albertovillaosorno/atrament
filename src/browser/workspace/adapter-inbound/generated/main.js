@@ -434,7 +434,9 @@ async function completeSessionHandshake(secret) {
     if (response.status !== 200 && response.status !== 409) {
         const invalidMessage = "Invalid backend handshake · editing disabled";
         setTextIfChanged(sessionStatus, invalidMessage);
-        if (response.status >= 500) {
+        // The runtime can return 408 when its total request deadline
+        // expires. Like 5xx, this is retryable without replaying a draft.
+        if (response.status === 408 || response.status >= 500) {
             showSessionRetry("connection");
         }
         return;

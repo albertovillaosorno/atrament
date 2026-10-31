@@ -598,6 +598,33 @@ test("control-plane JSON bounds unknown-length streams", async () => {
     assert.ok(pulls <= 4, "stop reading after the byte budget");
 });
 
+test("control JSON bounds empty stream chunks without progress", async () => {
+    const payload = new TextEncoder().encode('{"result":"compatible"}');
+    for (const [emptyChunks, accepted] of [
+        [64, true],
+        [65, false],
+    ]) {
+        let pulls = 0;
+        let cancelled = false;
+        const response = new Response(new ReadableStream({
+            pull(controller) {
+                pulls += 1;
+                if (pulls <= emptyChunks) {
+                    controller.enqueue(new Uint8Array());
+                } else {
+                    controller.enqueue(payload);
+                    controller.close();
+                }
+            },
+            cancel() { cancelled = true; },
+        }));
+        const parsed = await parseBoundedJsonResponse(response);
+        assert.deepEqual(parsed, accepted ? { result: "compatible" } : null);
+        assert.equal(cancelled, !accepted);
+        assert.ok(pulls <= 67, "reader cannot consume unlimited empty chunks");
+    }
+});
+
 test("control JSON admits exact UTF-8 and rejects corruption", async () => {
     const valid = { result: "compatible", label: "niño 📝" };
     const encoded = new TextEncoder().encode(JSON.stringify(valid));

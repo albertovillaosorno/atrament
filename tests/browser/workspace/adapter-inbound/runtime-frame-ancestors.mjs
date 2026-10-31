@@ -4396,7 +4396,8 @@ test(
                 });
             },
             null,
-            () => (++handshakeCalls === 1 ? 503 : 200),
+            () => (++handshakeCalls === 1 ? 503
+                : handshakeCalls === 2 ? 408 : 200),
             (field) => field === "source" && ++sourceReads === 1
                 ? 503
                 : 200,
@@ -4461,6 +4462,18 @@ test(
             });
             await clickRetry();
 
+            const timeoutFailure = await waitForSessionStatus(
+                bidi,
+                tab.context,
+                "Invalid backend handshake · editing disabled",
+            );
+            assert.equal(timeoutFailure.hash, "");
+            assert.equal(handshakeCalls, 2);
+            assert.deepEqual(await inspectRetry(), {
+                disabled: false, hidden: false, label: "Retry connection",
+            });
+            await clickRetry();
+
             const draftFailure = await waitForSessionStatus(
                 bidi,
                 tab.context,
@@ -4491,6 +4504,7 @@ test(
                 disabled: true, hidden: true, label: "Retry connection",
             });
             assert.deepEqual(apiRequests, [
+                "POST /api/handshake",
                 "POST /api/handshake",
                 "POST /api/handshake",
                 "GET /api/session/task",
@@ -4571,7 +4585,7 @@ test(
                 disabled: true, hidden: true, label: "Retry edits",
             });
             await clickRetry();
-            assert.deepEqual(apiRequests.slice(8), [
+            assert.deepEqual(apiRequests.slice(9), [
                 "POST /api/session/task",
                 "POST /api/session/task",
                 "POST /api/session/task",

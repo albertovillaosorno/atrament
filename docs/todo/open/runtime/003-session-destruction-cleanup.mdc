@@ -192,3 +192,10 @@ malformed UTF-8, and transport failure. A real Firefox fixture now refuses
 both corrupt and oversized source responses without hydrating any of the three
 fields, then accepts a valid retry. This is a browser draft ingress bound, not
 proof of backend media conversion or temporary-file cleanup.
+
+The shared browser response reader now also stops on the sixty-fifth
+zero-length stream chunk, even when the byte total remains under the draft
+limit. A red-first stream fixture verified that sixty-five empty chunks
+followed by valid draft text were previously admitted; a bounded read now
+cancels without hydrating. Sixty-four empty chunks followed by valid UTF-8
+remain accepted. This is client-side liveness protection, not media cleanup.

@@ -130,6 +130,32 @@ test("streamed draft reads retain split UTF-8 sequences and BOM", async () => {
     assert.equal(await decodeDraftReadResponse(response), "\uFEFF🌞");
 });
 
+test("draft reads refuse unbounded empty response chunks", async () => {
+    const payload = new TextEncoder().encode("private note");
+    for (const [emptyChunks, expected] of [
+        [64, "private note"],
+        [65, null],
+    ]) {
+        let pulls = 0;
+        let cancelled = false;
+        const response = new Response(new ReadableStream({
+            pull(controller) {
+                pulls += 1;
+                if (pulls <= emptyChunks) {
+                    controller.enqueue(new Uint8Array());
+                } else {
+                    controller.enqueue(payload);
+                    controller.close();
+                }
+            },
+            cancel() { cancelled = true; },
+        }));
+        assert.equal(await decodeDraftReadResponse(response), expected);
+        assert.equal(cancelled, expected === null);
+        assert.ok(pulls <= 67, "reader cannot consume unlimited empty chunks");
+    }
+});
+
 test("streamed draft reads enforce the exact backend byte limit", async () => {
     const cap = 1_048_576;
     const exact = new Response(new Uint8Array(cap).fill(0x61));
