@@ -40,6 +40,21 @@ use atrament_media_job_session as application;
 
 use application::{MediaJobSessionError, MediaJobSessionService};
 
+macro_rules! admitted {
+    ($result:expr) => {{
+        let result = $result;
+        assert!(
+            result.is_ok(),
+            "fixture admission failed: {:?}",
+            result.as_ref().err(),
+        );
+        let Ok(value) = result else {
+            return;
+        };
+        value
+    }};
+}
+
 #[test]
 fn every_terminal_outcome_requires_registered_waveform_cleanup() {
     for outcome in [
@@ -48,10 +63,9 @@ fn every_terminal_outcome_requires_registered_waveform_cleanup() {
         MediaJobOutcome::Succeeded,
     ] {
         let mut session = MediaJobSessionService::new();
-        let job = session.begin_job().expect("job identity");
-        let intermediate = session
-            .register_waveform_intermediate(job)
-            .expect("waveform identity");
+        let job = admitted!(session.begin_job());
+        let intermediate =
+            admitted!(session.register_waveform_intermediate(job));
         assert_eq!(
             session.finish_job(job, outcome),
             Ok(MediaJobCleanupStatus::CleanupRequired),
@@ -74,10 +88,8 @@ fn every_terminal_outcome_requires_registered_waveform_cleanup() {
 #[test]
 fn failed_cleanup_remains_retry_required_until_success_is_recorded() {
     let mut session = MediaJobSessionService::new();
-    let job = session.begin_job().expect("job identity");
-    let intermediate = session
-        .register_waveform_intermediate(job)
-        .expect("waveform identity");
+    let job = admitted!(session.begin_job());
+    let intermediate = admitted!(session.register_waveform_intermediate(job));
     assert_eq!(
         session.finish_job(job, MediaJobOutcome::Failed),
         Ok(MediaJobCleanupStatus::CleanupRequired),
@@ -103,10 +115,9 @@ fn failed_cleanup_remains_retry_required_until_success_is_recorded() {
 #[test]
 fn active_and_terminal_transitions_preserve_single_intermediate_ownership() {
     let mut session = MediaJobSessionService::new();
-    let first_job = session.begin_job().expect("first job identity");
-    let first_intermediate = session
-        .register_waveform_intermediate(first_job)
-        .expect("first waveform identity");
+    let first_job = admitted!(session.begin_job());
+    let first_intermediate =
+        admitted!(session.register_waveform_intermediate(first_job));
     assert_eq!(
         session.register_waveform_intermediate(first_job),
         Err(MediaJobSessionError::WaveformRegistered {
@@ -118,10 +129,9 @@ fn active_and_terminal_transitions_preserve_single_intermediate_ownership() {
         Err(MediaJobSessionError::NotTerminal),
     );
 
-    let second_job = session.begin_job().expect("second job identity");
-    let second_intermediate = session
-        .register_waveform_intermediate(second_job)
-        .expect("second waveform identity");
+    let second_job = admitted!(session.begin_job());
+    let second_intermediate =
+        admitted!(session.register_waveform_intermediate(second_job));
     assert_eq!(
         session.finish_job(first_job, MediaJobOutcome::Succeeded),
         Ok(MediaJobCleanupStatus::CleanupRequired),
@@ -149,7 +159,7 @@ fn active_and_terminal_transitions_preserve_single_intermediate_ownership() {
 #[test]
 fn jobs_without_waveforms_settle_immediately_and_reject_cleanup_invention() {
     let mut session = MediaJobSessionService::new();
-    let job = session.begin_job().expect("job identity");
+    let job = admitted!(session.begin_job());
     assert_eq!(
         session.cleanup_status(job),
         Err(MediaJobSessionError::NotTerminal),
@@ -159,10 +169,9 @@ fn jobs_without_waveforms_settle_immediately_and_reject_cleanup_invention() {
         Ok(MediaJobCleanupStatus::Settled),
     );
 
-    let another_job = session.begin_job().expect("second job identity");
-    let another_intermediate = session
-        .register_waveform_intermediate(another_job)
-        .expect("second waveform identity");
+    let another_job = admitted!(session.begin_job());
+    let another_intermediate =
+        admitted!(session.register_waveform_intermediate(another_job));
     assert_eq!(
         session.record_cleanup_failure(job, another_intermediate),
         Err(MediaJobSessionError::WaveformNotRegistered),
@@ -173,10 +182,9 @@ fn jobs_without_waveforms_settle_immediately_and_reject_cleanup_invention() {
 fn dropping_service_leaves_a_fresh_service_with_no_job_authority() {
     let old_job = {
         let mut session = MediaJobSessionService::new();
-        let job = session.begin_job().expect("job identity");
-        let _intermediate = session
-            .register_waveform_intermediate(job)
-            .expect("waveform identity");
+        let job = admitted!(session.begin_job());
+        let _intermediate =
+            admitted!(session.register_waveform_intermediate(job));
         assert!(!session.is_empty(), "populated service must own job");
         job
     };
@@ -192,10 +200,8 @@ fn dropping_service_leaves_a_fresh_service_with_no_job_authority() {
 #[test]
 fn settled_job_rejects_late_cleanup_events_without_recreating_work() {
     let mut session = MediaJobSessionService::new();
-    let job = session.begin_job().expect("job identity");
-    let intermediate = session
-        .register_waveform_intermediate(job)
-        .expect("waveform identity");
+    let job = admitted!(session.begin_job());
+    let intermediate = admitted!(session.register_waveform_intermediate(job));
     assert_eq!(
         session.finish_job(job, MediaJobOutcome::Succeeded),
         Ok(MediaJobCleanupStatus::CleanupRequired),
@@ -221,15 +227,14 @@ fn settled_job_rejects_late_cleanup_events_without_recreating_work() {
 fn many_interleaved_cleanup_jobs_never_accept_another_jobs_waveform() {
     let mut session = MediaJobSessionService::new();
     let mut jobs = Vec::new();
-    for index in 0..128_usize {
-        let job = session.begin_job().expect("bounded fresh job identity");
-        let waveform = if index % 4 == 0 {
+    for index in 0..128usize {
+        let job = admitted!(session.begin_job());
+        let waveform = if index.rem_euclid(4) == 0 {
             None
         } else {
-            Some(session.register_waveform_intermediate(job)
-                .expect("bounded distinct waveform identity"))
+            Some(admitted!(session.register_waveform_intermediate(job)))
         };
-        let outcome = match index % 3 {
+        let outcome = match index.rem_euclid(3) {
             0 => MediaJobOutcome::Cancelled,
             1 => MediaJobOutcome::Failed,
             _ => MediaJobOutcome::Succeeded,
@@ -244,39 +249,54 @@ fn many_interleaved_cleanup_jobs_never_accept_another_jobs_waveform() {
     }
 
     for (index, (job, waveform)) in jobs.iter().copied().enumerate() {
-        let expected = match (index % 4, waveform) {
-            (0, None) => MediaJobCleanupStatus::Settled,
-            (1, Some(_)) => MediaJobCleanupStatus::CleanupRequired,
-            (2, Some(_)) => MediaJobCleanupStatus::CleanupRetryRequired,
-            (3, Some(_)) => MediaJobCleanupStatus::Settled,
-            _ => panic!("generated job shape changed"),
+        let expected = match (index.rem_euclid(4), waveform) {
+            (0, None) | (3, Some(_)) => Some(MediaJobCleanupStatus::Settled),
+            (1, Some(_)) => Some(MediaJobCleanupStatus::CleanupRequired),
+            (2, Some(_)) => Some(MediaJobCleanupStatus::CleanupRetryRequired),
+            _ => None,
+        };
+        assert!(expected.is_some(), "generated job shape changed");
+        let Some(expected_status) = expected else {
+            return;
         };
         if let Some(owned) = waveform {
-            let wrong = jobs[(index + 1) % jobs.len()]
-                .1
-                .or(jobs[(index + 2) % jobs.len()].1)
-                .expect("neighbor has waveform");
             let observed = MediaJobSessionError::WaveformMismatch {
                 expected: owned,
             };
-            if index % 4 == 2 {
+            if index.rem_euclid(4) == 2 {
                 assert_eq!(
                     session.record_cleanup_failure(job, owned),
                     Ok(MediaJobCleanupStatus::CleanupRetryRequired),
                 );
             }
-            assert_eq!(
-                session.record_cleanup_success(job, wrong),
-                Err(observed),
-            );
-            if index % 4 == 3 {
+            let mut foreign_cases = 0u32;
+            for (other_job, other_waveform) in jobs.iter().copied() {
+                if other_job == job {
+                    continue;
+                }
+                if let Some(foreign_waveform) = other_waveform {
+                    assert_eq!(
+                        session.record_cleanup_success(job, foreign_waveform),
+                        Err(observed.clone()),
+                    );
+                    foreign_cases = foreign_cases.saturating_add(1);
+                }
+            }
+            assert_eq!(foreign_cases, 95);
+            let current_status = if index.rem_euclid(4) == 2 {
+                MediaJobCleanupStatus::CleanupRetryRequired
+            } else {
+                MediaJobCleanupStatus::CleanupRequired
+            };
+            assert_eq!(session.cleanup_status(job), Ok(current_status));
+            if index.rem_euclid(4) == 3 {
                 assert_eq!(
                     session.record_cleanup_success(job, owned),
                     Ok(MediaJobCleanupStatus::Settled),
                 );
             }
         }
-        assert_eq!(session.cleanup_status(job), Ok(expected));
+        assert_eq!(session.cleanup_status(job), Ok(expected_status));
     }
     assert!(!session.is_empty());
     assert_eq!(jobs.len(), 128);
@@ -289,11 +309,11 @@ fn all_terminal_session_cleanup_paths_match_state_machine() {
         MediaJobOutcome::Failed,
         MediaJobOutcome::Succeeded,
     ];
-    let mut cases = 0_u8;
+    let mut cases = 0u8;
     for outcome in outcomes {
-        for path in 0_u8..4 {
+        for path in 0u8..4 {
             let mut session = MediaJobSessionService::new();
-            let job = session.begin_job().expect("job identity");
+            let job = admitted!(session.begin_job());
             if path == 0 {
                 assert_eq!(
                     session.finish_job(job, outcome),
@@ -306,9 +326,8 @@ fn all_terminal_session_cleanup_paths_match_state_machine() {
                 cases = cases.saturating_add(1);
                 continue;
             }
-            let intermediate = session
-                .register_waveform_intermediate(job)
-                .expect("waveform identity");
+            let intermediate =
+                admitted!(session.register_waveform_intermediate(job));
             assert_eq!(
                 session.finish_job(job, outcome),
                 Ok(MediaJobCleanupStatus::CleanupRequired),
