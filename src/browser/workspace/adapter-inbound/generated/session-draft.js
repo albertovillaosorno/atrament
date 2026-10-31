@@ -52,6 +52,11 @@ export function draftMutationHeaders(sessionSecret) {
 export function draftMutationTarget(field) {
     return draftReadTarget(field);
 }
+// A successful backend draft read must be a declared UTF-8 text resource.
+// Do not treat a same-origin HTML/error page with HTTP 200 as draft state.
+export function isDraftReadContentType(value) {
+    return value?.trim().toLowerCase() === "text/plain; charset=utf-8";
+}
 function isRecord(value) {
     return typeof value === "object"
         && value !== null

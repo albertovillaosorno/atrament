@@ -546,6 +546,10 @@ async function readDraftField(field, secret, generation) {
     if (response.status !== 200) {
         return { kind: "rejected" };
     }
+    const declaredMediaType = response.headers.get("content-type");
+    if (!sessionDraft.isDraftReadContentType(declaredMediaType)) {
+        return { kind: "rejected" };
+    }
     try {
         const value = await response.text();
         return sessionSecret === secret

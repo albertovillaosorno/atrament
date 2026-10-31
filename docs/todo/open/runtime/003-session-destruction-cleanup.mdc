@@ -115,6 +115,16 @@ to wipe local state independently: network teardown is not promised for tabs
 that close without the explicit command, or for crashed or unresponsive
 processes.
 
+Browser draft hydration now admits an HTTP 200 body only when its response
+declares the expected `text/plain; charset=utf-8` media type. A red-first
+runtime-extracted browser regression showed a 200 HTML response previously
+became accepted draft text. The corrected path refuses wrong or absent media
+without reading the response body.
+
+Hydration leaves all three inputs disabled
+until every field passes and can never apply a partial snapshot. The independent
+browser transport fixture also pins case-insensitive exact media admission.
+
 The end confirmation can be cancelled by Escape or by moving focus away from
 its button, preventing a stale armed action. An authenticated end returning
 `401` now invalidates browser authority and clears private draft fields. A

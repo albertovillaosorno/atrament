@@ -42,6 +42,7 @@ const {
     draftReadHeaders,
     draftReadTarget,
     isResourceLimit,
+    isDraftReadContentType,
 } = await import(`${GENERATED_ROOT}session-draft.js`);
 
 test("draft targets are same-origin and contain no credential", () => {
@@ -71,6 +72,27 @@ test("draft mutation headers add only the text media type", () => {
         Authorization: `Bearer ${secret}`,
         "Content-Type": "text/plain; charset=utf-8",
     });
+});
+
+test("draft reads admit only declared UTF-8 plain text", () => {
+    for (const valid of [
+        "text/plain; charset=utf-8",
+        "Text/Plain; Charset=UTF-8",
+        " text/plain; charset=utf-8 ",
+    ]) {
+        assert.equal(isDraftReadContentType(valid), true, valid);
+    }
+    for (const invalid of [
+        null,
+        "",
+        "text/plain",
+        "text/html; charset=utf-8",
+        "application/json; charset=utf-8",
+        "text/plain; charset=iso-8859-1",
+        "text/plain; charset=utf-8; extra=yes",
+    ]) {
+        assert.equal(isDraftReadContentType(invalid), false, String(invalid));
+    }
 });
 
 test("draft resource limit requires current shared diagnostic metadata", () => {

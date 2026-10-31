@@ -44,6 +44,9 @@ const MAIN_MODULE = new URL(
     "../../../../src/browser/workspace/adapter-inbound/generated/main.js",
     import.meta.url,
 );
+const { isDraftReadContentType } = await import(
+    new URL("session-draft.js", MAIN_MODULE).href,
+);
 
 test("static workspace starts session controls disabled", async () => {
     const source = await readFile(INDEX_HTML, "utf8");
@@ -450,6 +453,55 @@ test(
     },
 );
 
+
+test("draft hydration rejects wrong media without body read", async () => {
+    const source = await readFile(MAIN_MODULE, "utf8");
+    const start = source.indexOf("async function readDraftField(");
+    const end = source.indexOf("async function hydrateSessionDraft(", start);
+    assert.ok(start >= 0 && end > start, "draft read must be extractable");
+    const readDraftField = source.slice(start, end);
+    for (const mediaType of [
+        "text/html; charset=utf-8",
+        "application/json; charset=utf-8",
+        "text/plain; charset=iso-8859-1",
+        null,
+        "text/plain; charset=utf-8",
+    ]) {
+        let reads = 0;
+        const result = await runInNewContext(`
+            (async () => {
+                const sessionSecret = "secret";
+                const draftSyncGeneration = 0;
+                const sessionRequests = { signal: {} };
+                const sessionDraft = {
+                    draftReadTarget: () => "./api/session/task",
+                    draftReadHeaders: () => ({}),
+                    isDraftReadContentType,
+                };
+                ${readDraftField}
+                return readDraftField("task", "secret", 0);
+            })()
+        `, {
+            isDraftReadContentType,
+            fetch: async () => ({
+                status: 200,
+                headers: { get: () => mediaType },
+                text: async () => {
+                    reads += 1;
+                    return "private draft";
+                },
+            }),
+        });
+        if (mediaType === "text/plain; charset=utf-8") {
+            assert.equal(result.kind, "available");
+            assert.equal(result.value, "private draft");
+            assert.equal(reads, 1);
+        } else {
+            assert.equal(result.kind, "rejected", String(mediaType));
+            assert.equal(reads, 0, "untrusted body must remain unread");
+        }
+    }
+});
 
 test("draft hydration is atomic and stale-page guarded", async () => {
     const source = await readFile(MAIN_MODULE, "utf8");
