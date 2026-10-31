@@ -1098,3 +1098,16 @@ confirms unchanged device, inode, length and mtime with changed ctime, then
 requires `SelectedTargetChanged` without publishing Export bytes or losing the
 externally rewritten content. This covers the precommit history gate's use of
 ctime, not a guarantee against timestamp spoofing or changes after the check.
+
+A red-first Linux writer regression now alters the first 64 KiB of the
+anonymous stage through a second process-descriptor handle while the second
+64 KiB chunk is still pending. Because the original writer sampled stage
+metadata only *after* completing the sync, it previously reported a successful
+Export of a complete but byte-different artifact. The transport now uses a
+readable anonymous file descriptor and checks the actual staged bytes against
+the admitted artifact through bounded 16 KiB reads before linking any name,
+then retains its post-read identity, mode and metadata checks. Both overwrite
+dispositions reject `StagedFileChanged` without replacing or creating the
+selected target. This does not make a concurrent filesystem mutation or the
+replacement link-before-rename crash window impossible; it closes the
+previously unobserved pre-sync byte-substitution case.

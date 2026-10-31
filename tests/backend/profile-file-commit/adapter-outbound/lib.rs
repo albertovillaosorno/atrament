@@ -271,6 +271,67 @@ mod linux {
     }
 
     #[test]
+    fn staged_bytes_changed_during_write_cannot_publish() {
+        // A change made before sync is already included in the staged
+        // metadata snapshot. Comparing metadata only after sync misses it.
+        for disposition in [Mode::PreserveExisting, Mode::ReplaceExisting] {
+            let dir = OwnedDir::new();
+            let target = dir.target();
+            if disposition == Mode::ReplaceExisting {
+                fs::write(&target, b"original selected profile")
+                    .expect("preexisting replacement target");
+            }
+            let artifact = vec![0x93u8; 2 * 64 * 1024];
+            let mut observations = 0usize;
+            let result = commit_profile_file_cancellable(
+                &target,
+                &artifact,
+                artifact.len(),
+                disposition,
+                || {
+                    observations += 1;
+                    if observations == 3 {
+                        // The first 64 KiB has been written but the final
+                        // 64 KiB and sync have not. Mutating the first bytes
+                        // leaves a complete same-length file after sync.
+                        let stage = fs::read_dir("/proc/self/fd")
+                            .expect("inspect own file descriptors")
+                            .find_map(|candidate| {
+                                let entry = candidate.ok()?;
+                                let path = fs::read_link(entry.path()).ok()?;
+                                (path.starts_with(&dir.0)
+                                    && path.to_string_lossy().ends_with(" (deleted)"))
+                                .then(|| entry.path())
+                            })
+                            .expect("test-owned anonymous stage descriptor");
+                        let mut writable = OpenOptions::new()
+                            .write(true)
+                            .open(stage)
+                            .expect("reopen test-owned stage for mutation");
+                        writable
+                            .write_all(b"tamper")
+                            .expect("alter staged bytes before final sync");
+                    }
+                    false
+                },
+            );
+            assert_eq!(observations, 4);
+            assert_eq!(result, Err(Error::StagedFileChanged));
+            assert!(!result.is_err_and(Error::may_have_committed));
+            if disposition == Mode::ReplaceExisting {
+                assert_eq!(
+                    fs::read(&target).expect("old selected file survives"),
+                    b"original selected profile",
+                );
+                assert_eq!(dir.entries(), vec![String::from("chosen.atrament")],);
+            } else {
+                assert!(!target.exists());
+                assert!(dir.entries().is_empty());
+            }
+        }
+    }
+
+    #[test]
     fn staged_permission_widening_before_sync_refuses_export() {
         for (disposition, mutate_at) in [
             (Mode::PreserveExisting, 2usize),

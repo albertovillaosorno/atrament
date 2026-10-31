@@ -79,7 +79,7 @@ pub enum ProfileFileCommitError {
     SelectedParentChanged,
     /// The observed replacement entry changed during precommit staging.
     SelectedTargetChanged,
-    /// The anonymous stage changed after file sync but before publication.
+    /// Staged bytes or metadata changed before publication.
     StagedFileChanged,
     /// Existing target conflicts with preserve-existing intent.
     TargetExists,
@@ -202,9 +202,10 @@ pub fn commit_profile_file(
 /// Replacement also rechecks the selected entry without following links
 /// after staging, refusing late symlinks or non-regular targets and changes
 /// to the initial target's existence, identity or timestamps before linking.
-/// The anonymous stage's identity, size and times must remain unchanged
-/// since its completed sync; drift observed before linking is a proven
-/// precommit refusal with no selected-target effect.
+/// The anonymous stage's exact bytes must match the admitted artifact before
+/// linking, including changes made during staged writes. Its identity, size
+/// and times must remain unchanged since its completed sync; observed drift
+/// before linking is a proven precommit refusal without selected-target effect.
 /// Another actor can change the entry after this final observation; the
 /// recheck is not an atomic compare-and-replace guarantee.
 /// Linux stages bytes through `O_TMPFILE`, so cancellation or process death
@@ -343,6 +344,35 @@ fn observe_replace_target(
 }
 
 #[cfg(target_os = "linux")]
+fn staged_bytes_match(output: &File, artifact: &[u8]) -> Result<bool, ProfileFileCommitError> {
+    use std::os::unix::fs::FileExt as _;
+
+    // The stage is private but a same-user process can reach its descriptor.
+    // Metadata recorded only after sync cannot reveal a prior equal-length
+    // mutation. Read back bounded chunks from the actual staged inode before
+    // publishing any name, without allocating another artifact-sized buffer.
+    let mut readback = [0u8; 16 * 1024];
+    let mut offset = 0usize;
+    for chunk in artifact.chunks(readback.len()) {
+        let position =
+            u64::try_from(offset).map_err(|_error| ProfileFileCommitError::StagedFileChanged)?;
+        let part = readback
+            .get_mut(..chunk.len())
+            .ok_or(ProfileFileCommitError::StagedFileChanged)?;
+        output
+            .read_exact_at(part, position)
+            .map_err(|error| ProfileFileCommitError::FileIo(error.kind()))?;
+        if part != chunk {
+            return Ok(false);
+        }
+        offset = offset
+            .checked_add(chunk.len())
+            .ok_or(ProfileFileCommitError::StagedFileChanged)?;
+    }
+    Ok(true)
+}
+
+#[cfg(target_os = "linux")]
 #[expect(
     clippy::too_many_lines,
     reason = "single atomic file lifecycle with unified error paths"
@@ -415,7 +445,7 @@ fn commit_platform(
     let mut output = File::from(openat(
         &directory,
         ".",
-        OFlag::O_WRONLY | OFlag::O_TMPFILE | OFlag::O_CLOEXEC,
+        OFlag::O_RDWR | OFlag::O_TMPFILE | OFlag::O_CLOEXEC,
         Mode::S_IRUSR | Mode::S_IWUSR,
     ).map_err(|error| {
         if matches!(
@@ -485,6 +515,13 @@ fn commit_platform(
         return Err(ProfileFileCommitError::SelectedTargetChanged);
     }
 
+    // Detect a rewrite that happened while chunks were still being written:
+    // the first post-sync metadata snapshot would already include that
+    // mutation and so later metadata comparisons alone cannot detect it.
+    // Read back exact bytes before the first selected or temporary link.
+    if !staged_bytes_match(&output, artifact)? {
+        return Err(ProfileFileCommitError::StagedFileChanged);
+    }
     // The final cancellation callback or another process could have opened
     // our still-unnamed stage via a process descriptor. Verify it remains the
     // exact synced inode before making its first visible directory entry.
