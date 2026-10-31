@@ -895,6 +895,16 @@ checking the parent. Both overwrite modes refuse before linking without
 altering the old location or the alternate directory's unrelated file.
 A successful unchanged-CWD relative commit is the fixture's positive control.
 
+The process Export retry journal additionally binds the initially observed CWD
+device/inode to each relative-target key without moving filesystem ownership
+into the pure retry-binding domain. An isolated subprocess first commits a
+relative file, then changes CWD to an unrelated directory holding the exact
+same ZIP bytes. Same-key recovery now refuses `RelativeCwdChanged` even though
+both paths are byte-identical and the newly resolved file matches the archive.
+An unchanged-CWD same-key recovery remains authorized by the earlier receipt.
+The session also rechecks CWD immediately before and after a new file commit,
+conservatively retaining uncertain effect if the postcommit path context drifts.
+
 These checks narrow the observable directory-rename race; they do not lock an
 external pathname, prevent changes after either check, or solve the brief
 replacement link-before-rename crash window that can leave a named stage.

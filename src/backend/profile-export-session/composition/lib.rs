@@ -16,8 +16,8 @@
 // - Allows:
 //   - Inputs: Host-authenticated intent, revision and sealed ZIP.
 //   - Outputs: One synced Export receipt or typed refusal/recovery outcome.
-//   - Side effects: Exactly one attempted file commit for a fresh retry key;
-//     read-only target inspection for a previously synced retry key.
+//   - Side effects: At most one file commit per fresh retry key; read-only CWD
+//     identity checks for relative paths and target checks for synced retries.
 // - Split-When:
 //   - The trusted runtime admits host selection and accepted profile state.
 // - Merge-When:
@@ -36,10 +36,14 @@
 
 use std::collections::BTreeMap;
 use std::fmt;
+#[cfg(target_os = "linux")]
+use std::fs;
+use std::io;
 use std::path::{Path, PathBuf};
 
 use atrament_explicit_file_path_intent::{
-    ExplicitFilePathIntent, ExplicitFilePathSource, ExplicitOverwriteIntent,
+    ExplicitFilePathIntent, ExplicitFilePathSource, ExplicitFilePurpose,
+    ExplicitOverwriteIntent,
 };
 use atrament_handwriting_profile_container::Sha256Digest;
 use atrament_profile_export_assembly::ProfileExportArtifact;
@@ -175,14 +179,27 @@ pub enum ProfileExportSessionError {
     Commit(ProfileFileCommitError),
     /// Session journal and binding map disagree; never guess an outcome.
     JournalInconsistent,
+    /// Current process CWD no longer matches a saved relative Export target.
+    RelativeCwdChanged,
+    /// The current CWD could not be inspected to bind a relative target.
+    RelativeCwdUnavailable(io::ErrorKind),
+    /// Relative CWD identity cannot be verified on this platform.
+    RelativeCwdUnsupported,
     /// A same-key retry cannot recover the earlier synced receipt.
     Retry(ProfileExportRetryRecoveryDecision),
+}
+
+#[derive(Clone, Copy, Eq, PartialEq)]
+struct RelativeCwdIdentity {
+    device: u64,
+    inode: u64,
 }
 
 #[derive(Clone)]
 struct ProfileExportAttempt {
     effect: ProfileExportPriorEffect,
     receipt: Option<ProfileExportReceipt>,
+    relative_cwd: Option<RelativeCwdIdentity>,
 }
 
 /// Bounded, disposable record of exactly one attempted file effect per key.
@@ -195,6 +212,8 @@ struct ProfileExportAttempt {
 /// Unknown post-rename durability is retained as uncertain, not repaired by
 /// target equality. Only the original successful writer result creates a
 /// receipt, and replay requires an independent read-only exact-byte check.
+/// For relative paths, the CWD device/inode is also bound to the attempt:
+/// identical path text and bytes under a different CWD cannot recover it.
 /// Debug output never reveals retained keys, paths, receipts or artifact data.
 pub struct ProfileExportSession {
     attempts: BTreeMap<String, ProfileExportAttempt>,
@@ -245,7 +264,8 @@ impl ProfileExportSession {
     ///
     /// A repeated key cannot retry a cancelled, failed or unwound attempt.
     /// Its cancellation callback is not invoked on a same-key retry.
-    /// A new authorized attempt needs a distinct key.
+    /// A new authorized attempt needs a distinct key; relative path retries
+    /// additionally require the same observed process CWD identity.
     ///
     /// # Errors
     ///
@@ -263,50 +283,50 @@ impl ProfileExportSession {
     where
         Cancel: FnMut() -> bool,
     {
+        // Relative path text can change filesystem identity across chdir.
+        let relative_cwd = relative_cwd_for_export(intent)?;
         let binding = self
             .bindings
             .bind(retry_key, revision, intent, artifact)
             .map_err(ProfileExportSessionError::Binding)?;
         match binding {
             ProfileRetryBindingDisposition::NewBinding => {
-                let overwrite = match intent.overwrite() {
-                    ExplicitOverwriteIntent::PreserveExisting => {
-                        ProfileFileCommitDisposition::PreserveExisting
-                    }
-                    ExplicitOverwriteIntent::ReplaceExisting => {
-                        ProfileFileCommitDisposition::ReplaceExisting
-                    }
-                };
+                let overwrite = commit_disposition(intent.overwrite());
                 // Prepare both owned receipt copies before the irreversible
                 // file operation. A successful file sync must not be followed
                 // by fallible allocations for path/key copies or journal
-                // cloning; only allocation-free moves and field updates may
-                // occur between commit and the returned synced receipt.
-                let mut retained_receipt = ProfileExportReceipt {
-                    archive_sha256: artifact.archive_sha256(),
-                    byte_length: artifact.bytes().len(),
-                    overwrite: intent.overwrite(),
-                    path: intent.path().to_path_buf(),
-                    retry_key: String::from(retry_key),
-                    revision,
-                    root_sha256: artifact.root_sha256(),
-                    source: intent.source(),
-                };
+                // cloning. A postcommit CWD read failure must instead retain
+                // uncertain effect, never manufacture a receipt.
+                let mut retained_receipt =
+                    prepare_receipt(retry_key, revision, intent, artifact);
                 let mut returned_receipt = retained_receipt.clone();
-                self.reserve_attempt(retry_key)?;
-                let result = commit_profile_file_cancellable(
-                    intent.path(),
-                    artifact.bytes(),
-                    maximum_bytes,
-                    overwrite,
-                    is_cancelled,
-                );
+                self.reserve_attempt(retry_key, relative_cwd)?;
+                // Avoid committing in a different CWD after request binding.
+                // Any post-reservation observation failure leaves the journal
+                // NotRecorded, which a same-key retry can never upgrade.
+                let result = if current_relative_cwd(intent)? == relative_cwd {
+                    commit_profile_file_cancellable(
+                        intent.path(),
+                        artifact.bytes(),
+                        maximum_bytes,
+                        overwrite,
+                        is_cancelled,
+                    )
+                } else {
+                    Err(ProfileFileCommitError::SelectedParentChanged)
+                };
                 let attempt = self
                     .attempts
                     .get_mut(retry_key)
                     .ok_or(ProfileExportSessionError::JournalInconsistent)?;
                 match result {
                     Ok(evidence) => {
+                        if current_relative_cwd(intent).ok() != Some(relative_cwd) {
+                            attempt.effect = ProfileExportPriorEffect::DurabilityUnknown;
+                            return Err(ProfileExportSessionError::Commit(
+                                ProfileFileCommitError::CommittedPathUnverified,
+                            ));
+                        }
                         retained_receipt.byte_length = evidence.byte_length;
                         returned_receipt.byte_length = evidence.byte_length;
                         attempt.effect = ProfileExportPriorEffect::SyncedCommit(
@@ -333,6 +353,9 @@ impl ProfileExportSession {
                     .attempts
                     .get(retry_key)
                     .ok_or(ProfileExportSessionError::JournalInconsistent)?;
+                if attempt.relative_cwd != relative_cwd {
+                    return Err(ProfileExportSessionError::RelativeCwdChanged);
+                }
                 let target = if matches!(
                     attempt.effect,
                     ProfileExportPriorEffect::SyncedCommit(_)
@@ -391,6 +414,7 @@ impl ProfileExportSession {
     fn reserve_attempt(
         &mut self,
         retry_key: &str,
+        relative_cwd: Option<RelativeCwdIdentity>,
     ) -> Result<(), ProfileExportSessionError> {
         if self.attempts.contains_key(retry_key) {
             return Err(ProfileExportSessionError::JournalInconsistent);
@@ -400,8 +424,81 @@ impl ProfileExportSession {
             ProfileExportAttempt {
                 effect: ProfileExportPriorEffect::NotRecorded,
                 receipt: None,
+                relative_cwd,
             },
         );
         Ok(())
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn current_relative_cwd(
+    intent: &ExplicitFilePathIntent,
+) -> Result<Option<RelativeCwdIdentity>, ProfileExportSessionError> {
+    use std::os::unix::fs::MetadataExt as _;
+
+    if intent.path().is_absolute() {
+        return Ok(None);
+    }
+    let metadata = fs::metadata(".").map_err(|error| {
+        ProfileExportSessionError::RelativeCwdUnavailable(error.kind())
+    })?;
+    Ok(Some(RelativeCwdIdentity {
+        device: metadata.dev(),
+        inode: metadata.ino(),
+    }))
+}
+
+#[cfg(not(target_os = "linux"))]
+fn current_relative_cwd(
+    intent: &ExplicitFilePathIntent,
+) -> Result<Option<RelativeCwdIdentity>, ProfileExportSessionError> {
+    if intent.path().is_absolute() {
+        Ok(None)
+    } else {
+        Err(ProfileExportSessionError::RelativeCwdUnsupported)
+    }
+}
+
+fn relative_cwd_for_export(
+    intent: &ExplicitFilePathIntent,
+) -> Result<Option<RelativeCwdIdentity>, ProfileExportSessionError> {
+    if intent.purpose() != ExplicitFilePurpose::ExportProfile {
+        return Err(ProfileExportSessionError::Binding(
+            ProfileRetryBindingError::WrongPathPurpose,
+        ));
+    }
+    current_relative_cwd(intent)
+}
+
+const fn commit_disposition(
+    overwrite: ExplicitOverwriteIntent,
+) -> ProfileFileCommitDisposition {
+    match overwrite {
+        ExplicitOverwriteIntent::PreserveExisting => {
+            ProfileFileCommitDisposition::PreserveExisting
+        }
+        ExplicitOverwriteIntent::ReplaceExisting => {
+            ProfileFileCommitDisposition::ReplaceExisting
+        }
+    }
+}
+
+// Build and clone both receipts before the first irreversible file effect.
+fn prepare_receipt(
+    retry_key: &str,
+    revision: RevisionIdentity,
+    intent: &ExplicitFilePathIntent,
+    artifact: &ProfileExportArtifact,
+) -> ProfileExportReceipt {
+    ProfileExportReceipt {
+        archive_sha256: artifact.archive_sha256(),
+        byte_length: artifact.bytes().len(),
+        overwrite: intent.overwrite(),
+        path: intent.path().to_path_buf(),
+        retry_key: String::from(retry_key),
+        revision,
+        root_sha256: artifact.root_sha256(),
+        source: intent.source(),
     }
 }

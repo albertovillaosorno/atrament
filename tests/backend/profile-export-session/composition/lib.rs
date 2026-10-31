@@ -57,6 +57,10 @@ mod linux {
     const CRASH_EXPORT_TARGET: &str = "ATRAMENT_TEST_CRASH_EXPORT_TARGET";
     const CRASH_EXPORT_TEST: &str =
         "linux::completed_export_survives_forced_process_death";
+    const RETRY_CWD_ALTERNATE: &str = "ATRAMENT_TEST_RETRY_CWD_ALTERNATE";
+    const RETRY_CWD_REPLACE: &str = "ATRAMENT_TEST_RETRY_CWD_REPLACE";
+    const RETRY_CWD_TEST: &str =
+        "linux::relative_retry_does_not_recover_identical_bytes_in_other_cwd";
 
     struct OwnedDir(PathBuf);
     #[expect(clippy::missing_trait_methods, reason = "fixture cleanup only")]
@@ -775,6 +779,70 @@ mod linux {
             replacement.bytes(),
         );
         assert_eq!(fs::read_dir(&root.0).expect("one output").count(), 1);
+    }
+
+    #[test]
+    fn relative_retry_does_not_recover_identical_bytes_in_other_cwd() {
+        if let Some(alternate) = env::var_os(RETRY_CWD_ALTERNATE) {
+            let overwrite = if env::var_os(RETRY_CWD_REPLACE).is_some() {
+                ReplaceExisting
+            } else {
+                PreserveExisting
+            };
+            let path = PathBuf::from("nested/profile.atrament");
+            let intent = intent(path, overwrite);
+            let artifact = artifact("relative-retry-context");
+            let accepted = revision();
+            let mut session = ProfileExportSession::new(1);
+            assert!(matches!(
+                session.export("same", accepted, &intent, &artifact, 8192),
+                Ok(Outcome::Committed(_)),
+            ));
+            assert!(matches!(
+                session.export("same", accepted, &intent, &artifact, 8192),
+                Ok(Outcome::Recovered(_)),
+            ));
+            env::set_current_dir(alternate).expect("move child CWD");
+            let retry = session.export("same", accepted, &intent, &artifact, 8192);
+            assert_eq!(retry, Err(Error::RelativeCwdChanged));
+            return;
+        }
+        for overwrite in [PreserveExisting, ReplaceExisting] {
+            let root = fixture();
+            let first_cwd = root.0.join("first-cwd");
+            let second_cwd = root.0.join("second-cwd");
+            let first_parent = first_cwd.join("nested");
+            let second_parent = second_cwd.join("nested");
+            fs::create_dir_all(&first_parent).expect("first directory");
+            fs::create_dir_all(&second_parent).expect("second directory");
+            let chosen = first_parent.join("profile.atrament");
+            let changed = second_parent.join("profile.atrament");
+            let artifact = artifact("relative-retry-context");
+            if overwrite == ReplaceExisting {
+                fs::write(&chosen, b"original").expect("replacement fixture");
+            }
+            fs::write(&changed, artifact.bytes()).expect("byte-identical other target");
+            let other_inode = fs::metadata(&changed).expect("other inode").ino();
+            let mut command = Command::new(env::current_exe().expect("test executable"));
+            let _configured = command
+                .arg("--exact")
+                .arg(RETRY_CWD_TEST)
+                .env(RETRY_CWD_ALTERNATE, &second_cwd)
+                .env_remove(RETRY_CWD_REPLACE)
+                .current_dir(&first_cwd);
+            if overwrite == ReplaceExisting {
+                let _mode = command.env(RETRY_CWD_REPLACE, "yes");
+            }
+            let output = command.output().expect("isolated session retry child");
+            assert!(
+                output.status.success(),
+                "the retry must refuse: {}",
+                String::from_utf8_lossy(&output.stdout),
+            );
+            assert_eq!(fs::read(&chosen).expect("first committed file"), artifact.bytes());
+            assert_eq!(fs::read(&changed).expect("other target intact"), artifact.bytes());
+            assert_eq!(fs::metadata(&changed).expect("other inode intact").ino(), other_inode);
+        }
     }
 
     #[test]
