@@ -35,6 +35,13 @@
 
 //! Handwriting calibration evidence domain regression tests.
 
+#![expect(
+    clippy::expect_used,
+    reason = "fail-fast tests confirm complete bounded evidence fixtures"
+)]
+
+use std::ptr;
+
 use atrament_handwriting_calibration_evidence::{
     CalibrationDetermination, CalibrationEvidenceBasis,
     CalibrationParameterEvidence, CalibrationSample, CalibrationSampleRole,
@@ -56,7 +63,7 @@ fn parameter_evidence_retains_source_units_confidence_and_corrections() {
         parameter: "body-x-height",
         source_region: "sheet-2/region-14",
         unit: "caller-owned-physical-unit",
-        value: 37_u32,
+        value: 37u32,
     };
 
     assert_eq!(evidence.parameter, "body-x-height");
@@ -117,9 +124,7 @@ fn held_out_and_training_sample_identities_must_be_disjoint() {
     ];
     assert_eq!(
         validate_calibration_sample_roles(&conflicting),
-        Err(CalibrationSampleRoleError::ConflictingRole {
-            sample: "sample-a",
-        }),
+        Err(CalibrationSampleRoleError::ConflictingRole { sample: "sample-a" }),
     );
 }
 
@@ -156,7 +161,9 @@ fn reference_sample_role_validation(
 ) -> Result<(), CalibrationSampleRoleError<u8>> {
     let mut roles = [None; 2];
     for sample in samples {
-        let slot = &mut roles[usize::from(sample.identity)];
+        let slot = roles
+            .get_mut(usize::from(sample.identity))
+            .expect("compact oracle uses two identities");
         if let Some(existing) = slot {
             if *existing != sample.role {
                 return Err(CalibrationSampleRoleError::ConflictingRole {
@@ -172,19 +179,21 @@ fn reference_sample_role_validation(
 
 #[test]
 fn every_compact_sample_role_sequence_matches_separation_oracle() {
-    let mut cases = 0_usize;
+    let mut cases = 0usize;
     let mut saw_valid = false;
     let mut saw_conflict = [false; 2];
-    for length in 0_u32..=6 {
-        for encoded in 0_usize..4_usize.pow(length) {
+    for length in 0u32..=6 {
+        for encoded in 0usize..4usize.pow(length) {
             let mut value = encoded;
-            let mut samples = Vec::with_capacity(length as usize);
+            let mut samples = Vec::with_capacity(
+                usize::try_from(length).expect("compact length fits usize"),
+            );
             for _ in 0..length {
-                let symbol = value % 4;
-                value /= 4;
-                let identity = u8::try_from(symbol / 2)
-                    .expect("compact identity fits u8");
-                let role = if symbol % 2 == 0 {
+                let symbol = value & 0b11;
+                value >>= 2u32;
+                let identity = u8::try_from(symbol >> 1u32)
+                    .expect("two-bit identity fits u8");
+                let role = if symbol & 1 == 0 {
                     CalibrationSampleRole::Training
                 } else {
                     CalibrationSampleRole::HeldOut
@@ -195,8 +204,10 @@ fn every_compact_sample_role_sequence_matches_separation_oracle() {
             match expected {
                 Ok(()) => saw_valid = true,
                 Err(CalibrationSampleRoleError::ConflictingRole { sample }) => {
-                    saw_conflict[usize::from(sample)] = true;
-                },
+                    *saw_conflict
+                        .get_mut(usize::from(sample))
+                        .expect("oracle conflict uses two identities") = true;
+                }
             }
             assert_eq!(
                 validate_calibration_sample_roles(&samples),
@@ -205,15 +216,13 @@ fn every_compact_sample_role_sequence_matches_separation_oracle() {
             );
             match expected {
                 Ok(()) => {
-                    let validated = validate_calibration_sample_roles_view(
-                        &samples,
-                    )
-                    .expect("valid sample roles seal exact declarations");
-                    assert!(std::ptr::eq(
-                        validated.samples(),
-                        samples.as_slice(),
-                    ));
-                },
+                    let validated =
+                        validate_calibration_sample_roles_view(&samples)
+                            .expect(
+                                "valid sample roles seal exact declarations",
+                            );
+                    assert!(ptr::eq(validated.samples(), samples.as_slice(),));
+                }
                 Err(reason) => assert_eq!(
                     validate_calibration_sample_roles_view(&samples),
                     Err(reason),
@@ -246,8 +255,8 @@ fn held_out_samples() -> Vec<CalibrationSample<&'static str>> {
     ]
 }
 
-fn complete_quality_report(
-) -> HeldOutQualityReport<&'static str, i32, &'static str, &'static str> {
+fn complete_quality_report()
+-> HeldOutQualityReport<&'static str, i32, &'static str, &'static str> {
     use HeldOutQualityDimension::{
         Geometry, Joins, PerceptualFidelity, Punctuation, Rhythm, Spacing,
     };
@@ -298,29 +307,51 @@ fn complete_quality_report(
 fn held_out_report_retains_all_required_dimensions_and_known_failures() {
     let report = complete_quality_report();
     let samples = held_out_samples();
-    assert_eq!(
-        validate_held_out_quality_report(&samples, &report),
-        Ok(()),
-    );
+    assert_eq!(validate_held_out_quality_report(&samples, &report), Ok(()),);
     let validated = validate_held_out_quality_report_view(&samples, &report)
         .expect("complete held-out report seals exact evidence");
-    assert!(std::ptr::eq(validated.report(), &report));
-    assert!(std::ptr::eq(validated.samples(), samples.as_slice()));
+    assert!(ptr::eq(validated.report(), &raw const report));
+    assert!(ptr::eq(validated.samples(), samples.as_slice()));
     assert_eq!(report.measurements.len(), 6);
     assert_eq!(
         report.known_failures,
         ["weak-terminal-join-on-small-writing"],
     );
-    assert_eq!(report.measurements[0].sample, "held-a");
-    assert_eq!(report.measurements[0].value, 91);
-    assert_eq!(report.measurements[0].evidence, "geometry-evidence");
+    assert_eq!(
+        report
+            .measurements
+            .first()
+            .expect("six measurements")
+            .sample,
+        "held-a"
+    );
+    assert_eq!(
+        report.measurements.first().expect("six measurements").value,
+        91i32
+    );
+    assert_eq!(
+        report
+            .measurements
+            .first()
+            .expect("six measurements")
+            .evidence,
+        "geometry-evidence"
+    );
 }
 
 #[test]
 fn held_out_report_rejects_training_and_unknown_measurement_samples_in_order() {
     let mut report = complete_quality_report();
-    report.measurements[0].sample = "training-a";
-    report.measurements[1].sample = "unknown-a";
+    report
+        .measurements
+        .first_mut()
+        .expect("six measurements")
+        .sample = "training-a";
+    report
+        .measurements
+        .get_mut(1)
+        .expect("six measurements")
+        .sample = "unknown-a";
     assert_eq!(
         validate_held_out_quality_report(&held_out_samples(), &report),
         Err(HeldOutQualityReportError::TrainingSample {
@@ -328,7 +359,11 @@ fn held_out_report_rejects_training_and_unknown_measurement_samples_in_order() {
         }),
     );
 
-    report.measurements[0].sample = "held-a";
+    report
+        .measurements
+        .first_mut()
+        .expect("six measurements")
+        .sample = "held-a";
     assert_eq!(
         validate_held_out_quality_report(&held_out_samples(), &report),
         Err(HeldOutQualityReportError::UnknownSample {
@@ -350,10 +385,13 @@ fn sample_role_conflict_rejects_before_held_out_report_measurements() {
         },
     ];
     let mut report = complete_quality_report();
-    report.measurements[0].sample = "unknown-first-measurement";
-    let expected = HeldOutQualityReportError::ConflictingSampleRole {
-        sample: "conflict",
-    };
+    report
+        .measurements
+        .first_mut()
+        .expect("six measurements")
+        .sample = "unknown-first-measurement";
+    let expected =
+        HeldOutQualityReportError::ConflictingSampleRole { sample: "conflict" };
     assert_eq!(
         validate_held_out_quality_report(&samples, &report),
         Err(expected.clone()),
@@ -391,7 +429,13 @@ fn held_out_report_requires_every_dimension_without_metric_thresholds() {
 fn repeated_held_out_measurements_and_empty_known_failures_remain_valid() {
     let mut report = complete_quality_report();
     report.known_failures.clear();
-    report.measurements.push(report.measurements[0].clone());
+    report.measurements.push(
+        report
+            .measurements
+            .first()
+            .expect("six measurements")
+            .clone(),
+    );
     assert_eq!(
         validate_held_out_quality_report(&held_out_samples(), &report),
         Ok(()),
@@ -413,23 +457,24 @@ fn every_quality_dimension_subset_matches_completeness_oracle() {
         PerceptualFidelity,
     ];
     let samples = [CalibrationSample {
-        identity: 0_u8,
+        identity: 0u8,
         role: CalibrationSampleRole::HeldOut,
     }];
-    let mut cases = 0_u8;
-    for mask in 0_u8..64 {
+    let mut cases = 0u8;
+    for mask in 0u8..64 {
         let report = HeldOutQualityReport::<u8, u8, (), ()> {
             known_failures: Vec::new(),
             measurements: dimensions
                 .iter()
                 .enumerate()
                 .filter_map(|(index, dimension)| {
-                    (mask & (1_u8 << index) != 0).then_some(
+                    (mask & (1u8 << index) != 0).then_some(
                         HeldOutQualityMeasurement {
                             dimension: *dimension,
                             evidence: (),
                             sample: 0,
-                            value: index as u8,
+                            value: u8::try_from(index)
+                                .expect("six quality dimensions"),
                         },
                     )
                 })
@@ -438,7 +483,7 @@ fn every_quality_dimension_subset_matches_completeness_oracle() {
         let expected = dimensions
             .iter()
             .enumerate()
-            .find(|(index, _)| mask & (1_u8 << index) == 0)
+            .find(|(index, _)| mask & (1u8 << index) == 0)
             .map_or(Ok(()), |(_, dimension)| {
                 Err(HeldOutQualityReportError::MissingDimension {
                     dimension: *dimension,
@@ -454,9 +499,9 @@ fn every_quality_dimension_subset_matches_completeness_oracle() {
                 let validated =
                     validate_held_out_quality_report_view(&samples, &report)
                         .expect("complete dimension set seals exact report");
-                assert!(std::ptr::eq(validated.report(), &report));
-                assert!(std::ptr::eq(validated.samples(), samples.as_slice()));
-            },
+                assert!(ptr::eq(validated.report(), &raw const report));
+                assert!(ptr::eq(validated.samples(), samples.as_slice()));
+            }
             Err(reason) => assert_eq!(
                 validate_held_out_quality_report_view(&samples, &report),
                 Err(reason),
@@ -483,22 +528,25 @@ fn every_compact_measurement_role_sequence_matches_first_failure_oracle() {
     ];
     let samples = [
         CalibrationSample {
-            identity: 0_u8,
+            identity: 0u8,
             role: CalibrationSampleRole::HeldOut,
         },
         CalibrationSample {
-            identity: 1_u8,
+            identity: 1u8,
             role: CalibrationSampleRole::Training,
         },
     ];
-    let mut cases = 0_u16;
+    let mut cases = 0u16;
     let mut saw = [false; 3];
-    for encoded in 0_u16..729 {
+    for encoded in 0u16..729 {
         let mut state = encoded;
-        let mut references = [0_u8; 6];
+        let mut references = [0u8; 6];
         for reference in &mut references {
-            *reference = (state % 3) as u8;
-            state /= 3;
+            *reference = u8::try_from(
+                state.checked_rem(3).expect("nonzero ternary radix"),
+            )
+            .expect("ternary digit fits u8");
+            state = state.checked_div(3).expect("nonzero ternary radix");
         }
         let report = HeldOutQualityReport::<u8, u8, (), ()> {
             known_failures: Vec::new(),
@@ -506,13 +554,11 @@ fn every_compact_measurement_role_sequence_matches_first_failure_oracle() {
                 .iter()
                 .zip(references)
                 .enumerate()
-                .map(|(index, (dimension, sample))| {
-                    HeldOutQualityMeasurement {
-                        dimension: *dimension,
-                        evidence: (),
-                        sample,
-                        value: index as u8,
-                    }
+                .map(|(index, (dimension, sample))| HeldOutQualityMeasurement {
+                    dimension: *dimension,
+                    evidence: (),
+                    sample,
+                    value: u8::try_from(index).expect("six quality dimensions"),
                 })
                 .collect(),
         };
@@ -520,16 +566,17 @@ fn every_compact_measurement_role_sequence_matches_first_failure_oracle() {
             None => {
                 saw[0] = true;
                 Ok(())
-            },
+            }
             Some(1) => {
                 saw[1] = true;
                 Err(HeldOutQualityReportError::TrainingSample { sample: 1 })
-            },
-            Some(2) => {
+            }
+            Some(unknown) => {
                 saw[2] = true;
-                Err(HeldOutQualityReportError::UnknownSample { sample: 2 })
-            },
-            Some(_) => unreachable!("base-3 selector is bounded"),
+                Err(HeldOutQualityReportError::UnknownSample {
+                    sample: *unknown,
+                })
+            }
         };
         assert_eq!(
             validate_held_out_quality_report(&samples, &report),
@@ -541,8 +588,8 @@ fn every_compact_measurement_role_sequence_matches_first_failure_oracle() {
                 let validated =
                     validate_held_out_quality_report_view(&samples, &report)
                         .expect("all measurements reference held-out sample");
-                assert!(std::ptr::eq(validated.report(), &report));
-            },
+                assert!(ptr::eq(validated.report(), &raw const report));
+            }
             Err(reason) => assert_eq!(
                 validate_held_out_quality_report_view(&samples, &report),
                 Err(reason),
