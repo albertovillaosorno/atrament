@@ -901,6 +901,7 @@ into the pure retry-binding domain. An isolated subprocess first commits a
 relative file, then changes CWD to an unrelated directory holding the exact
 same ZIP bytes. Same-key recovery now refuses `RelativeCwdChanged` even though
 both paths are byte-identical and the newly resolved file matches the archive.
+
 An unchanged-CWD same-key recovery remains authorized by the earlier receipt.
 The session also rechecks CWD immediately before and after a new file commit,
 conservatively retaining uncertain effect if the postcommit path context drifts.

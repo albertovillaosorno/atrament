@@ -331,29 +331,41 @@ mod linux {
             );
             assert_eq!(
                 refused,
-                Err(Error::Commit(ProfileFileCommitError::SelectedParentChanged)),
+                Err(Error::Commit(
+                    ProfileFileCommitError::SelectedParentChanged,
+                )),
             );
             assert_eq!(observations, 3);
             assert_eq!(session.len(), 1);
             assert!(!chosen.exists());
             let relocated = relocated_parent.join("profile.atrament");
             if overwrite == ReplaceExisting {
-                assert_eq!(fs::read(&relocated).expect("original"), b"original");
+                assert_eq!(
+                    fs::read(&relocated).expect("original"),
+                    b"original",
+                );
             } else {
                 assert!(!relocated.exists());
             }
             assert_eq!(
-                session.export("first-key", accepted, &request, &original, 8192),
+                session.export(
+                    "first-key", accepted, &request, &original, 8192,
+                ),
                 Err(Error::Retry(
                     ProfileExportRetryRecoveryDecision::PriorKnownNoCommit
                 )),
             );
             assert!(!chosen.exists());
             assert!(matches!(
-                session.export("fresh-key", accepted, &request, &original, 8192),
+                session.export(
+                    "fresh-key", accepted, &request, &original, 8192,
+                ),
                 Ok(Outcome::Committed(_)),
             ));
-            assert_eq!(fs::read(&chosen).expect("new authorized effect"), original.bytes());
+            assert_eq!(
+                fs::read(&chosen).expect("new authorized effect"),
+                original.bytes(),
+            );
         }
     }
 
@@ -803,7 +815,9 @@ mod linux {
                 Ok(Outcome::Recovered(_)),
             ));
             env::set_current_dir(alternate).expect("move child CWD");
-            let retry = session.export("same", accepted, &intent, &artifact, 8192);
+            let retry = session.export(
+                "same", accepted, &intent, &artifact, 8192,
+            );
             assert_eq!(retry, Err(Error::RelativeCwdChanged));
             return;
         }
@@ -821,9 +835,12 @@ mod linux {
             if overwrite == ReplaceExisting {
                 fs::write(&chosen, b"original").expect("replacement fixture");
             }
-            fs::write(&changed, artifact.bytes()).expect("byte-identical other target");
-            let other_inode = fs::metadata(&changed).expect("other inode").ino();
-            let mut command = Command::new(env::current_exe().expect("test executable"));
+            fs::write(&changed, artifact.bytes())
+                .expect("byte-identical other target");
+            let other_inode =
+                fs::metadata(&changed).expect("other inode").ino();
+            let executable = env::current_exe().expect("test executable");
+            let mut command = Command::new(executable);
             let _configured = command
                 .arg("--exact")
                 .arg(RETRY_CWD_TEST)
@@ -833,15 +850,26 @@ mod linux {
             if overwrite == ReplaceExisting {
                 let _mode = command.env(RETRY_CWD_REPLACE, "yes");
             }
-            let output = command.output().expect("isolated session retry child");
+            let output = command
+                .output()
+                .expect("isolated session retry child");
             assert!(
                 output.status.success(),
                 "the retry must refuse: {}",
                 String::from_utf8_lossy(&output.stdout),
             );
-            assert_eq!(fs::read(&chosen).expect("first committed file"), artifact.bytes());
-            assert_eq!(fs::read(&changed).expect("other target intact"), artifact.bytes());
-            assert_eq!(fs::metadata(&changed).expect("other inode intact").ino(), other_inode);
+            assert_eq!(
+                fs::read(&chosen).expect("first committed file"),
+                artifact.bytes(),
+            );
+            assert_eq!(
+                fs::read(&changed).expect("other target intact"),
+                artifact.bytes(),
+            );
+            let unchanged_inode = fs::metadata(&changed)
+                .expect("other inode intact")
+                .ino();
+            assert_eq!(unchanged_inode, other_inode);
         }
     }
 

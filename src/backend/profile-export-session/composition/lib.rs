@@ -321,8 +321,11 @@ impl ProfileExportSession {
                     .ok_or(ProfileExportSessionError::JournalInconsistent)?;
                 match result {
                     Ok(evidence) => {
-                        if current_relative_cwd(intent).ok() != Some(relative_cwd) {
-                            attempt.effect = ProfileExportPriorEffect::DurabilityUnknown;
+                        let observed_cwd = current_relative_cwd(intent).ok();
+                        let cwd_matches = observed_cwd == Some(relative_cwd);
+                        if !cwd_matches {
+                            attempt.effect =
+                                ProfileExportPriorEffect::DurabilityUnknown;
                             return Err(ProfileExportSessionError::Commit(
                                 ProfileFileCommitError::CommittedPathUnverified,
                             ));

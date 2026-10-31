@@ -58,7 +58,8 @@ mod linux {
     const CRASH_STAGE_AFTER_SYNC: &str = "ATRAMENT_TEST_AFTER_STAGE_SYNC";
     const CRASH_STAGE_TEST: &str =
         "linux::forced_death_during_write_leaves_no_named_stage";
-    const CWD_DRIFT_ALTERNATE: &str = "ATRAMENT_TEST_EXPORT_CWD_DRIFT_ALTERNATE";
+    const CWD_DRIFT_ALTERNATE: &str =
+        "ATRAMENT_TEST_EXPORT_CWD_DRIFT_ALTERNATE";
     const CWD_DRIFT_REPLACE: &str = "ATRAMENT_TEST_EXPORT_CWD_DRIFT_REPLACE";
     const CWD_DRIFT_TEST: &str =
         "linux::relative_cwd_change_during_stage_refuses_selected_destination";
@@ -349,18 +350,25 @@ mod linux {
             assert_eq!(outcome, Err(Error::SelectedParentChanged));
             assert_eq!(observations, 3);
             assert!(!target.exists());
-            assert_eq!(fs::read_dir(&selected_parent).expect("new directory").count(), 0);
-            let original_in_relocated = relocated_parent.join("chosen.atrament");
+            let selected_count = fs::read_dir(&selected_parent)
+                .expect("new directory")
+                .count();
+            assert_eq!(selected_count, 0);
+            let original_in_relocated =
+                relocated_parent.join("chosen.atrament");
             if disposition == Mode::ReplaceExisting {
                 assert_eq!(
-                    fs::read(&original_in_relocated).expect("original unchanged"),
+                    fs::read(&original_in_relocated)
+                        .expect("original unchanged"),
                     b"old"
                 );
             } else {
                 assert!(!original_in_relocated.exists());
             }
             assert_eq!(
-                fs::read_dir(&relocated_parent).expect("no staged output").count(),
+                fs::read_dir(&relocated_parent)
+                    .expect("no staged output")
+                    .count(),
                 usize::from(disposition == Mode::ReplaceExisting),
             );
         }
@@ -405,15 +413,23 @@ mod linux {
                 .expect("redirect remains")
                 .file_type()
                 .is_symlink());
-            assert_eq!(fs::read(&victim_target).expect("unchanged victim"), b"unrelated victim");
+            assert_eq!(
+                fs::read(&victim_target).expect("unchanged victim"),
+                b"unrelated victim",
+            );
             let relocated_target = relocated_parent.join("chosen.atrament");
             if disposition == Mode::ReplaceExisting {
-                assert_eq!(fs::read(&relocated_target).expect("original"), b"original");
+                assert_eq!(
+                    fs::read(&relocated_target).expect("original"),
+                    b"original",
+                );
             } else {
                 assert!(!relocated_target.exists());
             }
             assert_eq!(
-                fs::read_dir(&relocated_parent).expect("no export stage").count(),
+                fs::read_dir(&relocated_parent)
+                    .expect("no export stage")
+                    .count(),
                 usize::from(disposition == Mode::ReplaceExisting),
             );
         }
@@ -454,12 +470,17 @@ mod linux {
             assert!(!target.exists());
             let relocated = relocated_parent.join("chosen.atrament");
             if mode == Mode::ReplaceExisting {
-                assert_eq!(fs::read(&relocated).expect("original"), b"original");
+                assert_eq!(
+                    fs::read(&relocated).expect("original"),
+                    b"original",
+                );
             } else {
                 assert!(!relocated.exists());
             }
             assert_eq!(
-                fs::read_dir(&relocated_parent).expect("no unnamed leak").count(),
+                fs::read_dir(&relocated_parent)
+                    .expect("no unnamed leak")
+                    .count(),
                 usize::from(mode == Mode::ReplaceExisting),
             );
         }
@@ -512,8 +533,10 @@ mod linux {
             let alternate_cwd = dir.0.join("alternate-cwd");
             let original_parent = original_cwd.join("nested");
             let alternate_parent = alternate_cwd.join("nested");
-            fs::create_dir_all(&original_parent).expect("selected relative directory");
-            fs::create_dir_all(&alternate_parent).expect("alternate relative directory");
+            fs::create_dir_all(&original_parent)
+                .expect("selected relative directory");
+            fs::create_dir_all(&alternate_parent)
+                .expect("alternate relative directory");
             let original = original_parent.join("chosen.atrament");
             let victim = alternate_parent.join("chosen.atrament");
             fs::write(&victim, b"unrelated bytes").expect("unrelated target");
@@ -521,7 +544,8 @@ mod linux {
                 fs::write(&original, b"original bytes")
                     .expect("selected original");
             }
-            let mut command = Command::new(env::current_exe().expect("test executable"));
+            let executable = env::current_exe().expect("test executable");
+            let mut command = Command::new(executable);
             let _configured = command
                 .arg("--exact")
                 .arg(CWD_DRIFT_TEST)
@@ -537,14 +561,20 @@ mod linux {
                 "child must refuse relative output after cwd drift: {}",
                 String::from_utf8_lossy(&output.stderr),
             );
-            assert_eq!(fs::read(&victim).expect("victim untouched"), b"unrelated bytes");
+            assert_eq!(
+                fs::read(&victim).expect("victim untouched"),
+                b"unrelated bytes",
+            );
             assert_eq!(
                 fs::read(original_parent.join("stable.atrament"))
                     .expect("unchanged relative control"),
                 b"stable",
             );
             if mode == Mode::ReplaceExisting {
-                assert_eq!(fs::read(&original).expect("original"), b"original bytes");
+                assert_eq!(
+                    fs::read(&original).expect("original"),
+                    b"original bytes",
+                );
             } else {
                 assert!(!original.exists());
             }
