@@ -93,25 +93,31 @@ fn exact_inventory_sweep_matches_every_required_grapheme_in_order() {
 #[test]
 fn normalized_equivalent_fixture_preserves_both_exact_spellings() {
     let scenario = EnglishSpanishCorpusScenario::NormalizedEquivalents;
-    let fixture = REQUIRED_SCENARIO_FIXTURES
+    let matching = REQUIRED_SCENARIO_FIXTURES
         .iter()
-        .find(|fixture| fixture.scenario == scenario)
-        .expect("normalized-equivalent fixture must remain present");
+        .find(|fixture| fixture.scenario == scenario);
+    assert!(
+        matching.is_some(),
+        "normalized-equivalent fixture must remain present",
+    );
+    let Some(fixture) = matching else {
+        return;
+    };
     for (precomposed, decomposed) in [
-        ("Á", "A\u{301}"),
-        ("É", "E\u{301}"),
-        ("Í", "I\u{301}"),
-        ("Ñ", "N\u{303}"),
-        ("Ó", "O\u{301}"),
-        ("Ú", "U\u{301}"),
-        ("Ü", "U\u{308}"),
-        ("á", "a\u{301}"),
-        ("é", "e\u{301}"),
-        ("í", "i\u{301}"),
-        ("ñ", "n\u{303}"),
-        ("ó", "o\u{301}"),
-        ("ú", "u\u{301}"),
-        ("ü", "u\u{308}"),
+        ("\u{c1}", "A\u{301}"),
+        ("\u{c9}", "E\u{301}"),
+        ("\u{cd}", "I\u{301}"),
+        ("\u{d1}", "N\u{303}"),
+        ("\u{d3}", "O\u{301}"),
+        ("\u{da}", "U\u{301}"),
+        ("\u{dc}", "U\u{308}"),
+        ("\u{e1}", "a\u{301}"),
+        ("\u{e9}", "e\u{301}"),
+        ("\u{ed}", "i\u{301}"),
+        ("\u{f1}", "n\u{303}"),
+        ("\u{f3}", "o\u{301}"),
+        ("\u{fa}", "u\u{301}"),
+        ("\u{fc}", "u\u{308}"),
     ] {
         assert!(fixture.text.contains(precomposed));
         assert!(fixture.text.contains(decomposed));
@@ -121,10 +127,16 @@ fn normalized_equivalent_fixture_preserves_both_exact_spellings() {
 #[test]
 fn mixed_mathematics_fixture_keeps_math_source_visible_but_uninterpreted() {
     let scenario = EnglishSpanishCorpusScenario::MixedMathematics;
-    let fixture = REQUIRED_SCENARIO_FIXTURES
+    let matching = REQUIRED_SCENARIO_FIXTURES
         .iter()
-        .find(|fixture| fixture.scenario == scenario)
-        .expect("mixed-mathematics fixture must remain present");
+        .find(|fixture| fixture.scenario == scenario);
+    assert!(
+        matching.is_some(),
+        "mixed-mathematics fixture must remain present",
+    );
+    let Some(fixture) = matching else {
+        return;
+    };
     assert!(fixture.text.contains("x^2 + y^2 = z^2"));
     assert!(fixture.text.contains("\\frac{1}{2}"));
     assert!(fixture.text.contains("\\sqrt{x}"));
