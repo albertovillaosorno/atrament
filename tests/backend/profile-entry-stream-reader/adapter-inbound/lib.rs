@@ -46,23 +46,89 @@ use atrament_profile_entry_stream_reader::{
     verify_profile_entry_from_reader,
 };
 
-fn declaration(bytes: &[u8]) -> ProfileManifestEntry {
-    ProfileManifestEntry {
-        byte_length: u64::try_from(bytes.len()).expect("test length fits u64"),
-        digest: sha256_profile_bytes(bytes),
-        media_type: "application/json".into(),
-        path: "sections/sample.json".into(),
+// Test guards require the typed stream outcome before inspecting its evidence.
+macro_rules! require_ok {
+    ($expression:expr) => {{
+        let result = $expression;
+        assert!(
+            result.is_ok(),
+            "expected verified entry: {:?}",
+            result.as_ref().err()
+        );
+        let Ok(value) = result else {
+            return;
+        };
+        value
+    }};
+}
+
+macro_rules! require_err {
+    ($expression:expr) => {{
+        let result = $expression;
+        assert!(
+            result.is_err(),
+            "expected rejection, got: {:?}",
+            result.as_ref().ok()
+        );
+        let Err(failure) = result else {
+            return;
+        };
+        failure
+    }};
+}
+
+struct FailAfterComplete {
+    after: ErrorKind,
+    content: Cursor<&'static [u8]>,
+}
+
+#[expect(clippy::missing_trait_methods, reason = "mock uses Read defaults")]
+impl Read for FailAfterComplete {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        if self.content.position() >= byte_count(self.content.get_ref().len()) {
+            return Err(io::Error::new(
+                self.after,
+                "injected terminal read failure",
+            ));
+        }
+        self.content.read(buf)
+    }
+}
+
+struct FailAtOffset<'source> {
+    after_bytes: usize,
+    calls: usize,
+    kind: ErrorKind,
+    source: Cursor<&'source [u8]>,
+}
+
+#[expect(clippy::missing_trait_methods, reason = "mock uses Read defaults")]
+impl Read for FailAtOffset<'_> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        self.calls = self.calls.saturating_add(1);
+        let consumed =
+            usize::try_from(self.source.position()).unwrap_or(usize::MAX);
+        if consumed >= self.after_bytes {
+            return Err(io::Error::new(
+                self.kind,
+                "source read failure marker",
+            ));
+        }
+        let admitted = self.after_bytes.saturating_sub(consumed).min(buf.len());
+        self.source
+            .read(buf.get_mut(..admitted).unwrap_or_default())
     }
 }
 
 struct InstrumentedReader<R> {
-    source: R,
     limit_per_call: usize,
     read_calls: usize,
     requested_max: usize,
     returned_bytes: usize,
+    source: R,
 }
 
+#[expect(clippy::missing_trait_methods, reason = "mock uses Read defaults")]
 impl<R: Read> Read for InstrumentedReader<R> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         self.read_calls = self.read_calls.saturating_add(1);
@@ -76,16 +142,41 @@ impl<R: Read> Read for InstrumentedReader<R> {
     }
 }
 
-fn traced<'a>(
-    input: &'a [u8],
+struct PrivateIoFailure;
+
+#[expect(clippy::missing_trait_methods, reason = "mock uses Read defaults")]
+impl Read for PrivateIoFailure {
+    fn read(&mut self, _buf: &mut [u8]) -> io::Result<usize> {
+        Err(io::Error::new(
+            ErrorKind::PermissionDenied,
+            "selected-private-path-7391: source payload inaccessible",
+        ))
+    }
+}
+
+fn byte_count(length: usize) -> u64 {
+    u64::try_from(length).unwrap_or(u64::MAX)
+}
+
+const fn traced(
+    input: &[u8],
     per_call: usize,
-) -> InstrumentedReader<Cursor<&'a [u8]>> {
+) -> InstrumentedReader<Cursor<&[u8]>> {
     InstrumentedReader {
-        source: Cursor::new(input),
         limit_per_call: per_call,
         read_calls: 0,
         requested_max: 0,
         returned_bytes: 0,
+        source: Cursor::new(input),
+    }
+}
+
+fn declaration(bytes: &[u8]) -> ProfileManifestEntry {
+    ProfileManifestEntry {
+        byte_length: byte_count(bytes.len()),
+        digest: sha256_profile_bytes(bytes),
+        media_type: "application/json".into(),
+        path: "sections/sample.json".into(),
     }
 }
 
@@ -96,26 +187,29 @@ fn full_sources_match_exact_digest_across_chunk_and_buffer_boundaries() {
         8191, 8192, 8193, 16_385, 65_537,
     ] {
         let bytes = (0..len)
-            .map(|index| (index as u8).wrapping_mul(29))
+            .map(|index| {
+                u8::try_from(index.rem_euclid(256))
+                    .unwrap_or_default()
+                    .wrapping_mul(29)
+            })
             .collect::<Vec<_>>();
         let entry = declaration(&bytes);
         let expected = ProfileEntryEvidence {
-            byte_length: len as u64,
+            byte_length: byte_count(len),
             digest: entry.digest,
         };
         for per_call in [1usize, 2, 3, 7, 31, 64, 511, 4096, 8192, 12_000] {
             let mut source = traced(&bytes, per_call);
-            let observed = verify_profile_entry_from_reader(
+            let observed = require_ok!(verify_profile_entry_from_reader(
                 &mut source,
                 &entry,
-                len as u64,
-            )
-            .expect("exact bounded source verifies");
+                byte_count(len),
+            ));
             assert_eq!(observed, expected, "length={len}, per_call={per_call}");
             assert!(source.read_calls > 0);
             assert_eq!(source.returned_bytes, len);
             assert!(source.requested_max <= PROFILE_STREAM_READ_BUFFER_BYTES);
-            assert_eq!(source.source.position(), len as u64);
+            assert_eq!(source.source.position(), byte_count(len));
         }
     }
 }
@@ -125,16 +219,14 @@ fn declared_limit_denies_without_any_source_read_or_digest() {
     let bytes = b"one small input";
     let entry = declaration(bytes);
     let mut source = traced(bytes, 1);
-    match verify_profile_entry_from_reader(&mut source, &entry, 3) {
+    let outcome = verify_profile_entry_from_reader(&mut source, &entry, 3);
+    assert!(matches!(
+        outcome,
         Err(ProfileEntryStreamReadError::DeclaredLimitExceeded {
             declared,
-            limit,
-        }) => {
-            assert_eq!(declared, bytes.len() as u64);
-            assert_eq!(limit, 3);
-        }
-        other => panic!("expected pre-read limit refusal: {other:?}"),
-    }
+            limit: 3,
+        }) if declared == byte_count(bytes.len()),
+    ));
     assert_eq!(source.read_calls, 0);
     assert_eq!(source.returned_bytes, 0);
     assert_eq!(source.source.position(), 0);
@@ -172,7 +264,7 @@ fn stream_underflow_precedes_unrelated_digest_mismatch() {
         verify_profile_entry_from_reader(
             &mut short,
             &entry,
-            content.len() as u64
+            byte_count(content.len())
         ),
         Err(ProfileEntryStreamReadError::Verification(
             ProfileChunkVerificationError::Entry(
@@ -188,7 +280,7 @@ fn stream_underflow_precedes_unrelated_digest_mismatch() {
         verify_profile_entry_from_reader(
             &mut complete,
             &entry,
-            content.len() as u64
+            byte_count(content.len())
         ),
         Err(ProfileEntryStreamReadError::Verification(
             ProfileChunkVerificationError::Entry(
@@ -219,38 +311,24 @@ fn oversized_member_detected_by_single_extra_byte_not_bulk_read() {
     assert_eq!(source.read_calls, 2);
 }
 
-struct FailAfterComplete {
-    content: Cursor<&'static [u8]>,
-    after: ErrorKind,
-}
-
-impl Read for FailAfterComplete {
-    fn read(&mut self, bytes: &mut [u8]) -> io::Result<usize> {
-        if self.content.position() >= self.content.get_ref().len() as u64 {
-            return Err(io::Error::new(
-                self.after,
-                "injected terminal read failure",
-            ));
-        }
-        self.content.read(bytes)
-    }
-}
-
 #[test]
 fn read_error_after_complete_declared_prefix_is_not_eof() {
     let bytes = b"complete";
     let entry = declaration(bytes);
     let mut source = FailAfterComplete {
-        content: Cursor::new(bytes),
         after: ErrorKind::PermissionDenied,
+        content: Cursor::new(bytes),
     };
-    match verify_profile_entry_from_reader(&mut source, &entry, 100) {
-        Err(ProfileEntryStreamReadError::Input(error)) => {
-            assert_eq!(error.kind(), ErrorKind::PermissionDenied);
-            assert!(error.to_string().contains("injected"));
-        }
-        other => panic!("expected source error after full prefix: {other:?}"),
-    }
+    let outcome = verify_profile_entry_from_reader(&mut source, &entry, 100);
+    assert!(
+        matches!(
+            &outcome,
+            Err(ProfileEntryStreamReadError::Input(error))
+                if error.kind() == ErrorKind::PermissionDenied
+                    && error.to_string().contains("injected"),
+        ),
+        "expected terminal source failure: {outcome:?}"
+    );
 }
 
 #[test]
@@ -269,35 +347,11 @@ fn sha256_message_length_refuses_huge_declaration_without_read() {
     assert_eq!(source.read_calls, 0);
 }
 
-struct FailAtOffset<'a> {
-    source: Cursor<&'a [u8]>,
-    kind: ErrorKind,
-    after_bytes: usize,
-    calls: usize,
-}
-
-impl Read for FailAtOffset<'_> {
-    fn read(&mut self, output: &mut [u8]) -> io::Result<usize> {
-        self.calls = self.calls.saturating_add(1);
-        let consumed =
-            usize::try_from(self.source.position()).unwrap_or(usize::MAX);
-        if consumed >= self.after_bytes {
-            return Err(io::Error::new(
-                self.kind,
-                "source read failure marker",
-            ));
-        }
-        let admitted =
-            self.after_bytes.saturating_sub(consumed).min(output.len());
-        self.source
-            .read(output.get_mut(..admitted).unwrap_or_default())
-    }
-}
-
 #[test]
 fn interrupted_and_wouldblock_reads_are_not_retried_or_reinterpreted_as_eof() {
     let bytes = b"some relevant source bytes";
     let entry = declaration(bytes);
+    let source_marker = "source read failure marker";
     for (kind, offset) in [
         (ErrorKind::Interrupted, 0usize),
         (ErrorKind::WouldBlock, 1),
@@ -305,26 +359,80 @@ fn interrupted_and_wouldblock_reads_are_not_retried_or_reinterpreted_as_eof() {
         (ErrorKind::BrokenPipe, bytes.len()),
     ] {
         let mut source = FailAtOffset {
-            source: Cursor::new(bytes.as_slice()),
-            kind,
             after_bytes: offset,
             calls: 0,
+            kind,
+            source: Cursor::new(bytes.as_slice()),
         };
         let observed = verify_profile_entry_from_reader(
             &mut source,
             &entry,
-            bytes.len() as u64,
+            byte_count(bytes.len()),
         );
-        match observed {
-            Err(ProfileEntryStreamReadError::Input(error)) => {
-                assert_eq!(error.kind(), kind);
-                assert!(
-                    error.to_string().contains("source read failure marker")
-                );
-            }
-            other => panic!("source error was not retained: {other:?}"),
+        assert!(
+            matches!(
+                &observed,
+                Err(ProfileEntryStreamReadError::Input(error))
+                    if error.kind() == kind
+                        && error.to_string().contains(source_marker),
+            ),
+            "source error was not retained: {observed:?}"
+        );
+        assert_eq!(source.source.position(), byte_count(offset));
+    }
+}
+
+#[test]
+fn errors_across_all_read_buffer_seams_remain_source_failures() {
+    let bytes = vec![b'v'; PROFILE_STREAM_READ_BUFFER_BYTES * 2 + 17];
+    let entry = declaration(&bytes);
+    let seam = PROFILE_STREAM_READ_BUFFER_BYTES;
+    let offsets = [
+        0,
+        1,
+        31,
+        55,
+        56,
+        63,
+        64,
+        65,
+        seam - 1,
+        seam,
+        seam + 1,
+        seam * 2 - 1,
+        seam * 2,
+        seam * 2 + 1,
+        bytes.len() - 1,
+        bytes.len(),
+    ];
+    for kind in [
+        ErrorKind::Interrupted,
+        ErrorKind::TimedOut,
+        ErrorKind::PermissionDenied,
+    ] {
+        for offset in offsets {
+            let mut source = FailAtOffset {
+                after_bytes: offset,
+                calls: 0,
+                kind,
+                source: Cursor::new(bytes.as_slice()),
+            };
+            let result = verify_profile_entry_from_reader(
+                &mut source,
+                &entry,
+                entry.byte_length,
+            );
+            assert!(
+                matches!(
+                    &result,
+                    Err(ProfileEntryStreamReadError::Input(error))
+                        if error.kind() == kind,
+                ),
+                "error at {offset} must not become digest evidence: {result:?}"
+            );
+            assert_eq!(source.source.position(), byte_count(offset));
+            assert!(source.calls > 0);
         }
-        assert_eq!(source.source.position(), offset as u64);
     }
 }
 
@@ -334,23 +442,25 @@ fn invalid_digest_does_not_hide_error_at_final_eof_probe() {
     let mut entry = declaration(bytes);
     entry.digest = sha256_profile_bytes(b"different content");
     let mut source = FailAtOffset {
-        source: Cursor::new(bytes.as_slice()),
-        kind: ErrorKind::ConnectionReset,
         after_bytes: bytes.len(),
         calls: 0,
+        kind: ErrorKind::ConnectionReset,
+        source: Cursor::new(bytes.as_slice()),
     };
     let observed = verify_profile_entry_from_reader(
         &mut source,
         &entry,
-        bytes.len() as u64,
+        byte_count(bytes.len()),
     );
-    match observed {
-        Err(ProfileEntryStreamReadError::Input(error)) => {
-            assert_eq!(error.kind(), ErrorKind::ConnectionReset);
-        }
-        other => panic!("probe source error must beat digest: {other:?}"),
-    }
-    assert_eq!(source.source.position(), bytes.len() as u64);
+    assert!(
+        matches!(
+            &observed,
+            Err(ProfileEntryStreamReadError::Input(error))
+                if error.kind() == ErrorKind::ConnectionReset,
+        ),
+        "probe source failure must precede digest: {observed:?}"
+    );
+    assert_eq!(source.source.position(), byte_count(bytes.len()));
 }
 
 #[test]
@@ -363,7 +473,7 @@ fn oversized_source_with_large_declared_prefix_reads_only_one_extra_byte() {
     let observed = verify_profile_entry_from_reader(
         &mut source,
         &entry,
-        expected.len() as u64,
+        byte_count(expected.len()),
     );
     assert!(matches!(
         observed,
@@ -374,7 +484,7 @@ fn oversized_source_with_large_declared_prefix_reads_only_one_extra_byte() {
         )),
     ));
     assert_eq!(source.returned_bytes, expected.len() + 1);
-    assert_eq!(source.source.position(), (expected.len() + 1) as u64);
+    assert_eq!(source.source.position(), byte_count(expected.len() + 1));
     assert!(source.requested_max <= PROFILE_STREAM_READ_BUFFER_BYTES);
 }
 
@@ -388,7 +498,7 @@ fn eof_is_proven_only_for_supplied_reader_not_hidden_upstream_sources() {
         verify_profile_entry_from_reader(
             &mut physically_unbounded,
             &entry,
-            expected.len() as u64,
+            byte_count(expected.len()),
         ),
         Err(ProfileEntryStreamReadError::Verification(
             ProfileChunkVerificationError::Entry(
@@ -396,21 +506,23 @@ fn eof_is_proven_only_for_supplied_reader_not_hidden_upstream_sources() {
             ),
         ))
     ));
-    assert_eq!(physically_unbounded.position(), (expected.len() + 1) as u64);
+    assert_eq!(
+        physically_unbounded.position(),
+        byte_count(expected.len() + 1)
+    );
 
     // std::io::Take is allowed to manufacture EOF at its own limit.
     // SHA success here is restricted to the caller-supplied Take view and
     // cannot attest the hidden original source is exactly this long.
     let cursor = Cursor::new(actual_source.as_slice());
-    let mut restricted = cursor.take(expected.len() as u64);
-    let accepted = verify_profile_entry_from_reader(
+    let mut restricted = cursor.take(byte_count(expected.len()));
+    let accepted = require_ok!(verify_profile_entry_from_reader(
         &mut restricted,
         &entry,
-        expected.len() as u64,
-    )
-    .expect("exact supplied Take view hashes correctly");
+        byte_count(expected.len()),
+    ));
     assert_eq!(accepted.digest, entry.digest);
-    assert_eq!(restricted.get_ref().position(), expected.len() as u64);
+    assert_eq!(restricted.get_ref().position(), byte_count(expected.len()));
     assert!(restricted.get_ref().get_ref().len() > expected.len());
 }
 
@@ -419,20 +531,22 @@ fn read_error_before_length_fails_even_when_declared_sha_matches_prefix() {
     let complete = b"abcd";
     let entry = declaration(complete);
     let mut source = FailAtOffset {
-        source: Cursor::new(complete.as_slice()),
-        kind: ErrorKind::UnexpectedEof,
         after_bytes: 3,
         calls: 0,
+        kind: ErrorKind::UnexpectedEof,
+        source: Cursor::new(complete.as_slice()),
     };
     // The upstream I/O error is not the same as observing a clean EOF at
     // byte three, and it must not be reclassified as length mismatch.
     let observed = verify_profile_entry_from_reader(&mut source, &entry, 4);
-    match observed {
-        Err(ProfileEntryStreamReadError::Input(error)) => {
-            assert_eq!(error.kind(), ErrorKind::UnexpectedEof);
-        }
-        other => panic!("upstream failure lost: {other:?}"),
-    }
+    assert!(
+        matches!(
+            &observed,
+            Err(ProfileEntryStreamReadError::Input(error))
+                if error.kind() == ErrorKind::UnexpectedEof,
+        ),
+        "upstream failure lost: {observed:?}"
+    );
     assert_eq!(source.source.position(), 3);
 }
 
@@ -441,21 +555,24 @@ fn invalid_reader_count_cannot_expand_slice_or_panic() {
     struct InvalidLengthReader {
         calls: usize,
     }
+    #[expect(clippy::missing_trait_methods, reason = "mock uses Read defaults")]
     impl Read for InvalidLengthReader {
-        fn read(&mut self, output: &mut [u8]) -> io::Result<usize> {
+        fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
             self.calls = self.calls.saturating_add(1);
-            Ok(output.len().saturating_add(1))
+            Ok(buf.len().saturating_add(1))
         }
     }
     let entry = declaration(b"abc");
     let mut source = InvalidLengthReader { calls: 0 };
     let outcome = verify_profile_entry_from_reader(&mut source, &entry, 3);
-    match outcome {
-        Err(ProfileEntryStreamReadError::Input(error)) => {
-            assert_eq!(error.kind(), ErrorKind::InvalidData);
-        }
-        other => panic!("invalid Read contract did not fail closed: {other:?}"),
-    }
+    assert!(
+        matches!(
+            &outcome,
+            Err(ProfileEntryStreamReadError::Input(error))
+                if error.kind() == ErrorKind::InvalidData,
+        ),
+        "invalid Read count was not refused: {outcome:?}"
+    );
     assert_eq!(source.calls, 1);
 }
 
@@ -464,13 +581,14 @@ fn premature_zero_count_is_not_retried_into_hidden_later_bytes() {
     struct PrematureEof {
         calls: usize,
     }
+    #[expect(clippy::missing_trait_methods, reason = "mock uses Read defaults")]
     impl Read for PrematureEof {
-        fn read(&mut self, output: &mut [u8]) -> io::Result<usize> {
+        fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
             self.calls = self.calls.saturating_add(1);
             if self.calls == 1 {
                 return Ok(0);
             }
-            if let Some(slot) = output.get_mut(0) {
+            if let Some(slot) = buf.get_mut(0) {
                 *slot = b'a';
             }
             Ok(1)
@@ -493,50 +611,38 @@ fn premature_zero_count_is_not_retried_into_hidden_later_bytes() {
     assert_eq!(source.calls, 1, "no later bytes were used to bypass EOF");
 }
 
-struct PrivateIoFailure;
-
-impl Read for PrivateIoFailure {
-    fn read(&mut self, _bytes: &mut [u8]) -> io::Result<usize> {
-        Err(io::Error::new(
-            ErrorKind::PermissionDenied,
-            "selected-private-path-7391: source payload inaccessible",
-        ))
-    }
-}
-
 #[test]
 fn source_error_debug_retains_kind_without_leaking_private_message() {
     let entry = declaration(b"private section payload");
     let mut source = PrivateIoFailure;
-    let failure = verify_profile_entry_from_reader(
+    let failure = require_err!(verify_profile_entry_from_reader(
         &mut source,
         &entry,
         entry.byte_length,
-    )
-    .expect_err("input reader must fail");
+    ));
     for rendered in [format!("{failure:?}"), format!("{failure:#?}")] {
         assert!(rendered.contains("Input"));
         assert!(rendered.contains("PermissionDenied"));
         assert!(!rendered.contains("selected-private-path-7391"));
         assert!(!rendered.contains("source payload inaccessible"));
     }
-    match failure {
-        ProfileEntryStreamReadError::Input(original) => {
-            assert_eq!(original.kind(), ErrorKind::PermissionDenied);
-            assert!(
-                original.to_string().contains("selected-private-path-7391")
-            );
-        }
-        other => panic!("expected source error: {other:?}"),
-    }
+    let private_marker = "selected-private-path-7391";
+    assert!(
+        matches!(
+            &failure,
+            ProfileEntryStreamReadError::Input(original)
+                if original.kind() == ErrorKind::PermissionDenied
+                    && original.to_string().contains(private_marker),
+        ),
+        "expected source error: {failure:?}"
+    );
     // Safe numeric diagnostics remain visible for non-I/O errors.
-    let mut source = PrivateIoFailure;
-    let oversized = verify_profile_entry_from_reader(
-        &mut source,
+    let mut refused_source = PrivateIoFailure;
+    let oversized = require_err!(verify_profile_entry_from_reader(
+        &mut refused_source,
         &entry,
         entry.byte_length - 1,
-    )
-    .expect_err("byte budget must refuse before reading");
+    ));
     let rendered = format!("{oversized:?}");
     assert!(rendered.contains("DeclaredLimitExceeded"));
     assert!(rendered.contains("declared"));
