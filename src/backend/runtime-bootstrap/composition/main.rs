@@ -406,6 +406,7 @@ pub(crate) fn inspect_cli_args(
     if command.as_deref() == Some(OsStr::new("profile")) {
         if let Some(path) = source.as_deref()
             && destination.is_none()
+            && !path.as_encoded_bytes().starts_with(b"-")
         {
             if action.as_deref() == Some(OsStr::new("inspect")) {
                 return inspect_profile(PathBuf::from(path)).map(Some);

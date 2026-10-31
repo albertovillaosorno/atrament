@@ -203,8 +203,9 @@ flag authorizes atomic replacement of an existing regular target (including
 the selected source itself), or creation of an absent target, but never follows
 symlinks.
 
-Bare dash-prefixed tokens are treated as options, not source or output
-filenames. Prefix `./` to select a file such as `./--replace`.
+Bare dash-prefixed tokens are treated as options in every profile command,
+not source or output filenames. Prefix `./` to select a file such as
+`./--replace`.
 
 Both modes preserve verified opaque assets and unknown
 optional features. Unsupported required features and malformed sections refuse

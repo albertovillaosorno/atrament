@@ -86,6 +86,11 @@ permits deliberate use of that filename. Real subprocess fixtures prove the
 refusals create no target and an unambiguous selection writes a complete
 verifiable profile.
 
+Read-only verify and inspect likewise refuse option-like bare paths before
+opening them, even if a readable file by that name exists; only deliberate
+`./--name` selection can print that profile's private section. This is a CLI
+argument boundary, not a general caller-authenticated Import.
+
 Current export design evidence freezes accepted-revision binding, caller-owned
 or explicit host-policy output intent, explicit path and overwrite behavior,
 blocking validation, temporary cleanup, file-commit semantics, output identity,

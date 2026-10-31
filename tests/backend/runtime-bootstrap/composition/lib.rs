@@ -293,6 +293,58 @@ fn repack_cli_refuses_ambiguous_bare_option_as_file_path() {
 
 #[cfg(target_os = "linux")]
 #[test]
+fn profile_cli_refuses_bare_option_source_without_private_inspection() {
+    let section = br#"{"private":"bare-option-section-8712"}"#;
+    let asset = b"bare-option-asset-4592";
+    let original = OwnedProfileFile::new(&profile_zip(
+        section, asset, section,
+    ));
+    let folder = OwnedProfileDirectory::new(original.0.with_extension(
+        "option-source-folder",
+    ));
+    let source = OwnedProfileDestination(folder.0.join("--private"));
+    fs::write(&source.0, fs::read(&original.0).expect("owned fixture"))
+        .expect("copy test-owned bytes to option-like selected name");
+    for operation in ["inspect", "verify"] {
+        let rejected = Command::new(env!("CARGO_BIN_EXE_atrament"))
+            .current_dir(&folder.0)
+            .args(["profile", operation, "--private"])
+            .output()
+            .expect("reject bare source flag before private profile read");
+        assert!(!rejected.status.success());
+        assert!(rejected.stdout.is_empty());
+        let stderr = String::from_utf8_lossy(&rejected.stderr);
+        assert!(stderr.contains("usage:"));
+        for private in ["bare-option-section-8712", "bare-option-asset-4592"] {
+            assert!(!stderr.contains(private));
+        }
+
+        let selected = Command::new(env!("CARGO_BIN_EXE_atrament"))
+            .current_dir(&folder.0)
+            .args(["profile", operation, "./--private"])
+            .output()
+            .expect("explicit relative path selects the exact profile");
+        assert!(selected.status.success());
+        assert!(selected.stderr.is_empty());
+        if operation == "inspect" {
+            let readable = String::from_utf8_lossy(&selected.stdout);
+            assert!(readable.contains("bare-option-section-8712"));
+            assert!(!readable.contains("bare-option-asset-4592"));
+        } else {
+            assert_eq!(
+                selected.stdout,
+                b"profile verified (no session import)\n",
+            );
+        }
+    }
+    assert_eq!(
+        fs::read(&source.0).expect("no CLI operation alters source"),
+        fs::read(&original.0).expect("original source stays unchanged"),
+    );
+}
+
+#[cfg(target_os = "linux")]
+#[test]
 fn repack_cli_requires_unambiguous_path_for_option_named_target() {
     let section = br#"{"safe":"literal-option-target"}"#;
     let source = OwnedProfileFile::new(&profile_zip(
