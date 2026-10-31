@@ -32,6 +32,8 @@
 
 //! Source and claim citation linkage regression tests.
 
+use std::ptr;
+
 use atrament_citation_review_linkage::{
     CitationClaimLink, CitationReviewLinkage, CitationReviewLinkageError,
     CitationSource, ClaimProvenance, citation_provenance_for_claim,
@@ -40,12 +42,42 @@ use atrament_citation_review_linkage::{
 };
 use atrament_semantic_notebook::{Provenance, ProvenanceKind};
 
+// Test-only guards assert result shapes before inspecting borrowed evidence.
+macro_rules! require_ok {
+    ($expression:expr) => {{
+        let outcome = $expression;
+        assert!(
+            outcome.is_ok(),
+            "expected admitted linkage: {:?}",
+            outcome.as_ref().err()
+        );
+        let Ok(value) = outcome else {
+            return;
+        };
+        value
+    }};
+}
+
+macro_rules! require_some {
+    ($expression:expr) => {{
+        let found = $expression;
+        assert!(
+            found.is_some(),
+            "fixed citation fixture must contain the record"
+        );
+        let Some(value) = found else {
+            return;
+        };
+        value
+    }};
+}
+
 type Claim = ClaimProvenance<u8, u8>;
 type Link = CitationClaimLink<u8, u8, u8>;
 type Source = CitationSource<&'static str, u8>;
 type Review = CitationReviewLinkage<Claim, Link, Provenance<u8>, Source>;
 
-fn provenance(id: u8, kind: ProvenanceKind) -> Provenance<u8> {
+const fn provenance(id: u8, kind: ProvenanceKind) -> Provenance<u8> {
     Provenance {
         id,
         kind,
@@ -85,29 +117,30 @@ fn review() -> Review {
 fn cited_claim_resolves_through_exact_provenance_to_reviewable_source() {
     let review = review();
     assert_eq!(validate_citation_review_linkage(&review), Ok(()));
-    let validated = validate_citation_review_linkage_view(&review)
-        .expect("valid review seals");
-    assert!(std::ptr::eq(validated.review(), &review));
-    assert!(std::ptr::eq(
-        validated
-            .provenance_for_claim(&1)
-            .expect("cited provenance projects"),
-        &review.provenance[0],
-    ));
-    assert_eq!(
-        validated.source_identities_for_claim(&1),
-        Ok(vec![&21]),
+    let validated = require_ok!(validate_citation_review_linkage_view(&review));
+    assert!(
+        ptr::eq(validated.review(), &raw const review),
+        "sealed linkage borrows exact revision",
     );
-    assert!(std::ptr::eq(
-        validated.sources_for_claim(&1).expect("source projects")[0],
-        &review.sources[0],
+    assert!(ptr::eq(
+        require_ok!(validated.provenance_for_claim(&1)),
+        require_some!(review.provenance.first()),
     ));
-    assert_eq!(review.links[0].claim_identity, 1);
-    assert_eq!(review.links[0].provenance_identity, 11);
-    assert_eq!(review.provenance[0].kind, ProvenanceKind::Cited);
-    assert_eq!(review.links[0].source_identity, 21);
+    assert_eq!(validated.source_identities_for_claim(&1), Ok(vec![&21]),);
+    let source_projection = require_ok!(validated.sources_for_claim(&1));
+    assert!(ptr::eq(
+        *require_some!(source_projection.first()),
+        require_some!(review.sources.first()),
+    ));
+    assert_eq!(require_some!(review.links.first()).claim_identity, 1);
+    assert_eq!(require_some!(review.links.first()).provenance_identity, 11);
     assert_eq!(
-        review.sources[0].metadata,
+        require_some!(review.provenance.first()).kind,
+        ProvenanceKind::Cited
+    );
+    assert_eq!(require_some!(review.links.first()).source_identity, 21);
+    assert_eq!(
+        require_some!(review.sources.first()).metadata,
         "doi:10.1000/example; title=Example Source",
     );
 }
@@ -115,23 +148,22 @@ fn cited_claim_resolves_through_exact_provenance_to_reviewable_source() {
 #[test]
 fn unknown_and_mismatched_identities_fail_in_documented_order() {
     let mut unknown_assignment = review();
-    unknown_assignment.claims[0].provenance_identity = 99;
+    require_some!(unknown_assignment.claims.first_mut()).provenance_identity =
+        99;
     assert_eq!(
         validate_citation_review_linkage(&unknown_assignment),
-        Err(CitationReviewLinkageError::UnknownProvenance {
-            provenance: 99,
-        }),
+        Err(CitationReviewLinkageError::UnknownProvenance { provenance: 99 }),
     );
 
     let mut unknown_claim = review();
-    unknown_claim.links[0].claim_identity = 9;
+    require_some!(unknown_claim.links.first_mut()).claim_identity = 9;
     assert_eq!(
         validate_citation_review_linkage(&unknown_claim),
         Err(CitationReviewLinkageError::UnknownClaim { claim: 9 }),
     );
 
     let mut wrong_provenance = review();
-    wrong_provenance.links[0].provenance_identity = 12;
+    require_some!(wrong_provenance.links.first_mut()).provenance_identity = 12;
     assert_eq!(
         validate_citation_review_linkage(&wrong_provenance),
         Err(CitationReviewLinkageError::ProvenanceIdentityMismatch {
@@ -140,7 +172,7 @@ fn unknown_and_mismatched_identities_fail_in_documented_order() {
     );
 
     let mut unknown_source = review();
-    unknown_source.links[0].source_identity = 99;
+    require_some!(unknown_source.links.first_mut()).source_identity = 99;
     assert_eq!(
         validate_citation_review_linkage(&unknown_source),
         Err(CitationReviewLinkageError::UnknownSource { source: 99 }),
@@ -150,8 +182,8 @@ fn unknown_and_mismatched_identities_fail_in_documented_order() {
 #[test]
 fn only_cited_provenance_records_admit_links_and_each_cited_claim_needs_one() {
     let mut non_cited = review();
-    non_cited.links[0].claim_identity = 2;
-    non_cited.links[0].provenance_identity = 12;
+    require_some!(non_cited.links.first_mut()).claim_identity = 2;
+    require_some!(non_cited.links.first_mut()).provenance_identity = 12;
     assert_eq!(
         validate_citation_review_linkage(&non_cited),
         Err(CitationReviewLinkageError::NonCitedClaimLink { claim: 2 }),
@@ -168,32 +200,33 @@ fn only_cited_provenance_records_admit_links_and_each_cited_claim_needs_one() {
 #[test]
 fn duplicate_claim_provenance_source_and_link_reject_deterministically() {
     let mut duplicate_claim = review();
-    duplicate_claim.claims.push(duplicate_claim.claims[0].clone());
+    let claims_copy = require_some!(duplicate_claim.claims.first()).clone();
+    duplicate_claim.claims.push(claims_copy);
     assert_eq!(
         validate_citation_review_linkage(&duplicate_claim),
         Err(CitationReviewLinkageError::DuplicateClaim { claim: 1 }),
     );
 
     let mut duplicate_provenance = review();
-    duplicate_provenance
-        .provenance
-        .push(duplicate_provenance.provenance[0].clone());
+    let provenance_copy =
+        require_some!(duplicate_provenance.provenance.first()).clone();
+    duplicate_provenance.provenance.push(provenance_copy);
     assert_eq!(
         validate_citation_review_linkage(&duplicate_provenance),
-        Err(CitationReviewLinkageError::DuplicateProvenance {
-            provenance: 11,
-        }),
+        Err(CitationReviewLinkageError::DuplicateProvenance { provenance: 11 }),
     );
 
     let mut duplicate_source = review();
-    duplicate_source.sources.push(duplicate_source.sources[0].clone());
+    let sources_copy = require_some!(duplicate_source.sources.first()).clone();
+    duplicate_source.sources.push(sources_copy);
     assert_eq!(
         validate_citation_review_linkage(&duplicate_source),
         Err(CitationReviewLinkageError::DuplicateSource { source: 21 }),
     );
 
     let mut duplicate_link = review();
-    duplicate_link.links.push(duplicate_link.links[0].clone());
+    let links_copy = require_some!(duplicate_link.links.first()).clone();
+    duplicate_link.links.push(links_copy);
     assert_eq!(
         validate_citation_review_linkage(&duplicate_link),
         Err(CitationReviewLinkageError::DuplicateCitationLink {
@@ -210,100 +243,126 @@ fn assert_direct_and_sealed_rejection(
     assert_eq!(
         validate_citation_review_linkage(review),
         Err(expected.clone()),
+        "direct validation must retain exact structural rejection",
     );
     assert_eq!(
         validate_citation_review_linkage_view(review).map(|_| ()),
         Err(expected),
+        "sealed view must retain the same structural rejection",
     );
 }
 
 #[test]
 fn every_structural_error_rejects_direct_and_sealed_admission_identically() {
-    let mut cases = 0_u8;
+    let mut cases = 0u8;
 
-    let mut value = review();
-    value.claims.push(value.claims[0].clone());
-    assert_direct_and_sealed_rejection(
-        &value,
-        CitationReviewLinkageError::DuplicateClaim { claim: 1 },
-    );
-    cases += 1;
+    {
+        let mut value = review();
+        let duplicate = require_some!(value.claims.first()).clone();
+        value.claims.push(duplicate);
+        assert_direct_and_sealed_rejection(
+            &value,
+            CitationReviewLinkageError::DuplicateClaim { claim: 1 },
+        );
+        cases += 1;
+    }
 
-    let mut value = review();
-    value.provenance.push(value.provenance[0].clone());
-    assert_direct_and_sealed_rejection(
-        &value,
-        CitationReviewLinkageError::DuplicateProvenance { provenance: 11 },
-    );
-    cases += 1;
+    {
+        let mut value = review();
+        let duplicate = require_some!(value.provenance.first()).clone();
+        value.provenance.push(duplicate);
+        assert_direct_and_sealed_rejection(
+            &value,
+            CitationReviewLinkageError::DuplicateProvenance { provenance: 11 },
+        );
+        cases += 1;
+    }
 
-    let mut value = review();
-    value.sources.push(value.sources[0].clone());
-    assert_direct_and_sealed_rejection(
-        &value,
-        CitationReviewLinkageError::DuplicateSource { source: 21 },
-    );
-    cases += 1;
+    {
+        let mut value = review();
+        let duplicate = require_some!(value.sources.first()).clone();
+        value.sources.push(duplicate);
+        assert_direct_and_sealed_rejection(
+            &value,
+            CitationReviewLinkageError::DuplicateSource { source: 21 },
+        );
+        cases += 1;
+    }
 
-    let mut value = review();
-    value.links.push(value.links[0].clone());
-    assert_direct_and_sealed_rejection(
-        &value,
-        CitationReviewLinkageError::DuplicateCitationLink {
-            claim: 1,
-            source: 21,
-        },
-    );
-    cases += 1;
+    {
+        let mut value = review();
+        let duplicate = require_some!(value.links.first()).clone();
+        value.links.push(duplicate);
+        assert_direct_and_sealed_rejection(
+            &value,
+            CitationReviewLinkageError::DuplicateCitationLink {
+                claim: 1,
+                source: 21,
+            },
+        );
+        cases += 1;
+    }
 
-    let mut value = review();
-    value.links.clear();
-    assert_direct_and_sealed_rejection(
-        &value,
-        CitationReviewLinkageError::MissingCitationLink { claim: 1 },
-    );
-    cases += 1;
+    {
+        let mut value = review();
+        value.links.clear();
+        assert_direct_and_sealed_rejection(
+            &value,
+            CitationReviewLinkageError::MissingCitationLink { claim: 1 },
+        );
+        cases += 1;
+    }
 
-    let mut value = review();
-    value.links[0].claim_identity = 2;
-    value.links[0].provenance_identity = 12;
-    assert_direct_and_sealed_rejection(
-        &value,
-        CitationReviewLinkageError::NonCitedClaimLink { claim: 2 },
-    );
-    cases += 1;
+    {
+        let mut value = review();
+        require_some!(value.links.first_mut()).claim_identity = 2;
+        require_some!(value.links.first_mut()).provenance_identity = 12;
+        assert_direct_and_sealed_rejection(
+            &value,
+            CitationReviewLinkageError::NonCitedClaimLink { claim: 2 },
+        );
+        cases += 1;
+    }
 
-    let mut value = review();
-    value.links[0].provenance_identity = 12;
-    assert_direct_and_sealed_rejection(
-        &value,
-        CitationReviewLinkageError::ProvenanceIdentityMismatch { claim: 1 },
-    );
-    cases += 1;
+    {
+        let mut value = review();
+        require_some!(value.links.first_mut()).provenance_identity = 12;
+        assert_direct_and_sealed_rejection(
+            &value,
+            CitationReviewLinkageError::ProvenanceIdentityMismatch { claim: 1 },
+        );
+        cases += 1;
+    }
 
-    let mut value = review();
-    value.links[0].claim_identity = 99;
-    assert_direct_and_sealed_rejection(
-        &value,
-        CitationReviewLinkageError::UnknownClaim { claim: 99 },
-    );
-    cases += 1;
+    {
+        let mut value = review();
+        require_some!(value.links.first_mut()).claim_identity = 99;
+        assert_direct_and_sealed_rejection(
+            &value,
+            CitationReviewLinkageError::UnknownClaim { claim: 99 },
+        );
+        cases += 1;
+    }
 
-    let mut value = review();
-    value.claims[0].provenance_identity = 99;
-    assert_direct_and_sealed_rejection(
-        &value,
-        CitationReviewLinkageError::UnknownProvenance { provenance: 99 },
-    );
-    cases += 1;
+    {
+        let mut value = review();
+        require_some!(value.claims.first_mut()).provenance_identity = 99;
+        assert_direct_and_sealed_rejection(
+            &value,
+            CitationReviewLinkageError::UnknownProvenance { provenance: 99 },
+        );
+        cases += 1;
+    }
 
-    let mut value = review();
-    value.links[0].source_identity = 99;
-    assert_direct_and_sealed_rejection(
-        &value,
-        CitationReviewLinkageError::UnknownSource { source: 99 },
-    );
-    cases += 1;
+    {
+        let mut value = review();
+        require_some!(value.links.first_mut()).source_identity = 99;
+        assert_direct_and_sealed_rejection(
+            &value,
+            CitationReviewLinkageError::UnknownSource { source: 99 },
+        );
+        cases += 1;
+    }
 
     assert_eq!(cases, 10);
 }
@@ -326,17 +385,16 @@ fn one_cited_claim_may_link_to_multiple_distinct_sources() {
 #[test]
 fn validated_claim_provenance_projection_borrows_exact_revision_record() {
     let mut value = review();
-    value.provenance[0].reference = Some(String::from("doi:10.1000/example"));
-    let cited = citation_provenance_for_claim(&value, &1)
-        .expect("cited claim provenance must project");
-    assert!(std::ptr::eq(cited, &value.provenance[0]));
+    require_some!(value.provenance.first_mut()).reference =
+        Some(String::from("doi:10.1000/example"));
+    let cited = require_ok!(citation_provenance_for_claim(&value, &1));
+    assert!(ptr::eq(cited, require_some!(value.provenance.first())));
     assert_eq!(cited.id, 11);
     assert_eq!(cited.kind, ProvenanceKind::Cited);
     assert_eq!(cited.reference.as_deref(), Some("doi:10.1000/example"));
 
-    let derived = citation_provenance_for_claim(&value, &2)
-        .expect("non-cited claim still has exact semantic provenance");
-    assert!(std::ptr::eq(derived, &value.provenance[1]));
+    let derived = require_ok!(citation_provenance_for_claim(&value, &2));
+    assert!(ptr::eq(derived, require_some!(value.provenance.get(1))));
     assert_eq!(derived.kind, ProvenanceKind::Derived);
     assert_eq!(
         citation_provenance_for_claim(&value, &99),
@@ -389,19 +447,21 @@ fn validated_claim_source_records_preserve_link_order_and_metadata() {
         metadata: "source metadata b",
         source_identity: 22,
     });
-    value.links.insert(0, CitationClaimLink {
-        claim_identity: 1,
-        provenance_identity: 11,
-        source_identity: 22,
-    });
-    let sources = citation_sources_for_claim(&value, &1)
-        .expect("cited claim source records must project");
+    value.links.insert(
+        0,
+        CitationClaimLink {
+            claim_identity: 1,
+            provenance_identity: 11,
+            source_identity: 22,
+        },
+    );
+    let sources = require_ok!(citation_sources_for_claim(&value, &1));
     assert_eq!(sources.len(), 2);
-    assert_eq!(sources[0].source_identity, 22);
-    assert_eq!(sources[0].metadata, "source metadata b");
-    assert_eq!(sources[1].source_identity, 21);
+    assert_eq!(require_some!(sources.first()).source_identity, 22);
+    assert_eq!(require_some!(sources.first()).metadata, "source metadata b");
+    assert_eq!(require_some!(sources.get(1)).source_identity, 21);
     assert_eq!(
-        sources[1].metadata,
+        require_some!(sources.get(1)).metadata,
         "doi:10.1000/example; title=Example Source",
     );
     assert_eq!(
@@ -442,19 +502,19 @@ fn compact_provenance_link_state_space_matches_structural_oracle() {
         ProvenanceKind::Supplied,
         ProvenanceKind::Unresolved,
     ];
-    let mut cases = 0_u8;
+    let mut cases = 0u8;
     let mut saw = [false; 5];
     for kind in kinds {
         for link_present in [false, true] {
             for source_present in [false, true] {
                 for provenance_matches in [false, true] {
-                    let review = CitationReviewLinkage {
+                    let review: Review = CitationReviewLinkage {
                         claims: vec![ClaimProvenance {
                             claim_identity: 1,
                             provenance_identity: 11,
                         }],
                         links: link_present
-                            .then(|| CitationClaimLink {
+                            .then_some(CitationClaimLink {
                                 claim_identity: 1,
                                 provenance_identity: if provenance_matches {
                                     11
@@ -467,7 +527,7 @@ fn compact_provenance_link_state_space_matches_structural_oracle() {
                             .collect(),
                         provenance: vec![provenance(11, kind)],
                         sources: source_present
-                            .then(|| CitationSource {
+                            .then_some(CitationSource {
                                 metadata: "source-21",
                                 source_identity: 21,
                             })
@@ -476,28 +536,28 @@ fn compact_provenance_link_state_space_matches_structural_oracle() {
                     };
                     let expected = if !link_present {
                         if kind == ProvenanceKind::Cited {
-                            saw[0] = true;
+                            *require_some!(saw.first_mut()) = true;
                             Err(
                                 CitationReviewLinkageError::
                                     MissingCitationLink { claim: 1 },
                             )
                         } else {
-                            saw[1] = true;
+                            *require_some!(saw.get_mut(1)) = true;
                             Ok(())
                         }
                     } else if !provenance_matches {
-                        saw[2] = true;
+                        *require_some!(saw.get_mut(2)) = true;
                         Err(
                             CitationReviewLinkageError::
                                 ProvenanceIdentityMismatch { claim: 1 },
                         )
                     } else if !source_present {
-                        saw[3] = true;
+                        *require_some!(saw.get_mut(3)) = true;
                         Err(CitationReviewLinkageError::UnknownSource {
                             source: 21,
                         })
                     } else if kind != ProvenanceKind::Cited {
-                        saw[4] = true;
+                        *require_some!(saw.get_mut(4)) = true;
                         Err(CitationReviewLinkageError::NonCitedClaimLink {
                             claim: 1,
                         })
@@ -514,7 +574,7 @@ fn compact_provenance_link_state_space_matches_structural_oracle() {
                     assert_eq!(
                         validate_citation_review_linkage_view(&review).map(
                             |validated| {
-                                std::ptr::eq(validated.review(), &review)
+                                ptr::eq(validated.review(), &raw const review)
                             },
                         ),
                         expected.map(|()| true),
@@ -528,5 +588,8 @@ fn compact_provenance_link_state_space_matches_structural_oracle() {
         }
     }
     assert_eq!(cases, 32);
-    assert!(saw.into_iter().all(|seen| seen));
+    assert!(
+        saw.into_iter().all(|seen| seen),
+        "all expected structural outcomes must be observed",
+    );
 }
