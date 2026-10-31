@@ -880,6 +880,10 @@ selected directory. A second parent identity observation after directory sync
 classifies path drift as `CommittedPathUnverified`, which is treated as an
 uncertain prior effect rather than a successful receipt or retry permission.
 
+An additional two-disposition fixture redirects that renamed parent to an
+unrelated directory through a symlink; the selected-path no-symlink recheck
+rejects it without touching the unrelated target or displaced original.
+
 These checks narrow the observable directory-rename race; they do not lock an
 external pathname, prevent changes after either check, or solve the brief
 replacement link-before-rename crash window that can leave a named stage.

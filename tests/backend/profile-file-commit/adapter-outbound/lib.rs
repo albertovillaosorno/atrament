@@ -363,6 +363,59 @@ mod linux {
     }
 
     #[test]
+    fn symlink_redirect_of_selected_parent_never_writes_a_victim() {
+        for disposition in [Mode::PreserveExisting, Mode::ReplaceExisting] {
+            let dir = OwnedDir::new();
+            let selected_parent = dir.0.join("selected");
+            let relocated_parent = dir.0.join("relocated");
+            let victim_parent = dir.0.join("victim");
+            fs::create_dir_all(&selected_parent).expect("selected directory");
+            fs::create_dir_all(&victim_parent).expect("victim directory");
+            let target = selected_parent.join("chosen.atrament");
+            let victim_target = victim_parent.join("chosen.atrament");
+            fs::write(&victim_target, b"unrelated victim")
+                .expect("victim bytes");
+            if disposition == Mode::ReplaceExisting {
+                fs::write(&target, b"original").expect("selected original");
+            }
+            let mut observations = 0usize;
+            let result = commit_profile_file_cancellable(
+                &target,
+                b"replacement bytes",
+                64,
+                disposition,
+                || {
+                    observations += 1;
+                    if observations == 3 {
+                        fs::rename(&selected_parent, &relocated_parent)
+                            .expect("relocate opened parent");
+                        symlink(&victim_parent, &selected_parent)
+                            .expect("redirect selected pathname");
+                    }
+                    false
+                },
+            );
+            assert_eq!(result, Err(Error::SelectedParentChanged));
+            assert_eq!(observations, 3);
+            assert!(fs::symlink_metadata(&selected_parent)
+                .expect("redirect remains")
+                .file_type()
+                .is_symlink());
+            assert_eq!(fs::read(&victim_target).expect("unchanged victim"), b"unrelated victim");
+            let relocated_target = relocated_parent.join("chosen.atrament");
+            if disposition == Mode::ReplaceExisting {
+                assert_eq!(fs::read(&relocated_target).expect("original"), b"original");
+            } else {
+                assert!(!relocated_target.exists());
+            }
+            assert_eq!(
+                fs::read_dir(&relocated_parent).expect("no export stage").count(),
+                usize::from(disposition == Mode::ReplaceExisting),
+            );
+        }
+    }
+
+    #[test]
     fn refused_oversize_preserves_target_without_creating_intermediate() {
         let dir = OwnedDir::new();
         let target = dir.target();
