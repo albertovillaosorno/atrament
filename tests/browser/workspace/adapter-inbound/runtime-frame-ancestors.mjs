@@ -90,9 +90,14 @@ const COMPATIBLE_HANDSHAKE = JSON.stringify({
     },
 });
 
+// Readiness logs are untrusted process output. Never retain unbounded lines
+// or reflect their contents through a test failure's diagnostics.
+const MAX_READINESS_OUTPUT_BYTES = 65_536;
+
 function waitForLine(stream, select, timeoutMs = 15_000) {
     return new Promise((resolve, reject) => {
         let buffered = "";
+        let observedBytes = 0;
         const finish = (error, value) => {
             clearTimeout(timer);
             stream.off("data", onData);
@@ -107,9 +112,14 @@ function waitForLine(stream, select, timeoutMs = 15_000) {
         };
         const onError = (error) => finish(error);
         const onEnd = () => finish(new Error(
-            `process output ended before readiness: ${buffered}`,
+            "process output ended before readiness",
         ));
         const onData = (chunk) => {
+            observedBytes += Buffer.byteLength(chunk, "utf8");
+            if (observedBytes > MAX_READINESS_OUTPUT_BYTES) {
+                finish(new Error("readiness output exceeds byte budget"));
+                return;
+            }
             buffered += chunk;
             const lines = buffered.split("\n");
             buffered = lines.pop() ?? "";
@@ -128,7 +138,7 @@ function waitForLine(stream, select, timeoutMs = 15_000) {
             }
         };
         const timer = setTimeout(() => finish(new Error(
-            `timed out waiting for process output: ${buffered}`,
+            "timed out waiting for process output",
         )), timeoutMs);
         stream.setEncoding("utf8");
         stream.on("data", onData);
@@ -372,6 +382,47 @@ test(
         silent.destroy();
     },
 );
+
+test("readiness failures never reflect untrusted process output", async () => {
+    const marker = "private-process-output-marker";
+    const closed = new PassThrough();
+    const premature = waitForLine(closed, () => null);
+    closed.end(marker);
+    await assert.rejects(premature, (error) => {
+        assert.match(error.message, /ended before readiness/);
+        assert.equal(error.message.includes(marker), false);
+        return true;
+    });
+
+    const silent = new PassThrough();
+    const expired = waitForLine(silent, () => null, 20);
+    silent.write(marker);
+    await assert.rejects(expired, (error) => {
+        assert.match(error.message, /timed out waiting for process output/);
+        assert.equal(error.message.includes(marker), false);
+        return true;
+    });
+    silent.destroy();
+});
+
+test("readiness output has a finite UTF-8 byte budget", async () => {
+    const valid = new PassThrough();
+    const accepted = waitForLine(valid, (line) =>
+        line === "ready: ok" ? "ok" : null);
+    valid.write("x".repeat(65_536 - "ready: ok\n".length - 1)
+        + "\n");
+    valid.write("ready: ok\n");
+    assert.equal(await accepted, "ok");
+    valid.destroy();
+
+    const oversized = new PassThrough();
+    const rejected = waitForLine(oversized, () => null, 50);
+    // Counting UTF-16 characters instead of actual UTF-8 bytes would pass.
+    oversized.write("á".repeat(32_769));
+    await assert.rejects(rejected, /readiness output exceeds byte budget/);
+    assert.equal(oversized.listenerCount("data"), 0);
+    oversized.destroy();
+});
 
 test(
     "fixture shutdown aborts a pending HTTP request without browser exit",
@@ -698,7 +749,29 @@ class BidiClient {
         this.nextId = 1;
         this.pending = new Map();
         this.socket = null;
-        this.url = new URL(url);
+        // The endpoint comes from Firefox stderr, not a trusted local
+        // configuration. Never open a debugger socket on another host (or
+        // accept URL credentials or routing metadata) from that output.
+        let endpoint;
+        try {
+            endpoint = new URL(url);
+        } catch {
+            // Node's URL error can expose the untrusted input as metadata.
+            throw new Error("invalid Firefox BiDi loopback endpoint");
+        }
+        if (url !== endpoint.href
+            || endpoint.protocol !== "ws:"
+            || endpoint.hostname !== "127.0.0.1"
+            || endpoint.port === ""
+            || Number(endpoint.port) === 0
+            || endpoint.pathname !== "/session"
+            || endpoint.username !== ""
+            || endpoint.password !== ""
+            || endpoint.search !== ""
+            || endpoint.hash !== "") {
+            throw new Error("invalid Firefox BiDi loopback endpoint");
+        }
+        this.url = endpoint;
     }
 
     async connect() {
@@ -995,6 +1068,39 @@ class BidiClient {
         return Buffer.concat([header, mask, masked]);
     }
 }
+
+test("Firefox BiDi client refuses off-loopback debugging endpoints", () => {
+    const allowed = new BidiClient("ws://127.0.0.1:1234/session");
+    assert.equal(allowed.url.hostname, "127.0.0.1");
+    const marker = "malformed-debugger-marker-secret";
+    assert.throws(() => new BidiClient(marker), (error) => {
+        assert.match(error.message, /invalid Firefox BiDi loopback endpoint/);
+        assert.equal(error.message.includes(marker), false);
+        assert.equal("input" in error, false);
+        return true;
+    });
+    for (const endpoint of [
+        "ws://127.1:1234/session",
+        "ws://0x7f000001:1234/session",
+        "WS://127.0.0.1:1234/session",
+        " ws://127.0.0.1:1234/session",
+        "ws://example.com:1234/session",
+        "ws://192.0.2.1:1234/session",
+        "ws://localhost:1234/session",
+        "ws://[::1]:1234/session",
+        "wss://127.0.0.1:1234/session",
+        "http://127.0.0.1:1234/session",
+        "ws://user:password@127.0.0.1:1234/session",
+        "ws://127.0.0.1:1234/session?access=marker",
+        "ws://127.0.0.1:1234/session#fragment",
+        "ws://127.0.0.1/session",
+        "ws://127.0.0.1:0/session",
+    ]) {
+        assert.throws(() => new BidiClient(endpoint),
+            /invalid Firefox BiDi loopback endpoint/,
+            endpoint);
+    }
+});
 
 test("WebSocket upgrade rejects false status and forged accept headers",
     () => {

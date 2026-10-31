@@ -401,6 +401,33 @@ oversized claims with no payload allocation, protocol errors and bounded
 event history. These limits apply solely to disposable browser automation,
 not to runtime session messages or public application protocol limits.
 
+The separate real-runtime socket-confinement fixture now imposes the same
+64 KiB total stdout ceiling. A red-first probe showed its readiness reader
+could accumulate arbitrary bytes, throw from an untrusted JSON line directly
+inside a stream event, or wait for timeout after a partial EOF. It now parses
+bounded strictly decoded UTF-8, rejects malformed records with scrubbed
+errors, handles stream end and error, and removes observers after settlement.
+The production runtime's startup protocol and socket policy are unchanged.
+
+Readiness output from spawned test processes now has a total 64 KiB UTF-8
+byte ceiling and a finite deadline. A red-first fixture proved an unterminated
+multi-byte stream could exhaust its deadline without bounded accumulation;
+another showed the buffered child output appeared verbatim in readiness error
+messages. Overflow now rejects and releases observers, and premature-close
+or timeout errors do not reflect untrusted process output. This only protects
+the browser test harness, not production runtime startup logs.
+
+The Firefox harness now checks the endpoint printed on Firefox stderr
+before opening a debugging socket: only an uncredentialed IPv4 loopback
+`ws://127.0.0.1:<port>/session` endpoint is admitted. A red-first fixture
+proved an off-host endpoint had previously reached client construction.
+Non-loopback hosts, non-WebSocket schemes, URL credentials, query strings,
+fragments, noncanonical aliases, and missing ports now fail before TCP connect.
+
+Malformed endpoint errors also omit input rather than reflecting stderr data.
+This protects the automation runner from misdirected debugging traffic; it
+does not change the product's browser-launch credential exposure or listener.
+
 The BiDi automation client now decodes WebSocket text with fatal UTF-8
 validation before JSON parsing. A red-first fixture found that an invalid byte
 in an otherwise valid command success previously became replacement text and

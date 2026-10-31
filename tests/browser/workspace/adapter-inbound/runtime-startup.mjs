@@ -35,7 +35,9 @@
 //
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
+import { EventEmitter } from "node:events";
 import fs from "node:fs";
+import { PassThrough } from "node:stream";
 import path from "node:path";
 import test from "node:test";
 
@@ -64,44 +66,184 @@ function buildRuntime() {
     assert.equal(build.status, 0);
 }
 
+// The child process is not an unlimited or trusted source of readiness
+// records. Bound its complete UTF-8 output and fail without quoting it.
+const MAX_STARTUP_OUTPUT_BYTES = 65_536;
+
 function waitForReady(child) {
     return new Promise((resolve, reject) => {
         let buffered = "";
-        const timeout = setTimeout(() => {
-            cleanup();
-            reject(new Error("runtime did not publish ready state"));
-        }, 2_000);
+        let receivedBytes = 0;
+        let settled = false;
+        const decoder = new TextDecoder("utf-8", { fatal: true });
         const cleanup = () => {
             clearTimeout(timeout);
             child.stdout.off("data", onData);
+            child.stdout.off("error", onError);
+            child.stdout.off("end", onEnd);
+            child.stdout.off("close", onEnd);
             child.off("exit", onExit);
         };
-        const onExit = (code, signal) => {
+        const finish = (error, record) => {
+            if (settled) {
+                return;
+            }
+            settled = true;
             cleanup();
-            reject(new Error(
-                `runtime exited before ready: ${code}/${signal}`,
-            ));
+            if (error !== null) {
+                reject(error);
+            } else {
+                resolve(record);
+            }
         };
+        const onExit = (code, signal) => finish(new Error(
+            `runtime exited before ready: ${code}/${signal}`,
+        ));
+        const onError = () => finish(new Error(
+            "runtime startup output stream failed",
+        ));
+        const onEnd = () => finish(new Error(
+            "runtime startup output ended before ready",
+        ));
         const onData = (chunk) => {
-            buffered += chunk.toString("utf8");
+            const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+            if (bytes.length > MAX_STARTUP_OUTPUT_BYTES - receivedBytes) {
+                finish(new Error("startup output exceeds byte budget"));
+                return;
+            }
+            receivedBytes += bytes.length;
+            try {
+                buffered += decoder.decode(bytes, { stream: true });
+            } catch {
+                finish(new Error("invalid runtime readiness encoding"));
+                return;
+            }
             const lines = buffered.split("\n");
             buffered = lines.pop() ?? "";
             for (const line of lines) {
                 if (line === "") {
                     continue;
                 }
-                const record = JSON.parse(line);
+                let record;
+                try {
+                    record = JSON.parse(line);
+                } catch {
+                    finish(new Error("invalid runtime readiness record"));
+                    return;
+                }
+                if (record === null || typeof record !== "object"
+                    || Array.isArray(record)) {
+                    finish(new Error("invalid runtime readiness record"));
+                    return;
+                }
                 if (record.state === "ready") {
-                    cleanup();
-                    resolve(record);
+                    finish(null, record);
                     return;
                 }
             }
         };
+        const timeout = setTimeout(() => finish(new Error(
+            "runtime did not publish ready state",
+        )), 2_000);
         child.stdout.on("data", onData);
+        child.stdout.once("error", onError);
+        child.stdout.once("end", onEnd);
+        child.stdout.once("close", onEnd);
         child.once("exit", onExit);
     });
 }
+
+function fixtureReadinessChild() {
+    const child = new EventEmitter();
+    child.stdout = new PassThrough();
+    return child;
+}
+
+test("startup readiness bounds untrusted UTF-8 process output", async () => {
+    const child = fixtureReadinessChild();
+    const pending = waitForReady(child);
+    child.stdout.write("á".repeat(32_769));
+    await assert.rejects(pending, /startup output exceeds byte budget/);
+    assert.equal(child.stdout.listenerCount("data"), 0);
+    assert.equal(child.listenerCount("exit"), 0);
+    child.stdout.destroy();
+});
+
+test(
+    "startup readiness refuses malformed output without throwing",
+    async () => {
+        const child = fixtureReadinessChild();
+        const pending = waitForReady(child);
+        let thrown = null;
+        try {
+            child.stdout.write("private-marker-invalid-json\n");
+        } catch (error) {
+            thrown = error;
+        }
+        child.emit("exit", 17, null);
+        assert.equal(thrown, null,
+            "malformed records cannot escape data handlers");
+        await assert.rejects(pending, /invalid runtime readiness record/);
+        assert.equal(child.stdout.listenerCount("data"), 0);
+        child.stdout.destroy();
+    },
+);
+
+test(
+    "startup readiness rejects partial output without reflecting it",
+    async () => {
+        const child = fixtureReadinessChild();
+        const pending = waitForReady(child);
+        child.stdout.end("private-marker");
+        await assert.rejects(pending, (error) => {
+            assert.match(error.message, /output ended before ready/);
+            assert.equal(error.message.includes("private-marker"), false);
+            return true;
+        });
+        assert.equal(child.stdout.listenerCount("data"), 0);
+        assert.equal(child.listenerCount("exit"), 0);
+    },
+);
+
+test("startup readiness accepts fragmented finite JSON output", async () => {
+    const child = fixtureReadinessChild();
+    const pending = waitForReady(child);
+    child.stdout.write('{"state":"sta');
+    child.stdout.write('rting"}\n{"state":"rea');
+    child.stdout.write('dy","origin":"http://127.0.0.1:1234"}\n');
+    const ready = await pending;
+    assert.deepEqual(ready, {
+        state: "ready", origin: "http://127.0.0.1:1234",
+    });
+    assert.equal(child.stdout.listenerCount("data"), 0);
+    assert.equal(child.listenerCount("exit"), 0);
+    child.stdout.destroy();
+});
+
+test(
+    "startup readiness decodes fragmented UTF-8 without substitution",
+    async () => {
+        const child = fixtureReadinessChild();
+        const pending = waitForReady(child);
+        const expected = { state: "ready", marker: "á👩‍🔬" };
+        const bytes = Buffer.from(`${JSON.stringify(expected)}\n`);
+        const split = bytes.indexOf(Buffer.from("á"));
+        assert.ok(split > 0);
+        child.stdout.write(bytes.subarray(0, split + 1));
+        child.stdout.write(bytes.subarray(split + 1));
+        assert.deepEqual(await pending, expected);
+        child.stdout.destroy();
+
+        const invalid = fixtureReadinessChild();
+        const rejected = waitForReady(invalid);
+        invalid.stdout.write(Buffer.concat([
+            Buffer.from('{"state":"ready","marker":"'),
+            Buffer.from([0xff]), Buffer.from('"}\n'),
+        ]));
+        await assert.rejects(rejected, /invalid runtime readiness encoding/);
+        invalid.stdout.destroy();
+    },
+);
 
 function processSocketInodes(pid) {
     const descriptors = fs.readdirSync(`/proc/${pid}/fd`);
