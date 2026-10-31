@@ -98,6 +98,7 @@ function waitForLine(stream, select, timeoutMs = 15_000) {
     return new Promise((resolve, reject) => {
         let buffered = "";
         let observedBytes = 0;
+        const decoder = new TextDecoder("utf-8", { fatal: true });
         const finish = (error, value) => {
             clearTimeout(timer);
             stream.off("data", onData);
@@ -114,13 +115,24 @@ function waitForLine(stream, select, timeoutMs = 15_000) {
         const onEnd = () => finish(new Error(
             "process output ended before readiness",
         ));
-        const onData = (chunk) => {
-            observedBytes += Buffer.byteLength(chunk, "utf8");
-            if (observedBytes > MAX_READINESS_OUTPUT_BYTES) {
+        const onData = (bytes) => {
+            // A string chunk may already contain replacement characters.
+            // Only raw process bytes can establish unmodified readiness.
+            if (!Buffer.isBuffer(bytes)) {
+                finish(new Error("invalid readiness output encoding"));
+                return;
+            }
+            if (bytes.length > MAX_READINESS_OUTPUT_BYTES - observedBytes) {
                 finish(new Error("readiness output exceeds byte budget"));
                 return;
             }
-            buffered += chunk;
+            observedBytes += bytes.length;
+            try {
+                buffered += decoder.decode(bytes, { stream: true });
+            } catch {
+                finish(new Error("invalid readiness output encoding"));
+                return;
+            }
             const lines = buffered.split("\n");
             buffered = lines.pop() ?? "";
             for (const line of lines) {
@@ -140,7 +152,6 @@ function waitForLine(stream, select, timeoutMs = 15_000) {
         const timer = setTimeout(() => finish(new Error(
             "timed out waiting for process output",
         )), timeoutMs);
-        stream.setEncoding("utf8");
         stream.on("data", onData);
         stream.once("error", onError);
         stream.once("end", onEnd);
@@ -175,6 +186,21 @@ function stopChild(child, gracefulMs = 2_000, forcedMs = 10_000) {
         };
         const onExit = () => finish();
         const onError = (error) => finish(error);
+        const signalChild = (signal) => {
+            try {
+                if (!child.kill(signal)) {
+                    if (child.exitCode !== null || child.signalCode !== null) {
+                        finish();
+                    } else {
+                        finish(new Error(
+                            `disposable child ${signal} signal failed`,
+                        ));
+                    }
+                }
+            } catch (error) {
+                finish(error);
+            }
+        };
         child.once("exit", onExit);
         child.once("error", onError);
         gracefulTimer = setTimeout(() => {
@@ -185,17 +211,9 @@ function stopChild(child, gracefulMs = 2_000, forcedMs = 10_000) {
             forcedTimer = setTimeout(() => finish(new Error(
                 "disposable child did not exit after SIGKILL",
             )), forcedMs);
-            try {
-                child.kill("SIGKILL");
-            } catch (error) {
-                finish(error);
-            }
+            signalChild("SIGKILL");
         }, gracefulMs);
-        try {
-            child.kill("SIGTERM");
-        } catch (error) {
-            finish(error);
-        }
+        signalChild("SIGTERM");
     });
 }
 
@@ -285,6 +303,36 @@ test("stubborn child aborts bounded shutdown without lingering observers",
         }), 10, 10);
     },
 );
+
+test("disposable child shutdown refuses unsuccessful signals", async () => {
+    const failedTerm = new EventEmitter();
+    failedTerm.exitCode = null;
+    failedTerm.signalCode = null;
+    const termSignals = [];
+    failedTerm.kill = (signal) => {
+        termSignals.push(signal);
+        return false;
+    };
+    await assert.rejects(stopChild(failedTerm, 10, 20),
+        /disposable child SIGTERM signal failed/);
+    assert.deepEqual(termSignals, ["SIGTERM"]);
+    assert.equal(failedTerm.listenerCount("exit"), 0);
+    assert.equal(failedTerm.listenerCount("error"), 0);
+
+    const failedKill = new EventEmitter();
+    failedKill.exitCode = null;
+    failedKill.signalCode = null;
+    const killSignals = [];
+    failedKill.kill = (signal) => {
+        killSignals.push(signal);
+        return signal === "SIGTERM";
+    };
+    await assert.rejects(stopChild(failedKill, 10, 20),
+        /disposable child SIGKILL signal failed/);
+    assert.deepEqual(killSignals, ["SIGTERM", "SIGKILL"]);
+    assert.equal(failedKill.listenerCount("exit"), 0);
+    assert.equal(failedKill.listenerCount("error"), 0);
+});
 
 test("disposable child teardown retains original spawn and kill errors",
     async () => {
@@ -422,6 +470,45 @@ test("readiness output has a finite UTF-8 byte budget", async () => {
     await assert.rejects(rejected, /readiness output exceeds byte budget/);
     assert.equal(oversized.listenerCount("data"), 0);
     oversized.destroy();
+});
+
+test("readiness refuses malformed UTF-8 without replacing bytes", async () => {
+    const invalid = new PassThrough();
+    const rejected = waitForLine(invalid, (line) =>
+        line.startsWith("ready: ") ? line.slice(7) : null);
+    invalid.write(Buffer.concat([
+        Buffer.from("ready: "),
+        Buffer.from([0xff]),
+        Buffer.from("\n"),
+    ]));
+    await assert.rejects(rejected, /invalid readiness output encoding/);
+    assert.equal(invalid.listenerCount("data"), 0);
+    assert.equal(invalid.listenerCount("error"), 0);
+    invalid.destroy();
+
+    // An upstream text decoder has already replaced invalid raw bytes.
+    // Treat text-mode streams as untrusted rather than re-encoding them.
+    const decoded = new PassThrough();
+    decoded.setEncoding("utf8");
+    const undecodable = waitForLine(decoded, (line) =>
+        line.startsWith("ready: ") ? line.slice(7) : null);
+    decoded.write(Buffer.concat([
+        Buffer.from("ready: "), Buffer.from([0xff]),
+        Buffer.from("\n"),
+    ]));
+    await assert.rejects(undecodable,
+        /invalid readiness output encoding/);
+    decoded.destroy();
+
+    const valid = new PassThrough();
+    const accepted = waitForLine(valid, (line) =>
+        line.startsWith("ready: ") ? line.slice(7) : null);
+    const bytes = Buffer.from("ready: á👩‍🔬\n");
+    for (const byte of bytes) {
+        valid.write(Buffer.from([byte]));
+    }
+    assert.equal(await accepted, "á👩‍🔬");
+    valid.destroy();
 });
 
 test(

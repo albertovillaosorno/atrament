@@ -534,3 +534,16 @@ and reports failure instead of claiming erasure. After the same-tab user
 confirms End again, a valid response clears session authority and draft text.
 This verifies client retry semantics, not backend destruction after an unknown
 prior request outcome.
+
+The Firefox automation readiness reader now consumes raw process bytes with a
+fatal streaming UTF-8 decoder, rather than accepting replacement characters
+from malformed startup output. Red-first fixtures proved invalid output could
+previously be selected as a readiness marker; tests now reject both malformed
+raw bytes and an already-decoded text-mode stream while preserving valid
+multibyte output split at every byte.
+
+A separate red-first fixture proved that unsuccessful `SIGTERM` and
+`SIGKILL` returns were ignored by Firefox fixture
+teardown. Those failures now reject promptly, clear process observers, and
+cancel both shutdown deadlines. Neither change alters the actual browser
+launcher or resolves its launch URL credential exposure.
