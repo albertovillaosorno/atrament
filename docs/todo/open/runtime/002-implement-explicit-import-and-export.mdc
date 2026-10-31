@@ -66,6 +66,9 @@ Raw C1 control characters and Unicode line or paragraph separators are also
 escaped on inspection, since verified JSON can contain them and portable ZIP
 section names can contain the Unicode separators. A separate real-process
 fixture proves readable escapes, no raw separators and unchanged source bytes.
+The large-section CLI fixture also checks a near-2 MiB SHA-verified JSON
+payload that expands to nearly 4 MiB of printable terminal escapes. The
+complete expected display still matches and the source remains unchanged.
 
 A separate Linux `atrament profile verify PATH` CLI now runs the same
 fully bounded, secure selected-source and SHA/section-syntax gate as profile
