@@ -82,7 +82,8 @@ The Linux `atrament profile check-canonical PATH` command now checks
 full Import integrity before comparing the exact source ZIP bytes to the
 complete canonical artifact assembled from the same verified manifest and
 payloads. It is read-only, prints a fixed success confirmation, and refuses
-valid but noncanonical source bytes without leaking private section text.
+valid but noncanonical source bytes with fixed, path-free manifest-versus-ZIP
+framing reasons, without leaking private section text.
 Fixtures distinguish noncanonical root JSON and legacy header metadata from
 true SHA or section failures, and prove root-only repacks pass. Byte access
 comes from sealed, fully SHA-verified archive evidence, not an inferred path.

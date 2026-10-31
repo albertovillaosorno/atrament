@@ -582,7 +582,9 @@ fn cli_check_canonical_distinguishes_integrity_from_canonical_bytes() {
     assert!(!rejected.status.success());
     assert!(rejected.stdout.is_empty());
     let error = String::from_utf8_lossy(&rejected.stderr);
-    assert!(error.contains("verified but not canonically encoded"));
+    assert!(error.contains(
+        "verified but not canonically encoded: manifest JSON",
+    ));
     assert!(!error.contains("canonical-only-49352"));
     assert!(!error.contains("private-opaque-canonical-49252"));
     assert_eq!(fs::read(&source.0).expect("unchanged source"), original);
@@ -686,7 +688,9 @@ fn cli_check_canonical_rejects_legacy_zip_metadata_even_with_canonical_root() {
     assert!(!result.status.success());
     assert!(result.stdout.is_empty());
     let error = String::from_utf8_lossy(&result.stderr);
-    assert!(error.contains("verified but not canonically encoded"));
+    assert!(error.contains(
+        "verified but not canonically encoded: ZIP framing",
+    ));
     assert!(!error.contains("legacy-writer-metadata-51235"));
     assert!(!error.contains("private-asset-51235"));
     assert_eq!(fs::read(&source.0).expect("source remains unchanged"), legacy);

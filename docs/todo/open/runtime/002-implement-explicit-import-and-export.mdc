@@ -80,8 +80,9 @@ Export.
 The independent Linux `atrament profile check-canonical PATH` gate
 now verifies an explicit source, reassembles bounded canonical ZIP bytes using
 the same helper as `repack`, and compares the complete source bytes exactly.
-It refuses SHA-correct but noncanonical root ordering and legacy ZIP metadata
-without modifying the source, printing private content, or claiming session
+It distinguishes SHA-correct but noncanonical root JSON from legacy ZIP
+framing with fixed refusal classes, without modifying the source, printing
+private content, or claiming session
 Import. A sealed, fully verified source archive borrow enables this byte
 comparison without trusting externally supplied member bytes.
 

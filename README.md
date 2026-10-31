@@ -196,8 +196,9 @@ Verification checks a bounded archive, manifest, member digests, and
 JSON-section syntax, then reports only a fixed success message, without
 revealing profile content. The read-only `check-canonical` operation performs
 those checks and compares all original ZIP bytes with the deterministic
-first-release encoding. Valid but noncanonical archives refuse without stdout;
-it does not rewrite the source or display any private profile data. Inspection
+first-release encoding. Valid but noncanonical archives refuse without stdout,
+with fixed messages distinguishing manifest JSON from ZIP framing; it does not
+rewrite the source or display any private profile data. Inspection
 performs the same integrity checks before displaying the manifest and readable
 sections.
 

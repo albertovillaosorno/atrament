@@ -85,6 +85,28 @@ const PROFILE_INSPECT_MAX_MEMBER_BYTES: usize = 2 * 1024 * 1024;
 const PROFILE_INSPECT_MAX_MEMBER_BYTES_U64: u64 = 2 * 1024 * 1024;
 const PROFILE_INSPECT_MAX_ROOT_BYTES: usize = 128 * 1024;
 
+/// Private, path-free canonicality refusal after complete source verification.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum ProfileCanonicalityMismatch {
+    /// The verified manifest root differs from the deterministic JSON writer.
+    ManifestSerialization,
+    /// Root JSON is canonical, but the complete stored ZIP bytes differ.
+    ZipFraming,
+}
+
+impl ProfileCanonicalityMismatch {
+    const fn message(self) -> &'static str {
+        match self {
+            Self::ManifestSerialization => {
+                "profile is verified but not canonically encoded: manifest JSON"
+            }
+            Self::ZipFraming => {
+                "profile is verified but not canonically encoded: ZIP framing"
+            }
+        }
+    }
+}
+
 fn publish_startup(state: &str, origin: Option<&str>) -> io::Result<()> {
     let origin_json = origin
         .map_or_else(|| String::from("null"), |value| format!("\"{value}\""));
@@ -354,14 +376,19 @@ pub(crate) fn check_canonical_profile(path: PathBuf) -> io::Result<()> {
         profile_inspection_limits(),
         |verified| {
             let canonical = canonical_artifact_from_verified_profile(verified)?;
-            if canonical.bytes() == verified.verified_archive_bytes() {
-                Ok(())
+            let mismatch = if canonical.bytes()
+                == verified.verified_archive_bytes()
+            {
+                None
+            } else if canonical.root_sha256() != verified.root_sha256() {
+                Some(ProfileCanonicalityMismatch::ManifestSerialization)
             } else {
-                Err(io::Error::new(
-                    io::ErrorKind::InvalidData,
-                    "profile is verified but not canonically encoded",
-                ))
-            }
+                Some(ProfileCanonicalityMismatch::ZipFraming)
+            };
+            mismatch.map_or(Ok(()), |reason| Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                reason.message(),
+            )))
         },
     ).map_err(|error| io::Error::new(
         io::ErrorKind::InvalidData,
