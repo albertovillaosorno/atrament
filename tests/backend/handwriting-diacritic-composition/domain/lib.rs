@@ -34,22 +34,27 @@
 
 //! Handwriting diacritic composition domain regression tests.
 
+#![expect(
+    clippy::expect_used,
+    reason = "fail-fast admission fixture assertions"
+)]
+
 use atrament_handwriting_diacritic_composition::{
     DiacriticCompositionError, DiacriticCompositionIntent,
     DiacriticPresentation, admit_diacritic_composition,
 };
 use atrament_handwriting_glyph_coverage::HandwritingCoverageProfile;
 
-fn profile(
-) -> HandwritingCoverageProfile<&'static str, &'static str, &'static str> {
+fn profile()
+-> HandwritingCoverageProfile<&'static str, &'static str, &'static str> {
     HandwritingCoverageProfile {
         compositional_rules: vec!["latin-base-plus-acute"],
-        exact_graphemes: vec!["a", "á"],
+        exact_graphemes: vec!["a", "\u{e1}"],
         profile_identity: "writer-profile-7",
     }
 }
 
-fn intent(
+const fn intent(
     target_grapheme: &'static str,
     matched_rule: &'static str,
 ) -> DiacriticCompositionIntent<
@@ -80,7 +85,10 @@ fn declared_compositional_coverage_admits_and_retains_presentation() {
     assert_eq!(*admitted.profile_identity(), "writer-profile-7");
     assert_eq!(*admitted.profile_rule(), "latin-base-plus-acute");
     assert_eq!(admitted.intent().target_grapheme, "a\u{301}");
-    assert_eq!(admitted.intent().presentation.placement, "above-base-anchor");
+    assert_eq!(
+        admitted.intent().presentation.placement,
+        "above-base-anchor"
+    );
     assert_eq!(admitted.intent().presentation.scale, 92);
     assert_eq!(
         admitted.intent().presentation.collision_evidence,
@@ -110,7 +118,7 @@ fn exact_coverage_does_not_silently_switch_to_compositional_reuse() {
     assert_eq!(
         admit_diacritic_composition(
             &profile(),
-            intent("á", "latin-base-plus-acute"),
+            intent("\u{e1}", "latin-base-plus-acute"),
         ),
         Err(DiacriticCompositionError::ExactCoverage),
     );
@@ -132,7 +140,7 @@ fn exact_coverage_precedes_undeclared_composition_rule() {
     assert_eq!(
         admit_diacritic_composition(
             &profile(),
-            intent("á", "generic-accent-reuse"),
+            intent("\u{e1}", "generic-accent-reuse"),
         ),
         Err(DiacriticCompositionError::ExactCoverage),
     );

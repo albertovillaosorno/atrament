@@ -33,6 +33,11 @@
 
 //! Handwriting fallback admission domain regression tests.
 
+#![expect(
+    clippy::expect_used,
+    reason = "fail-fast bounded exhaustive fallback fixture assertions"
+)]
+
 use atrament_handwriting_fallback_admission::{
     FallbackStyleDeclaration, FallbackStyleVisibility, FallbackUserAcceptance,
     HandwritingCoverageAdmission, HandwritingFallbackAdmissionError,
@@ -40,7 +45,7 @@ use atrament_handwriting_fallback_admission::{
 };
 use atrament_handwriting_glyph_coverage::HandwritingCoverage;
 
-fn fallback(
+const fn fallback(
     declaration: FallbackStyleDeclaration,
     visibility: FallbackStyleVisibility,
     user_acceptance: FallbackUserAcceptance,
@@ -94,7 +99,7 @@ fn missing_coverage_without_fallback_remains_blocked() {
 
 #[test]
 fn all_eight_fallback_evidence_states_match_three_requirement_oracle() {
-    let mut cases = 0_u8;
+    let mut cases = 0u8;
     let mut saw_admitted = false;
     let mut saw_rejected = false;
     for declaration in [
@@ -109,11 +114,8 @@ fn all_eight_fallback_evidence_states_match_three_requirement_oracle() {
                 FallbackUserAcceptance::NotAccepted,
                 FallbackUserAcceptance::Accepted,
             ] {
-                let evidence = fallback(
-                    declaration,
-                    visibility,
-                    user_acceptance,
-                );
+                let evidence =
+                    fallback(declaration, visibility, user_acceptance);
                 let expected = if declaration
                     == FallbackStyleDeclaration::Declared
                     && visibility == FallbackStyleVisibility::Visible
@@ -171,13 +173,13 @@ fn admitted_fallback_retains_exact_caller_owned_style_identity() {
 #[test]
 fn all_27_coverage_and_fallback_states_match_independent_admission_oracle() {
     let declared_rule = "profile-rule";
-    let mut cases = 0_u8;
+    let mut cases = 0u8;
     let mut saw_profile = false;
     let mut saw_fallback = false;
     let mut saw_missing_without_fallback = false;
     let mut saw_incomplete_fallback = false;
-    for coverage_index in 0_u8..3 {
-        for fallback_index in 0_u8..9 {
+    for coverage_index in 0u8..3 {
+        for fallback_index in 0u8..9 {
             let coverage = match coverage_index {
                 0 => HandwritingCoverage::Exact,
                 1 => HandwritingCoverage::Compositional {
