@@ -33,11 +33,11 @@
 //! Autonomous budget stop projection application regression tests.
 
 use atrament_autonomous_budget_admission::{
-    AutonomousBudgetClass, autonomous_budget_admission,
+    autonomous_budget_admission, AutonomousBudgetClass,
 };
 use atrament_autonomous_budget_stop_projection as budget_stop;
-use budget_stop::autonomous_budget_terminal_outcome;
 use atrament_autonomous_goal_outcome::AutonomousGoalTerminalClass;
+use budget_stop::autonomous_budget_terminal_outcome;
 
 const BUDGETS: [AutonomousBudgetClass; 5] = [
     AutonomousBudgetClass::Attempt,
@@ -49,14 +49,14 @@ const BUDGETS: [AutonomousBudgetClass; 5] = [
 
 #[test]
 fn all_32_budget_masks_project_only_exhausted_masks_to_terminal_stop() {
-    let mut no_terminal = 0_usize;
-    let mut stopped = 0_usize;
-    for mask in 0_u8..32 {
+    let mut no_terminal = 0usize;
+    let mut stopped = 0usize;
+    for mask in 0u8..32 {
         let exhausted: Vec<_> = BUDGETS
             .into_iter()
             .enumerate()
             .filter_map(|(index, budget)| {
-                (mask & (1_u8 << index) != 0).then_some(budget)
+                (mask & (1u8 << index) != 0).then_some(budget)
             })
             .collect();
         let admission = autonomous_budget_admission(&exhausted);

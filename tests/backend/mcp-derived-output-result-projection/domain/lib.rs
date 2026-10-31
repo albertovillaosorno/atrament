@@ -35,7 +35,6 @@
 //! Mcp derived output result projection domain regression tests.
 
 use atrament_application_operation_lifecycle as lifecycle;
-use lifecycle::ApplicationCancellationObservation;
 use atrament_derived_output_result::{
     DerivedOutputEffectDisposition, DerivedOutputOperation,
     DerivedOutputResultClass,
@@ -45,6 +44,7 @@ use atrament_mcp_derived_output_result_projection::{
     mcp_derived_output_cancellation_result,
     mcp_derived_output_effect_disposition, mcp_derived_output_operation,
 };
+use lifecycle::ApplicationCancellationObservation;
 
 const CAPABILITIES: [McpApplicationCapabilityClass; 8] = [
     McpApplicationCapabilityClass::Apply,
@@ -71,24 +71,28 @@ const RESULTS: [DerivedOutputResultClass; 11] = [
     DerivedOutputResultClass::StaleOrUnavailableRevision,
 ];
 
-fn expected_operation(
+const fn expected_operation(
     capability: McpApplicationCapabilityClass,
 ) -> Option<DerivedOutputOperation> {
     match capability {
         McpApplicationCapabilityClass::Export => {
             Some(DerivedOutputOperation::Export)
-        },
+        }
         McpApplicationCapabilityClass::Plan => {
             Some(DerivedOutputOperation::Plan)
-        },
+        }
         McpApplicationCapabilityClass::Render => {
             Some(DerivedOutputOperation::Render)
-        },
-        _ => None,
+        }
+        McpApplicationCapabilityClass::Apply
+        | McpApplicationCapabilityClass::CommandContext
+        | McpApplicationCapabilityClass::HistoryTraversal
+        | McpApplicationCapabilityClass::Inspect
+        | McpApplicationCapabilityClass::Validate => None,
     }
 }
 
-fn expected_disposition(
+const fn expected_disposition(
     operation: DerivedOutputOperation,
     result: DerivedOutputResultClass,
 ) -> Option<DerivedOutputEffectDisposition> {
@@ -138,7 +142,7 @@ fn all_eight_capabilities_have_exact_output_operation_mapping() {
 
 #[test]
 fn all_88_capability_result_pairs_match_independent_oracle() {
-    let mut cases = 0_usize;
+    let mut cases = 0usize;
     for capability in CAPABILITIES {
         for result in RESULTS {
             let expected = expected_operation(capability)
@@ -161,11 +165,12 @@ fn all_24_capability_cancellation_pairs_preserve_output_boundaries() {
         ApplicationCancellationObservation::RequestOnly,
         ApplicationCancellationObservation::TookEffectBeforeBoundary,
     ];
-    let mut cases = 0_usize;
+    let mut cases = 0usize;
     for capability in CAPABILITIES {
         for observation in OBSERVATIONS {
-            let expected = expected_operation(capability).and_then(|operation| {
-                match observation {
+            let expected =
+                expected_operation(capability).and_then(|operation| {
+                    match observation {
                     ApplicationCancellationObservation::RequestOnly => None,
                     ApplicationCancellationObservation::
                         TookEffectBeforeBoundary => Some(
@@ -185,7 +190,7 @@ fn all_24_capability_cancellation_pairs_preserve_output_boundaries() {
                         }
                     },
                 }
-            });
+                });
             assert_eq!(
                 mcp_derived_output_cancellation_result(capability, observation),
                 expected,

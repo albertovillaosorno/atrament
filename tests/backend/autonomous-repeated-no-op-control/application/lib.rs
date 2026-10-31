@@ -37,8 +37,9 @@
 
 use atrament_autonomous_progress_evidence::AutonomousProgressEvidenceClass;
 use atrament_autonomous_repeated_no_op_control::{
-    AutonomousNoOpObservation, autonomous_repeated_no_op_progress_evidence,
+    autonomous_repeated_no_op_progress_evidence,
     autonomous_repeated_no_op_requires_equivalent_mutation_stop,
+    AutonomousNoOpObservation,
 };
 use atrament_semantic_notebook_port::SemanticCommandResultClass;
 
@@ -74,7 +75,7 @@ const EVIDENCE: [AutonomousProgressEvidenceClass; 9] = [
 
 #[test]
 fn all_nine_progress_evidence_classes_match_repeated_no_op_stop_axis() {
-    let mut stops = 0_usize;
+    let mut stops = 0usize;
     for evidence in EVIDENCE {
         let expected =
             evidence == AutonomousProgressEvidenceClass::RepeatedNoOpSameIntent;
@@ -93,14 +94,14 @@ fn all_nine_progress_evidence_classes_match_repeated_no_op_stop_axis() {
 
 #[test]
 fn all_900_result_intent_evidence_states_match_repeated_no_op_rule() {
-    let mut combinations = 0_usize;
-    let mut repeated = 0_usize;
+    let mut combinations = 0usize;
+    let mut repeated = 0usize;
     for previous_result in RESULTS {
         for current_result in RESULTS {
             for same_intent in [false, true] {
                 for new_relevant_evidence in [false, true] {
                     let previous = AutonomousNoOpObservation {
-                        intent: 1_u8,
+                        intent: 1u8,
                         result: previous_result,
                     };
                     let current = AutonomousNoOpObservation {
