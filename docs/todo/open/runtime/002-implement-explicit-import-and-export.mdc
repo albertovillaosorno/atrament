@@ -980,3 +980,12 @@ independently authorized `--replace` instead atomically publishes a distinct
 canonical target inode. The verified source retains its original inode and
 complete pre-repack bytes; the new output passes independent profile inspection.
 This proves explicit overwrite does not silently rewrite the linked source.
+
+The high-resolution change-time check is now covered by a real-file session
+fixture that rewrites the *same* complete ZIP bytes through the original inode,
+then restores the committed modification timestamp. The test waits for an
+independent timestamp tick, proves the path, device, inode, byte content and
+mtime match the saved output, then rejects same-key recovery solely because
+ctime differs. Both overwrite dispositions leave the externally rewritten file
+untouched. Change time narrows, but does not eliminate, mutable-filesystem
+history uncertainty.

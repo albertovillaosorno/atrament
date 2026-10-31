@@ -504,6 +504,69 @@ mod linux {
     }
 
     #[test]
+    fn same_key_retry_refuses_inplace_rewrite_with_restored_mtime() {
+        use std::time::UNIX_EPOCH;
+
+        for overwrite in [PreserveExisting, ReplaceExisting] {
+            let root = fixture();
+            let chosen = root.0.join("selected.atrament");
+            if overwrite == ReplaceExisting {
+                fs::write(&chosen, b"prior bytes").expect("existing target");
+            }
+            let request = intent(chosen.clone(), overwrite);
+            let original = artifact("writer-restored-mtime");
+            let accepted = revision();
+            let mut session = ProfileExportSession::new(1);
+            assert!(matches!(
+                session.export("key", accepted, &request, &original, 8192),
+                Ok(Outcome::Committed(_)),
+            ));
+            let before = fs::metadata(&chosen).expect("committed metadata");
+            let original_mtime = UNIX_EPOCH
+                + Duration::new(
+                    before.mtime().try_into().expect("positive seconds"),
+                    before.mtime_nsec().try_into().expect("valid nanos"),
+                );
+            // Make the metadata-change observation independent of timestamp
+            // granularity before the external in-place rewrite.
+            thread::sleep(Duration::from_millis(20));
+            fs::write(&chosen, original.bytes())
+                .expect("external complete same-byte rewrite");
+            fs::File::options()
+                .write(true)
+                .open(&chosen)
+                .expect("open file to restore its mtime")
+                .set_modified(original_mtime)
+                .expect("restore original modification time");
+            let after = fs::metadata(&chosen).expect("restored metadata");
+            assert_eq!(before.ino(), after.ino());
+            assert_eq!(before.dev(), after.dev());
+            assert_eq!(
+                (before.mtime(), before.mtime_nsec()),
+                (after.mtime(), after.mtime_nsec()),
+            );
+            assert_ne!(
+                (before.ctime(), before.ctime_nsec()),
+                (after.ctime(), after.ctime_nsec()),
+            );
+            assert_eq!(
+                fs::read(&chosen).expect("same ZIP bytes"),
+                original.bytes(),
+            );
+            assert_eq!(
+                session.export("key", accepted, &request, &original, 8192),
+                Err(Error::Retry(
+                    ProfileExportRetryRecoveryDecision::ExternalTargetDrift,
+                )),
+            );
+            assert_eq!(
+                fs::read(&chosen).expect("no retry rewrite"),
+                original.bytes(),
+            );
+        }
+    }
+
+    #[test]
     fn changed_retry_identity_conflicts_without_writes() {
         let root = fixture();
         let chosen = root.0.join("selected.atrament");
