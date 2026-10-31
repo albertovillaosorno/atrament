@@ -1935,6 +1935,70 @@ fn cli_inspection_escapes_non_ascii_unicode_spaces() {
 
 #[cfg(target_os = "linux")]
 #[test]
+fn cli_inspection_escapes_unicode_spaces_in_manifest_and_section_names() {
+    let spaces = ['\u{00a0}', '\u{1680}', '\u{202f}', '\u{205f}', '\u{3000}'];
+    let joined: String = spaces.into_iter().collect();
+    let path = format!("sections/left{joined}right.json");
+    let section = br#"{"ordinary":"source has ASCII spaces"}"#;
+    let root = format!(
+        concat!(
+            r#"{{"container_version":"atrament.profile/1","#,
+            r#""profile_identity":"writer{}one","#,
+            r#""required_features":[],"#,
+            r#""optional_features":["label{}two"],"entries":[{{"#,
+            r#""path":"{}","media_type":"application/json","#,
+            r#""byte_length":{},"sha256":"{}"}}]}}"#,
+        ),
+        joined, joined, path, section.len(), digest_hex(section),
+    );
+    let archive = write_stored_profile_zip(
+        &[
+            ProfileStoredZipMember {
+                name: "manifest.json", bytes: root.as_bytes(),
+            },
+            ProfileStoredZipMember {
+                name: &path, bytes: section,
+            },
+        ],
+        ProfileStoredZipWriteLimits {
+            maximum_archive_bytes: 4096,
+            maximum_entries: 2,
+            maximum_entry_bytes: 2048,
+            maximum_total_bytes: 3000,
+        },
+    ).expect("verified manifest and section paths may contain Unicode spaces");
+    let source = OwnedProfileFile::new(&archive);
+    bootstrap::verify_profile(source.0.clone())
+        .expect("exact source passes ZIP, manifest, SHA and section syntax");
+    let process = Command::new(env!("CARGO_BIN_EXE_atrament"))
+        .args(["profile", "inspect"])
+        .arg(&source.0)
+        .output()
+        .expect("inspect admitted source through the real CLI");
+    assert!(process.status.success());
+    assert!(process.stderr.is_empty());
+    let display = String::from_utf8(process.stdout)
+        .expect("inspection display is valid UTF-8");
+    let mut escaped = String::new();
+    for character in spaces {
+        write!(&mut escaped, "\\u{:04x}", u32::from(character))
+            .expect("ASCII escape formatting");
+        assert!(!display.contains(character), "no raw Unicode whitespace");
+    }
+    assert!(display.contains(&format!(r#""writer{escaped}one""#)));
+    assert!(display.contains(&format!(r#""label{escaped}two""#)));
+    assert!(display.contains(&format!(
+        r#""sections/left{escaped}right.json""#,
+    )));
+    assert!(display.contains(&format!(
+        "sections/left{escaped}right.json (syntax-checked; untyped):",
+    )));
+    assert!(display.contains(r#""ordinary":"source has ASCII spaces""#));
+    assert_eq!(fs::read(&source.0).expect("source untouched"), archive);
+}
+
+#[cfg(target_os = "linux")]
+#[test]
 fn cli_inspection_escapes_default_ignorable_unicode_ranges() {
     // Enumerate the full current Default_Ignorable_Code_Point range table,
     // including reserved supplementary scalars, not just range endpoints.

@@ -1157,3 +1157,9 @@ ignorables. A real CLI red-first fixture showed verified section JSON could
 print these visually ambiguous characters raw, even with SHA-verification.
 The display writes their exact JSON escapes while retaining ordinary ASCII
 spaces and leaving verified source profile bytes unchanged.
+
+An independent real-CLI source with non-ASCII whitespace in its verified
+profile identity, optional feature, and section pathname also confirms the
+inspector escapes those metadata surfaces without changing source bytes or
+ordinary ASCII whitespace. This exercises manifest reserialization and the
+separate section-label display paths in addition to section JSON.
