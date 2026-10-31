@@ -39,10 +39,11 @@ names. Tabs, repeated spaces, trailing whitespace, and other methods or versions
 reject before routing.
 
 Browser privacy regression evidence also pins the generated workspace to exactly
-three admitted same-origin `fetch` call sites for handshake and draft transport.
-All three omit ambient credentials, reject redirects, use no-referrer and
-no-store behavior, and contain no absolute HTTP(S), beacon, XHR, WebSocket, or
-EventSource transport path.
+four admitted same-origin `fetch` call sites: handshake, draft read, draft write,
+and explicit session end. All four omit ambient credentials, reject redirects,
+and use no-store behavior. The three POSTs use origin-only referrers, while the
+read-only draft GET uses no-referrer. The generated module has no absolute
+HTTP(S), beacon, XHR, WebSocket, or EventSource transport path.
 
 A source-level backend network-surface guard now requires every production
 `std::net` import to remain inside the loopback session runtime. Locked offline
