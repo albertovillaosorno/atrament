@@ -62,6 +62,11 @@ stored ZIP, SHA checks, section contents and ordinary Unicode remain unchanged.
 The exact preallocated output length accounts for the additional escapes.
 A real-process regression exercises controls in all three display locations.
 
+Raw C1 control characters and Unicode line or paragraph separators are also
+escaped on inspection, since verified JSON can contain them and portable ZIP
+section names can contain the Unicode separators. A separate real-process
+fixture proves readable escapes, no raw separators and unchanged source bytes.
+
 A separate Linux `atrament profile verify PATH` CLI now runs the same
 fully bounded, secure selected-source and SHA/section-syntax gate as profile
 inspection, then emits only a fixed success confirmation. Unlike inspection,

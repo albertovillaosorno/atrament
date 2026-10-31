@@ -1578,6 +1578,72 @@ fn cli_inspection_escapes_bidi_controls_in_verified_json_and_names() {
 
 #[cfg(target_os = "linux")]
 #[test]
+fn cli_inspection_escapes_c1_and_unicode_line_separators() {
+    let section_path = format!(
+        "sections/split{}{}page.json", '\u{2028}', '\u{2029}',
+    );
+    let section = format!(
+        r#"{{"value":"left{}{}{}right"}}"#,
+        '\u{007f}', '\u{0085}', '\u{2029}',
+    );
+    let root = format!(
+        concat!(
+            r#"{{"container_version":"atrament.profile/1","#,
+            r#""profile_identity":"record{}owner","#,
+            r#""required_features":[],"optional_features":[],"entries":["#,
+            r#"{{"path":"{}","media_type":"application/json","#,
+            r#""byte_length":{},"sha256":"{}"}}]}}"#,
+        ),
+        '\u{0085}',
+        section_path,
+        section.len(),
+        digest_hex(section.as_bytes()),
+    );
+    let bytes = write_stored_profile_zip(
+        &[
+            ProfileStoredZipMember {
+                name: "manifest.json", bytes: root.as_bytes(),
+            },
+            ProfileStoredZipMember {
+                name: &section_path, bytes: section.as_bytes(),
+            },
+        ],
+        ProfileStoredZipWriteLimits {
+            maximum_archive_bytes: 4096,
+            maximum_entries: 2,
+            maximum_entry_bytes: 2048,
+            maximum_total_bytes: 3000,
+        },
+    ).expect("source may contain valid raw JSON C1 and Unicode separators");
+    let source = OwnedProfileFile::new(&bytes);
+    bootstrap::verify_profile(source.0.clone())
+        .expect("raw C1 and Unicode line separators remain valid source");
+    let process = Command::new(env!("CARGO_BIN_EXE_atrament"))
+        .args(["profile", "inspect"])
+        .arg(&source.0)
+        .output()
+        .expect("print verified source with escaped terminal controls");
+    assert!(process.status.success());
+    assert!(process.stderr.is_empty());
+    let display = String::from_utf8(process.stdout)
+        .expect("inspection output is valid UTF-8");
+    assert!(display.contains(r#""profile_identity":"record\u0085owner""#));
+    assert!(display.contains(
+        r"sections/split\u2028\u2029page.json (syntax-checked; untyped):",
+    ));
+    assert!(display.contains(
+        r#""value":"left\u007f\u0085\u2029right""#,
+    ));
+    for separator in [
+        '\u{007f}', '\u{0085}', '\u{2028}', '\u{2029}',
+    ] {
+        assert!(!display.contains(separator), "raw terminal separator");
+    }
+    assert_eq!(fs::read(&source.0).expect("read-only display"), bytes);
+}
+
+#[cfg(target_os = "linux")]
+#[test]
 fn cli_section_order_is_stable_across_manifest_declaration_orders() {
     let first = br#"{"first":true}"#;
     let last = br#"{"last":true}"#;

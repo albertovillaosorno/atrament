@@ -217,23 +217,24 @@ const fn profile_repack_limits() -> ProfileExportAssemblyLimits {
     }
 }
 
-// Raw Unicode bidi controls can visually reorder CLI inspection labels and
-// JSON text even after ZIP, SHA and JSON syntax admission. They are valid
-// JSON string content but must be escaped only in terminal presentation.
-const fn is_unicode_bidi_control(character: char) -> bool {
-    matches!(
+// Raw bidi controls, Unicode line/paragraph separators and C1 controls can
+// visually alter verified profile CLI output. Escape only their presentation;
+// never change the SHA-verified ZIP or its JSON source bytes.
+const fn is_terminal_control(character: char) -> bool {
+    character.is_control() || matches!(
         character,
         '\u{061c}' | '\u{200e}' | '\u{200f}'
             | '\u{202a}'..='\u{202e}'
+            | '\u{2028}'..='\u{2029}'
             | '\u{2066}'..='\u{2069}'
     )
 }
 
 fn terminal_safe_text_len(value: &str) -> Option<usize> {
     value.chars().try_fold(0usize, |total, character| {
-        total.checked_add(if is_unicode_bidi_control(character) {
-            // Every Unicode Bidi_Control scalar is in the BMP, so its JSON
-            // \uXXXX spelling is exactly six printable ASCII bytes.
+        total.checked_add(if is_terminal_control(character) {
+            // All escaped scalars fit in the BMP, so the visible \uXXXX
+            // escape takes exactly six printable ASCII bytes.
             6
         } else {
             character.len_utf8()
@@ -243,7 +244,7 @@ fn terminal_safe_text_len(value: &str) -> Option<usize> {
 
 fn append_terminal_safe_text(output: &mut String, value: &str) {
     for character in value.chars() {
-        if is_unicode_bidi_control(character) {
+        if is_terminal_control(character) {
             // Formatting to String is infallible. Capacity was reserved for
             // the complete exact transformed length before any append.
             let _formatted = write!(output, "\\u{:04x}", u32::from(character));
@@ -494,7 +495,7 @@ pub(crate) fn inspect_profile(path: PathBuf) -> io::Result<String> {
             }
             sections.sort_unstable_by(|left, right| left.0.cmp(right.0));
 
-            // Exact planned output length includes escaped bidi controls in
+            // Exact planned output length includes escaped terminal controls in
             // root JSON, section paths and section JSON. Fallible one-time
             // allocation precedes all writes and never grows afterward.
             let length_error = || {
