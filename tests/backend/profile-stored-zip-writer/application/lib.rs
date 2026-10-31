@@ -338,6 +338,103 @@ fn utf8_member_name_field_limit_is_enforced_on_byte_length() {
 }
 
 #[test]
+fn utf8_multibyte_names_obey_zip16_byte_limit_and_preserve_storage() {
+    let accepted_limit = ProfileStoredZipWriteLimits {
+        maximum_archive_bytes: 200_000,
+        maximum_entries: 2,
+        maximum_entry_bytes: 100,
+        maximum_total_bytes: 100,
+    };
+    let read_limit = ProfileZipReadLimits {
+        maximum_archive_bytes: 200_000,
+        maximum_entries: 2,
+        maximum_entry_bytes: 100,
+        maximum_total_bytes: 100,
+    };
+    let prefix = "assets/";
+    let body_budget = usize::from(u16::MAX).saturating_sub(prefix.len());
+    for (character, expected_width) in
+        [("\u{f1}", 2usize), ("\u{20ac}", 3), ("\u{1f600}", 4)]
+    {
+        assert_eq!(character.len(), expected_width);
+        let repetitions = body_budget.checked_div(expected_width).unwrap_or(0);
+        let spare_bytes = body_budget.rem_euclid(expected_width);
+        let name = format!(
+            "{prefix}{}{}",
+            character.repeat(repetitions),
+            "x".repeat(spare_bytes),
+        );
+        assert_eq!(name.len(), usize::from(u16::MAX));
+        assert!(name.chars().count() < name.len());
+        let entries = [
+            member(&name, b"asset"),
+            member(PROFILE_MANIFEST_PATH, b"{}"),
+        ];
+        let plan_outcome =
+            planned_stored_profile_zip_bytes(&entries, accepted_limit);
+        let write_outcome = write_stored_profile_zip(&entries, accepted_limit);
+        assert!(
+            plan_outcome.is_ok(),
+            "byte-exact name must fit: {plan_outcome:?}"
+        );
+        assert!(
+            write_outcome.is_ok(),
+            "byte-exact name must fit: {write_outcome:?}"
+        );
+        let (Ok(planned), Ok(encoded)) = (plan_outcome, write_outcome) else {
+            return;
+        };
+        assert_eq!(encoded.len(), planned);
+        let read_outcome = read_stored_profile_zip(&encoded, read_limit);
+        assert!(
+            read_outcome.is_ok(),
+            "strict reader must admit name: {read_outcome:?}"
+        );
+        let Ok(parsed) = read_outcome else {
+            return;
+        };
+        assert_eq!(
+            parsed.entries().first().map(|entry| entry.name()),
+            Some(name.as_str())
+        );
+        assert_eq!(
+            parsed.entries().first().map(|entry| entry.bytes()),
+            Some(&b"asset"[..])
+        );
+        assert_eq!(
+            parsed.entries().last().map(|entry| entry.name()),
+            Some(PROFILE_MANIFEST_PATH)
+        );
+        assert!(parsed.matches_stored_writer_framing());
+
+        let overflow = format!("{name}z");
+        assert_eq!(overflow.len(), usize::from(u16::MAX) + 1);
+        let invalid = [
+            member(&overflow, b"asset"),
+            member(PROFILE_MANIFEST_PATH, b"{}"),
+        ];
+        assert_eq!(
+            planned_stored_profile_zip_bytes(&invalid, accepted_limit),
+            Err(ProfileStoredZipWriteError::InvalidName),
+        );
+        assert_eq!(
+            write_stored_profile_zip(&invalid, accepted_limit),
+            Err(ProfileStoredZipWriteError::InvalidName),
+        );
+        let mut destination = [0xa5u8; 128];
+        assert_eq!(
+            write_stored_profile_zip_into(
+                &invalid,
+                accepted_limit,
+                &mut destination
+            ),
+            Err(ProfileStoredZipWriteError::InvalidName),
+        );
+        assert_eq!(destination, [0xa5; 128]);
+    }
+}
+
+#[test]
 fn many_generated_sorted_payloads_are_stable_and_reader_admitted() {
     for size in [1usize, 2, 3, 7, 17, 31, 64, 127] {
         let names = (0..size)
