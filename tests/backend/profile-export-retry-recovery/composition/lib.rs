@@ -96,6 +96,8 @@ fn commit(zip: &ProfileExportArtifact) -> Prior {
         byte_length: zip.bytes().len(),
         file_device: 11,
         file_inode: 22,
+        file_modified: (33, 0),
+        file_changed: (44, 0),
     })
 }
 
@@ -105,6 +107,8 @@ fn matches(zip: &ProfileExportArtifact) -> Status {
         byte_length: zip.bytes().len(),
         file_device: 11,
         file_inode: 22,
+        file_modified: (33, 0),
+        file_changed: (44, 0),
     }
 }
 
@@ -235,6 +239,8 @@ fn forged_commit_length_or_target_match_does_not_recover() {
                 byte_length: 0,
                 file_device: 11,
                 file_inode: 22,
+                file_modified: (33, 0),
+                file_changed: (44, 0),
             }),
             Some(Ok(matches(&zip))),
             &zip
@@ -259,6 +265,8 @@ fn forged_commit_length_or_target_match_does_not_recover() {
                 byte_length: 0,
                 file_device: 11,
                 file_inode: 22,
+                file_modified: (33, 0),
+                file_changed: (44, 0),
             })),
             &zip
         ),
@@ -279,6 +287,34 @@ fn matching_bytes_under_another_inode_cannot_recover_a_synced_commit() {
                     byte_length: zip.bytes().len(),
                     file_device: device,
                     file_inode: inode,
+                    file_modified: (33, 0),
+                    file_changed: (44, 0),
+                })),
+                &zip,
+            ),
+            Decision::ExternalTargetDrift,
+        );
+    }
+}
+
+#[test]
+fn exact_file_identity_with_changed_times_refuses_recovery() {
+    let zip = artifact("A");
+    for (modified, changed) in [
+        ((34, 0), (44, 0)),
+        ((33, 0), (45, 0)),
+    ] {
+        assert_eq!(
+            assess(
+                Ok(Binding::SameBinding),
+                commit(&zip),
+                Some(Ok(Status::Matches {
+                    archive_sha256: zip.archive_sha256(),
+                    byte_length: zip.bytes().len(),
+                    file_device: 11,
+                    file_inode: 22,
+                    file_modified: modified,
+                    file_changed: changed,
                 })),
                 &zip,
             ),

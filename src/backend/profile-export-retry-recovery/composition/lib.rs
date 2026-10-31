@@ -153,6 +153,8 @@ pub fn assess_profile_export_retry_recovery(
             byte_length,
             file_device,
             file_inode,
+            file_modified,
+            file_changed,
         })) => {
             if archive_sha256 != artifact.archive_sha256()
                 || byte_length != artifact.bytes().len()
@@ -160,6 +162,8 @@ pub fn assess_profile_export_retry_recovery(
                 ProfileExportRetryRecoveryDecision::InconsistentEvidence
             } else if file_device != commit.file_device
                 || file_inode != commit.file_inode
+                || file_modified != commit.file_modified
+                || file_changed != commit.file_changed
             {
                 ProfileExportRetryRecoveryDecision::ExternalTargetDrift
             } else {

@@ -72,10 +72,14 @@ pub enum ProfileExportTargetStatus {
         archive_sha256: Sha256Digest,
         /// Exact number of matched bytes.
         byte_length: usize,
+        /// Metadata-change time (seconds, nanoseconds) of the reopened target.
+        file_changed: (i64, i64),
         /// Linux device of the rechecked, securely opened target file.
         file_device: u64,
         /// Linux inode of the rechecked, securely opened target file.
         file_inode: u64,
+        /// Modification time (seconds, nanoseconds) of the reopened target.
+        file_modified: (i64, i64),
     },
     /// No file currently exists at the selected path.
     Missing,
@@ -173,17 +177,25 @@ impl ProfileExportTargetProbe<'_> {
             return Ok(ProfileExportTargetStatus::Drifted);
         }
         #[cfg(unix)]
-        let (file_device, file_inode) = {
+        let (file_device, file_inode, file_modified, file_changed) = {
             use std::os::unix::fs::MetadataExt as _;
-            (current_metadata.dev(), current_metadata.ino())
+            (
+                current_metadata.dev(),
+                current_metadata.ino(),
+                (current_metadata.mtime(), current_metadata.mtime_nsec()),
+                (current_metadata.ctime(), current_metadata.ctime_nsec()),
+            )
         };
         #[cfg(not(unix))]
-        let (file_device, file_inode) = (0, 0);
+        let (file_device, file_inode, file_modified, file_changed) =
+            (0, 0, (0, 0), (0, 0));
         Ok(ProfileExportTargetStatus::Matches {
             archive_sha256: self.artifact.archive_sha256(),
             byte_length: self.artifact.bytes().len(),
             file_device,
             file_inode,
+            file_modified,
+            file_changed,
         })
     }
 }

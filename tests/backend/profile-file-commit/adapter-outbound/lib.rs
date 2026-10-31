@@ -125,6 +125,14 @@ mod linux {
         let metadata = fs::metadata(&target).expect("committed file metadata");
         assert_eq!(evidence.file_device, metadata.dev());
         assert_eq!(evidence.file_inode, metadata.ino());
+        assert_eq!(
+            evidence.file_modified,
+            (metadata.mtime(), metadata.mtime_nsec()),
+        );
+        assert_eq!(
+            evidence.file_changed,
+            (metadata.ctime(), metadata.ctime_nsec()),
+        );
         assert_eq!(fs::read(&target).expect("read target"), payload);
         assert_eq!(dir.entries(), vec![String::from("chosen.atrament")]);
         assert_eq!(

@@ -458,6 +458,52 @@ mod linux {
     }
 
     #[test]
+    fn same_key_retry_refuses_timestamp_changed_byte_identical_inode() {
+        use std::time::SystemTime;
+
+        for overwrite in [PreserveExisting, ReplaceExisting] {
+            let root = fixture();
+            let chosen = root.0.join("selected.atrament");
+            if overwrite == ReplaceExisting {
+                fs::write(&chosen, b"prior bytes").expect("prior target");
+            }
+            let request = intent(chosen.clone(), overwrite);
+            let original = artifact("writer-inplace-metadata-drift");
+            let accepted = revision();
+            let mut session = ProfileExportSession::new(1);
+            assert!(matches!(
+                session.export("key", accepted, &request, &original, 8192),
+                Ok(Outcome::Committed(_)),
+            ));
+            let before = fs::metadata(&chosen).expect("committed metadata");
+            fs::File::options()
+                .write(true)
+                .open(&chosen)
+                .expect("open selected file for external metadata change")
+                .set_modified(SystemTime::UNIX_EPOCH)
+                .expect("simulate external modification metadata");
+            let after = fs::metadata(&chosen).expect("modified metadata");
+            assert_eq!(after.ino(), before.ino());
+            assert_eq!(after.dev(), before.dev());
+            assert_ne!(
+                (after.mtime(), after.mtime_nsec()),
+                (before.mtime(), before.mtime_nsec()),
+            );
+            assert_eq!(
+                fs::read(&chosen).expect("unchanged bytes"),
+                original.bytes(),
+            );
+            assert_eq!(
+                session.export("key", accepted, &request, &original, 8192),
+                Err(Error::Retry(
+                    ProfileExportRetryRecoveryDecision::ExternalTargetDrift,
+                )),
+            );
+            assert_eq!(session.len(), 1);
+        }
+    }
+
+    #[test]
     fn changed_retry_identity_conflicts_without_writes() {
         let root = fixture();
         let chosen = root.0.join("selected.atrament");

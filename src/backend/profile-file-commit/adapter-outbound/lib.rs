@@ -110,10 +110,14 @@ impl ProfileFileCommitError {
 pub struct ProfileFileCommitEvidence {
     /// Number of complete artifact bytes committed to the selected target.
     pub byte_length: usize,
+    /// Metadata-change time (seconds, nanoseconds) after the final link.
+    pub file_changed: (i64, i64),
     /// Linux device identity of the staged inode linked at the selected name.
     pub file_device: u64,
     /// Linux inode identity of the staged file, retained for retry recovery.
     pub file_inode: u64,
+    /// Modification time (seconds, nanoseconds) after the final file commit.
+    pub file_modified: (i64, i64),
 }
 
 #[cfg(target_os = "linux")]
@@ -223,13 +227,7 @@ where
     if is_cancelled() {
         return Err(ProfileFileCommitError::CancelledBeforeCommit);
     }
-    let (file_device, file_inode) =
-        commit_platform(target, artifact, disposition, &mut is_cancelled)?;
-    Ok(ProfileFileCommitEvidence {
-        byte_length: artifact.len(),
-        file_device,
-        file_inode,
-    })
+    commit_platform(target, artifact, disposition, &mut is_cancelled)
 }
 
 #[cfg(not(target_os = "linux"))]
@@ -238,7 +236,7 @@ fn commit_platform(
     _artifact: &[u8],
     _disposition: ProfileFileCommitDisposition,
     _is_cancelled: &mut dyn FnMut() -> bool,
-) -> Result<(u64, u64), ProfileFileCommitError> {
+) -> Result<ProfileFileCommitEvidence, ProfileFileCommitError> {
     Err(ProfileFileCommitError::UnsupportedPlatform)
 }
 
@@ -296,7 +294,7 @@ fn commit_platform(
     artifact: &[u8],
     disposition: ProfileFileCommitDisposition,
     is_cancelled: &mut dyn FnMut() -> bool,
-) -> Result<(u64, u64), ProfileFileCommitError> {
+) -> Result<ProfileFileCommitEvidence, ProfileFileCommitError> {
     use std::io::Write as _;
     use std::os::unix::fs::MetadataExt as _;
 
@@ -394,10 +392,10 @@ fn commit_platform(
         .map_err(|error| ProfileFileCommitError::FileIo(error.kind()))?;
     // Observe the private staged inode before any link or rename. This is
     // the committed file identity even if a later caller changes the path.
-    let metadata = output
+    let staged_metadata = output
         .metadata()
         .map_err(|error| ProfileFileCommitError::FileIo(error.kind()))?;
-    let file_identity = (metadata.dev(), metadata.ino());
+    let file_identity = (staged_metadata.dev(), staged_metadata.ino());
     if is_cancelled() {
         return Err(ProfileFileCommitError::CancelledBeforeCommit);
     }
@@ -480,7 +478,7 @@ fn commit_platform(
             temp.committed = true;
         }
     }
-    drop(output);
+    // Keep the descriptor open through the final metadata observation.
     // The target already changed. Never return an ordinary no-effect error.
     directory.sync_all().map_err(|error| {
         ProfileFileCommitError::CommittedDurabilityUnknown(error.kind())
@@ -496,5 +494,27 @@ fn commit_platform(
     ) {
         return Err(ProfileFileCommitError::CommittedPathUnverified);
     }
-    Ok(file_identity)
+    // Link and rename can update ctime, so report metadata only after the
+    // final synced directory-entry effect, never the initial staged values.
+    let committed_metadata = output
+        .metadata()
+        .map_err(|_error| ProfileFileCommitError::CommittedPathUnverified)?;
+    if committed_metadata.dev() != file_identity.0
+        || committed_metadata.ino() != file_identity.1
+    {
+        return Err(ProfileFileCommitError::CommittedPathUnverified);
+    }
+    Ok(ProfileFileCommitEvidence {
+        byte_length: artifact.len(),
+        file_device: file_identity.0,
+        file_inode: file_identity.1,
+        file_modified: (
+            committed_metadata.mtime(),
+            committed_metadata.mtime_nsec(),
+        ),
+        file_changed: (
+            committed_metadata.ctime(),
+            committed_metadata.ctime_nsec(),
+        ),
+    })
 }

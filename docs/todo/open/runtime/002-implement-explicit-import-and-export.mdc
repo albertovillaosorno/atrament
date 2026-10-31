@@ -957,3 +957,18 @@ File identity detects observed replacements, not all external mutations. It
 does not lock pathnames between observations, rule out inode reuse after the
 original file is destroyed, authenticate caller intent, or close the separate
 replacement link-before-rename crash window.
+
+A second red-first recovery regression now changes the modification timestamp
+of the committed inode without changing its bytes, inode or selected pathname.
+Both preserve-existing and explicit-replacement Export retries refuse
+`ExternalTargetDrift`; the file remains untouched by the retry. The writer
+captures modification and change times from the linked inode only after the
+final directory sync, since link/rename operations can change ctime relative to
+anonymous staging. The read-only checker returns high-resolution mtime and
+ctime from its securely re-opened target; the pure classifier refuses a change
+to either timestamp even when digest, length, device and inode still match.
+
+This is an observed-metadata drift guard, not a secure historical file snapshot:
+external processes can change the pathname or bytes after the final check,
+and file timestamps can be adjusted or reused. Only a trusted caller-owned
+Export session can admit requests or return the original synced receipt.

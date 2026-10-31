@@ -90,6 +90,8 @@ mod linux {
             byte_length: profile.bytes().len(),
             file_device: metadata.dev(),
             file_inode: metadata.ino(),
+            file_modified: (metadata.mtime(), metadata.mtime_nsec()),
+            file_changed: (metadata.ctime(), metadata.ctime_nsec()),
         }
     }
 
