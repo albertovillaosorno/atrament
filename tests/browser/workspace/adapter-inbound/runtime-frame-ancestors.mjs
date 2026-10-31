@@ -4584,6 +4584,105 @@ test(
 );
 
 test(
+    "Firefox rejects wrong-media 413 diagnostics while preserving draft text",
+    { skip: !FIREFOX_AVAILABLE, timeout: FIREFOX_CASE_TIMEOUT_MS },
+    async () => {
+        fs.mkdirSync(".temp", { recursive: true });
+        const profile = fs.mkdtempSync(".temp/session-diagnostic-media-");
+        const apiRequests = [];
+        const edits = [];
+        const limitDiagnostic = JSON.stringify({
+            error: "resource_limit",
+            diagnostics: {
+                version: "atrament.diagnostic/1",
+                completeness: "complete",
+                items: [{ code: "atrament.session-draft.resource-limit" }],
+            },
+        });
+        const server = createSessionFixtureServer(
+            apiRequests,
+            (request, response, field) => {
+                const chunks = [];
+                request.on("data", (chunk) => chunks.push(chunk));
+                request.on("end", () => {
+                    edits.push({
+                        field,
+                        text: Buffer.concat(chunks).toString("utf8"),
+                    });
+                    response.writeHead(413, {
+                        "Cache-Control": "no-store",
+                        "Content-Type": edits.length === 1
+                            ? "text/html; charset=utf-8"
+                            : "application/json; charset=utf-8",
+                    });
+                    response.end(limitDiagnostic);
+                });
+            },
+        );
+        const children = [];
+        let bidi;
+        try {
+            server.listen(0, "127.0.0.1");
+            await once(server, "listening");
+            const address = server.address();
+            assert.notEqual(address, null);
+            assert.notEqual(typeof address, "string");
+            bidi = await startBidiFirefox(profile, children);
+            const tab = await bidi.command("browsingContext.create", {
+                type: "tab",
+            });
+            await bidi.command("browsingContext.navigate", {
+                context: tab.context,
+                url: `http://127.0.0.1:${address.port}/` +
+                    `#session=${REFRESH_SECRET}`,
+                wait: "complete",
+            });
+            await waitForSessionStatus(bidi, tab.context, "Session ready");
+            for (const [value, expected] of [
+                ["wrong-media draft", "Invalid draft diagnostic"],
+                ["valid-media draft", "Draft too large · reduce"],
+            ]) {
+                await bidi.command("script.evaluate", {
+                    awaitPromise: false,
+                    expression: `(() => {
+                        const task = document.getElementById("task-input");
+                        task.value = ${JSON.stringify(value)};
+                        task.dispatchEvent(new Event("input"));
+                    })()`,
+                    resultOwnership: "none",
+                    target: { context: tab.context },
+                });
+                const state = await waitForSessionStatus(
+                    bidi, tab.context, expected,
+                );
+                assert.deepEqual(state.task, {
+                    disabled: false, value,
+                });
+            }
+            assert.deepEqual(edits, [
+                { field: "task", text: "wrong-media draft" },
+                { field: "task", text: "valid-media draft" },
+            ]);
+            assert.deepEqual(apiRequests, [
+                "POST /api/handshake",
+                "GET /api/session/task",
+                "GET /api/session/source",
+                "GET /api/session/candidate",
+                "POST /api/session/task",
+                "POST /api/session/task",
+            ]);
+        } finally {
+            bidi?.close();
+            await closeFixtureServer(server);
+            for (const child of children.reverse()) {
+                await stopChild(child);
+            }
+            fs.rmSync(profile, { recursive: true, force: true });
+        }
+    },
+);
+
+test(
     "Firefox rejects compatible JSON mislabeled as an HTML handshake",
     { skip: !FIREFOX_AVAILABLE, timeout: FIREFOX_CASE_TIMEOUT_MS },
     async () => {

@@ -147,3 +147,21 @@ regressions exercised throwing root fields, a nested version record, indexed
 diagnostic slots and revoked objects; ordinary JSON fixtures remain unchanged.
 The rule applies only to these parsing results, not arbitrary JavaScript errors
 or network-reachable Proxy payloads.
+
+The browser draft-write adapter now requires declared UTF-8 JSON media before
+interpreting an HTTP 413 resource-limit diagnostic. A red-first runtime module
+regression showed that a response labeled HTML could previously trigger a known
+resource-limit message when its body happened to contain plausible JSON.
+The corrected path leaves the body unread, reports an invalid diagnostic, and
+retains draft text for correction rather than misclassifying the server result.
+
+The diagnostic media helper admits only exact UTF-8 JSON declarations (with
+case-insensitive spelling and surrounding whitespace). The existing stable
+resource-limit envelope remains mandatory after media admission; this does not
+add authority to the browser or change the backend diagnostic producers.
+
+A real Firefox loopback fixture now sends a malformed-media 413 response with
+a otherwise valid resource-limit JSON body, followed by a correctly declared
+JSON diagnostic after a fresh edit. The first reports invalid metadata without
+losing the user's draft, while the second reports the known byte-limit class.
+This tests network and DOM behavior beyond the extracted browser parser.

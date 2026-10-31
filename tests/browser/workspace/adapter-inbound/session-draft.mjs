@@ -43,6 +43,7 @@ const {
     draftReadTarget,
     isResourceLimit,
     isDraftReadContentType,
+    isDraftDiagnosticContentType,
 } = await import(`${GENERATED_ROOT}session-draft.js`);
 
 test("draft targets are same-origin and contain no credential", () => {
@@ -92,6 +93,29 @@ test("draft reads admit only declared UTF-8 plain text", () => {
         "text/plain; charset=utf-8; extra=yes",
     ]) {
         assert.equal(isDraftReadContentType(invalid), false, String(invalid));
+    }
+});
+
+test("draft resource-limit diagnostics require UTF-8 JSON media", () => {
+    for (const valid of [
+        "application/json; charset=utf-8",
+        "Application/JSON; Charset=UTF-8",
+        " application/json; charset=utf-8 ",
+    ]) {
+        assert.equal(isDraftDiagnosticContentType(valid), true, valid);
+    }
+    for (const invalid of [
+        null,
+        "",
+        "application/json",
+        "text/html; charset=utf-8",
+        "text/plain; charset=utf-8",
+        "application/json; charset=latin1",
+        "application/json; charset=utf-8; extra=yes",
+    ]) {
+        assert.equal(
+            isDraftDiagnosticContentType(invalid), false, String(invalid),
+        );
     }
 });
 

@@ -384,6 +384,69 @@ test("retry control follows remaining retryable draft failures", async () => {
     }
 });
 
+test("draft 413 media refusal precedes diagnostic body parsing", async () => {
+    const source = await readFile(MAIN_MODULE, "utf8");
+    const start = source.indexOf("async function syncDraftField(");
+    const end = source.indexOf("function bindDraftSync(", start);
+    assert.ok(start >= 0 && end > start, "draft sync must be extractable");
+    const syncDraftField = source.slice(start, end);
+    for (const [mediaType, admitted] of [
+        ["text/html; charset=utf-8", false],
+        ["text/plain; charset=utf-8", false],
+        [null, false],
+        ["application/json; charset=utf-8", true],
+    ]) {
+        let bodyReads = 0;
+        const result = await runInNewContext(`
+            (async () => {
+                const sessionSecret = "secret";
+                const draftSyncGeneration = 0;
+                const sessionRequests = { signal: {} };
+                const failedDraftFields = new Set();
+                const retryableDraftFields = new Set();
+                const syncingDraftFields = new Set();
+                const failures = [];
+                const sessionDraft = {
+                    draftMutationTarget: () => "./api/session/task",
+                    draftMutationHeaders: () => ({}),
+                    isResourceLimit: () => true,
+                    isDraftDiagnosticContentType: (value) =>
+                        value === "application/json; charset=utf-8",
+                };
+                function draftSyncIsCurrent(secret, generation) {
+                    return sessionSecret === secret
+                        && draftSyncGeneration === generation;
+                }
+                function recordDraftSyncFailure(field, message) {
+                    failedDraftFields.add(field);
+                    failures.push(message);
+                }
+                function hideResolvedDraftRetry() {}
+                function hideSessionRetry() {}
+                function setTextIfChanged() {}
+                function invalidateUnauthorizedSession() {}
+                ${syncDraftField}
+                await syncDraftField("task", { value: "private" }, "secret");
+                return JSON.stringify(failures);
+            })()
+        `, {
+            fetch: async () => ({
+                status: 413,
+                headers: { get: () => mediaType },
+                json: async () => {
+                    bodyReads += 1;
+                    return { error: "resource_limit" };
+                },
+            }),
+        });
+        assert.deepEqual(JSON.parse(result), [admitted
+            ? "Draft too large · reduce"
+            : "Invalid draft diagnostic"]);
+        assert.equal(bodyReads, admitted ? 1 : 0,
+            `untrusted body must remain unread: ${mediaType}`);
+    }
+});
+
 test("page session network requests are cancellable on exit", async () => {
     const source = await readFile(MAIN_MODULE, "utf8");
     const signalUses = source.match(/signal: sessionRequests\.signal,/gu) ?? [];

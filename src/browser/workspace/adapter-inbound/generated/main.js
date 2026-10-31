@@ -653,6 +653,11 @@ async function syncDraftField(field, input, secret) {
                 continue;
             }
             if (response.status === 413) {
+                const media = response.headers.get("content-type");
+                if (!sessionDraft.isDraftDiagnosticContentType(media)) {
+                    recordDraftSyncFailure(field, "Invalid draft diagnostic");
+                    return;
+                }
                 let payload;
                 try {
                     payload = await response.json();

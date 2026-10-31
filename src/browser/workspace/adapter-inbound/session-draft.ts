@@ -69,6 +69,11 @@ export function isDraftReadContentType(value: string | null): boolean {
     return value?.trim().toLowerCase() === "text/plain; charset=utf-8";
 }
 
+// A resource-limit diagnostic is not authority without a declared JSON body.
+export function isDraftDiagnosticContentType(value: string | null): boolean {
+    return value?.trim().toLowerCase() === "application/json; charset=utf-8";
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
     return typeof value === "object"
         && value !== null
