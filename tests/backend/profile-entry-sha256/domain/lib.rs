@@ -46,6 +46,34 @@ use atrament_profile_entry_sha256::{
 use std::fmt::Write as _;
 use std::iter::successors;
 
+// Preserve failure diagnostics without unchecked fixture unwraps.
+macro_rules! require_ok {
+    ($expression:expr) => {{
+        let observed = $expression;
+        assert!(
+            observed.is_ok(),
+            "known profile-entry evidence must verify: {:?}",
+            observed.as_ref().err(),
+        );
+        let Ok(value) = observed else { return; };
+        value
+    }};
+}
+
+macro_rules! require_some {
+    ($expression:expr) => {{
+        let selected = $expression;
+        assert!(selected.is_some(), "expected bounded fixture prefix");
+        let Some(value) = selected else { return; };
+        value
+    }};
+}
+
+// A byte stream intentionally cycles every 256 source indices.
+fn cyclic_byte(index: usize) -> u8 {
+    u8::try_from(index.rem_euclid(256)).unwrap_or_default()
+}
+
 fn digest_hex(digest: Sha256Digest) -> String {
     let mut hex = String::with_capacity(64);
     for byte in digest.bytes() {
@@ -186,7 +214,7 @@ fn incremental_sha256_matches_known_vectors_and_exact_padding_boundaries() {
     }
     let mut million = ProfileSha256State::default();
     let chunk = [b'a'; 1000];
-    for _ in 0..1000 {
+    for _ in 0usize..1_000usize {
         assert_eq!(million.update(&chunk), Ok(()));
     }
     assert_eq!(
@@ -198,15 +226,15 @@ fn incremental_sha256_matches_known_vectors_and_exact_padding_boundaries() {
     // 55/56 and 63/64. Different input splittings must be indistinguishable.
     for length in 0usize..=256usize {
         let bytes = (0..length)
-            .map(|i| (i as u8).wrapping_mul(31))
+            .map(|i| cyclic_byte(i).wrapping_mul(31))
             .collect::<Vec<_>>();
         let expected = sha256_profile_bytes(&bytes);
         for split in 0..=length {
-            let (a, b) = bytes.split_at(split);
+            let (first, second) = bytes.split_at(split);
             let mut state = ProfileSha256State::new();
-            assert_eq!(state.update(a), Ok(()));
+            assert_eq!(state.update(first), Ok(()));
             assert_eq!(state.update(&[]), Ok(()));
-            assert_eq!(state.update(b), Ok(()));
+            assert_eq!(state.update(second), Ok(()));
             assert_eq!(
                 state.finish(),
                 expected,
@@ -223,7 +251,7 @@ fn incremental_sha256_preserves_empty_chunks_and_arbitrary_stride_splits() {
         128, 129, 1024, 4097,
     ] {
         let bytes = (0..length)
-            .map(|index| (index as u8).wrapping_mul(73).wrapping_add(17))
+            .map(|index| cyclic_byte(index).wrapping_mul(73).wrapping_add(17))
             .collect::<Vec<_>>();
         let expected = sha256_profile_bytes(&bytes);
         for stride in [
@@ -268,11 +296,10 @@ fn chunked_entry_verification_matches_exact_slice_evidence() {
         4_097,
     ] {
         let bytes = (0..length)
-            .map(|index| (index as u8).wrapping_mul(47).wrapping_add(3))
+            .map(|index| cyclic_byte(index).wrapping_mul(47).wrapping_add(3))
             .collect::<Vec<_>>();
         let entry = declaration(&bytes);
-        let expected = verify_profile_entry_bytes(&entry, &bytes)
-            .expect("complete in-memory bytes match declared digest");
+        let expected = require_ok!(verify_profile_entry_bytes(&entry, &bytes));
         for stride in [1usize, 2, 3, 7, 55, 56, 63, 64, 65, 127, 128, 1_023] {
             let parts = bytes.chunks(stride);
             assert_eq!(
@@ -291,19 +318,19 @@ fn chunked_entry_verification_rejects_length_before_bad_sha_digest() {
     let bytes = b"critical member bytes";
     let mut entry = declaration(bytes);
     entry.digest = sha256_profile_bytes(b"unrelated");
-    let short = [bytes.get(..7).expect("short prefix")];
+    let short = [require_some!(bytes.get(..7))];
     let observed_short = 7u64;
     assert_eq!(
         verify_profile_entry_chunks(&entry, short),
         Err(ProfileChunkVerificationError::Entry(
             ProfileEntryVerificationError::ByteLengthMismatch {
-                declared: bytes.len() as u64,
+                declared: u64::try_from(bytes.len()).unwrap_or(u64::MAX),
                 observed: observed_short,
             }
         ))
     );
 
-    let length = bytes.len() as u64;
+    let length = u64::try_from(bytes.len()).unwrap_or(u64::MAX);
     let oversized = [bytes.as_slice(), b"extra".as_slice()];
     assert_eq!(
         verify_profile_entry_chunks(&entry, oversized),
@@ -353,7 +380,10 @@ fn incremental_hasher_tracks_admitted_byte_length_including_pending_prefix() {
         let previous = state.bytes_hashed();
         let data = vec![0xabu8; size];
         assert_eq!(state.update(&data), Ok(()));
-        assert_eq!(state.bytes_hashed(), previous + size as u64);
+        assert_eq!(
+            state.bytes_hashed(),
+            previous + u64::try_from(size).unwrap_or(u64::MAX),
+        );
     }
 }
 
@@ -400,11 +430,10 @@ fn fallible_chunked_sha256_success_matches_infallible_and_slice_paths() {
     use std::io::ErrorKind;
     for length in [0usize, 1, 55, 56, 63, 64, 65, 127, 128, 129, 1023] {
         let bytes = (0..length)
-            .map(|index| (index as u8).wrapping_mul(37).wrapping_add(11))
+            .map(|index| cyclic_byte(index).wrapping_mul(37).wrapping_add(11))
             .collect::<Vec<_>>();
         let entry = declaration(&bytes);
-        let expected = verify_profile_entry_bytes(&entry, &bytes)
-            .expect("known declaration for complete bytes");
+        let expected = require_ok!(verify_profile_entry_bytes(&entry, &bytes));
         for stride in [1usize, 2, 7, 63, 64, 65, 128, 256] {
             let input = bytes.chunks(stride).map(Ok::<&[u8], ErrorKind>);
             assert_eq!(
@@ -513,11 +542,9 @@ fn sha256_message_length_arithmetic_rejects_exact_overflow_without_allocating()
 fn incremental_hash_state_debug_never_exposes_buffered_profile_bytes() {
     let secret = b"private-stroke-vector-5168";
     let mut hasher = ProfileSha256State::new();
-    hasher.update(secret).expect("first partial chunk");
+    assert_eq!(hasher.update(secret), Ok(()));
     let first = hasher;
-    hasher
-        .update(&[b'x'; 64])
-        .expect("cross one compression boundary");
+    assert_eq!(hasher.update(&[b'x'; 64]), Ok(()));
     let second = hasher;
     for state in [first, second] {
         for rendered in [format!("{state:?}"), format!("{state:#?}")] {
@@ -531,7 +558,10 @@ fn incremental_hash_state_debug_never_exposes_buffered_profile_bytes() {
     let mut expected = secret.to_vec();
     expected.extend_from_slice(&[b'x'; 64]);
     assert_eq!(second.finish(), sha256_profile_bytes(&expected));
-    assert_eq!(first.bytes_hashed(), secret.len() as u64);
+    assert_eq!(
+        first.bytes_hashed(),
+        u64::try_from(secret.len()).unwrap_or(u64::MAX),
+    );
 }
 
 #[test]
@@ -539,6 +569,9 @@ fn fallible_chunk_debug_redacts_arbitrary_transport_errors() {
     struct PrivateTransportFailure {
         selected_path: &'static str,
     }
+
+    type Failure =
+        ProfileFallibleChunkVerificationError<PrivateTransportFailure>;
 
     let entry = declaration(b"private member bytes");
     let source = [Err::<&[u8], _>(PrivateTransportFailure {
@@ -549,14 +582,15 @@ fn fallible_chunk_debug_redacts_arbitrary_transport_errors() {
         assert!(printed.contains("Input"));
         assert!(!printed.contains("private-reader-7591"));
     }
-    match outcome {
-        Err(ProfileFallibleChunkVerificationError::Input(reason)) => {
-            assert_eq!(reason.selected_path, "path/private-reader-7591");
-        }
-        other => panic!("expected typed source failure: {other:?}"),
-    }
-    type Failure =
-        ProfileFallibleChunkVerificationError<PrivateTransportFailure>;
+    assert!(
+        matches!(outcome, Err(ProfileFallibleChunkVerificationError::Input(_))),
+        "transport failure keeps its typed source cause",
+    );
+    let Err(ProfileFallibleChunkVerificationError::Input(reason)) = outcome
+    else {
+        return;
+    };
+    assert_eq!(reason.selected_path, "path/private-reader-7591");
     let verification = Failure::Verification(
         ProfileChunkVerificationError::Entry(
             ProfileEntryVerificationError::DigestMismatch,
