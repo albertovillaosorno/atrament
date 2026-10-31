@@ -4730,7 +4730,7 @@ test(
 );
 
 test(
-    "Firefox rejects compatible JSON mislabeled as an HTML handshake",
+    "Firefox rejects wrong-media handshake, then retries in the same tab",
     { skip: !FIREFOX_AVAILABLE, timeout: FIREFOX_CASE_TIMEOUT_MS },
     async () => {
         fs.mkdirSync(".temp", { recursive: true });
@@ -4774,16 +4774,25 @@ test(
             }
             assert.deepEqual(apiRequests, ["POST /api/handshake"]);
 
-            const secondTab = await bidi.command("browsingContext.create", {
-                type: "tab",
+            // Recover without reintroducing the scrubbed credential into
+            // any address bar or creating a new browsing context.
+            const retry = await bidi.command("script.evaluate", {
+                awaitPromise: false,
+                expression: `(() => {
+                    const control = document.getElementById("retry-session");
+                    if (control.disabled || control.hidden
+                        || control.textContent !== "Retry connection") {
+                        throw new Error("invalid handshake has no retry");
+                    }
+                    control.click();
+                    return true;
+                })()`,
+                resultOwnership: "none",
+                target: { context: firstTab.context },
             });
-            await bidi.command("browsingContext.navigate", {
-                context: secondTab.context,
-                url: `${origin}/#session=${REFRESH_SECRET}`,
-                wait: "complete",
-            });
+            assert.equal(retry.type, "success");
             const accepted = await waitForSessionStatus(
-                bidi, secondTab.context, "Session ready",
+                bidi, firstTab.context, "Session ready",
             );
             for (const field of ["task", "source", "candidate"]) {
                 assert.deepEqual(accepted[field], {
@@ -4809,7 +4818,7 @@ test(
 );
 
 test(
-    "Firefox refuses oversized handshake JSON before granting draft access",
+    "Firefox refuses oversized handshake JSON until in-tab retry",
     { skip: !FIREFOX_AVAILABLE, timeout: FIREFOX_CASE_TIMEOUT_MS },
     async () => {
         fs.mkdirSync(".temp", { recursive: true });
@@ -4853,16 +4862,25 @@ test(
             }
             assert.deepEqual(apiRequests, ["POST /api/handshake"]);
 
-            const secondTab = await bidi.command("browsingContext.create", {
-                type: "tab",
+            // Recover without reintroducing the scrubbed credential into
+            // any address bar or creating a new browsing context.
+            const retry = await bidi.command("script.evaluate", {
+                awaitPromise: false,
+                expression: `(() => {
+                    const control = document.getElementById("retry-session");
+                    if (control.disabled || control.hidden
+                        || control.textContent !== "Retry connection") {
+                        throw new Error("invalid handshake has no retry");
+                    }
+                    control.click();
+                    return true;
+                })()`,
+                resultOwnership: "none",
+                target: { context: firstTab.context },
             });
-            await bidi.command("browsingContext.navigate", {
-                context: secondTab.context,
-                url: `${origin}/#session=${REFRESH_SECRET}`,
-                wait: "complete",
-            });
+            assert.equal(retry.type, "success");
             const accepted = await waitForSessionStatus(
-                bidi, secondTab.context, "Session ready",
+                bidi, firstTab.context, "Session ready",
             );
             for (const field of ["task", "source", "candidate"]) {
                 assert.deepEqual(accepted[field], {

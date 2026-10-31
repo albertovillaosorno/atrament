@@ -185,8 +185,10 @@ media admission, mixed-case variants, missing declarations, and wrong charsets.
 
 A real Firefox fixture confirms a `200 text/html` handshake carrying valid
 compatible JSON leaves all draft fields blank and disabled, emits no draft
-reads, and consumes the launch fragment. A distinct new tab with a correctly
-declared JSON handshake then hydrates normally.
+reads, and consumes the launch fragment. The same tab now exposes an
+explicit connection retry while keeping editing disabled; clicking it obtains
+a correctly declared JSON handshake and hydrates all three fields without
+reintroducing the launch credential into a URL or making another document.
 
 This is client-side fail-closed transport evidence; it does not extend the
 backend's available capabilities or prove later notebook acceptance.
@@ -215,5 +217,11 @@ stream cancellation, malformed UTF-8 rejection, and exact-limit success. A
 runtime module fixture confirms an overlong compatible-looking handshake never
 grants draft access. Firefox independently refuses the overlong handshake with
 all draft fields disabled and no draft requests, then accepts a new correctly
-bounded handshake. This guards browser transport allocation and admission,
-not backend-issued notebook content or persistent state.
+bounded handshake via the same in-tab retry.
+
+A red-first browser-module regression separately pins connection retry after
+malformed or over-budget control JSON and wrong-media `200` and `409` bodies.
+Valid incompatible version responses remain terminal, and authorization
+failure still erases the session. This guards browser transport allocation,
+admission, and recoverability, not backend-issued notebook content or
+persistent state.

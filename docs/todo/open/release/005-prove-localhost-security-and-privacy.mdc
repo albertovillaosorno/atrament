@@ -39,11 +39,19 @@ names. Tabs, repeated spaces, trailing whitespace, and other methods or versions
 reject before routing.
 
 Browser privacy regression evidence also pins the generated workspace to exactly
-four admitted same-origin `fetch` call sites: handshake, draft read, draft write,
-and explicit session end. All four omit ambient credentials, reject redirects,
-and use no-store behavior. The three POSTs use origin-only referrers, while the
-read-only draft GET uses no-referrer. The generated module has no absolute
-HTTP(S), beacon, XHR, WebSocket, or EventSource transport path.
+four admitted same-origin `fetch` call sites: handshake, draft read,
+draft write, and explicit session end. All four omit ambient credentials,
+reject redirects, and use no-store behavior. The three POSTs use origin-only
+referrers, while the read-only draft GET uses no-referrer. The generated
+module has no absolute HTTP(S), beacon, XHR, WebSocket, or EventSource
+transport path.
+
+Malformed or misdeclared browser handshake responses cannot grant edit
+authority. The in-memory client now offers explicit same-tab retry on rejected
+`200`/`409` JSON metadata while preserving the fragment-free address bar;
+Firefox confirms wrong-media and oversized responses never request private
+drafts before a later valid handshake. This is client recovery evidence, not a
+change to the session's HTTP authentication rules.
 
 A source-level backend network-surface guard now requires every production
 `std::net` import to remain inside the loopback session runtime. Locked offline

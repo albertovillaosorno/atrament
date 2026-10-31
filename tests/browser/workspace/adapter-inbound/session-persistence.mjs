@@ -609,6 +609,7 @@ test("handshake response media is checked before JSON admission", async () => {
     ]) {
         let bodyReads = 0;
         let hydrations = 0;
+        const retries = [];
         const result = await runInNewContext(`
             (async () => {
                 const sessionSecret = "secret";
@@ -622,7 +623,7 @@ test("handshake response media is checked before JSON admission", async () => {
                         value === "application/json; charset=utf-8",
                 };
                 function hideSessionRetry() {}
-                function showSessionRetry() {}
+                function showSessionRetry(reason) { onRetry(reason); }
                 function setTextIfChanged(element, value) {
                     element.textContent = value;
                 }
@@ -634,6 +635,7 @@ test("handshake response media is checked before JSON admission", async () => {
             })()
         `, {
             hydrate: () => { hydrations += 1; },
+            onRetry: (reason) => retries.push(reason),
             fetch: async () => ({
                 status,
                 headers: { get: () => mediaType },
@@ -647,6 +649,8 @@ test("handshake response media is checked before JSON admission", async () => {
             `status=${status} media=${mediaType}`);
         assert.equal(bodyReads, allow ? 1 : 0,
             "misdeclared handshake bodies must not be parsed");
+        assert.deepEqual(retries, allow ? [] : ["connection"],
+            "invalid handshake must allow in-tab retry without admission");
         if (!allow) {
             assert.equal(result,
                 "Invalid backend handshake · editing disabled");
@@ -676,8 +680,10 @@ test("handshake overlong JSON cannot authorize draft hydration", async () => {
     for (const [payload, allowed] of [
         [valid, true],
         [valid + " ".repeat(16_385), false],
+        ["{invalid-json", false],
     ]) {
         let hydrations = 0;
+        const retries = [];
         const response = new Response(payload, {
             status: 200,
             headers: { "Content-Type": "application/json; charset=utf-8" },
@@ -697,7 +703,7 @@ test("handshake overlong JSON cannot authorize draft hydration", async () => {
                         value === "application/json; charset=utf-8",
                 };
                 function hideSessionRetry() {}
-                function showSessionRetry() {}
+                function showSessionRetry(reason) { onRetry(reason); }
                 function setTextIfChanged(element, value) {
                     element.textContent = value;
                 }
@@ -710,9 +716,12 @@ test("handshake overlong JSON cannot authorize draft hydration", async () => {
         `, {
             fetch: async () => response,
             hydrate: () => { hydrations += 1; },
+            onRetry: (reason) => retries.push(reason),
             parseBoundedJsonResponse,
         });
         assert.equal(hydrations, allowed ? 1 : 0);
+        assert.deepEqual(retries, allowed ? [] : ["connection"],
+            "bounded JSON failure must expose in-tab recovery");
         if (!allowed) {
             assert.equal(
                 status, "Invalid backend handshake · editing disabled",

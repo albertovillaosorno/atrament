@@ -445,6 +445,9 @@ async function completeSessionHandshake(secret) {
     if (!sessionHandshake.isHandshakeContentType(handshakeMediaType)) {
         const invalidMessage = "Invalid backend handshake · editing disabled";
         setTextIfChanged(sessionStatus, invalidMessage);
+        // A misrouted response is not compatibility authority. Keep editing
+        // disabled, but allow a fresh handshake within the same live session.
+        showSessionRetry("connection");
         return;
     }
     let payload;
@@ -474,6 +477,9 @@ async function completeSessionHandshake(secret) {
     }
     const invalidMessage = "Invalid backend handshake · editing disabled";
     setTextIfChanged(sessionStatus, invalidMessage);
+    // Malformed or over-budget JSON may be transient. A retry revalidates
+    // compatibility without restoring the scrubbed launch fragment.
+    showSessionRetry("connection");
 }
 const failedDraftFields = new Set();
 const retryableDraftFields = new Set();
