@@ -123,6 +123,12 @@ malformed trailing escapes, and clears the fragment without authenticating.
 Unrelated navigation fragments remain unchanged at startup; this is URL hygiene,
 not a claim that malformed aliases can authorize a session.
 
+A real Firefox navigation fixture now loads encoded, percent-encoded prefix,
+and uppercase credential aliases through distinct browsing contexts. It
+confirms the actual address bar has no fragment, every private draft control
+remains blank and disabled, and no handshake or draft API request occurs.
+Reloading the scrubbed tab still cannot obtain session authority.
+
 The authenticated draft replacement transport now requires exactly one
 `Content-Type: text/plain; charset=utf-8` field before it decodes and replaces
 session text. A red-first adapter regression proved previously admitted POSTs

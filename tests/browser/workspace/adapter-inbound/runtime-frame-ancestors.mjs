@@ -4665,6 +4665,81 @@ test(
 );
 
 test(
+    "Firefox scrubs encoded session aliases without authorization",
+    { skip: !FIREFOX_AVAILABLE, timeout: FIREFOX_CASE_TIMEOUT_MS },
+    async () => {
+        fs.mkdirSync(".temp", { recursive: true });
+        const profile = fs.mkdtempSync(".temp/session-encoded-alias-");
+        const apiRequests = [];
+        const server = createSessionFixtureServer(apiRequests);
+        const children = [];
+        let bidi;
+        try {
+            server.listen(0, "127.0.0.1");
+            await once(server, "listening");
+            const address = server.address();
+            assert.notEqual(typeof address, "string");
+            assert.notEqual(address, null);
+            const origin = `http://127.0.0.1:${address.port}`;
+
+            bidi = await startBidiFirefox(profile, children);
+            const aliases = [
+                `#session%3D${REFRESH_SECRET}`,
+                `#%73ession=${REFRESH_SECRET}`,
+                `#SESSION=${REFRESH_SECRET}`,
+            ];
+            let firstTab = null;
+            for (const hash of aliases) {
+                const tab = await bidi.command("browsingContext.create", {
+                    type: "tab",
+                });
+                firstTab ??= tab.context;
+                await bidi.command("browsingContext.navigate", {
+                    context: tab.context,
+                    url: `${origin}/${hash}`,
+                    wait: "complete",
+                });
+                const disabled = await waitForSessionStatus(
+                    bidi,
+                    tab.context,
+                    "Frontend ready · credential unavailable",
+                );
+                assert.equal(disabled.hash, "", `alias ${hash} remains in URL`);
+                for (const field of ["task", "source", "candidate"]) {
+                    assert.deepEqual(disabled[field], {
+                        disabled: true, value: "",
+                    });
+                }
+                assert.deepEqual(
+                    apiRequests,
+                    [],
+                    "alias must not authenticate",
+                );
+            }
+            assert.notEqual(firstTab, null);
+            await bidi.command("browsingContext.reload", {
+                context: firstTab,
+                wait: "complete",
+            });
+            const refreshed = await waitForSessionStatus(
+                bidi,
+                firstTab,
+                "Frontend ready · credential unavailable",
+            );
+            assert.equal(refreshed.hash, "");
+            assert.deepEqual(apiRequests, [], "refresh must not authenticate");
+        } finally {
+            bidi?.close();
+            await closeFixtureServer(server);
+            for (const child of children.reverse()) {
+                await stopChild(child);
+            }
+            fs.rmSync(profile, { recursive: true, force: true });
+        }
+    },
+);
+
+test(
     "Firefox retries a newer draft after an obsolete resource limit",
     { skip: !FIREFOX_AVAILABLE, timeout: FIREFOX_CASE_TIMEOUT_MS },
     async () => {
