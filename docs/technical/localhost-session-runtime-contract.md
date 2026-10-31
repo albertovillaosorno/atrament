@@ -110,11 +110,22 @@ not reflect arbitrary request origins, admit wildcard origins, or accept browser
 mutation through form-compatible endpoints that another local or remote page
 could trigger without the application client.
 
-Every runtime response also carries
-`Content-Security-Policy: frame-ancestors 'none'` and
-`Referrer-Policy: no-referrer`. A real Firefox fixture must be able to load the
-workspace directly while a distinct loopback origin fails to embed the same
-resource as a frame.
+Every runtime response carries an HTTP `Content-Security-Policy` header,
+not merely an HTML meta policy. It forbids framing with
+`frame-ancestors 'none'`, uses `default-src 'self'`, and restricts scripts,
+styles, and connections to `'self'`. It forbids base URL overrides, form
+submission, fonts, child frames, manifests, media, objects, and workers;
+images allow only `'self'` and `data:`. The document meta CSP must match these
+resource directives and cannot substitute for the HTTP header.
+
+Every response also carries `Referrer-Policy: no-referrer`.
+
+A real Firefox fixture must load the workspace directly while a distinct
+loopback origin cannot embed it. A separate header-only document must refuse
+cross-origin scripts, images and stylesheets, inserted inline scripts, and
+hostile base URL changes; an unprotected control must allow the same probes.
+These checks establish browser enforcement, not browser-opener credential
+secrecy or general host process isolation.
 
 Without a session credential, the active scripted workspace loads exactly the
 document, stylesheet, main module, and four generated support modules from the
