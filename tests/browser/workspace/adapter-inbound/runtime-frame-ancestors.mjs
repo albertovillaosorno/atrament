@@ -1566,6 +1566,7 @@ function createSessionFixtureServer(
     onSessionEnd = null,
     onHandshake = null,
     onDraftRead = null,
+    onDraftContentType = null,
 ) {
     const generated = new Set([
         "main.js",
@@ -1678,9 +1679,11 @@ function createSessionFixtureServer(
                 return;
             }
             const status = onDraftRead?.(field) ?? 200;
+            const contentType = onDraftContentType?.(field)
+                ?? "text/plain; charset=utf-8";
             response.writeHead(status, {
                 "Cache-Control": "no-store",
-                "Content-Type": "text/plain; charset=utf-8",
+                "Content-Type": contentType,
             });
             response.end(status === 200 ? REFRESH_DRAFT[field] : "");
             return;
@@ -4566,6 +4569,105 @@ test(
                 "POST /api/session/task",
                 "POST /api/session/task",
                 "POST /api/session/task",
+            ]);
+        } finally {
+            bidi?.close();
+            await closeFixtureServer(server);
+            for (const child of children.reverse()) {
+                await stopChild(child);
+            }
+            fs.rmSync(profile, { recursive: true, force: true });
+        }
+    },
+);
+
+test(
+    "Firefox rejects wrong draft media then hydrates on valid retry",
+    { skip: !FIREFOX_AVAILABLE, timeout: FIREFOX_CASE_TIMEOUT_MS },
+    async () => {
+        fs.mkdirSync(".temp", { recursive: true });
+        const profile = fs.mkdtempSync(".temp/session-draft-media-");
+        const apiRequests = [];
+        let sourceReads = 0;
+        const server = createSessionFixtureServer(
+            apiRequests,
+            null,
+            null,
+            null,
+            null,
+            (field) => field === "source" && ++sourceReads === 1
+                ? "text/html; charset=utf-8"
+                : "text/plain; charset=utf-8",
+        );
+        const children = [];
+        let bidi;
+        try {
+            server.listen(0, "127.0.0.1");
+            await once(server, "listening");
+            const address = server.address();
+            assert.notEqual(typeof address, "string");
+            assert.notEqual(address, null);
+            const origin = `http://127.0.0.1:${address.port}`;
+
+            bidi = await startBidiFirefox(profile, children);
+            const tab = await bidi.command("browsingContext.create", {
+                type: "tab",
+            });
+            await bidi.command("browsingContext.navigate", {
+                context: tab.context,
+                url: `${origin}/#session=${REFRESH_SECRET}`,
+                wait: "complete",
+            });
+            const rejected = await waitForSessionStatus(
+                bidi, tab.context, "Draft load rejected · editing off",
+            );
+            assert.equal(rejected.hash, "");
+            for (const field of ["task", "source", "candidate"]) {
+                assert.deepEqual(rejected[field], {
+                    disabled: true, value: "",
+                });
+            }
+            assert.deepEqual(apiRequests, [
+                "POST /api/handshake",
+                "GET /api/session/task",
+                "GET /api/session/source",
+            ]);
+            const retry = await bidi.command("script.evaluate", {
+                awaitPromise: false,
+                expression: `(() => {
+                    const control = document.getElementById("retry-session");
+                    const visible = !control.hidden && !control.disabled;
+                    if (visible) control.click();
+                    return JSON.stringify({
+                        visible,
+                        label: control.textContent,
+                    });
+                })()`,
+                resultOwnership: "none",
+                target: { context: tab.context },
+            });
+            assert.equal(retry.type, "success");
+            assert.deepEqual(JSON.parse(retry.result.value), {
+                visible: true, label: "Retry connection",
+            });
+
+            const ready = await waitForSessionStatus(
+                bidi, tab.context, "Session ready",
+            );
+            for (const field of ["task", "source", "candidate"]) {
+                assert.deepEqual(ready[field], {
+                    disabled: false, value: REFRESH_DRAFT[field],
+                });
+            }
+            assert.equal(sourceReads, 2);
+            assert.deepEqual(apiRequests, [
+                "POST /api/handshake",
+                "GET /api/session/task",
+                "GET /api/session/source",
+                "POST /api/handshake",
+                "GET /api/session/task",
+                "GET /api/session/source",
+                "GET /api/session/candidate",
             ]);
         } finally {
             bidi?.close();

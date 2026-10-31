@@ -125,6 +125,13 @@ Hydration leaves all three inputs disabled
 until every field passes and can never apply a partial snapshot. The independent
 browser transport fixture also pins case-insensitive exact media admission.
 
+A real Firefox loopback fixture now returns an HTML media type with a
+successful status for the source draft after the task draft has arrived. It
+verifies the complete three-field snapshot stays blank and disabled, the
+candidate field is not requested, and a later valid-media retry hydrates all
+fields. This covers browser network and DOM behavior beyond the isolated parser
+fixture.
+
 The end confirmation can be cancelled by Escape or by moving focus away from
 its button, preventing a stale armed action. An authenticated end returning
 `401` now invalidates browser authority and clears private draft fields. A
