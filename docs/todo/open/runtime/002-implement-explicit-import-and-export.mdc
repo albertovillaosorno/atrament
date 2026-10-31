@@ -50,8 +50,9 @@ caller-supplied OS argument selections, no-symlink verified source opening,
 full ZIP/manifest/SHA and bounded JSON section verification, in-memory
 canonical reassembly, and a synced atomic file commit. It preserves unknown
 optional features and opaque asset contents; it never extracts archive paths
-as filesystem paths. The default command preserves any existing target. An
-explicit positional `--replace` instruction independently authorizes atomic
+as filesystem paths. The default command preserves any existing target.
+
+An explicit positional `--replace` instruction independently authorizes atomic
 replacement of a selected regular target (including the selected source)
 with complete verified bytes, or creation of an absent target; invalid source
 input refuses before any target effect, and no symlink is followed.
@@ -75,7 +76,8 @@ explicit replacement of a prior target, self-target repack, malformed-source
 replacement refusal with exact target preservation, symlink-victim refusal,
 non-UTF8 selected target creation and replacement in explicit mode, and extra
 argument refusal before any source opening. They establish local CLI intent
-only, not session Export authorization.
+only, not session Export authorization. Separate explicit-replacement CLI cases
+refuse directory targets and symlinked parent directories before writing.
 
 Current export design evidence freezes accepted-revision binding, caller-owned
 or explicit host-policy output intent, explicit path and overwrite behavior,

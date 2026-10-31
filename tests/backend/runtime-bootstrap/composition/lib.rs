@@ -111,6 +111,30 @@ impl Drop for OwnedProfileDestination {
     }
 }
 
+/// Own only the exact temporary directory created by this test.
+#[cfg(target_os = "linux")]
+struct OwnedProfileDirectory(PathBuf);
+
+#[cfg(target_os = "linux")]
+impl OwnedProfileDirectory {
+    #[expect(
+        clippy::create_dir,
+        reason = "fixture must refuse an existing directory, not reuse it"
+    )]
+    fn new(path: PathBuf) -> Self {
+        fs::create_dir(&path).expect("create test-owned directory");
+        Self(path)
+    }
+}
+
+#[cfg(target_os = "linux")]
+impl Drop for OwnedProfileDirectory {
+    fn drop(&mut self) {
+        fs::remove_dir(&self.0)
+            .expect("remove empty test-owned directory");
+    }
+}
+
 fn assert_recovery_error_is_secret_free(launch_error: &LaunchError) {
     let error = bootstrap::browser_launch_failure(launch_error);
     let message = error.to_string();
@@ -823,6 +847,78 @@ fn cli_repack_replace_refuses_invalid_source_without_touching_target() {
     ] {
         assert!(!stderr.contains(private));
     }
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn cli_repack_replace_refuses_directory_target_without_modification() {
+    let section = br#"{"secret":"directory-refusal-5915"}"#;
+    let source = OwnedProfileFile::new(&profile_zip(
+        section, b"opaque-directory-9343", section,
+    ));
+    let target = OwnedProfileDirectory::new(
+        source.0.with_extension("existing-directory"),
+    );
+    let output = Command::new(env!("CARGO_BIN_EXE_atrament"))
+        .args(["profile", "repack", "--replace"])
+        .arg(&source.0)
+        .arg(&target.0)
+        .output()
+        .expect("attempt directory replacement");
+    assert!(!output.status.success());
+    assert!(output.stdout.is_empty());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("InvalidExistingTarget"));
+    assert!(!stderr.contains("directory-refusal-5915"));
+    assert!(!stderr.contains("opaque-directory-9343"));
+    assert!(target.0.is_dir());
+    assert_eq!(
+        fs::read_dir(&target.0).expect("unchanged directory").count(),
+        0,
+    );
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn cli_repack_replace_refuses_symlinked_parent_before_writing() {
+    use std::os::unix::fs::symlink;
+
+    let section = br#"{"secret":"ancestor-refusal-7586"}"#;
+    let source = OwnedProfileFile::new(&profile_zip(
+        section, b"opaque-ancestor-2327", section,
+    ));
+    let actual_directory = OwnedProfileDirectory::new(
+        source.0.with_extension("real-parent"),
+    );
+    let alias = OwnedProfileDestination(
+        source.0.with_extension("linked-parent"),
+    );
+    symlink(&actual_directory.0, &alias.0)
+        .expect("link to test-owned selected parent");
+    let target = alias.0.join("new-profile.atrament");
+    let output = Command::new(env!("CARGO_BIN_EXE_atrament"))
+        .args(["profile", "repack", "--replace"])
+        .arg(&source.0)
+        .arg(&target)
+        .output()
+        .expect("attempt forbidden symlink ancestor");
+    assert!(!output.status.success());
+    assert!(output.stdout.is_empty());
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(stderr.contains("profile repack target refused"));
+    assert!(!stderr.contains("ancestor-refusal-7586"));
+    assert!(!stderr.contains("opaque-ancestor-2327"));
+    assert!(!target.exists());
+    assert!(actual_directory.0.is_dir());
+    assert_eq!(
+        fs::read_dir(&actual_directory.0)
+            .expect("linked directory remains untouched").count(),
+        0,
+    );
+    assert_eq!(
+        fs::read_link(&alias.0).expect("ancestor remains a symlink"),
+        actual_directory.0,
+    );
 }
 
 #[cfg(target_os = "linux")]
