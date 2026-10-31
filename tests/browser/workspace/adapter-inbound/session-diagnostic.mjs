@@ -184,7 +184,8 @@ test("diagnostic admission limits item work before inspecting entries", () => {
     assert.notEqual(guardedMetadata?.items, guardedLength,
         "admitted metadata must not retain a caller-owned array");
     assert.equal(guardedMetadata?.items.length, 1);
-    assert.equal(guardedMetadata?.items[0], item);
+    assert.notEqual(guardedMetadata?.items[0], item);
+    assert.deepEqual(guardedMetadata?.items[0], item);
     assert.equal(lengthReads, 0, "array length admission must read own data");
 
     // Changes to an original array slot after validation cannot change the
@@ -192,7 +193,73 @@ test("diagnostic admission limits item work before inspecting entries", () => {
     const mutableItems = [item];
     const admitted = parseDiagnosticSet(payload(mutableItems));
     mutableItems[0] = { code: "unrelated" };
-    assert.equal(admitted?.items[0], item);
+    assert.notEqual(admitted?.items[0], item);
+    assert.deepEqual(admitted?.items[0], item);
+});
+
+test("diagnostic admission snapshots each verified item object", () => {
+    const item = {
+        code: "atrament.example.condition",
+        dimension: "prompt",
+        expected: "atrament.prompt/1",
+        detail: 42,
+    };
+    const parsed = parseDiagnosticSet({
+        version: DIAGNOSTIC_VERSION,
+        completeness: "complete",
+        items: [item],
+    });
+    assert.notEqual(parsed?.items[0], item);
+    item.code = "changed";
+    item.dimension = "renderer";
+    item.expected = "changed";
+    item.detail = 0;
+    assert.deepEqual(parsed?.items[0], {
+        code: "atrament.example.condition",
+        dimension: "prompt",
+        expected: "atrament.prompt/1",
+        detail: 42,
+    });
+});
+
+test("diagnostic item snapshots reject unbounded or accessor fields", () => {
+    const payload = (item) => ({
+        version: DIAGNOSTIC_VERSION,
+        completeness: "complete",
+        items: [item],
+    });
+    const atLimit = { code: "atrament.example.condition" };
+    for (let index = 1; index < 128; index += 1) {
+        atLimit[`detail-${index}`] = index;
+    }
+    assert.equal(Object.keys(atLimit).length, 128);
+    assert.equal(parseDiagnosticSet(payload(atLimit))?.items.length, 1);
+    assert.equal(
+        parseDiagnosticSet(payload({ ...atLimit, overflow: true })), null,
+    );
+
+    let getterReads = 0;
+    const withAccessor = { code: "atrament.example.condition" };
+    Object.defineProperty(withAccessor, "detail", {
+        enumerable: true,
+        get() {
+            getterReads += 1;
+            return "not decoded JSON";
+        },
+    });
+    assert.equal(parseDiagnosticSet(payload(withAccessor)), null);
+    assert.equal(getterReads, 0);
+    assert.equal(parseDiagnosticSet(payload({
+        code: "atrament.example.condition",
+        [Symbol("not JSON")]: 1,
+    })), null);
+
+    const throwingKeys = new Proxy({
+        code: "atrament.example.condition",
+    }, {
+        ownKeys() { throw Error("invalid item keys"); },
+    });
+    assert.equal(parseDiagnosticSet(payload(throwingKeys)), null);
 });
 
 test("diagnostic metadata requires own wire fields", () => {

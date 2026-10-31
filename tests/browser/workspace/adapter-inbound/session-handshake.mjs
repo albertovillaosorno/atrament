@@ -147,6 +147,39 @@ test("handshake mismatch ignores input-array property getters", () => {
     assert.equal(reads, 0, "validated array slots must be owned snapshots");
 });
 
+test("handshake reads each diagnostic property only once", () => {
+    let codeReads = 0;
+    const item = new Proxy({
+        code: "atrament.handshake.version-mismatch",
+        dimension: "prompt",
+        expected: CURRENT_VERSIONS.prompt,
+    }, {
+        getOwnPropertyDescriptor(target, key) {
+            if (key === "code") {
+                codeReads += 1;
+                if (codeReads > 1) {
+                    throw Error("handshake reread untrusted diagnostic code");
+                }
+            }
+            return Reflect.getOwnPropertyDescriptor(target, key);
+        },
+    });
+    const result = parseHandshakePayload({
+        result: "incompatible",
+        diagnostics: {
+            version: "atrament.diagnostic/1",
+            completeness: "complete",
+            items: [item],
+        },
+    });
+    assert.deepEqual(result, {
+        kind: "incompatible",
+        dimension: "prompt",
+        expected: CURRENT_VERSIONS.prompt,
+    });
+    assert.equal(codeReads, 1);
+});
+
 test("typed incompatibility requires the dimension's current version", () => {
     for (const expected of [
         "arbitrary-version",

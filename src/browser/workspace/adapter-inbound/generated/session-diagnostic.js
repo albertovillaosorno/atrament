@@ -34,6 +34,7 @@ export const DIAGNOSTIC_VERSION = "atrament.diagnostic/1";
 // Browser metadata is explanatory, not an unbounded decoded JSON work queue.
 // Current handshake and draft transports emit exactly one diagnostic each.
 const MAX_DIAGNOSTIC_ITEMS = 128;
+const MAX_DIAGNOSTIC_ITEM_FIELDS = 128;
 function isRecord(value) {
     return typeof value === "object"
         && value !== null
@@ -50,12 +51,45 @@ export function ownDataField(value, field) {
 function isCompleteness(value) {
     return value === "complete" || value === "incomplete";
 }
-function isDiagnosticItem(value) {
+function admittedDiagnosticItem(value) {
     if (!isRecord(value)) {
-        return false;
+        return null;
     }
-    const code = ownDataField(value, "code");
-    return typeof code === "string" && code !== "";
+    // Copy own data descriptors, not the caller's object. Later consumers
+    // must not reenter Proxy traps or observe field changes after admission.
+    // A decoded JSON item has only string-keyed data fields; bound the work
+    // per item as well as the number of items.
+    try {
+        const fields = Reflect.ownKeys(value);
+        if (fields.length > MAX_DIAGNOSTIC_ITEM_FIELDS) {
+            return null;
+        }
+        const snapshot = {};
+        for (const field of fields) {
+            if (typeof field !== "string") {
+                return null;
+            }
+            const descriptor = Object.getOwnPropertyDescriptor(value, field);
+            if (descriptor === undefined
+                || !Object.hasOwn(descriptor, "value")) {
+                return null;
+            }
+            Object.defineProperty(snapshot, field, {
+                value: descriptor.value,
+                enumerable: descriptor.enumerable === true,
+                configurable: true,
+                writable: true,
+            });
+        }
+        const code = ownDataField(snapshot, "code");
+        return typeof code === "string" && code !== ""
+            ? snapshot
+            : null;
+    }
+    catch {
+        // In-process traps have no authority to break diagnostic admission.
+        return null;
+    }
 }
 function admittedDiagnosticItems(items) {
     // Avoid property getters even when an in-process caller wraps its Array.
@@ -67,13 +101,11 @@ function admittedDiagnosticItems(items) {
         || length > MAX_DIAGNOSTIC_ITEMS) {
         return null;
     }
-    // The route consumers read `items[0]` directly. Return a snapshot so
-    // subsequent access cannot invoke a Proxy getter on the input array or
-    // observe a changed source slot after validation.
+    // Both the collection and its item records must be owned snapshots.
     const admitted = [];
     for (let index = 0; index < length; index += 1) {
-        const item = ownDataField(items, String(index));
-        if (!isDiagnosticItem(item)) {
+        const item = admittedDiagnosticItem(ownDataField(items, String(index)));
+        if (item === null) {
             return null;
         }
         admitted.push(item);

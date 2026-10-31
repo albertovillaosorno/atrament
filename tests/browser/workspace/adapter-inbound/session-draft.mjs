@@ -105,6 +105,32 @@ test("draft resource limit requires current shared diagnostic metadata", () => {
     );
 });
 
+test("draft parses diagnostic item fields without rereading proxies", () => {
+    let codeReads = 0;
+    const item = new Proxy({
+        code: "atrament.session-draft.resource-limit",
+    }, {
+        getOwnPropertyDescriptor(target, key) {
+            if (key === "code") {
+                codeReads += 1;
+                if (codeReads > 1) {
+                    throw Error("draft reread untrusted diagnostic code");
+                }
+            }
+            return Reflect.getOwnPropertyDescriptor(target, key);
+        },
+    });
+    assert.equal(isResourceLimit({
+        error: "resource_limit",
+        diagnostics: {
+            version: "atrament.diagnostic/1",
+            completeness: "complete",
+            items: [item],
+        },
+    }), true);
+    assert.equal(codeReads, 1);
+});
+
 test("incomplete draft diagnostics still preserve known resource limit", () => {
     assert.equal(
         isResourceLimit({

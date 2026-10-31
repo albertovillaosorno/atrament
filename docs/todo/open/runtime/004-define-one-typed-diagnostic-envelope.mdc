@@ -128,3 +128,14 @@ The parser now copies at most 128 admitted item references into a fresh array,
 so subsequent array-slot changes to the caller's collection do not affect
 transport classification. Item object fields still use descriptor-only reads;
 this does not turn arbitrary in-process objects into network-origin evidence.
+
+The browser parser now copies each admitted diagnostic item into an owned
+record, not merely an owned items array. Red-first handshake and draft tests
+showed that rereading a retained in-process Proxy's `code` descriptor could
+throw after initial admission; a direct parser test showed mutable item fields
+could change the earlier result. Snapshotting own data descriptors once avoids
+both paths, retains ordinary JSON metadata, and refuses accessor-only fields.
+
+Each item is limited to 128 own string fields in addition to the existing
+128-item collection cap. This is a browser in-process integrity and work bound,
+not remote JSON security evidence or complete diagnostic schema validation.
