@@ -52,7 +52,7 @@ const RESULTS: [DerivedOutputResultClass; 11] = [
     DerivedOutputResultClass::StaleOrUnavailableRevision,
 ];
 
-fn expected(
+const fn expected(
     result: DerivedOutputResultClass,
 ) -> Option<AutonomousDerivedOutputGuidance> {
     match result {
@@ -84,7 +84,7 @@ fn expected(
 
 #[test]
 fn all_11_output_results_match_frozen_partial_guidance() {
-    let mut classified = 0_usize;
+    let mut classified = 0usize;
     for result in RESULTS {
         let expected = expected(result);
         assert_eq!(autonomous_derived_output_guidance(result), expected);

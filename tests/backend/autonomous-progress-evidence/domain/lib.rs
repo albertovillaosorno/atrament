@@ -49,7 +49,7 @@ const EVIDENCE: [AutonomousProgressEvidenceClass; 9] = [
     AutonomousProgressEvidenceClass::StableBlockingDiagnosticRepeated,
 ];
 
-fn expected(
+const fn expected(
     evidence: AutonomousProgressEvidenceClass,
 ) -> AutonomousProgressDisposition {
     match evidence {
@@ -71,8 +71,8 @@ fn expected(
 
 #[test]
 fn all_nine_frozen_evidence_classes_match_progress_oracle() {
-    let mut progress = 0_usize;
-    let mut non_progress = 0_usize;
+    let mut progress = 0usize;
+    let mut non_progress = 0usize;
     for evidence in EVIDENCE {
         let expected = expected(evidence);
         assert_eq!(autonomous_progress_disposition(evidence), expected);

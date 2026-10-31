@@ -66,8 +66,8 @@ fn expected(
 
 #[test]
 fn all_six_completion_combinations_match_frozen_conjunction() {
-    let mut combinations = 0_usize;
-    let mut completions = 0_usize;
+    let mut combinations = 0usize;
+    let mut completions = 0usize;
     for semantic in SEMANTICS {
         for output in OUTPUTS {
             let expected = expected(semantic, output);
@@ -94,7 +94,7 @@ fn requested_output_aggregation_requires_every_requested_item_complete() {
         AutonomousRequestedOutputCompletion::NotRequested
     );
 
-    let mut cases = 1_usize;
+    let mut cases = 1usize;
     for first in [Complete, Incomplete] {
         for second in [Complete, Incomplete] {
             for third in [Complete, Incomplete] {

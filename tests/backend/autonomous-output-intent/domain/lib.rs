@@ -79,7 +79,7 @@ fn expected(
 
 #[test]
 fn all_nine_source_output_pairs_match_frozen_intent_authority() {
-    let mut cases = 0_usize;
+    let mut cases = 0usize;
     for source in SOURCES {
         for output in OUTPUTS {
             assert_eq!(
@@ -109,13 +109,17 @@ fn autonomous_export_requires_independent_goal_and_selected_path_intent() {
     for goal_source in SOURCES {
         for purpose in purposes {
             for origin in origins {
-                let intent = classify_explicit_file_path_intent(
+                let actual = classify_explicit_file_path_intent(
                     purpose,
                     origin,
                     PathBuf::from("one-explicit-file.atrament"),
                     ExplicitOverwriteIntent::PreserveExisting,
                 )
-                .expect("independently selected file classifies");
+                .map(|intent| {
+                    autonomous_export_path_intent_admission(
+                        goal_source, &intent,
+                    )
+                });
                 let expected = if purpose.is_export()
                     && !matches!(
                         goal_source,
@@ -127,10 +131,8 @@ fn autonomous_export_requires_independent_goal_and_selected_path_intent() {
                     AutonomousOutputIntentAdmission::NotAdmitted
                 };
                 assert_eq!(
-                    autonomous_export_path_intent_admission(
-                        goal_source, &intent,
-                    ),
-                    expected,
+                    actual,
+                    Ok(expected),
                     "goal={goal_source:?} file={purpose:?} origin={origin:?}",
                 );
                 cases += 1;

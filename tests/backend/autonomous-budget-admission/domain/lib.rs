@@ -83,13 +83,13 @@ fn expected(exhausted: &[AutonomousBudgetClass]) -> AutonomousBudgetAdmission {
 
 #[test]
 fn all_32_budget_masks_match_independent_stop_oracle() {
-    let mut cases = 0_usize;
-    for mask in 0_u8..32 {
+    let mut cases = 0usize;
+    for mask in 0u8..32 {
         let exhausted: Vec<_> = BUDGETS
             .into_iter()
             .enumerate()
             .filter_map(|(index, budget)| {
-                (mask & (1_u8 << index) != 0).then_some(budget)
+                (mask & (1u8 << index) != 0).then_some(budget)
             })
             .collect();
         assert_eq!(

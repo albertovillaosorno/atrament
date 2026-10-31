@@ -45,7 +45,7 @@ const TERMINALS: [AutonomousGoalTerminalClass; 5] = [
     AutonomousGoalTerminalClass::StoppedUnresolvedEvidence,
 ];
 
-fn expected(
+const fn expected(
     terminal: AutonomousGoalTerminalClass,
 ) -> AutonomousGoalTerminalDisposition {
     match terminal {
@@ -63,8 +63,8 @@ fn expected(
 
 #[test]
 fn all_five_terminal_classes_preserve_completion_distinction() {
-    let mut completed = 0_usize;
-    let mut stopped = 0_usize;
+    let mut completed = 0usize;
+    let mut stopped = 0usize;
     for terminal in TERMINALS {
         let expected = expected(terminal);
         assert_eq!(autonomous_goal_terminal_disposition(terminal), expected);
