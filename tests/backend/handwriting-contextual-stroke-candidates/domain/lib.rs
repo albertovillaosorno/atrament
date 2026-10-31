@@ -33,6 +33,13 @@
 
 //! Handwriting contextual stroke candidates domain regression tests.
 
+#![expect(
+    clippy::expect_used,
+    reason = "fail-fast exact candidate fixture expectations"
+)]
+
+use std::ptr;
+
 use atrament_handwriting_contextual_stroke_candidates::{
     ContextualStrokeCandidate, ContextualStrokeCandidateIdentityError,
     ContextualStrokePlanningInput, StrokePlanningContext,
@@ -59,7 +66,10 @@ type Context = StrokePlanningContext<
     &'static str,
 >;
 
-fn candidate(candidate_identity: u16, payload: &'static str) -> Candidate {
+const fn candidate(
+    candidate_identity: u16,
+    payload: &'static str,
+) -> Candidate {
     ContextualStrokeCandidate {
         candidate_identity,
         character_intent: "n",
@@ -71,7 +81,7 @@ fn candidate(candidate_identity: u16, payload: &'static str) -> Candidate {
     }
 }
 
-fn context() -> Context {
+const fn context() -> Context {
     StrokePlanningContext {
         line_geometry: "baseline-3",
         neighboring_graphemes: ("a", "d"),
@@ -109,9 +119,30 @@ fn planning_input_preserves_caller_candidate_order_without_selection() {
         candidates: vec![candidate(2, "variant-b"), candidate(1, "variant-a")],
         context: context(),
     };
-    assert_eq!(input.candidates[0].candidate_identity, 2);
-    assert_eq!(input.candidates[1].candidate_identity, 1);
-    assert_eq!(input.candidates[0].stroke_payload, "variant-b");
+    assert_eq!(
+        input
+            .candidates
+            .first()
+            .expect("two candidates")
+            .candidate_identity,
+        2
+    );
+    assert_eq!(
+        input
+            .candidates
+            .get(1)
+            .expect("two candidates")
+            .candidate_identity,
+        1
+    );
+    assert_eq!(
+        input
+            .candidates
+            .first()
+            .expect("two candidates")
+            .stroke_payload,
+        "variant-b"
+    );
 }
 
 #[test]
@@ -131,11 +162,18 @@ fn complete_planning_input_explicitly_validates_candidate_addressing() {
     assert_eq!(validate_contextual_stroke_planning_input(&valid), Ok(()));
     let validated = validate_contextual_stroke_planning_input_view(&valid)
         .expect("unique candidates seal exact planning input");
-    assert!(std::ptr::eq(validated.input(), &valid));
-    assert!(std::ptr::eq(validated.context(), &valid.context));
+    assert!(ptr::eq(validated.input(), &raw const valid));
+    assert!(ptr::eq(validated.context(), &raw const valid.context));
     assert_eq!(validated.candidates(), valid.candidates.as_slice());
     assert_eq!(valid.context, context());
-    assert_eq!(valid.candidates[0].candidate_identity, 2);
+    assert_eq!(
+        valid
+            .candidates
+            .first()
+            .expect("two candidates")
+            .candidate_identity,
+        2
+    );
 
     let duplicate = ContextualStrokePlanningInput {
         candidates: vec![
@@ -187,31 +225,40 @@ fn duplicate_candidate_identity_reports_earliest_prior_owner() {
 
 #[test]
 fn all_three_identity_sequences_through_length_six_match_oracle() {
-    let mut cases = 0_u16;
+    let mut cases = 0u16;
     let mut saw_unique = false;
     let mut saw_duplicate = false;
-    for length in 0_u32..=6 {
-        for encoded in 0_u32..3_u32.pow(length) {
+    for length in 0u32..=6 {
+        for encoded in 0u32..3u32.pow(length) {
             let mut state = encoded;
             let mut identities = Vec::new();
             let mut candidates = Vec::new();
             for index in 0..length {
-                let identity = (state % 3) as u16;
-                state /= 3;
+                let identity =
+                    u16::try_from(state.checked_rem(3).expect("nonzero radix"))
+                        .expect("three identities fit u16");
+                state = state.checked_div(3).expect("nonzero radix");
                 identities.push(identity);
                 candidates.push(candidate(
                     identity,
-                    if index % 2 == 0 { "variant-a" } else { "variant-b" },
+                    if index & 1 == 0 {
+                        "variant-a"
+                    } else {
+                        "variant-b"
+                    },
                 ));
             }
             let mut expected = Ok(());
             'outer: for duplicate_index in 0..identities.len() {
                 for first_index in 0..duplicate_index {
-                    if identities[first_index] == identities[duplicate_index] {
-                        expected = Err(ContextualStrokeCandidateIdentityError {
-                            duplicate_index,
-                            first_index,
-                        });
+                    if identities.get(first_index)
+                        == identities.get(duplicate_index)
+                    {
+                        expected =
+                            Err(ContextualStrokeCandidateIdentityError {
+                                duplicate_index,
+                                first_index,
+                            });
                         break 'outer;
                     }
                 }
@@ -240,12 +287,12 @@ fn all_three_identity_sequences_through_length_six_match_oracle() {
                     let validated =
                         validate_contextual_stroke_planning_input_view(&input)
                             .expect("unique sequence seals exact input");
-                    assert!(std::ptr::eq(validated.input(), &input));
+                    assert!(ptr::eq(validated.input(), &raw const input));
                     assert_eq!(
                         validated.candidates(),
                         input.candidates.as_slice(),
                     );
-                },
+                }
                 Err(reason) => assert_eq!(
                     validate_contextual_stroke_planning_input_view(&input),
                     Err(reason),
