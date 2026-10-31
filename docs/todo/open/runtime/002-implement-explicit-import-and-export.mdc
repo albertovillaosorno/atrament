@@ -242,8 +242,9 @@ The anonymous staging inode must also have zero directory links at its
 completed sync and just before selected-path publication. A named hard link
 created by another actor through an accessible process descriptor before
 staging sync previously allowed an Export success with a second pathname to
-the same bytes. A red-first fixture demonstrates this for both no-overwrite
-and replacement. The writer now refuses with `StagedFileChanged` without
+the same bytes. A red-first fixture demonstrates this for no-overwrite and
+replacement, then checks a second link inserted after the stage sync. The
+writer refuses with `StagedFileChanged` without
 changing the selected target.
 
 A successful commit additionally requires exactly one link after publication.

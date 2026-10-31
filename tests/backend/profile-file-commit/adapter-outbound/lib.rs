@@ -275,7 +275,12 @@ mod linux {
         use nix::fcntl::AtFlags;
         use nix::unistd::linkat;
 
-        for disposition in [Mode::PreserveExisting, Mode::ReplaceExisting] {
+        for (disposition, link_on_observation) in [
+            (Mode::PreserveExisting, 2usize),
+            (Mode::PreserveExisting, 3usize),
+            (Mode::ReplaceExisting, 2usize),
+            (Mode::ReplaceExisting, 3usize),
+        ] {
             let dir = OwnedDir::new();
             let target = dir.target();
             if disposition == Mode::ReplaceExisting {
@@ -294,9 +299,9 @@ mod linux {
                 disposition,
                 || {
                     observations += 1;
-                    if observations == 2 {
-                        // Deliberately expose another name for the unnamed
-                        // inode before the writer takes its synced snapshot.
+                    if observations == link_on_observation {
+                        // Expose another name before writing or after sync,
+                        // covering both independent anonymous-stage guards.
                         // The rogue name must never become a successful Export
                         // of the still-selected pathname.
                         let stage = fs::read_dir("/proc/self/fd")
