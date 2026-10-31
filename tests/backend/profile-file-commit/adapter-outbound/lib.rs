@@ -271,6 +271,73 @@ mod linux {
     }
 
     #[test]
+    fn staged_permission_widening_before_sync_refuses_export() {
+        for (disposition, mutate_at) in [
+            (Mode::PreserveExisting, 2usize),
+            (Mode::PreserveExisting, 3usize),
+            (Mode::ReplaceExisting, 2usize),
+            (Mode::ReplaceExisting, 3usize),
+        ] {
+            let dir = OwnedDir::new();
+            let target = dir.target();
+            if disposition == Mode::ReplaceExisting {
+                fs::write(&target, b"previous target")
+                    .expect("original target");
+            }
+            let payload = b"strictly private profile contents";
+            let mut observations = 0usize;
+            let result = commit_profile_file_cancellable(
+                &target,
+                payload,
+                payload.len(),
+                disposition,
+                || {
+                    observations += 1;
+                    if observations == mutate_at {
+                        // The writer has already set 0600. Mutate just
+                        // before the first or final metadata observation.
+                        let stage = fs::read_dir("/proc/self/fd")
+                            .expect("test process fds")
+                            .find_map(|candidate| {
+                                let entry = candidate.ok()?;
+                                let path = fs::read_link(entry.path()).ok()?;
+                                (path.starts_with(&dir.0)
+                                    && path.to_string_lossy().ends_with(
+                                        " (deleted)",
+                                    ))
+                                .then(|| entry.path())
+                            })
+                            .expect("anonymous stage descriptor");
+                        let writable = OpenOptions::new()
+                            .read(true)
+                            .open(stage)
+                            .expect("reopen test-owned stage");
+                        writable.set_permissions(
+                            fs::Permissions::from_mode(0o666),
+                        )
+                        .expect("simulate concurrent permission widening");
+                    }
+                    false
+                },
+            );
+            assert_eq!(result, Err(Error::StagedFileChanged));
+            assert!(observations >= 2);
+            if disposition == Mode::ReplaceExisting {
+                assert_eq!(
+                    fs::read(&target).expect("original unchanged"),
+                    b"previous target",
+                );
+            } else {
+                assert!(!target.exists());
+            }
+            assert_eq!(
+                dir.entries().len(),
+                usize::from(disposition == Mode::ReplaceExisting),
+            );
+        }
+    }
+
+    #[test]
     fn externally_linked_anonymous_stage_must_not_publish_selected_entry() {
         use nix::fcntl::AtFlags;
         use nix::unistd::linkat;

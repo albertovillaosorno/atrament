@@ -238,6 +238,13 @@ otherwise anonymous staged inode after sync but before linking, retaining the
 exact length. Both preserve and replace now refuse with `StagedFileChanged`
 while the selected original is absent or untouched and no named stage remains.
 
+Descriptor-based mode `0600` is now an explicit invariant at the synced
+staging snapshot, immediately before linking, and after publication. A
+red-first Linux fixture widened the still-unnamed file mode to `0666` during
+staging and previously received a success receipt for public permissions.
+Both overwrite modes now refuse such drift before the selected target changes,
+including a widening made after file sync.
+
 The anonymous staging inode must also have zero directory links at its
 completed sync and just before selected-path publication. A named hard link
 created by another actor through an accessible process descriptor before

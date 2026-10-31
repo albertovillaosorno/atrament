@@ -455,7 +455,9 @@ fn commit_platform(
     // Even an anonymous inode can be linked by a same-user actor with
     // access to its descriptor. A preexisting name breaks the intended
     // private-stage boundary regardless of matching bytes and timestamps.
-    if staged_metadata.nlink() != 0 {
+    if staged_metadata.nlink() != 0
+        || staged_metadata.mode() & 0o7777 != 0o600
+    {
         return Err(ProfileFileCommitError::StagedFileChanged);
     }
     let file_identity = (staged_metadata.dev(), staged_metadata.ino());
@@ -490,6 +492,7 @@ fn commit_platform(
         .metadata()
         .map_err(|error| ProfileFileCommitError::FileIo(error.kind()))?;
     if stage_before_link.nlink() != 0
+        || stage_before_link.mode() & 0o7777 != 0o600
         || stage_before_link.dev() != staged_metadata.dev()
         || stage_before_link.ino() != staged_metadata.ino()
         || stage_before_link.len() != staged_metadata.len()
@@ -591,6 +594,7 @@ fn commit_platform(
         .metadata()
         .map_err(|_error| ProfileFileCommitError::CommittedPathUnverified)?;
     if committed_metadata.nlink() != 1
+        || committed_metadata.mode() & 0o7777 != 0o600
         || committed_metadata.dev() != file_identity.0
         || committed_metadata.ino() != file_identity.1
         || committed_metadata.len() != staged_metadata.len()
