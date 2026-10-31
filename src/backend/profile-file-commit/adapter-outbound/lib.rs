@@ -79,6 +79,8 @@ pub enum ProfileFileCommitError {
     SelectedParentChanged,
     /// The observed replacement entry changed during precommit staging.
     SelectedTargetChanged,
+    /// The anonymous stage changed after file sync but before publication.
+    StagedFileChanged,
     /// Existing target conflicts with preserve-existing intent.
     TargetExists,
     /// Secure operation is unavailable on this platform.
@@ -104,6 +106,7 @@ impl ProfileFileCommitError {
             | Self::RandomUnavailable
             | Self::SelectedParentChanged
             | Self::SelectedTargetChanged
+            | Self::StagedFileChanged
             | Self::TargetExists
             | Self::UnsupportedPlatform => false,
         }
@@ -192,10 +195,16 @@ pub fn commit_profile_file(
 /// before the first permanent directory entry is created. The selected parent
 /// is reopened before linking and after directory sync; device/inode drift
 /// before the link refuses without effect, while post-link drift is uncertain.
+/// After syncing, the selected leaf must still be the committed regular inode
+/// with matching size and timestamps; a vanished, replaced or linked leaf
+/// yields an uncertain committed-path result, never ordinary precommit refusal.
 /// For relative targets, the process CWD must still match its original anchor.
 /// Replacement also rechecks the selected entry without following links
 /// after staging, refusing late symlinks or non-regular targets and changes
 /// to the initial target's existence, identity or timestamps before linking.
+/// The anonymous stage's identity, size and times must remain unchanged
+/// since its completed sync; drift observed before linking is a proven
+/// precommit refusal with no selected-target effect.
 /// Another actor can change the entry after this final observation; the
 /// recheck is not an atomic compare-and-replace guarantee.
 /// Linux stages bytes through `O_TMPFILE`, so cancellation or process death
@@ -458,6 +467,23 @@ fn commit_platform(
         return Err(ProfileFileCommitError::SelectedTargetChanged);
     }
 
+    // The final cancellation callback or another process could have opened
+    // our still-unnamed stage via a process descriptor. Verify it remains the
+    // exact synced inode before making its first visible directory entry.
+    let stage_before_link = output
+        .metadata()
+        .map_err(|error| ProfileFileCommitError::FileIo(error.kind()))?;
+    if stage_before_link.dev() != staged_metadata.dev()
+        || stage_before_link.ino() != staged_metadata.ino()
+        || stage_before_link.len() != staged_metadata.len()
+        || stage_before_link.mtime() != staged_metadata.mtime()
+        || stage_before_link.mtime_nsec() != staged_metadata.mtime_nsec()
+        || stage_before_link.ctime() != staged_metadata.ctime()
+        || stage_before_link.ctime_nsec() != staged_metadata.ctime_nsec()
+    {
+        return Err(ProfileFileCommitError::StagedFileChanged);
+    }
+
     match disposition {
         ProfileFileCommitDisposition::PreserveExisting => {
             // Direct linking is atomic no-overwrite without a temporary name.
@@ -549,6 +575,36 @@ fn commit_platform(
         .map_err(|_error| ProfileFileCommitError::CommittedPathUnverified)?;
     if committed_metadata.dev() != file_identity.0
         || committed_metadata.ino() != file_identity.1
+        || committed_metadata.len() != staged_metadata.len()
+        || committed_metadata.mtime() != staged_metadata.mtime()
+        || committed_metadata.mtime_nsec() != staged_metadata.mtime_nsec()
+    {
+        // Link/rename changes ctime, not length or mtime. A new mtime after
+        // stage sync is evidence of a concurrent write, not original bytes.
+        return Err(ProfileFileCommitError::CommittedPathUnverified);
+    }
+    // Rechecking the parent alone cannot prove the selected leaf still
+    // points to the inode we synced: a concurrent actor may unlink, rename
+    // or substitute the selected entry after the commit boundary. Inspect
+    // the leaf without following links and compare all recorded identity,
+    // length and timestamp fields. This is one final observation, not a lock.
+    let expected_length = i64::try_from(artifact.len())
+        .map_err(|_error| ProfileFileCommitError::CommittedPathUnverified)?;
+    let expected_target = ReplaceTargetObservation {
+        changed: (
+            committed_metadata.ctime(),
+            committed_metadata.ctime_nsec(),
+        ),
+        device: committed_metadata.dev(),
+        inode: committed_metadata.ino(),
+        length: expected_length,
+        modified: (
+            committed_metadata.mtime(),
+            committed_metadata.mtime_nsec(),
+        ),
+    };
+    if observe_replace_target(&directory, name).ok().flatten()
+        != Some(expected_target)
     {
         return Err(ProfileFileCommitError::CommittedPathUnverified);
     }

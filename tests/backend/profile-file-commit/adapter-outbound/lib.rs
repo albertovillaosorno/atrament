@@ -122,7 +122,9 @@ mod linux {
         )
         .expect("no-existing-target commit");
         assert_eq!(evidence.byte_length, payload.len());
-        let metadata = fs::metadata(&target).expect("committed file metadata");
+        let metadata = fs::symlink_metadata(&target)
+            .expect("committed selected entry without link traversal");
+        assert!(metadata.is_file());
         assert_eq!(evidence.file_device, metadata.dev());
         assert_eq!(evidence.file_inode, metadata.ino());
         assert_eq!(
@@ -143,6 +145,74 @@ mod linux {
                 & 0o777,
             0o600
         );
+    }
+
+    #[test]
+    fn staged_inode_mutated_after_sync_cannot_publish() {
+        use std::time::SystemTime;
+
+        for disposition in [Mode::PreserveExisting, Mode::ReplaceExisting] {
+            let dir = OwnedDir::new();
+            let target = dir.target();
+            if disposition == Mode::ReplaceExisting {
+                fs::write(&target, b"previous output")
+                    .expect("seed explicit replacement target");
+            }
+            let original = b"original complete artifact";
+            let mut observations = 0usize;
+            let result = commit_profile_file_cancellable(
+                &target,
+                original,
+                original.len(),
+                disposition,
+                || {
+                    observations += 1;
+                    if observations == 3 {
+                        // The caller's final cancellation callback runs
+                        // after anonymous file sync, before directory linking.
+                        // /proc provides another writable handle to that
+                        // still-unnamed inode in this isolated Linux fixture.
+                        let stage = fs::read_dir("/proc/self/fd")
+                            .expect("inspect own process descriptors")
+                            .find_map(|candidate| {
+                                let entry = candidate.ok()?;
+                                let path = fs::read_link(entry.path()).ok()?;
+                                (path.starts_with(&dir.0)
+                                    && path.to_string_lossy().ends_with(
+                                        " (deleted)",
+                                    ))
+                                .then(|| entry.path())
+                            })
+                            .expect("test-owned O_TMPFILE descriptor");
+                        let mut writable = OpenOptions::new()
+                            .write(true)
+                            .open(stage)
+                            .expect("reopen own anonymous stage");
+                        writable.write_all(b"tamper")
+                            .expect("rewrite same-length staged prefix");
+                        writable.set_modified(SystemTime::UNIX_EPOCH)
+                            .expect("prove stage mtime changed after sync");
+                    }
+                    false
+                },
+            );
+            assert_eq!(observations, 3);
+            assert_eq!(result, Err(Error::StagedFileChanged));
+            assert!(!result.is_err_and(Error::may_have_committed));
+            if disposition == Mode::ReplaceExisting {
+                assert_eq!(
+                    fs::read(&target).expect("old target survives"),
+                    b"previous output",
+                );
+                assert_eq!(
+                    dir.entries(),
+                    vec![String::from("chosen.atrament")],
+                );
+            } else {
+                assert!(!target.exists());
+                assert!(dir.entries().is_empty());
+            }
+        }
     }
 
     #[test]
@@ -293,16 +363,25 @@ mod linux {
         let target = dir.target();
         fs::write(&target, b"original").expect("seed original");
         let replacement = b"new complete artifact";
+        let evidence = commit_profile_file(
+            &target,
+            replacement,
+            100,
+            Mode::ReplaceExisting,
+        ).expect("explicit replacement");
+        assert_eq!(evidence.byte_length, replacement.len());
+        let metadata = fs::symlink_metadata(&target)
+            .expect("replacement selected entry without link traversal");
+        assert!(metadata.is_file());
+        assert_eq!(evidence.file_device, metadata.dev());
+        assert_eq!(evidence.file_inode, metadata.ino());
         assert_eq!(
-            commit_profile_file(
-                &target,
-                replacement,
-                100,
-                Mode::ReplaceExisting
-            )
-            .expect("explicit replacement")
-            .byte_length,
-            replacement.len()
+            evidence.file_modified,
+            (metadata.mtime(), metadata.mtime_nsec()),
+        );
+        assert_eq!(
+            evidence.file_changed,
+            (metadata.ctime(), metadata.ctime_nsec()),
         );
         assert_eq!(fs::read(&target).expect("read replacement"), replacement);
         assert_eq!(dir.entries(), vec![String::from("chosen.atrament")]);
@@ -322,6 +401,7 @@ mod linux {
             Error::RandomUnavailable,
             Error::SelectedParentChanged,
             Error::SelectedTargetChanged,
+            Error::StagedFileChanged,
             Error::TargetExists,
             Error::UnsupportedPlatform,
         ] {

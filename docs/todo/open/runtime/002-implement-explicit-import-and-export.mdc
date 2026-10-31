@@ -195,6 +195,30 @@ no-overwrite; an explicit replacement creates a randomized sibling hard link
 only for the final `renameat2`, then syncs the directory. A filesystem without
 secure anonymous staging refuses rather than leaking partial files on crash.
 
+The low-level file-commit adapter now also checks the selected destination
+leaf after directory sync. It observes that leaf without following links and
+compares its device, inode, byte length, modification time and metadata-change
+time against the retained staged descriptor. The opened output must also
+retain the length and modification time captured after anonymous-file sync;
+link/rename changes ctime but cannot legitimately change those two fields.
+
+A missing, swapped or unsafe entry cannot yield a success receipt: after the
+irreversible link or rename it is
+reported as `CommittedPathUnverified` (uncertain effect), never as a proven
+no-commit failure. Real-file preserve and replacement fixtures compare the
+returned commit evidence with independent no-follow selected-leaf metadata.
+
+The anonymous stage also receives a final metadata check before its first
+visible directory link, catching observed drift after file sync without an
+irreversible effect. A deterministic Linux `/proc/self/fd` fixture changes the
+otherwise anonymous staged inode after sync but before linking, retaining the
+exact length. Both preserve and replace now refuse with `StagedFileChanged`
+while the selected original is absent or untouched and no named stage remains.
+
+Postlink drift remains an uncertain effect, not a proven no-commit refusal.
+Neither prelink nor postlink observation locks the pathname against later
+writers.
+
 The adapter refuses observed symlinks and nonregular replacement targets,
 cleans any late-linked replacement staging path on ordinary refusal, and
 distinguishes an uncertain post-link/rename sync failure from no commit.
