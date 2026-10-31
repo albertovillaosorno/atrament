@@ -33,6 +33,8 @@
 
 //! CPU render performance evidence regression tests.
 
+use std::ptr;
+
 use atrament_render_performance_evidence::{
     NoDiscreteGpuMachine, RenderPerformanceCoverageError,
     RenderPerformanceObservation, RenderPerformanceScenario,
@@ -58,20 +60,20 @@ fn first_release_cpu_benchmark_scenarios_are_explicit() {
 #[test]
 fn observations_retain_preview_and_final_measurements_without_budgeting() {
     let preview = RenderPerformanceObservation {
-        latency: (14_u64, "ms"),
+        latency: (14u64, "ms"),
         machine: NoDiscreteGpuMachine {
             machine_identity: "integrated-host-4",
         },
-        peak_memory: (180_u64, "MiB"),
+        peak_memory: (180u64, "MiB"),
         quality_mode: RenderQualityMode::Preview,
         scenario: RenderPerformanceScenario::RapidEdits,
     };
     let final_render = RenderPerformanceObservation {
-        latency: (430_u64, "ms"),
+        latency: (430u64, "ms"),
         machine: NoDiscreteGpuMachine {
             machine_identity: "integrated-host-4",
         },
-        peak_memory: (420_u64, "MiB"),
+        peak_memory: (420u64, "MiB"),
         quality_mode: RenderQualityMode::Final,
         scenario: RenderPerformanceScenario::FinalExport,
     };
@@ -87,9 +89,9 @@ fn measurement_units_and_values_remain_caller_owned() {
     let observation = RenderPerformanceObservation {
         latency: "caller-latency-evidence",
         machine: NoDiscreteGpuMachine {
-            machine_identity: 77_u64,
+            machine_identity: 77u64,
         },
-        peak_memory: vec![1_u8, 2_u8, 3_u8],
+        peak_memory: vec![1u8, 2u8, 3u8],
         quality_mode: RenderQualityMode::Preview,
         scenario: RenderPerformanceScenario::Zoom,
     };
@@ -98,7 +100,7 @@ fn measurement_units_and_values_remain_caller_owned() {
     assert_eq!(observation.machine.machine_identity, 77);
 }
 
-fn observation(
+const fn observation(
     scenario: RenderPerformanceScenario,
     quality_mode: RenderQualityMode,
 ) -> RenderPerformanceObservation<u64, &'static str, u64> {
@@ -151,13 +153,12 @@ fn every_workload_scenario_is_independently_required() {
             .into_iter()
             .filter(|scenario| *scenario != missing)
             .map(|scenario| {
-                let quality_mode = if scenario
-                    == RenderPerformanceScenario::FinalExport
-                {
-                    RenderQualityMode::Final
-                } else {
-                    RenderQualityMode::Preview
-                };
+                let quality_mode =
+                    if scenario == RenderPerformanceScenario::FinalExport {
+                        RenderQualityMode::Final
+                    } else {
+                        RenderQualityMode::Preview
+                    };
                 observation(scenario, quality_mode)
             })
             .collect::<Vec<_>>();
@@ -236,14 +237,14 @@ fn scenario_coverage_does_not_substitute_for_preview_quality_evidence() {
 
 #[test]
 fn every_complete_scenario_quality_mask_matches_role_coverage_oracle() {
-    let mut cases = 0_u8;
+    let mut cases = 0u8;
     let mut saw = [false; 3];
-    for final_mask in 0_u8..64 {
+    for final_mask in 0u8..64 {
         let observations = SCENARIOS
             .into_iter()
             .enumerate()
             .map(|(index, scenario)| {
-                let quality_mode = if final_mask & (1_u8 << index) == 0 {
+                let quality_mode = if final_mask & (1u8 << index) == 0 {
                     RenderQualityMode::Preview
                 } else {
                     RenderQualityMode::Final
@@ -272,16 +273,15 @@ fn every_complete_scenario_quality_mask_matches_role_coverage_oracle() {
     assert!(saw.into_iter().all(|seen| seen));
 }
 
-
 #[test]
 fn all_256_scenario_and_quality_presence_states_match_coverage_precedence() {
-    let mut cases = 0_u16;
+    let mut cases = 0u16;
     let mut outcomes = [false; 4];
-    for scenario_mask in 0_u8..64 {
-        for quality_mask in 0_u8..4 {
+    for scenario_mask in 0u8..64 {
+        for quality_mask in 0u8..4 {
             let mut observations = Vec::new();
             for (index, scenario) in SCENARIOS.into_iter().enumerate() {
-                if scenario_mask & (1_u8 << index) == 0 {
+                if scenario_mask & (1u8 << index) == 0 {
                     continue;
                 }
                 if quality_mask & 0b01 != 0 {
@@ -291,20 +291,17 @@ fn all_256_scenario_and_quality_presence_states_match_coverage_precedence() {
                     ));
                 }
                 if quality_mask & 0b10 != 0 {
-                    observations.push(observation(
-                        scenario,
-                        RenderQualityMode::Final,
-                    ));
+                    observations
+                        .push(observation(scenario, RenderQualityMode::Final));
                 }
             }
-            let first_missing = SCENARIOS
-                .into_iter()
-                .enumerate()
-                .find_map(|(index, scenario)| {
-                    let represented = scenario_mask & (1_u8 << index) != 0
+            let first_missing = SCENARIOS.into_iter().enumerate().find_map(
+                |(index, scenario)| {
+                    let represented = scenario_mask & (1u8 << index) != 0
                         && quality_mask != 0;
                     (!represented).then_some(scenario)
-                });
+                },
+            );
             let expected = if let Some(scenario) = first_missing {
                 outcomes[0] = true;
                 Err(RenderPerformanceCoverageError::ScenarioAbsent(scenario))
@@ -321,26 +318,28 @@ fn all_256_scenario_and_quality_presence_states_match_coverage_precedence() {
             assert_eq!(
                 validate_render_performance_coverage(&observations),
                 expected,
-                "scenario mask {:#08b}, quality {:#04b}",
-                scenario_mask,
-                quality_mask,
+                "mask {scenario_mask:#08b}, quality {quality_mask:#04b}",
             );
             match expected {
                 Ok(()) => {
-                    let validated =
-                        validate_render_performance_coverage_view(&observations)
-                            .expect("complete coverage seals");
-                    assert!(std::ptr::eq(
-                        validated.observations(),
-                        observations.as_slice(),
-                    ));
-                },
+                    let view = validate_render_performance_coverage_view(
+                        &observations,
+                    );
+                    assert!(
+                        matches!(
+                            view,
+                            Ok(validated) if ptr::eq(
+                                validated.observations(),
+                                observations.as_slice(),
+                            )
+                        ),
+                        "sealed view must borrow original observations",
+                    );
+                }
                 Err(reason) => assert_eq!(
                     validate_render_performance_coverage_view(&observations),
                     Err(reason),
-                    "sealed scenario {:#08b}, quality {:#04b}",
-                    scenario_mask,
-                    quality_mask,
+                    "mask {scenario_mask:#08b}, quality {quality_mask:#04b}",
                 ),
             }
             cases = cases.saturating_add(1);

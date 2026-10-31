@@ -77,7 +77,7 @@ type Calibration = DeviceCoordinateCalibration<
     SheetRegistrationCalibration<&'static str, &'static str, &'static str>,
 >;
 
-fn calibration() -> Calibration {
+const fn calibration() -> Calibration {
     DeviceCoordinateCalibration {
         calibration_identity: "calibration-4",
         coordinate_transform: CoordinateTransformCalibration {
@@ -102,7 +102,10 @@ fn calibration() -> Calibration {
     }
 }
 
-fn segment(contact_state: MotionContactState, name: &'static str) -> Operation {
+const fn segment(
+    contact_state: MotionContactState,
+    name: &'static str,
+) -> Operation {
     MotionPlanOperation::Segment(MotionSegment {
         acceleration: 30,
         contact_state,
@@ -156,18 +159,37 @@ fn clean_evaluations() -> Vec<DryRunLimitEvaluation<&'static str>> {
     ]
 }
 
+fn set_limit_state(
+    evaluations: &mut [DryRunLimitEvaluation<&'static str>],
+    operation_index: usize,
+    state: DryRunLimitState,
+) {
+    let selected = evaluations.get_mut(operation_index);
+    assert!(
+        selected.is_some(),
+        "missing fixture operation {operation_index}"
+    );
+    if let Some(evaluation) = selected {
+        evaluation.state = state;
+    }
+}
+
 #[test]
 fn actual_motion_plan_operations_expose_dry_run_kinds() {
     let plan = plan();
-    assert_eq!(plan.operations[0].dry_run_kind(), DryRunOperationKind::PenUp);
-    assert_eq!(plan.operations[1].dry_run_kind(), DryRunOperationKind::Pause);
+    let kinds = plan
+        .operations
+        .iter()
+        .map(DryRunOperation::dry_run_kind)
+        .collect::<Vec<_>>();
     assert_eq!(
-        plan.operations[2].dry_run_kind(),
-        DryRunOperationKind::Checkpoint,
-    );
-    assert_eq!(
-        plan.operations[3].dry_run_kind(),
-        DryRunOperationKind::PenDown,
+        kinds,
+        [
+            DryRunOperationKind::PenUp,
+            DryRunOperationKind::Pause,
+            DryRunOperationKind::Checkpoint,
+            DryRunOperationKind::PenDown,
+        ],
     );
 }
 
@@ -187,7 +209,7 @@ fn exact_plan_and_calibration_with_complete_limits_passes_dry_run() {
 #[test]
 fn operation_count_mismatch_rejects_before_limit_interpretation() {
     let mut evaluations = clean_evaluations();
-    evaluations[0].state = DryRunLimitState::Violated;
+    set_limit_state(&mut evaluations, 0, DryRunLimitState::Violated);
     let _removed = evaluations.pop();
     let dry_run = MotionPlanDryRun {
         calibration: calibration(),
@@ -206,7 +228,7 @@ fn operation_count_mismatch_rejects_before_limit_interpretation() {
 #[test]
 fn motion_segment_cannot_claim_limit_checks_are_not_applicable() {
     let mut evaluations = clean_evaluations();
-    evaluations[0].state = DryRunLimitState::NotApplicable;
+    set_limit_state(&mut evaluations, 0, DryRunLimitState::NotApplicable);
     let dry_run = MotionPlanDryRun {
         calibration: calibration(),
         limit_evaluations: evaluations,
@@ -221,7 +243,7 @@ fn motion_segment_cannot_claim_limit_checks_are_not_applicable() {
 #[test]
 fn unknown_or_violated_limit_state_blocks_exact_operation() {
     let mut unknown = clean_evaluations();
-    unknown[3].state = DryRunLimitState::Unknown;
+    set_limit_state(&mut unknown, 3, DryRunLimitState::Unknown);
     let unknown_run = MotionPlanDryRun {
         calibration: calibration(),
         limit_evaluations: unknown,
@@ -233,7 +255,7 @@ fn unknown_or_violated_limit_state_blocks_exact_operation() {
     );
 
     let mut violated = clean_evaluations();
-    violated[0].state = DryRunLimitState::Violated;
+    set_limit_state(&mut violated, 0, DryRunLimitState::Violated);
     let violated_run = MotionPlanDryRun {
         calibration: calibration(),
         limit_evaluations: violated,
@@ -248,9 +270,9 @@ fn unknown_or_violated_limit_state_blocks_exact_operation() {
 #[test]
 fn first_invalid_limit_state_wins_in_plan_order() {
     let mut evaluations = clean_evaluations();
-    evaluations[1].state = DryRunLimitState::Unknown;
-    evaluations[2].state = DryRunLimitState::Violated;
-    evaluations[3].state = DryRunLimitState::Unknown;
+    set_limit_state(&mut evaluations, 1, DryRunLimitState::Unknown);
+    set_limit_state(&mut evaluations, 2, DryRunLimitState::Violated);
+    set_limit_state(&mut evaluations, 3, DryRunLimitState::Unknown);
     let dry_run = MotionPlanDryRun {
         calibration: calibration(),
         limit_evaluations: evaluations,
@@ -270,14 +292,14 @@ fn every_operation_kind_and_limit_state_has_explicit_fail_closed_behavior() {
         DryRunLimitState::Violated,
         DryRunLimitState::WithinLimits,
     ];
-    let mut cases = 0_u32;
+    let mut cases = 0u32;
 
     for operation_index in 0..4 {
         let is_motion = matches!(operation_index, 0 | 3);
         for state in states {
             cases += 1;
             let mut evaluations = clean_evaluations();
-            evaluations[operation_index].state = state;
+            set_limit_state(&mut evaluations, operation_index, state);
             let dry_run = MotionPlanDryRun {
                 calibration: calibration(),
                 limit_evaluations: evaluations,
@@ -288,17 +310,17 @@ fn every_operation_kind_and_limit_state_has_explicit_fail_closed_behavior() {
                     Err(DryRunValidationError::MotionLimitMissing {
                         operation_index,
                     })
-                },
+                }
                 DryRunLimitState::Unknown => {
                     Err(DryRunValidationError::UnknownLimitState {
                         operation_index,
                     })
-                },
+                }
                 DryRunLimitState::Violated => {
                     Err(DryRunValidationError::ViolatedBoundary {
                         operation_index,
                     })
-                },
+                }
                 DryRunLimitState::NotApplicable
                 | DryRunLimitState::WithinLimits => Ok(()),
             };
