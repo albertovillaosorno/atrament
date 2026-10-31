@@ -57,6 +57,12 @@ same-origin JavaScript worker also runs in the permissive tab but is refused
 without any worker request in the header-only tab, independently exercising
 `worker-src 'none'`.
 
+A same-origin child frame and form POST likewise succeed
+in the permissive control and fail on the header-only tab without generating
+requests. Both checks fail independently when the corresponding directive is
+relaxed to `'self'`, pinning `frame-src 'none'` and `form-action 'none'` rather
+than incidental cross-origin restrictions.
+
 This is browser enforcement evidence for the HTTP boundary, not a claim about
 browser-opener credentials or arbitrary outbound desktop programs.
 

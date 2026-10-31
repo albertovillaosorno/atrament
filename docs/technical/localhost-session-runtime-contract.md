@@ -126,6 +126,10 @@ cross-origin scripts, images and stylesheets, inserted inline scripts, and
 hostile base URL changes; an unprotected control must allow the same probes.
 A same-origin JavaScript worker must run in the control but be refused without
 a network request by the header-only page's `worker-src 'none'` directive.
+
+A same-origin child frame and form POST must also succeed in the unprotected
+control but be refused by `frame-src 'none'` and `form-action 'none'` on the
+header-only page; neither blocked operation may reach the fixture server.
 These checks establish browser enforcement, not browser-opener credential
 secrecy or general host process isolation.
 

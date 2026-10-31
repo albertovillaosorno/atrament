@@ -33,7 +33,7 @@
 //     text, framing, draft coalescing, fragment-scrubbed refresh, and
 //     close-time cancellation.
 // - Usage:
-//   - Run through `pnpm test:browser-security` from the repository root.
+//   - Run through `pnpm test:frontend` from the repository root.
 // - Defaults:
 //   - Skips only when Firefox is unavailable on the host.
 //
@@ -4792,6 +4792,8 @@ test(
         let outboundRequests = 0;
         const assetRequests = [];
         let workerRequests = 0;
+        let frameChildRequests = 0;
+        let formSubmissions = 0;
         let permissive;
         let bidi;
         try {
@@ -4875,7 +4877,28 @@ test(
             assert.equal(typeof responseCsp, "string");
             await runtimeResponse.body?.cancel();
 
+            let resolveControlForm;
+            const controlFormSubmitted = new Promise((resolve) => {
+                resolveControlForm = resolve;
+            });
             permissive = http.createServer((request, response) => {
+                if (request.url === "/csp-frame-child") {
+                    frameChildRequests += 1;
+                    response.writeHead(200, {
+                        "Content-Type": "text/html; charset=utf-8",
+                    });
+                    response.end("<!doctype html><p>Frame child loaded</p>");
+                    return;
+                }
+                if (request.url === "/csp-form-submit") {
+                    formSubmissions += 1;
+                    resolveControlForm(request.method);
+                    response.writeHead(200, {
+                        "Content-Type": "text/html; charset=utf-8",
+                    });
+                    response.end("<!doctype html><p>Form submitted</p>");
+                    return;
+                }
                 if (request.url === "/csp-worker.js") {
                     workerRequests += 1;
                     response.writeHead(200, {
@@ -5188,6 +5211,96 @@ test(
                 "HTTP worker-src must refuse even same-origin workers");
             assert.equal(workerRequests, 1,
                 "CSP rejection must send no worker script request");
+
+            // frame-src 'none' must deny a child frame from the page's own
+            // origin, which default-src 'self' would otherwise allow.
+            const frameChildUrl = JSON.stringify(
+                `${permissiveOrigin}/csp-frame-child`,
+            );
+            const probeChildFrame = `(async () => {
+                const frame = document.createElement("iframe");
+                frame.src = ${frameChildUrl};
+                const loaded = await new Promise((resolve) => {
+                    const timer = setTimeout(() => resolve(false), 3000);
+                    frame.onload = () => {
+                        clearTimeout(timer);
+                        resolve(frame.contentDocument?.body?.textContent
+                            ?.includes("Frame child loaded") === true);
+                    };
+                    frame.onerror = () => {
+                        clearTimeout(timer);
+                        resolve(false);
+                    };
+                    document.body.append(frame);
+                });
+                frame.remove();
+                return loaded;
+            })()`;
+            const controlFrame = await bidi.command("script.evaluate", {
+                awaitPromise: true,
+                expression: probeChildFrame,
+                resultOwnership: "none",
+                target: { context: networkControl.context },
+            });
+            assert.equal(controlFrame.type, "success");
+            assert.equal(controlFrame.result.value, true);
+            assert.equal(frameChildRequests, 1,
+                "permissive control loads the same-origin child frame");
+            const blockedFrame = await bidi.command("script.evaluate", {
+                awaitPromise: true,
+                expression: probeChildFrame,
+                resultOwnership: "none",
+                target: { context: headerOnly.context },
+            });
+            assert.equal(blockedFrame.type, "success");
+            assert.equal(blockedFrame.result.value, false);
+            assert.equal(frameChildRequests, 1,
+                "HTTP frame-src must refuse same-origin child requests");
+
+            // form-action 'none' must block a same-origin POST even though
+            // script.evaluate itself is privileged automation code.
+            const formUrl = JSON.stringify(
+                `${permissiveOrigin}/csp-form-submit`,
+            );
+            const submitForm = `(() => {
+                const form = document.createElement("form");
+                form.method = "POST";
+                form.action = ${formUrl};
+                document.body.append(form);
+                form.submit();
+                return true;
+            })()`;
+            const controlForm = await bidi.command("script.evaluate", {
+                awaitPromise: false,
+                expression: submitForm,
+                resultOwnership: "none",
+                target: { context: networkControl.context },
+            });
+            assert.equal(controlForm.type, "success");
+            assert.equal(controlForm.result.value, true);
+            assert.equal(await observedWithin(
+                controlFormSubmitted, "permissive form submission",
+            ), "POST");
+            assert.equal(formSubmissions, 1);
+            const blockedForm = await bidi.command("script.evaluate", {
+                awaitPromise: true,
+                expression: `(async () => {
+                    try {
+                        ${submitForm};
+                    } catch {
+                        // A synchronous CSP refusal is also a denial.
+                    }
+                    await new Promise(resolve => setTimeout(resolve, 300));
+                    return location.pathname;
+                })()`,
+                resultOwnership: "none",
+                target: { context: headerOnly.context },
+            });
+            assert.equal(blockedForm.type, "success");
+            assert.equal(blockedForm.result.value, "/csp-header-only",
+                "HTTP form-action must keep the protected document in place");
+            assert.equal(formSubmissions, 1,
+                "HTTP form-action must prevent same-origin POST emission");
 
             const direct = await bidi.command("browsingContext.create", {
                 type: "tab",
