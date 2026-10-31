@@ -482,11 +482,18 @@ fn commit_platform(
     let staged_metadata = output
         .metadata()
         .map_err(|error| ProfileFileCommitError::FileIo(error.kind()))?;
+    // A mid-write external extension can leave a valid artifact prefix plus
+    // trailing bytes even though all committed-prefix readback bytes match.
+    // Reject it before linking instead of publishing an oversized output and
+    // reporting uncertain path verification only after that file effect.
+    let expected_staged_length = u64::try_from(artifact.len())
+        .map_err(|_error| ProfileFileCommitError::StagedFileChanged)?;
     // Even an anonymous inode can be linked by a same-user actor with
     // access to its descriptor. A preexisting name breaks the intended
     // private-stage boundary regardless of matching bytes and timestamps.
     if staged_metadata.nlink() != 0
         || staged_metadata.mode() & 0o7777 != 0o600
+        || staged_metadata.len() != expected_staged_length
     {
         return Err(ProfileFileCommitError::StagedFileChanged);
     }

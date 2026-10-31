@@ -1111,3 +1111,13 @@ dispositions reject `StagedFileChanged` without replacing or creating the
 selected target. This does not make a concurrent filesystem mutation or the
 replacement link-before-rename crash window impossible; it closes the
 previously unobserved pre-sync byte-substitution case.
+
+A second red-first writer fixture extends the anonymous stage beyond the
+admitted ZIP length during a two-chunk write. The previous bounded byte
+readback matched the entire expected prefix but did not notice the extra
+trailing bytes; it linked the oversized file before returning the uncertain
+`CommittedPathUnverified` result. The stage's first post-sync metadata check
+now requires the exact artifact length as well as private mode and zero links.
+Both overwrite dispositions instead refuse as a proven no-commit
+`StagedFileChanged`, preserving the original target and avoiding any new name.
+This is a prepublication length guard, not an atomic lock on other processes.

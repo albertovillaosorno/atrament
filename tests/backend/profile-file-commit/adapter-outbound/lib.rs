@@ -332,6 +332,76 @@ mod linux {
     }
 
     #[test]
+    fn staged_file_extended_during_write_cannot_publish() {
+        // Readback of only the expected prefix cannot reject unexpected
+        // trailing bytes appended before the first post-sync observation.
+        for disposition in [Mode::PreserveExisting, Mode::ReplaceExisting] {
+            let dir = OwnedDir::new();
+            let target = dir.target();
+            if disposition == Mode::ReplaceExisting {
+                fs::write(&target, b"original selected profile")
+                    .expect("seed existing target");
+            }
+            let artifact = vec![0x93u8; 2 * 64 * 1024];
+            let mut observations = 0usize;
+            let result = commit_profile_file_cancellable(
+                &target,
+                &artifact,
+                artifact.len(),
+                disposition,
+                || {
+                    observations += 1;
+                    if observations == 3 {
+                        // The first chunk is complete but the second is not
+                        // yet written. Extend the anonymous file beyond the
+                        // artifact's final size using its process descriptor.
+                        let stage = fs::read_dir("/proc/self/fd")
+                            .expect("inspect own file descriptors")
+                            .find_map(|candidate| {
+                                let entry = candidate.ok()?;
+                                let path = fs::read_link(entry.path()).ok()?;
+                                (path.starts_with(&dir.0)
+                                    && path.to_string_lossy().ends_with(
+                                        " (deleted)",
+                                    ))
+                                .then(|| entry.path())
+                            })
+                            .expect("test-owned anonymous stage descriptor");
+                        let writable = OpenOptions::new()
+                            .write(true)
+                            .open(stage)
+                            .expect("reopen test-owned stage for mutation");
+                        let extra = artifact
+                            .len()
+                            .checked_add(16)
+                            .and_then(|size| u64::try_from(size).ok())
+                            .expect("small fixture length");
+                        writable.set_len(extra)
+                            .expect("extend staged file during write");
+                    }
+                    false
+                },
+            );
+            assert!(observations >= 3);
+            assert_eq!(result, Err(Error::StagedFileChanged));
+            assert!(!result.is_err_and(Error::may_have_committed));
+            if disposition == Mode::ReplaceExisting {
+                assert_eq!(
+                    fs::read(&target).expect("old selected target remains"),
+                    b"original selected profile",
+                );
+                assert_eq!(
+                    dir.entries(),
+                    vec![String::from("chosen.atrament")],
+                );
+            } else {
+                assert!(!target.exists());
+                assert!(dir.entries().is_empty());
+            }
+        }
+    }
+
+    #[test]
     fn staged_permission_widening_before_sync_refuses_export() {
         for (disposition, mutate_at) in [
             (Mode::PreserveExisting, 2usize),
