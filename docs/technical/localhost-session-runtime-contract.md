@@ -130,6 +130,12 @@ a network request by the header-only page's `worker-src 'none'` directive.
 A same-origin child frame and form POST must also succeed in the unprotected
 control but be refused by `frame-src 'none'` and `form-action 'none'` on the
 header-only page; neither blocked operation may reach the fixture server.
+
+A same-origin PCM WAV must also load metadata in the unprotected control but
+be refused without a network request by the header-only page's
+`media-src 'none'` directive. Relaxing the directive to `'self'` must break
+the media regression independently of the other resource checks.
+
 These checks establish browser enforcement, not browser-opener credential
 secrecy or general host process isolation.
 

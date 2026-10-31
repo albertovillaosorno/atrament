@@ -4792,6 +4792,7 @@ test(
         let outboundRequests = 0;
         const assetRequests = [];
         let workerRequests = 0;
+        let mediaRequests = 0;
         let frameChildRequests = 0;
         let formSubmissions = 0;
         let permissive;
@@ -4881,7 +4882,31 @@ test(
             const controlFormSubmitted = new Promise((resolve) => {
                 resolveControlForm = resolve;
             });
+            // One small, valid mono PCM wave is enough to load metadata
+            // without requiring autoplay permission or external fixtures.
+            const wave = Buffer.alloc(44 + 1024, 128);
+            wave.write("RIFF", 0);
+            wave.writeUInt32LE(wave.length - 8, 4);
+            wave.write("WAVEfmt ", 8);
+            wave.writeUInt32LE(16, 16);
+            wave.writeUInt16LE(1, 20);
+            wave.writeUInt16LE(1, 22);
+            wave.writeUInt32LE(8000, 24);
+            wave.writeUInt32LE(8000, 28);
+            wave.writeUInt16LE(1, 32);
+            wave.writeUInt16LE(8, 34);
+            wave.write("data", 36);
+            wave.writeUInt32LE(wave.length - 44, 40);
             permissive = http.createServer((request, response) => {
+                if (request.url === "/csp-media.wav") {
+                    mediaRequests += 1;
+                    response.writeHead(200, {
+                        "Cache-Control": "no-store",
+                        "Content-Type": "audio/wav",
+                    });
+                    response.end(wave);
+                    return;
+                }
                 if (request.url === "/csp-frame-child") {
                     frameChildRequests += 1;
                     response.writeHead(200, {
@@ -5211,6 +5236,59 @@ test(
                 "HTTP worker-src must refuse even same-origin workers");
             assert.equal(workerRequests, 1,
                 "CSP rejection must send no worker script request");
+
+            // media-src 'none' denies even same-origin media. A valid WAV
+            // must load in the control without relying on audio playback.
+            const mediaUrl = JSON.stringify(
+                `${permissiveOrigin}/csp-media.wav`,
+            );
+            const probeMedia = `(async () => {
+                const audio = document.createElement("audio");
+                audio.preload = "metadata";
+                document.body.append(audio);
+                const loaded = await new Promise((resolve) => {
+                    const timer = setTimeout(() => resolve(false), 4000);
+                    const finish = (value) => {
+                        clearTimeout(timer);
+                        resolve(value);
+                    };
+                    audio.addEventListener("loadedmetadata", () => {
+                        finish(true);
+                    }, { once: true });
+                    audio.addEventListener("error", () => {
+                        finish(false);
+                    }, { once: true });
+                    audio.src = ${mediaUrl};
+                    audio.load();
+                });
+                audio.removeAttribute("src");
+                audio.load();
+                audio.remove();
+                return loaded;
+            })()`;
+            const controlMedia = await bidi.command("script.evaluate", {
+                awaitPromise: true,
+                expression: probeMedia,
+                resultOwnership: "none",
+                target: { context: networkControl.context },
+            });
+            assert.equal(controlMedia.type, "success");
+            assert.equal(controlMedia.result.value, true,
+                "permissive control must decode same-origin WAV metadata");
+            assert.ok(mediaRequests > 0,
+                "permissive control must fetch the WAV resource");
+            const requestsBeforeBlockedMedia = mediaRequests;
+            const blockedMedia = await bidi.command("script.evaluate", {
+                awaitPromise: true,
+                expression: probeMedia,
+                resultOwnership: "none",
+                target: { context: headerOnly.context },
+            });
+            assert.equal(blockedMedia.type, "success");
+            assert.equal(blockedMedia.result.value, false,
+                "HTTP media-src must deny same-origin WAV metadata");
+            assert.equal(mediaRequests, requestsBeforeBlockedMedia,
+                "HTTP media-src must refuse without a media request");
 
             // frame-src 'none' must deny a child frame from the page's own
             // origin, which default-src 'self' would otherwise allow.
