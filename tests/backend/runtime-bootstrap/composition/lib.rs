@@ -254,6 +254,127 @@ fn cli_rejects_infinite_argument_stream_after_four_values() {
     assert_eq!(pulls.get(), 4usize);
 }
 
+#[test]
+fn repack_cli_rejects_extra_argument_before_any_source_open() {
+    let pulls = Cell::new(0usize);
+    let source = ["profile", "repack", "not-a-file", "not-a-target"]
+        .into_iter().map(OsString::from)
+        .chain(iter::from_fn(|| {
+            pulls.set(pulls.get() + 1usize);
+            Some(OsString::from("unexpected extra argument"))
+        }));
+    assert_eq!(
+        bootstrap::inspect_cli_args(source)
+            .expect_err("extra argument is not an authorized repack")
+            .kind(),
+        io::ErrorKind::InvalidInput,
+    );
+    assert_eq!(pulls.get(), 1usize, "at most fifth item inspected");
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn cli_repack_handles_root_only_profile_without_phantom_members() {
+    let root = concat!(
+        r#"{"required_features":[],"profile_identity":"empty-writer", "#,
+        r#""optional_features":[],"entries":[],"#,
+        r#""container_version":"atrament.profile/1"}"#,
+    );
+    let original = write_stored_profile_zip(
+        &[ProfileStoredZipMember {
+            name: "manifest.json", bytes: root.as_bytes(),
+        }],
+        ProfileStoredZipWriteLimits {
+            maximum_archive_bytes: 4096,
+            maximum_entries: 1,
+            maximum_entry_bytes: 2048,
+            maximum_total_bytes: 3000,
+        },
+    ).expect("root-only input is valid ZIP");
+    let source = OwnedProfileFile::new(&original);
+    let destination = OwnedProfileDestination(
+        source.0.with_extension("empty-repack.atrament"),
+    );
+    let executed = Command::new(env!("CARGO_BIN_EXE_atrament"))
+        .args(["profile", "repack"])
+        .arg(&source.0)
+        .arg(&destination.0)
+        .output()
+        .expect("root-only selected source repack");
+    assert!(executed.status.success());
+    assert!(executed.stderr.is_empty());
+    let bytes = fs::read(&destination.0).expect("root-only canonical ZIP");
+    let archive = read_stored_profile_zip(
+        &bytes,
+        ProfileZipReadLimits {
+            maximum_archive_bytes: 4096,
+            maximum_entries: 1,
+            maximum_entry_bytes: 2048,
+            maximum_total_bytes: 3000,
+        },
+    ).expect("repacked root-only ZIP independently parses");
+    assert_eq!(archive.entries().len(), 1);
+    assert_eq!(archive.entries()[0].name(), "manifest.json");
+    assert!(archive.matches_stored_writer_framing());
+    let manifest = archive.manifest_utf8(4096).expect("canonical root JSON");
+    assert!(manifest.starts_with(
+        r#"{"container_version":"atrament.profile/1","entries":[]"#,
+    ));
+    assert!(manifest.contains(r#""profile_identity":"empty-writer""#));
+    let inspection = bootstrap::inspect_profile(destination.0.clone())
+        .expect("root-only export independently reimports");
+    assert!(inspection.contains("empty-writer"));
+    assert!(!inspection.contains("sections/"));
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn cli_repack_rejects_selected_source_symlink_before_target_creation() {
+    use std::os::unix::fs::symlink;
+    let section = br#"{"private":"must-not-leak-8326"}"#;
+    let original = profile_zip(section, b"opaque-source-9511", section);
+    let source = OwnedProfileFile::new(&original);
+    let link = OwnedProfileDestination(
+        source.0.with_extension("source-link.atrament"),
+    );
+    symlink(&source.0, &link.0).expect("untrusted link selected by caller");
+    let destination = OwnedProfileDestination(
+        source.0.with_extension("from-link.atrament"),
+    );
+    let executed = Command::new(env!("CARGO_BIN_EXE_atrament"))
+        .args(["profile", "repack"])
+        .arg(&link.0)
+        .arg(&destination.0)
+        .output()
+        .expect("attempt to repack source through disallowed symlink");
+    assert!(!executed.status.success());
+    assert!(executed.stdout.is_empty());
+    assert!(!destination.0.exists());
+    assert_eq!(fs::read(&source.0).expect("original untouched"), original);
+    let stderr = String::from_utf8_lossy(&executed.stderr);
+    assert!(stderr.contains("Open("));
+    assert!(!stderr.contains("must-not-leak-8326"));
+    assert!(!stderr.contains("opaque-source-9511"));
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn cli_repack_refuses_same_source_and_target_without_in_place_rewrite() {
+    let section = br#"{"private":"preserve-source-1179"}"#;
+    let original = profile_zip(section, b"preserve-asset-3001", section);
+    let source = OwnedProfileFile::new(&original);
+    let executed = Command::new(env!("CARGO_BIN_EXE_atrament"))
+        .args(["profile", "repack"])
+        .arg(&source.0)
+        .arg(&source.0)
+        .output()
+        .expect("self-repack without overwrite authorization");
+    assert!(!executed.status.success());
+    assert!(executed.stdout.is_empty());
+    assert!(String::from_utf8_lossy(&executed.stderr).contains("TargetExists"));
+    assert_eq!(fs::read(&source.0).expect("same file untouched"), original);
+}
+
 #[cfg(target_os = "linux")]
 #[test]
 fn cli_repack_canonically_preserves_verified_sections_assets_and_features() {
@@ -308,6 +429,31 @@ fn cli_repack_canonically_preserves_verified_sections_assets_and_features() {
     assert!(inspected.contains("future.writer"));
     assert!(inspected.contains("verified-section-9570"));
     assert!(!inspected.contains("opaque-repack-asset-3262"));
+
+    // Canonical bytes must be stable when a verified output is repacked again.
+    let repeat = OwnedProfileDestination(
+        source.0.with_extension("canonical-repeat.atrament"),
+    );
+    let repeated = Command::new(env!("CARGO_BIN_EXE_atrament"))
+        .args(["profile", "repack"])
+        .arg(&destination.0)
+        .arg(&repeat.0)
+        .output()
+        .expect("repack already-canonical output");
+    assert!(repeated.status.success());
+    assert!(repeated.stderr.is_empty());
+    assert_eq!(
+        fs::read(&repeat.0).expect("canonical repeated output"),
+        repacked,
+    );
+    use std::os::unix::fs::PermissionsExt as _;
+    assert_eq!(
+        fs::metadata(&destination.0)
+            .expect("persisted output metadata")
+            .permissions().mode() & 0o777,
+        0o600,
+        "new output should be private to the owning process user",
+    );
 }
 
 #[cfg(target_os = "linux")]
