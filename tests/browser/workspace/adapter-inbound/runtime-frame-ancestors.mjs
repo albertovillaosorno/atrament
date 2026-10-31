@@ -1594,6 +1594,7 @@ function createSessionFixtureServer(
     onDraftBody = null,
     onHandshakeBody = null,
     onHandshakeResponse = null,
+    onDraftResponse = null,
 ) {
     const generated = new Set([
         "main.js",
@@ -1711,6 +1712,9 @@ function createSessionFixtureServer(
                 return;
             }
             const status = onDraftRead?.(field) ?? 200;
+            if (onDraftResponse?.(request, response, field, status) === true) {
+                return;
+            }
             const contentType = onDraftContentType?.(field)
                 ?? "text/plain; charset=utf-8";
             response.writeHead(status, {
@@ -1754,9 +1758,9 @@ async function evaluateSessionDocument(client, context) {
     return JSON.parse(response.result.value);
 }
 
-async function waitForSessionStatus(client, context, expected) {
+async function waitForSessionStatus(client, context, expected, attempts = 100) {
     let state = null;
-    for (let attempt = 0; attempt < 100; attempt += 1) {
+    for (let attempt = 0; attempt < attempts; attempt += 1) {
         state = await evaluateSessionDocument(client, context);
         if (state.status === expected) {
             return state;
@@ -5029,6 +5033,198 @@ test(
                 "GET /api/session/task",
                 "GET /api/session/source",
                 "GET /api/session/candidate",
+            ]);
+        } finally {
+            bidi?.close();
+            await closeFixtureServer(server);
+            for (const child of children.reverse()) {
+                await stopChild(child);
+            }
+            fs.rmSync(profile, { recursive: true, force: true });
+        }
+    },
+);
+
+test(
+    "Firefox times out stalled valid-media session streams and retries",
+    { skip: !FIREFOX_AVAILABLE, timeout: FIREFOX_CASE_TIMEOUT_MS },
+    async () => {
+        fs.mkdirSync(".temp", { recursive: true });
+        const profile = fs.mkdtempSync(".temp/session-stream-timeout-");
+        const apiRequests = [];
+        let handshakes = 0;
+        let taskReads = 0;
+        let taskWrites = 0;
+        let handshakeClosed;
+        let draftClosed;
+        let diagnosticClosed;
+        const stalledDiagnosticClosed = new Promise((resolve) => {
+            diagnosticClosed = resolve;
+        });
+        const stalledHandshakeClosed = new Promise((resolve) => {
+            handshakeClosed = resolve;
+        });
+        const stalledDraftClosed = new Promise((resolve) => {
+            draftClosed = resolve;
+        });
+        const server = createSessionFixtureServer(
+            apiRequests,
+            (_request, response, field) => {
+                assert.equal(field, "task");
+                if (++taskWrites !== 1) {
+                    response.writeHead(204);
+                    response.end();
+                    return;
+                }
+                response.writeHead(413, {
+                    "Cache-Control": "no-store",
+                    "Content-Type": "application/json; charset=utf-8",
+                });
+                response.write('{"error":"resource_limit"');
+                response.once("close", diagnosticClosed);
+            },
+            null, null, null, null, null, null, null,
+            (_request, response) => {
+                if (++handshakes !== 1) {
+                    return false;
+                }
+                response.writeHead(200, {
+                    "Cache-Control": "no-store",
+                    "Content-Type": "application/json; charset=utf-8",
+                });
+                response.write('{"result":"compatible"');
+                response.once("close", handshakeClosed);
+                return true;
+            },
+            (_request, response, field) => {
+                if (field !== "task" || ++taskReads !== 1) {
+                    return false;
+                }
+                response.writeHead(200, {
+                    "Cache-Control": "no-store",
+                    "Content-Type": "text/plain; charset=utf-8",
+                });
+                response.write("partial private draft");
+                response.once("close", draftClosed);
+                return true;
+            },
+        );
+        const children = [];
+        let bidi;
+        try {
+            server.listen(0, "127.0.0.1");
+            await once(server, "listening");
+            const address = server.address();
+            assert.notEqual(address, null);
+            assert.notEqual(typeof address, "string");
+            const origin = `http://127.0.0.1:${address.port}`;
+            bidi = await startBidiFirefox(profile, children);
+            const tab = await bidi.command("browsingContext.create", {
+                type: "tab",
+            });
+            await bidi.command("browsingContext.navigate", {
+                context: tab.context,
+                url: `${origin}/#session=${REFRESH_SECRET}`,
+                wait: "complete",
+            });
+            const retrySessionInSameTab = async () => {
+                const retry = await bidi.command("script.evaluate", {
+                    awaitPromise: false,
+                    expression: `(() => {
+                        const retry = document.getElementById("retry-session");
+                        if (retry.hidden || retry.disabled
+                            || retry.textContent !== "Retry connection") {
+                            throw Error("stalled response retry unavailable");
+                        }
+                        retry.click();
+                        return true;
+                    })()`,
+                    resultOwnership: "none",
+                    target: { context: tab.context },
+                });
+                assert.equal(retry.type, "success");
+            };
+            const assertNotHydrated = (state) => {
+                assert.equal(state.hash, "");
+                for (const field of ["task", "source", "candidate"]) {
+                    assert.deepEqual(state[field], {
+                        disabled: true, value: "",
+                    });
+                }
+            };
+            const invalidHandshake = await waitForSessionStatus(
+                bidi, tab.context,
+                "Invalid backend handshake · editing disabled", 400,
+            );
+            assertNotHydrated(invalidHandshake);
+            await observedWithin(stalledHandshakeClosed,
+                "valid-media stalled handshake abort");
+            await retrySessionInSameTab();
+            const unavailableDraft = await waitForSessionStatus(
+                bidi, tab.context, "Draft load unavailable · editing off", 400,
+            );
+            assertNotHydrated(unavailableDraft);
+            await observedWithin(stalledDraftClosed,
+                "valid-media stalled draft abort");
+            await retrySessionInSameTab();
+            const ready = await waitForSessionStatus(
+                bidi, tab.context, "Session ready",
+            );
+            assert.equal(ready.hash, "");
+            for (const field of ["task", "source", "candidate"]) {
+                assert.deepEqual(ready[field], {
+                    disabled: false, value: REFRESH_DRAFT[field],
+                });
+            }
+            const edit = await bidi.command("script.evaluate", {
+                awaitPromise: false,
+                expression: `(() => {
+                    const task = document.getElementById("task-input");
+                    task.value = "pending private edit";
+                    task.dispatchEvent(new Event("input"));
+                })()`,
+                resultOwnership: "none",
+                target: { context: tab.context },
+            });
+            assert.equal(edit.type, "success");
+            const failedEdit = await waitForSessionStatus(
+                bidi, tab.context, "Draft offline · retry edit", 400,
+            );
+            assert.deepEqual(failedEdit.task, {
+                disabled: false, value: "pending private edit",
+            });
+            await observedWithin(stalledDiagnosticClosed,
+                "valid-media stalled diagnostic abort");
+            const retryEdit = await bidi.command("script.evaluate", {
+                awaitPromise: false,
+                expression: `(() => {
+                    const retry = document.getElementById("retry-session");
+                    if (retry.hidden || retry.disabled
+                        || retry.textContent !== "Retry edits") {
+                        throw Error("stalled diagnostic retry unavailable");
+                    }
+                    retry.click();
+                })()`,
+                resultOwnership: "none",
+                target: { context: tab.context },
+            });
+            assert.equal(retryEdit.type, "success");
+            const synced = await waitForSessionStatus(
+                bidi, tab.context, "Session ready",
+            );
+            assert.deepEqual(synced.task, {
+                disabled: false, value: "pending private edit",
+            });
+            assert.deepEqual(apiRequests, [
+                "POST /api/handshake",
+                "POST /api/handshake",
+                "GET /api/session/task",
+                "POST /api/handshake",
+                "GET /api/session/task",
+                "GET /api/session/source",
+                "GET /api/session/candidate",
+                "POST /api/session/task",
+                "POST /api/session/task",
             ]);
         } finally {
             bidi?.close();

@@ -55,7 +55,8 @@ change to the session's HTTP authentication rules.
 
 A discarded-response browser regression now verifies that wrong-media
 handshakes, draft responses, and unexpected statuses are refused without
-reading their bodies, and that the browser explicitly cancels their streams. The authenticated handshake and draft requests also
+reading their bodies, and that the browser explicitly cancels their
+streams. The authenticated handshake and draft requests also
 compose page-lifetime and per-request abort signals; refusing an already-started
 fetch aborts the request instead of depending on `ReadableStream.cancel()` to
 close its connection.
@@ -426,3 +427,18 @@ uses the same finite 25-second readiness allowance; a red-first fake BiDi
 client fixture asserts both the handshake budget and connect-before-command
 ordering without launching Firefox. The existing 50-second per-case ceiling
 and actual browser/session transport admission remain unchanged.
+
+Client-side session calls now have a six-second abort deadline spanning both
+`fetch()` and any valid-media response-body stream. A stream that sends a
+partial compatible handshake, text draft, or `413` diagnostic and never closes
+could previously hold browser controls indefinitely despite bounded bytes.
+Red-first Node fixtures verify that the incomplete content never becomes
+accepted authority; stalled draft limit diagnostics retain an explicit retry
+rather than being mistaken for malformed backend diagnostics.
+
+A real Firefox fixture observes closure of all three stalled sockets, no
+partial draft hydration, same-tab recovery, and a successful later draft edit
+retry. The
+explicit End session request has the same finite deadline and does not claim
+backend erasure if its outcome remains unknown. This is browser lifetime
+hardening, not proof of backend operation cancellation or media-file cleanup.

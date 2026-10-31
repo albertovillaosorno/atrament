@@ -181,8 +181,9 @@ refused streams are cancelled without consuming private payloads or changing
 retry and diagnostic outcomes.
 
 A separate Firefox test serves a wrong-media handshake with a body that never
-ends: the per-request abort closes that live connection, leaves all inputs disabled, and permits the same fragment-free tab
-to retry, hydrate all three fields, and enable editing. Firefox additionally
+ends: the per-request abort closes that live connection, leaves all inputs
+disabled, and permits the same fragment-free tab to retry, hydrate all three
+fields, and enable editing. Firefox additionally
 showed that body-stream cancellation alone did not promptly close this socket,
 which is why both cancellation and request abort are used.
 
@@ -221,3 +222,24 @@ limit. A red-first stream fixture verified that sixty-five empty chunks
 followed by valid draft text were previously admitted; a bounded read now
 cancels without hydrating. Sixty-four empty chunks followed by valid UTF-8
 remain accepted. This is client-side liveness protection, not media cleanup.
+
+A further red-first browser regression demonstrated that a correctly typed
+handshake JSON or draft body can deliver a short prefix and never close, below
+both existing byte and empty-chunk limits. All four session fetches now carry
+a six-second browser-side request deadline, active through response-body reads
+as well as response headers. It complements rather than replaces the runtime's
+two-second I/O budget. A response that exceeds the deadline cannot admit a
+partial handshake or draft snapshot, and an explicit End session timeout never
+claims successful erasure.
+
+A real Firefox loopback fixture keeps a valid-media handshake, draft GET, and
+`413` draft diagnostic body open after sending an incomplete prefix. Firefox
+closes each connection at its browser request deadline. The first two failures
+retain blank, disabled draft inputs and recover through same-tab connection
+retries; the stalled diagnostic preserves the unsent edit and exposes an edit
+retry, which succeeds once the fixture acknowledges it.
+
+Independent Node fixtures exercise all three stalled readers and pin deadline
+coverage for the explicit End session fetch. This protects browser request
+lifetime only; the
+remaining backend media cancellation and cleanup proof is still open.

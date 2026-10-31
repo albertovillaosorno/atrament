@@ -494,6 +494,10 @@ async function completeSessionHandshake(secret: string): Promise<void> {
     hideSessionRetry();
     setTextIfChanged(sessionStatus, "Checking backend compatibility…");
     const requestAbort = new AbortController();
+    // The backend has a two-second I/O budget, but a misrouted or stalled
+    // browser response can still withhold its headers or final body chunk.
+    // Keep the same deadline active through the bounded body decode.
+    const requestDeadline = AbortSignal.timeout(6_000);
     let response: Response;
     try {
         response = await fetch("./api/handshake", {
@@ -506,6 +510,7 @@ async function completeSessionHandshake(secret: string): Promise<void> {
             referrerPolicy: "origin",
             signal: AbortSignal.any([
                 sessionRequests.signal, requestAbort.signal,
+                requestDeadline,
             ]),
         });
     } catch {
@@ -662,6 +667,7 @@ async function readDraftField(
     generation: number,
 ): Promise<DraftReadOutcome> {
     const requestAbort = new AbortController();
+    const requestDeadline = AbortSignal.timeout(6_000);
     let response: Response;
     try {
         response = await fetch(sessionDraft.draftReadTarget(field), {
@@ -674,6 +680,7 @@ async function readDraftField(
             referrerPolicy: "no-referrer",
             signal: AbortSignal.any([
                 sessionRequests.signal, requestAbort.signal,
+                requestDeadline,
             ]),
         });
     } catch {
@@ -784,6 +791,7 @@ async function syncDraftField(
         ) {
             attemptedValue = input.value;
             const requestAbort = new AbortController();
+            const requestDeadline = AbortSignal.timeout(6_000);
             let response: Response;
             try {
                 const target = sessionDraft.draftMutationTarget(field);
@@ -798,6 +806,7 @@ async function syncDraftField(
                     referrerPolicy: "origin",
                     signal: AbortSignal.any([
                         sessionRequests.signal, requestAbort.signal,
+                        requestDeadline,
                     ]),
                 });
             } catch {
@@ -833,8 +842,11 @@ async function syncDraftField(
                 } catch {
                     requestAbort.abort();
                     if (draftSyncIsCurrent(secret, generation)) {
-                        const invalidMessage = "Invalid draft diagnostic";
-                        recordDraftSyncFailure(field, invalidMessage);
+                        const timedOut = requestDeadline.aborted;
+                        const message = timedOut
+                            ? "Draft offline · retry edit"
+                            : "Invalid draft diagnostic";
+                        recordDraftSyncFailure(field, message, timedOut);
                     }
                     return;
                 }
@@ -951,6 +963,7 @@ endSession.addEventListener("click", (): void => {
     endSession.disabled = true;
     void (async (): Promise<void> => {
         const requestAbort = new AbortController();
+        const requestDeadline = AbortSignal.timeout(6_000);
         try {
             const response = await fetch("./api/session/end", {
                 method: "POST",
@@ -960,7 +973,9 @@ endSession.addEventListener("click", (): void => {
                 mode: "same-origin",
                 redirect: "error",
                 referrerPolicy: "origin",
-                signal: requestAbort.signal,
+                signal: AbortSignal.any([
+                    requestAbort.signal, requestDeadline,
+                ]),
             });
             if (sessionSecret !== secret) {
                 discardResponseBody(response, requestAbort);

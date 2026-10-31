@@ -1381,6 +1381,193 @@ function recordingAbortController(abortCalls) {
     };
 }
 
+test("every browser session fetch has a finite request deadline", async () => {
+    const source = await readFile(MAIN_MODULE, "utf8");
+    assert.equal(source.split("AbortSignal.timeout(").length - 1, 4,
+        "handshake, draft GET/POST, and explicit end must all time out");
+});
+
+function stalledTypedResponse(
+    contentType, prefix, deadlines, aborts, status = 200,
+) {
+    const timeoutSignal = {
+        any: (signals) => AbortSignal.any(signals),
+        timeout(milliseconds) {
+            deadlines.push(milliseconds);
+            const controller = new AbortController();
+            queueMicrotask(() => controller.abort());
+            return controller.signal;
+        },
+    };
+    const fetch = async (_url, options) => {
+        const body = new ReadableStream({
+            start(controller) {
+                controller.enqueue(new TextEncoder().encode(prefix));
+                options.signal.addEventListener("abort", () => {
+                    aborts.push(true);
+                    controller.error(new Error("synthetic socket timeout"));
+                }, { once: true });
+            },
+        });
+        return new Response(body, {
+            status,
+            headers: { "Content-Type": contentType },
+        });
+    };
+    return { timeoutSignal, fetch };
+}
+
+test("stalled valid-media handshake rejects partial JSON and offers retry",
+    { timeout: 2_000 }, async () => {
+    const source = await readFile(MAIN_MODULE, "utf8");
+    const handshake = source.slice(
+        source.indexOf("async function completeSessionHandshake(secret) {"),
+        source.indexOf("const failedDraftFields"),
+    );
+    const deadlines = [];
+    const aborts = [];
+    const retries = [];
+    const fixture = stalledTypedResponse(
+        "application/json; charset=utf-8", '{"result":', deadlines, aborts,
+    );
+    const result = await runInNewContext(`
+        (async () => {
+            const sessionSecret = "secret";
+            const sessionRequests = new AbortController();
+            const sessionStatus = { textContent: "" };
+            const sessionHandshake = {
+                handshakeHeaders: () => ({}),
+                isHandshakeContentType: (v) =>
+                    v === "application/json; charset=utf-8",
+                parseHandshakePayload: () => ({ kind: "invalid" }),
+            };
+            function hideSessionRetry() {}
+            function showSessionRetry(purpose) { onRetry(purpose); }
+            function setTextIfChanged(element, value) {
+                element.textContent = value;
+            }
+            function invalidateUnauthorizedSession() {}
+            async function hydrateSessionDraft() {
+                throw Error("incomplete JSON must not hydrate");
+            }
+            const parseBoundedJsonResponse = parseJson;
+            ${discardedResponseHelper(source)}
+            ${handshake}
+            await completeSessionHandshake("secret");
+            return sessionStatus.textContent;
+        })()
+    `, {
+        fetch: fixture.fetch,
+        AbortSignal: fixture.timeoutSignal,
+        parseJson: parseBoundedJsonResponse,
+        onRetry: (purpose) => retries.push(purpose),
+    });
+    assert.equal(result, "Invalid backend handshake · editing disabled");
+    assert.deepEqual(retries, ["connection"]);
+    assert.deepEqual(aborts, [true]);
+    assert.equal(deadlines.length, 1);
+    assert.ok(deadlines[0] >= 2_000 && deadlines[0] <= 20_000);
+});
+
+test("stalled valid-media draft read never hydrates partial text",
+    { timeout: 2_000 }, async () => {
+    const source = await readFile(MAIN_MODULE, "utf8");
+    const readDraft = source.slice(
+        source.indexOf("async function readDraftField("),
+        source.indexOf("async function hydrateSessionDraft("),
+    );
+    const deadlines = [];
+    const aborts = [];
+    const fixture = stalledTypedResponse(
+        "text/plain; charset=utf-8", "private partial", deadlines, aborts,
+    );
+    const result = await runInNewContext(`
+        (async () => {
+            const sessionSecret = "secret";
+            const draftSyncGeneration = 0;
+            const sessionRequests = new AbortController();
+            const sessionDraft = {
+                draftReadTarget: () => "./api/session/task",
+                draftReadHeaders: () => ({}),
+                isDraftReadContentType: (v) =>
+                    v === "text/plain; charset=utf-8",
+                decodeDraftReadResponse: decodeDraft,
+            };
+            function draftSyncIsCurrent(secret, generation) {
+                return secret === sessionSecret
+                    && generation === draftSyncGeneration;
+            }
+            ${discardedResponseHelper(source)}
+            ${readDraft}
+            return readDraftField("task", "secret", 0);
+        })()
+    `, {
+        fetch: fixture.fetch,
+        AbortSignal: fixture.timeoutSignal,
+        decodeDraft: decodeDraftReadResponse,
+    });
+    assert.equal(result.kind, "unavailable");
+    assert.deepEqual(aborts, [true]);
+    assert.equal(deadlines.length, 1);
+    assert.ok(deadlines[0] >= 2_000 && deadlines[0] <= 20_000);
+});
+
+test("stalled draft limit diagnostic retains an explicit edit retry",
+    { timeout: 2_000 }, async () => {
+    const source = await readFile(MAIN_MODULE, "utf8");
+    const syncDraft = source.slice(
+        source.indexOf("async function syncDraftField("),
+        source.indexOf("function bindDraftSync("),
+    );
+    const deadlines = [];
+    const aborts = [];
+    const failures = [];
+    const fixture = stalledTypedResponse(
+        "application/json; charset=utf-8", '{"error":',
+        deadlines, aborts, 413,
+    );
+    await runInNewContext(`
+        (async () => {
+            const sessionSecret = "secret";
+            const draftSyncGeneration = 0;
+            const sessionRequests = new AbortController();
+            const failedDraftFields = new Set();
+            const retryableDraftFields = new Set();
+            const syncingDraftFields = new Set();
+            const sessionDraft = {
+                draftMutationTarget: () => "./api/session/task",
+                draftMutationHeaders: () => ({}),
+                isDraftDiagnosticContentType: (v) =>
+                    v === "application/json; charset=utf-8",
+            };
+            function draftSyncIsCurrent(secret, generation) {
+                return secret === sessionSecret
+                    && generation === draftSyncGeneration;
+            }
+            function recordDraftSyncFailure(field, message, retryable) {
+                failedDraftFields.add(field);
+                onFailure(message, retryable);
+            }
+            function hideResolvedDraftRetry() {}
+            function hideSessionRetry() {}
+            function setTextIfChanged() {}
+            function invalidateUnauthorizedSession() {}
+            const parseBoundedJsonResponse = parseJson;
+            ${discardedResponseHelper(source)}
+            ${syncDraft}
+            await syncDraftField("task", { value: "private" }, "secret");
+        })()
+    `, {
+        fetch: fixture.fetch,
+        AbortSignal: fixture.timeoutSignal,
+        parseJson: parseBoundedJsonResponse,
+        onFailure: (...args) => failures.push(args),
+    });
+    assert.deepEqual(failures, [["Draft offline · retry edit", true]]);
+    assert.deepEqual(aborts, [true]);
+    assert.equal(deadlines.length, 1);
+});
+
 test(
     "rejected handshake responses cancel unread bodies before retry",
     async () => {
