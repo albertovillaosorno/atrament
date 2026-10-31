@@ -40,6 +40,7 @@ mod linux {
     use std::env;
     use std::fs;
     use std::os::unix::fs::{MetadataExt as _, symlink};
+    use std::path::Path;
     use std::process::{self, Command};
     use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -79,6 +80,19 @@ mod linux {
         }
     }
 
+    fn matching_status(
+        profile: &ProfileExportArtifact,
+        selected: &Path,
+    ) -> Status {
+        let metadata = fs::metadata(selected).expect("matched file metadata");
+        Status::Matches {
+            archive_sha256: profile.archive_sha256(),
+            byte_length: profile.bytes().len(),
+            file_device: metadata.dev(),
+            file_inode: metadata.ino(),
+        }
+    }
+
     #[test]
     fn opened_probe_refuses_identical_bytes_after_pathname_rebinding() {
         let dir = OwnedDir::new();
@@ -112,10 +126,7 @@ mod linux {
                 &original,
                 original.bytes().len(),
             ),
-            Ok(Status::Matches {
-                archive_sha256: original.archive_sha256(),
-                byte_length: original.bytes().len(),
-            })
+            Ok(matching_status(&original, selected.path()))
         );
         assert_eq!(
             fs::read(&parked).expect("parked original unchanged"),
@@ -261,10 +272,7 @@ mod linux {
             .expect("relative target exists");
             assert_eq!(
                 original_probe.verify(),
-                Ok(Status::Matches {
-                    archive_sha256: profile.archive_sha256(),
-                    byte_length: profile.bytes().len(),
-                }),
+                Ok(matching_status(&profile, selected.path())),
             );
             let after_move_probe = open_profile_export_target_probe(
                 &selected,
@@ -341,10 +349,7 @@ mod linux {
                 &profile,
                 profile.bytes().len(),
             ),
-            Ok(Status::Matches {
-                archive_sha256: profile.archive_sha256(),
-                byte_length: profile.bytes().len(),
-            })
+            Ok(matching_status(&profile, selected.path()))
         );
         assert_eq!(
             fs::read(selected.path()).expect("no source mutation"),
@@ -404,10 +409,7 @@ mod linux {
                 &second,
                 second.bytes().len(),
             ),
-            Ok(Status::Matches {
-                archive_sha256: second.archive_sha256(),
-                byte_length: second.bytes().len(),
-            })
+            Ok(matching_status(&second, selected.path()))
         );
     }
 

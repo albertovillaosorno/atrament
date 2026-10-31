@@ -110,6 +110,10 @@ impl ProfileFileCommitError {
 pub struct ProfileFileCommitEvidence {
     /// Number of complete artifact bytes committed to the selected target.
     pub byte_length: usize,
+    /// Linux device identity of the staged inode linked at the selected name.
+    pub file_device: u64,
+    /// Linux inode identity of the staged file, retained for retry recovery.
+    pub file_inode: u64,
 }
 
 #[cfg(target_os = "linux")]
@@ -219,9 +223,12 @@ where
     if is_cancelled() {
         return Err(ProfileFileCommitError::CancelledBeforeCommit);
     }
-    commit_platform(target, artifact, disposition, &mut is_cancelled)?;
+    let (file_device, file_inode) =
+        commit_platform(target, artifact, disposition, &mut is_cancelled)?;
     Ok(ProfileFileCommitEvidence {
         byte_length: artifact.len(),
+        file_device,
+        file_inode,
     })
 }
 
@@ -231,7 +238,7 @@ fn commit_platform(
     _artifact: &[u8],
     _disposition: ProfileFileCommitDisposition,
     _is_cancelled: &mut dyn FnMut() -> bool,
-) -> Result<(), ProfileFileCommitError> {
+) -> Result<(u64, u64), ProfileFileCommitError> {
     Err(ProfileFileCommitError::UnsupportedPlatform)
 }
 
@@ -289,8 +296,9 @@ fn commit_platform(
     artifact: &[u8],
     disposition: ProfileFileCommitDisposition,
     is_cancelled: &mut dyn FnMut() -> bool,
-) -> Result<(), ProfileFileCommitError> {
+) -> Result<(u64, u64), ProfileFileCommitError> {
     use std::io::Write as _;
+    use std::os::unix::fs::MetadataExt as _;
 
     use nix::fcntl::{
         AtFlags, OFlag, OpenHow, RenameFlags, ResolveFlag, openat, openat2,
@@ -384,6 +392,12 @@ fn commit_platform(
     output
         .sync_all()
         .map_err(|error| ProfileFileCommitError::FileIo(error.kind()))?;
+    // Observe the private staged inode before any link or rename. This is
+    // the committed file identity even if a later caller changes the path.
+    let metadata = output
+        .metadata()
+        .map_err(|error| ProfileFileCommitError::FileIo(error.kind()))?;
+    let file_identity = (metadata.dev(), metadata.ino());
     if is_cancelled() {
         return Err(ProfileFileCommitError::CancelledBeforeCommit);
     }
@@ -482,5 +496,5 @@ fn commit_platform(
     ) {
         return Err(ProfileFileCommitError::CommittedPathUnverified);
     }
-    Ok(())
+    Ok(file_identity)
 }

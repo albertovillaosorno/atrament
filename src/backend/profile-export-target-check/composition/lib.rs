@@ -66,12 +66,16 @@ use atrament_profile_selected_file_open::{
 pub enum ProfileExportTargetStatus {
     /// File was read completely but is not the requested artifact.
     Drifted,
-    /// Selected target holds the exact complete artifact bytes.
+    /// Selected target holds exact bytes with its rechecked file identity.
     Matches {
         /// SHA-256 supplied by the already-verified artifact assembly.
         archive_sha256: Sha256Digest,
         /// Exact number of matched bytes.
         byte_length: usize,
+        /// Linux device of the rechecked, securely opened target file.
+        file_device: u64,
+        /// Linux inode of the rechecked, securely opened target file.
+        file_inode: u64,
     },
     /// No file currently exists at the selected path.
     Missing,
@@ -168,9 +172,18 @@ impl ProfileExportTargetProbe<'_> {
         ) {
             return Ok(ProfileExportTargetStatus::Drifted);
         }
+        #[cfg(unix)]
+        let (file_device, file_inode) = {
+            use std::os::unix::fs::MetadataExt as _;
+            (current_metadata.dev(), current_metadata.ino())
+        };
+        #[cfg(not(unix))]
+        let (file_device, file_inode) = (0, 0);
         Ok(ProfileExportTargetStatus::Matches {
             archive_sha256: self.artifact.archive_sha256(),
             byte_length: self.artifact.bytes().len(),
+            file_device,
+            file_inode,
         })
     }
 }

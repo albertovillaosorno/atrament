@@ -43,7 +43,7 @@ mod linux {
     use std::ffi::OsString;
     use std::fs::{self, OpenOptions};
     use std::io::{self, Read as _, Write as _};
-    use std::os::unix::fs::{PermissionsExt as _, symlink};
+    use std::os::unix::fs::{MetadataExt as _, PermissionsExt as _, symlink};
     use std::os::unix::process::ExitStatusExt as _;
     use std::path::{Path, PathBuf};
     use std::process::{self, Command, Stdio};
@@ -122,6 +122,9 @@ mod linux {
         )
         .expect("no-existing-target commit");
         assert_eq!(evidence.byte_length, payload.len());
+        let metadata = fs::metadata(&target).expect("committed file metadata");
+        assert_eq!(evidence.file_device, metadata.dev());
+        assert_eq!(evidence.file_inode, metadata.ino());
         assert_eq!(fs::read(&target).expect("read target"), payload);
         assert_eq!(dir.entries(), vec![String::from("chosen.atrament")]);
         assert_eq!(

@@ -273,7 +273,8 @@ result without a duplicate output or second intentional rewrite.
 
 An external-drift fixture modifies the target after successful export and before
 same-retry recovery. Recovery detects the conflict and does not overwrite the
-external change.
+external change. An identical-byte replacement using a different device/inode
+must also refuse the previous receipt, without changing either file.
 
 A temporary-cleanup fixture forces success and failure paths and proves owned
 intermediates disappear. No database, autosave journal, or hidden recovery file

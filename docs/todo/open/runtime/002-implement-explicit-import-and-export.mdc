@@ -939,3 +939,21 @@ conservatively retaining uncertain effect if the postcommit path context drifts.
 These checks narrow the observable directory-rename race; they do not lock an
 external pathname, prevent changes after either check, or solve the brief
 replacement link-before-rename crash window that can leave a named stage.
+
+The profile file writer now captures device/inode identity from its privately
+staged Linux file before it is linked into the selected path. A successful
+synced commit retains that identity in the process-owned Export attempt.
+The read-only target checker includes the re-opened file identity with a
+byte-exact match, and same-key recovery requires both original identities.
+
+A red-first session regression for both overwrite dispositions now rejects a
+new inode containing identical ZIP bytes as `ExternalTargetDrift`, without
+changing either the external replacement or the parked original. An independent
+pure classifier test covers changed device and changed inode; a transport test
+checks the staged identity equals the final linked target. Stable target
+recovery remains successful and never repeats the file effect.
+
+File identity detects observed replacements, not all external mutations. It
+does not lock pathnames between observations, rule out inode reuse after the
+original file is destroyed, authenticate caller intent, or close the separate
+replacement link-before-rename crash window.

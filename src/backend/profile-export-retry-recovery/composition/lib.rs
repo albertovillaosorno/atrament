@@ -78,7 +78,7 @@ pub enum ProfileExportRetryRecoveryDecision {
     FreshBinding,
     /// Caller-supplied commit or target facts disagree with the sealed ZIP.
     InconsistentEvidence,
-    /// A prior synced commit still has byte-exact target representation.
+    /// A prior synced commit still has exact bytes and matching file identity.
     PriorCommitBytesVerified,
     /// Renamed output might not have been durably committed.
     PriorDurabilityUnknown,
@@ -96,9 +96,10 @@ pub enum ProfileExportRetryRecoveryDecision {
 /// Caller authority, current revision and accepted artifact origin must have
 /// been established independently. The session must retain an authentic
 /// result from its earlier file-commit call; the target checker must inspect
-/// the selected path after that result. A matching file by itself cannot
-/// prove an earlier commit, and a previous uncertain durability result cannot
-/// be upgraded to success merely by reading the target.
+/// the selected path after that result. Byte equality alone cannot recover a
+/// receipt after another file replaces the original committed inode. A
+/// previous uncertain durability result cannot be upgraded to success merely
+/// by reading the target.
 ///
 /// `PriorCommitBytesVerified` permits a trusted Export application to consult
 /// its saved receipt; it is not itself proof of that receipt or a durable
@@ -150,13 +151,19 @@ pub fn assess_profile_export_retry_recovery(
         Some(Ok(ProfileExportTargetStatus::Matches {
             archive_sha256,
             byte_length,
+            file_device,
+            file_inode,
         })) => {
-            if archive_sha256 == artifact.archive_sha256()
-                && byte_length == artifact.bytes().len()
+            if archive_sha256 != artifact.archive_sha256()
+                || byte_length != artifact.bytes().len()
             {
-                ProfileExportRetryRecoveryDecision::PriorCommitBytesVerified
-            } else {
                 ProfileExportRetryRecoveryDecision::InconsistentEvidence
+            } else if file_device != commit.file_device
+                || file_inode != commit.file_inode
+            {
+                ProfileExportRetryRecoveryDecision::ExternalTargetDrift
+            } else {
+                ProfileExportRetryRecoveryDecision::PriorCommitBytesVerified
             }
         }
     }

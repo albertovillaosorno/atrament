@@ -94,6 +94,8 @@ fn artifact(identity: &str) -> ProfileExportArtifact {
 fn commit(zip: &ProfileExportArtifact) -> Prior {
     Prior::SyncedCommit(ProfileFileCommitEvidence {
         byte_length: zip.bytes().len(),
+        file_device: 11,
+        file_inode: 22,
     })
 }
 
@@ -101,6 +103,8 @@ fn matches(zip: &ProfileExportArtifact) -> Status {
     Status::Matches {
         archive_sha256: zip.archive_sha256(),
         byte_length: zip.bytes().len(),
+        file_device: 11,
+        file_inode: 22,
     }
 }
 
@@ -227,7 +231,11 @@ fn forged_commit_length_or_target_match_does_not_recover() {
     assert_eq!(
         assess(
             Ok(Binding::SameBinding),
-            Prior::SyncedCommit(ProfileFileCommitEvidence { byte_length: 0 }),
+            Prior::SyncedCommit(ProfileFileCommitEvidence {
+                byte_length: 0,
+                file_device: 11,
+                file_inode: 22,
+            }),
             Some(Ok(matches(&zip))),
             &zip
         ),
@@ -249,11 +257,34 @@ fn forged_commit_length_or_target_match_does_not_recover() {
             Some(Ok(Status::Matches {
                 archive_sha256: zip.archive_sha256(),
                 byte_length: 0,
+                file_device: 11,
+                file_inode: 22,
             })),
             &zip
         ),
         Decision::InconsistentEvidence
     );
+}
+
+#[test]
+fn matching_bytes_under_another_inode_cannot_recover_a_synced_commit() {
+    let zip = artifact("A");
+    for (device, inode) in [(11, 23), (12, 22)] {
+        assert_eq!(
+            assess(
+                Ok(Binding::SameBinding),
+                commit(&zip),
+                Some(Ok(Status::Matches {
+                    archive_sha256: zip.archive_sha256(),
+                    byte_length: zip.bytes().len(),
+                    file_device: device,
+                    file_inode: inode,
+                })),
+                &zip,
+            ),
+            Decision::ExternalTargetDrift,
+        );
+    }
 }
 
 #[cfg(target_os = "linux")]

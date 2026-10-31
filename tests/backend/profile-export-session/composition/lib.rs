@@ -416,6 +416,48 @@ mod linux {
     }
 
     #[test]
+    fn same_key_retry_refuses_byte_identical_external_inode_replacement() {
+        for overwrite in [PreserveExisting, ReplaceExisting] {
+            let root = fixture();
+            let chosen = root.0.join("selected.atrament");
+            if overwrite == ReplaceExisting {
+                fs::write(&chosen, b"prior bytes").expect("prior target");
+            }
+            let request = intent(chosen.clone(), overwrite);
+            let original = artifact("writer-identical-replacement");
+            let accepted = revision();
+            let mut session = ProfileExportSession::new(1);
+            assert!(matches!(
+                session.export("key", accepted, &request, &original, 8192),
+                Ok(Outcome::Committed(_)),
+            ));
+            let parked = root.0.join("prior-committed-inode");
+            fs::rename(&chosen, &parked).expect("park original inode");
+            fs::write(&chosen, original.bytes())
+                .expect("external byte-identical replacement");
+            assert_ne!(
+                fs::metadata(&parked).expect("original inode").ino(),
+                fs::metadata(&chosen).expect("external inode").ino(),
+            );
+            assert_eq!(
+                session.export("key", accepted, &request, &original, 8192),
+                Err(Error::Retry(
+                    ProfileExportRetryRecoveryDecision::ExternalTargetDrift
+                )),
+            );
+            assert_eq!(
+                fs::read(&chosen).expect("unmodified external file"),
+                original.bytes(),
+            );
+            assert_eq!(
+                fs::read(&parked).expect("original file retained"),
+                original.bytes(),
+            );
+            assert_eq!(session.len(), 1);
+        }
+    }
+
+    #[test]
     fn changed_retry_identity_conflicts_without_writes() {
         let root = fixture();
         let chosen = root.0.join("selected.atrament");
