@@ -325,6 +325,109 @@ test(
 );
 
 
+test("end-session warning survives drafts that settle afterward", async () => {
+    const source = await readFile(MAIN_MODULE, "utf8");
+    const extract = (start, end) => {
+        const first = source.indexOf(start);
+        const last = source.indexOf(end, first);
+        assert.ok(first >= 0 && last > first, `missing ${start}`);
+        return source.slice(first, last);
+    };
+    const failure = extract(
+        "function recordDraftSyncFailure(",
+        "function invalidateUnauthorizedSession()",
+    );
+    const sync = extract(
+        "async function syncDraftField(",
+        "function bindDraftSync(",
+    );
+    const end = extract(
+        "let endSessionConfirmed = false;",
+        'window.addEventListener("pagehide"',
+    );
+    for (const [phase, draftStatus, expected] of [
+        ["armed", 204, "Ending discards this notebook"],
+        ["failed", 204, "End session failed · retry"],
+        ["failed", 503, "End session failed · retry"],
+    ]) {
+        const result = await runInNewContext(`
+            (async () => {
+                let sessionSecret = "secret";
+                const sessionRequests = new AbortController();
+                const draftSyncGeneration = 0;
+                const failedDraftFields = new Set();
+                const retryableDraftFields = new Set();
+                const syncingDraftFields = new Set();
+                const sessionStatus = { textContent: "Session ready" };
+                const draftInput = { value: "in-flight private draft" };
+                const handlers = {};
+                const endSession = {
+                    disabled: false,
+                    textContent: "End session",
+                    addEventListener(type, handler) {
+                        handlers[type] = handler;
+                    },
+                };
+                let finishDraft;
+                const pendingDraft = new Promise((resolve) => {
+                    finishDraft = resolve;
+                });
+                const fetch = (url) => url.endsWith("/task")
+                    ? pendingDraft
+                    : Promise.resolve(new Response(null, { status: 503 }));
+                const sessionDraft = {
+                    draftMutationTarget: () => "./api/session/task",
+                    draftMutationHeaders: () => ({}),
+                    draftReadHeaders: () => ({}),
+                    isDraftDiagnosticContentType: () => true,
+                };
+                function draftSyncIsCurrent(secret, generation) {
+                    return sessionSecret === secret
+                        && draftSyncGeneration === generation;
+                }
+                function setTextIfChanged(element, value) {
+                    element.textContent = value;
+                }
+                function showSessionRetry() {}
+                function hideSessionRetry() {}
+                function hideResolvedDraftRetry() {}
+                function discardResponseBody() {}
+                function invalidateUnauthorizedSession() {}
+                function invalidateClipboardRequests() {}
+                function invalidateDraftSync() {}
+                function clearSessionText() {}
+                const parseBoundedJsonResponse = async () => null;
+                ${failure}
+                ${sync}
+                ${end}
+                const write = syncDraftField("task", draftInput, "secret");
+                handlers.click();
+                if (mode === "failed") {
+                    handlers.click();
+                }
+                for (let step = 0; step < 20; step += 1) {
+                    await Promise.resolve();
+                }
+                const before = sessionStatus.textContent;
+                finishDraft(new Response(null, { status: writeStatus }));
+                await write;
+                return {
+                    before,
+                    after: sessionStatus.textContent,
+                    button: endSession.textContent,
+                };
+            })()
+        `, {
+            Response,
+            mode: phase,
+            writeStatus: draftStatus,
+        });
+        assert.equal(result.before, expected, `${phase} initial warning`);
+        assert.equal(result.after, expected,
+            `${phase} warning after draft HTTP ${draftStatus}`);
+    }
+});
+
 test("retry control follows remaining retryable draft failures", async () => {
     const source = await readFile(MAIN_MODULE, "utf8");
     function extract(start, end) {
@@ -352,6 +455,8 @@ test("retry control follows remaining retryable draft failures", async () => {
         const result = await runInNewContext(`
         (async () => {
             let retryPurpose = null;
+            const endSessionConfirmed = false;
+            const endSessionFailurePending = false;
             const retrySession = { hidden: true, disabled: true };
             const sessionStatus = { textContent: "" };
             const sessionSecret = "secret";

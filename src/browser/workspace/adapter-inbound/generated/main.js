@@ -388,6 +388,7 @@ function clearSessionText() {
     copyPrompt.disabled = true;
     endSession.disabled = true;
     endSessionConfirmed = false;
+    endSessionFailurePending = false;
     setTextIfChanged(endSession, "End session");
     setTextIfChanged(copyStatus, "Waiting for a prompt from the backend.");
     updateCharacterCount(taskInput, taskCount);
@@ -537,7 +538,10 @@ function recordDraftSyncFailure(field, message, retryable = false) {
         retryableDraftFields.delete(field);
         hideResolvedDraftRetry();
     }
-    setTextIfChanged(sessionStatus, message);
+    // A failed explicit erasure must not be hidden by a later draft result.
+    if (!endSessionFailurePending) {
+        setTextIfChanged(sessionStatus, message);
+    }
 }
 function invalidateUnauthorizedSession() {
     sessionSecret = null;
@@ -765,7 +769,9 @@ async function syncDraftField(field, input, secret) {
         }
         else if (current
             && syncingDraftFields.size === 0
-            && failedDraftFields.size === 0) {
+            && failedDraftFields.size === 0
+            && !endSessionConfirmed
+            && !endSessionFailurePending) {
             hideSessionRetry();
             setTextIfChanged(sessionStatus, "Session ready");
         }
@@ -800,6 +806,7 @@ retrySession.addEventListener("click", () => {
     }
 });
 let endSessionConfirmed = false;
+let endSessionFailurePending = false;
 let endSessionPreviousStatus = "Session ready";
 function disarmEndSessionConfirmation() {
     if (!endSessionConfirmed || endSession.disabled) {
@@ -873,6 +880,7 @@ endSession.addEventListener("click", () => {
         if (sessionSecret === secret) {
             endSession.disabled = false;
             endSessionConfirmed = false;
+            endSessionFailurePending = true;
             setTextIfChanged(endSession, "End session");
             setTextIfChanged(sessionStatus, "End session failed · retry");
         }

@@ -103,6 +103,18 @@ active. The backend rejects missing or incorrect origin/credential and
 nonempty bodies; on acceptance it acknowledges closure, leaves its loopback
 accept loop, releases the listener, and drops the process application owner.
 
+A red-first browser regression found that a draft replacement completing
+after the user armed End session, or after an End request failed, could
+replace the warning with `Session ready`. The browser now preserves the
+confirmation warning while armed and retains the failed-erasure warning
+until the session is actually invalidated. The same protection covers a
+late rejected draft write, without suppressing that field's retry state.
+
+Extracted-adapter tests exercise all three orderings; a real Firefox
+fixture holds a draft POST, returns `503` for End, then acknowledges the
+pending draft and verifies the failed-end message remains visible. This
+protects UI state reporting, not a claim that a failed End erased data.
+
 A real socket regression verifies that an unauthorized attempt cannot end the
 session and that an authorized request releases the exact endpoint. Firefox
 coverage verifies confirmation before any mutation, authenticated termination,
