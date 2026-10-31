@@ -103,9 +103,10 @@ impl Drop for OwnedProfileDestination {
         match fs::remove_file(&self.0) {
             Ok(()) => {}
             Err(error) if error.kind() == io::ErrorKind::NotFound => {}
-            Err(error) => {
-                panic!("cannot remove test-owned destination: {error:?}")
-            }
+            Err(error) => assert_eq!(
+                error.kind(), io::ErrorKind::NotFound,
+                "cannot remove test-owned destination",
+            ),
         }
     }
 }
@@ -431,7 +432,10 @@ fn cli_repack_handles_root_only_profile_without_phantom_members() {
         },
     ).expect("repacked root-only ZIP independently parses");
     assert_eq!(archive.entries().len(), 1);
-    assert_eq!(archive.entries()[0].name(), "manifest.json");
+    assert_eq!(
+        archive.entries().first().expect("root manifest member").name(),
+        "manifest.json",
+    );
     assert!(archive.matches_stored_writer_framing());
     let manifest = archive.manifest_utf8(4096).expect("canonical root JSON");
     assert!(manifest.starts_with(
@@ -495,6 +499,8 @@ fn cli_repack_refuses_same_source_and_target_without_in_place_rewrite() {
 #[cfg(target_os = "linux")]
 #[test]
 fn cli_repack_canonically_preserves_verified_sections_assets_and_features() {
+    use std::os::unix::fs::PermissionsExt as _;
+
     let section = br#"{"private":"verified-section-9570"}"#;
     let asset = b"\0\xffopaque-repack-asset-3262";
     let original = profile_zip_with_optional_features(
@@ -531,11 +537,14 @@ fn cli_repack_canonically_preserves_verified_sections_assets_and_features() {
     assert!(archive.matches_stored_writer_framing());
     let entries = archive.entries();
     assert_eq!(entries.len(), 3);
-    assert_eq!(entries[0].name(), "assets/raw.bin");
-    assert_eq!(entries[0].bytes(), asset);
-    assert_eq!(entries[1].name(), "manifest.json");
-    assert_eq!(entries[2].name(), "sections/writer.json");
-    assert_eq!(entries[2].bytes(), section);
+    let asset_entry = entries.first().expect("asset member");
+    let manifest_entry = entries.get(1).expect("root manifest member");
+    let section_entry = entries.get(2).expect("writer section member");
+    assert_eq!(asset_entry.name(), "assets/raw.bin");
+    assert_eq!(asset_entry.bytes(), asset);
+    assert_eq!(manifest_entry.name(), "manifest.json");
+    assert_eq!(section_entry.name(), "sections/writer.json");
+    assert_eq!(section_entry.bytes(), section);
     let root = archive.manifest_utf8(4096).expect("canonical manifest");
     assert!(root.contains(r#""optional_features":["future.writer"]"#));
     assert!(root.starts_with(
@@ -563,7 +572,6 @@ fn cli_repack_canonically_preserves_verified_sections_assets_and_features() {
         fs::read(&repeat.0).expect("canonical repeated output"),
         repacked,
     );
-    use std::os::unix::fs::PermissionsExt as _;
     assert_eq!(
         fs::metadata(&destination.0)
             .expect("persisted output metadata")
