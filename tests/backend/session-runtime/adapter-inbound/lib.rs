@@ -765,6 +765,7 @@ fn request_methods_are_ascii_case_sensitive() {
             concat!(
                 "{} /api/session/task HTTP/1.1\r\n",
                 "Host: {}\r\nAuthorization: {}\r\nOrigin: {}\r\n",
+                "Content-Type: text/plain; charset=utf-8\r\n",
                 "Content-Length: 0\r\n\r\n",
             ),
             method, EXPECTED_HOST, authorization, EXPECTED_ORIGIN,
@@ -816,7 +817,10 @@ fn every_admitted_method_byte_is_exact() {
                     request.extend_from_slice(EXPECTED_SECRET.as_bytes());
                     request.extend_from_slice(b"\r\nOrigin: ");
                     request.extend_from_slice(EXPECTED_ORIGIN.as_bytes());
-                    request.extend_from_slice(b"\r\nContent-Length: 0");
+                    request.extend_from_slice(
+                        b"\r\nContent-Type: text/plain; charset=utf-8\r\n",
+                    );
+                    request.extend_from_slice(b"Content-Length: 0");
                 }
                 request.extend_from_slice(b"\r\n\r\n");
                 let expected = if byte == method[index] {
@@ -1060,7 +1064,9 @@ fn security_and_framing_headers_admit_every_ascii_case_variant() {
             concat!(
                 "POST /api/session/task HTTP/1.1\r\n",
                 "Host: {}\r\nAuthorization: {}\r\n",
-                "{}: {}\r\nContent-Length: 1\r\n\r\nx",
+                "{}: {}\r\n",
+                "Content-Type: text/plain; charset=utf-8\r\n",
+                "Content-Length: 1\r\n\r\nx",
             ),
             EXPECTED_HOST, authorization, name, EXPECTED_ORIGIN,
         );
@@ -1083,6 +1089,7 @@ fn security_and_framing_headers_admit_every_ascii_case_variant() {
             concat!(
                 "POST /api/session/task HTTP/1.1\r\n",
                 "Host: {}\r\n{}: {}\r\nOrigin: {}\r\n",
+                "Content-Type: text/plain; charset=utf-8\r\n",
                 "Content-Length: 1\r\n\r\nx",
             ),
             EXPECTED_HOST, name, authorization, EXPECTED_ORIGIN,
@@ -1106,7 +1113,7 @@ fn security_and_framing_headers_admit_every_ascii_case_variant() {
             concat!(
                 "POST /api/session/task HTTP/1.1\r\n",
                 "Host: {}\r\nAuthorization: {}\r\nOrigin: {}\r\n",
-                "{}: 1\r\n\r\nx",
+                "Content-Type: text/plain; charset=utf-8\r\n{}: 1\r\n\r\nx",
             ),
             EXPECTED_HOST, authorization, EXPECTED_ORIGIN, name,
         );
@@ -1252,7 +1259,10 @@ fn security_header_outer_ows_trims_only_ascii_space_and_tab() {
             .into_bytes();
             request.extend_from_slice(&origin_value);
             request.extend_from_slice(
-                b"\r\nContent-Length: 0\r\n\r\n",
+                b"\r\nContent-Type: text/plain; charset=utf-8\r\n",
+            );
+            request.extend_from_slice(
+                b"Content-Length: 0\r\n\r\n",
             );
             let expected = if matches!(byte, b' ' | b'\t') {
                 "HTTP/1.1 204 No Content"
@@ -1296,6 +1306,9 @@ fn security_header_outer_ows_trims_only_ascii_space_and_tab() {
                 )
                 .as_bytes(),
             );
+            request.extend_from_slice(
+                b"Content-Type: text/plain; charset=utf-8\r\n",
+            );
             request.extend_from_slice(b"Content-Length: 0\r\n\r\n");
             let expected = if matches!(byte, b' ' | b'\t') {
                 "HTTP/1.1 204 No Content"
@@ -1335,7 +1348,9 @@ fn bearer_scheme_requires_one_literal_ascii_space_separator() {
         request.extend_from_slice(EXPECTED_SECRET.as_bytes());
         request.extend_from_slice(
             format!(
-                "\r\nOrigin: {EXPECTED_ORIGIN}\r\nContent-Length: 0\r\n\r\n",
+                "\r\nOrigin: {EXPECTED_ORIGIN}\r\n\
+                 Content-Type: text/plain; charset=utf-8\r\n\
+                 Content-Length: 0\r\n\r\n",
             )
             .as_bytes(),
         );
@@ -2919,10 +2934,58 @@ fn draft_replace_request(
     if let Some(value) = origin {
         request.push_str(&format!("Origin: {value}\r\n"));
     }
+    request.push_str("Content-Type: text/plain; charset=utf-8\r\n");
     request.push_str(&format!("Content-Length: {}\r\n\r\n", body.len()));
     let mut bytes = request.into_bytes();
     bytes.extend_from_slice(body);
     bytes
+}
+
+#[test]
+fn authenticated_draft_mutation_requires_text_plain_utf8_media_type() {
+    let headers = [
+        ("", false),
+        ("Content-Type: application/json\r\n", false),
+        ("Content-Type: text/plain\r\n", false),
+        ("Content-Type: text/plain; charset=latin1\r\n", false),
+        ("Content-Type: text/plain; charset=utf-8\r\n", true),
+        ("cOnTeNt-TyPe: TEXT/PLAIN; CHARSET=UTF-8\r\n", true),
+        (
+            concat!(
+                "Content-Type: text/plain; charset=utf-8\r\n",
+                "Content-Type: text/plain; charset=utf-8\r\n",
+            ),
+            false,
+        ),
+    ];
+    for (media_type_header, admitted) in headers {
+        let body = b"new data";
+        let request = format!(
+            concat!(
+                "POST /api/session/task HTTP/1.1\r\n",
+                "Host: {}\r\n",
+                "Origin: {}\r\n",
+                "Authorization: Bearer {}\r\n",
+                "{}Content-Length: {}\r\n\r\n",
+            ),
+            EXPECTED_HOST, EXPECTED_ORIGIN, EXPECTED_SECRET,
+            media_type_header, body.len(),
+        );
+        let mut bytes = request.into_bytes();
+        bytes.extend_from_slice(body);
+        let mut draft = SessionDraftService::default();
+        let response = route_with_draft(&bytes, EXPECTED_HOST, &mut draft);
+        assert_eq!(
+            status_line(&response) == "HTTP/1.1 204 No Content",
+            admitted,
+            "media type header {media_type_header:?}",
+        );
+        assert_eq!(
+            draft.value(DraftField::Task),
+            if admitted { "new data" } else { "" },
+            "media type header {media_type_header:?}",
+        );
+    }
 }
 
 #[test]
@@ -2987,6 +3050,9 @@ fn draft_mutation_requires_the_complete_admission_conjunction() {
                             request.push_str(&format!("Origin: {value}\r\n"));
                         }
                         let request = if method == "POST" {
+                            request.push_str(
+                                "Content-Type: text/plain; charset=utf-8\r\n",
+                            );
                             request.push_str(&format!(
                                 "Content-Length: {}\r\n\r\n",
                                 body.len(),
@@ -3088,7 +3154,8 @@ fn every_ascii_single_byte_content_length_matches_decimal_grammar() {
             concat!(
                 "POST /api/session/task HTTP/1.1\r\n",
                 "Host: {}\r\nAuthorization: {}\r\n",
-                "Origin: {}\r\nContent-Length:",
+                "Origin: {}\r\nContent-Type: text/plain; charset=utf-8\r\n",
+                "Content-Length:",
             ),
             EXPECTED_HOST, authorization, EXPECTED_ORIGIN,
         )
@@ -3139,7 +3206,8 @@ fn content_length_outer_ows_and_duplicates_are_exact() {
                 concat!(
                     "POST /api/session/task HTTP/1.1\r\n",
                     "Host: {}\r\nAuthorization: {}\r\n",
-                    "Origin: {}\r\nContent-Length:",
+                    "Origin: {}\r\nContent-Type: text/plain; charset=utf-8\r\n",
+                    "Content-Length:",
                 ),
                 EXPECTED_HOST, authorization, EXPECTED_ORIGIN,
             )

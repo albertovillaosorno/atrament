@@ -113,3 +113,13 @@ replacement entry while removing the URL fragment. A red-first browser-module
 fixture showed the previous implementation propagated a private sentinel in
 `history.state`; it also verifies cleanup does not read a throwing state getter.
 These are isolated browser policy checks, not proof of all engine persistence.
+
+The authenticated draft replacement transport now requires exactly one
+`Content-Type: text/plain; charset=utf-8` field before it decodes and replaces
+session text. A red-first adapter regression proved previously admitted POSTs
+without a media type or with unrelated types could replace draft fields;
+missing, wrong-charset, and duplicate fields now refuse without mutation.
+
+Header-name and media-type case variations remain admitted, and existing
+origin, credential, framing, and byte-limit guards remain independent.
+This is a wire-contract boundary, not proof of trusted notebook acceptance.

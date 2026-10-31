@@ -960,6 +960,17 @@ fn route_draft_replace(
             br#"{"error":"unauthenticated"}"#,
         );
     }
+    // The browser draft contract is text/plain UTF-8, not a generic
+    // authenticated byte sink. Require a single declared media type before
+    // interpreting or replacing any draft field.
+    if !single_header_value(request, "content-type")
+        .is_some_and(|value| value.eq_ignore_ascii_case(TEXT_CONTENT_TYPE))
+    {
+        return json_response(
+            "400 Bad Request",
+            br#"{"error":"invalid_request"}"#,
+        );
+    }
     let Some(body) = request_body(request) else {
         return json_response(
             "400 Bad Request",
