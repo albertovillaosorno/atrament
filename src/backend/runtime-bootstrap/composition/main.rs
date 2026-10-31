@@ -221,6 +221,7 @@ const fn profile_repack_limits() -> ProfileExportAssemblyLimits {
 // reorder labels or make distinct verified names look the same. Include
 // reserved supplementary ignorables and visually blank U+2800 as well.
 // Escape only the terminal display, never verified ZIP or section bytes.
+// Backslashes are doubled to distinguish existing escapes from generated ones.
 const fn is_terminal_control(character: char) -> bool {
     character.is_control() || matches!(
         character,
@@ -249,6 +250,8 @@ fn terminal_safe_text_len(value: &str) -> Option<usize> {
             // Supplementary invisible format scalars require two UTF-16
             // surrogate escapes; BMP controls require just one.
             if u32::from(character) > 0xffff { 12 } else { 6 }
+        } else if character == '\\' {
+            2
         } else {
             character.len_utf8()
         })
@@ -273,6 +276,10 @@ fn append_terminal_safe_text(output: &mut String, value: &str) {
                     output, "\\u{high:04x}\\u{low:04x}",
                 );
             }
+        } else if character == '\\' {
+            // Distinguish an original JSON backslash escape from a display
+            // escape generated for a raw invisible Unicode scalar.
+            output.push_str("\\\\");
         } else {
             output.push(character);
         }

@@ -75,6 +75,13 @@ length, metadata and SHA verification requirements. Non-Unix readers retain
 the previous seek/read behavior until an equivalent positional-read
 implementation is independently admitted.
 
+The profile inspection display now doubles existing source backslashes while
+escaping terminal-sensitive Unicode. A red-first verified-section fixture
+proved a source JSON `\u200b` escape and raw U+200B previously printed
+identically; their original spellings are now visibly distinct, without
+changing the section, manifest, digest or source archive bytes. The exact
+preallocated output length accounts for both escaped cases.
+
 The low-level selected-profile opener now refuses empty, directory-marked
 and embedded-NUL names before filesystem access, independently of the
 higher-level source-intent classifier. Linux also reports missing or

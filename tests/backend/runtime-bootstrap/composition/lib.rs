@@ -1594,6 +1594,25 @@ fn cli_inspection_preserves_exact_large_section_after_output_planning() {
 
 #[cfg(target_os = "linux")]
 #[test]
+fn cli_inspection_distinguishes_original_json_escapes_from_terminal_escapes() {
+    // The source JSON escape and raw Unicode character decode identically,
+    // but must not be printed as indistinguishable source spellings.
+    let raw = format!(r#"{{"encoded":"\u200b","literal":"{}"}}"#, '\u{200b}');
+    let bytes = raw.as_bytes();
+    let archive = profile_zip(bytes, b"", bytes);
+    let source = OwnedProfileFile::new(&archive);
+    let display = bootstrap::inspect_profile(source.0.clone())
+        .expect("inspect verified source without mutating its bytes");
+    assert!(
+        display.contains(r#"{"encoded":"\\u200b","literal":"\u200b"}"#),
+        "original JSON escape must remain different from a terminal escape",
+    );
+    assert!(!display.contains('\u{200b}'));
+    assert_eq!(fs::read(&source.0).expect("source survives"), archive);
+}
+
+#[cfg(target_os = "linux")]
+#[test]
 fn cli_inspection_escapes_bidi_controls_in_verified_json_and_names() {
     let section_path = format!("sections/rtl{}name.json", '\u{200f}');
     let bidi_controls = [
