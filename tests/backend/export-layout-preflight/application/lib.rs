@@ -56,9 +56,31 @@ use atrament_semantic_notebook::{
     IdentityAllocator, Notebook, Page, PaperProfile,
 };
 use atrament_semantic_notebook_port::{
-    AcceptanceOutcome, PageProfileEditOutcome, SemanticNotebookSession,
+    AcceptanceOutcome, PageProfileEditOutcome, SemanticNotebookSession as _,
 };
 use atrament_semantic_notebook_session::SemanticNotebookSessionService;
+
+macro_rules! admitted {
+    ($result:expr) => {{
+        let result = $result;
+        assert!(
+            result.is_ok(),
+            "expected admitted layout result: {:?}",
+            result.as_ref().err(),
+        );
+        let Ok(value) = result else { return };
+        value
+    }};
+}
+
+macro_rules! present {
+    ($value:expr) => {{
+        let value = $value;
+        assert!(value.is_some(), "expected fixture value");
+        let Some(value) = value else { return };
+        value
+    }};
+}
 
 struct AcceptedFixture {
     block: AcceptedIdentity,
@@ -67,7 +89,7 @@ struct AcceptedFixture {
     revision: atrament_semantic_notebook::RevisionIdentity,
 }
 
-fn geometry(outer_margin: u64) -> PhysicalPageProfile {
+const fn geometry(outer_margin: u64) -> PhysicalPageProfile {
     PhysicalPageProfile {
         binding_edge: BindingEdge::Left,
         border_shape: BorderShape::Rectangle,
@@ -97,13 +119,13 @@ fn geometry(outer_margin: u64) -> PhysicalPageProfile {
 
 fn accepted_fixture(
     session: &mut SemanticNotebookSessionService,
-) -> AcceptedFixture {
+) -> Option<AcceptedFixture> {
     let ids = IdentityAllocator::new();
-    let notebook = ids.allocate_candidate().expect("notebook");
-    let profile = ids.allocate_candidate().expect("profile");
-    let page = ids.allocate_candidate().expect("page");
-    let flow = ids.allocate_candidate().expect("flow");
-    let block = ids.allocate_candidate().expect("block");
+    let notebook = ids.allocate_candidate().ok()?;
+    let profile = ids.allocate_candidate().ok()?;
+    let page = ids.allocate_candidate().ok()?;
+    let flow = ids.allocate_candidate().ok()?;
+    let block = ids.allocate_candidate().ok()?;
     let candidate = Notebook {
         assets: vec![],
         constraints: vec![],
@@ -134,24 +156,23 @@ fn accepted_fixture(
     let AcceptanceOutcome::Accepted { mapping, revision } =
         session.accept(candidate)
     else {
-        panic!("candidate must be accepted");
+        return None;
     };
-    let mapped = |candidate: CandidateIdentity| {
+    let mapped = |identity: CandidateIdentity| {
         mapping
             .iter()
-            .find(|entry| entry.candidate == candidate)
-            .expect("candidate identity mapped")
-            .accepted
+            .find(|entry| entry.candidate == identity)
+            .map(|entry| entry.accepted)
     };
-    AcceptedFixture {
-        block: mapped(block),
-        page: mapped(page),
-        profile: mapped(profile),
+    Some(AcceptedFixture {
+        block: mapped(block)?,
+        page: mapped(page)?,
+        profile: mapped(profile)?,
         revision,
-    }
+    })
 }
 
-fn complete_empty() -> DiagnosticSet {
+const fn complete_empty() -> DiagnosticSet {
     DiagnosticSet {
         completeness: Completeness::Complete,
         diagnostics: vec![],
@@ -161,9 +182,9 @@ fn complete_empty() -> DiagnosticSet {
 #[test]
 fn real_six_mm_fixed_overflow_blocks_export_layout_preflight() {
     let mut session = SemanticNotebookSessionService::default();
-    let fixture = accepted_fixture(&mut session);
-    let layout = validate_fixed_placement(
-        session.current().expect("accepted revision"),
+    let fixture = present!(accepted_fixture(&mut session));
+    let layout = admitted!(validate_fixed_placement(
+        present!(session.current()),
         AcceptedFixedPlacement {
             object: fixture.block,
             page: fixture.page,
@@ -175,53 +196,55 @@ fn real_six_mm_fixed_overflow_blocks_export_layout_preflight() {
             },
             revision: fixture.revision,
         },
-    )
-    .expect("fixed layout validation");
+    ));
+    assert!(matches!(layout, FixedRegionLayoutResult::Overflow { .. }));
     let FixedRegionLayoutResult::Overflow { diagnostics, .. } = layout else {
-        panic!("fixture must overflow");
+        return;
     };
-    let result = preflight_layout_for_export(
-        session.current().expect("accepted revision"),
+    let result = admitted!(preflight_layout_for_export(
+        present!(session.current()),
         fixture.revision,
-        RevisionLayoutDiagnostics::bind(fixture.revision, &diagnostics)
-            .expect("layout diagnostic binding"),
-    )
-    .expect("revision binding is valid");
-    let ExportLayoutPreflightResult::Blocked {
-        diagnostics: blocked,
-        revision,
-    } = result
-    else {
-        panic!("blocking layout diagnostic must block preflight");
-    };
-    assert_eq!(revision, fixture.revision);
-    assert_eq!(blocked, diagnostics);
+        admitted!(RevisionLayoutDiagnostics::bind(
+            fixture.revision,
+            &diagnostics,
+        )),
+    ));
+    assert_eq!(
+        result,
+        ExportLayoutPreflightResult::Blocked {
+            diagnostics: diagnostics.clone(),
+            revision: fixture.revision,
+        },
+    );
+    let blocked = diagnostics;
     assert_eq!(blocked.diagnostics.len(), 1);
     assert_eq!(
-        blocked.diagnostics[0].code,
+        present!(blocked.diagnostics.first()).code,
         DiagnosticCode::LayoutFixedRegionOverflow,
     );
     assert_eq!(
-        blocked.diagnostics[0].evidence[1],
-        Evidence::PhysicalLength {
+        present!(blocked.diagnostics.first()).evidence.get(1),
+        Some(&Evidence::PhysicalLength {
             micrometres: 6_000,
             quantity: atrament_diagnostic::PhysicalLengthQuantity::Overflow,
-        },
+        }),
     );
 }
 
 #[test]
 fn complete_empty_layout_evidence_is_ready_but_does_not_mutate_revision() {
     let mut session = SemanticNotebookSessionService::default();
-    let fixture = accepted_fixture(&mut session);
-    let before = session.current().expect("accepted revision").clone();
+    let fixture = present!(accepted_fixture(&mut session));
+    let before = present!(session.current()).clone();
     let diagnostics = complete_empty();
     assert_eq!(
         preflight_layout_for_export(
             &before,
             fixture.revision,
-            RevisionLayoutDiagnostics::bind(fixture.revision, &diagnostics)
-                .expect("layout diagnostic binding"),
+            admitted!(RevisionLayoutDiagnostics::bind(
+                fixture.revision,
+                &diagnostics,
+            )),
         ),
         Ok(ExportLayoutPreflightResult::Ready {
             diagnostics,
@@ -234,17 +257,19 @@ fn complete_empty_layout_evidence_is_ready_but_does_not_mutate_revision() {
 #[test]
 fn incomplete_layout_evidence_never_reports_ready() {
     let mut session = SemanticNotebookSessionService::default();
-    let fixture = accepted_fixture(&mut session);
+    let fixture = present!(accepted_fixture(&mut session));
     let diagnostics = DiagnosticSet {
         completeness: Completeness::Incomplete,
         diagnostics: vec![],
     };
     assert_eq!(
         preflight_layout_for_export(
-            session.current().expect("accepted revision"),
+            present!(session.current()),
             fixture.revision,
-            RevisionLayoutDiagnostics::bind(fixture.revision, &diagnostics)
-                .expect("layout diagnostic binding"),
+            admitted!(RevisionLayoutDiagnostics::bind(
+                fixture.revision,
+                &diagnostics,
+            )),
         ),
         Ok(ExportLayoutPreflightResult::Incomplete {
             diagnostics,
@@ -256,23 +281,29 @@ fn incomplete_layout_evidence_never_reports_ready() {
 #[test]
 fn stale_requested_revision_rejects_before_layout_evidence() {
     let mut session = SemanticNotebookSessionService::default();
-    let fixture = accepted_fixture(&mut session);
-    let PageProfileEditOutcome::Applied { revision: current, .. } = session
-        .replace_page_profile(
-            fixture.revision,
-            fixture.profile,
-            geometry(40_000),
-        )
+    let fixture = present!(accepted_fixture(&mut session));
+    let edit = session.replace_page_profile(
+        fixture.revision,
+        fixture.profile,
+        geometry(40_000),
+    );
+    assert!(matches!(edit, PageProfileEditOutcome::Applied { .. }));
+    let PageProfileEditOutcome::Applied {
+        revision: current,
+        ..
+    } = edit
     else {
-        panic!("profile edit must apply");
+        return;
     };
     let diagnostics = complete_empty();
     assert_eq!(
         preflight_layout_for_export(
-            session.current().expect("edited revision"),
+            present!(session.current()),
             fixture.revision,
-            RevisionLayoutDiagnostics::bind(fixture.revision, &diagnostics)
-                .expect("layout diagnostic binding"),
+            admitted!(RevisionLayoutDiagnostics::bind(
+                fixture.revision,
+                &diagnostics,
+            )),
         ),
         Err(ExportLayoutPreflightError::RequestedRevisionMismatch {
             current,
@@ -284,23 +315,29 @@ fn stale_requested_revision_rejects_before_layout_evidence() {
 #[test]
 fn layout_evidence_from_another_revision_cannot_be_reused() {
     let mut session = SemanticNotebookSessionService::default();
-    let fixture = accepted_fixture(&mut session);
-    let PageProfileEditOutcome::Applied { revision: current, .. } = session
-        .replace_page_profile(
-            fixture.revision,
-            fixture.profile,
-            geometry(40_000),
-        )
+    let fixture = present!(accepted_fixture(&mut session));
+    let edit = session.replace_page_profile(
+        fixture.revision,
+        fixture.profile,
+        geometry(40_000),
+    );
+    assert!(matches!(edit, PageProfileEditOutcome::Applied { .. }));
+    let PageProfileEditOutcome::Applied {
+        revision: current,
+        ..
+    } = edit
     else {
-        panic!("profile edit must apply");
+        return;
     };
     let diagnostics = complete_empty();
     assert_eq!(
         preflight_layout_for_export(
-            session.current().expect("edited revision"),
+            present!(session.current()),
             current,
-            RevisionLayoutDiagnostics::bind(fixture.revision, &diagnostics)
-                .expect("layout diagnostic binding"),
+            admitted!(RevisionLayoutDiagnostics::bind(
+                fixture.revision,
+                &diagnostics,
+            )),
         ),
         Err(ExportLayoutPreflightError::LayoutRevisionMismatch {
             requested: current,
@@ -312,12 +349,14 @@ fn layout_evidence_from_another_revision_cannot_be_reused() {
 #[test]
 fn non_layout_code_cannot_be_relabelled_as_layout() {
     let mut session = SemanticNotebookSessionService::default();
-    let fixture = accepted_fixture(&mut session);
-    let mut diagnostics = real_overflow_diagnostics(&session, &fixture);
-    diagnostics.diagnostics[0].code = DiagnosticCode::SessionDraftResourceLimit;
+    let fixture = present!(accepted_fixture(&mut session));
+    let mut diagnostics =
+        present!(real_overflow_diagnostics(&session, &fixture));
+    let diagnostic = present!(diagnostics.diagnostics.first_mut());
+    diagnostic.code = DiagnosticCode::SessionDraftResourceLimit;
 
     assert_eq!(
-        diagnostics.diagnostics[0].operation.operation,
+        present!(diagnostics.diagnostics.first()).operation.operation,
         Operation::Layout,
     );
     assert!(matches!(
@@ -329,7 +368,7 @@ fn non_layout_code_cannot_be_relabelled_as_layout() {
 #[test]
 fn non_layout_diagnostic_cannot_be_smuggled_into_layout_preflight() {
     let mut session = SemanticNotebookSessionService::default();
-    let fixture = accepted_fixture(&mut session);
+    let fixture = present!(accepted_fixture(&mut session));
     let diagnostics = DiagnosticSet {
         completeness: Completeness::Complete,
         diagnostics: vec![Diagnostic {
@@ -358,9 +397,9 @@ fn non_layout_diagnostic_cannot_be_smuggled_into_layout_preflight() {
 fn real_overflow_diagnostics(
     session: &SemanticNotebookSessionService,
     fixture: &AcceptedFixture,
-) -> DiagnosticSet {
+) -> Option<DiagnosticSet> {
     let layout = validate_fixed_placement(
-        session.current().expect("accepted revision"),
+        session.current()?,
         AcceptedFixedPlacement {
             object: fixture.block,
             page: fixture.page,
@@ -373,19 +412,21 @@ fn real_overflow_diagnostics(
             revision: fixture.revision,
         },
     )
-    .expect("fixed layout validation");
+    .ok()?;
     let FixedRegionLayoutResult::Overflow { diagnostics, .. } = layout else {
-        panic!("fixture must overflow");
+        return None;
     };
-    diagnostics
+    Some(diagnostics)
 }
 
 #[test]
 fn blocking_overflow_cannot_be_downgraded_to_advisory() {
     let mut session = SemanticNotebookSessionService::default();
-    let fixture = accepted_fixture(&mut session);
-    let mut diagnostics = real_overflow_diagnostics(&session, &fixture);
-    diagnostics.diagnostics[0].disposition = BlockingDisposition::Advisory;
+    let fixture = present!(accepted_fixture(&mut session));
+    let mut diagnostics =
+        present!(real_overflow_diagnostics(&session, &fixture));
+    let diagnostic = present!(diagnostics.diagnostics.first_mut());
+    diagnostic.disposition = BlockingDisposition::Advisory;
 
     assert!(matches!(
         RevisionLayoutDiagnostics::bind(fixture.revision, &diagnostics),
@@ -396,17 +437,20 @@ fn blocking_overflow_cannot_be_downgraded_to_advisory() {
 #[test]
 fn incomplete_blocking_layout_evidence_remains_incomplete() {
     let mut session = SemanticNotebookSessionService::default();
-    let fixture = accepted_fixture(&mut session);
-    let mut diagnostics = real_overflow_diagnostics(&session, &fixture);
+    let fixture = present!(accepted_fixture(&mut session));
+    let mut diagnostics =
+        present!(real_overflow_diagnostics(&session, &fixture));
     diagnostics.completeness = Completeness::Incomplete;
     let expected = diagnostics.clone();
 
     assert_eq!(
         preflight_layout_for_export(
-            session.current().expect("accepted revision"),
+            present!(session.current()),
             fixture.revision,
-            RevisionLayoutDiagnostics::bind(fixture.revision, &diagnostics)
-                .expect("incomplete blocking diagnostic binding"),
+            admitted!(RevisionLayoutDiagnostics::bind(
+                fixture.revision,
+                &diagnostics,
+            )),
         ),
         Ok(ExportLayoutPreflightResult::Incomplete {
             diagnostics: expected,
@@ -418,10 +462,12 @@ fn incomplete_blocking_layout_evidence_remains_incomplete() {
 #[test]
 fn diagnostic_revision_context_cannot_be_relabelled_as_current() {
     let mut session = SemanticNotebookSessionService::default();
-    let fixture = accepted_fixture(&mut session);
-    let mut diagnostics = real_overflow_diagnostics(&session, &fixture);
-    diagnostics.diagnostics[0].operation.contexts[0].identity =
-        String::from("RevisionIdentity(999999)");
+    let fixture = present!(accepted_fixture(&mut session));
+    let mut diagnostics =
+        present!(real_overflow_diagnostics(&session, &fixture));
+    let diagnostic = present!(diagnostics.diagnostics.first_mut());
+    let context = present!(diagnostic.operation.contexts.first_mut());
+    context.identity = String::from("RevisionIdentity(999999)");
 
     assert!(matches!(
         RevisionLayoutDiagnostics::bind(fixture.revision, &diagnostics),
@@ -432,17 +478,21 @@ fn diagnostic_revision_context_cannot_be_relabelled_as_current() {
 #[test]
 fn layout_diagnostic_requires_exactly_one_revision_context() {
     let mut session = SemanticNotebookSessionService::default();
-    let fixture = accepted_fixture(&mut session);
-    let mut missing = real_overflow_diagnostics(&session, &fixture);
-    missing.diagnostics[0].operation.contexts.clear();
+    let fixture = present!(accepted_fixture(&mut session));
+    let mut missing = present!(real_overflow_diagnostics(&session, &fixture));
+    present!(missing.diagnostics.first_mut()).operation.contexts.clear();
     assert!(matches!(
         RevisionLayoutDiagnostics::bind(fixture.revision, &missing),
         Err(ExportLayoutPreflightError::DiagnosticContextMissing),
     ));
 
-    let mut duplicated = real_overflow_diagnostics(&session, &fixture);
-    let repeated = duplicated.diagnostics[0].operation.contexts[0].clone();
-    duplicated.diagnostics[0].operation.contexts.push(repeated);
+    let mut duplicated =
+        present!(real_overflow_diagnostics(&session, &fixture));
+    let original_diagnostic = present!(duplicated.diagnostics.first());
+    let repeated =
+        present!(original_diagnostic.operation.contexts.first()).clone();
+    let mutable_diagnostic = present!(duplicated.diagnostics.first_mut());
+    mutable_diagnostic.operation.contexts.push(repeated);
     assert!(matches!(
         RevisionLayoutDiagnostics::bind(fixture.revision, &duplicated),
         Err(ExportLayoutPreflightError::DiagnosticContextMismatch),
