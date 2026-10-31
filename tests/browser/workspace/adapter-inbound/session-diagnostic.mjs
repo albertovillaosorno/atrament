@@ -93,6 +93,27 @@ test("diagnostic set rejects invalid namespace, completeness, or items", () => {
     }
 });
 
+test("diagnostic parser rejects arrays posing as records", () => {
+    const ordinaryItem = { code: "atrament.example.condition" };
+    const arrayRoot = Object.assign([], {
+        version: DIAGNOSTIC_VERSION,
+        completeness: "complete",
+        items: [ordinaryItem],
+    });
+    const arrayItem = Object.assign([], {
+        code: "atrament.example.condition",
+    });
+    const objectWithArrayItem = {
+        version: DIAGNOSTIC_VERSION,
+        completeness: "complete",
+        items: [arrayItem],
+    };
+    for (const value of [arrayRoot, objectWithArrayItem]) {
+        assert.equal(referenceDiagnosticSet(value), null);
+        assert.equal(parseDiagnosticSet(value), null);
+    }
+});
+
 function referenceDiagnosticSet(value) {
     if (typeof value !== "object" || value === null || Array.isArray(value)) {
         return null;

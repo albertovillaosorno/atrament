@@ -32,7 +32,9 @@
 //
 export const DIAGNOSTIC_VERSION = "atrament.diagnostic/1";
 function isRecord(value) {
-    return typeof value === "object" && value !== null;
+    return typeof value === "object"
+        && value !== null
+        && !Array.isArray(value);
 }
 function isCompleteness(value) {
     return value === "complete" || value === "incomplete";

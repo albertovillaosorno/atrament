@@ -71,3 +71,9 @@ generic in the pre-normalization batch. No stable diagnostic identity text or
 context binding exists yet, so the application must not leak Debug formatting to
 satisfy the fixture. Render, full Export, and Plan producers also remain open,
 and CLI/MCP parity cannot yet prove cross-capability semantics.
+
+The browser diagnostic metadata guard now refuses arrays in both the root
+set and individual items, even when a JavaScript caller attaches properties
+that mimic object fields. A red-first fixture proved the prior guard accepted
+these non-object shapes, contrary to the independent fail-closed reference.
+This is local parser-shape correctness, not a claim of network exploitability.
