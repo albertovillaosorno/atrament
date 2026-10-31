@@ -386,3 +386,11 @@ The disposable test harness now permits 25 seconds for Firefox's BiDi startup
 announcement and 50 seconds for each complete Firefox integration case.
 These deadlines remain finite, apply only to tests, and do not change browser
 session, backend readiness or real runtime admission policy.
+
+A later high-contention full-browser pass exposed that Firefox could announce
+its BiDi endpoint within the 25-second readiness window but still exceed a
+separate 15-second `session.new` command deadline. The session handshake now
+uses the same finite 25-second readiness allowance; a red-first fake BiDi
+client fixture asserts both the handshake budget and connect-before-command
+ordering without launching Firefox. The existing 50-second per-case ceiling
+and actual browser/session transport admission remain unchanged.

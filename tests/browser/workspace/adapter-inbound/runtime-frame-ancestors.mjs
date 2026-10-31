@@ -1468,6 +1468,34 @@ async function observedWithin(observation, label) {
     ]);
 }
 
+async function initializeBidiSession(bidi) {
+    await bidi.connect();
+    await bidi.command(
+        "session.new",
+        { capabilities: { alwaysMatch: {} } },
+        FIREFOX_BIDI_READY_TIMEOUT_MS,
+    );
+}
+
+test("Firefox BiDi startup applies the same finite readiness budget",
+    async () => {
+        const events = [];
+        const bidi = {
+            connect: async () => { events.push(["connect"]); },
+            command: async (method, params, timeout) => {
+                events.push(["command", method, timeout]);
+                assert.deepEqual(params,
+                    { capabilities: { alwaysMatch: {} } });
+            },
+        };
+        await initializeBidiSession(bidi);
+        assert.deepEqual(events, [
+            ["connect"],
+            ["command", "session.new", FIREFOX_BIDI_READY_TIMEOUT_MS],
+        ]);
+    },
+);
+
 async function startBidiFirefox(profile, children) {
     const firefox = spawn(
         "firefox",
@@ -1491,12 +1519,7 @@ async function startBidiFirefox(profile, children) {
     }, FIREFOX_BIDI_READY_TIMEOUT_MS);
     const bidi = new BidiClient(`${remote}/session`);
     try {
-        await bidi.connect();
-        await bidi.command(
-            "session.new",
-            { capabilities: { alwaysMatch: {} } },
-            15_000,
-        );
+        await initializeBidiSession(bidi);
         return bidi;
     } catch (error) {
         // The caller only receives successfully initialized clients. Keep
