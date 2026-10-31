@@ -248,6 +248,54 @@ test("handshake requires own result and version diagnostic identities", () => {
     }
 });
 
+test("handshake parser refuses accessor-backed protocol identities", () => {
+    const diagnostic = {
+        code: "atrament.handshake.version-mismatch",
+        dimension: "prompt",
+        expected: CURRENT_VERSIONS.prompt,
+    };
+    const diagnostics = {
+        version: "atrament.diagnostic/1",
+        completeness: "complete",
+        items: [diagnostic],
+    };
+    const compatible = { result: "compatible", versions: CURRENT_VERSIONS };
+    const incompatible = { result: "incompatible", diagnostics };
+    let getterCalls = 0;
+    const accessor = (object, field, value) => {
+        Object.defineProperty(object, field, {
+            enumerable: true,
+            get() {
+                getterCalls += 1;
+                return value;
+            },
+        });
+        return object;
+    };
+    const candidates = [
+        accessor({ ...compatible }, "result", "compatible"),
+        accessor({ result: "compatible" }, "versions", CURRENT_VERSIONS),
+        { result: "compatible", versions: accessor(
+            { ...CURRENT_VERSIONS }, "prompt", CURRENT_VERSIONS.prompt,
+        ) },
+        accessor({ result: "incompatible" }, "diagnostics", diagnostics),
+        { ...incompatible, diagnostics: {
+            ...diagnostics,
+            items: [accessor({ ...diagnostic }, "dimension", "prompt")],
+        } },
+        { ...incompatible, diagnostics: {
+            ...diagnostics,
+            items: [accessor(
+                { ...diagnostic }, "expected", CURRENT_VERSIONS.prompt,
+            )],
+        } },
+    ];
+    for (const candidate of candidates) {
+        assert.deepEqual(parseHandshakePayload(candidate), { kind: "invalid" });
+    }
+    assert.equal(getterCalls, 0, "wire accessors must never execute");
+});
+
 function referenceHandshakeOutcome(value) {
     if (
         typeof value !== "object"

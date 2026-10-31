@@ -98,3 +98,11 @@ version, completeness, item code, handshake dimensions, or resource-limit error
 were previously misclassified as admitted metadata. A null-prototype object
 with genuine own fields still passes; the ordinary JSON response flow is
 unchanged. This is local shape validation, not evidence of remote exploitation.
+
+Browser diagnostic, handshake, and draft response adapters now require own
+*data* properties on the admitted protocol fields. A red-first test for each
+adapter showed that own accessor getters could previously supply otherwise
+valid identities and be invoked during validation, despite the earlier
+prototype-field guard. Descriptor-only reads now reject those shapes without
+executing the getters; ordinary decoded JSON remains accepted. This is an
+in-process parser integrity rule, not a claim of remote code execution.

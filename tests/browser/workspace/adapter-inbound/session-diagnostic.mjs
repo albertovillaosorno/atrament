@@ -167,6 +167,46 @@ test("diagnostic metadata requires own wire fields", () => {
     });
 });
 
+test("diagnostic parser refuses accessor-backed wire fields", () => {
+    const item = { code: "atrament.example.condition" };
+    const valid = {
+        version: DIAGNOSTIC_VERSION,
+        completeness: "complete",
+        items: [item],
+    };
+    let getterCalls = 0;
+    const accessor = (object, field, value = valid[field]) => {
+        Object.defineProperty(object, field, {
+            enumerable: true,
+            get() {
+                getterCalls += 1;
+                return value;
+            },
+        });
+        return object;
+    };
+    for (const field of ["version", "completeness", "items"]) {
+        const candidate = { ...valid };
+        assert.equal(parseDiagnosticSet(accessor(candidate, field)), null);
+    }
+    const itemWithGetter = accessor({}, "code", item.code);
+    assert.equal(
+        parseDiagnosticSet({ ...valid, items: [itemWithGetter] }), null,
+    );
+    const itemsWithGetter = [item];
+    Object.defineProperty(itemsWithGetter, "0", {
+        configurable: true,
+        get() {
+            getterCalls += 1;
+            return item;
+        },
+    });
+    assert.equal(
+        parseDiagnosticSet({ ...valid, items: itemsWithGetter }), null,
+    );
+    assert.equal(getterCalls, 0, "wire accessors must never execute");
+});
+
 function referenceDiagnosticSet(value) {
     if (typeof value !== "object" || value === null || Array.isArray(value)) {
         return null;

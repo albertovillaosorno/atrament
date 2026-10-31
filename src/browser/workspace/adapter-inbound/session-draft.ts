@@ -34,7 +34,7 @@
 // - Defaults:
 //   - Uses text/plain UTF-8 bodies and no ambient browser credentials.
 //
-import { parseDiagnosticSet } from "./session-diagnostic.js";
+import { ownDataField, parseDiagnosticSet } from "./session-diagnostic.js";
 
 export type DraftField = "candidate" | "source" | "task";
 
@@ -70,17 +70,13 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 export function isResourceLimit(value: unknown): boolean {
-    if (
-        !isRecord(value)
-        || !Object.hasOwn(value, "error")
-        || !Object.hasOwn(value, "diagnostics")
-        || value.error !== "resource_limit"
-    ) {
+    if (!isRecord(value) || ownDataField(value, "error") !== "resource_limit") {
         return false;
     }
-    const metadata = parseDiagnosticSet(value.diagnostics);
-    return metadata !== null
-        && metadata.items.length === 1
-        && metadata.items[0]?.code
+    const metadata = parseDiagnosticSet(ownDataField(value, "diagnostics"));
+    const item = metadata?.items[0];
+    return metadata?.items.length === 1
+        && item !== undefined
+        && ownDataField(item, "code")
             === "atrament.session-draft.resource-limit";
 }

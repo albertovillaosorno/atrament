@@ -36,18 +36,27 @@ function isRecord(value) {
         && value !== null
         && !Array.isArray(value);
 }
+// Decoded JSON fields are own data properties. Do not invoke getters when
+// these parsers are also passed objects constructed inside JavaScript.
+export function ownDataField(value, field) {
+    const descriptor = Object.getOwnPropertyDescriptor(value, field);
+    return descriptor !== undefined && Object.hasOwn(descriptor, "value")
+        ? descriptor.value
+        : undefined;
+}
 function isCompleteness(value) {
     return value === "complete" || value === "incomplete";
 }
 function isDiagnosticItem(value) {
-    return isRecord(value)
-        && Object.hasOwn(value, "code")
-        && typeof value.code === "string"
-        && value.code !== "";
+    if (!isRecord(value)) {
+        return false;
+    }
+    const code = ownDataField(value, "code");
+    return typeof code === "string" && code !== "";
 }
 function hasValidDiagnosticItems(items) {
     for (let index = 0; index < items.length; index += 1) {
-        if (!Object.hasOwn(items, index) || !isDiagnosticItem(items[index])) {
+        if (!isDiagnosticItem(ownDataField(items, String(index)))) {
             return false;
         }
     }
@@ -57,17 +66,14 @@ export function parseDiagnosticSet(value) {
     if (!isRecord(value)) {
         return null;
     }
-    if (!Object.hasOwn(value, "version")
-        || !Object.hasOwn(value, "completeness")
-        || !Object.hasOwn(value, "items")
-        || value.version !== DIAGNOSTIC_VERSION
-        || !isCompleteness(value.completeness)
-        || !Array.isArray(value.items)
-        || !hasValidDiagnosticItems(value.items)) {
+    const version = ownDataField(value, "version");
+    const completeness = ownDataField(value, "completeness");
+    const items = ownDataField(value, "items");
+    if (version !== DIAGNOSTIC_VERSION
+        || !isCompleteness(completeness)
+        || !Array.isArray(items)
+        || !hasValidDiagnosticItems(items)) {
         return null;
     }
-    return {
-        completeness: value.completeness,
-        items: value.items,
-    };
+    return { completeness, items };
 }

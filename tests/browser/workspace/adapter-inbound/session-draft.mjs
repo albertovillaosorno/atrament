@@ -152,6 +152,42 @@ test("draft resource-limit requires own response error identity", () => {
     }
 });
 
+test("draft resource-limit parser refuses accessor-backed fields", () => {
+    const diagnostic = { code: "atrament.session-draft.resource-limit" };
+    const metadata = {
+        version: "atrament.diagnostic/1",
+        completeness: "complete",
+        items: [diagnostic],
+    };
+    const valid = { error: "resource_limit", diagnostics: metadata };
+    let getterCalls = 0;
+    const accessor = (object, field, value) => {
+        Object.defineProperty(object, field, {
+            enumerable: true,
+            get() {
+                getterCalls += 1;
+                return value;
+            },
+        });
+        return object;
+    };
+    const candidates = [
+        accessor({ ...valid }, "error", "resource_limit"),
+        accessor({ error: "resource_limit" }, "diagnostics", metadata),
+        { ...valid, diagnostics: accessor(
+            { ...metadata }, "version", "atrament.diagnostic/1",
+        ) },
+        { ...valid, diagnostics: {
+            ...metadata,
+            items: [accessor({ ...diagnostic }, "code", diagnostic.code)],
+        } },
+    ];
+    for (const candidate of candidates) {
+        assert.equal(isResourceLimit(candidate), false);
+    }
+    assert.equal(getterCalls, 0, "wire accessors must never execute");
+});
+
 function referenceResourceLimit(value) {
     if (
         typeof value !== "object"
