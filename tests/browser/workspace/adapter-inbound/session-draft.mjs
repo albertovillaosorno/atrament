@@ -131,6 +131,36 @@ test("draft parses diagnostic item fields without rereading proxies", () => {
     assert.equal(codeReads, 1);
 });
 
+test("draft resource-limit parser refuses throwing Proxy metadata", () => {
+    const throwingError = new Proxy({}, {
+        getOwnPropertyDescriptor() { throw Error("draft error trap"); },
+    });
+    const { proxy: revoked, revoke } = Proxy.revocable({}, {});
+    revoke();
+    const throwingItems = new Proxy([{
+        code: "atrament.session-draft.resource-limit",
+    }], {
+        getOwnPropertyDescriptor(target, key) {
+            if (key === "0") { throw Error("draft diagnostic item trap"); }
+            return Reflect.getOwnPropertyDescriptor(target, key);
+        },
+    });
+    for (const value of [
+        throwingError,
+        revoked,
+        {
+            error: "resource_limit",
+            diagnostics: {
+                version: "atrament.diagnostic/1",
+                completeness: "complete",
+                items: throwingItems,
+            },
+        },
+    ]) {
+        assert.equal(isResourceLimit(value), false);
+    }
+});
+
 test("incomplete draft diagnostics still preserve known resource limit", () => {
     assert.equal(
         isResourceLimit({

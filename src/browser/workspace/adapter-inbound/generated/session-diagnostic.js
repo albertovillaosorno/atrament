@@ -113,19 +113,25 @@ function admittedDiagnosticItems(items) {
     return admitted;
 }
 export function parseDiagnosticSet(value) {
-    if (!isRecord(value)) {
+    // Descriptor traps from in-process objects are invalid payloads.
+    try {
+        if (!isRecord(value)) {
+            return null;
+        }
+        const version = ownDataField(value, "version");
+        const completeness = ownDataField(value, "completeness");
+        const items = ownDataField(value, "items");
+        if (version !== DIAGNOSTIC_VERSION
+            || !isCompleteness(completeness)
+            || !Array.isArray(items)) {
+            return null;
+        }
+        const admittedItems = admittedDiagnosticItems(items);
+        return admittedItems === null
+            ? null
+            : { completeness, items: admittedItems };
+    }
+    catch {
         return null;
     }
-    const version = ownDataField(value, "version");
-    const completeness = ownDataField(value, "completeness");
-    const items = ownDataField(value, "items");
-    if (version !== DIAGNOSTIC_VERSION
-        || !isCompleteness(completeness)
-        || !Array.isArray(items)) {
-        return null;
-    }
-    const admittedItems = admittedDiagnosticItems(items);
-    return admittedItems === null
-        ? null
-        : { completeness, items: admittedItems };
 }

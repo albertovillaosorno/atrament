@@ -83,37 +83,43 @@ export function handshakeHeaders(sessionSecret) {
     };
 }
 export function parseHandshakePayload(value) {
-    if (!isRecord(value)) {
+    // Descriptor traps from in-process objects are invalid payloads.
+    try {
+        if (!isRecord(value)) {
+            return { kind: "invalid" };
+        }
+        const result = ownDataField(value, "result");
+        const versions = ownDataField(value, "versions");
+        if (result === "compatible" && hasCurrentVersions(versions)) {
+            return { kind: "compatible" };
+        }
+        const diagnostics = ownDataField(value, "diagnostics");
+        if (result !== "incompatible" || !isRecord(diagnostics)) {
+            return { kind: "invalid" };
+        }
+        const metadata = parseDiagnosticSet(diagnostics);
+        if (metadata === null || metadata.items.length !== 1) {
+            return { kind: "invalid" };
+        }
+        const diagnostic = metadata.items[0];
+        if (diagnostic === undefined) {
+            return { kind: "invalid" };
+        }
+        const dimension = ownDataField(diagnostic, "dimension");
+        const expected = ownDataField(diagnostic, "expected");
+        if (ownDataField(diagnostic, "code")
+            !== "atrament.handshake.version-mismatch"
+            || !isVersionDimension(dimension)
+            || expected !== CURRENT_VERSIONS[dimension]) {
+            return { kind: "invalid" };
+        }
+        return {
+            kind: "incompatible",
+            dimension,
+            expected: CURRENT_VERSIONS[dimension],
+        };
+    }
+    catch {
         return { kind: "invalid" };
     }
-    const result = ownDataField(value, "result");
-    const versions = ownDataField(value, "versions");
-    if (result === "compatible" && hasCurrentVersions(versions)) {
-        return { kind: "compatible" };
-    }
-    const diagnostics = ownDataField(value, "diagnostics");
-    if (result !== "incompatible" || !isRecord(diagnostics)) {
-        return { kind: "invalid" };
-    }
-    const metadata = parseDiagnosticSet(diagnostics);
-    if (metadata === null || metadata.items.length !== 1) {
-        return { kind: "invalid" };
-    }
-    const diagnostic = metadata.items[0];
-    if (diagnostic === undefined) {
-        return { kind: "invalid" };
-    }
-    const dimension = ownDataField(diagnostic, "dimension");
-    const expected = ownDataField(diagnostic, "expected");
-    if (ownDataField(diagnostic, "code")
-        !== "atrament.handshake.version-mismatch"
-        || !isVersionDimension(dimension)
-        || expected !== CURRENT_VERSIONS[dimension]) {
-        return { kind: "invalid" };
-    }
-    return {
-        kind: "incompatible",
-        dimension,
-        expected: CURRENT_VERSIONS[dimension],
-    };
 }

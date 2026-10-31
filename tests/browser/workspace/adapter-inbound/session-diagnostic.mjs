@@ -262,6 +262,33 @@ test("diagnostic item snapshots reject unbounded or accessor fields", () => {
     assert.equal(parseDiagnosticSet(payload(throwingKeys)), null);
 });
 
+test("diagnostic parser refuses descriptor and revoked Proxy traps", () => {
+    const throwingRoot = new Proxy({}, {
+        getOwnPropertyDescriptor() {
+            throw Error("unexpected root descriptor");
+        },
+    });
+    const throwingSlot = new Proxy([{ code: "valid" }], {
+        getOwnPropertyDescriptor(target, field) {
+            if (field === "0") { throw Error("unexpected array slot"); }
+            return Reflect.getOwnPropertyDescriptor(target, field);
+        },
+    });
+    const { proxy: revoked, revoke } = Proxy.revocable({}, {});
+    revoke();
+    for (const payload of [
+        throwingRoot,
+        revoked,
+        {
+            version: DIAGNOSTIC_VERSION,
+            completeness: "complete",
+            items: throwingSlot,
+        },
+    ]) {
+        assert.equal(parseDiagnosticSet(payload), null);
+    }
+});
+
 test("diagnostic metadata requires own wire fields", () => {
     const validItem = { code: "atrament.example.condition" };
     const valid = {

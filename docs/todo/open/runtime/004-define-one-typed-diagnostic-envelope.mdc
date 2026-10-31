@@ -139,3 +139,11 @@ both paths, retains ordinary JSON metadata, and refuses accessor-only fields.
 Each item is limited to 128 own string fields in addition to the existing
 128-item collection cap. This is a browser in-process integrity and work bound,
 not remote JSON security evidence or complete diagnostic schema validation.
+
+The public browser diagnostic, handshake, and draft-response entrypoints now
+classify in-process descriptor failures and revoked Proxy inputs as invalid,
+rather than propagating exceptions from an otherwise guarded read. Red-first
+regressions exercised throwing root fields, a nested version record, indexed
+diagnostic slots and revoked objects; ordinary JSON fixtures remain unchanged.
+The rule applies only to these parsing results, not arbitrary JavaScript errors
+or network-reachable Proxy payloads.

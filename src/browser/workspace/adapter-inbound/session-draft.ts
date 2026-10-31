@@ -70,13 +70,21 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 export function isResourceLimit(value: unknown): boolean {
-    if (!isRecord(value) || ownDataField(value, "error") !== "resource_limit") {
+    // Descriptor traps from in-process objects are invalid payloads.
+    try {
+        if (
+            !isRecord(value)
+            || ownDataField(value, "error") !== "resource_limit"
+        ) {
+            return false;
+        }
+        const metadata = parseDiagnosticSet(ownDataField(value, "diagnostics"));
+        const item = metadata?.items[0];
+        return metadata?.items.length === 1
+            && item !== undefined
+            && ownDataField(item, "code")
+                === "atrament.session-draft.resource-limit";
+    } catch {
         return false;
     }
-    const metadata = parseDiagnosticSet(ownDataField(value, "diagnostics"));
-    const item = metadata?.items[0];
-    return metadata?.items.length === 1
-        && item !== undefined
-        && ownDataField(item, "code")
-            === "atrament.session-draft.resource-limit";
 }

@@ -180,6 +180,24 @@ test("handshake reads each diagnostic property only once", () => {
     assert.equal(codeReads, 1);
 });
 
+test("handshake parser classifies throwing Proxy fields as invalid", () => {
+    const throwingResult = new Proxy({}, {
+        getOwnPropertyDescriptor() { throw Error("handshake result trap"); },
+    });
+    const throwingVersion = new Proxy({ ...CURRENT_VERSIONS }, {
+        getOwnPropertyDescriptor() { throw Error("handshake version trap"); },
+    });
+    const { proxy: revoked, revoke } = Proxy.revocable({}, {});
+    revoke();
+    for (const value of [
+        throwingResult,
+        revoked,
+        { result: "compatible", versions: throwingVersion },
+    ]) {
+        assert.deepEqual(parseHandshakePayload(value), { kind: "invalid" });
+    }
+});
+
 test("typed incompatibility requires the dimension's current version", () => {
     for (const expected of [
         "arbitrary-version",
