@@ -400,9 +400,22 @@ function enableCompatibleEditing() {
     sourceInput.disabled = false;
     candidateInput.disabled = false;
 }
+// A rejected response must not keep downloading a body the page will never
+// parse. Fetch body cancellation alone may not close Firefox's network stream;
+// abort the individual fetch as well. Neither operation may block a retry.
+function discardResponseBody(response, requestAbort) {
+    try {
+        requestAbort?.abort();
+        void response.body?.cancel().catch(() => { });
+    }
+    catch {
+        // A failed stream cancellation cannot grant session authority.
+    }
+}
 async function completeSessionHandshake(secret) {
     hideSessionRetry();
     setTextIfChanged(sessionStatus, "Checking backend compatibility…");
+    const requestAbort = new AbortController();
     let response;
     try {
         response = await fetch("./api/handshake", {
@@ -413,7 +426,9 @@ async function completeSessionHandshake(secret) {
             mode: "same-origin",
             redirect: "error",
             referrerPolicy: "origin",
-            signal: sessionRequests.signal,
+            signal: AbortSignal.any([
+                sessionRequests.signal, requestAbort.signal,
+            ]),
         });
     }
     catch {
@@ -425,13 +440,16 @@ async function completeSessionHandshake(secret) {
         return;
     }
     if (sessionSecret !== secret) {
+        discardResponseBody(response, requestAbort);
         return;
     }
     if (response.status === 401) {
+        discardResponseBody(response, requestAbort);
         invalidateUnauthorizedSession();
         return;
     }
     if (response.status !== 200 && response.status !== 409) {
+        discardResponseBody(response, requestAbort);
         const invalidMessage = "Invalid backend handshake · editing disabled";
         setTextIfChanged(sessionStatus, invalidMessage);
         // The runtime can return 408 when its total request deadline
@@ -443,6 +461,7 @@ async function completeSessionHandshake(secret) {
     }
     const handshakeMediaType = response.headers.get("content-type");
     if (!sessionHandshake.isHandshakeContentType(handshakeMediaType)) {
+        discardResponseBody(response, requestAbort);
         const invalidMessage = "Invalid backend handshake · editing disabled";
         setTextIfChanged(sessionStatus, invalidMessage);
         // A misrouted response is not compatibility authority. Keep editing
@@ -456,6 +475,9 @@ async function completeSessionHandshake(secret) {
     }
     catch {
         payload = null;
+    }
+    if (payload === null) {
+        requestAbort.abort();
     }
     if (sessionSecret !== secret) {
         return;
@@ -532,6 +554,7 @@ const draftInputs = [
     ["candidate", candidateInput, candidateCount],
 ];
 async function readDraftField(field, secret, generation) {
+    const requestAbort = new AbortController();
     let response;
     try {
         response = await fetch(sessionDraft.draftReadTarget(field), {
@@ -542,7 +565,9 @@ async function readDraftField(field, secret, generation) {
             mode: "same-origin",
             redirect: "error",
             referrerPolicy: "no-referrer",
-            signal: sessionRequests.signal,
+            signal: AbortSignal.any([
+                sessionRequests.signal, requestAbort.signal,
+            ]),
         });
     }
     catch {
@@ -553,20 +578,27 @@ async function readDraftField(field, secret, generation) {
     }
     if (sessionSecret !== secret
         || draftSyncGeneration !== generation) {
+        discardResponseBody(response, requestAbort);
         return { kind: "stale" };
     }
     if (response.status === 401) {
+        discardResponseBody(response, requestAbort);
         return { kind: "authorization-failed" };
     }
     if (response.status !== 200) {
+        discardResponseBody(response, requestAbort);
         return { kind: "rejected" };
     }
     const declaredMediaType = response.headers.get("content-type");
     if (!sessionDraft.isDraftReadContentType(declaredMediaType)) {
+        discardResponseBody(response, requestAbort);
         return { kind: "rejected" };
     }
     try {
         const value = await sessionDraft.decodeDraftReadResponse(response);
+        if (value === null) {
+            requestAbort.abort();
+        }
         if (!draftSyncIsCurrent(secret, generation)) {
             return { kind: "stale" };
         }
@@ -575,6 +607,7 @@ async function readDraftField(field, secret, generation) {
             : { kind: "available", value };
     }
     catch {
+        requestAbort.abort();
         return sessionSecret === secret
             && draftSyncGeneration === generation
             ? { kind: "unavailable" }
@@ -629,6 +662,7 @@ async function syncDraftField(field, input, secret) {
         while (sessionSecret === secret
             && draftSyncGeneration === generation) {
             attemptedValue = input.value;
+            const requestAbort = new AbortController();
             let response;
             try {
                 const target = sessionDraft.draftMutationTarget(field);
@@ -641,7 +675,9 @@ async function syncDraftField(field, input, secret) {
                     mode: "same-origin",
                     redirect: "error",
                     referrerPolicy: "origin",
-                    signal: sessionRequests.signal,
+                    signal: AbortSignal.any([
+                        sessionRequests.signal, requestAbort.signal,
+                    ]),
                 });
             }
             catch {
@@ -652,6 +688,7 @@ async function syncDraftField(field, input, secret) {
                 return;
             }
             if (!draftSyncIsCurrent(secret, generation)) {
+                discardResponseBody(response, requestAbort);
                 return;
             }
             if (response.status === 204) {
@@ -666,6 +703,7 @@ async function syncDraftField(field, input, secret) {
             if (response.status === 413) {
                 const media = response.headers.get("content-type");
                 if (!sessionDraft.isDraftDiagnosticContentType(media)) {
+                    discardResponseBody(response, requestAbort);
                     recordDraftSyncFailure(field, "Invalid draft diagnostic");
                     return;
                 }
@@ -674,11 +712,15 @@ async function syncDraftField(field, input, secret) {
                     payload = await parseBoundedJsonResponse(response);
                 }
                 catch {
+                    requestAbort.abort();
                     if (draftSyncIsCurrent(secret, generation)) {
                         const invalidMessage = "Invalid draft diagnostic";
                         recordDraftSyncFailure(field, invalidMessage);
                     }
                     return;
+                }
+                if (payload === null) {
+                    requestAbort.abort();
                 }
                 if (!draftSyncIsCurrent(secret, generation)) {
                     return;
@@ -690,6 +732,7 @@ async function syncDraftField(field, input, secret) {
                 recordDraftSyncFailure(field, diagnosticMessage);
                 return;
             }
+            discardResponseBody(response, requestAbort);
             if (response.status === 401) {
                 invalidateUnauthorizedSession();
                 return;
@@ -777,6 +820,7 @@ endSession.addEventListener("click", () => {
     }
     endSession.disabled = true;
     void (async () => {
+        const requestAbort = new AbortController();
         try {
             const response = await fetch("./api/session/end", {
                 method: "POST",
@@ -786,11 +830,14 @@ endSession.addEventListener("click", () => {
                 mode: "same-origin",
                 redirect: "error",
                 referrerPolicy: "origin",
+                signal: requestAbort.signal,
             });
             if (sessionSecret !== secret) {
+                discardResponseBody(response, requestAbort);
                 return;
             }
             if (response.status === 401) {
+                discardResponseBody(response, requestAbort);
                 invalidateUnauthorizedSession();
                 return;
             }
@@ -803,6 +850,7 @@ endSession.addEventListener("click", () => {
                 setTextIfChanged(sessionStatus, "Session ended");
                 return;
             }
+            discardResponseBody(response, requestAbort);
         }
         catch {
             // The session may still exist. Never announce successful erasure.

@@ -34,7 +34,14 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
-import { runInNewContext } from "node:vm";
+import { runInNewContext as runVmContext } from "node:vm";
+
+// A browser owns these abort primitives. Node VM contexts omit them by
+// default; expose the real primitives so extracted adapter tests also check
+// that request abort signals are well-formed.
+function runInNewContext(source, context) {
+    return runVmContext(source, { AbortController, AbortSignal, ...context });
+}
 
 const INDEX_HTML = new URL(
     "../../../../src/browser/workspace/adapter-inbound/index.html",
@@ -352,7 +359,7 @@ test("retry control follows remaining retryable draft failures", async () => {
             const failedDraftFields = new Set();
             const retryableDraftFields = new Set();
             const syncingDraftFields = new Set();
-            const sessionRequests = { signal: {} };
+            const sessionRequests = new AbortController();
             const sessionDraft = {
                 draftMutationTarget: () => "./api/session/task",
                 draftMutationHeaders: () => ({}),
@@ -412,7 +419,7 @@ test("draft 413 media refusal precedes diagnostic body parsing", async () => {
             (async () => {
                 const sessionSecret = "secret";
                 const draftSyncGeneration = 0;
-                const sessionRequests = { signal: {} };
+                const sessionRequests = new AbortController();
                 const failedDraftFields = new Set();
                 const retryableDraftFields = new Set();
                 const syncingDraftFields = new Set();
@@ -437,6 +444,7 @@ test("draft 413 media refusal precedes diagnostic body parsing", async () => {
                 function hideSessionRetry() {}
                 function setTextIfChanged() {}
                 function invalidateUnauthorizedSession() {}
+                function discardResponseBody() {}
                 ${syncDraftField}
                 await syncDraftField("task", { value: "private" }, "secret");
                 return JSON.stringify(failures);
@@ -461,12 +469,12 @@ test("draft 413 media refusal precedes diagnostic body parsing", async () => {
 
 test("page session network requests are cancellable on exit", async () => {
     const source = await readFile(MAIN_MODULE, "utf8");
-    const signalUses = source.match(/signal: sessionRequests\.signal,/gu) ?? [];
-    assert.equal(
-        signalUses.length,
-        3,
-        "handshake, draft reads, and writes must share the page-session signal",
-    );
+    const signalUses = source.match(
+        /sessionRequests\.signal, requestAbort\.signal,/gu,
+    ) ?? [];
+    assert.equal(signalUses.length, 3,
+        "handshake, draft reads, and writes retain page-session abort "
+            + "alongside per-request abort");
     const draftStart = source.indexOf("async function syncDraftField(");
     const draftEnd = source.indexOf("function bindDraftSync(", draftStart);
     assert.notEqual(draftStart, -1, "draft sync function must exist");
@@ -547,7 +555,7 @@ test("transient handshake HTTP 408 offers retry without parsing", async () => {
         const result = await runInNewContext(`
             (async () => {
                 const sessionSecret = "secret";
-                const sessionRequests = { signal: {} };
+                const sessionRequests = new AbortController();
                 const sessionStatus = { textContent: "" };
                 const retries = [];
                 const sessionHandshake = {
@@ -564,6 +572,7 @@ test("transient handshake HTTP 408 offers retry without parsing", async () => {
                 async function hydrateSessionDraft() {
                     throw new Error("unexpected draft hydration");
                 }
+                function discardResponseBody() {}
                 ${handshake}
                 await completeSessionHandshake("secret");
                 return JSON.stringify({
@@ -616,7 +625,7 @@ test("handshake response media is checked before JSON admission", async () => {
         const result = await runInNewContext(`
             (async () => {
                 const sessionSecret = "secret";
-                const sessionRequests = { signal: {} };
+                const sessionRequests = new AbortController();
                 const sessionStatus = { textContent: "" };
                 const parseBoundedJsonResponse = (response) => response.json();
                 const sessionHandshake = {
@@ -632,6 +641,7 @@ test("handshake response media is checked before JSON admission", async () => {
                 }
                 function invalidateUnauthorizedSession() {}
                 async function hydrateSessionDraft() { hydrate(); }
+                function discardResponseBody() {}
                 ${handshake}
                 await completeSessionHandshake("secret");
                 return sessionStatus.textContent;
@@ -698,7 +708,7 @@ test("typed incompatibility on HTTP 409 remains terminal", async () => {
         const status = await runInNewContext(`
             (async () => {
                 const sessionSecret = "secret";
-                const sessionRequests = { signal: {} };
+                const sessionRequests = new AbortController();
                 const sessionStatus = { textContent: "" };
                 const sessionHandshake = {
                     handshakeHeaders: () => ({}),
@@ -713,6 +723,7 @@ test("typed incompatibility on HTTP 409 remains terminal", async () => {
                 }
                 function invalidateUnauthorizedSession() {}
                 async function hydrateSessionDraft() { hydrate(); }
+                function discardResponseBody() {}
                 ${handshake}
                 await completeSessionHandshake("secret");
                 return sessionStatus.textContent;
@@ -764,7 +775,7 @@ test("handshake overlong JSON cannot authorize draft hydration", async () => {
         const status = await runInNewContext(`
             (async () => {
                 const sessionSecret = "secret";
-                const sessionRequests = { signal: {} };
+                const sessionRequests = new AbortController();
                 const sessionStatus = { textContent: "" };
                 const sessionHandshake = {
                     handshakeHeaders: () => ({}),
@@ -782,6 +793,7 @@ test("handshake overlong JSON cannot authorize draft hydration", async () => {
                 }
                 function invalidateUnauthorizedSession() {}
                 async function hydrateSessionDraft() { hydrate(); }
+                function discardResponseBody() {}
                 ${handshake}
                 await completeSessionHandshake("secret");
                 return sessionStatus.textContent;
@@ -822,7 +834,7 @@ test("draft 413 oversized JSON cannot fake a resource limit", async () => {
             (async () => {
                 const sessionSecret = "secret";
                 const draftSyncGeneration = 0;
-                const sessionRequests = { signal: {} };
+                const sessionRequests = new AbortController();
                 const failedDraftFields = new Set();
                 const retryableDraftFields = new Set();
                 const syncingDraftFields = new Set();
@@ -847,6 +859,7 @@ test("draft 413 oversized JSON cannot fake a resource limit", async () => {
                 function hideSessionRetry() {}
                 function setTextIfChanged() {}
                 function invalidateUnauthorizedSession() {}
+                function discardResponseBody() {}
                 ${draftSync}
                 await syncDraftField("task", { value: "private" }, "secret");
                 return JSON.stringify(failures);
@@ -874,7 +887,7 @@ test("draft hydration rejects wrong media without body read", async () => {
             (async () => {
                 const sessionSecret = "secret";
                 const draftSyncGeneration = 0;
-                const sessionRequests = { signal: {} };
+                const sessionRequests = new AbortController();
                 function draftSyncIsCurrent(secret, generation) {
                     return sessionSecret === secret
                         && draftSyncGeneration === generation;
@@ -885,6 +898,7 @@ test("draft hydration rejects wrong media without body read", async () => {
                     isDraftReadContentType,
                     decodeDraftReadResponse,
                 };
+                function discardResponseBody() {}
                 ${readDraftField}
                 return readDraftField("task", "secret", 0);
             })()
@@ -926,7 +940,7 @@ test(
         (async () => {
             const sessionSecret = "secret";
             const draftSyncGeneration = 0;
-            const sessionRequests = { signal: {} };
+            const sessionRequests = new AbortController();
             function draftSyncIsCurrent(secret, generation) {
                 return sessionSecret === secret
                     && draftSyncGeneration === generation;
@@ -937,6 +951,7 @@ test(
                 isDraftReadContentType,
                 decodeDraftReadResponse,
             };
+            function discardResponseBody() {}
             ${readDraftField}
             return readDraftField("task", "secret", 0);
         })()
@@ -972,7 +987,7 @@ test("draft hydration preserves BOM and rejects invalid UTF-8", async () => {
             (async () => {
                 const sessionSecret = "secret";
                 const draftSyncGeneration = 0;
-                const sessionRequests = { signal: {} };
+                const sessionRequests = new AbortController();
                 function draftSyncIsCurrent(secret, generation) {
                     return sessionSecret === secret
                         && draftSyncGeneration === generation;
@@ -983,6 +998,7 @@ test("draft hydration preserves BOM and rejects invalid UTF-8", async () => {
                     isDraftReadContentType,
                     decodeDraftReadResponse,
                 };
+                function discardResponseBody() {}
                 ${readDraftField}
                 return readDraftField("task", "secret", 0);
             })()
@@ -1333,5 +1349,206 @@ test("session credential fragment is one-time browser handoff", async () => {
             true,
             `credential handoff must retain ${required}`,
         );
+    }
+});
+
+function rejectedResponseWithPendingBody(status, contentType) {
+    let cancellationCount = 0;
+    const body = new ReadableStream({
+        cancel() { cancellationCount += 1; },
+    });
+    const headers = contentType === null ? {} : {
+        "Content-Type": contentType,
+    };
+    const response = new Response(body, { status, headers });
+    return { response, cancellationCount: () => cancellationCount };
+}
+
+function discardedResponseHelper(source) {
+    const start = source.indexOf("function discardResponseBody(");
+    const end = source.indexOf("\n}", start);
+    assert.ok(start >= 0 && end > start,
+        "production rejected-response disposal helper must exist");
+    return source.slice(start, end + 2);
+}
+
+function recordingAbortController(abortCalls) {
+    return class extends AbortController {
+        abort() {
+            abortCalls.push(true);
+            super.abort();
+        }
+    };
+}
+
+test(
+    "rejected handshake responses cancel unread bodies before retry",
+    async () => {
+    const source = await readFile(MAIN_MODULE, "utf8");
+    const discard = discardedResponseHelper(source);
+    const start = source.indexOf(
+        "async function completeSessionHandshake(secret) {",
+    );
+    const end = source.indexOf("const failedDraftFields", start);
+    assert.ok(start >= 0 && end > start);
+    const handshake = source.slice(start, end);
+    for (const [status, contentType, expectRetry] of [
+        [200, "text/html; charset=utf-8", true],
+        [409, "text/html; charset=utf-8", true],
+        [408, null, true],
+        [500, null, true],
+        [403, null, false],
+    ]) {
+        const probe = rejectedResponseWithPendingBody(status, contentType);
+        const abortCalls = [];
+        const retries = [];
+        const result = await runInNewContext(`
+            (async () => {
+                const sessionSecret = "secret";
+                const sessionRequests = new AbortController();
+                const sessionStatus = { textContent: "" };
+                const sessionHandshake = {
+                    handshakeHeaders: () => ({}),
+                    isHandshakeContentType: (media) =>
+                        media === "application/json; charset=utf-8",
+                };
+                function hideSessionRetry() {}
+                function showSessionRetry(purpose) { onRetry(purpose); }
+                function setTextIfChanged(element, value) {
+                    element.textContent = value;
+                }
+                function invalidateUnauthorizedSession() {}
+                async function hydrateSessionDraft() {
+                    throw Error("rejected handshake cannot hydrate");
+                }
+                const parseBoundedJsonResponse = () => {
+                    throw Error("rejected body cannot be parsed");
+                };
+                ${discard}
+                ${handshake}
+                await completeSessionHandshake("secret");
+                return sessionStatus.textContent;
+            })()
+        `, {
+            fetch: async () => probe.response,
+            onRetry: (purpose) => retries.push(purpose),
+            AbortController: recordingAbortController(abortCalls),
+        });
+        assert.equal(result, "Invalid backend handshake · editing disabled");
+        assert.deepEqual(retries, expectRetry ? ["connection"] : []);
+        assert.equal(probe.cancellationCount(), 1,
+            `HTTP ${status} ${contentType} body must be canceled`);
+        assert.equal(abortCalls.length, 1,
+            `HTTP ${status} ${contentType} fetch must be aborted`);
+    }
+});
+
+test("rejected draft reads cancel unread bodies", async () => {
+    const source = await readFile(MAIN_MODULE, "utf8");
+    const discard = discardedResponseHelper(source);
+    const start = source.indexOf("async function readDraftField(");
+    const end = source.indexOf("async function hydrateSessionDraft(", start);
+    assert.ok(start >= 0 && end > start);
+    const readDraftField = source.slice(start, end);
+    for (const [status, contentType] of [
+        [200, "text/html; charset=utf-8"],
+        [403, "text/plain; charset=utf-8"],
+        [408, "text/plain; charset=utf-8"],
+    ]) {
+        const probe = rejectedResponseWithPendingBody(status, contentType);
+        const abortCalls = [];
+        const outcome = await runInNewContext(`
+            (async () => {
+                const sessionSecret = "secret";
+                const draftSyncGeneration = 0;
+                const sessionRequests = new AbortController();
+                function draftSyncIsCurrent(secret, generation) {
+                    return sessionSecret === secret
+                        && draftSyncGeneration === generation;
+                }
+                const sessionDraft = {
+                    draftReadTarget: () => "./api/session/task",
+                    draftReadHeaders: () => ({}),
+                    isDraftReadContentType: (value) =>
+                        value === "text/plain; charset=utf-8",
+                };
+                ${discard}
+                ${readDraftField}
+                return readDraftField("task", "secret", 0);
+            })()
+        `, {
+            fetch: async () => probe.response,
+            AbortController: recordingAbortController(abortCalls),
+        });
+        assert.equal(outcome.kind, "rejected");
+        assert.equal(probe.cancellationCount(), 1,
+            `HTTP ${status} ${contentType} body must be canceled`);
+        assert.equal(abortCalls.length, 1,
+            `HTTP ${status} ${contentType} fetch must be aborted`);
+    }
+});
+
+test(
+    "rejected draft writes cancel unread diagnostic and error bodies",
+    async () => {
+    const source = await readFile(MAIN_MODULE, "utf8");
+    const discard = discardedResponseHelper(source);
+    const start = source.indexOf("async function syncDraftField(");
+    const end = source.indexOf("function bindDraftSync(", start);
+    assert.ok(start >= 0 && end > start);
+    const syncDraftField = source.slice(start, end);
+    for (const [status, contentType] of [
+        [413, "text/html; charset=utf-8"],
+        [403, "application/json; charset=utf-8"],
+        [408, "application/json; charset=utf-8"],
+        [500, null],
+    ]) {
+        const probe = rejectedResponseWithPendingBody(status, contentType);
+        const abortCalls = [];
+        const failures = [];
+        await runInNewContext(`
+            (async () => {
+                const sessionSecret = "secret";
+                const draftSyncGeneration = 0;
+                const sessionRequests = new AbortController();
+                const failedDraftFields = new Set();
+                const retryableDraftFields = new Set();
+                const syncingDraftFields = new Set();
+                const sessionDraft = {
+                    draftMutationTarget: () => "./api/session/task",
+                    draftMutationHeaders: () => ({}),
+                    isDraftDiagnosticContentType: (value) =>
+                        value === "application/json; charset=utf-8",
+                };
+                function draftSyncIsCurrent(secret, generation) {
+                    return sessionSecret === secret
+                        && draftSyncGeneration === generation;
+                }
+                function recordDraftSyncFailure(field, message, retryable) {
+                    failedDraftFields.add(field);
+                    onFailure(message, retryable);
+                }
+                function hideResolvedDraftRetry() {}
+                function hideSessionRetry() {}
+                function setTextIfChanged() {}
+                function invalidateUnauthorizedSession() {}
+                const parseBoundedJsonResponse = () => {
+                    throw Error("rejected diagnostic body cannot be parsed");
+                };
+                ${discard}
+                ${syncDraftField}
+                await syncDraftField("task", { value: "private" }, "secret");
+            })()
+        `, {
+            fetch: async () => probe.response,
+            onFailure: (...args) => failures.push(args),
+            AbortController: recordingAbortController(abortCalls),
+        });
+        assert.equal(failures.length, 1,
+            `HTTP ${status} must leave a visible draft failure`);
+        assert.equal(probe.cancellationCount(), 1,
+            `HTTP ${status} ${contentType} body must be canceled`);
+        assert.equal(abortCalls.length, 1,
+            `HTTP ${status} ${contentType} fetch must be aborted`);
     }
 });

@@ -53,6 +53,21 @@ Firefox confirms wrong-media and oversized responses never request private
 drafts before a later valid handshake. This is client recovery evidence, not a
 change to the session's HTTP authentication rules.
 
+A discarded-response browser regression now verifies that wrong-media
+handshakes, draft responses, and unexpected statuses are refused without
+reading their bodies, and that the browser explicitly cancels their streams. The authenticated handshake and draft requests also
+compose page-lifetime and per-request abort signals; refusing an already-started
+fetch aborts the request instead of depending on `ReadableStream.cancel()` to
+close its connection.
+
+In a real Firefox fixture, a server deliberately sends headers and one partial
+wrong-media handshake body, then never finishes it.
+The browser refuses editing, aborts the live connection, and retries in the same
+fragment-free tab before hydrating its drafts. The synthetic server sees no
+private draft request before the valid retry. This narrows the browser network
+lifecycle evidence; it does not remove the independently observed opener-argv
+credential exposure or prove packet-level isolation across all future paths.
+
 A source-level backend network-surface guard now requires every production
 `std::net` import to remain inside the loopback session runtime. Locked offline
 Cargo metadata pins each direct registry dependency's owner, exact version

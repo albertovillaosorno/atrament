@@ -167,6 +167,28 @@ remains unchanged. The harness verifies actual SIGKILL termination, not only
 an unsuccessful exit. This extends the precommit crash proof to synced bytes;
 it still does not cover a crash in the later link-before-rename window.
 
+A red-first browser adapter regression found that an already-rejected
+handshake, draft GET, or draft POST response could retain an unread body while
+editing remained disabled or a retry was offered. The browser now explicitly
+cancels rejected response bodies and aborts the individual in-flight fetch,
+while preserving the page-lifetime cancellation signal on handshake and draft
+operations.
+
+This includes stale responses, authorization failures, unexpected
+statuses, and wrong-media responses; the explicit End session command also
+cancels unread refusal bodies. Three executable browser-module fixtures verify
+refused streams are cancelled without consuming private payloads or changing
+retry and diagnostic outcomes.
+
+A separate Firefox test serves a wrong-media handshake with a body that never
+ends: the per-request abort closes that live connection, leaves all inputs disabled, and permits the same fragment-free tab
+to retry, hydrate all three fields, and enable editing. Firefox additionally
+showed that body-stream cancellation alone did not promptly close this socket,
+which is why both cancellation and request abort are used.
+
+This is page-owned browser transport cleanup evidence, not proof that closing
+a tab terminates the backend process or cleans up media conversions.
+
 The task remains open until temporary media exist and end-to-end fixtures also
 cover backend operation cancellation, media cleanup, and late-link crash
 recovery rather than only anonymous-stage and post-sync termination.

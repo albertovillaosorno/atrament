@@ -1593,6 +1593,7 @@ function createSessionFixtureServer(
     onHandshakeContentType = null,
     onDraftBody = null,
     onHandshakeBody = null,
+    onHandshakeResponse = null,
 ) {
     const generated = new Set([
         "main.js",
@@ -1668,6 +1669,9 @@ function createSessionFixtureServer(
                 return;
             }
             const status = onHandshake?.() ?? 200;
+            if (onHandshakeResponse?.(request, response, status) === true) {
+                return;
+            }
             response.writeHead(status, {
                 "Cache-Control": "no-store",
                 "Content-Type": onHandshakeContentType?.()
@@ -4909,6 +4913,111 @@ test(
             const accepted = await waitForSessionStatus(
                 bidi, firstTab.context, "Session ready",
             );
+            for (const field of ["task", "source", "candidate"]) {
+                assert.deepEqual(accepted[field], {
+                    disabled: false, value: REFRESH_DRAFT[field],
+                });
+            }
+            assert.deepEqual(apiRequests, [
+                "POST /api/handshake",
+                "POST /api/handshake",
+                "GET /api/session/task",
+                "GET /api/session/source",
+                "GET /api/session/candidate",
+            ]);
+        } finally {
+            bidi?.close();
+            await closeFixtureServer(server);
+            for (const child of children.reverse()) {
+                await stopChild(child);
+            }
+            fs.rmSync(profile, { recursive: true, force: true });
+        }
+    },
+);
+
+test(
+    "Firefox aborts a stalled wrong-media handshake before in-tab retry",
+    { skip: !FIREFOX_AVAILABLE, timeout: FIREFOX_CASE_TIMEOUT_MS },
+    async () => {
+        fs.mkdirSync(".temp", { recursive: true });
+        const profile = fs.mkdtempSync(".temp/session-handshake-cancel-");
+        const apiRequests = [];
+        let handshakes = 0;
+        let streamClosed;
+        const firstStreamClosed = new Promise((resolve) => {
+            streamClosed = resolve;
+        });
+        const server = createSessionFixtureServer(
+            apiRequests, null, null, null, null, null, null, null, null,
+            (request, response) => {
+                handshakes += 1;
+                if (handshakes !== 1) {
+                    return false;
+                }
+                assert.equal(request.method, "POST");
+                response.writeHead(200, {
+                    "Cache-Control": "no-store",
+                    "Content-Type": "text/html; charset=utf-8",
+                });
+                // Keep the response open forever unless the browser actively
+                // discards the body. A completed short response would not
+                // prove fetch stream cancellation.
+                response.write("<html>untrusted response never ends");
+                response.once("close", streamClosed);
+                return true;
+            },
+        );
+        const children = [];
+        let bidi;
+        try {
+            server.listen(0, "127.0.0.1");
+            await once(server, "listening");
+            const address = server.address();
+            assert.notEqual(address, null);
+            assert.notEqual(typeof address, "string");
+            const origin = `http://127.0.0.1:${address.port}`;
+            bidi = await startBidiFirefox(profile, children);
+            const tab = await bidi.command("browsingContext.create", {
+                type: "tab",
+            });
+            await bidi.command("browsingContext.navigate", {
+                context: tab.context,
+                url: `${origin}/#session=${REFRESH_SECRET}`,
+                wait: "complete",
+            });
+            const rejected = await waitForSessionStatus(
+                bidi, tab.context,
+                "Invalid backend handshake · editing disabled",
+            );
+            assert.equal(rejected.hash, "");
+            for (const field of ["task", "source", "candidate"]) {
+                assert.deepEqual(rejected[field], {
+                    disabled: true, value: "",
+                });
+            }
+            assert.deepEqual(apiRequests, ["POST /api/handshake"]);
+            await observedWithin(firstStreamClosed,
+                "unread wrong-media handshake abort");
+            const retry = await bidi.command("script.evaluate", {
+                awaitPromise: false,
+                expression: `(() => {
+                    const retry = document.getElementById("retry-session");
+                    if (retry.disabled || retry.hidden
+                        || retry.textContent !== "Retry connection") {
+                        throw Error("stalled handshake retry unavailable");
+                    }
+                    retry.click();
+                    return true;
+                })()`,
+                resultOwnership: "none",
+                target: { context: tab.context },
+            });
+            assert.equal(retry.type, "success");
+            const accepted = await waitForSessionStatus(
+                bidi, tab.context, "Session ready",
+            );
+            assert.equal(accepted.hash, "");
             for (const field of ["task", "source", "candidate"]) {
                 assert.deepEqual(accepted[field], {
                     disabled: false, value: REFRESH_DRAFT[field],
