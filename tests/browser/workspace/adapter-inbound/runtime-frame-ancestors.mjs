@@ -4694,13 +4694,7 @@ test(
                 bidi, tab.context, "Session ready",
             );
             assert.equal(ready.hash, "");
-            const admittedRequests = [...apiRequests];
-            for (const hash of [
-                `#session=${REFRESH_SECRET}`,
-                `#session%3D${REFRESH_SECRET}`,
-                `#%73ession=${REFRESH_SECRET}`,
-                `#SESSION=${REFRESH_SECRET}`,
-            ]) {
+            const navigateHash = async (hash) => {
                 const response = await bidi.command("script.evaluate", {
                     awaitPromise: true,
                     expression: `new Promise((resolve) => {
@@ -4718,6 +4712,15 @@ test(
                 assert.equal(response.result.type, "string");
                 assert.equal(response.result.value, "",
                     `credential-like navigation retained ${hash}`);
+            };
+            const admittedRequests = [...apiRequests];
+            for (const hash of [
+                `#session=${REFRESH_SECRET}`,
+                `#session%3D${REFRESH_SECRET}`,
+                `#%73ession=${REFRESH_SECRET}`,
+                `#SESSION=${REFRESH_SECRET}`,
+            ]) {
+                await navigateHash(hash);
                 const current = await evaluateSessionDocument(
                     bidi, tab.context,
                 );
@@ -4744,6 +4747,44 @@ test(
             assert.equal(ordinary.type, "success");
             assert.equal(ordinary.result.type, "string");
             assert.equal(ordinary.result.value, "#source-panel");
+
+            // The first handoff is not reusable after a tab refresh. A
+            // subsequent hashchange must neither preserve the URL secret nor
+            // turn the refreshed credentialless document into a session.
+            await bidi.command("browsingContext.reload", {
+                context: tab.context,
+                wait: "complete",
+            });
+            const unavailable = await waitForSessionStatus(
+                bidi, tab.context,
+                "Frontend ready · credential unavailable",
+            );
+            for (const field of ["task", "source", "candidate"]) {
+                assert.deepEqual(unavailable[field], {
+                    disabled: true, value: "",
+                });
+            }
+            for (const hash of [
+                `#session=${REFRESH_SECRET}`,
+                `#session%3D${REFRESH_SECRET}`,
+                `#%73ession=${REFRESH_SECRET}`,
+            ]) {
+                await navigateHash(hash);
+                const stillUnavailable = await evaluateSessionDocument(
+                    bidi, tab.context,
+                );
+                assert.equal(
+                    stillUnavailable.status,
+                    "Frontend ready · credential unavailable",
+                );
+                for (const field of ["task", "source", "candidate"]) {
+                    assert.deepEqual(stillUnavailable[field], {
+                        disabled: true, value: "",
+                    });
+                }
+            }
+            assert.deepEqual(apiRequests, admittedRequests,
+                "credential injection after refresh must not reauthorize");
         } finally {
             bidi?.close();
             await closeFixtureServer(server);

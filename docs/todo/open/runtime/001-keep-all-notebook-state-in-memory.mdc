@@ -137,8 +137,13 @@ hash navigation, without accepting or replacing the original in-memory
 credential. An independent real Firefox fixture injects canonical and encoded
 session-looking fragments into an already authenticated tab, confirms each
 URL fragment is erased without additional handshake or draft requests, and
-preserves normal `#source-panel` anchor navigation. Post-startup fragments
-cannot reauthenticate an uncredentialed page.
+preserves normal `#source-panel` anchor navigation.
+
+The Firefox fixture then reloads the tab without its spent credential,
+injects additional canonical and encoded session-looking hashes, and
+confirms each new fragment disappears while all draft inputs remain blank
+and disabled and no new handshake or draft request occurs. Post-startup
+fragments cannot reauthenticate an uncredentialed page.
 
 The authenticated draft replacement transport now requires exactly one
 `Content-Type: text/plain; charset=utf-8` field before it decodes and replaces
