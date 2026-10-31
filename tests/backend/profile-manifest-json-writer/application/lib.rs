@@ -185,6 +185,48 @@ fn strings_escape_controls_but_retain_unicode_and_hex_digest_bytes() {
 }
 
 #[test]
+fn every_decimal_width_preserves_plan_owned_and_buffer_bytes() {
+    let mut manifest = fixture();
+    manifest.entries.push(entry("assets/source.bin", b"ok"));
+    let mut lengths = vec![0, u64::from(u32::MAX), u64::MAX - 1, u64::MAX];
+    for exponent in 1..=19u32 {
+        let boundary = 10u64.pow(exponent);
+        lengths.extend([boundary - 1, boundary]);
+    }
+    for length in lengths {
+        manifest.entries[0].byte_length = length;
+        let planned = planned_canonical_profile_manifest_json_bytes(
+            &manifest, &["strokes", "layout"], limits(),
+        ).expect("exact decimal framing plan");
+        let owned = encode(&manifest);
+        assert_eq!(owned.len(), planned);
+        let readable = std::str::from_utf8(&owned)
+            .expect("ASCII decimal in UTF-8 JSON");
+        assert!(
+            readable.contains(&format!(r#""byte_length":{length}"#)),
+            "canonical decimal was not exact: {length}",
+        );
+        assert_eq!(decode(&owned).entries[0].byte_length, length);
+        let mut destination = vec![0xa5; planned + 7];
+        let written = write_canonical_profile_manifest_json_into(
+            &manifest, &["strokes", "layout"], limits(),
+            &mut destination,
+        ).expect("caller-owned output admits exact decimal bytes");
+        assert_eq!(written, planned);
+        assert_eq!(&destination[..written], owned);
+        assert_eq!(&destination[written..], &[0xa5; 7]);
+        let mut tighter = limits();
+        tighter.maximum_bytes = planned - 1;
+        assert_eq!(
+            planned_canonical_profile_manifest_json_bytes(
+                &manifest, &["strokes", "layout"], tighter,
+            ),
+            Err(Error::ManifestTooLarge),
+        );
+    }
+}
+
+#[test]
 fn output_budget_matches_exact_escape_aware_count() {
     let manifest = fixture();
     let actual = encode(&manifest);

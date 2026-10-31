@@ -22,6 +22,11 @@ migrated_from: TODO.md
 
 ## Current portable-container implementation status
 
+Canonical manifest JSON now counts and writes all `u64` entry lengths using a
+fixed 20-byte decimal buffer, without per-entry temporary heap strings. An
+exhaustive decimal-width boundary fixture compares planning, owned output and
+caller-owned output through the maximum `u64` value.
+
 The typed manifest decoder uses fallible, checked allocations for every
 untrusted decoded string and metadata array. An allocation failure returns a
 typed refusal rather than panicking on a caller-admitted large declaration;

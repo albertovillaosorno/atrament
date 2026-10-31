@@ -202,14 +202,37 @@ where
     sink.emit(b"\"")
 }
 
+#[expect(
+    clippy::integer_division_remainder_used,
+    reason = "base-ten digit encoding requires exact quotient and remainder"
+)]
 fn append_decimal<S>(
     sink: &mut S,
-    value: u64,
+    mut value: u64,
 ) -> Result<(), ProfileManifestJsonWriteError>
 where
     S: JsonSink,
 {
-    sink.emit(value.to_string().as_bytes())
+    // Every u64 fits in 20 decimal digits. Count and emission must not
+    // allocate a temporary String per declared entry byte length.
+    let mut digits = [0u8; 20];
+    let mut start = digits.len();
+    loop {
+        start = start.checked_sub(1)
+            .ok_or(ProfileManifestJsonWriteError::InternalEncoding)?;
+        let digit = u8::try_from(value % 10u64)
+            .map_err(|_value| ProfileManifestJsonWriteError::InternalEncoding)?;
+        *digits.get_mut(start)
+            .ok_or(ProfileManifestJsonWriteError::InternalEncoding)? =
+            b'0'.checked_add(digit)
+                .ok_or(ProfileManifestJsonWriteError::InternalEncoding)?;
+        value /= 10u64;
+        if value == 0 {
+            break;
+        }
+    }
+    sink.emit(digits.get(start..)
+        .ok_or(ProfileManifestJsonWriteError::InternalEncoding)?)
 }
 
 fn hex_digit(value: u8) -> Result<u8, ProfileManifestJsonWriteError> {
