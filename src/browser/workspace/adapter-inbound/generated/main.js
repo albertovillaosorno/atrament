@@ -59,13 +59,9 @@ function hasSessionFragmentPrefix(hash) {
     }
     return true;
 }
-function consumeSessionSecretFragment() {
-    const hash = window.location.hash;
-    const sessionSecret = sessionSecretFromFragment(hash);
-    if (sessionSecret === null
-        && !hash.startsWith("#session=")
-        && !hasSessionFragmentPrefix(hash)) {
-        return null;
+function scrubSessionLikeFragment(hash) {
+    if (!hash.startsWith("#session=") && !hasSessionFragmentPrefix(hash)) {
+        return false;
     }
     const localUrl = fragmentFreeLocalUrl();
     try {
@@ -73,11 +69,21 @@ function consumeSessionSecretFragment() {
     }
     catch {
         window.location.replace(localUrl);
-        return null;
+        return false;
     }
-    return sessionSecret;
+    return true;
+}
+function consumeSessionSecretFragment() {
+    const hash = window.location.hash;
+    const sessionSecret = sessionSecretFromFragment(hash);
+    return scrubSessionLikeFragment(hash) ? sessionSecret : null;
 }
 let sessionSecret = consumeSessionSecretFragment();
+window.addEventListener("hashchange", () => {
+    // Later same-document navigation can erase a credential-looking URL,
+    // but must never admit a fresh credential to the running page session.
+    scrubSessionLikeFragment(window.location.hash);
+});
 const sessionRequests = new AbortController();
 function requireElement(selector) {
     const element = document.querySelector(selector);

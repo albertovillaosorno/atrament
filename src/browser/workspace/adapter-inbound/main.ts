@@ -64,27 +64,32 @@ function hasSessionFragmentPrefix(hash: string): boolean {
     return true;
 }
 
-function consumeSessionSecretFragment(): string | null {
-    const hash = window.location.hash;
-    const sessionSecret = sessionSecretFromFragment(hash);
-    if (
-        sessionSecret === null
-        && !hash.startsWith("#session=")
-        && !hasSessionFragmentPrefix(hash)
-    ) {
-        return null;
+function scrubSessionLikeFragment(hash: string): boolean {
+    if (!hash.startsWith("#session=") && !hasSessionFragmentPrefix(hash)) {
+        return false;
     }
     const localUrl = fragmentFreeLocalUrl();
     try {
         window.history.replaceState(null, "", localUrl);
     } catch {
         window.location.replace(localUrl);
-        return null;
+        return false;
     }
-    return sessionSecret;
+    return true;
+}
+
+function consumeSessionSecretFragment(): string | null {
+    const hash = window.location.hash;
+    const sessionSecret = sessionSecretFromFragment(hash);
+    return scrubSessionLikeFragment(hash) ? sessionSecret : null;
 }
 
 let sessionSecret = consumeSessionSecretFragment();
+window.addEventListener("hashchange", (): void => {
+    // Later same-document navigation can erase a credential-looking URL,
+    // but must never admit a fresh credential to the running page session.
+    scrubSessionLikeFragment(window.location.hash);
+});
 const sessionRequests = new AbortController();
 
 function requireElement<T extends Element>(selector: string): T {

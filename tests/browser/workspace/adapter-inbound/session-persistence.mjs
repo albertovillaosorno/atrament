@@ -681,6 +681,66 @@ test("encoded credential aliases scrub without login", async () => {
     }
 });
 
+test("post-load credential hashes are scrubbed without authority", async () => {
+    const source = await readFile(MAIN_MODULE, "utf8");
+    const start = source.indexOf("function fragmentFreeLocalUrl() {");
+    const end = source.indexOf(
+        "const sessionRequests = new AbortController();", start,
+    );
+    assert.ok(start >= 0 && end > start);
+    const handoff = source.slice(start, end);
+    const { sessionSecretFromFragment } = await import(new URL(
+        "../../../../src/browser/workspace/adapter-inbound/generated/"
+            + "session-fragment.js",
+        import.meta.url,
+    ));
+    const secret = "a".repeat(64);
+    const replaced = [];
+    const listeners = new Map();
+    const location = {
+        hash: "", pathname: "/index.html", search: "?view=1",
+        replace() { throw Error("unexpected redirect"); },
+    };
+    const window = {
+        location,
+        history: {
+            replaceState(state, title, url) {
+                replaced.push({ state, title, url });
+                location.hash = "";
+            },
+        },
+        addEventListener(name, callback) { listeners.set(name, callback); },
+    };
+    const state = runInNewContext(
+        `${handoff}\n({ sessionSecret: () => sessionSecret })`,
+        { window, sessionSecretFromFragment },
+    );
+    assert.equal(state.sessionSecret(), null);
+    const navigate = listeners.get("hashchange");
+    assert.equal(typeof navigate, "function",
+        "post-startup credential navigation must have a scrub handler");
+    for (const hash of [
+        `#session=${secret}`,
+        `#session%3D${secret}`,
+        `#%73ession=${secret}`,
+        `#SESSION=${secret}`,
+    ]) {
+        location.hash = hash;
+        navigate();
+        assert.equal(location.hash, "", `fragment retained: ${hash}`);
+        assert.equal(state.sessionSecret(), null,
+            "post-load credential fragments must never grant authority");
+    }
+    assert.deepEqual(replaced, Array.from({ length: 4 }, () => ({
+        state: null, title: "", url: "/index.html?view=1",
+    })));
+    location.hash = "#source-panel";
+    navigate();
+    assert.equal(location.hash, "#source-panel",
+        "ordinary editor navigation must remain intact");
+    assert.equal(replaced.length, 4);
+});
+
 test("session credential fragment is one-time browser handoff", async () => {
     const source = await readFile(MAIN_MODULE, "utf8");
     const urlStart = source.indexOf("function fragmentFreeLocalUrl() {");
@@ -707,14 +767,14 @@ test("session credential fragment is one-time browser handoff", async () => {
     assert.equal(urlHelper.includes("window.location.search"), true);
     assert.equal(urlHelper.includes("window.location.hash"), false);
 
-    const handoff = source.slice(handoffStart, handoffEnd);
+    const handoff = source.slice(urlStart, handoffEnd);
     for (const required of [
         'const hash = window.location.hash;',
         'hash.startsWith("#session=")',
         "const localUrl = fragmentFreeLocalUrl();",
         'window.history.replaceState(null, "", localUrl);',
         "window.location.replace(localUrl);",
-        "return sessionSecret;",
+        "return scrubSessionLikeFragment(hash) ? sessionSecret : null;",
     ]) {
         assert.equal(
             handoff.includes(required),

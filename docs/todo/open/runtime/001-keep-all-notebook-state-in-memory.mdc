@@ -129,6 +129,17 @@ confirms the actual address bar has no fragment, every private draft control
 remains blank and disabled, and no handshake or draft API request occurs.
 Reloading the scrubbed tab still cannot obtain session authority.
 
+A follow-up red-first browser-module fixture found that a same-document
+`hashchange` after startup could place a fresh `#session=` credential-looking
+value in the address bar because only initial navigation was scrubbed. The
+runtime now reuses the same bounded literal/encoded-prefix cleanup for later
+hash navigation, without accepting or replacing the original in-memory
+credential. An independent real Firefox fixture injects canonical and encoded
+session-looking fragments into an already authenticated tab, confirms each
+URL fragment is erased without additional handshake or draft requests, and
+preserves normal `#source-panel` anchor navigation. Post-startup fragments
+cannot reauthenticate an uncredentialed page.
+
 The authenticated draft replacement transport now requires exactly one
 `Content-Type: text/plain; charset=utf-8` field before it decodes and replaces
 session text. A red-first adapter regression proved previously admitted POSTs

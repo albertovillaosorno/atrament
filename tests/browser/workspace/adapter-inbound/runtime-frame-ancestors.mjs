@@ -4665,6 +4665,97 @@ test(
 );
 
 test(
+    "Firefox scrubs credential fragments added after session startup",
+    { skip: !FIREFOX_AVAILABLE, timeout: FIREFOX_CASE_TIMEOUT_MS },
+    async () => {
+        fs.mkdirSync(".temp", { recursive: true });
+        const profile = fs.mkdtempSync(".temp/session-late-fragment-");
+        const apiRequests = [];
+        const server = createSessionFixtureServer(apiRequests);
+        const children = [];
+        let bidi;
+        try {
+            server.listen(0, "127.0.0.1");
+            await once(server, "listening");
+            const address = server.address();
+            assert.notEqual(typeof address, "string");
+            assert.notEqual(address, null);
+            const origin = `http://127.0.0.1:${address.port}`;
+            bidi = await startBidiFirefox(profile, children);
+            const tab = await bidi.command("browsingContext.create", {
+                type: "tab",
+            });
+            await bidi.command("browsingContext.navigate", {
+                context: tab.context,
+                url: `${origin}/#session=${REFRESH_SECRET}`,
+                wait: "complete",
+            });
+            const ready = await waitForSessionStatus(
+                bidi, tab.context, "Session ready",
+            );
+            assert.equal(ready.hash, "");
+            const admittedRequests = [...apiRequests];
+            for (const hash of [
+                `#session=${REFRESH_SECRET}`,
+                `#session%3D${REFRESH_SECRET}`,
+                `#%73ession=${REFRESH_SECRET}`,
+                `#SESSION=${REFRESH_SECRET}`,
+            ]) {
+                const response = await bidi.command("script.evaluate", {
+                    awaitPromise: true,
+                    expression: `new Promise((resolve) => {
+                        window.addEventListener("hashchange", () => {
+                            window.setTimeout(
+                                () => resolve(window.location.hash), 0,
+                            );
+                        }, { once: true });
+                        window.location.hash = ${JSON.stringify(hash)};
+                    })`,
+                    resultOwnership: "none",
+                    target: { context: tab.context },
+                });
+                assert.equal(response.type, "success");
+                assert.equal(response.result.type, "string");
+                assert.equal(response.result.value, "",
+                    `credential-like navigation retained ${hash}`);
+                const current = await evaluateSessionDocument(
+                    bidi, tab.context,
+                );
+                assert.equal(current.status, "Session ready");
+                assert.deepEqual(current.task, ready.task);
+                assert.deepEqual(current.source, ready.source);
+                assert.deepEqual(current.candidate, ready.candidate);
+            }
+            assert.deepEqual(apiRequests, admittedRequests,
+                "hash navigation must not trigger new authentication");
+            const ordinary = await bidi.command("script.evaluate", {
+                awaitPromise: true,
+                expression: `new Promise((resolve) => {
+                    window.addEventListener("hashchange", () => {
+                        window.setTimeout(
+                            () => resolve(window.location.hash), 0,
+                        );
+                    }, { once: true });
+                    window.location.hash = "#source-panel";
+                })`,
+                resultOwnership: "none",
+                target: { context: tab.context },
+            });
+            assert.equal(ordinary.type, "success");
+            assert.equal(ordinary.result.type, "string");
+            assert.equal(ordinary.result.value, "#source-panel");
+        } finally {
+            bidi?.close();
+            await closeFixtureServer(server);
+            for (const child of children.reverse()) {
+                await stopChild(child);
+            }
+            fs.rmSync(profile, { recursive: true, force: true });
+        }
+    },
+);
+
+test(
     "Firefox scrubs encoded session aliases without authorization",
     { skip: !FIREFOX_AVAILABLE, timeout: FIREFOX_CASE_TIMEOUT_MS },
     async () => {
