@@ -47,8 +47,12 @@ renderer dependency.
 It rewinds to offset zero, validates metadata size and actual read
 length, and probes the real EOF before returning bounded owned bytes.
 Directories, oversized sources, read failures and length drift refuse.
-This is a read-only file transport, not a file picker or a stable
-disk snapshot across concurrent same-length rewrites.
+This is read-only file transport, not a picker or stable disk snapshot.
+
+The opened-file reader also rechecks descriptor metadata after the exact EOF
+probe, rejecting observed in-place file drift (Unix mtime and ctime, plus
+opened descriptor identity). This cannot rule out every simultaneous write,
+even when metadata matches.
 
 `src/backend/profile-open-file-import/composition/lib.rs` accepts
 classified `ImportProfile` intent and a host-supplied reader callback.

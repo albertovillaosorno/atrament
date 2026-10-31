@@ -30,6 +30,14 @@ into background persistence. Keep paths mentioned only in notebook, source,
 diagnostic, clipboard, or model-response text as data rather than Export
 authority.
 
+The opened-profile file reader now checks descriptor metadata again after
+its exact EOF probe, rejecting observed in-place rewrites even when size and
+EOF remain unchanged. On Unix it compares device, inode, high-resolution
+mtime and ctime; other platforms compare the length and modification time.
+Deterministic source-metadata regressions cover an unchanged file, same-length
+rewrites, restored mtime and distinct inodes. This is extra race detection,
+**not** an atomic snapshot guarantee against concurrent filesystem writers.
+
 A separate Linux `atrament profile verify PATH` CLI now runs the same
 fully bounded, secure selected-source and SHA/section-syntax gate as profile
 inspection, then emits only a fixed success confirmation. Unlike inspection,

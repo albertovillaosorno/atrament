@@ -21,19 +21,19 @@
 // - Merge-When:
 //   - Full file Import ownership includes host paths and section decoding.
 // - Summary:
-//   - Real EOF probes prevent truncated views from proving full file content.
+//   - Exact EOF and descriptor metadata rechecks reject observed file drift.
 // - Description:
-//   - Source bytes cannot escape on a size or I/O failure.
+//   - Source bytes cannot escape on size, I/O or metadata drift failure.
 // - Usage:
 //   - Only a trusted host may bind the open handle to its selected path.
 // - Defaults:
-//   - Nonregular, oversized, short and growing files fail closed.
+//   - Nonregular, oversized, short, growing or observed rewritten files fail.
 //
 
 //! File transport snapshot with exact length/EOF checks, no path authority.
 
 use std::fmt;
-use std::fs::File;
+use std::fs::{File, Metadata};
 use std::io::{self, Read as _, Seek as _, SeekFrom};
 
 const READ_BUFFER_BYTES: usize = 8 * 1024;
@@ -68,6 +68,8 @@ pub enum ProfileFileReadError {
     FileIo(io::ErrorKind),
     /// Source length differed from metadata at EOF or during reading.
     FileLengthChanged,
+    /// Source metadata changed across the bounded read, even at equal length.
+    FileMetadataChanged,
     /// The file's reported size exceeds the host's specified ceiling.
     FileTooLarge,
     /// Directories, pipes and devices are not admitted profile sources.
@@ -87,19 +89,52 @@ fn read_retry(
     }
 }
 
+// Metadata is an additional observed-mutation gate, not a filesystem lock.
+// The already-open descriptor remains bound to the same inode. On Unix,
+// checking ctime as well as mtime rejects an observed rewrite even if another
+// writer restores the previous mtime. Other platforms require a readable
+// modification timestamp and exact size; they do not gain Unix ctime proof.
+#[must_use]
+pub(crate) fn source_metadata_unchanged(
+    before: &Metadata,
+    after: &Metadata,
+) -> bool {
+    if !before.is_file() || !after.is_file() || before.len() != after.len() {
+        return false;
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt as _;
+
+        before.dev() == after.dev()
+            && before.ino() == after.ino()
+            && before.mtime() == after.mtime()
+            && before.mtime_nsec() == after.mtime_nsec()
+            && before.ctime() == after.ctime()
+            && before.ctime_nsec() == after.ctime_nsec()
+    }
+    #[cfg(not(unix))]
+    {
+        before.modified().is_ok() && before.modified() == after.modified()
+    }
+}
+
 /// Consume a host-opened regular file with an actual exact EOF probe.
 ///
 /// A trusted host must establish the original selection and open policy.
 /// This reader never opens paths and does not prove that a simultaneous
 /// writer left the disk file stable. It accepts only a complete byte read
-/// matching the original file length, then returns an owned bounded slice.
+/// matching the original file length and rechecks descriptor metadata after
+/// the exact EOF probe. Observed even-length rewrites refuse, but unchanged
+/// metadata cannot prove a snapshot against all simultaneous writers.
 /// Rewind begins at byte zero regardless of the caller's initial file cursor.
 /// The caller must still check ZIP framing, typed metadata and SHA-256.
 ///
 /// # Errors
 ///
-/// Rejects wrong file types, OS errors, metadata-size excess, short reads
-/// and unexpected bytes after the declared end, including zero-length files.
+/// Rejects wrong file types, OS errors, metadata-size excess, short reads,
+/// unexpected bytes after the declared end (including zero-length files),
+/// and changes to the opened file's metadata across the read.
 pub fn read_bounded_profile_file(
     mut source: File,
     maximum_bytes: usize,
@@ -152,6 +187,14 @@ pub fn read_bounded_profile_file(
         != 0
     {
         return Err(ProfileFileReadError::FileLengthChanged);
+    }
+    // An in-place rewrite can preserve both the original length and EOF.
+    // Refuse observed descriptor drift before any owned bytes are returned.
+    let after = source
+        .metadata()
+        .map_err(|error| ProfileFileReadError::FileIo(error.kind()))?;
+    if !source_metadata_unchanged(&metadata, &after) {
+        return Err(ProfileFileReadError::FileMetadataChanged);
     }
     Ok(ProfileOpenedFileBytes { bytes })
 }
