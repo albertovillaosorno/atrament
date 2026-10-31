@@ -60,6 +60,12 @@ at a selected destination; it does **not** import typed handwriting sections,
 bind an accepted session revision, or authorize notebook/PDF or session-profile
 Export.
 
+A secure selected-file Import mutation sweep now rebuilds CRC-correct ZIPs
+after flipping every bit of a SHA-committed JSON section and opaque binary
+asset. The full gate rejects each mutation by its unchanged manifest digest
+without entering the inspection callback, while the original source passes.
+These fixtures verify source integrity, not typed handwriting acceptance.
+
 Linux subprocess fixtures separately exercise source-symlink and
 destination-symlink refusal, same-file and pre-existing target
 preservation, malformed late sections, SHA forgery, non-UTF8 destination

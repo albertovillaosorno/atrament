@@ -32,10 +32,20 @@
 
 //! Real file descriptors exercise bounded, source-attached Import verification.
 
+#![expect(
+    clippy::expect_used,
+    clippy::format_collect,
+    clippy::missing_trait_methods,
+    clippy::redundant_closure_for_method_calls,
+    reason = "test-owned fail-fast and HRTB-borrowed inspection fixtures"
+)]
+
 use std::cell::Cell;
-use std::fs::{File, OpenOptions};
-use std::io::{Seek, SeekFrom, Write};
+use std::env;
+use std::fs::{self, File, OpenOptions};
+use std::io::{self, Seek as _, SeekFrom, Write as _};
 use std::path::PathBuf;
+use std::process;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use atrament_explicit_file_path_intent::{
@@ -82,9 +92,9 @@ struct OwnedTestFile {
 
 impl OwnedTestFile {
     fn new(bytes: &[u8]) -> Self {
-        let path = std::env::temp_dir().join(format!(
+        let path = env::temp_dir().join(format!(
             "atrament-open-profile-import-{}-{}.atrament",
-            std::process::id(),
+            process::id(),
             FILE_SEQUENCE.fetch_add(1, Ordering::Relaxed),
         ));
         let mut file = OpenOptions::new()
@@ -103,11 +113,11 @@ impl OwnedTestFile {
 
 impl Drop for OwnedTestFile {
     fn drop(&mut self) {
-        std::fs::remove_file(&self.path).expect("remove owned fixture");
+        fs::remove_file(&self.path).expect("remove owned fixture");
     }
 }
 
-fn limits() -> ProfileOpenFileImportLimits {
+const fn limits() -> ProfileOpenFileImportLimits {
     ProfileOpenFileImportLimits {
         maximum_file_bytes: 16_384,
         zip: ProfileZipReadLimits {
@@ -311,7 +321,7 @@ fn selected_entrypoint_checks_purpose_before_touching_selected_path() {
         let intent = selected(purpose);
         assert_eq!(
             inspect_selected_profile_import(&intent, &[], limits(), |_view| {
-                inspected.set(true)
+                inspected.set(true);
             }),
             Err(Error::WrongPathPurpose),
         );
@@ -331,10 +341,10 @@ fn selected_entrypoint_refuses_missing_source_despite_other_valid_file() {
     // The path-bound API has no such callback and must refuse the selection.
     assert_eq!(
         inspect_selected_profile_import(&chosen, &[], limits(), |_verified| {
-            inspected.set(true)
+            inspected.set(true);
         }),
         Err(Error::Open(ProfileSelectedFileOpenError::FileIo(
-            std::io::ErrorKind::NotFound,
+            io::ErrorKind::NotFound,
         ))),
     );
     assert!(!inspected.get());
@@ -371,7 +381,7 @@ fn selected_entrypoint_rejects_symlink_even_to_valid_profile() {
     let result =
         inspect_selected_profile_import(
             &chosen, &[], limits(), |_verified| inspected.set(true));
-    std::fs::remove_file(&alias).expect("remove only test-created symlink");
+    fs::remove_file(&alias).expect("remove only test-created symlink");
     assert_eq!(
         result,
         Err(Error::Open(ProfileSelectedFileOpenError::SymlinkForbidden)),
@@ -455,7 +465,7 @@ fn file_and_zip_byte_limits_refuse_before_inspection() {
 fn directory_and_write_only_descriptor_refuse() {
     let intent = selected(ExplicitFilePurpose::ImportProfile);
     let directory =
-        File::open(std::env::temp_dir()).expect("OS test directory");
+        File::open(env::temp_dir()).expect("OS test directory");
     assert_eq!(
         inspect_open_profile_import(
             &intent,
@@ -486,7 +496,7 @@ fn directory_and_write_only_descriptor_refuse() {
 #[test]
 fn broken_zip_and_root_are_distinct_without_callback() {
     let intent = selected(ExplicitFilePurpose::ImportProfile);
-    let called = Cell::new(0);
+    let called = Cell::new(0usize);
     let malformed = OwnedTestFile::new(b"this is not a zip");
     assert!(matches!(
         inspect_open_profile_import(
@@ -494,7 +504,7 @@ fn broken_zip_and_root_are_distinct_without_callback() {
             |max| read_bounded_profile_file(malformed.open(), max),
             &[],
             limits(),
-            |_verified| called.set(called.get() + 1)
+            |_verified| called.set(called.get() + 1usize)
         ),
         Err(Error::Zip(
             ProfileZipReadError::Truncated
@@ -509,25 +519,25 @@ fn broken_zip_and_root_are_distinct_without_callback() {
             |max| read_bounded_profile_file(fixture.open(), max),
             &[],
             limits(),
-            |_verified| called.set(called.get() + 1)
+            |_verified| called.set(called.get() + 1usize)
         ),
         Err(Error::RootJson(ProfileZipManifestSyntaxError::Json(
             ProfileJsonSyntaxError::Malformed
         ))),
     ));
     let schema_root = zip(br#"{"not-a-manifest":true}"#, b"data");
-    let fixture = OwnedTestFile::new(&schema_root);
+    let schema_file = OwnedTestFile::new(&schema_root);
     assert!(matches!(
         inspect_open_profile_import(
             &intent,
-            |max| read_bounded_profile_file(fixture.open(), max),
+            |max| read_bounded_profile_file(schema_file.open(), max),
             &[],
             limits(),
-            |_verified| called.set(called.get() + 1)
+            |_verified| called.set(called.get() + 1usize)
         ),
         Err(Error::Manifest(ProfileManifestJsonError::UnknownField(_))),
     ));
-    assert_eq!(called.get(), 0);
+    assert_eq!(called.get(), 0usize);
 }
 
 #[test]
@@ -711,7 +721,7 @@ fn selected_path_rejects_repeated_required_features_before_inspection() {
     );
     assert!(!inspected.get());
     assert_eq!(
-        std::fs::read(&file.path).expect("test-owned selected bytes"),
+        fs::read(&file.path).expect("test-owned selected bytes"),
         archive,
     );
 }
@@ -1270,6 +1280,91 @@ fn two_payload_open_file_admits_only_after_all_digest_checks() {
         );
     }
     assert!(!inspected.get());
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn all_crc_correct_payload_bit_flips_refuse_selected_file_inspection() {
+    let section = br#"{"strokes":[1,2,3]}"#;
+    let asset = b"\0\xffopaque-private-bytes";
+    let root_json = two_entry_manifest(section, asset);
+    let original = two_entry_zip(&root_json, section, asset);
+    let intact = OwnedTestFile::new(&original);
+    let chosen = classify_explicit_file_path_intent(
+        ExplicitFilePurpose::ImportProfile,
+        ExplicitFilePathSource::CallerSelection,
+        intact.path.clone(),
+        ExplicitOverwriteIntent::PreserveExisting,
+    ).expect("test-owned selected input");
+    let baseline = inspect_selected_profile_import(
+        &chosen, &[], limits(), |verified| {
+            assert_eq!(verified.verified_entry_count(), 2);
+            assert_eq!(
+                verified.verified_entry_bytes(MEMBER),
+                Some(section.as_slice()),
+            );
+            assert_eq!(
+                verified.verified_entry_bytes("assets/icon.png"),
+                Some(asset.as_slice()),
+            );
+        },
+    );
+    assert_eq!(baseline, Ok(()), "unmodified source is fully admitted");
+
+    let inspection_called = Cell::new(false);
+    let mut attempted = 0usize;
+    // Each forged ZIP has valid CRC32 and exact local/central framing;
+    // only the unchanged manifest SHA-256 commitments can reject it.
+    for (index, payload) in [
+        (0usize, section.as_slice()),
+        (1, asset.as_slice()),
+    ] {
+        for position in 0..payload.len() {
+            for bit in 0..8u8 {
+                let mut forged_payload = payload.to_vec();
+                let selected_byte = forged_payload.get_mut(position)
+                    .expect("position is bounded by payload length");
+                *selected_byte ^= 1u8 << bit;
+                let forged = if index == 0 {
+                    two_entry_zip(&root_json, &forged_payload, asset)
+                } else {
+                    two_entry_zip(&root_json, section, &forged_payload)
+                };
+                let fixture = OwnedTestFile::new(&forged);
+                let path = classify_explicit_file_path_intent(
+                    ExplicitFilePurpose::ImportProfile,
+                    ExplicitFilePathSource::CallerSelection,
+                    fixture.path.clone(),
+                    ExplicitOverwriteIntent::PreserveExisting,
+                ).expect("test-owned mutated selection");
+                let expected_payload_error =
+                    ProfileZipPayloadVerificationError::Entry {
+                        index,
+                        reason: ProfileEntryVerificationError::DigestMismatch,
+                    };
+                let mismatch = Error::Verification(
+                    ProfileImportVerificationError::Payload(
+                        expected_payload_error,
+                    ),
+                );
+                assert_eq!(
+                    inspect_selected_profile_import(
+                        &path, &[], limits(), |_verified| {
+                            inspection_called.set(true);
+                        },
+                    ),
+                    Err(mismatch),
+                    "member {index} byte {position} bit {bit}",
+                );
+                assert!(
+                    !inspection_called.get(),
+                    "forged bytes reached inspection",
+                );
+                attempted += 1;
+            }
+        }
+    }
+    assert_eq!(attempted, (section.len() + asset.len()) * 8);
 }
 
 #[test]
