@@ -1831,6 +1831,69 @@ fn cli_inspection_escapes_opaque_asset_metadata_without_revealing_bytes() {
 
 #[cfg(target_os = "linux")]
 #[test]
+fn cli_inspection_escapes_visually_blank_unicode_metadata() {
+    let section_path = format!("sections/left{}right.json", '\u{115f}');
+    let section = format!(
+        r#"{{"value":"front{}middle{}back"}}"#,
+        '\u{1160}', '\u{2800}',
+    );
+    let root = format!(
+        concat!(
+            r#"{{"container_version":"atrament.profile/1","#,
+            r#""profile_identity":"pre{}post","required_features":[],"#,
+            r#""optional_features":["cap{}ability"],"entries":[{{"#,
+            r#""path":"{}","media_type":"application/json","#,
+            r#""byte_length":{},"sha256":"{}"}}]}}"#,
+        ),
+        '\u{3164}', '\u{ffa0}', section_path, section.len(),
+        digest_hex(section.as_bytes()),
+    );
+    let archive = write_stored_profile_zip(
+        &[
+            ProfileStoredZipMember {
+                name: "manifest.json", bytes: root.as_bytes(),
+            },
+            ProfileStoredZipMember {
+                name: &section_path, bytes: section.as_bytes(),
+            },
+        ],
+        ProfileStoredZipWriteLimits {
+            maximum_archive_bytes: 4096,
+            maximum_entries: 2,
+            maximum_entry_bytes: 2048,
+            maximum_total_bytes: 3000,
+        },
+    ).expect("blank Unicode scalars remain valid profile metadata");
+    let source = OwnedProfileFile::new(&archive);
+    bootstrap::verify_profile(source.0.clone())
+        .expect("verified source is unchanged by display policy");
+    let process = Command::new(env!("CARGO_BIN_EXE_atrament"))
+        .args(["profile", "inspect"])
+        .arg(&source.0)
+        .output()
+        .expect("inspect exact verified profile in a real CLI");
+    assert!(process.status.success());
+    assert!(process.stderr.is_empty());
+    let display = String::from_utf8(process.stdout)
+        .expect("terminal display stays valid UTF-8");
+    assert!(display.contains(r#""profile_identity":"pre\u3164post""#));
+    assert!(display.contains(r#""optional_features":["cap\uffa0ability"]"#));
+    assert!(display.contains(
+        r"sections/left\u115fright.json (syntax-checked; untyped):",
+    ));
+    assert!(display.contains(
+        r#""value":"front\u1160middle\u2800back""#,
+    ));
+    for blank in [
+        '\u{115f}', '\u{1160}', '\u{2800}', '\u{3164}', '\u{ffa0}',
+    ] {
+        assert!(!display.contains(blank), "raw visually blank metadata");
+    }
+    assert_eq!(fs::read(&source.0).expect("source unchanged"), archive);
+}
+
+#[cfg(target_os = "linux")]
+#[test]
 fn cli_section_order_is_stable_across_manifest_declaration_orders() {
     let first = br#"{"first":true}"#;
     let last = br#"{"last":true}"#;

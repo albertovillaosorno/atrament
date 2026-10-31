@@ -1130,3 +1130,12 @@ encounter an early EOF after the writer observed the original complete length.
 The transport classifies this observed mutation as `StagedFileChanged`, not a
 generic I/O failure, before publishing either preserve or replacement output.
 The original selected target remains intact and no named staging file escapes.
+
+A red-first real CLI fixture also found visually blank Unicode metadata that
+the terminal-only escaping rule still emitted literally: Hangul choseong and
+jungseong fillers (U+115F/U+1160), braille pattern blank (U+2800), Hangul
+filler (U+3164), and halfwidth Hangul filler (U+FFA0). These are now printed as
+explicit JSON Unicode escapes in profile identity, optional-feature names,
+section paths and JSON text. The independently verified source ZIP remains
+byte-exact and unchanged; this is display spoofing hardening, not a new Import
+or Export permission, nor a claim to enumerate every invisible Unicode scalar.

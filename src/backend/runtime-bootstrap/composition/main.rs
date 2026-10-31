@@ -223,11 +223,14 @@ const fn profile_repack_limits() -> ProfileExportAssemblyLimits {
 const fn is_terminal_control(character: char) -> bool {
     character.is_control() || matches!(
         character,
-        '\u{00ad}' | '\u{034f}' | '\u{061c}' | '\u{180e}'
+        '\u{00ad}' | '\u{034f}' | '\u{061c}'
+            | '\u{115f}'..='\u{1160}'
+            | '\u{180e}'
             | '\u{200b}'..='\u{200f}'
             | '\u{2028}'..='\u{202e}'
             | '\u{2060}'..='\u{206f}'
-            | '\u{feff}'
+            | '\u{2800}' | '\u{3164}'
+            | '\u{feff}' | '\u{ffa0}'
             | '\u{e0000}'..='\u{e007f}'
             | '\u{e0100}'..='\u{e01ef}'
     )
