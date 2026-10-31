@@ -32,6 +32,12 @@
 
 //! File transport tests without any profile content or path authority.
 
+#![expect(
+    clippy::expect_used,
+    clippy::missing_trait_methods,
+    reason = "fail-fast, uniquely owned filesystem test fixtures",
+)]
+
 // Compile the same private metadata comparator into the test harness to
 // exercise deterministic before/after filesystem mutation evidence. Normal
 // transport tests below still call the linked production crate.
@@ -39,9 +45,11 @@
 #[path = "../../../../src/backend/profile-file-reader/adapter-outbound/lib.rs"]
 pub mod metadata_gate;
 
-use std::fs::{File, OpenOptions};
+use std::env;
+use std::fs::{self, File, OpenOptions};
 use std::io::{Seek as _, SeekFrom, Write as _};
 use std::path::PathBuf;
+use std::process;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use atrament_profile_file_reader::{
@@ -56,9 +64,9 @@ struct OwnedTempFile {
 
 impl OwnedTempFile {
     fn new(data: &[u8]) -> Self {
-        let path = std::env::temp_dir().join(format!(
+        let path = env::temp_dir().join(format!(
             "atrament-profile-file-reader-{}-{}",
-            std::process::id(),
+            process::id(),
             FILE_SEQUENCE.fetch_add(1, Ordering::Relaxed),
         ));
         let mut source = OpenOptions::new()
@@ -77,7 +85,7 @@ impl OwnedTempFile {
 
 impl Drop for OwnedTempFile {
     fn drop(&mut self) {
-        std::fs::remove_file(&self.path).expect("remove owned test fixture");
+        fs::remove_file(&self.path).expect("remove owned test fixture");
     }
 }
 
@@ -162,7 +170,7 @@ fn read_gate_refuses_same_length_in_place_write_with_changed_metadata() {
     let fixture = OwnedTempFile::new(b"before-1234");
     let source = fixture.open();
     let before = source.metadata().expect("initial metadata");
-    std::fs::write(&fixture.path, b"after--5678")
+    fs::write(&fixture.path, b"after--5678")
         .expect("same-length in-place rewrite");
     source.set_times(FileTimes::new().set_modified(
         SystemTime::UNIX_EPOCH + Duration::from_secs(1),
@@ -195,6 +203,7 @@ fn read_gate_refuses_same_length_different_inode_evidence() {
 fn read_gate_rejects_rewrite_with_restored_mtime() {
     use std::fs::FileTimes;
     use std::os::unix::fs::MetadataExt as _;
+    use std::thread;
     use std::time::Duration;
 
     let fixture = OwnedTempFile::new(b"private-preimage-47");
@@ -203,8 +212,8 @@ fn read_gate_rejects_rewrite_with_restored_mtime() {
     let previous_modified = before.modified().expect("regular file mtime");
     // Ensure the mutation is distinguishable at the test filesystem's
     // nanosecond timestamp resolution before restoring the prior mtime.
-    std::thread::sleep(Duration::from_millis(3));
-    std::fs::write(&fixture.path, b"private-postimage47")
+    thread::sleep(Duration::from_millis(3));
+    fs::write(&fixture.path, b"private-postimage47")
         .expect("same-size direct rewrite");
     source.set_times(FileTimes::new().set_modified(previous_modified))
         .expect("restore original mtime");
