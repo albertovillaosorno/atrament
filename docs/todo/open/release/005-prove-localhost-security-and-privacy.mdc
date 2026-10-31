@@ -75,6 +75,12 @@ tab makes no font request; relaxing `font-src 'none'` to `'self'` causes an
 additional request and fails the regression. This proves font fetch refusal,
 not custom-font decoding or rendering.
 
+The same header-only Firefox fixture also probes a same-origin embedded SVG
+`<object>`. The permissive control loads the SVG document; the protected page
+neither loads it nor requests the resource. Changing only `object-src 'none'` to
+`'self'` makes the regression fail, independently pinning the HTTP directive
+rather than the default same-origin resource policy.
+
 This is browser enforcement evidence for the HTTP boundary, not a claim about
 browser-opener credentials or arbitrary outbound desktop programs.
 

@@ -4794,6 +4794,7 @@ test(
         let workerRequests = 0;
         let fontRequests = 0;
         let mediaRequests = 0;
+        let objectRequests = 0;
         let frameChildRequests = 0;
         let formSubmissions = 0;
         let permissive;
@@ -4908,6 +4909,18 @@ test(
                     // Deliberately malformed: this probes fetch admission,
                     // not the font decoder or font-display layout.
                     response.end("not-a-woff2-font");
+                    return;
+                }
+                if (request.url === "/csp-object.svg") {
+                    objectRequests += 1;
+                    response.writeHead(200, {
+                        "Cache-Control": "no-store",
+                        "Content-Type": "image/svg+xml",
+                    });
+                    response.end(
+                        '<svg xmlns="http://www.w3.org/2000/svg" ' +
+                        'width="2" height="2"><circle r="1"/></svg>',
+                    );
                     return;
                 }
                 if (request.url === "/csp-media.wav") {
@@ -5340,6 +5353,53 @@ test(
                 "HTTP media-src must deny same-origin WAV metadata");
             assert.equal(mediaRequests, requestsBeforeBlockedMedia,
                 "HTTP media-src must refuse without a media request");
+
+            // object-src 'none' must block a same-origin embedded SVG even
+            // though default-src 'self' would otherwise admit that source.
+            const objectUrl = JSON.stringify(
+                `${permissiveOrigin}/csp-object.svg`,
+            );
+            const probeObject = `(async () => {
+                const node = document.createElement("object");
+                node.type = "image/svg+xml";
+                node.data = ${objectUrl};
+                const loaded = await new Promise((resolve) => {
+                    const timer = setTimeout(() => resolve(false), 3000);
+                    const finish = (value) => {
+                        clearTimeout(timer);
+                        resolve(value);
+                    };
+                    node.onload = () => finish(
+                        node.contentDocument?.documentElement?.localName
+                            === "svg"
+                    );
+                    node.onerror = () => finish(false);
+                    document.body.append(node);
+                });
+                node.remove();
+                return loaded;
+            })()`;
+            const controlObject = await bidi.command("script.evaluate", {
+                awaitPromise: true,
+                expression: probeObject,
+                resultOwnership: "none",
+                target: { context: networkControl.context },
+            });
+            assert.equal(controlObject.type, "success");
+            assert.equal(controlObject.result.value, true,
+                "permissive control must load same-origin SVG object");
+            assert.equal(objectRequests, 1);
+            const blockedObject = await bidi.command("script.evaluate", {
+                awaitPromise: true,
+                expression: probeObject,
+                resultOwnership: "none",
+                target: { context: headerOnly.context },
+            });
+            assert.equal(blockedObject.type, "success");
+            assert.equal(blockedObject.result.value, false,
+                "HTTP object-src must deny same-origin embedded SVG");
+            assert.equal(objectRequests, 1,
+                "HTTP object-src must refuse without an SVG request");
 
             // frame-src 'none' must deny a child frame from the page's own
             // origin, which default-src 'self' would otherwise allow.
