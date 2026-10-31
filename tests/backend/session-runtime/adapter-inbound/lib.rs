@@ -3749,7 +3749,7 @@ fn authenticated_draft_replace_read_preserves_leading_bom() {
     assert!(head.starts_with("HTTP/1.1 200 OK\r\n"));
     assert!(head.contains("Content-Type: text/plain; charset=utf-8"));
     assert_eq!(body, source.as_bytes());
-    assert_eq!(&body[..3], &[0xef, 0xbb, 0xbf]);
+    assert!(body.starts_with(&[0xef, 0xbb, 0xbf]));
 }
 
 #[test]
