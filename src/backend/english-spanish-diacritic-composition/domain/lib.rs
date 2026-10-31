@@ -38,6 +38,10 @@
 
 //! English/Spanish diacritic-rule lookup plus generic profile admission.
 
+// The bilingual inventory is exercised only by the external test target.
+#[cfg(test)]
+use atrament_english_spanish_grapheme_inventory as _;
+
 use atrament_english_spanish_diacritic_rule::{
     EnglishSpanishDiacriticRule, applicable_english_spanish_diacritic_rule,
 };

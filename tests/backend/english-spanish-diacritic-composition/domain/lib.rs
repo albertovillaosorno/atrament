@@ -53,6 +53,33 @@ use atrament_handwriting_diacritic_composition::{
 };
 use atrament_handwriting_glyph_coverage::HandwritingCoverageProfile;
 
+// Test assertions retain the typed failure before inspecting admission.
+macro_rules! require_ok {
+    ($expression:expr) => {{
+        let outcome = $expression;
+        assert!(
+            outcome.is_ok(),
+            "expected bilingual admission: {:?}",
+            outcome.as_ref().err(),
+        );
+        let Ok(admitted) = outcome else {
+            return;
+        };
+        admitted
+    }};
+}
+
+macro_rules! require_some {
+    ($expression:expr) => {{
+        let matched = $expression;
+        assert!(matched.is_some(), "frozen grapheme must have a rule");
+        let Some(rule) = matched else {
+            return;
+        };
+        rule
+    }};
+}
+
 type Presentation = DiacriticPresentation<&'static str, &'static str, u16, u16>;
 type Profile = HandwritingCoverageProfile<
     &'static str,
@@ -60,7 +87,7 @@ type Profile = HandwritingCoverageProfile<
     EnglishSpanishDiacriticRule,
 >;
 
-fn presentation() -> Presentation {
+const fn presentation() -> Presentation {
     Presentation {
         collision_evidence: "clear",
         language_form: "spanish",
@@ -69,7 +96,7 @@ fn presentation() -> Presentation {
     }
 }
 
-fn profile(
+const fn profile(
     exact_graphemes: Vec<String>,
     compositional_rules: Vec<EnglishSpanishDiacriticRule>,
 ) -> Profile {
@@ -90,17 +117,17 @@ fn every_decomposed_bilingual_requirement_uses_its_language_rule() {
             EnglishSpanishDiacriticRule::Tilde,
         ],
     );
-    let mut cases = 0_usize;
+    let mut cases = 0usize;
     for required in REQUIRED_TEXT_GRAPHEMES.iter().filter(|required| {
         required.category
             == EnglishSpanishGraphemeCategory::SpanishDecomposedEquivalent
     }) {
-        let admitted = admit_english_spanish_diacritic_composition(
-            &profile,
-            String::from(required.grapheme),
-            presentation(),
-        )
-        .expect("frozen decomposed bilingual grapheme must admit composition");
+        let admitted =
+            require_ok!(admit_english_spanish_diacritic_composition(
+                &profile,
+                String::from(required.grapheme),
+                presentation(),
+            ));
         assert_eq!(admitted.intent().target_grapheme, required.grapheme);
         assert_eq!(admitted.intent().presentation, presentation());
         assert_eq!(admitted.profile_identity(), &"writer-a");
@@ -120,7 +147,7 @@ fn every_non_decomposed_bilingual_requirement_rejects_without_inference() {
             EnglishSpanishDiacriticRule::Tilde,
         ],
     );
-    let mut cases = 0_usize;
+    let mut cases = 0usize;
     for required in REQUIRED_TEXT_GRAPHEMES.iter().filter(|required| {
         required.category
             != EnglishSpanishGraphemeCategory::SpanishDecomposedEquivalent
@@ -145,7 +172,7 @@ fn every_non_decomposed_bilingual_requirement_rejects_without_inference() {
 
 #[test]
 fn every_decomposed_requirement_matches_profile_admission_matrix() {
-    let mut cases = 0_usize;
+    let mut cases = 0usize;
     let mut acute = false;
     let mut diaeresis = false;
     let mut tilde = false;
@@ -153,8 +180,9 @@ fn every_decomposed_requirement_matches_profile_admission_matrix() {
         required.category
             == EnglishSpanishGraphemeCategory::SpanishDecomposedEquivalent
     }) {
-        let rule = applicable_english_spanish_diacritic_rule(required.grapheme)
-            .expect("decomposed bilingual requirement must own a rule");
+        let rule = require_some!(applicable_english_spanish_diacritic_rule(
+            required.grapheme
+        ));
         match rule {
             EnglishSpanishDiacriticRule::Acute => acute = true,
             EnglishSpanishDiacriticRule::Diaeresis => diaeresis = true,
@@ -185,9 +213,7 @@ fn every_decomposed_requirement_matches_profile_admission_matrix() {
                         required.grapheme,
                     );
                 } else if rule_declared {
-                    let admitted = outcome.expect(
-                        "declared bilingual composition must be admitted",
-                    );
+                    let admitted = require_ok!(outcome);
                     assert_eq!(
                         admitted.intent().target_grapheme,
                         required.grapheme,
@@ -227,7 +253,7 @@ fn deterministic_near_misses_never_gain_language_rule_or_normalization() {
         ],
     );
     for target in [
-        "á",
+        "\u{e1}",
         "n\u{301}",
         "e\u{308}",
         "u\u{303}",
