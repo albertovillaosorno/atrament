@@ -355,6 +355,12 @@ command deadlines without leaking pending-command map entries. These tests
 bound automation state; they do not weaken or replace the backend's HTTP
 request-admission or session-secret checks.
 
+The real-Firefox request-observation helper now clears its five-second
+deadline on early success or failure as well as expiration. A red-first
+fake-timer regression reproduced the formerly retained timer and now checks
+all three settlement paths. This is disposable fixture lifetime protection,
+not a change to the production session request deadline.
+
 BiDi upgrade acceptance now checks the exact `101` status, `Upgrade` and
 `Connection` header values, unique header names, and the RFC 6455
 `Sec-WebSocket-Accept` challenge response. It rejects a false `1010` status,
@@ -394,6 +400,14 @@ Independent frame fixtures cover 16-bit/64-bit lengths, fragmented messages,
 oversized claims with no payload allocation, protocol errors and bounded
 event history. These limits apply solely to disposable browser automation,
 not to runtime session messages or public application protocol limits.
+
+The BiDi automation client now decodes WebSocket text with fatal UTF-8
+validation before JSON parsing. A red-first fixture found that an invalid byte
+in an otherwise valid command success previously became replacement text and
+was accepted; the new single-frame and fragmented-byte regressions require
+connection closure and pending-command rejection. Valid Unicode across
+continuation frames remains supported, and this does not change the actual
+localhost runtime's session transport.
 
 The browser harness now assembles fragmented WebSocket text messages across
 continuation frames under the same aggregate 8 MiB bound. It permits control

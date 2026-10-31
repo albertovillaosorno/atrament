@@ -891,9 +891,20 @@ class BidiClient {
                 this.close(new Error("unsupported WebDriver BiDi data frame"));
                 return;
             }
+            // WebSocket text frames require valid UTF-8. Buffer.toString()
+            // silently replaces malformed bytes and can turn a broken peer
+            // response into syntactically valid JSON with altered content.
+            let text;
+            try {
+                text = new TextDecoder("utf-8", { fatal: true })
+                    .decode(payload);
+            } catch {
+                this.close(new Error("invalid WebDriver BiDi UTF-8 frame"));
+                return;
+            }
             let message;
             try {
-                message = JSON.parse(payload.toString("utf8"));
+                message = JSON.parse(text);
             } catch {
                 this.close(new Error("invalid WebDriver BiDi JSON frame"));
                 return;
@@ -1099,6 +1110,40 @@ test("WebDriver BiDi rejects malformed JSON, null data and close frames",
         }
     },
 );
+
+test("WebDriver BiDi refuses malformed UTF-8 in JSON messages", async () => {
+    const prefix = Buffer.from(
+        '{"id":1,"type":"success","result":{"value":"',
+    );
+    const suffix = Buffer.from('"}}');
+    const malformed = Buffer.concat([
+        prefix, Buffer.from([0xe2, 0x28]), suffix,
+    ]);
+    for (const frames of [
+        [testServerFrame(malformed)],
+        [
+            testServerFrame(Buffer.concat([prefix, Buffer.from([0xe2])]),
+                0x1, false),
+            testServerFrame(Buffer.concat([Buffer.from([0x28]), suffix]),
+                0x0, true),
+        ],
+    ]) {
+        const client = new BidiClient("ws://127.0.0.1:1234/session");
+        let destroyed = 0;
+        client.socket = {
+            write: () => {}, destroy: () => { destroyed += 1; },
+        };
+        const pending = client.command("script.evaluate", {}, 30_000);
+        for (const frame of frames) {
+            client.buffer = Buffer.concat([client.buffer, frame]);
+            client.drain();
+        }
+        await assert.rejects(pending, /invalid WebDriver BiDi UTF-8/);
+        assert.equal(client.closed, true);
+        assert.equal(client.pending.size, 0);
+        assert.equal(destroyed, 1);
+    }
+});
 
 test("WebDriver BiDi parses bounded extended and split frames losslessly",
     async () => {
