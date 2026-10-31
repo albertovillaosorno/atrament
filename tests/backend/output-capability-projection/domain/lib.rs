@@ -41,14 +41,289 @@ use atrament_output_capability_matrix::{
     SemanticCapability,
 };
 use atrament_output_capability_projection::{
+    live_conversion_kind_admitted, output_capability_disposition,
+    review_live_output_capabilities, review_output_capabilities,
     AcceptedCapabilityConversion, LiveConversionChoice, LiveConversionKind,
     OutputCapability, OutputCapabilityProjectionStatus,
-    OutputCapabilityRequest, live_conversion_kind_admitted,
-    output_capability_disposition, review_live_output_capabilities,
-    review_output_capabilities,
+    OutputCapabilityRequest,
 };
 
-fn conversion(
+const LIVE_SUPPORTED_EXAMPLES: [(OutputCapability, LiveConversionKind); 27] = [
+    (
+        OutputCapability::Semantic(SemanticCapability::Photograph),
+        LiveConversionKind::AcceptedLineArtProjection,
+    ),
+    (
+        OutputCapability::Semantic(SemanticCapability::RasterIllustration),
+        LiveConversionKind::AcceptedLineArtProjection,
+    ),
+    (
+        OutputCapability::HandwritingDecoration(
+            HandwritingDecorationCapability::MarkerHighlight,
+        ),
+        LiveConversionKind::HighlightUnderline,
+    ),
+    (
+        OutputCapability::HandwritingDecoration(
+            HandwritingDecorationCapability::FilledHighlight,
+        ),
+        LiveConversionKind::HighlightBox,
+    ),
+    (
+        OutputCapability::HandwritingDecoration(
+            HandwritingDecorationCapability::DecorativeTitleLayering,
+        ),
+        LiveConversionKind::SoberOnePenTitle,
+    ),
+    (
+        OutputCapability::HandwritingDecoration(
+            HandwritingDecorationCapability::TitleOutline,
+        ),
+        LiveConversionKind::SoberOnePenTitle,
+    ),
+    (
+        OutputCapability::Color(ColorCapability::MultipleSimulatedInkColors),
+        LiveConversionKind::CalibratedInk,
+    ),
+    (
+        OutputCapability::Color(ColorCapability::MarkerColor),
+        LiveConversionKind::CalibratedInk,
+    ),
+    (
+        OutputCapability::Color(ColorCapability::ColoredTitleLayers),
+        LiveConversionKind::CalibratedInk,
+    ),
+    (
+        OutputCapability::Color(ColorCapability::ColoredDiagramStrokes),
+        LiveConversionKind::CalibratedInk,
+    ),
+    (
+        OutputCapability::Color(ColorCapability::FullColorPhotograph),
+        LiveConversionKind::CalibratedInk,
+    ),
+    (
+        OutputCapability::Color(ColorCapability::GrayscalePhotograph),
+        LiveConversionKind::CalibratedInk,
+    ),
+    (
+        OutputCapability::Color(ColorCapability::TransparentAlpha),
+        LiveConversionKind::CalibratedInk,
+    ),
+    (
+        OutputCapability::ImageTreatment(ImageTreatmentCapability::PngSource),
+        LiveConversionKind::AcceptedLineArtProjection,
+    ),
+    (
+        OutputCapability::ImageTreatment(ImageTreatmentCapability::JpegSource),
+        LiveConversionKind::AcceptedLineArtProjection,
+    ),
+    (
+        OutputCapability::ImageTreatment(ImageTreatmentCapability::WebpSource),
+        LiveConversionKind::AcceptedLineArtProjection,
+    ),
+    (
+        OutputCapability::ImageTreatment(
+            ImageTreatmentCapability::BelowTextPlacement,
+        ),
+        LiveConversionKind::AcceptedLineArtProjection,
+    ),
+    (
+        OutputCapability::ImageTreatment(
+            ImageTreatmentCapability::InlinePlacement,
+        ),
+        LiveConversionKind::AcceptedLineArtProjection,
+    ),
+    (
+        OutputCapability::ImageTreatment(
+            ImageTreatmentCapability::AboveTextPlacement,
+        ),
+        LiveConversionKind::AcceptedLineArtProjection,
+    ),
+    (
+        OutputCapability::ImageTreatment(
+            ImageTreatmentCapability::ClippedRegionPlacement,
+        ),
+        LiveConversionKind::AcceptedLineArtProjection,
+    ),
+    (
+        OutputCapability::ImageTreatment(ImageTreatmentCapability::Opacity),
+        LiveConversionKind::OnePenGeometry,
+    ),
+    (
+        OutputCapability::PagePaper(PagePaperCapability::RuledPaper),
+        LiveConversionKind::DrawWithSamePen,
+    ),
+    (
+        OutputCapability::PagePaper(PagePaperCapability::DottedPaper),
+        LiveConversionKind::DrawWithSamePen,
+    ),
+    (
+        OutputCapability::PagePaper(PagePaperCapability::SquaredPaper),
+        LiveConversionKind::DrawWithSamePen,
+    ),
+    (
+        OutputCapability::PagePaper(PagePaperCapability::CustomDigitalPaper),
+        LiveConversionKind::DrawWithSamePen,
+    ),
+    (
+        OutputCapability::PagePaper(PagePaperCapability::BorderGeometry),
+        LiveConversionKind::DrawWithSamePen,
+    ),
+    (
+        OutputCapability::PagePaper(PagePaperCapability::GridOrRuleGeometry),
+        LiveConversionKind::DrawWithSamePen,
+    ),
+];
+
+const LIVE_ALL_KINDS: [LiveConversionKind; 9] = [
+    LiveConversionKind::AcceptedLineArtProjection,
+    LiveConversionKind::CalibratedInk,
+    LiveConversionKind::DrawWithSamePen,
+    LiveConversionKind::HighlightBox,
+    LiveConversionKind::HighlightSpacing,
+    LiveConversionKind::HighlightStrokeWeight,
+    LiveConversionKind::HighlightUnderline,
+    LiveConversionKind::OnePenGeometry,
+    LiveConversionKind::SoberOnePenTitle,
+];
+const LIVE_ALLOWED_MATRIX: [(OutputCapability, &[LiveConversionKind]); 27] = [
+    (
+        OutputCapability::Semantic(SemanticCapability::Photograph),
+        &[LiveConversionKind::AcceptedLineArtProjection],
+    ),
+    (
+        OutputCapability::Semantic(SemanticCapability::RasterIllustration),
+        &[LiveConversionKind::AcceptedLineArtProjection],
+    ),
+    (
+        OutputCapability::HandwritingDecoration(
+            HandwritingDecorationCapability::MarkerHighlight,
+        ),
+        &[
+            LiveConversionKind::HighlightBox,
+            LiveConversionKind::HighlightSpacing,
+            LiveConversionKind::HighlightStrokeWeight,
+            LiveConversionKind::HighlightUnderline,
+        ],
+    ),
+    (
+        OutputCapability::HandwritingDecoration(
+            HandwritingDecorationCapability::FilledHighlight,
+        ),
+        &[
+            LiveConversionKind::HighlightBox,
+            LiveConversionKind::HighlightSpacing,
+            LiveConversionKind::HighlightStrokeWeight,
+            LiveConversionKind::HighlightUnderline,
+        ],
+    ),
+    (
+        OutputCapability::HandwritingDecoration(
+            HandwritingDecorationCapability::DecorativeTitleLayering,
+        ),
+        &[LiveConversionKind::SoberOnePenTitle],
+    ),
+    (
+        OutputCapability::HandwritingDecoration(
+            HandwritingDecorationCapability::TitleOutline,
+        ),
+        &[LiveConversionKind::SoberOnePenTitle],
+    ),
+    (
+        OutputCapability::Color(ColorCapability::MultipleSimulatedInkColors),
+        &[LiveConversionKind::CalibratedInk],
+    ),
+    (
+        OutputCapability::Color(ColorCapability::MarkerColor),
+        &[LiveConversionKind::CalibratedInk],
+    ),
+    (
+        OutputCapability::Color(ColorCapability::ColoredTitleLayers),
+        &[LiveConversionKind::CalibratedInk],
+    ),
+    (
+        OutputCapability::Color(ColorCapability::ColoredDiagramStrokes),
+        &[LiveConversionKind::CalibratedInk],
+    ),
+    (
+        OutputCapability::Color(ColorCapability::FullColorPhotograph),
+        &[LiveConversionKind::CalibratedInk],
+    ),
+    (
+        OutputCapability::Color(ColorCapability::GrayscalePhotograph),
+        &[LiveConversionKind::CalibratedInk],
+    ),
+    (
+        OutputCapability::Color(ColorCapability::TransparentAlpha),
+        &[LiveConversionKind::CalibratedInk],
+    ),
+    (
+        OutputCapability::ImageTreatment(ImageTreatmentCapability::PngSource),
+        &[LiveConversionKind::AcceptedLineArtProjection],
+    ),
+    (
+        OutputCapability::ImageTreatment(ImageTreatmentCapability::JpegSource),
+        &[LiveConversionKind::AcceptedLineArtProjection],
+    ),
+    (
+        OutputCapability::ImageTreatment(ImageTreatmentCapability::WebpSource),
+        &[LiveConversionKind::AcceptedLineArtProjection],
+    ),
+    (
+        OutputCapability::ImageTreatment(
+            ImageTreatmentCapability::BelowTextPlacement,
+        ),
+        &[LiveConversionKind::AcceptedLineArtProjection],
+    ),
+    (
+        OutputCapability::ImageTreatment(
+            ImageTreatmentCapability::InlinePlacement,
+        ),
+        &[LiveConversionKind::AcceptedLineArtProjection],
+    ),
+    (
+        OutputCapability::ImageTreatment(
+            ImageTreatmentCapability::AboveTextPlacement,
+        ),
+        &[LiveConversionKind::AcceptedLineArtProjection],
+    ),
+    (
+        OutputCapability::ImageTreatment(
+            ImageTreatmentCapability::ClippedRegionPlacement,
+        ),
+        &[LiveConversionKind::AcceptedLineArtProjection],
+    ),
+    (
+        OutputCapability::ImageTreatment(ImageTreatmentCapability::Opacity),
+        &[LiveConversionKind::OnePenGeometry],
+    ),
+    (
+        OutputCapability::PagePaper(PagePaperCapability::RuledPaper),
+        &[LiveConversionKind::DrawWithSamePen],
+    ),
+    (
+        OutputCapability::PagePaper(PagePaperCapability::DottedPaper),
+        &[LiveConversionKind::DrawWithSamePen],
+    ),
+    (
+        OutputCapability::PagePaper(PagePaperCapability::SquaredPaper),
+        &[LiveConversionKind::DrawWithSamePen],
+    ),
+    (
+        OutputCapability::PagePaper(PagePaperCapability::CustomDigitalPaper),
+        &[LiveConversionKind::DrawWithSamePen],
+    ),
+    (
+        OutputCapability::PagePaper(PagePaperCapability::BorderGeometry),
+        &[LiveConversionKind::DrawWithSamePen],
+    ),
+    (
+        OutputCapability::PagePaper(PagePaperCapability::GridOrRuleGeometry),
+        &[LiveConversionKind::DrawWithSamePen],
+    ),
+];
+
+const fn conversion(
     choice: &'static str,
 ) -> AcceptedCapabilityConversion<&'static str, &'static str> {
     AcceptedCapabilityConversion {
@@ -136,29 +411,47 @@ fn review_preserves_every_source_and_explicit_conversion_evidence() {
     );
     assert_eq!(projection.mode(), OutputMode::Live);
     assert_eq!(projection.entries().len(), 4);
-    assert_eq!(projection.entries()[0].source_identity, "paragraph-1");
     assert_eq!(
-        projection.entries()[0].status,
-        OutputCapabilityProjectionStatus::AcceptedDirect,
-    );
-    assert_eq!(projection.entries()[1].source_identity, "photo-2");
-    assert_eq!(
-        projection.entries()[1].status,
-        OutputCapabilityProjectionStatus::ConversionRequired,
-    );
-    let accepted = projection.entries()[1]
-        .accepted_conversion
-        .as_ref()
-        .unwrap();
-    assert_eq!(accepted.choice, "photo-to-line-art");
-    assert_eq!(accepted.provenance, "user-confirmed-conversion");
-    assert_eq!(
-        projection.entries()[2].status,
-        OutputCapabilityProjectionStatus::Rejected,
+        projection
+            .entries()
+            .first()
+            .map(|entry| entry.source_identity),
+        Some("paragraph-1")
     );
     assert_eq!(
-        projection.entries()[3].status,
-        OutputCapabilityProjectionStatus::FutureUnavailable,
+        projection.entries().first().map(|entry| entry.status),
+        Some(OutputCapabilityProjectionStatus::AcceptedDirect),
+    );
+    assert_eq!(
+        projection
+            .entries()
+            .get(1)
+            .map(|entry| entry.source_identity),
+        Some("photo-2")
+    );
+    assert_eq!(
+        projection.entries().get(1).map(|entry| entry.status),
+        Some(OutputCapabilityProjectionStatus::ConversionRequired),
+    );
+    let accepted = projection
+        .entries()
+        .get(1)
+        .and_then(|entry| entry.accepted_conversion.as_ref());
+    assert_eq!(
+        accepted.map(|value| value.choice),
+        Some("photo-to-line-art")
+    );
+    assert_eq!(
+        accepted.map(|value| value.provenance),
+        Some("user-confirmed-conversion"),
+    );
+    assert_eq!(
+        projection.entries().get(2).map(|entry| entry.status),
+        Some(OutputCapabilityProjectionStatus::Rejected),
+    );
+    assert_eq!(
+        projection.entries().get(3).map(|entry| entry.status),
+        Some(OutputCapabilityProjectionStatus::FutureUnavailable),
     );
     assert!(!projection.is_ready());
 }
@@ -200,9 +493,18 @@ fn blocking_projection_preserves_every_non_ready_source_in_order() {
     );
     let blocked = projection.blocking_entries();
     assert_eq!(blocked.len(), 3);
-    assert_eq!(blocked[0].source_identity, "needs-conversion");
-    assert_eq!(blocked[1].source_identity, "rejected");
-    assert_eq!(blocked[2].source_identity, "future");
+    assert_eq!(
+        blocked.first().map(|entry| entry.source_identity),
+        Some("needs-conversion")
+    );
+    assert_eq!(
+        blocked.get(1).map(|entry| entry.source_identity),
+        Some("rejected")
+    );
+    assert_eq!(
+        blocked.get(2).map(|entry| entry.source_identity),
+        Some("future")
+    );
     assert!(blocked.iter().all(|entry| !entry.status.is_ready()));
 }
 
@@ -308,7 +610,10 @@ fn readiness_predicate_covers_all_projection_statuses() {
         (OutputCapabilityProjectionStatus::Converted, true),
         (OutputCapabilityProjectionStatus::FutureUnavailable, false),
         (OutputCapabilityProjectionStatus::Rejected, false),
-        (OutputCapabilityProjectionStatus::UnexpectedConversion, false),
+        (
+            OutputCapabilityProjectionStatus::UnexpectedConversion,
+            false,
+        ),
         (
             OutputCapabilityProjectionStatus::UnsupportedConversionChoice,
             false,
@@ -332,8 +637,8 @@ fn convert_without_explicit_acceptance_remains_blocked() {
         }],
     );
     assert_eq!(
-        projection.entries()[0].status,
-        OutputCapabilityProjectionStatus::ConversionRequired,
+        projection.entries().first().map(|entry| entry.status),
+        Some(OutputCapabilityProjectionStatus::ConversionRequired),
     );
     assert!(!projection.is_ready());
 }
@@ -367,16 +672,16 @@ fn conversion_cannot_override_reject_future_or_direct_acceptance() {
         ],
     );
     assert_eq!(
-        projection.entries()[0].status,
-        OutputCapabilityProjectionStatus::Rejected,
+        projection.entries().first().map(|entry| entry.status),
+        Some(OutputCapabilityProjectionStatus::Rejected),
     );
     assert_eq!(
-        projection.entries()[1].status,
-        OutputCapabilityProjectionStatus::FutureUnavailable,
+        projection.entries().get(1).map(|entry| entry.status),
+        Some(OutputCapabilityProjectionStatus::FutureUnavailable),
     );
     assert_eq!(
-        projection.entries()[2].status,
-        OutputCapabilityProjectionStatus::UnexpectedConversion,
+        projection.entries().get(2).map(|entry| entry.status),
+        Some(OutputCapabilityProjectionStatus::UnexpectedConversion),
     );
     assert!(!projection.is_ready());
 }
@@ -403,13 +708,13 @@ fn generic_live_review_cannot_admit_unvalidated_conversion_evidence() {
         ],
     );
     assert_eq!(
-        projection.entries()[1].status,
-        OutputCapabilityProjectionStatus::ConversionRequired,
+        projection.entries().get(1).map(|entry| entry.status),
+        Some(OutputCapabilityProjectionStatus::ConversionRequired),
     );
     assert!(!projection.is_ready());
 }
 
-fn live_conversion(
+const fn live_conversion(
     kind: LiveConversionKind,
     details: &'static str,
 ) -> AcceptedCapabilityConversion<
@@ -424,146 +729,8 @@ fn live_conversion(
 
 #[test]
 fn every_live_convert_row_has_a_frozen_supported_conversion_kind() {
-    let cases = [
-        (
-            OutputCapability::Semantic(SemanticCapability::Photograph),
-            LiveConversionKind::AcceptedLineArtProjection,
-        ),
-        (
-            OutputCapability::Semantic(SemanticCapability::RasterIllustration),
-            LiveConversionKind::AcceptedLineArtProjection,
-        ),
-        (
-            OutputCapability::HandwritingDecoration(
-                HandwritingDecorationCapability::MarkerHighlight,
-            ),
-            LiveConversionKind::HighlightUnderline,
-        ),
-        (
-            OutputCapability::HandwritingDecoration(
-                HandwritingDecorationCapability::FilledHighlight,
-            ),
-            LiveConversionKind::HighlightBox,
-        ),
-        (
-            OutputCapability::HandwritingDecoration(
-                HandwritingDecorationCapability::DecorativeTitleLayering,
-            ),
-            LiveConversionKind::SoberOnePenTitle,
-        ),
-        (
-            OutputCapability::HandwritingDecoration(
-                HandwritingDecorationCapability::TitleOutline,
-            ),
-            LiveConversionKind::SoberOnePenTitle,
-        ),
-        (
-            OutputCapability::Color(
-                ColorCapability::MultipleSimulatedInkColors,
-            ),
-            LiveConversionKind::CalibratedInk,
-        ),
-        (
-            OutputCapability::Color(ColorCapability::MarkerColor),
-            LiveConversionKind::CalibratedInk,
-        ),
-        (
-            OutputCapability::Color(ColorCapability::ColoredTitleLayers),
-            LiveConversionKind::CalibratedInk,
-        ),
-        (
-            OutputCapability::Color(ColorCapability::ColoredDiagramStrokes),
-            LiveConversionKind::CalibratedInk,
-        ),
-        (
-            OutputCapability::Color(ColorCapability::FullColorPhotograph),
-            LiveConversionKind::CalibratedInk,
-        ),
-        (
-            OutputCapability::Color(ColorCapability::GrayscalePhotograph),
-            LiveConversionKind::CalibratedInk,
-        ),
-        (
-            OutputCapability::Color(ColorCapability::TransparentAlpha),
-            LiveConversionKind::CalibratedInk,
-        ),
-        (
-            OutputCapability::ImageTreatment(
-                ImageTreatmentCapability::PngSource,
-            ),
-            LiveConversionKind::AcceptedLineArtProjection,
-        ),
-        (
-            OutputCapability::ImageTreatment(
-                ImageTreatmentCapability::JpegSource,
-            ),
-            LiveConversionKind::AcceptedLineArtProjection,
-        ),
-        (
-            OutputCapability::ImageTreatment(
-                ImageTreatmentCapability::WebpSource,
-            ),
-            LiveConversionKind::AcceptedLineArtProjection,
-        ),
-        (
-            OutputCapability::ImageTreatment(
-                ImageTreatmentCapability::BelowTextPlacement,
-            ),
-            LiveConversionKind::AcceptedLineArtProjection,
-        ),
-        (
-            OutputCapability::ImageTreatment(
-                ImageTreatmentCapability::InlinePlacement,
-            ),
-            LiveConversionKind::AcceptedLineArtProjection,
-        ),
-        (
-            OutputCapability::ImageTreatment(
-                ImageTreatmentCapability::AboveTextPlacement,
-            ),
-            LiveConversionKind::AcceptedLineArtProjection,
-        ),
-        (
-            OutputCapability::ImageTreatment(
-                ImageTreatmentCapability::ClippedRegionPlacement,
-            ),
-            LiveConversionKind::AcceptedLineArtProjection,
-        ),
-        (
-            OutputCapability::ImageTreatment(ImageTreatmentCapability::Opacity),
-            LiveConversionKind::OnePenGeometry,
-        ),
-        (
-            OutputCapability::PagePaper(PagePaperCapability::RuledPaper),
-            LiveConversionKind::DrawWithSamePen,
-        ),
-        (
-            OutputCapability::PagePaper(PagePaperCapability::DottedPaper),
-            LiveConversionKind::DrawWithSamePen,
-        ),
-        (
-            OutputCapability::PagePaper(PagePaperCapability::SquaredPaper),
-            LiveConversionKind::DrawWithSamePen,
-        ),
-        (
-            OutputCapability::PagePaper(
-                PagePaperCapability::CustomDigitalPaper,
-            ),
-            LiveConversionKind::DrawWithSamePen,
-        ),
-        (
-            OutputCapability::PagePaper(PagePaperCapability::BorderGeometry),
-            LiveConversionKind::DrawWithSamePen,
-        ),
-        (
-            OutputCapability::PagePaper(
-                PagePaperCapability::GridOrRuleGeometry,
-            ),
-            LiveConversionKind::DrawWithSamePen,
-        ),
-    ];
-    assert_eq!(cases.len(), 27);
-    for (capability, kind) in cases {
+    assert_eq!(LIVE_SUPPORTED_EXAMPLES.len(), 27);
+    for (capability, kind) in LIVE_SUPPORTED_EXAMPLES {
         assert_eq!(
             output_capability_disposition(capability, OutputMode::Live),
             CapabilityDisposition::Convert,
@@ -606,15 +773,21 @@ fn live_review_keeps_supported_conversion_details_and_provenance() {
         }]);
     assert!(projection.is_ready());
     assert_eq!(
-        projection.entries()[0].status,
-        OutputCapabilityProjectionStatus::Converted,
+        projection.entries().first().map(|entry| entry.status),
+        Some(OutputCapabilityProjectionStatus::Converted),
     );
-    let accepted = projection.entries()[0]
-        .accepted_conversion
-        .as_ref()
-        .unwrap();
-    assert_eq!(accepted.choice.details, "line-art-projection-17");
-    assert_eq!(accepted.provenance, "user-confirmed-live-conversion",);
+    let accepted = projection
+        .entries()
+        .first()
+        .and_then(|entry| entry.accepted_conversion.as_ref());
+    assert_eq!(
+        accepted.map(|value| value.choice.details),
+        Some("line-art-projection-17"),
+    );
+    assert_eq!(
+        accepted.map(|value| value.provenance),
+        Some("user-confirmed-live-conversion"),
+    );
 }
 
 #[test]
@@ -631,186 +804,25 @@ fn live_review_blocks_explicit_but_mismatched_conversion_kind() {
             source_identity: "photo-8",
         }]);
     assert_eq!(
-        projection.entries()[0].status,
-        OutputCapabilityProjectionStatus::UnsupportedConversionChoice,
+        projection.entries().first().map(|entry| entry.status),
+        Some(OutputCapabilityProjectionStatus::UnsupportedConversionChoice),
     );
     assert!(!projection.is_ready());
 }
 
 #[test]
 fn every_live_convert_row_admits_only_its_frozen_conversion_kinds() {
-    const ALL_KINDS: [LiveConversionKind; 9] = [
-        LiveConversionKind::AcceptedLineArtProjection,
-        LiveConversionKind::CalibratedInk,
-        LiveConversionKind::DrawWithSamePen,
-        LiveConversionKind::HighlightBox,
-        LiveConversionKind::HighlightSpacing,
-        LiveConversionKind::HighlightStrokeWeight,
-        LiveConversionKind::HighlightUnderline,
-        LiveConversionKind::OnePenGeometry,
-        LiveConversionKind::SoberOnePenTitle,
-    ];
-    let cases: [(OutputCapability, &[LiveConversionKind]); 27] = [
-        (
-            OutputCapability::Semantic(SemanticCapability::Photograph),
-            &[LiveConversionKind::AcceptedLineArtProjection],
-        ),
-        (
-            OutputCapability::Semantic(SemanticCapability::RasterIllustration),
-            &[LiveConversionKind::AcceptedLineArtProjection],
-        ),
-        (
-            OutputCapability::HandwritingDecoration(
-                HandwritingDecorationCapability::MarkerHighlight,
-            ),
-            &[
-                LiveConversionKind::HighlightBox,
-                LiveConversionKind::HighlightSpacing,
-                LiveConversionKind::HighlightStrokeWeight,
-                LiveConversionKind::HighlightUnderline,
-            ],
-        ),
-        (
-            OutputCapability::HandwritingDecoration(
-                HandwritingDecorationCapability::FilledHighlight,
-            ),
-            &[
-                LiveConversionKind::HighlightBox,
-                LiveConversionKind::HighlightSpacing,
-                LiveConversionKind::HighlightStrokeWeight,
-                LiveConversionKind::HighlightUnderline,
-            ],
-        ),
-        (
-            OutputCapability::HandwritingDecoration(
-                HandwritingDecorationCapability::DecorativeTitleLayering,
-            ),
-            &[LiveConversionKind::SoberOnePenTitle],
-        ),
-        (
-            OutputCapability::HandwritingDecoration(
-                HandwritingDecorationCapability::TitleOutline,
-            ),
-            &[LiveConversionKind::SoberOnePenTitle],
-        ),
-        (
-            OutputCapability::Color(
-                ColorCapability::MultipleSimulatedInkColors,
-            ),
-            &[LiveConversionKind::CalibratedInk],
-        ),
-        (
-            OutputCapability::Color(ColorCapability::MarkerColor),
-            &[LiveConversionKind::CalibratedInk],
-        ),
-        (
-            OutputCapability::Color(ColorCapability::ColoredTitleLayers),
-            &[LiveConversionKind::CalibratedInk],
-        ),
-        (
-            OutputCapability::Color(ColorCapability::ColoredDiagramStrokes),
-            &[LiveConversionKind::CalibratedInk],
-        ),
-        (
-            OutputCapability::Color(ColorCapability::FullColorPhotograph),
-            &[LiveConversionKind::CalibratedInk],
-        ),
-        (
-            OutputCapability::Color(ColorCapability::GrayscalePhotograph),
-            &[LiveConversionKind::CalibratedInk],
-        ),
-        (
-            OutputCapability::Color(ColorCapability::TransparentAlpha),
-            &[LiveConversionKind::CalibratedInk],
-        ),
-        (
-            OutputCapability::ImageTreatment(
-                ImageTreatmentCapability::PngSource,
-            ),
-            &[LiveConversionKind::AcceptedLineArtProjection],
-        ),
-        (
-            OutputCapability::ImageTreatment(
-                ImageTreatmentCapability::JpegSource,
-            ),
-            &[LiveConversionKind::AcceptedLineArtProjection],
-        ),
-        (
-            OutputCapability::ImageTreatment(
-                ImageTreatmentCapability::WebpSource,
-            ),
-            &[LiveConversionKind::AcceptedLineArtProjection],
-        ),
-        (
-            OutputCapability::ImageTreatment(
-                ImageTreatmentCapability::BelowTextPlacement,
-            ),
-            &[LiveConversionKind::AcceptedLineArtProjection],
-        ),
-        (
-            OutputCapability::ImageTreatment(
-                ImageTreatmentCapability::InlinePlacement,
-            ),
-            &[LiveConversionKind::AcceptedLineArtProjection],
-        ),
-        (
-            OutputCapability::ImageTreatment(
-                ImageTreatmentCapability::AboveTextPlacement,
-            ),
-            &[LiveConversionKind::AcceptedLineArtProjection],
-        ),
-        (
-            OutputCapability::ImageTreatment(
-                ImageTreatmentCapability::ClippedRegionPlacement,
-            ),
-            &[LiveConversionKind::AcceptedLineArtProjection],
-        ),
-        (
-            OutputCapability::ImageTreatment(ImageTreatmentCapability::Opacity),
-            &[LiveConversionKind::OnePenGeometry],
-        ),
-        (
-            OutputCapability::PagePaper(PagePaperCapability::RuledPaper),
-            &[LiveConversionKind::DrawWithSamePen],
-        ),
-        (
-            OutputCapability::PagePaper(PagePaperCapability::DottedPaper),
-            &[LiveConversionKind::DrawWithSamePen],
-        ),
-        (
-            OutputCapability::PagePaper(PagePaperCapability::SquaredPaper),
-            &[LiveConversionKind::DrawWithSamePen],
-        ),
-        (
-            OutputCapability::PagePaper(
-                PagePaperCapability::CustomDigitalPaper,
-            ),
-            &[LiveConversionKind::DrawWithSamePen],
-        ),
-        (
-            OutputCapability::PagePaper(PagePaperCapability::BorderGeometry),
-            &[LiveConversionKind::DrawWithSamePen],
-        ),
-        (
-            OutputCapability::PagePaper(
-                PagePaperCapability::GridOrRuleGeometry,
-            ),
-            &[LiveConversionKind::DrawWithSamePen],
-        ),
-    ];
-
-    for (capability, expected) in cases {
+    for (capability, expected) in LIVE_ALLOWED_MATRIX {
         assert_eq!(
             output_capability_disposition(capability, OutputMode::Live),
             CapabilityDisposition::Convert,
         );
-        let admitted = ALL_KINDS
+        let admitted = LIVE_ALL_KINDS
             .into_iter()
             .filter(|kind| live_conversion_kind_admitted(capability, *kind))
             .collect::<Vec<_>>();
         assert_eq!(
-            admitted,
-            expected,
+            admitted, expected,
             "unexpected conversion set for {capability:?}",
         );
     }

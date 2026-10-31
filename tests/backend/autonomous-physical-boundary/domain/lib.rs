@@ -36,8 +36,9 @@
 //! Autonomous physical boundary domain regression tests.
 
 use atrament_autonomous_physical_boundary::{
+    autonomous_generic_workflow_physical_authority,
     AutonomousGenericWorkflowClass, AutonomousPhysicalActionClass,
-    AutonomousPhysicalAuthority, autonomous_generic_workflow_physical_authority,
+    AutonomousPhysicalAuthority,
 };
 
 const ACTIONS: [AutonomousPhysicalActionClass; 8] = [
@@ -70,7 +71,7 @@ fn generic_success_history_never_accumulates_physical_authority() {
             AutonomousGenericWorkflowClass::Plan,
         ],
     ];
-    let mut cases = 0_usize;
+    let mut cases = 0usize;
     for history in histories {
         for action in ACTIONS {
             assert_eq!(

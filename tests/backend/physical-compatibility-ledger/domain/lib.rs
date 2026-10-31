@@ -59,7 +59,7 @@ fn physical_setup_keeps_paper_pen_usable_area_and_settings() {
         paper: "blank-a4-90gsm",
         pen: "black-ballpoint-0.7mm",
         settings: ["speed=75", "acceleration=32"],
-        usable_area: (10_000_u32, 12_000_u32, 190_000_u32, 270_000_u32),
+        usable_area: (10_000u32, 12_000u32, 190_000u32, 270_000u32),
     };
     assert_eq!(setup.paper, "blank-a4-90gsm");
     assert_eq!(setup.pen, "black-ballpoint-0.7mm");
