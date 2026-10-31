@@ -65,7 +65,12 @@ const TEXT_CONTENT_TYPE: &str = "text/plain; charset=utf-8";
 const JSON_CONTENT_TYPE: &str = "application/json; charset=utf-8";
 const RESPONSE_TRAILERS: &str = concat!(
     "Cache-Control: no-store\r\n",
-    "Content-Security-Policy: frame-ancestors 'none'; connect-src 'self'\r\n",
+    "Content-Security-Policy: frame-ancestors 'none'; ",
+    "default-src 'self'; base-uri 'none'; connect-src 'self'; ",
+    "font-src 'none'; form-action 'none'; frame-src 'none'; ",
+    "img-src 'self' data:; manifest-src 'none'; media-src 'none'; ",
+    "object-src 'none'; script-src 'self'; style-src 'self'; ",
+    "worker-src 'none'\r\n",
     "Referrer-Policy: no-referrer\r\n",
     "X-Content-Type-Options: nosniff\r\n",
     "Connection: close\r\n\r\n",

@@ -38,6 +38,15 @@ GET and POST are case-sensitive across every ASCII case variant. A separate
 names. Tabs, repeated spaces, trailing whitespace, and other methods or versions
 reject before routing.
 
+The loopback HTTP CSP previously sent only frame and connection restrictions;
+its stricter script, style, form, object, worker, and resource rules existed
+solely in an HTML meta element. A red-first Rust regression now compares the
+served HTML policy to the HTTP policy, allowing the header-only
+`frame-ancestors 'none'` exception. The transport now enforces all resource
+restrictions in the HTTP header on success, error, and empty responses, even
+without interpreting the HTML meta tag. This does not remedy the separate
+browser-opener argv credential exposure.
+
 Browser privacy regression evidence also pins the generated workspace to exactly
 four admitted same-origin `fetch` call sites: handshake, draft read,
 draft write, and explicit session end. All four omit ambient credentials,

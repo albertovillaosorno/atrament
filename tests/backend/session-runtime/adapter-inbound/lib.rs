@@ -2081,8 +2081,65 @@ fn serves_embedded_frontend_resources_without_caching() {
 
 const EXPECTED_CSP_HEADER: &str = concat!(
     "Content-Security-Policy: frame-ancestors 'none'; ",
-    "connect-src 'self'\r\n",
+    "default-src 'self'; base-uri 'none'; connect-src 'self'; ",
+    "font-src 'none'; form-action 'none'; frame-src 'none'; ",
+    "img-src 'self' data:; manifest-src 'none'; media-src 'none'; ",
+    "object-src 'none'; script-src 'self'; style-src 'self'; ",
+    "worker-src 'none'\r\n",
 );
+
+#[test]
+fn http_csp_enforces_the_document_resource_policy_without_meta() {
+    use std::collections::BTreeSet;
+
+    let response = request("/index.html", EXPECTED_HOST);
+    let (head, body) = response_parts(&response);
+    let http_policy = head
+        .split("\r\n")
+        .find_map(|line| line.strip_prefix("Content-Security-Policy: "))
+        .expect("document response must carry an HTTP CSP");
+    let html = std::str::from_utf8(body).expect("document is UTF-8");
+    let meta_policy = html
+        .split_once("http-equiv=\"Content-Security-Policy\"")
+        .expect("document declares its own resource policy")
+        .1
+        .split_once("content=\"")
+        .expect("CSP meta has content")
+        .1
+        .split_once('"')
+        .expect("CSP meta is quoted")
+        .0;
+    let directives = |policy: &str| -> BTreeSet<String> {
+        policy
+            .split(';')
+            .map(|directive| {
+                directive.split_whitespace().collect::<Vec<_>>().join(" ")
+            })
+            .filter(|directive| !directive.is_empty())
+            .collect()
+    };
+    let mut header_directives = directives(http_policy);
+    assert!(
+        header_directives.remove("frame-ancestors 'none'"),
+        "HTTP framing protection must not rely on a meta tag",
+    );
+    let meta_directives = directives(meta_policy);
+    for required in [
+        "default-src 'self'",
+        "script-src 'self'",
+        "style-src 'self'",
+        "base-uri 'none'",
+        "form-action 'none'",
+        "object-src 'none'",
+        "worker-src 'none'",
+    ] {
+        assert!(meta_directives.contains(required), "missing {required}");
+    }
+    assert_eq!(
+        header_directives, meta_directives,
+        "HTTP enforcement must not depend on the HTML meta element",
+    );
+}
 
 fn assert_security_headers(response: &[u8]) {
     let (head, _body) = response_parts(response);
