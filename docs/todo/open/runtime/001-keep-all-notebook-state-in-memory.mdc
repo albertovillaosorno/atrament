@@ -123,3 +123,8 @@ missing, wrong-charset, and duplicate fields now refuse without mutation.
 Header-name and media-type case variations remain admitted, and existing
 origin, credential, framing, and byte-limit guards remain independent.
 This is a wire-contract boundary, not proof of trusted notebook acceptance.
+
+A deterministic byte-mutation regression now varies every byte of the
+authenticated draft `Content-Type` field name and declared media type. Only
+case-equivalent spelling is admitted; every other mutation leaves all
+session-owned draft fields intact, including an existing task value.

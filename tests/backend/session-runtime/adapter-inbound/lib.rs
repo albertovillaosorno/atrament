@@ -2989,6 +2989,61 @@ fn authenticated_draft_mutation_requires_text_plain_utf8_media_type() {
 }
 
 #[test]
+fn draft_media_type_name_and_value_refuse_every_altered_byte() {
+    const FIELD_NAME: &[u8] = b"Content-Type";
+    const MEDIA_TYPE: &[u8] = b"text/plain; charset=utf-8";
+    let prefix = format!(
+        concat!(
+            "POST /api/session/task HTTP/1.1\r\n",
+            "Host: {}\r\nOrigin: {}\r\n",
+            "Authorization: Bearer {}\r\n",
+        ),
+        EXPECTED_HOST, EXPECTED_ORIGIN, EXPECTED_SECRET,
+    );
+    let mut admitted = 0usize;
+    for mutate_name in [true, false] {
+        let original = if mutate_name { FIELD_NAME } else { MEDIA_TYPE };
+        for index in 0..original.len() {
+            for byte in 0u8..=255 {
+                let mut field_name = FIELD_NAME.to_vec();
+                let mut media_type = MEDIA_TYPE.to_vec();
+                if mutate_name {
+                    field_name[index] = byte;
+                } else {
+                    media_type[index] = byte;
+                }
+                let mut request = prefix.as_bytes().to_vec();
+                request.extend_from_slice(&field_name);
+                request.extend_from_slice(b": ");
+                request.extend_from_slice(&media_type);
+                request.extend_from_slice(
+                    b"\r\nContent-Length: 1\r\n\r\nx",
+                );
+                let valid = original[index].eq_ignore_ascii_case(&byte);
+                let mut draft = seeded_private_draft();
+                let response = route_with_draft(
+                    &request,
+                    EXPECTED_HOST,
+                    &mut draft,
+                );
+                assert_eq!(
+                    status_line(&response) == "HTTP/1.1 204 No Content",
+                    valid,
+                    "name={mutate_name} index={index} byte={byte}",
+                );
+                if valid {
+                    assert_eq!(draft.value(DraftField::Task), "x");
+                    admitted += 1;
+                } else {
+                    assert_private_draft_unchanged(&draft);
+                }
+            }
+        }
+    }
+    assert!(admitted > 0, "valid case variants remain admitted");
+}
+
+#[test]
 fn authenticated_draft_mutations_replace_only_requested_field() {
     let authorization = format!("Bearer {EXPECTED_SECRET}");
     let cases = [
