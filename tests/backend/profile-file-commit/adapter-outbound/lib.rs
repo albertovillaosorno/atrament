@@ -271,6 +271,69 @@ mod linux {
     }
 
     #[test]
+    fn truncated_stage_after_sync_reports_staged_change() {
+        // The first metadata snapshot has the complete original length.
+        // A late truncate must be classified as a changed stage, not an
+        // ordinary read I/O failure or an uncertain committed effect.
+        for disposition in [Mode::PreserveExisting, Mode::ReplaceExisting] {
+            let dir = OwnedDir::new();
+            let target = dir.target();
+            if disposition == Mode::ReplaceExisting {
+                fs::write(&target, b"previous output")
+                    .expect("seed replacement target");
+            }
+            let artifact = vec![0x93u8; 64 * 1024];
+            let mut observations = 0usize;
+            let result = commit_profile_file_cancellable(
+                &target,
+                &artifact,
+                artifact.len(),
+                disposition,
+                || {
+                    observations += 1;
+                    if observations == 3 {
+                        let stage = fs::read_dir("/proc/self/fd")
+                            .expect("inspect own descriptors")
+                            .find_map(|candidate| {
+                                let entry = candidate.ok()?;
+                                let path = fs::read_link(entry.path()).ok()?;
+                                (path.starts_with(&dir.0)
+                                    && path.to_string_lossy().ends_with(
+                                        " (deleted)",
+                                    ))
+                                .then(|| entry.path())
+                            })
+                            .expect("test-owned anonymous stage");
+                        OpenOptions::new()
+                            .write(true)
+                            .open(stage)
+                            .expect("reopen own stage")
+                            .set_len(0)
+                            .expect("truncate after sync");
+                    }
+                    false
+                },
+            );
+            assert_eq!(observations, 3);
+            assert_eq!(result, Err(Error::StagedFileChanged));
+            assert!(!result.is_err_and(Error::may_have_committed));
+            if disposition == Mode::ReplaceExisting {
+                assert_eq!(
+                    fs::read(&target).expect("old file"),
+                    b"previous output",
+                );
+                assert_eq!(
+                    dir.entries(),
+                    vec![String::from("chosen.atrament")],
+                );
+            } else {
+                assert!(!target.exists());
+                assert!(dir.entries().is_empty());
+            }
+        }
+    }
+
+    #[test]
     fn staged_bytes_changed_during_write_cannot_publish() {
         // A change made before sync is already included in the staged
         // metadata snapshot. Comparing metadata only after sync misses it.

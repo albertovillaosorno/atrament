@@ -1124,3 +1124,9 @@ Both overwrite dispositions instead refuse as a proven no-commit
 `StagedFileChanged`, preserving the original target and avoiding any new name.
 
 This is a prepublication length guard, not an atomic lock on other processes.
+
+A post-sync anonymous-stage truncation regression now forces readback to
+encounter an early EOF after the writer observed the original complete length.
+The transport classifies this observed mutation as `StagedFileChanged`, not a
+generic I/O failure, before publishing either preserve or replacement output.
+The original selected target remains intact and no named staging file escapes.

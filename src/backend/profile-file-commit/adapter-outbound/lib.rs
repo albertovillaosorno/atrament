@@ -362,9 +362,15 @@ fn staged_bytes_match(
         let part = readback
             .get_mut(..chunk.len())
             .ok_or(ProfileFileCommitError::StagedFileChanged)?;
-        output
-            .read_exact_at(part, position)
-            .map_err(|error| ProfileFileCommitError::FileIo(error.kind()))?;
+        output.read_exact_at(part, position).map_err(|error| {
+            // The original stage was fully synced at the expected length.
+            // A new early EOF proves that its bytes changed before linking.
+            if error.kind() == io::ErrorKind::UnexpectedEof {
+                ProfileFileCommitError::StagedFileChanged
+            } else {
+                ProfileFileCommitError::FileIo(error.kind())
+            }
+        })?;
         if part != chunk {
             return Ok(false);
         }
