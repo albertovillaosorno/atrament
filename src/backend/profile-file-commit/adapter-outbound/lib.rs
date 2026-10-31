@@ -77,6 +77,8 @@ pub enum ProfileFileCommitError {
     RandomUnavailable,
     /// The selected parent or relative CWD changed before any file effect.
     SelectedParentChanged,
+    /// The observed replacement entry changed during precommit staging.
+    SelectedTargetChanged,
     /// Existing target conflicts with preserve-existing intent.
     TargetExists,
     /// Secure operation is unavailable on this platform.
@@ -101,6 +103,7 @@ impl ProfileFileCommitError {
             | Self::InvalidTarget
             | Self::RandomUnavailable
             | Self::SelectedParentChanged
+            | Self::SelectedTargetChanged
             | Self::TargetExists
             | Self::UnsupportedPlatform => false,
         }
@@ -127,6 +130,16 @@ struct OwnedTemp<'directory> {
     committed: bool,
     dir: &'directory File,
     name: String,
+}
+
+#[cfg(target_os = "linux")]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct ReplaceTargetObservation {
+    changed: (i64, i64),
+    device: u64,
+    inode: u64,
+    length: i64,
+    modified: (i64, i64),
 }
 
 #[cfg(target_os = "linux")]
@@ -181,9 +194,10 @@ pub fn commit_profile_file(
 /// before the link refuses without effect, while post-link drift is uncertain.
 /// For relative targets, the process CWD must still match its original anchor.
 /// Replacement also rechecks the selected entry without following links
-/// after staging, refusing an observed late symlink or non-regular target
-/// before publishing a name. Another actor can change the entry after this
-/// check; the recheck is not an atomic compare-and-replace guarantee.
+/// after staging, refusing late symlinks or non-regular targets and changes
+/// to the initial target's existence, identity or timestamps before linking.
+/// Another actor can change the entry after this final observation; the
+/// recheck is not an atomic compare-and-replace guarantee.
 /// Linux stages bytes through `O_TMPFILE`, so cancellation or process death
 /// during writing cannot
 /// leave a named temporary file. Preserve-existing links the completed file
@@ -291,10 +305,10 @@ fn selected_parent_is_same_directory(
 }
 
 #[cfg(target_os = "linux")]
-fn check_replace_target_type(
+fn observe_replace_target(
     directory: &File,
     name: &OsStr,
-) -> Result<(), ProfileFileCommitError> {
+) -> Result<Option<ReplaceTargetObservation>, ProfileFileCommitError> {
     use nix::fcntl::AtFlags;
     use nix::sys::stat::{SFlag, fstatat};
 
@@ -305,7 +319,14 @@ fn check_replace_target_type(
         {
             Err(ProfileFileCommitError::InvalidExistingTarget)
         }
-        Err(Errno::ENOENT) | Ok(_) => Ok(()),
+        Ok(metadata) => Ok(Some(ReplaceTargetObservation {
+            changed: (metadata.st_ctime, metadata.st_ctime_nsec),
+            device: metadata.st_dev,
+            inode: metadata.st_ino,
+            length: metadata.st_size,
+            modified: (metadata.st_mtime, metadata.st_mtime_nsec),
+        })),
+        Err(Errno::ENOENT) => Ok(None),
         Err(error) => Err(ProfileFileCommitError::FileIo(
             io::Error::from(error).kind(),
         )),
@@ -368,11 +389,15 @@ fn commit_platform(
         .file_name()
         .ok_or(ProfileFileCommitError::InvalidTarget)?;
 
-    // A selected replacement target must be absent or an ordinary file.
-    // Never dereference a selected link, including one introduced later.
-    if disposition == ProfileFileCommitDisposition::ReplaceExisting {
-        check_replace_target_type(&directory, name)?;
-    }
+    // Bind explicit replacement to the selected entry's observed state.
+    // Missing and existing files are distinct; no link is dereferenced.
+    let replace_target_before = if disposition
+        == ProfileFileCommitDisposition::ReplaceExisting
+    {
+        Some(observe_replace_target(&directory, name)?)
+    } else {
+        None
+    };
 
     // An unnamed inode cannot survive process death as a directory entry.
     // Refuse a filesystem without anonymous staging instead of falling back
@@ -423,11 +448,14 @@ fn commit_platform(
         return Err(ProfileFileCommitError::SelectedParentChanged);
     }
 
-    // Staging and the final cancellation callback can race an external
-    // link or special-file insertion. Recheck before publishing even the
-    // temporary replacement name; no filesystem-name lock is implied.
-    if disposition == ProfileFileCommitDisposition::ReplaceExisting {
-        check_replace_target_type(&directory, name)?;
+    // Staging and the final cancellation callback may observe another
+    // writer's inserted, removed or modified entry. Refuse that change
+    // before publishing even the temporary replacement name. This is a
+    // late observation, never an atomic pathname lock.
+    if let Some(before) = replace_target_before
+        && before != observe_replace_target(&directory, name)?
+    {
+        return Err(ProfileFileCommitError::SelectedTargetChanged);
     }
 
     match disposition {

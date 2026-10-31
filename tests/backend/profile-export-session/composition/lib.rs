@@ -297,6 +297,73 @@ mod linux {
     }
 
     #[test]
+    fn selected_regular_target_drift_never_retries_an_uncommitted_export() {
+        for initially_present in [false, true] {
+            let root = fixture();
+            let chosen = root.0.join("selected.atrament");
+            if initially_present {
+                fs::write(&chosen, b"original selected entry")
+                    .expect("selected existing file");
+            }
+            let request = intent(chosen.clone(), ReplaceExisting);
+            let original = artifact("writer-late-target-drift");
+            let accepted = revision();
+            let mut session = ProfileExportSession::new(2);
+            let mut observations = 0usize;
+            let refused = session.export_cancellable(
+                "original-key",
+                accepted,
+                &request,
+                &original,
+                original.bytes().len(),
+                || {
+                    observations += 1;
+                    if observations == 3 {
+                        fs::write(&chosen, b"independently changed bytes")
+                            .expect("external file change after staging");
+                    }
+                    false
+                },
+            );
+            assert_eq!(
+                refused,
+                Err(Error::Commit(
+                    ProfileFileCommitError::SelectedTargetChanged,
+                )),
+            );
+            assert_eq!(observations, 3);
+            assert_eq!(session.len(), 1);
+            assert_eq!(
+                fs::read(&chosen).expect("external bytes preserved"),
+                b"independently changed bytes",
+            );
+            assert_eq!(fs::read_dir(&root.0).expect("no stage").count(), 1);
+            assert_eq!(
+                session.export(
+                    "original-key", accepted, &request, &original, 8192,
+                ),
+                Err(Error::Retry(
+                    ProfileExportRetryRecoveryDecision::PriorKnownNoCommit,
+                )),
+            );
+            assert_eq!(
+                fs::read(&chosen).expect("retry did not write"),
+                b"independently changed bytes",
+            );
+            assert!(matches!(
+                session.export(
+                    "fresh-key", accepted, &request, &original, 8192,
+                ),
+                Ok(Outcome::Committed(_)),
+            ));
+            assert_eq!(
+                fs::read(&chosen).expect("fresh authorized output"),
+                original.bytes(),
+            );
+        }
+    }
+
+    #[test]
     fn selected_parent_replacement_refuses_receipt_and_same_key_replay() {
         for overwrite in [PreserveExisting, ReplaceExisting] {
             let root = fixture();

@@ -991,13 +991,23 @@ untouched. Change time narrows, but does not eliminate, mutable-filesystem
 history uncertainty.
 
 
-The Linux profile file-commit transport now repeats its no-follow replacement
-entry-type inspection after anonymous staging and the final cancellation probe,
-before linking the staged inode under any name. Deterministic races replace an
-initial regular target with a symlink or directory, or insert a symlink after
-an initially absent target; all three refuse as `InvalidExistingTarget` while
-retaining the new entry and unrelated target bytes. The initial type check,
-private staging and positive stable replacement behavior remain intact. This
-closes observed prelink link/special-file substitutions but does not lock the
-entry against a change after the second check or solve the replacement
+The Linux profile file-commit transport now captures the selected entry's
+regular-or-absent status and, for a regular file, its device, inode, length,
+mtime and ctime without following links. It rechecks those observations after
+anonymous staging and final cancellation, before any named link. Deterministic
+races substitute a symlink or directory for an initially regular target, or
+insert a symlink after an absent target; each refuses `InvalidExistingTarget`
+and preserves the changed entry and unrelated files.
+
+New red-first fixtures also create an unexpected regular file, swap the selected
+inode for another regular file, remove the original, or rewrite that inode to a
+different length during staging. These now refuse `SelectedTargetChanged`,
+without overwriting the intervening file, recreating the removed name or
+leaving a named temporary stage. A real Export session fixture also proves
+same-key replay refuses after a changed or newly created target, while a fresh
+independent key can authorize a later replacement. Stable replacement remains
+successful, and all prelink refusals classify as no file effect.
+
+These checks reduce observed target-substitution risk but do not lock the
+entry after the last observation or eliminate the replacement
 link-before-rename crash window.

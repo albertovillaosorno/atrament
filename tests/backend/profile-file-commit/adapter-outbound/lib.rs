@@ -321,6 +321,7 @@ mod linux {
             Error::InvalidTarget,
             Error::RandomUnavailable,
             Error::SelectedParentChanged,
+            Error::SelectedTargetChanged,
             Error::TargetExists,
             Error::UnsupportedPlatform,
         ] {
@@ -744,6 +745,122 @@ mod linux {
             b"unrelated bytes",
         );
         assert_eq!(dir.entries().len(), 2);
+    }
+
+    #[test]
+    fn late_regular_target_creation_never_clobbers_unselected_bytes() {
+        let dir = OwnedDir::new();
+        let target = dir.target();
+        let mut observations = 0usize;
+        let outcome = commit_profile_file_cancellable(
+            &target,
+            b"intended profile",
+            16,
+            Mode::ReplaceExisting,
+            || {
+                observations += 1;
+                if observations == 3 {
+                    fs::write(&target, b"unselected external file")
+                        .expect("create external target during staging");
+                }
+                false
+            },
+        );
+        assert_eq!(outcome, Err(Error::SelectedTargetChanged));
+        assert_eq!(observations, 3);
+        assert_eq!(
+            fs::read(&target).expect("late target preserved"),
+            b"unselected external file",
+        );
+        assert_eq!(dir.entries(), vec![String::from("chosen.atrament")]);
+    }
+
+    #[test]
+    fn swapped_regular_target_never_clobbers_new_entry_or_old_inode() {
+        let dir = OwnedDir::new();
+        let target = dir.target();
+        let parked = dir.0.join("parked");
+        fs::write(&target, b"original selection").expect("initial target");
+        let mut observations = 0usize;
+        let outcome = commit_profile_file_cancellable(
+            &target,
+            b"intended profile",
+            16,
+            Mode::ReplaceExisting,
+            || {
+                observations += 1;
+                if observations == 3 {
+                    fs::rename(&target, &parked).expect("park original");
+                    fs::write(&target, b"another external file")
+                        .expect("create new regular target");
+                }
+                false
+            },
+        );
+        assert_eq!(outcome, Err(Error::SelectedTargetChanged));
+        assert_eq!(observations, 3);
+        assert_eq!(fs::read(&parked).expect("original"), b"original selection");
+        assert_eq!(
+            fs::read(&target).expect("late target"),
+            b"another external file",
+        );
+        assert_eq!(dir.entries().len(), 2);
+    }
+
+    #[test]
+    fn removed_replacement_target_during_staging_is_not_recreated() {
+        let dir = OwnedDir::new();
+        let target = dir.target();
+        fs::write(&target, b"original selection").expect("initial target");
+        let mut observations = 0usize;
+        let outcome = commit_profile_file_cancellable(
+            &target,
+            b"intended profile",
+            16,
+            Mode::ReplaceExisting,
+            || {
+                observations += 1;
+                if observations == 3 {
+                    fs::remove_file(&target).expect("remove selected target");
+                }
+                false
+            },
+        );
+        assert_eq!(outcome, Err(Error::SelectedTargetChanged));
+        assert_eq!(observations, 3);
+        assert!(!target.exists());
+        assert!(dir.entries().is_empty());
+    }
+
+    #[test]
+    fn modified_same_inode_during_replace_staging_is_not_overwritten() {
+        let dir = OwnedDir::new();
+        let target = dir.target();
+        fs::write(&target, b"original selection").expect("initial target");
+        let original_inode = fs::metadata(&target).expect("inode").ino();
+        let mut observations = 0usize;
+        let outcome = commit_profile_file_cancellable(
+            &target,
+            b"intended profile",
+            16,
+            Mode::ReplaceExisting,
+            || {
+                observations += 1;
+                if observations == 3 {
+                    fs::write(&target, b"externally updated longer content")
+                        .expect("write same external inode");
+                }
+                false
+            },
+        );
+        assert_eq!(outcome, Err(Error::SelectedTargetChanged));
+        assert_eq!(observations, 3);
+        assert_eq!(fs::metadata(&target).expect("inode").ino(), original_inode);
+        assert_eq!(
+            fs::read(&target).expect("changed target preserved"),
+            b"externally updated longer content",
+        );
+        assert_eq!(dir.entries(), vec![String::from("chosen.atrament")]);
     }
 
     #[test]
