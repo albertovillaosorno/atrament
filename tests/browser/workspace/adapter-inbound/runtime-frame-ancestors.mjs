@@ -4790,6 +4790,7 @@ test(
         const children = [];
         let hostile;
         let outboundRequests = 0;
+        const assetRequests = [];
         let permissive;
         let bidi;
         try {
@@ -4912,6 +4913,29 @@ test(
                     response.end("external response");
                     return;
                 }
+                const assetResponses = {
+                    "/csp-script": [
+                        "text/javascript; charset=utf-8",
+                        "window.atramentCspProbeLoaded = true;",
+                    ],
+                    "/csp-image": [
+                        "image/svg+xml",
+                        '<svg xmlns="http://www.w3.org/2000/svg" '
+                            + 'width="2" height="2"/>',
+                    ],
+                    "/csp-style": [
+                        "text/css; charset=utf-8",
+                        ".atrament-csp-probe { display: block; }",
+                    ],
+                };
+                const asset = Object.hasOwn(assetResponses, request.url)
+                    ? assetResponses[request.url] : undefined;
+                if (asset !== undefined) {
+                    assetRequests.push(request.url);
+                    response.writeHead(200, { "Content-Type": asset[0] });
+                    response.end(asset[1]);
+                    return;
+                }
                 if (request.url === "/atrament-referrer") {
                     resolveAtramentReferrer(request.headers.referer ?? null);
                     response.end("<!doctype html><title>Recorder</title>");
@@ -4997,6 +5021,69 @@ test(
                 "response header alone must prevent cross-origin fetch");
             assert.equal(outboundRequests, 1,
                 "no-meta document must not contact external endpoint");
+
+            const assetTargets = JSON.stringify({
+                image: `${hostileOrigin}/csp-image`,
+                script: `${hostileOrigin}/csp-script`,
+                style: `${hostileOrigin}/csp-style`,
+            });
+            const probeAssets = `(async () => {
+                const urls = ${assetTargets};
+                const loaded = {};
+                for (const kind of ["script", "image", "style"]) {
+                    loaded[kind] = await new Promise((resolve, reject) => {
+                        const node = document.createElement(
+                            kind === "image" ? "img" :
+                                kind === "style" ? "link" : "script"
+                        );
+                        if (kind === "style") {
+                            node.rel = "stylesheet";
+                            node.href = urls[kind];
+                        } else {
+                            node.src = urls[kind];
+                        }
+                        const timer = setTimeout(() => reject(
+                            new Error("CSP asset probe did not settle")
+                        ), 5000);
+                        node.onload = () => {
+                            clearTimeout(timer);
+                            resolve(true);
+                        };
+                        node.onerror = () => {
+                            clearTimeout(timer);
+                            resolve(false);
+                        };
+                        document.body.append(node);
+                    });
+                }
+                return JSON.stringify(loaded);
+            })()`;
+            const controlAssets = await bidi.command("script.evaluate", {
+                awaitPromise: true,
+                expression: probeAssets,
+                resultOwnership: "none",
+                target: { context: networkControl.context },
+            });
+            assert.equal(controlAssets.type, "success");
+            assert.deepEqual(JSON.parse(controlAssets.result.value), {
+                image: true, script: true, style: true,
+            }, "permissive document must load each cross-origin asset");
+            assert.deepEqual(assetRequests, [
+                "/csp-script", "/csp-image", "/csp-style",
+            ]);
+            const blockedAssets = await bidi.command("script.evaluate", {
+                awaitPromise: true,
+                expression: probeAssets,
+                resultOwnership: "none",
+                target: { context: headerOnly.context },
+            });
+            assert.equal(blockedAssets.type, "success");
+            assert.deepEqual(JSON.parse(blockedAssets.result.value), {
+                image: false, script: false, style: false,
+            }, "header-only CSP must block foreign scripts, images and CSS");
+            assert.deepEqual(assetRequests, [
+                "/csp-script", "/csp-image", "/csp-style",
+            ], "protected document must not emit cross-origin asset requests");
 
             const direct = await bidi.command("browsingContext.create", {
                 type: "tab",

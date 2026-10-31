@@ -47,6 +47,13 @@ restrictions in the HTTP header on success, error, and empty responses, even
 without interpreting the HTML meta tag. This does not remedy the separate
 browser-opener argv credential exposure.
 
+A real Firefox header-only CSP fixture now confirms that the actual runtime
+response blocks foreign JavaScript, images, and stylesheets without an HTML
+meta tag. A permissive control tab successfully fetches those same three
+resources, while the protected tab emits zero additional requests. This is
+browser enforcement evidence for the HTTP boundary, not a claim about browser
+opener credentials or arbitrary outbound desktop programs.
+
 Browser privacy regression evidence also pins the generated workspace to exactly
 four admitted same-origin `fetch` call sites: handshake, draft read,
 draft write, and explicit session end. All four omit ambient credentials,
