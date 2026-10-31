@@ -106,7 +106,6 @@ fn all_eight_mcp_capabilities_have_exact_lifecycle_projection() {
     }
 }
 
-
 #[test]
 fn all_40_capability_completion_pairs_preserve_lifecycle_authority() {
     const CAPABILITIES: [McpApplicationCapabilityClass; 8] = [
@@ -126,7 +125,7 @@ fn all_40_capability_completion_pairs_preserve_lifecycle_authority() {
         ApplicationOperationCompletionObservation::SameRetryRecovery,
         ApplicationOperationCompletionObservation::TransportTermination,
     ];
-    let mut cases = 0_usize;
+    let mut cases = 0usize;
     for capability in CAPABILITIES {
         for observation in OBSERVATIONS {
             let expected = match capability {

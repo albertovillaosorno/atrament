@@ -34,14 +34,16 @@
 
 //! Physical motion interruption and recovery regression tests.
 
+use std::ptr;
+
 use atrament_physical_recovery_state::{
+    admit_known_physical_recovery_state, physical_resume_disposition,
     PhysicalBoundaryState, PhysicalFeedbackState, PhysicalInterruptionKind,
     PhysicalPositionState, PhysicalRecoverySnapshot, PhysicalResumeDisposition,
-    PhysicalStrokeState, admit_known_physical_recovery_state,
-    physical_resume_disposition,
+    PhysicalStrokeState,
 };
 
-fn safe_snapshot(
+const fn safe_snapshot(
     interruption: PhysicalInterruptionKind,
 ) -> PhysicalRecoverySnapshot<(i32, i32)> {
     PhysicalRecoverySnapshot {
@@ -68,9 +70,11 @@ fn fully_known_state_is_the_only_resumable_shape() {
             physical_resume_disposition(&snapshot),
             PhysicalResumeDisposition::ResumeKnownState,
         );
-        let known = admit_known_physical_recovery_state(&snapshot)
-            .expect("fully known snapshot admits read-only evidence");
-        assert!(std::ptr::eq(known.snapshot(), &snapshot));
+        let known = admit_known_physical_recovery_state(&snapshot);
+        assert!(known.is_some(), "fully known snapshot admits evidence");
+        if let Some(sealed) = known {
+            assert!(ptr::eq(sealed.snapshot(), ptr::from_ref(&snapshot)));
+        }
         assert_eq!(snapshot.interruption, interruption);
     }
 }
@@ -152,8 +156,8 @@ fn every_physical_recovery_state_combination_fails_closed_except_fully_known() {
         PhysicalStrokeState::BetweenStrokes,
         PhysicalStrokeState::PartialStroke,
     ];
-    let mut cases = 0_u32;
-    let mut resumable = 0_u32;
+    let mut cases = 0u32;
+    let mut resumable = 0u32;
 
     for interruption in interruptions {
         for feedback in feedback_states {
@@ -162,7 +166,7 @@ fn every_physical_recovery_state_combination_fails_closed_except_fully_known() {
                     for stroke in stroke_states {
                         cases += 1;
                         let position = if position_is_known {
-                            PhysicalPositionState::Known((120_i32, 340_i32))
+                            PhysicalPositionState::Known((120i32, 340i32))
                         } else {
                             PhysicalPositionState::Unknown
                         };

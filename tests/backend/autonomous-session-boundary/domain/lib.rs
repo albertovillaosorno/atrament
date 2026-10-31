@@ -36,9 +36,9 @@
 //! Autonomous session boundary domain regression tests.
 
 use atrament_autonomous_session_boundary::{
-    AUTONOMOUS_FRESH_SESSION_STEPS, AutonomousFreshSessionStep,
+    autonomous_session_end_disposition, AutonomousFreshSessionStep,
     AutonomousSessionEndDisposition, AutonomousSessionStateClass,
-    autonomous_session_end_disposition,
+    AUTONOMOUS_FRESH_SESSION_STEPS,
 };
 
 const STATES: [AutonomousSessionStateClass; 4] = [
@@ -48,25 +48,25 @@ const STATES: [AutonomousSessionStateClass; 4] = [
     AutonomousSessionStateClass::SessionAdmission,
 ];
 
-fn expected(
+const fn expected(
     state: AutonomousSessionStateClass,
 ) -> AutonomousSessionEndDisposition {
     match state {
         AutonomousSessionStateClass::ExternalCallerWorkflowState => {
             AutonomousSessionEndDisposition::OutsideAtramentSessionOwnership
-        },
+        }
         AutonomousSessionStateClass::CommandContext
         | AutonomousSessionStateClass::RetryRecoveryState
         | AutonomousSessionStateClass::SessionAdmission => {
             AutonomousSessionEndDisposition::InvalidatedWithSession
-        },
+        }
     }
 }
 
 #[test]
 fn all_four_state_classes_preserve_restart_ownership() {
-    let mut invalidated = 0_usize;
-    let mut external = 0_usize;
+    let mut invalidated = 0usize;
+    let mut external = 0usize;
     for state in STATES {
         let expected = expected(state);
         assert_eq!(autonomous_session_end_disposition(state), expected);

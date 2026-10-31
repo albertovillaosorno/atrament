@@ -34,11 +34,17 @@
 
 //! Read-only offline simulation trace over an exact validated motion plan.
 
+// These dev dependencies serve the separate integration-test target. Explicit
+// Test-only imports keep the library target lint-clean.
+#[cfg(test)]
+use atrament_device_coordinate_calibration as _;
+#[cfg(test)]
+use atrament_device_neutral_motion_plan as _;
+
 use atrament_motion_plan_dry_run::{
-    DryRunCalibration, DryRunLimitEvaluation, DryRunOperation as _,
-    DryRunOperationKind,
-    DryRunPlan, DryRunValidationError, MotionPlanDryRun,
-    validate_motion_plan_dry_run,
+    validate_motion_plan_dry_run, DryRunCalibration, DryRunLimitEvaluation,
+    DryRunOperation as _, DryRunOperationKind, DryRunPlan,
+    DryRunValidationError, MotionPlanDryRun,
 };
 
 /// One exact plan operation plus its inspected limit evidence.
@@ -88,7 +94,8 @@ where
     #[must_use]
     pub fn steps(
         &self,
-    ) -> &[MotionPlanSimulationStep<'trace, LimitEvidence, Plan::Operation>] {
+    ) -> &[MotionPlanSimulationStep<'trace, LimitEvidence, Plan::Operation>]
+    {
         &self.steps
     }
 }

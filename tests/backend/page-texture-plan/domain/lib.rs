@@ -34,27 +34,20 @@
 
 //! Page texture plan domain regression tests.
 
+use std::ptr;
+
 use atrament_material_layer_plan as _;
 use atrament_page_texture_plan::{
-    BoundedTextureStrength, PageTexturePlan, PageTexturePlanError,
-    StochasticLayerReplayKey, validate_page_texture_plan_view,
+    validate_page_texture_plan_view, BoundedTextureStrength, PageTexturePlan,
+    PageTexturePlanError, StochasticLayerReplayKey,
 };
 
-type ReplayKey = StochasticLayerReplayKey<
-    u64,
-    &'static str,
-    &'static str,
-    &'static str,
->;
-type Plan = PageTexturePlan<
-    &'static str,
-    (u64, u64),
-    &'static str,
-    u16,
-    ReplayKey,
->;
+type ReplayKey =
+    StochasticLayerReplayKey<u64, &'static str, &'static str, &'static str>;
+type Plan =
+    PageTexturePlan<&'static str, (u64, u64), &'static str, u16, ReplayKey>;
 
-fn valid_plan() -> Plan {
+const fn valid_plan() -> Plan {
     PageTexturePlan {
         geometry_authority: "vector-page-9",
         physical_bounds: (210_000, 297_000),
@@ -122,17 +115,16 @@ fn inverted_strength_envelope_rejects_before_selected_value() {
     );
 }
 
-
 #[test]
 fn every_compact_strength_triple_matches_range_precedence() {
-    let mut cases = 0_u16;
+    let mut cases = 0u16;
     let mut outcomes = [false; 3];
-    for minimum in -3_i8..=3 {
-        for maximum in -3_i8..=3 {
-            for selected in -3_i8..=3 {
+    for minimum in -3i8..=3 {
+        for maximum in -3i8..=3 {
+            for selected in -3i8..=3 {
                 let plan = PageTexturePlan {
                     geometry_authority: "vector-page-compact",
-                    physical_bounds: (210_000_u64, 297_000_u64),
+                    physical_bounds: (210_000u64, 297_000u64),
                     physical_scale: "caller-owned-scale",
                     replay_key: ReplayKey {
                         document_seed: 17,
@@ -163,17 +155,17 @@ fn every_compact_strength_triple_matches_range_precedence() {
                 );
                 match expected {
                     Ok(()) => {
-                        let validated = validate_page_texture_plan_view(&plan)
-                            .expect("valid compact plan seals");
-                        assert!(std::ptr::eq(validated.plan(), &plan));
-                    },
+                        let validation = validate_page_texture_plan_view(&plan);
+                        assert!(validation.is_ok(), "valid compact plan seals");
+                        if let Ok(sealed) = validation {
+                            let original = ptr::from_ref(&plan);
+                            assert!(ptr::eq(sealed.plan(), original));
+                        }
+                    }
                     Err(reason) => assert_eq!(
                         validate_page_texture_plan_view(&plan),
                         Err(reason),
-                        "sealed minimum {}, maximum {}, selected {}",
-                        minimum,
-                        maximum,
-                        selected,
+                        "range {minimum}/{maximum}/{selected}",
                     ),
                 }
                 cases = cases.saturating_add(1);

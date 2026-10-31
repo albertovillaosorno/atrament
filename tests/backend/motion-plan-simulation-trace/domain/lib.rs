@@ -34,6 +34,8 @@
 
 //! Motion plan simulation trace test coverage.
 
+use std::ptr;
+
 use atrament_device_coordinate_calibration::{
     CoordinateTransformCalibration, DeviceCoordinateCalibration,
     PenMotionCalibration, SheetRegistrationCalibration,
@@ -79,7 +81,7 @@ type Calibration = DeviceCoordinateCalibration<
 
 type DryRun = MotionPlanDryRun<Calibration, &'static str, Plan>;
 
-fn calibration() -> Calibration {
+const fn calibration() -> Calibration {
     DeviceCoordinateCalibration {
         calibration_identity: "calibration-4",
         coordinate_transform: CoordinateTransformCalibration {
@@ -104,7 +106,7 @@ fn calibration() -> Calibration {
     }
 }
 
-fn segment(
+const fn segment(
     contact_state: MotionContactState,
     geometry: &'static str,
 ) -> Operation {
@@ -164,59 +166,86 @@ fn dry_run() -> DryRun {
 #[test]
 fn simulation_trace_preserves_exact_operation_order_and_kind() {
     let dry_run = dry_run();
-    let trace = build_motion_plan_simulation_trace(&dry_run)
-        .expect("clean dry run");
-    assert_eq!(trace.steps().len(), 4);
-    assert_eq!(trace.steps()[0].operation_index, 0);
-    assert_eq!(trace.steps()[0].kind, DryRunOperationKind::PenUp);
-    assert_eq!(trace.steps()[1].kind, DryRunOperationKind::Pause);
-    assert_eq!(trace.steps()[2].kind, DryRunOperationKind::Checkpoint);
-    assert_eq!(trace.steps()[3].kind, DryRunOperationKind::PenDown);
+    let validation = build_motion_plan_simulation_trace(&dry_run);
+    assert!(validation.is_ok(), "clean dry run must yield a trace");
+    if let Ok(trace) = validation {
+        assert_eq!(trace.steps().len(), 4);
+        assert_eq!(
+            trace.steps().first().map(|step| step.operation_index),
+            Some(0)
+        );
+        assert_eq!(
+            trace.steps().first().map(|step| step.kind),
+            Some(DryRunOperationKind::PenUp),
+        );
+        assert_eq!(
+            trace.steps().get(1).map(|step| step.kind),
+            Some(DryRunOperationKind::Pause),
+        );
+        assert_eq!(
+            trace.steps().get(2).map(|step| step.kind),
+            Some(DryRunOperationKind::Checkpoint),
+        );
+        assert_eq!(
+            trace.steps().get(3).map(|step| step.kind),
+            Some(DryRunOperationKind::PenDown),
+        );
+    }
 }
 
 #[test]
 fn simulation_trace_borrows_exact_geometry_pause_checkpoint_and_limits() {
     let dry_run = dry_run();
-    let trace = build_motion_plan_simulation_trace(&dry_run)
-        .expect("clean dry run");
-    let MotionPlanOperation::Segment(first) = trace.steps()[0].operation else {
-        panic!("first operation must remain pen-up segment");
-    };
-    assert_eq!(first.geometry, "travel");
-    assert_eq!(
-        trace.steps()[0].limit_evaluation.evidence,
-        "travel-within-limits",
-    );
-    assert_eq!(
-        trace.steps()[1].operation,
-        &MotionPlanOperation::Pause("drying-pause"),
-    );
-    assert_eq!(
-        trace.steps()[2].operation,
-        &MotionPlanOperation::Checkpoint("checkpoint-1"),
-    );
+    let validation = build_motion_plan_simulation_trace(&dry_run);
+    assert!(validation.is_ok(), "clean dry run must yield a trace");
+    if let Ok(trace) = validation {
+        let initial = trace.steps().first();
+        assert!(initial.is_some(), "first step retained");
+        if let Some(first) = initial {
+            assert!(
+                matches!(first.operation, MotionPlanOperation::Segment(_)),
+                "first operation must remain a pen-up segment",
+            );
+            if let MotionPlanOperation::Segment(segment) = first.operation {
+                assert_eq!(segment.geometry, "travel");
+            }
+            assert_eq!(first.limit_evaluation.evidence, "travel-within-limits");
+        }
+        assert_eq!(
+            trace.steps().get(1).map(|step| step.operation),
+            Some(&MotionPlanOperation::Pause("drying-pause")),
+        );
+        assert_eq!(
+            trace.steps().get(2).map(|step| step.operation),
+            Some(&MotionPlanOperation::Checkpoint("checkpoint-1")),
+        );
+    }
 }
 
 #[test]
 fn trace_retains_exact_plan_calibration_duration_bounds_and_identities() {
     let dry_run = dry_run();
-    let trace = build_motion_plan_simulation_trace(&dry_run)
-        .expect("clean dry run");
-    assert_eq!(trace.dry_run().plan.plan_identity, "plan-22");
-    assert_eq!(trace.dry_run().plan.revision_identity, "revision-14");
-    assert_eq!(trace.dry_run().plan.estimated_duration, Some(4_200));
-    assert_eq!(trace.dry_run().plan.bounds.physical_bounds, "page-bounds");
-    assert_eq!(
-        trace.dry_run().calibration.calibration_identity,
-        "calibration-4",
-    );
-    assert_eq!(trace.dry_run().calibration.device_identity, "device-7");
+    let validation = build_motion_plan_simulation_trace(&dry_run);
+    assert!(validation.is_ok(), "clean dry run must yield a trace");
+    if let Ok(trace) = validation {
+        assert_eq!(trace.dry_run().plan.plan_identity, "plan-22");
+        assert_eq!(trace.dry_run().plan.revision_identity, "revision-14");
+        assert_eq!(trace.dry_run().plan.estimated_duration, Some(4_200));
+        assert_eq!(trace.dry_run().plan.bounds.physical_bounds, "page-bounds");
+        assert_eq!(
+            trace.dry_run().calibration.calibration_identity,
+            "calibration-4",
+        );
+        assert_eq!(trace.dry_run().calibration.device_identity, "device-7");
+    }
 }
 
 #[test]
 fn invalid_dry_run_produces_no_simulation_trace() {
     let mut dry_run = dry_run();
-    dry_run.limit_evaluations[3].state = DryRunLimitState::Unknown;
+    if let Some(last) = dry_run.limit_evaluations.get_mut(3) {
+        last.state = DryRunLimitState::Unknown;
+    }
     assert_eq!(
         build_motion_plan_simulation_trace(&dry_run),
         Err(DryRunValidationError::UnknownLimitState { operation_index: 3 }),
@@ -225,8 +254,8 @@ fn invalid_dry_run_produces_no_simulation_trace() {
 
 #[test]
 fn simulation_trace_preserves_every_compact_evaluation_count_mismatch() {
-    let mut cases = 0_u8;
-    for observed in 0_usize..=6 {
+    let mut cases = 0u8;
+    for observed in 0usize..=6 {
         if observed == 4 {
             continue;
         }
@@ -262,47 +291,55 @@ fn simulation_trace_matches_all_dry_run_limit_states() {
         DryRunLimitState::Violated,
         DryRunLimitState::WithinLimits,
     ];
-    let mut cases = 0_u8;
+    let mut cases = 0u8;
     for operation_index in 0..4 {
         let is_motion = matches!(operation_index, 0 | 3);
         for state in states {
             let mut dry_run = dry_run();
-            dry_run.limit_evaluations[operation_index].state = state;
+            if let Some(item) =
+                dry_run.limit_evaluations.get_mut(operation_index)
+            {
+                item.state = state;
+            }
             let expected_error = match state {
                 DryRunLimitState::NotApplicable if is_motion => {
                     Some(DryRunValidationError::MotionLimitMissing {
                         operation_index,
                     })
-                },
+                }
                 DryRunLimitState::Unknown => {
                     Some(DryRunValidationError::UnknownLimitState {
                         operation_index,
                     })
-                },
+                }
                 DryRunLimitState::Violated => {
                     Some(DryRunValidationError::ViolatedBoundary {
                         operation_index,
                     })
-                },
+                }
                 DryRunLimitState::NotApplicable
                 | DryRunLimitState::WithinLimits => None,
             };
-            match expected_error {
-                Some(error) => assert_eq!(
+            if let Some(error) = expected_error {
+                assert_eq!(
                     build_motion_plan_simulation_trace(&dry_run),
                     Err(error),
                     "trace rejection mismatch at operation {operation_index}",
-                ),
-                None => {
-                    let trace = build_motion_plan_simulation_trace(&dry_run)
-                        .expect("admitted dry run must produce a trace");
-                    assert!(std::ptr::eq(trace.dry_run(), &dry_run));
+                );
+            } else {
+                let validation = build_motion_plan_simulation_trace(&dry_run);
+                assert!(validation.is_ok(), "admitted run must produce trace");
+                if let Ok(trace) = validation {
+                    assert!(ptr::eq(trace.dry_run(), ptr::from_ref(&dry_run)));
                     assert_eq!(trace.steps().len(), 4);
                     assert_eq!(
-                        trace.steps()[operation_index].limit_evaluation.state,
-                        state,
+                        trace
+                            .steps()
+                            .get(operation_index)
+                            .map(|step| { step.limit_evaluation.state }),
+                        Some(state),
                     );
-                },
+                }
             }
             cases = cases.saturating_add(1);
         }
