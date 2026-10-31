@@ -279,12 +279,20 @@ secret after the same crash cycle, confirming that the fixture detects Firefox
 form-state persistence rather than merely reopening a blank page.
 
 The localhost runtime now emits response-level
-`Content-Security-Policy: frame-ancestors 'none'` and
-`Referrer-Policy: no-referrer` on every response. The former cannot be enforced
-from the document-level meta CSP, while the latter reinforces the shell's own
-no-referrer declaration. Backend fixtures pin both headers on every served
-workspace resource and across representative success, empty, authentication,
-conflict, routing, and malformed-request response classes.
+`Content-Security-Policy: frame-ancestors 'none'; connect-src 'self'` and
+`Referrer-Policy: no-referrer` on every response. Frame admission cannot be
+restricted from the document-level meta CSP, while connection admission repeats
+the shell's existing `connect-src 'self'` guard before its meta tag is parsed.
+The referrer header also reinforces the shell's no-referrer declaration.
+
+Backend fixtures pin these response headers on every served workspace resource
+and across representative success, empty, authentication, conflict, routing,
+and malformed-request response classes. A real Firefox fixture confirms a
+CORS-permissive external loopback fetch succeeds from an unrestricted control.
+It then rehosts the actual runtime CSP header on a meta-free document, proving
+that the response header alone blocks the same fetch before any request arrives.
+The original Atrament page also blocks that fetch while same-origin `/health`
+remains accessible.
 
 A real Firefox BiDi fixture now launches Atrament plus a hostile second loopback
 origin. Direct top-level loading commits the workspace document, while framing

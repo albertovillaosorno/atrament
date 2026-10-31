@@ -2071,7 +2071,7 @@ fn serves_embedded_frontend_resources_without_caching() {
         assert!(head.contains(&format!("Content-Type: {content_type}\r\n")));
         assert!(head.contains("Cache-Control: no-store\r\n"));
         assert!(head.contains(
-            "Content-Security-Policy: frame-ancestors 'none'\r\n",
+            EXPECTED_CSP_HEADER,
         ));
         assert!(head.contains("Referrer-Policy: no-referrer\r\n"));
         assert!(head.contains("X-Content-Type-Options: nosniff\r\n"));
@@ -2079,11 +2079,16 @@ fn serves_embedded_frontend_resources_without_caching() {
     }
 }
 
+const EXPECTED_CSP_HEADER: &str = concat!(
+    "Content-Security-Policy: frame-ancestors 'none'; ",
+    "connect-src 'self'\r\n",
+);
+
 fn assert_security_headers(response: &[u8]) {
     let (head, _body) = response_parts(response);
     assert!(head.contains("Cache-Control: no-store\r\n"));
     assert!(head.contains(
-        "Content-Security-Policy: frame-ancestors 'none'\r\n",
+        EXPECTED_CSP_HEADER,
     ));
     assert!(head.contains("Referrer-Policy: no-referrer\r\n"));
     assert!(head.contains("X-Content-Type-Options: nosniff\r\n"));

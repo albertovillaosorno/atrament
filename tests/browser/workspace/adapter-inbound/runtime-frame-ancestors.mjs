@@ -4153,13 +4153,14 @@ test(
 );
 
 test(
-    "Firefox blocks Atrament inside a hostile loopback frame",
+    "Firefox enforces localhost frame, referrer, and connection policy",
     { skip: !FIREFOX_AVAILABLE, timeout: FIREFOX_CASE_TIMEOUT_MS },
     async () => {
         fs.mkdirSync(".temp", { recursive: true });
         const profile = fs.mkdtempSync(".temp/frame-ancestors-");
         const children = [];
         let hostile;
+        let outboundRequests = 0;
         let permissive;
         let bidi;
         try {
@@ -4232,7 +4233,29 @@ test(
                 resolveControlReferrer = resolve;
             });
 
-            permissive = http.createServer((_request, response) => {
+            // Rehost the actual runtime response-level CSP on a document
+            // without a meta policy, so this also verifies header enforcement
+            // independently from the workspace's existing meta CSP.
+            const runtimeResponse = await fetch(origin);
+            assert.equal(runtimeResponse.status, 200);
+            const responseCsp = runtimeResponse.headers.get(
+                "content-security-policy",
+            );
+            assert.equal(typeof responseCsp, "string");
+            await runtimeResponse.body?.cancel();
+
+            permissive = http.createServer((request, response) => {
+                if (request.url === "/csp-header-only") {
+                    response.writeHead(200, {
+                        "Cache-Control": "no-store",
+                        "Content-Type": "text/html; charset=utf-8",
+                        "Content-Security-Policy": responseCsp,
+                    });
+                    response.end(
+                        "<!doctype html><title>Header-only CSP</title>",
+                    );
+                    return;
+                }
                 response.writeHead(200, {
                     "Cache-Control": "no-store",
                     "Content-Type": "text/html; charset=utf-8",
@@ -4251,6 +4274,15 @@ test(
                 `http://127.0.0.1:${permissiveAddress.port}`;
 
             hostile = http.createServer((request, response) => {
+                if (request.url === "/csp-probe") {
+                    outboundRequests += 1;
+                    response.writeHead(200, {
+                        "Access-Control-Allow-Origin": "*",
+                        "Content-Type": "text/plain; charset=utf-8",
+                    });
+                    response.end("external response");
+                    return;
+                }
                 if (request.url === "/atrament-referrer") {
                     resolveAtramentReferrer(request.headers.referer ?? null);
                     response.end("<!doctype html><title>Recorder</title>");
@@ -4280,8 +4312,62 @@ test(
             assert.notEqual(hostileAddress, null);
             const hostileOrigin =
                 `http://127.0.0.1:${hostileAddress.port}`;
+            const externalTarget = JSON.stringify(
+                `${hostileOrigin}/csp-probe`,
+            );
 
             bidi = await startBidiFirefox(profile, children);
+
+            // The unprotected control confirms that CORS permits the exact
+            // cross-origin request used by the protected documents.
+            const networkControl = await bidi.command(
+                "browsingContext.create", { type: "tab" },
+            );
+            await bidi.command("browsingContext.navigate", {
+                context: networkControl.context,
+                url: permissiveOrigin,
+                wait: "complete",
+            });
+            const allowed = await bidi.command("script.evaluate", {
+                awaitPromise: true,
+                expression: `fetch(${externalTarget}, {
+                    cache: "no-store"
+                }).then(response => response.text())`,
+                resultOwnership: "none",
+                target: { context: networkControl.context },
+            });
+            assert.equal(allowed.type, "success");
+            assert.equal(allowed.result.value, "external response");
+            assert.equal(outboundRequests, 1);
+
+            const headerOnly = await bidi.command(
+                "browsingContext.create", { type: "tab" },
+            );
+            await bidi.command("browsingContext.navigate", {
+                context: headerOnly.context,
+                url: `${permissiveOrigin}/csp-header-only`,
+                wait: "complete",
+            });
+            const headerProbe = await bidi.command("script.evaluate", {
+                awaitPromise: true,
+                expression: `(async () => {
+                    try {
+                        await fetch(${externalTarget}, {
+                            cache: "no-store"
+                        });
+                        return false;
+                    } catch {
+                        return true;
+                    }
+                })()`,
+                resultOwnership: "none",
+                target: { context: headerOnly.context },
+            });
+            assert.equal(headerProbe.type, "success");
+            assert.equal(headerProbe.result.value, true,
+                "response header alone must prevent cross-origin fetch");
+            assert.equal(outboundRequests, 1,
+                "no-meta document must not contact external endpoint");
 
             const direct = await bidi.command("browsingContext.create", {
                 type: "tab",
@@ -4299,6 +4385,35 @@ test(
                     title: "Atrament",
                 },
             );
+
+            // CORS permits the other loopback origin deliberately; a refusal
+            // here is from the workspace's header/meta CSP, not from CORS.
+            const networkProbe = await bidi.command("script.evaluate", {
+                awaitPromise: true,
+                expression: `(async () => {
+                    const local = await fetch("/health", { cache: "no-store" });
+                    let externalBlocked = false;
+                    try {
+                        await fetch(${externalTarget}, {
+                            cache: "no-store"
+                        });
+                    } catch {
+                        externalBlocked = true;
+                    }
+                    return JSON.stringify({
+                        localHealth: local.ok, externalBlocked
+                    });
+                })()`,
+                resultOwnership: "none",
+                target: { context: direct.context },
+            });
+            assert.equal(networkProbe.type, "success");
+            assert.deepEqual(JSON.parse(networkProbe.result.value), {
+                localHealth: true,
+                externalBlocked: true,
+            });
+            assert.equal(outboundRequests, 1,
+                "workspace must add no cross-origin request bytes");
 
             await navigateFromDocument(
                 bidi,
