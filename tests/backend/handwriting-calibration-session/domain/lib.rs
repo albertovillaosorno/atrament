@@ -35,6 +35,13 @@
 
 //! Handwriting calibration session domain regression tests.
 
+#![expect(
+    clippy::expect_used,
+    reason = "fail-fast assertions over bounded test fixtures"
+)]
+
+use std::ptr;
+
 use atrament_handwriting_calibration_session::{
     CalibrationPrompt, CalibrationPromptKind, CalibrationPromptProgress,
     CalibrationSampleReplacement, CalibrationSampleReplacementError,
@@ -44,7 +51,7 @@ use atrament_handwriting_calibration_session::{
 type Session =
     CalibrationSession<&'static str, u8, u16, &'static str, &'static str>;
 
-fn prompt(
+const fn prompt(
     identity: &'static str,
     kind: CalibrationPromptKind,
     progress: CalibrationPromptProgress<&'static str>,
@@ -99,15 +106,47 @@ fn completed_prompts_resume_at_first_pending_prompt_without_reordering() {
         reference_geometry: "caller-owned-reference-geometry",
     };
 
-    let next = session.next_pending_prompt_index()
+    let next = session
+        .next_pending_prompt_index()
         .expect("unique prompt identities")
         .expect("one prompt remains pending");
     assert_eq!(next, 1);
-    assert_eq!(session.prompts[next].identity, "join-ab");
-    assert_eq!(session.prompts[next].speed, 3);
-    assert_eq!(session.prompts[next].size, 12);
-    assert_eq!(session.prompts[0].identity, "character-a");
-    assert_eq!(session.reference_geometry, "caller-owned-reference-geometry");
+    assert_eq!(
+        session
+            .prompts
+            .get(next)
+            .expect("bounded prompt index")
+            .identity,
+        "join-ab"
+    );
+    assert_eq!(
+        session
+            .prompts
+            .get(next)
+            .expect("bounded prompt index")
+            .speed,
+        3
+    );
+    assert_eq!(
+        session
+            .prompts
+            .get(next)
+            .expect("bounded prompt index")
+            .size,
+        12
+    );
+    assert_eq!(
+        session
+            .prompts
+            .first()
+            .expect("bounded prompt index")
+            .identity,
+        "character-a"
+    );
+    assert_eq!(
+        session.reference_geometry,
+        "caller-owned-reference-geometry"
+    );
 }
 
 #[test]
@@ -141,22 +180,52 @@ fn completed_prompt_projection_preserves_plan_order_and_sample_links() {
         .completed_prompts()
         .expect("unique prompt identities project completed work");
     assert_eq!(completed.len(), 2);
-    assert_eq!(completed[0].identity, "character-a");
     assert_eq!(
-        completed[0].progress,
+        completed
+            .first()
+            .expect("bounded completed prompt index")
+            .identity,
+        "character-a"
+    );
+    assert_eq!(
+        completed
+            .first()
+            .expect("bounded completed prompt index")
+            .progress,
         CalibrationPromptProgress::Completed {
             sample: "sample-character-a",
         },
     );
-    assert_eq!(completed[1].identity, "word-casa");
     assert_eq!(
-        completed[1].progress,
+        completed
+            .get(1)
+            .expect("bounded completed prompt index")
+            .identity,
+        "word-casa"
+    );
+    assert_eq!(
+        completed
+            .get(1)
+            .expect("bounded completed prompt index")
+            .progress,
         CalibrationPromptProgress::Completed {
             sample: "sample-word-casa",
         },
     );
-    assert_eq!(completed[0].speed, 3);
-    assert_eq!(completed[0].size, 12);
+    assert_eq!(
+        completed
+            .first()
+            .expect("bounded completed prompt index")
+            .speed,
+        3
+    );
+    assert_eq!(
+        completed
+            .first()
+            .expect("bounded completed prompt index")
+            .size,
+        12
+    );
 }
 
 #[test]
@@ -195,14 +264,38 @@ fn exact_completed_sample_replacement_changes_only_the_target_link() {
         ),
         Ok(CalibrationSampleReplacement::Applied),
     );
-    assert_eq!(session.prompts[0].identity, before.prompts[0].identity);
-    assert_eq!(session.prompts[0].kind, before.prompts[0].kind);
-    assert_eq!(session.prompts[0].speed, before.prompts[0].speed);
-    assert_eq!(session.prompts[0].size, before.prompts[0].size);
-    assert_eq!(session.prompts[1..], before.prompts[1..]);
+    assert_eq!(
+        session
+            .prompts
+            .first()
+            .expect("bounded prompt index")
+            .identity,
+        before
+            .prompts
+            .first()
+            .expect("bounded prompt index")
+            .identity
+    );
+    assert_eq!(
+        session.prompts.first().expect("bounded prompt index").kind,
+        before.prompts.first().expect("bounded prompt index").kind
+    );
+    assert_eq!(
+        session.prompts.first().expect("bounded prompt index").speed,
+        before.prompts.first().expect("bounded prompt index").speed
+    );
+    assert_eq!(
+        session.prompts.first().expect("bounded prompt index").size,
+        before.prompts.first().expect("bounded prompt index").size
+    );
+    assert_eq!(session.prompts.get(1..), before.prompts.get(1..));
     assert_eq!(session.reference_geometry, before.reference_geometry);
     assert_eq!(
-        session.prompts[0].progress,
+        session
+            .prompts
+            .first()
+            .expect("bounded prompt index")
+            .progress,
         CalibrationPromptProgress::Completed {
             sample: "sample-character-a-2",
         },
@@ -271,11 +364,8 @@ fn completed_sample_replacement_is_exact_preconditioned_and_fail_closed() {
     for (case, prompt, expected, outcome) in cases {
         let mut session = base.clone();
         assert_eq!(
-            session.replace_completed_sample(
-                &prompt,
-                &expected,
-                "replacement",
-            ),
+            session
+                .replace_completed_sample(&prompt, &expected, "replacement",),
             outcome,
             "{case}",
         );
@@ -284,21 +374,25 @@ fn completed_sample_replacement_is_exact_preconditioned_and_fail_closed() {
 }
 
 #[test]
+#[expect(
+    clippy::too_many_lines,
+    reason = "single exhaustive 3076-case sample replacement oracle"
+)]
 fn every_compact_replacement_case_matches_exact_precondition_oracle() {
     type CompactSession = CalibrationSession<u8, u8, u8, u8, ()>;
     type ReplacementError = CalibrationSampleReplacementError<u8, u8>;
-    let mut cases = 0_usize;
+    let mut cases = 0usize;
     let mut saw = [false; 5];
-    for prompt_count in 0_u8..=6 {
-        for mask in 0_u16..(1_u16 << prompt_count) {
-            for target in 0_u8..=prompt_count {
+    for prompt_count in 0u8..=6 {
+        for mask in 0u16..(1u16 << prompt_count) {
+            for target in 0u8..=prompt_count {
                 for stale_expected in [false, true] {
                     for different_replacement in [false, true] {
                         let prompts = (0..prompt_count)
                             .map(|identity| CalibrationPrompt {
                                 identity,
                                 kind: CalibrationPromptKind::Word,
-                                progress: if mask & (1_u16 << identity) == 0 {
+                                progress: if mask & (1u16 << identity) == 0 {
                                     CalibrationPromptProgress::Pending
                                 } else {
                                     CalibrationPromptProgress::Completed {
@@ -327,32 +421,30 @@ fn every_compact_replacement_case_matches_exact_precondition_oracle() {
                         };
                         let expected = if target >= prompt_count {
                             saw[0] = true;
-                            Err(
-                                ReplacementError::UnknownPrompt {
-                                    prompt: target,
-                                },
-                            )
-                        } else if mask & (1_u16 << target) == 0 {
+                            Err(ReplacementError::UnknownPrompt {
+                                prompt: target,
+                            })
+                        } else if mask & (1u16 << target) == 0 {
                             saw[1] = true;
-                            Err(
-                                ReplacementError::PromptPending {
-                                    prompt: target,
-                                },
-                            )
+                            Err(ReplacementError::PromptPending {
+                                prompt: target,
+                            })
                         } else if stale_expected {
                             saw[2] = true;
-                            Err(
-                                ReplacementError::SampleMismatch {
-                                    actual: current_sample,
-                                    expected: expected_sample,
-                                    prompt: target,
-                                },
-                            )
+                            Err(ReplacementError::SampleMismatch {
+                                actual: current_sample,
+                                expected: expected_sample,
+                                prompt: target,
+                            })
                         } else if different_replacement {
                             saw[3] = true;
                             let target_index = usize::from(target);
-                            let target_prompt =
-                                &mut expected_session.prompts[target_index];
+                            let target_prompt = expected_session
+                                .prompts
+                                .get_mut(target_index)
+                                .expect(
+                                    "indexed prompt exists in accepted case",
+                                );
                             target_prompt.progress =
                                 CalibrationPromptProgress::Completed {
                                     sample: replacement_sample,
@@ -507,15 +599,15 @@ fn completion_is_derived_only_from_caller_supplied_prompt_progress() {
 #[test]
 fn every_compact_progress_mask_matches_resume_and_inspection_oracle() {
     type CompactSession = CalibrationSession<u8, u8, u8, u8, ()>;
-    let mut cases = 0_u16;
-    for prompt_count in 0_u8..=8 {
-        let state_count = 1_u16 << prompt_count;
-        for mask in 0_u16..state_count {
+    let mut cases = 0u16;
+    for prompt_count in 0u8..=8 {
+        let state_count = 1u16 << prompt_count;
+        for mask in 0u16..state_count {
             let prompts = (0..prompt_count)
                 .map(|identity| CalibrationPrompt {
                     identity,
                     kind: CalibrationPromptKind::Word,
-                    progress: if mask & (1_u16 << identity) == 0 {
+                    progress: if mask & (1u16 << identity) == 0 {
                         CalibrationPromptProgress::Pending
                     } else {
                         CalibrationPromptProgress::Completed {
@@ -530,16 +622,15 @@ fn every_compact_progress_mask_matches_resume_and_inspection_oracle() {
                 prompts,
                 reference_geometry: (),
             };
-            let expected_pending = (0..prompt_count).find(|identity| {
-                mask & (1_u16 << identity) == 0
-            });
+            let expected_pending = (0..prompt_count)
+                .find(|identity| mask & (1u16 << identity) == 0);
             let expected_completed = (0..prompt_count)
-                .filter(|identity| mask & (1_u16 << identity) != 0)
+                .filter(|identity| mask & (1u16 << identity) != 0)
                 .collect::<Vec<_>>();
             let validated = session
                 .validate_view()
                 .expect("compact plan identities are unique");
-            assert!(std::ptr::eq(validated.session(), &session));
+            assert!(ptr::eq(validated.session(), &raw const session));
             let completed = session
                 .completed_prompts()
                 .expect("compact plan identities are unique");
@@ -551,9 +642,7 @@ fn every_compact_progress_mask_matches_resume_and_inspection_oracle() {
             assert_eq!(
                 validated.next_pending_prompt_index(),
                 expected_pending.map(usize::from),
-                "sealed resume mismatch for count {} mask {:#x}",
-                prompt_count,
-                mask,
+                "sealed resume: count {prompt_count}, mask {mask:#x}",
             );
             assert_eq!(
                 session.is_complete(),
@@ -563,17 +652,14 @@ fn every_compact_progress_mask_matches_resume_and_inspection_oracle() {
             assert_eq!(
                 validated.is_complete(),
                 expected_pending.is_none(),
-                "sealed completion mismatch for count {} mask {:#x}",
-                prompt_count,
-                mask,
+                "sealed completion: count {prompt_count}, mask {mask:#x}",
             );
             let projected = completed
                 .iter()
                 .map(|prompt| prompt.identity)
                 .collect::<Vec<_>>();
             assert_eq!(
-                projected,
-                expected_completed,
+                projected, expected_completed,
                 "inspection mismatch for count {prompt_count} mask {mask:#x}",
             );
             assert_eq!(
@@ -583,9 +669,7 @@ fn every_compact_progress_mask_matches_resume_and_inspection_oracle() {
                     .map(|prompt| prompt.identity)
                     .collect::<Vec<_>>(),
                 expected_completed,
-                "sealed inspection mismatch count {} mask {:#x}",
-                prompt_count,
-                mask,
+                "sealed inspection: count {prompt_count}, mask {mask:#x}",
             );
             cases = cases.saturating_add(1);
         }
