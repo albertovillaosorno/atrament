@@ -616,6 +616,71 @@ test("fragment cleanup wipes pre-existing history state", async () => {
     }]);
 });
 
+test("encoded credential aliases scrub without login", async () => {
+    const source = await readFile(MAIN_MODULE, "utf8");
+    const start = source.indexOf("function fragmentFreeLocalUrl() {");
+    const end = source.indexOf(
+        "\nlet sessionSecret = consumeSessionSecretFragment();", start,
+    );
+    assert.ok(start >= 0 && end > start);
+    const handoff = source.slice(start, end);
+    const secret = "a".repeat(64);
+    const { sessionSecretFromFragment } = await import(new URL(
+        "../../../../src/browser/workspace/adapter-inbound/generated/"
+            + "session-fragment.js",
+        import.meta.url,
+    ));
+    const aliases = [
+        `#session%3D${secret}`,
+        `#session%3d${secret}`,
+        `#%73ession=${secret}`,
+        `#sess%69on=${secret}`,
+        `#%73ession%3D${secret}%zz`,
+        `#SESSION=${secret}`,
+    ];
+    for (const hash of aliases) {
+        assert.equal(sessionSecretFromFragment(hash), null);
+        const replaced = [];
+        const location = {
+            hash, pathname: "/index.html", search: "?view=1",
+            replace() { throw Error("unexpected fallback navigation"); },
+        };
+        const window = {
+            location,
+            history: {
+                replaceState(state, title, url) {
+                    replaced.push({ state, title, url });
+                },
+            },
+        };
+        const admitted = runInNewContext(
+            `${handoff}\nconsumeSessionSecretFragment();`,
+            { window, sessionSecretFromFragment },
+        );
+        assert.equal(admitted, null, `noncanonical alias ${hash}`);
+        assert.deepEqual(replaced, [{
+            state: null, title: "", url: "/index.html?view=1",
+        }], `credential-like fragment must be scrubbed: ${hash}`);
+    }
+
+    for (const hash of ["#source-panel", "#other%3Dvalue", "#invalid%zz"]) {
+        const replaced = [];
+        const window = {
+            location: {
+                hash, pathname: "/index.html", search: "",
+                replace() { throw Error("unexpected navigation"); },
+            },
+            history: { replaceState(...args) { replaced.push(args); } },
+        };
+        const admitted = runInNewContext(
+            `${handoff}\nconsumeSessionSecretFragment();`,
+            { window, sessionSecretFromFragment },
+        );
+        assert.equal(admitted, null);
+        assert.deepEqual(replaced, [], `unrelated fragment ${hash}`);
+    }
+});
+
 test("session credential fragment is one-time browser handoff", async () => {
     const source = await readFile(MAIN_MODULE, "utf8");
     const urlStart = source.indexOf("function fragmentFreeLocalUrl() {");

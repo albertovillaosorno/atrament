@@ -39,10 +39,39 @@ function fragmentFreeLocalUrl(): string {
     return `${window.location.pathname}${window.location.search}`;
 }
 
+// A malformed or percent-encoded credential alias is never authority, but
+// must not remain in the address bar. Inspect only eight ASCII prefix bytes
+// (or their %HH equivalents), not the potentially unbounded fragment body.
+function hasSessionFragmentPrefix(hash: string): boolean {
+    if (!hash.startsWith("#")) {
+        return false;
+    }
+    let offset = 1;
+    for (const character of "session=") {
+        if (hash[offset]?.toLowerCase() === character) {
+            offset += 1;
+            continue;
+        }
+        if (
+            hash[offset] !== "%"
+            || hash.slice(offset + 1, offset + 3).toLowerCase()
+                !== character.charCodeAt(0).toString(16)
+        ) {
+            return false;
+        }
+        offset += 3;
+    }
+    return true;
+}
+
 function consumeSessionSecretFragment(): string | null {
     const hash = window.location.hash;
     const sessionSecret = sessionSecretFromFragment(hash);
-    if (sessionSecret === null && !hash.startsWith("#session=")) {
+    if (
+        sessionSecret === null
+        && !hash.startsWith("#session=")
+        && !hasSessionFragmentPrefix(hash)
+    ) {
         return null;
     }
     const localUrl = fragmentFreeLocalUrl();
