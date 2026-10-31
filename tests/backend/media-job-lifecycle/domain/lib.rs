@@ -43,7 +43,14 @@ use atrament_media_job_lifecycle::{
 type Intermediate = OwnedWaveformIntermediate<&'static str, &'static str>;
 type Job = TerminalMediaJob<&'static str, Intermediate>;
 
-fn owned_intermediate() -> Intermediate {
+#[derive(Clone, Copy, Debug)]
+enum FixtureCleanupKind {
+    NoIntermediate,
+    Pending,
+    RetryRequired,
+}
+
+const fn owned_intermediate() -> Intermediate {
     OwnedWaveformIntermediate {
         intermediate_identity: "waveform-7",
         job_identity: "job-4",
@@ -120,13 +127,17 @@ fn all_terminal_cleanup_states_match_ownership_oracle() {
         MediaJobOutcome::Failed,
         MediaJobOutcome::Succeeded,
     ];
-    let mut cases = 0_u8;
+    let mut cases = 0u8;
     let mut saw_cleanup_required = false;
     let mut saw_retry_required = false;
     let mut saw_settled = false;
     let mut saw_foreign = false;
     for outcome in outcomes {
-        for cleanup_kind in 0_u8..3 {
+        for cleanup_kind in [
+            FixtureCleanupKind::NoIntermediate,
+            FixtureCleanupKind::Pending,
+            FixtureCleanupKind::RetryRequired,
+        ] {
             for owner_matches in [false, true] {
                 let intermediate = OwnedWaveformIntermediate {
                     intermediate_identity: "waveform-oracle",
@@ -137,44 +148,50 @@ fn all_terminal_cleanup_states_match_ownership_oracle() {
                     },
                 };
                 let cleanup = match cleanup_kind {
-                    0 => WaveformCleanupState::NoIntermediate,
-                    1 => WaveformCleanupState::Pending(intermediate),
-                    2 => WaveformCleanupState::RetryRequired(intermediate),
-                    _ => unreachable!(),
+                    FixtureCleanupKind::NoIntermediate => {
+                        WaveformCleanupState::NoIntermediate
+                    },
+                    FixtureCleanupKind::Pending => {
+                        WaveformCleanupState::Pending(intermediate)
+                    },
+                    FixtureCleanupKind::RetryRequired => {
+                        WaveformCleanupState::RetryRequired(intermediate)
+                    },
                 };
                 let job = Job {
                     cleanup,
                     job_identity: "job-oracle",
                     outcome,
                 };
-                let expected = match cleanup_kind {
-                    0 => {
+                let expected = match (cleanup_kind, owner_matches) {
+                    (FixtureCleanupKind::NoIntermediate, _) => {
                         saw_settled = true;
                         Ok(MediaJobCleanupStatus::Settled)
                     },
-                    1 if owner_matches => {
+                    (FixtureCleanupKind::Pending, true) => {
                         saw_cleanup_required = true;
                         Ok(MediaJobCleanupStatus::CleanupRequired)
                     },
-                    2 if owner_matches => {
+                    (FixtureCleanupKind::RetryRequired, true) => {
                         saw_retry_required = true;
                         Ok(MediaJobCleanupStatus::CleanupRetryRequired)
                     },
-                    1 | 2 => {
+                    (
+                        FixtureCleanupKind::Pending
+                        | FixtureCleanupKind::RetryRequired,
+                        false,
+                    ) => {
                         saw_foreign = true;
-                        Err(
-                            MediaJobLifecycleError::ForeignIntermediate {
-                                intermediate_job_identity: "job-foreign",
-                            },
-                        )
+                        Err(MediaJobLifecycleError::ForeignIntermediate {
+                            intermediate_job_identity: "job-foreign",
+                        })
                     },
-                    _ => unreachable!(),
                 };
                 assert_eq!(
                     media_job_cleanup_status(&job),
                     expected,
-                    "outcome {outcome:?}, cleanup {cleanup_kind}, owner match \
-                     {owner_matches}",
+                    "outcome {outcome:?}, cleanup {cleanup_kind:?}, \
+                     owner match {owner_matches}",
                 );
                 cases = cases.saturating_add(1);
             }
@@ -185,4 +202,54 @@ fn all_terminal_cleanup_states_match_ownership_oracle() {
     assert!(saw_retry_required);
     assert!(saw_settled);
     assert!(saw_foreign);
+}
+
+#[test]
+fn noncopy_job_and_waveform_identities_preserve_foreign_ownership() {
+    let current = String::from("job-current");
+    let foreign = String::from("job-foreign");
+    let opaque_waveform = vec![0u8, 255, 1, 128];
+    let mut cases = 0u8;
+    for outcome in [
+        MediaJobOutcome::Cancelled,
+        MediaJobOutcome::Failed,
+        MediaJobOutcome::Succeeded,
+    ] {
+        for retry in [false, true] {
+            for owned in [false, true] {
+                let intermediate = OwnedWaveformIntermediate {
+                    intermediate_identity: opaque_waveform.clone(),
+                    job_identity: if owned {
+                        current.clone()
+                    } else {
+                        foreign.clone()
+                    },
+                };
+                let cleanup = if retry {
+                    WaveformCleanupState::RetryRequired(intermediate)
+                } else {
+                    WaveformCleanupState::Pending(intermediate)
+                };
+                let job = TerminalMediaJob {
+                    cleanup,
+                    job_identity: current.clone(),
+                    outcome,
+                };
+                let snapshot = job.clone();
+                let expected = if !owned {
+                    Err(MediaJobLifecycleError::ForeignIntermediate {
+                        intermediate_job_identity: foreign.clone(),
+                    })
+                } else if retry {
+                    Ok(MediaJobCleanupStatus::CleanupRetryRequired)
+                } else {
+                    Ok(MediaJobCleanupStatus::CleanupRequired)
+                };
+                assert_eq!(media_job_cleanup_status(&job), expected);
+                assert_eq!(job, snapshot);
+                cases = cases.saturating_add(1);
+            }
+        }
+    }
+    assert_eq!(cases, 12);
 }
