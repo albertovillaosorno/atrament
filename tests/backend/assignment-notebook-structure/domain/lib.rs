@@ -32,6 +32,8 @@
 
 //! Assignment notebook semantic structure regression tests.
 
+use std::ptr;
+
 use atrament_assignment_notebook_structure::{
     ASSIGNMENT_NOTEBOOK_ROLES, AssignmentNotebookDisposition,
     AssignmentNotebookRole, AssignmentNotebookStructureEntry,
@@ -44,6 +46,93 @@ use atrament_semantic_notebook::{
     Block, BlockContent, Flow, InlineSpan, Notebook, Page, UnresolvedBlock,
     UnresolvedReason,
 };
+
+// Typed test guards retain errors without unchecked extraction.
+macro_rules! require_ok {
+    ($expression:expr) => {{
+        let outcome = $expression;
+        assert!(
+            outcome.is_ok(),
+            "expected projection: {:?}",
+            outcome.as_ref().err()
+        );
+        let Ok(value) = outcome else {
+            return;
+        };
+        value
+    }};
+}
+
+const MATRIX_STATES: [FixtureState; 6] = [
+    FixtureState::Represented,
+    FixtureState::MissingFact,
+    FixtureState::WrongRepresented,
+    FixtureState::WrongMissingFact,
+    FixtureState::NonBlock,
+    FixtureState::UnknownIdentity,
+];
+
+#[derive(Clone, Copy, Debug)]
+enum FixtureState {
+    MissingFact,
+    NonBlock,
+    Represented,
+    UnknownIdentity,
+    WrongMissingFact,
+    WrongRepresented,
+}
+
+const fn fixture_disposition(
+    state: FixtureState,
+) -> AssignmentNotebookDisposition<u32> {
+    match state {
+        FixtureState::Represented => {
+            AssignmentNotebookDisposition::Represented { block: 11 }
+        }
+        FixtureState::MissingFact => {
+            AssignmentNotebookDisposition::UnresolvedMissingFact { block: 12 }
+        }
+        FixtureState::WrongRepresented => {
+            AssignmentNotebookDisposition::Represented { block: 12 }
+        }
+        FixtureState::WrongMissingFact => {
+            AssignmentNotebookDisposition::UnresolvedMissingFact { block: 11 }
+        }
+        FixtureState::NonBlock => {
+            AssignmentNotebookDisposition::Represented { block: 3 }
+        }
+        FixtureState::UnknownIdentity => {
+            AssignmentNotebookDisposition::Represented { block: 99 }
+        }
+    }
+}
+
+const fn fixture_error(
+    state: FixtureState,
+    entry_index: usize,
+) -> Option<AssignmentNotebookStructureError> {
+    match state {
+        FixtureState::Represented | FixtureState::MissingFact => None,
+        FixtureState::WrongRepresented => {
+            Some(AssignmentNotebookStructureError::RepresentedIsUnresolved {
+                entry_index,
+            })
+        }
+        FixtureState::WrongMissingFact => Some(
+            AssignmentNotebookStructureError::UnresolvedMissingFactIsResolved {
+                entry_index,
+            },
+        ),
+        FixtureState::NonBlock => {
+            Some(AssignmentNotebookStructureError::NotBlock { entry_index })
+        }
+        FixtureState::UnknownIdentity => {
+            Some(AssignmentNotebookStructureError::UnknownIdentity {
+                entry_index,
+            })
+        }
+    }
+}
 
 fn span(id: u32, text: &str) -> InlineSpan<u32> {
     InlineSpan {
@@ -151,20 +240,30 @@ fn represented_and_missing_fact_entries_validate_without_role_inference() {
         validate_assignment_notebook_structure(&notebook(), &plan),
         Ok(())
     );
-    assert_eq!(plan.entries[0].role, AssignmentNotebookRole::Title);
-    assert_eq!(plan.entries[1].role, AssignmentNotebookRole::Example);
+    assert_eq!(
+        plan.entries.first().map(|entry| entry.role),
+        Some(AssignmentNotebookRole::Title)
+    );
+    assert_eq!(
+        plan.entries.get(1).map(|entry| entry.role),
+        Some(AssignmentNotebookRole::Example)
+    );
     let notebook = notebook();
-    let projected = project_assignment_notebook_structure_blocks(
-        &notebook,
-        &plan,
-    )
-    .expect("validated structure projects exact source blocks");
+    let projected = require_ok!(project_assignment_notebook_structure_blocks(
+        &notebook, &plan,
+    ));
     assert_eq!(
         projected.iter().map(|block| block.id).collect::<Vec<_>>(),
         [10, 11, 12],
     );
-    assert!(matches!(projected[0].content, BlockContent::Heading(_)));
-    assert!(matches!(projected[2].content, BlockContent::Unresolved(_)));
+    assert!(matches!(
+        projected.first().map(|block| &block.content),
+        Some(BlockContent::Heading(_))
+    ));
+    assert!(matches!(
+        projected.get(2).map(|block| &block.content),
+        Some(BlockContent::Unresolved(_))
+    ));
 }
 
 #[test]
@@ -205,13 +304,16 @@ fn empty_plan_and_repeated_roles_do_not_synthesize_structure_policy() {
         Ok(()),
     );
     let notebook = notebook();
-    let projected = project_assignment_notebook_structure_blocks(
-        &notebook,
-        &repeated,
-    )
-    .expect("repeated review entries remain valid");
+    let projected = require_ok!(project_assignment_notebook_structure_blocks(
+        &notebook, &repeated,
+    ));
     assert_eq!(projected.len(), 2);
-    assert!(std::ptr::eq(projected[0], projected[1]));
+    let first_candidate = projected.first();
+    let second_candidate = projected.get(1);
+    assert!(matches!(
+        (first_candidate, second_candidate),
+        (Some(first), Some(second)) if ptr::eq(*first, *second)
+    ));
 }
 
 #[test]
@@ -313,7 +415,7 @@ fn projection_rejects_complete_plan_before_exposing_any_blocks() {
 #[test]
 fn every_role_obeys_only_block_resolution_authority() {
     let notebook = notebook();
-    let mut cases = 0_u8;
+    let mut cases = 0u8;
     for role in ASSIGNMENT_NOTEBOOK_ROLES {
         let checks = [
             (
@@ -366,22 +468,22 @@ fn every_role_obeys_only_block_resolution_authority() {
                 expected,
                 "role {role:?}, disposition {disposition:?}",
             );
-            let projection = project_assignment_notebook_structure_blocks(
-                &notebook,
-                &plan,
-            );
+            let projection =
+                project_assignment_notebook_structure_blocks(&notebook, &plan);
             match expected {
-                Ok(()) => assert_eq!(
-                    projection
-                        .expect("valid case projects one exact block")[0]
-                        .id,
-                    match disposition {
+                Ok(()) => {
+                    let projected = require_ok!(projection);
+                    let expected_id = match disposition {
                         AssignmentNotebookDisposition::Represented { block }
                         | AssignmentNotebookDisposition::UnresolvedMissingFact {
                             block,
                         } => block,
-                    },
-                ),
+                    };
+                    assert_eq!(
+                        projected.first().map(|block| block.id),
+                        Some(expected_id)
+                    );
+                }
                 Err(error) => assert_eq!(projection, Err(error)),
             }
             cases = cases.saturating_add(1);
@@ -390,87 +492,51 @@ fn every_role_obeys_only_block_resolution_authority() {
     assert_eq!(cases, 54);
 }
 
-
 #[test]
 fn every_three_entry_disposition_tuple_preserves_first_failure_and_atomicity() {
-    const STATES: usize = 6;
     let notebook = notebook();
-    let disposition = |state| match state {
-        0 => AssignmentNotebookDisposition::Represented { block: 11 },
-        1 => AssignmentNotebookDisposition::UnresolvedMissingFact { block: 12 },
-        2 => AssignmentNotebookDisposition::Represented { block: 12 },
-        3 => AssignmentNotebookDisposition::UnresolvedMissingFact { block: 11 },
-        4 => AssignmentNotebookDisposition::Represented { block: 3 },
-        5 => AssignmentNotebookDisposition::Represented { block: 99 },
-        _ => unreachable!("enumerated disposition state"),
-    };
-    let state_error = |state, entry_index| match state {
-        0 | 1 => None,
-        2 => Some(AssignmentNotebookStructureError::RepresentedIsUnresolved {
-            entry_index,
-        }),
-        3 => Some(
-            AssignmentNotebookStructureError::
-                UnresolvedMissingFactIsResolved { entry_index },
-        ),
-        4 => Some(AssignmentNotebookStructureError::NotBlock { entry_index }),
-        5 => Some(AssignmentNotebookStructureError::UnknownIdentity {
-            entry_index,
-        }),
-        _ => unreachable!("enumerated disposition state"),
-    };
     let roles = [
         AssignmentNotebookRole::Title,
         AssignmentNotebookRole::Example,
         AssignmentNotebookRole::Conclusion,
     ];
 
-    let mut cases = 0_u16;
-    for first in 0..STATES {
-        for second in 0..STATES {
-            for third in 0..STATES {
+    let mut cases = 0u16;
+    for first in MATRIX_STATES {
+        for second in MATRIX_STATES {
+            for third in MATRIX_STATES {
                 let states = [first, second, third];
                 let plan = AssignmentNotebookStructurePlan {
                     entries: states
                         .into_iter()
                         .zip(roles)
                         .map(|(state, role)| AssignmentNotebookStructureEntry {
-                            disposition: disposition(state),
+                            disposition: fixture_disposition(state),
                             role,
                         })
                         .collect(),
                 };
-                let expected = states
-                    .into_iter()
-                    .enumerate()
-                    .find_map(|(entry_index, state)| {
-                        state_error(state, entry_index)
-                    });
+                let expected = states.into_iter().enumerate().find_map(
+                    |(entry_index, state)| fixture_error(state, entry_index),
+                );
                 assert_eq!(
                     validate_assignment_notebook_structure(&notebook, &plan),
                     expected.map_or(Ok(()), Err),
                     "states {states:?}",
                 );
                 let projection = project_assignment_notebook_structure_blocks(
-                    &notebook,
-                    &plan,
+                    &notebook, &plan,
                 );
                 let validated = validate_assignment_notebook_structure_view(
-                    &notebook,
-                    &plan,
+                    &notebook, &plan,
                 );
                 if let Some(error) = expected {
                     assert_eq!(projection, Err(error), "states {states:?}");
-                    match validated {
-                        Err(actual) => assert_eq!(actual, error),
-                        Ok(_) => panic!(
-                            "invalid states {states:?} cannot seal a view",
-                        ),
-                    }
+                    assert_eq!(validated.err(), Some(error));
                 } else {
-                    let projected = projection.expect("valid tuple projects");
+                    let projected = require_ok!(projection);
                     let expected_ids = states.map(|state| {
-                        match disposition(state) {
+                        match fixture_disposition(state) {
                             AssignmentNotebookDisposition::Represented { block }
                             | AssignmentNotebookDisposition::
                                 UnresolvedMissingFact { block } => block,
@@ -481,16 +547,14 @@ fn every_three_entry_disposition_tuple_preserves_first_failure_and_atomicity() {
                         .map(|block| block.id)
                         .collect::<Vec<_>>();
                     assert_eq!(
-                        projected_ids,
-                        expected_ids,
+                        projected_ids, expected_ids,
                         "states {states:?}",
                     );
-                    let validated = validated
-                        .expect("valid tuple seals exact assignment structure");
-                    assert!(std::ptr::eq(validated.notebook(), &notebook));
-                    assert!(std::ptr::eq(validated.plan(), &plan));
+                    let sealed = require_ok!(validated);
+                    assert!(ptr::eq(sealed.notebook(), &raw const notebook));
+                    assert!(ptr::eq(sealed.plan(), &raw const plan));
                     assert_eq!(
-                        validated
+                        sealed
                             .blocks()
                             .iter()
                             .map(|block| block.id)
