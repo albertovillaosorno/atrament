@@ -33,7 +33,6 @@
 //! Mcp history result projection test coverage.
 
 use atrament_application_operation_lifecycle as lifecycle;
-use lifecycle::ApplicationCancellationObservation;
 use atrament_mcp_capability_effect::McpApplicationCapabilityClass;
 use atrament_mcp_history_result_projection::{
     mcp_history_cancellation_result, mcp_history_commit_disposition,
@@ -46,6 +45,7 @@ use atrament_semantic_notebook::IdentityAllocator;
 use atrament_semantic_notebook_port::{
     HistoryAvailability, HistoryAvailabilityOutcome, HistoryDirection,
 };
+use lifecycle::ApplicationCancellationObservation;
 
 const CAPABILITIES: [McpApplicationCapabilityClass; 8] = [
     McpApplicationCapabilityClass::Apply,
@@ -67,7 +67,7 @@ const RESULTS: [SemanticHistoryResultClass; 6] = [
     SemanticHistoryResultClass::Traversed,
 ];
 
-fn expected_disposition(
+const fn expected_disposition(
     result: SemanticHistoryResultClass,
 ) -> SemanticHistoryCommitDisposition {
     match result {
@@ -76,19 +76,19 @@ fn expected_disposition(
         | SemanticHistoryResultClass::KnownNoCommitFailure
         | SemanticHistoryResultClass::StaleCurrentRevision => {
             SemanticHistoryCommitDisposition::KnownNoNewCommit
-        },
+        }
         SemanticHistoryResultClass::IdempotentReplay => {
             SemanticHistoryCommitDisposition::RecoveredPriorCompletion
-        },
+        }
         SemanticHistoryResultClass::Traversed => {
             SemanticHistoryCommitDisposition::CommittedThisCall
-        },
+        }
     }
 }
 
 #[test]
 fn all_48_capability_result_pairs_project_only_through_history() {
-    let mut cases = 0_usize;
+    let mut cases = 0usize;
     for capability in CAPABILITIES {
         for result in RESULTS {
             let expected = (capability
@@ -108,7 +108,11 @@ fn all_48_capability_result_pairs_project_only_through_history() {
 #[test]
 fn all_80_capability_and_direction_availability_cases_are_exact() {
     let identities = IdentityAllocator::new();
-    let revision = identities.allocate_revision().expect("revision identity");
+    let allocation = identities.allocate_revision();
+    assert!(allocation.is_ok(), "revision identity allocation");
+    let Ok(revision) = allocation else {
+        return;
+    };
     let mut availabilities = Vec::new();
     for can_redo in [false, true] {
         for can_undo in [false, true] {
@@ -122,7 +126,7 @@ fn all_80_capability_and_direction_availability_cases_are_exact() {
         }
     }
     availabilities.push(HistoryAvailabilityOutcome::NoAcceptedRevision);
-    let mut cases = 0_usize;
+    let mut cases = 0usize;
     for capability in CAPABILITIES {
         for availability in &availabilities {
             for direction in [HistoryDirection::Redo, HistoryDirection::Undo] {
@@ -132,7 +136,7 @@ fn all_80_capability_and_direction_availability_cases_are_exact() {
                             HistoryDirection::Redo => value.can_redo,
                             HistoryDirection::Undo => value.can_undo,
                         }
-                    },
+                    }
                     HistoryAvailabilityOutcome::NoAcceptedRevision => false,
                 };
                 let expected = (capability
@@ -160,14 +164,12 @@ fn all_24_capability_cancellation_pairs_project_only_through_history() {
         ApplicationCancellationObservation::RequestOnly,
         ApplicationCancellationObservation::TookEffectBeforeBoundary,
     ];
-    let mut cases = 0_usize;
+    let mut cases = 0usize;
     for capability in CAPABILITIES {
         for observation in OBSERVATIONS {
             let expected = if capability
-                != McpApplicationCapabilityClass::HistoryTraversal
+                == McpApplicationCapabilityClass::HistoryTraversal
             {
-                None
-            } else {
                 match observation {
                     ApplicationCancellationObservation::RequestOnly => None,
                     ApplicationCancellationObservation::
@@ -179,6 +181,8 @@ fn all_24_capability_cancellation_pairs_project_only_through_history() {
                         Some(SemanticHistoryResultClass::Traversed)
                     },
                 }
+            } else {
+                None
             };
             assert_eq!(
                 mcp_history_cancellation_result(capability, observation),

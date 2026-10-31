@@ -33,7 +33,6 @@
 //! Mcp semantic command result projection application regression tests.
 
 use atrament_application_operation_lifecycle as lifecycle;
-use lifecycle::ApplicationCancellationObservation;
 use atrament_mcp_capability_effect::McpApplicationCapabilityClass;
 use atrament_mcp_semantic_command_result_projection::{
     mcp_semantic_apply_cancellation_result,
@@ -44,6 +43,7 @@ use atrament_semantic_command_result::SemanticCommandOperation;
 use atrament_semantic_notebook_port::{
     SemanticCommandCommitDisposition, SemanticCommandResultClass,
 };
+use lifecycle::ApplicationCancellationObservation;
 
 const CAPABILITIES: [McpApplicationCapabilityClass; 8] = [
     McpApplicationCapabilityClass::Apply,
@@ -74,17 +74,22 @@ const RESULTS: [SemanticCommandResultClass; 15] = [
     SemanticCommandResultClass::WritableScopeViolation,
 ];
 
-fn expected_operation(
+const fn expected_operation(
     capability: McpApplicationCapabilityClass,
 ) -> Option<SemanticCommandOperation> {
     match capability {
         McpApplicationCapabilityClass::Apply => {
             Some(SemanticCommandOperation::Apply)
-        },
+        }
         McpApplicationCapabilityClass::Validate => {
             Some(SemanticCommandOperation::Validate)
-        },
-        _ => None,
+        }
+        McpApplicationCapabilityClass::CommandContext
+        | McpApplicationCapabilityClass::Export
+        | McpApplicationCapabilityClass::HistoryTraversal
+        | McpApplicationCapabilityClass::Inspect
+        | McpApplicationCapabilityClass::Plan
+        | McpApplicationCapabilityClass::Render => None,
     }
 }
 
@@ -99,25 +104,47 @@ fn result_applies(
         | SemanticCommandResultClass::NoOp
         | SemanticCommandResultClass::RetryConflict => {
             operation == SemanticCommandOperation::Apply
-        },
+        }
         SemanticCommandResultClass::SuccessfulValidation => {
             operation == SemanticCommandOperation::Validate
-        },
-        _ => true,
+        }
+        SemanticCommandResultClass::CommandContextMismatch
+        | SemanticCommandResultClass::DependencyGraphRejection
+        | SemanticCommandResultClass::InternalFailureKnownNoCommit
+        | SemanticCommandResultClass::ResourceLimitRejection
+        | SemanticCommandResultClass::SemanticValidationRejection
+        | SemanticCommandResultClass::StaleBase
+        | SemanticCommandResultClass::UnrepresentableOrUnresolved
+        | SemanticCommandResultClass::UnsupportedProtocolOrCapability
+        | SemanticCommandResultClass::WritableScopeViolation => true,
     }
 }
 
-fn expected_disposition(
+const fn expected_disposition(
     result: SemanticCommandResultClass,
 ) -> SemanticCommandCommitDisposition {
     match result {
         SemanticCommandResultClass::Applied => {
             SemanticCommandCommitDisposition::CommittedThisCall
-        },
+        }
         SemanticCommandResultClass::IdempotentReplay => {
             SemanticCommandCommitDisposition::RecoveredPriorCompletion
-        },
-        _ => SemanticCommandCommitDisposition::KnownNoNewCommit,
+        }
+        SemanticCommandResultClass::CancelledBeforeCommit
+        | SemanticCommandResultClass::CommandContextMismatch
+        | SemanticCommandResultClass::DependencyGraphRejection
+        | SemanticCommandResultClass::InternalFailureKnownNoCommit
+        | SemanticCommandResultClass::NoOp
+        | SemanticCommandResultClass::ResourceLimitRejection
+        | SemanticCommandResultClass::RetryConflict
+        | SemanticCommandResultClass::SemanticValidationRejection
+        | SemanticCommandResultClass::StaleBase
+        | SemanticCommandResultClass::SuccessfulValidation
+        | SemanticCommandResultClass::UnrepresentableOrUnresolved
+        | SemanticCommandResultClass::UnsupportedProtocolOrCapability
+        | SemanticCommandResultClass::WritableScopeViolation => {
+            SemanticCommandCommitDisposition::KnownNoNewCommit
+        }
     }
 }
 
@@ -133,13 +160,14 @@ fn all_eight_capabilities_have_exact_semantic_result_operation_mapping() {
 
 #[test]
 fn all_120_capability_result_pairs_preserve_operation_applicability() {
-    let mut cases = 0_usize;
+    let mut cases = 0usize;
     for capability in CAPABILITIES {
         for result in RESULTS {
-            let expected = expected_operation(capability).and_then(|operation| {
-                result_applies(operation, result)
-                    .then(|| expected_disposition(result))
-            });
+            let expected =
+                expected_operation(capability).and_then(|operation| {
+                    result_applies(operation, result)
+                        .then(|| expected_disposition(result))
+                });
             assert_eq!(
                 mcp_semantic_command_commit_disposition(capability, result),
                 expected,
@@ -158,14 +186,11 @@ fn all_24_capability_cancellation_pairs_project_only_through_apply() {
         ApplicationCancellationObservation::RequestOnly,
         ApplicationCancellationObservation::TookEffectBeforeBoundary,
     ];
-    let mut cases = 0_usize;
+    let mut cases = 0usize;
     for capability in CAPABILITIES {
         for observation in OBSERVATIONS {
-            let expected = if capability
-                != McpApplicationCapabilityClass::Apply
+            let expected = if capability == McpApplicationCapabilityClass::Apply
             {
-                None
-            } else {
                 match observation {
                     ApplicationCancellationObservation::
                         EffectBoundaryCrossed => {
@@ -177,6 +202,8 @@ fn all_24_capability_cancellation_pairs_project_only_through_apply() {
                         Some(SemanticCommandResultClass::CancelledBeforeCommit)
                     },
                 }
+            } else {
+                None
             };
             assert_eq!(
                 mcp_semantic_apply_cancellation_result(capability, observation),

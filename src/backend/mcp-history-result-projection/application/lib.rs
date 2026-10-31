@@ -35,12 +35,16 @@
 
 //! Read-only MCP projection onto shared semantic-history application meaning.
 
+// The semantic notebook is a dev dependency used by the integration fixture.
+#[cfg(test)]
+use atrament_semantic_notebook as _;
+
 use atrament_application_operation_lifecycle as lifecycle;
 use atrament_mcp_capability_effect::McpApplicationCapabilityClass;
 use atrament_semantic_history_result::{
-    SemanticHistoryCommitDisposition, SemanticHistoryResultClass,
     classify_history_cancellation_result, semantic_history_commit_disposition,
-    semantic_history_direction_is_available,
+    semantic_history_direction_is_available, SemanticHistoryCommitDisposition,
+    SemanticHistoryResultClass,
 };
 use atrament_semantic_notebook_port::{
     HistoryAvailabilityOutcome, HistoryDirection,
@@ -60,7 +64,7 @@ pub const fn mcp_history_cancellation_result(
     match capability {
         McpApplicationCapabilityClass::HistoryTraversal => {
             classify_history_cancellation_result(observation)
-        },
+        }
         McpApplicationCapabilityClass::Apply
         | McpApplicationCapabilityClass::CommandContext
         | McpApplicationCapabilityClass::Export
@@ -81,7 +85,7 @@ pub const fn mcp_history_commit_disposition(
     match capability {
         McpApplicationCapabilityClass::HistoryTraversal => {
             Some(semantic_history_commit_disposition(result))
-        },
+        }
         McpApplicationCapabilityClass::Apply
         | McpApplicationCapabilityClass::CommandContext
         | McpApplicationCapabilityClass::Export
