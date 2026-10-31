@@ -474,6 +474,12 @@ whitespace. The parser now checks exact HTTP token names, refuses invalid
 field-value controls, and trims only SP/HTAB on header values and tokens.
 Ordinary Firefox upgrade headers remain accepted; this is harness hardening.
 
+The real-runtime socket fixture also previously waited indefinitely after
+SIGKILL if its child failed to exit. Red-first fake processes now cover an
+unresponsive child, a failed signal, a thrown kill, and a delayed successful
+exit. Teardown now applies a 10-second forced-reap budget and removes process
+observers on every outcome without changing production shutdown semantics.
+
 A full-browser stress run exposed that a 2-second forced-kill reap deadline
 was too short under workstation memory pressure. The bounded SIGKILL window
 is now 10 seconds, while a separate delayed-exit fixture proves successful

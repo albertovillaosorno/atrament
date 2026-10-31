@@ -292,14 +292,114 @@ function processInternetSocketRows(pid, inodes) {
     return rows;
 }
 
-async function terminateChild(child) {
+function terminateChild(child, forcedMs = 10_000) {
     if (child.exitCode !== null || child.signalCode !== null) {
-        return;
+        return Promise.resolve();
     }
-    const exited = new Promise((resolve) => child.once("exit", resolve));
-    child.kill("SIGKILL");
-    await exited;
+    return new Promise((resolve, reject) => {
+        let settled = false;
+        const finish = (error = null) => {
+            if (settled) {
+                return;
+            }
+            settled = true;
+            clearTimeout(timer);
+            child.off("exit", onExit);
+            child.off("error", onError);
+            if (error === null) {
+                resolve();
+            } else {
+                reject(error);
+            }
+        };
+        const onExit = () => finish();
+        const onError = (error) => finish(error);
+        const timer = setTimeout(() => finish(new Error(
+            "disposable runtime child did not exit after SIGKILL",
+        )), forcedMs);
+        child.once("exit", onExit);
+        child.once("error", onError);
+        try {
+            if (!child.kill("SIGKILL") && !settled) {
+                finish(new Error("disposable runtime child SIGKILL failed"));
+            }
+        } catch (error) {
+            finish(error);
+        }
+    });
 }
+
+function fixtureTerminationChild(kill) {
+    const child = new EventEmitter();
+    child.exitCode = null;
+    child.signalCode = null;
+    child.kill = kill;
+    return child;
+}
+
+// An unresponsive fake process must not hang the test runner indefinitely.
+async function shutdownWithin(child, forcedMs = 20) {
+    let timer;
+    try {
+        return await Promise.race([
+            terminateChild(child, forcedMs),
+            new Promise((_resolve, reject) => {
+                timer = setTimeout(() => reject(new Error(
+                    "fixture deadline elapsed before child shutdown",
+                )), 120);
+            }),
+        ]);
+    } finally {
+        clearTimeout(timer);
+    }
+}
+
+test("runtime startup child shutdown has a bounded SIGKILL reap", async () => {
+    const signals = [];
+    const child = fixtureTerminationChild((signal) => {
+        signals.push(signal);
+        return true;
+    });
+    await assert.rejects(shutdownWithin(child),
+        /disposable runtime child did not exit after SIGKILL/);
+    assert.deepEqual(signals, ["SIGKILL"]);
+    assert.equal(child.listenerCount("exit"), 0);
+    assert.equal(child.listenerCount("error"), 0);
+});
+
+test("runtime startup child shutdown cleans observers if kill throws",
+    async () => {
+        const failure = new Error("synthetic SIGKILL failure");
+        const child = fixtureTerminationChild(() => { throw failure; });
+        await assert.rejects(terminateChild(child),
+            (error) => error === failure);
+        assert.equal(child.listenerCount("exit"), 0);
+        assert.equal(child.listenerCount("error"), 0);
+    });
+
+test("runtime startup child shutdown rejects an unsuccessful kill",
+    async () => {
+        const child = fixtureTerminationChild(() => false);
+        await assert.rejects(shutdownWithin(child),
+            /disposable runtime child SIGKILL failed/);
+        assert.equal(child.listenerCount("exit"), 0);
+    });
+
+test("runtime startup child shutdown observes a delayed SIGKILL exit",
+    async () => {
+        let child;
+        child = fixtureTerminationChild((signal) => {
+            assert.equal(signal, "SIGKILL");
+            setTimeout(() => {
+                child.signalCode = signal;
+                child.emit("exit", null, signal);
+            }, 30);
+            return true;
+        });
+        await terminateChild(child, 100);
+        assert.equal(child.listenerCount("exit"), 0);
+        assert.equal(child.listenerCount("error"), 0);
+    });
 
 test("failed browser launch never publishes runtime ready", () => {
     buildRuntime();
