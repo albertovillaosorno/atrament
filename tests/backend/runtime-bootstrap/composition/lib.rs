@@ -814,6 +814,69 @@ fn cli_repack_refuses_same_source_and_target_without_in_place_rewrite() {
 
 #[cfg(target_os = "linux")]
 #[test]
+fn cli_repack_hardlinked_target_requires_replace_without_mutating_source() {
+    use std::os::unix::fs::MetadataExt as _;
+
+    let section = br#"{"verified":"hardlinked-source-6108"}"#;
+    let original = profile_zip(section, b"private-hardlink-asset", section);
+    let source = OwnedProfileFile::new(&original);
+    let destination = OwnedProfileDestination(
+        source.0.with_extension("hardlink-target.atrament"),
+    );
+    fs::hard_link(&source.0, &destination.0)
+        .expect("test selected target aliases the original inode");
+    let source_inode = fs::metadata(&source.0).expect("source inode").ino();
+    assert_eq!(
+        fs::metadata(&destination.0).expect("linked inode").ino(),
+        source_inode,
+    );
+    let refused = Command::new(env!("CARGO_BIN_EXE_atrament"))
+        .args(["profile", "repack"])
+        .arg(&source.0)
+        .arg(&destination.0)
+        .output()
+        .expect("try to repack into hardlinked existing target");
+    assert!(!refused.status.success());
+    assert!(refused.stdout.is_empty());
+    assert!(String::from_utf8_lossy(&refused.stderr).contains("TargetExists"));
+    assert_eq!(fs::read(&source.0).expect("source preserved"), original);
+    assert_eq!(fs::read(&destination.0).expect("alias preserved"), original);
+    assert_eq!(
+        fs::metadata(&destination.0).expect("same linked inode").ino(),
+        source_inode,
+    );
+
+    let replaced = Command::new(env!("CARGO_BIN_EXE_atrament"))
+        .args(["profile", "repack", "--replace"])
+        .arg(&source.0)
+        .arg(&destination.0)
+        .output()
+        .expect("explicitly replace one hardlink destination");
+    assert!(replaced.status.success());
+    assert!(replaced.stderr.is_empty());
+    assert_eq!(
+        replaced.stdout,
+        b"profile repacked (verified; no session import)\n",
+    );
+    let canonical = fs::read(&destination.0).expect("new canonical ZIP");
+    assert_ne!(canonical, original, "noncanonical original is untouched");
+    assert_eq!(fs::read(&source.0).expect("linked source intact"), original);
+    assert_eq!(
+        fs::metadata(&source.0).expect("source inode").ino(),
+        source_inode,
+    );
+    assert_ne!(
+        fs::metadata(&destination.0).expect("new selected inode").ino(),
+        source_inode,
+    );
+    let inspection = bootstrap::inspect_profile(destination.0.clone())
+        .expect("replaced alias independently verifies");
+    assert!(inspection.contains("hardlinked-source-6108"));
+    assert!(!inspection.contains("private-hardlink-asset"));
+}
+
+#[cfg(target_os = "linux")]
+#[test]
 fn cli_repack_canonically_preserves_verified_sections_assets_and_features() {
     use std::os::unix::fs::PermissionsExt as _;
 

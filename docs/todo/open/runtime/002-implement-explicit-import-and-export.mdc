@@ -972,3 +972,11 @@ This is an observed-metadata drift guard, not a secure historical file snapshot:
 external processes can change the pathname or bytes after the final check,
 and file timestamps can be adjusted or reused. Only a trusted caller-owned
 Export session can admit requests or return the original synced receipt.
+
+An additional real-process profile CLI regression selects a verified source and
+an existing destination that are hardlinks to the same underlying inode.
+Default repack refuses `TargetExists` and preserves both names and their bytes;
+independently authorized `--replace` instead atomically publishes a distinct
+canonical target inode. The verified source retains its original inode and
+complete pre-repack bytes; the new output passes independent profile inspection.
+This proves explicit overwrite does not silently rewrite the linked source.
