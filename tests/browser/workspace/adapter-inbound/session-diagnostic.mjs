@@ -133,12 +133,49 @@ test("diagnostic parser rejects sparse and inherited diagnostic slots", () => {
     }
 });
 
+test("diagnostic metadata requires own wire fields", () => {
+    const validItem = { code: "atrament.example.condition" };
+    const valid = {
+        version: DIAGNOSTIC_VERSION,
+        completeness: "complete",
+        items: [validItem],
+    };
+    const inheritedRoot = Object.create(valid);
+    const inheritedCompleteness = Object.assign(
+        Object.create({ completeness: "complete" }),
+        { version: DIAGNOSTIC_VERSION, items: [validItem] },
+    );
+    const inheritedItems = Object.assign(
+        Object.create({ items: [validItem] }),
+        { version: DIAGNOSTIC_VERSION, completeness: "complete" },
+    );
+    const inheritedItem = Object.assign(
+        Object.create(validItem), { detail: 42 },
+    );
+    for (const malformed of [
+        inheritedRoot,
+        inheritedCompleteness,
+        inheritedItems,
+        { ...valid, items: [inheritedItem] },
+    ]) {
+        assert.equal(parseDiagnosticSet(malformed), null);
+    }
+    const ownNullPrototype = Object.assign(Object.create(null), valid);
+    assert.deepEqual(parseDiagnosticSet(ownNullPrototype), {
+        completeness: "complete",
+        items: [validItem],
+    });
+});
+
 function referenceDiagnosticSet(value) {
     if (typeof value !== "object" || value === null || Array.isArray(value)) {
         return null;
     }
     if (
-        value.version !== DIAGNOSTIC_VERSION
+        !Object.hasOwn(value, "version")
+        || !Object.hasOwn(value, "completeness")
+        || !Object.hasOwn(value, "items")
+        || value.version !== DIAGNOSTIC_VERSION
         || !["complete", "incomplete"].includes(value.completeness)
         || !Array.isArray(value.items)
     ) {
@@ -152,6 +189,7 @@ function referenceDiagnosticSet(value) {
             typeof item !== "object"
             || item === null
             || Array.isArray(item)
+            || !Object.hasOwn(item, "code")
             || typeof item.code !== "string"
             || item.code === ""
         ) {

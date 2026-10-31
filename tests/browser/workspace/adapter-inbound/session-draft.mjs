@@ -132,11 +132,33 @@ test("draft resource-limit response refuses array-shaped roots", () => {
     assert.equal(isResourceLimit(forged), false);
 });
 
+test("draft resource-limit requires own response error identity", () => {
+    const metadata = {
+        version: "atrament.diagnostic/1",
+        completeness: "complete",
+        items: [{ code: "atrament.session-draft.resource-limit" }],
+    };
+    const inheritedError = Object.assign(
+        Object.create({ error: "resource_limit" }),
+        { diagnostics: metadata },
+    );
+    const inheritedDiagnostics = Object.assign(
+        Object.create({ diagnostics: metadata }),
+        { error: "resource_limit" },
+    );
+    for (const value of [inheritedError, inheritedDiagnostics]) {
+        assert.equal(referenceResourceLimit(value), false);
+        assert.equal(isResourceLimit(value), false);
+    }
+});
+
 function referenceResourceLimit(value) {
     if (
         typeof value !== "object"
         || value === null
         || Array.isArray(value)
+        || !Object.hasOwn(value, "error")
+        || !Object.hasOwn(value, "diagnostics")
         || value.error !== "resource_limit"
     ) {
         return false;
@@ -146,6 +168,9 @@ function referenceResourceLimit(value) {
         typeof diagnostics !== "object"
         || diagnostics === null
         || Array.isArray(diagnostics)
+        || !["version", "completeness", "items"].every(
+            (field) => Object.hasOwn(diagnostics, field),
+        )
         || diagnostics.version !== "atrament.diagnostic/1"
         || !["complete", "incomplete"].includes(diagnostics.completeness)
         || !Array.isArray(diagnostics.items)
@@ -157,6 +182,7 @@ function referenceResourceLimit(value) {
     return typeof item === "object"
         && item !== null
         && !Array.isArray(item)
+        && Object.hasOwn(item, "code")
         && item.code === "atrament.session-draft.resource-limit";
 }
 

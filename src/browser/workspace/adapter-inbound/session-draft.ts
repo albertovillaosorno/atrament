@@ -70,7 +70,12 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 export function isResourceLimit(value: unknown): boolean {
-    if (!isRecord(value) || value.error !== "resource_limit") {
+    if (
+        !isRecord(value)
+        || !Object.hasOwn(value, "error")
+        || !Object.hasOwn(value, "diagnostics")
+        || value.error !== "resource_limit"
+    ) {
         return false;
     }
     const metadata = parseDiagnosticSet(value.diagnostics);

@@ -55,6 +55,7 @@ function isCompleteness(value: unknown): value is DiagnosticCompleteness {
 
 function isDiagnosticItem(value: unknown): value is DiagnosticItem {
     return isRecord(value)
+        && Object.hasOwn(value, "code")
         && typeof value.code === "string"
         && value.code !== "";
 }
@@ -75,7 +76,10 @@ export function parseDiagnosticSet(
         return null;
     }
     if (
-        value.version !== DIAGNOSTIC_VERSION
+        !Object.hasOwn(value, "version")
+        || !Object.hasOwn(value, "completeness")
+        || !Object.hasOwn(value, "items")
+        || value.version !== DIAGNOSTIC_VERSION
         || !isCompleteness(value.completeness)
         || !Array.isArray(value.items)
         || !hasValidDiagnosticItems(value.items)

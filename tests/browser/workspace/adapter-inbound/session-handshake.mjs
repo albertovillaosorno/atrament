@@ -197,8 +197,64 @@ test("handshake refuses arrays posing as response or version records", () => {
     }
 });
 
+test("handshake requires own result and version diagnostic identities", () => {
+    const inheritedResult = Object.assign(
+        Object.create({ result: "compatible" }),
+        { versions: CURRENT_VERSIONS },
+    );
+    const inheritedVersion = Object.assign(
+        Object.create({ prompt: CURRENT_VERSIONS.prompt }),
+        Object.fromEntries(
+            Object.entries(CURRENT_VERSIONS).filter(
+                ([key]) => key !== "prompt",
+            ),
+        ),
+    );
+    const mismatch = {
+        code: "atrament.handshake.version-mismatch",
+        dimension: "prompt",
+        expected: CURRENT_VERSIONS.prompt,
+    };
+    const inheritedDimension = Object.assign(
+        Object.create({ dimension: "prompt" }),
+        { code: mismatch.code, expected: mismatch.expected },
+    );
+    const inheritedExpected = Object.assign(
+        Object.create({ expected: mismatch.expected }),
+        { code: mismatch.code, dimension: "prompt" },
+    );
+    const diagnosticSet = (item) => ({
+        version: "atrament.diagnostic/1",
+        completeness: "complete",
+        items: [item],
+    });
+    for (const payload of [
+        inheritedResult,
+        { result: "compatible", versions: inheritedVersion },
+        {
+            result: "incompatible",
+            diagnostics: diagnosticSet(inheritedDimension),
+        },
+        {
+            result: "incompatible",
+            diagnostics: diagnosticSet(inheritedExpected),
+        },
+        Object.assign(
+            Object.create({ diagnostics: diagnosticSet(mismatch) }),
+            { result: "incompatible" },
+        ),
+    ]) {
+        assert.deepEqual(parseHandshakePayload(payload), { kind: "invalid" });
+    }
+});
+
 function referenceHandshakeOutcome(value) {
-    if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    if (
+        typeof value !== "object"
+        || value === null
+        || Array.isArray(value)
+        || !Object.hasOwn(value, "result")
+    ) {
         return { kind: "invalid" };
     }
     if (value.result === "compatible") {
@@ -207,8 +263,10 @@ function referenceHandshakeOutcome(value) {
             typeof versions === "object"
             && versions !== null
             && !Array.isArray(versions)
+            && Object.hasOwn(value, "versions")
             && Object.entries(CURRENT_VERSIONS).every(
-                ([dimension, expected]) => versions[dimension] === expected,
+                ([dimension, expected]) => Object.hasOwn(versions, dimension)
+                    && versions[dimension] === expected,
             )
         ) {
             return { kind: "compatible" };
@@ -223,6 +281,10 @@ function referenceHandshakeOutcome(value) {
         typeof diagnostics !== "object"
         || diagnostics === null
         || Array.isArray(diagnostics)
+        || !Object.hasOwn(value, "diagnostics")
+        || !["version", "completeness", "items"].every(
+            (field) => Object.hasOwn(diagnostics, field),
+        )
         || diagnostics.version !== "atrament.diagnostic/1"
         || !["complete", "incomplete"].includes(diagnostics.completeness)
         || !Array.isArray(diagnostics.items)
@@ -235,6 +297,9 @@ function referenceHandshakeOutcome(value) {
         typeof item !== "object"
         || item === null
         || Array.isArray(item)
+        || !["code", "dimension", "expected"].every(
+            (field) => Object.hasOwn(item, field),
+        )
         || item.code !== "atrament.handshake.version-mismatch"
         || !Object.hasOwn(CURRENT_VERSIONS, item.dimension)
         || item.expected !== CURRENT_VERSIONS[item.dimension]

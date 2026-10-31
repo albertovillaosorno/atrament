@@ -94,7 +94,8 @@ function hasCurrentVersions(value: unknown): boolean {
         return false;
     }
     return VERSION_DIMENSIONS.every((dimension) => {
-        return value[dimension] === CURRENT_VERSIONS[dimension];
+        return Object.hasOwn(value, dimension)
+            && value[dimension] === CURRENT_VERSIONS[dimension];
     });
 }
 
@@ -113,16 +114,21 @@ export function handshakeHeaders(
 }
 
 export function parseHandshakePayload(value: unknown): HandshakeOutcome {
-    if (!isRecord(value)) {
+    if (!isRecord(value) || !Object.hasOwn(value, "result")) {
         return { kind: "invalid" };
     }
     if (
         value.result === "compatible"
+        && Object.hasOwn(value, "versions")
         && hasCurrentVersions(value.versions)
     ) {
         return { kind: "compatible" };
     }
-    if (value.result !== "incompatible" || !isRecord(value.diagnostics)) {
+    if (
+        value.result !== "incompatible"
+        || !Object.hasOwn(value, "diagnostics")
+        || !isRecord(value.diagnostics)
+    ) {
         return { kind: "invalid" };
     }
     const metadata = parseDiagnosticSet(value.diagnostics);
@@ -133,6 +139,8 @@ export function parseHandshakePayload(value: unknown): HandshakeOutcome {
     if (
         diagnostic === undefined
         || diagnostic.code !== "atrament.handshake.version-mismatch"
+        || !Object.hasOwn(diagnostic, "dimension")
+        || !Object.hasOwn(diagnostic, "expected")
         || !isVersionDimension(diagnostic.dimension)
         || diagnostic.expected !== CURRENT_VERSIONS[diagnostic.dimension]
     ) {

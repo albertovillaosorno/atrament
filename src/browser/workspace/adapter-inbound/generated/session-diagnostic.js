@@ -41,6 +41,7 @@ function isCompleteness(value) {
 }
 function isDiagnosticItem(value) {
     return isRecord(value)
+        && Object.hasOwn(value, "code")
         && typeof value.code === "string"
         && value.code !== "";
 }
@@ -56,7 +57,10 @@ export function parseDiagnosticSet(value) {
     if (!isRecord(value)) {
         return null;
     }
-    if (value.version !== DIAGNOSTIC_VERSION
+    if (!Object.hasOwn(value, "version")
+        || !Object.hasOwn(value, "completeness")
+        || !Object.hasOwn(value, "items")
+        || value.version !== DIAGNOSTIC_VERSION
         || !isCompleteness(value.completeness)
         || !Array.isArray(value.items)
         || !hasValidDiagnosticItems(value.items)) {

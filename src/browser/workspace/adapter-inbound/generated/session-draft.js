@@ -58,7 +58,10 @@ function isRecord(value) {
         && !Array.isArray(value);
 }
 export function isResourceLimit(value) {
-    if (!isRecord(value) || value.error !== "resource_limit") {
+    if (!isRecord(value)
+        || !Object.hasOwn(value, "error")
+        || !Object.hasOwn(value, "diagnostics")
+        || value.error !== "resource_limit") {
         return false;
     }
     const metadata = parseDiagnosticSet(value.diagnostics);

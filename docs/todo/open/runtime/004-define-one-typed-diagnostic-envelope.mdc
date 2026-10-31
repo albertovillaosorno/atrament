@@ -90,3 +90,11 @@ diagnostic items. A red-first regression showed that `Array.every` skipped a
 sparse slot and accepted metadata without the required item record. The parser
 now checks own occupied slots, including arrays constructed in-process; this
 does not imply such sparse shapes can arrive through JSON transport.
+
+The browser diagnostic, handshake and draft parsers also require own data
+properties for protocol fields instead of accepting prototype-inherited values.
+Red-first JavaScript fixtures proved that ordinary objects with inherited
+version, completeness, item code, handshake dimensions, or resource-limit error
+were previously misclassified as admitted metadata. A null-prototype object
+with genuine own fields still passes; the ordinary JSON response flow is
+unchanged. This is local shape validation, not evidence of remote exploitation.
