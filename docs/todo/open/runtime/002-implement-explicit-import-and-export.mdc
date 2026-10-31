@@ -51,8 +51,11 @@ CWD change observed during path resolution refuses with a typed drift error
 instead of admitting an obsolete relative selection. Trusted callers may also
 supply a previously opened CWD descriptor to a separate relative-only opener:
 a child-process regression verifies a moved CWD refuses, a restored CWD still
-opens exact bytes, and absolute selection remains independent. This observation
-is not atomic with later changes and does not authenticate Import.
+opens exact bytes, and absolute selection remains independent. The pinned
+entrypoint separately refuses both leaf and parent links, parent traversal,
+malformed names and absent sources without reading unrelated candidate bytes.
+These observations are not atomic with later changes and do not authenticate
+Import.
 
 The read-only profile inspector now reserves its section reference inventory
 fallibly and plans the exact complete display length, including canonical root,

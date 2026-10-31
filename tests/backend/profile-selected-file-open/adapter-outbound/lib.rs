@@ -47,6 +47,8 @@ use nix as _;
 use std::fs::{self, File};
 #[cfg(target_os = "linux")]
 use std::io::{self, Read as _, Write as _};
+#[cfg(target_os = "linux")]
+use std::os::unix::fs::symlink;
 use std::path::{Path, PathBuf};
 #[cfg(target_os = "linux")]
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -121,8 +123,6 @@ fn malformed_selected_paths_refuse_before_opening_any_anchor() {
 #[cfg(target_os = "linux")]
 #[test]
 fn symlinked_file_and_parent_directory_are_both_forbidden() {
-    use std::os::unix::fs::symlink;
-
     let owned = OwnedTestDirectory::new(false);
     let real = owned.write("real.atrament", b"untrusted content");
     let leaf = owned.0.join("alias.atrament");
@@ -164,6 +164,10 @@ fn relative_path_is_resolved_under_cwd_without_link_traversal() {
 
 #[cfg(target_os = "linux")]
 #[test]
+#[expect(
+    clippy::too_many_lines,
+    reason = "single isolated CWD lifecycle proves path and link policy parity"
+)]
 fn selected_cwd_anchor_refuses_redirection_to_different_process_cwd() {
     const CHILD: &str = "ATRAMENT_TEST_SELECTED_CWD_ANCHOR";
     if env::var_os(CHILD).is_none() {
@@ -225,6 +229,56 @@ fn selected_cwd_anchor_refuses_redirection_to_different_process_cwd() {
     let mut bytes = Vec::new();
     let _read = stable.read_to_end(&mut bytes).expect("read selected source");
     assert_eq!(bytes, b"first");
+
+    // The pinned-CWD entrypoint must not weaken selected-path preflight or
+    // permit a link to redirect bytes into a different candidate directory.
+    symlink(second.join("chosen.atrament"), first.join("linked.atrament"))
+        .expect("test-owned selected-file link");
+    symlink(&second, first.join("linked-parent"))
+        .expect("test-owned selected-directory link");
+    for selected in ["linked.atrament", "linked-parent/chosen.atrament"] {
+        assert_eq!(
+            open_selected_profile_file_from_cwd(Path::new(selected), &captured)
+                .expect_err("pinned selection cannot follow links"),
+            Error::SymlinkForbidden,
+        );
+    }
+    assert_eq!(
+        open_selected_profile_file_from_cwd(
+            Path::new("../second/chosen.atrament"),
+            &captured,
+        )
+        .expect_err("pinned selection forbids parent traversal"),
+        Error::ParentTraversal,
+    );
+    for selected in ["", ".", "name/", "name/.", "bad\0name"] {
+        assert_eq!(
+            open_selected_profile_file_from_cwd(Path::new(selected), &captured)
+                .expect_err("pinned selection rejects malformed names"),
+            Error::InvalidSelectedPath,
+        );
+    }
+    assert_eq!(
+        open_selected_profile_file_from_cwd(
+            Path::new("linked-parent"),
+            &captured,
+        )
+        .expect_err("even a directory link is forbidden"),
+        Error::SymlinkForbidden,
+    );
+    assert_eq!(
+        open_selected_profile_file_from_cwd(
+            Path::new("absent.atrament"),
+            &captured,
+        )
+        .expect_err("pinned selection cannot invent sources"),
+        Error::FileIo(io::ErrorKind::NotFound),
+    );
+    assert_eq!(
+        fs::read(second.join("chosen.atrament"))
+            .expect("unselected candidate remains readable"),
+        b"second",
+    );
 
     env::set_current_dir(&second).expect("switch for absolute selection");
     let mut absolute = open_selected_profile_file(
