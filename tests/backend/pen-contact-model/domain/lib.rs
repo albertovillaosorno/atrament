@@ -49,7 +49,7 @@ fn pressure_force_and_dimensionless_proxy_remain_distinct() {
         PressureInput::CalibratedForce(3);
     let proxy = PressureInput::DimensionlessProxy {
         name: "tablet-pressure",
-        value: 3_u16,
+        value: 3u16,
     };
     assert_ne!(force, proxy);
 }
@@ -58,19 +58,19 @@ fn pressure_force_and_dimensionless_proxy_remain_distinct() {
 fn contact_input_retains_all_measurable_model_inputs() {
     let input = ContactModelInput {
         contact_state: "down",
-        curvature: 9_i32,
+        curvature: 9i32,
         direction: "north-east",
-        dwell_time: 4_u16,
-        position: (120_i32, 240_i32),
+        dwell_time: 4u16,
+        position: (120i32, 240i32),
         pressure: PressureInput::<u16, &str, u16>::DimensionlessProxy {
             name: "capture-proxy",
             value: 700,
         },
-        speed: 18_u16,
+        speed: 18u16,
     };
-    assert_eq!(input.position, (120, 240));
+    assert_eq!(input.position, (120i32, 240i32));
     assert_eq!(input.direction, "north-east");
-    assert_eq!(input.curvature, 9);
+    assert_eq!(input.curvature, 9i32);
     assert_eq!(input.speed, 18);
     assert_eq!(input.dwell_time, 4);
     assert_eq!(input.contact_state, "down");
@@ -80,11 +80,11 @@ fn contact_input_retains_all_measurable_model_inputs() {
 fn contact_output_retains_all_accepted_observable_response_families() {
     let output = ContactModelOutput {
         absorption_or_drying_response: "drying-12",
-        coverage: 84_u16,
-        edge_displacement: -3_i16,
-        pooling: 7_u16,
-        starvation: 2_u16,
-        trace_width: 410_u16,
+        coverage: 84u16,
+        edge_displacement: -3i16,
+        pooling: 7u16,
+        starvation: 2u16,
+        trace_width: 410u16,
     };
     assert_eq!(output.trace_width, 410);
     assert_eq!(output.coverage, 84);
@@ -95,8 +95,7 @@ fn contact_output_retains_all_accepted_observable_response_families() {
 }
 
 #[test]
-fn contact_preset_retains_validation_scope_and_known_failure_evidence(
-) {
+fn contact_preset_retains_validation_scope_and_known_failure_evidence() {
     let evidence = ContactPresetEvidence {
         conditions: ["room-temperature", "flat-sheet"],
         error_measures: ["width-rmse", "coverage-rmse"],
@@ -132,8 +131,8 @@ fn fitted_parameter_evidence_retains_units_provenance_confidence_and_error() {
         error_measure: "rmse-0.7",
         evidence: "controlled-line-17",
         input_range: CalibratedInputRange {
-            maximum: 900_u16,
-            minimum: 100_u16,
+            maximum: 900u16,
+            minimum: 100u16,
         },
         unit: "dimensionless-proxy",
     };
@@ -146,23 +145,23 @@ fn fitted_parameter_evidence_retains_units_provenance_confidence_and_error() {
 #[test]
 fn calibrated_range_classifies_boundaries_and_extrapolation_explicitly() {
     let range = CalibratedInputRange {
-        maximum: 20_i32,
-        minimum: 10_i32,
+        maximum: 20i32,
+        minimum: 10i32,
     };
     assert_eq!(
-        classify_contact_input(&10, &range),
+        classify_contact_input(&10i32, &range),
         Ok(ContactInputAdmission::Calibrated),
     );
     assert_eq!(
-        classify_contact_input(&20, &range),
+        classify_contact_input(&20i32, &range),
         Ok(ContactInputAdmission::Calibrated),
     );
     assert_eq!(
-        classify_contact_input(&9, &range),
+        classify_contact_input(&9i32, &range),
         Ok(ContactInputAdmission::ExtrapolationRequired),
     );
     assert_eq!(
-        classify_contact_input(&21, &range),
+        classify_contact_input(&21i32, &range),
         Ok(ContactInputAdmission::ExtrapolationRequired),
     );
 }
@@ -170,21 +169,20 @@ fn calibrated_range_classifies_boundaries_and_extrapolation_explicitly() {
 #[test]
 fn inverted_calibrated_range_rejects_before_classification() {
     let range = CalibratedInputRange {
-        maximum: 10_i32,
-        minimum: 20_i32,
+        maximum: 10i32,
+        minimum: 20i32,
     };
     assert_eq!(
-        classify_contact_input(&15, &range),
+        classify_contact_input(&15i32, &range),
         Err(CalibratedInputRangeError::MinimumAboveMaximum),
     );
 }
 
-
 #[test]
 fn observable_output_envelope_includes_both_boundaries() {
     let range = ObservableOutputRange {
-        maximum: 480_u16,
-        minimum: 320_u16,
+        maximum: 480u16,
+        minimum: 320u16,
     };
     assert_eq!(
         classify_contact_output(&320, &range),
@@ -207,23 +205,22 @@ fn observable_output_envelope_includes_both_boundaries() {
 #[test]
 fn inverted_observable_output_envelope_rejects_before_classification() {
     let range = ObservableOutputRange {
-        maximum: 10_i32,
-        minimum: 20_i32,
+        maximum: 10i32,
+        minimum: 20i32,
     };
     assert_eq!(
-        classify_contact_output(&15, &range),
+        classify_contact_output(&15i32, &range),
         Err(ObservableOutputRangeError::MinimumAboveMaximum),
     );
 }
 
-
 #[test]
 fn every_compact_input_range_triple_matches_calibration_oracle() {
-    let mut cases = 0_u16;
+    let mut cases = 0u16;
     let mut outcomes = [false; 3];
-    for minimum in -3_i8..=3 {
-        for maximum in -3_i8..=3 {
-            for input in -3_i8..=3 {
+    for minimum in -3i8..=3 {
+        for maximum in -3i8..=3 {
+            for input in -3i8..=3 {
                 let range = CalibratedInputRange { minimum, maximum };
                 let expected = if minimum > maximum {
                     outcomes[0] = true;
@@ -250,11 +247,11 @@ fn every_compact_input_range_triple_matches_calibration_oracle() {
 
 #[test]
 fn every_compact_output_range_triple_matches_boundedness_oracle() {
-    let mut cases = 0_u16;
+    let mut cases = 0u16;
     let mut outcomes = [false; 3];
-    for minimum in -3_i8..=3 {
-        for maximum in -3_i8..=3 {
-            for output in -3_i8..=3 {
+    for minimum in -3i8..=3 {
+        for maximum in -3i8..=3 {
+            for output in -3i8..=3 {
                 let range = ObservableOutputRange { minimum, maximum };
                 let expected = if minimum > maximum {
                     outcomes[0] = true;
