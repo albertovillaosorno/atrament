@@ -272,8 +272,13 @@ fn cli_args_reject_unknown_and_incomplete_commands_without_startup() {
 fn repack_cli_refuses_ambiguous_bare_option_as_file_path() {
     for arguments in [
         vec!["profile", "repack", "not-a-file", "--replace"],
+        vec!["profile", "repack", "not-a-file", "--replcae"],
+        vec!["profile", "repack", "not-a-file", "-x"],
+        vec!["profile", "repack", "-unknown", "target"],
         vec!["profile", "repack", "--replace", "--replace", "target"],
+        vec!["profile", "repack", "--replace", "-unknown", "target"],
         vec!["profile", "repack", "--replace", "not-a-file", "--replace"],
+        vec!["profile", "repack", "--replace", "not-a-file", "-x"],
     ] {
         assert_eq!(
             bootstrap::inspect_cli_args(
@@ -297,17 +302,22 @@ fn repack_cli_requires_unambiguous_path_for_option_named_target() {
         "option-destination-folder",
     ));
     let target = OwnedProfileDestination(folder.0.join("--replace"));
-    let rejected = Command::new(env!("CARGO_BIN_EXE_atrament"))
-        .current_dir(&folder.0)
-        .args(["profile", "repack"])
-        .arg(&source.0)
-        .arg("--replace")
-        .output()
-        .expect("run misplaced bare replacement option");
-    assert!(!rejected.status.success());
-    assert!(rejected.stdout.is_empty());
-    assert!(String::from_utf8_lossy(&rejected.stderr).contains("usage:"));
-    assert!(!target.0.exists(), "misplaced option created no target");
+    for option in ["--replace", "--replcae", "-x"] {
+        let rejected = Command::new(env!("CARGO_BIN_EXE_atrament"))
+            .current_dir(&folder.0)
+            .args(["profile", "repack"])
+            .arg(&source.0)
+            .arg(option)
+            .output()
+            .expect("run misplaced or unknown bare option");
+        assert!(!rejected.status.success());
+        assert!(rejected.stdout.is_empty());
+        let stderr = String::from_utf8_lossy(&rejected.stderr);
+        assert!(stderr.contains("usage:"));
+        assert!(!folder.0.join(option).exists(),
+            "bare option must not create a file");
+    }
+    assert!(!target.0.exists());
 
     let accepted = Command::new(env!("CARGO_BIN_EXE_atrament"))
         .current_dir(&folder.0)

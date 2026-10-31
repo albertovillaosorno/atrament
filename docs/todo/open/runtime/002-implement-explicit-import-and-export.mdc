@@ -79,11 +79,12 @@ argument refusal before any source opening. They establish local CLI intent
 only, not session Export authorization. Separate explicit-replacement CLI cases
 refuse directory targets and symlinked parent directories before writing.
 
-The CLI now refuses a bare positional `--replace` token as a source or target
-before it can open a profile or write an unintended file named after the flag.
-The explicit path `./--replace` still permits deliberate use of that filename.
-A real subprocess fixture proves the refusal creates no target and the
-unambiguous selection writes a complete verifiable profile.
+The CLI refuses all bare dash-prefixed positional source or target tokens
+before opening a profile or writing an unintended file named after an option,
+including a misspelled `--replace` flag. An explicit `./--replace` path still
+permits deliberate use of that filename. Real subprocess fixtures prove the
+refusals create no target and an unambiguous selection writes a complete
+verifiable profile.
 
 Current export design evidence freezes accepted-revision binding, caller-owned
 or explicit host-policy output intent, explicit path and overwrite behavior,

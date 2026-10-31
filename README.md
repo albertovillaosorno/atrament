@@ -201,8 +201,10 @@ caller-selected destination using atomic, synchronized file creation. By
 default, repack never overwrites an existing target. The explicit `--replace`
 flag authorizes atomic replacement of an existing regular target (including
 the selected source itself), or creation of an absent target, but never follows
-symlinks. Bare `--replace` is a CLI option, never a positional source or
-output name; prefix `./` to select a file literally named `--replace`.
+symlinks.
+
+Bare dash-prefixed tokens are treated as options, not source or output
+filenames. Prefix `./` to select a file such as `./--replace`.
 
 Both modes preserve verified opaque assets and unknown
 optional features. Unsupported required features and malformed sections refuse
