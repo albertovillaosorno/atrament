@@ -35,6 +35,9 @@
 
 //! Selected-path profile Import with bounded section syntax verification.
 
+use std::fmt;
+use std::fs::{File, Metadata};
+
 use atrament_explicit_file_path_intent::{
     ExplicitFilePathIntent, ExplicitFilePurpose,
 };
@@ -60,6 +63,7 @@ use atrament_profile_manifest_json_codec::{
 };
 use atrament_profile_selected_file_open::{
     ProfileSelectedFileOpenError, open_selected_profile_file,
+    open_selected_profile_file_from_cwd,
 };
 #[cfg(test)]
 use atrament_profile_stored_zip_writer as _;
@@ -113,6 +117,8 @@ pub enum ProfileOpenFileImportError {
         /// Original manifest index, without reflecting untrusted type text.
         index: usize,
     },
+    /// The securely reopened selected name no longer matches the source.
+    SelectedSourceChanged,
     /// The trusted host-opened source could not be read completely.
     Source(ProfileFileReadError),
     /// Features, inventory, declared budgets or SHA-256 did not match.
@@ -121,6 +127,105 @@ pub enum ProfileOpenFileImportError {
     WrongPathPurpose,
     /// ZIP CRC, framing, member order or resource admission failed.
     Zip(ProfileZipReadError),
+}
+
+/// An opened selected profile, bound to its initial pathname observation.
+///
+/// The probe can be consumed only once; a successful callback still requires
+/// complete ZIP, manifest, member-SHA and section JSON admission. A later
+/// secure pathname reopen must identify the same inode and metadata before
+/// verified content can reach the callback. This is race detection, not a
+/// locked pathname or a snapshot of a concurrently modified file.
+#[must_use]
+pub struct ProfileSelectedImportProbe<'selection> {
+    intent: &'selection ExplicitFilePathIntent,
+    opened: File,
+    original_metadata: Metadata,
+    selected_cwd: Option<File>,
+}
+
+impl fmt::Debug for ProfileSelectedImportProbe<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ProfileSelectedImportProbe")
+            .finish_non_exhaustive()
+    }
+}
+
+impl ProfileSelectedImportProbe<'_> {
+    /// Fully verify and recheck a selected source before invoking inspection.
+    ///
+    /// Reopening only after every ZIP and payload/section check avoids giving
+    /// the caller even a previously valid payload if the selected name moved
+    /// while verification ran. Relative paths retain the original CWD anchor.
+    /// The final observation cannot prevent a future pathname mutation.
+    ///
+    /// # Errors
+    ///
+    /// Refuses failed source, ZIP, manifest, SHA, section or pathname checks.
+    pub fn inspect<R, Inspect>(
+        self,
+        supported_required_features: &[&str],
+        limits: ProfileOpenFileImportLimits,
+        inspect: Inspect,
+    ) -> Result<R, ProfileOpenFileImportError>
+    where
+        Inspect: FnOnce(&VerifiedAttachedProfileImport<'_, '_, '_, '_>) -> R,
+    {
+        let Self {
+            intent,
+            opened,
+            original_metadata,
+            selected_cwd,
+        } = self;
+        // Retain the original descriptor through verification so the
+        // selected inode cannot be reclaimed and reused during the recheck.
+        let readable = opened.try_clone().map_err(|error| {
+            ProfileOpenFileImportError::Source(
+                ProfileFileReadError::FileIo(error.kind()),
+            )
+        })?;
+        inspect_open_profile_import(
+            intent,
+            |maximum| read_bounded_profile_file(readable, maximum),
+            supported_required_features,
+            limits,
+            |verified| {
+                let current = selected_cwd
+                    .as_ref()
+                    .map_or_else(
+                        || open_selected_profile_file(intent.path()),
+                        |cwd| {
+                            open_selected_profile_file_from_cwd(
+                                intent.path(), cwd,
+                            )
+                        },
+                    )
+                    .map_err(ProfileOpenFileImportError::Open)?;
+                let current_metadata = current.metadata().map_err(|error| {
+                    ProfileOpenFileImportError::Open(
+                        ProfileSelectedFileOpenError::FileIo(error.kind()),
+                    )
+                })?;
+                let opened_metadata = opened.metadata().map_err(|error| {
+                    ProfileOpenFileImportError::Open(
+                        ProfileSelectedFileOpenError::FileIo(error.kind()),
+                    )
+                })?;
+                if !same_selected_source_metadata(
+                    &original_metadata,
+                    &opened_metadata,
+                ) || !same_selected_source_metadata(
+                    &original_metadata,
+                    &current_metadata,
+                ) {
+                    return Err(
+                        ProfileOpenFileImportError::SelectedSourceChanged
+                    );
+                }
+                Ok(inspect(verified))
+            },
+        )?
+    }
 }
 
 /// Inspect all verified bytes from an independently opened profile file.
@@ -236,8 +341,10 @@ where
 ///
 /// This composition checks purpose before any filesystem access, opens only
 /// `intent.path()` via the secure platform policy, then reads and verifies the
-/// returned descriptor. It cannot be redirected to an unrelated file-source
-/// callback. A selected path or `CallerSelection` label is still **not** proof
+/// returned descriptor. Complete verified data reaches the caller only after
+/// securely reopening the selected name and comparing its inode and metadata.
+/// It cannot be redirected to an unrelated file-source callback. A selected
+/// path or `CallerSelection` label is still **not** proof
 /// of a real caller gesture: a trusted host must authenticate that provenance
 /// before invoking this method. Linux requires `openat2` with no symlinks;
 /// other platforms and unsupported kernels fail closed. No session mutation
@@ -257,16 +364,76 @@ pub fn inspect_selected_profile_import<R, Inspect>(
 where
     Inspect: FnOnce(&VerifiedAttachedProfileImport<'_, '_, '_, '_>) -> R,
 {
-    if intent.purpose() != ExplicitFilePurpose::ImportProfile {
-        return Err(ProfileOpenFileImportError::WrongPathPurpose);
-    }
-    let opened = open_selected_profile_file(intent.path())
-        .map_err(ProfileOpenFileImportError::Open)?;
-    inspect_open_profile_import(
-        intent,
-        |maximum| read_bounded_profile_file(opened, maximum),
+    open_selected_profile_import_probe(intent)?.inspect(
         supported_required_features,
         limits,
         inspect,
     )
+}
+
+/// Securely open an independently selected path for one later Import check.
+///
+/// No classified path grants Import on its own: the host must authenticate
+/// the caller's selection before requesting a probe. On Linux both opens
+/// reject every symlink component and parent traversal; a relative path also
+/// retains its original process CWD identity. This read-only probe does not
+/// admit handwriting sections or mutate session state.
+///
+/// # Errors
+///
+/// Refuses wrong purpose, unsupported platforms, unsafe or invalid paths and
+/// failure to obtain the initial selected file metadata.
+pub fn open_selected_profile_import_probe(
+    intent: &ExplicitFilePathIntent,
+) -> Result<ProfileSelectedImportProbe<'_>, ProfileOpenFileImportError> {
+    if intent.purpose() != ExplicitFilePurpose::ImportProfile {
+        return Err(ProfileOpenFileImportError::WrongPathPurpose);
+    }
+    let selected_cwd = (!intent.path().is_absolute())
+        .then(|| File::open("."))
+        .transpose()
+        .map_err(|error| {
+            ProfileOpenFileImportError::Open(
+                ProfileSelectedFileOpenError::FileIo(error.kind()),
+            )
+        })?;
+    let opened = selected_cwd
+        .as_ref()
+        .map_or_else(
+            || open_selected_profile_file(intent.path()),
+            |cwd| open_selected_profile_file_from_cwd(intent.path(), cwd),
+        )
+        .map_err(ProfileOpenFileImportError::Open)?;
+    let original_metadata = opened.metadata().map_err(|error| {
+        ProfileOpenFileImportError::Open(
+            ProfileSelectedFileOpenError::FileIo(error.kind()),
+        )
+    })?;
+    Ok(ProfileSelectedImportProbe {
+        intent,
+        opened,
+        original_metadata,
+        selected_cwd,
+    })
+}
+
+fn same_selected_source_metadata(before: &Metadata, after: &Metadata) -> bool {
+    if !before.is_file() || !after.is_file() || before.len() != after.len() {
+        return false;
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt as _;
+
+        before.dev() == after.dev()
+            && before.ino() == after.ino()
+            && before.mtime() == after.mtime()
+            && before.mtime_nsec() == after.mtime_nsec()
+            && before.ctime() == after.ctime()
+            && before.ctime_nsec() == after.ctime_nsec()
+    }
+    #[cfg(not(unix))]
+    {
+        before.modified().is_ok() && before.modified() == after.modified()
+    }
 }

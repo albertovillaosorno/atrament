@@ -30,6 +30,19 @@ into background persistence. Keep paths mentioned only in notebook, source,
 diagnostic, clipboard, or model-response text as data rather than Export
 authority.
 
+The selected-profile Import composition now retains the original opened
+source descriptor while verifying ZIP framing, manifest, every member SHA and
+section JSON, then securely reopens the exact selected pathname before its
+inspection callback may see any verified bytes. It compares both opened and
+reopened file identity, size, modification and change times against the initial
+observation, and pins the original CWD for relative selections. Deterministic
+regressions cover a same-byte new inode, a missing selection, a late symlink,
+a replaced parent containing matching bytes, an in-place metadata rewrite and
+a changed relative CWD with the same inode; none reaches the callback or
+modifies selected bytes. This narrows observed source pathname rebinding without
+locking external paths, proving an atomic snapshot, authenticating the caller
+or implementing typed handwriting profile acceptance.
+
 The opened-profile file reader now checks descriptor metadata again after
 its exact EOF probe, rejecting observed in-place rewrites even when size and
 EOF remain unchanged. On Unix it compares device, inode, high-resolution

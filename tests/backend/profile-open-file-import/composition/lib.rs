@@ -72,6 +72,7 @@ use atrament_profile_manifest_json_codec::{
 use atrament_profile_open_file_import::{
     ProfileOpenFileImportError as Error, ProfileOpenFileImportLimits,
     inspect_open_profile_import, inspect_selected_profile_import,
+    open_selected_profile_import_probe,
 };
 use atrament_profile_selected_file_open::ProfileSelectedFileOpenError;
 use atrament_profile_stored_zip_writer::{
@@ -86,8 +87,36 @@ use atrament_profile_zip_reader::{
 const MEMBER: &str = "sections/writer.json";
 static FILE_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
+#[cfg(target_os = "linux")]
+struct OwnedProbeDirectory {
+    path: PathBuf,
+}
+
 struct OwnedTestFile {
     path: PathBuf,
+}
+
+#[cfg(target_os = "linux")]
+impl OwnedProbeDirectory {
+    fn new() -> Self {
+        let path = env::temp_dir().join(format!(
+            "atrament-import-probe-{}-{}",
+            process::id(),
+            FILE_SEQUENCE.fetch_add(1, Ordering::Relaxed),
+        ));
+        // A reused path must refuse; this fixture will remove its tree.
+        #[expect(clippy::create_dir, reason = "test-owned unique directory")]
+        fs::create_dir(&path).expect("create owned Import probe directory");
+        Self { path }
+    }
+}
+
+#[cfg(target_os = "linux")]
+impl Drop for OwnedProbeDirectory {
+    fn drop(&mut self) {
+        fs::remove_dir_all(&self.path)
+            .expect("remove only owned Import probe directory");
+    }
 }
 
 impl OwnedTestFile {
@@ -162,6 +191,19 @@ fn selected(
         ExplicitOverwriteIntent::PreserveExisting,
     )
     .expect("classified path is not file authority")
+}
+
+#[cfg(target_os = "linux")]
+fn selected_probe_intent(
+    path: PathBuf,
+) -> atrament_explicit_file_path_intent::ExplicitFilePathIntent {
+    classify_explicit_file_path_intent(
+        ExplicitFilePurpose::ImportProfile,
+        ExplicitFilePathSource::CallerSelection,
+        path,
+        ExplicitOverwriteIntent::PreserveExisting,
+    )
+    .expect("typed Import selection")
 }
 
 fn root(payload: &[u8], required: &str) -> String {
@@ -268,6 +310,197 @@ fn selected_linux_path_is_bound_to_opened_descriptor_and_full_sha() {
     .expect("source-sealed selected file verified");
     assert_eq!(inspected.0, sha256_profile_bytes(&bytes));
     assert_eq!(inspected.1.as_deref(), Some(payload.as_slice()));
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn selected_probe_rechecks_same_byte_replacement_before_inspection() {
+    use std::os::unix::fs::MetadataExt as _;
+
+    let owned = OwnedProbeDirectory::new();
+    let selected_path = owned.path.join("selected.atrament");
+    let parked_path = owned.path.join("parked.atrament");
+    let payload = br#"{"strokes":[1,2,3]}"#;
+    let bytes = zip(root(payload, "[]").as_bytes(), payload);
+    fs::write(&selected_path, &bytes).expect("write selected profile");
+    let intent = selected_probe_intent(selected_path.clone());
+    let probe =
+        open_selected_profile_import_probe(&intent)
+            .expect("initial securely selected source");
+    fs::rename(&selected_path, &parked_path)
+        .expect("park originally selected inode");
+    fs::write(&selected_path, &bytes)
+        .expect("replace selection with byte-identical ZIP");
+    assert_ne!(
+        fs::metadata(&selected_path).expect("replacement").ino(),
+        fs::metadata(&parked_path).expect("original").ino(),
+    );
+    let inspected = Cell::new(false);
+    assert_eq!(
+        probe.inspect(&[], limits(), |_verified| inspected.set(true)),
+        Err(Error::SelectedSourceChanged),
+    );
+    assert!(!inspected.get());
+    assert_eq!(fs::read(&selected_path).expect("replacement"), bytes);
+    assert_eq!(fs::read(&parked_path).expect("original"), bytes);
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn selected_probe_refuses_late_symlink_and_missing_source() {
+    use std::os::unix::fs::symlink;
+
+    let owned = OwnedProbeDirectory::new();
+    let selected_path = owned.path.join("selected.atrament");
+    let parked_path = owned.path.join("parked.atrament");
+    let payload = br#"{"strokes":[]}"#;
+    let bytes = zip(root(payload, "[]").as_bytes(), payload);
+    fs::write(&selected_path, &bytes).expect("write selected profile");
+    let intent = selected_probe_intent(selected_path.clone());
+    let missing_probe =
+        open_selected_profile_import_probe(&intent)
+            .expect("initial securely selected source");
+    fs::rename(&selected_path, &parked_path)
+        .expect("remove selected name without changing opened inode");
+    let inspected = Cell::new(false);
+    assert_eq!(
+        missing_probe.inspect(&[], limits(), |_verified| inspected.set(true)),
+        Err(Error::Open(ProfileSelectedFileOpenError::FileIo(
+            io::ErrorKind::NotFound,
+        ))),
+    );
+    let linked_probe = {
+        fs::rename(&parked_path, &selected_path).expect("restore original");
+        open_selected_profile_import_probe(&intent)
+            .expect("securely reopen original")
+    };
+    fs::rename(&selected_path, &parked_path).expect("park original");
+    symlink(&parked_path, &selected_path).expect("insert selected symlink");
+    assert_eq!(
+        linked_probe.inspect(&[], limits(), |_verified| inspected.set(true)),
+        Err(Error::Open(ProfileSelectedFileOpenError::SymlinkForbidden)),
+    );
+    assert!(!inspected.get());
+    assert_eq!(fs::read(&parked_path).expect("original"), bytes);
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn selected_probe_rechecks_parent_rebinding_before_inspection() {
+    let owned = OwnedProbeDirectory::new();
+    let selected_dir = owned.path.join("selected-parent");
+    let parked_dir = owned.path.join("original-parent");
+    fs::create_dir_all(&selected_dir).expect("create selected parent");
+    let selected_path = selected_dir.join("source.atrament");
+    let payload = br#"{"strokes":[]}"#;
+    let bytes = zip(root(payload, "[]").as_bytes(), payload);
+    fs::write(&selected_path, &bytes).expect("write selected profile");
+    let intent = selected_probe_intent(selected_path.clone());
+    let probe =
+        open_selected_profile_import_probe(&intent)
+            .expect("initial securely selected source");
+    fs::rename(&selected_dir, &parked_dir)
+        .expect("move original parent and selected inode");
+    fs::create_dir_all(&selected_dir).expect("replace selected parent");
+    fs::write(&selected_path, &bytes)
+        .expect("same-byte source under replacement parent");
+    let inspected = Cell::new(false);
+    assert_eq!(
+        probe.inspect(&[], limits(), |_verified| inspected.set(true)),
+        Err(Error::SelectedSourceChanged),
+    );
+    assert!(!inspected.get());
+    assert_eq!(fs::read(&selected_path).expect("replacement"), bytes);
+    assert_eq!(
+        fs::read(parked_dir.join("source.atrament")).expect("original"),
+        bytes,
+    );
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn selected_probe_refuses_inplace_timestamp_drift_before_inspection() {
+    use std::time::SystemTime;
+
+    let owned = OwnedProbeDirectory::new();
+    let path = owned.path.join("selected.atrament");
+    let payload = br#"{"strokes":[]}"#;
+    let bytes = zip(root(payload, "[]").as_bytes(), payload);
+    fs::write(&path, &bytes).expect("selected source");
+    let intent = selected_probe_intent(path.clone());
+    let probe = open_selected_profile_import_probe(&intent)
+        .expect("original selected file");
+    let opened = OpenOptions::new().write(true).open(&path)
+        .expect("test owned selected file");
+    opened.set_modified(SystemTime::UNIX_EPOCH)
+        .expect("adjust selected file timestamp without changing bytes");
+    let inspected = Cell::new(false);
+    assert_eq!(
+        probe.inspect(&[], limits(), |_verified| inspected.set(true)),
+        Err(Error::SelectedSourceChanged),
+    );
+    assert!(!inspected.get());
+    assert_eq!(fs::read(&path).expect("untouched bytes"), bytes);
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn selected_probe_relative_cwd_rebinding_refuses_even_for_same_inode() {
+    const CHILD: &str = "ATRAMENT_TEST_IMPORT_PROBE_CWD_CHILD";
+    if env::var_os(CHILD).is_none() {
+        let result = process::Command::new(
+            env::current_exe().expect("running test executable"),
+        )
+        .arg("--exact")
+        .arg(
+            "selected_probe_relative_cwd_rebinding_refuses_even_for_same_inode",
+        )
+        .env(CHILD, "yes")
+        .output()
+        .expect("isolated import-CWD child");
+        assert!(result.status.success(), "child failed: {}",
+            String::from_utf8_lossy(&result.stderr));
+        return;
+    }
+
+    // Only the isolated child changes the process-wide CWD, never the
+    // parallel test runner. The alternative path hardlinks the original
+    // source to prove CWD selection matters even for identical inodes.
+    let owned = OwnedProbeDirectory::new();
+    let first = owned.path.join("first");
+    let second = owned.path.join("second");
+    fs::create_dir_all(&first).expect("first selected directory");
+    fs::create_dir_all(&second).expect("second selected directory");
+    let payload = br#"{"strokes":[]}"#;
+    let bytes = zip(root(payload, "[]").as_bytes(), payload);
+    fs::write(first.join("chosen.atrament"), &bytes)
+        .expect("original relative source");
+    fs::hard_link(
+        first.join("chosen.atrament"),
+        second.join("chosen.atrament"),
+    ).expect("alternate relative name with identical inode");
+    let original_cwd = env::current_dir().expect("initial cwd");
+    env::set_current_dir(&first).expect("select original relative root");
+    let intent = selected_probe_intent(PathBuf::from("chosen.atrament"));
+    let probe = open_selected_profile_import_probe(&intent)
+        .expect("original relative selection");
+    env::set_current_dir(&second).expect("rebind relative root");
+    let inspected = Cell::new(false);
+    assert_eq!(
+        probe.inspect(&[], limits(), |_verified| inspected.set(true)),
+        Err(Error::Open(
+            ProfileSelectedFileOpenError::WorkingDirectoryChanged,
+        )),
+    );
+    assert!(!inspected.get());
+    env::set_current_dir(&first).expect("restore original relative root");
+    assert_eq!(
+        inspect_selected_profile_import(&intent, &[], limits(),
+            |verified| verified.archive_sha256()),
+        Ok(sha256_profile_bytes(&bytes)),
+    );
+    env::set_current_dir(original_cwd).expect("restore child test cwd");
+    assert_eq!(fs::read(second.join("chosen.atrament")).expect("alias"), bytes);
 }
 
 #[cfg(target_os = "linux")]
