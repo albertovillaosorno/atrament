@@ -72,6 +72,35 @@ const FIREFOX_CASE_TIMEOUT_MS = 50_000;
 const MAX_BIDI_FRAME_BYTES = 8 * 1024 * 1024;
 const MAX_BIDI_FRAGMENTS = 1_024;
 const MAX_BIDI_EVENTS = 16;
+// WebDriver error descriptions, stacks and optional data may contain text
+// entered in the private page. Only published protocol error categories may
+// leave the automation peer as test error messages.
+const SAFE_BIDI_ERROR_CODES = new Set([
+    "invalid argument",
+    "invalid selector",
+    "invalid session id",
+    "javascript error",
+    "move target out of bounds",
+    "no such alert",
+    "no such element",
+    "no such frame",
+    "no such handle",
+    "no such history entry",
+    "no such intercept",
+    "no such node",
+    "no such request",
+    "no such script",
+    "no such shadow root",
+    "no such user context",
+    "no such window",
+    "session not created",
+    "timeout",
+    "unable to capture screen",
+    "unable to set cookie",
+    "unknown command",
+    "unknown error",
+    "unsupported operation",
+]);
 const REFRESH_SECRET = "a".repeat(64);
 const REFRESH_DRAFT = {
     candidate: "refresh-private candidate",
@@ -655,6 +684,17 @@ function readWebSocketUpgrade(socket, timeoutMs = 10_000) {
             if (boundary < 0) {
                 return;
             }
+            // The upgrade header may share one TCP read with an attacker-sized
+            // data frame. Refuse before copying the remainder into a second
+            // buffer, even though header scanning itself is already bounded.
+            const remainderBytes = received.length - boundary - 4
+                + chunk.length - inspected;
+            if (remainderBytes > MAX_BIDI_FRAME_BYTES + 10) {
+                finish(new Error(
+                    "WebSocket upgrade frame exceeds byte budget",
+                ));
+                return;
+            }
             socket.pause();
             finish(null, {
                 head: received.subarray(0, boundary).toString("latin1"),
@@ -744,6 +784,35 @@ test("upgrade bounds header scanning without dropping coalesced frames",
     },
 );
 
+test("upgrade refuses an over-budget coalesced frame before copying",
+    async () => {
+        const header = Buffer.from([
+            "HTTP/1.1 101 Switching Protocols",
+            "Upgrade: websocket",
+            "Connection: Upgrade",
+            "", "",
+        ].join("\r\n"));
+        for (const [remainderSize, expectedAcceptance] of [
+            [MAX_BIDI_FRAME_BYTES + 10, true],
+            [MAX_BIDI_FRAME_BYTES + 11, false],
+        ]) {
+            const stream = new PassThrough();
+            const pending = readWebSocketUpgrade(stream, 500);
+            const bytes = Buffer.alloc(remainderSize, 0x6f);
+            stream.write(Buffer.concat([header, bytes]));
+            if (expectedAcceptance) {
+                const accepted = await pending;
+                assert.equal(accepted.remainder.length, remainderSize);
+            } else {
+                await assert.rejects(pending,
+                    /WebSocket upgrade frame exceeds byte budget/);
+            }
+            assert.equal(stream.listenerCount("data"), 0);
+            stream.destroy();
+        }
+    },
+);
+
 test("upgrade accepts the exact header-byte boundary across chunks",
     async () => {
         for (const [length, accepted] of [
@@ -794,36 +863,52 @@ test("WebSocket upgrade rejects missing or oversized response headers",
 // A successful HTTP status alone does not establish a WebSocket peer.
 function validateWebSocketUpgrade(head, key) {
     const lines = head.split("\r\n");
-    // A valid HTTP/1.1 status line has two space separators. Bare control
-    // characters cannot convert a malformed reply into an accepted upgrade.
-    assert.match(lines[0], /^HTTP\/1\.1 101 [\t\x20-\x7e\x80-\xff]*$/);
+    // Never attach untrusted status text or headers to an AssertionError:
+    // a Firefox peer can include private workspace content in either.
+    if (!/^HTTP\/1\.1 101 [\t\x20-\x7e\x80-\xff]*$/.test(lines[0] ?? "")) {
+        throw new Error("invalid WebSocket upgrade status");
+    }
     const headers = new Map();
     for (const line of lines.slice(1)) {
         const colon = line.indexOf(":");
-        assert.ok(colon > 0, "invalid WebSocket upgrade header syntax");
+        if (colon <= 0) {
+            throw new Error("invalid WebSocket upgrade header syntax");
+        }
         const rawName = line.slice(0, colon);
-        assert.match(rawName, /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/,
-            "invalid WebSocket upgrade header name");
+        if (!/^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/.test(rawName)) {
+            throw new Error("invalid WebSocket upgrade header name");
+        }
         const rawValue = line.slice(colon + 1);
-        assert.ok(!/[\x00-\x08\x0a-\x1f\x7f]/.test(rawValue),
-            "invalid WebSocket upgrade header value");
+        if (/[\x00-\x08\x0a-\x1f\x7f]/.test(rawValue)) {
+            throw new Error("invalid WebSocket upgrade header value");
+        }
         const name = rawName.toLowerCase();
-        assert.ok(!headers.has(name), "duplicate WebSocket upgrade header");
+        if (headers.has(name)) {
+            throw new Error("duplicate WebSocket upgrade header");
+        }
         headers.set(name, rawValue.replace(/^[ \t]+|[ \t]+$/g, ""));
     }
-    assert.equal(headers.get("upgrade")?.toLowerCase(), "websocket");
-    assert.ok(headers.get("connection")?.toLowerCase()
-        .split(",").some((token) =>
-            token.replace(/^[ \t]+|[ \t]+$/g, "") === "upgrade"));
+    if (headers.get("upgrade")?.toLowerCase() !== "websocket") {
+        throw new Error("invalid WebSocket upgrade token");
+    }
+    const connection = headers.get("connection")?.toLowerCase();
+    if (connection === undefined || !connection.split(",").some((token) =>
+        token.replace(/^[ \t]+|[ \t]+$/g, "") === "upgrade")) {
+        throw new Error("invalid WebSocket connection token");
+    }
     const expected = crypto.createHash("sha1")
         .update(`${key}258EAFA5-E914-47DA-95CA-C5AB0DC85B11`)
         .digest("base64");
-    assert.equal(headers.get("sec-websocket-accept"), expected);
+    if (headers.get("sec-websocket-accept") !== expected) {
+        throw new Error("invalid WebSocket accept challenge");
+    }
     // No extension or subprotocol was offered in the client request.
-    assert.ok(!headers.has("sec-websocket-extensions"),
-        "unrequested WebSocket extension");
-    assert.ok(!headers.has("sec-websocket-protocol"),
-        "unrequested WebSocket subprotocol");
+    if (headers.has("sec-websocket-extensions")) {
+        throw new Error("unrequested WebSocket extension");
+    }
+    if (headers.has("sec-websocket-protocol")) {
+        throw new Error("unrequested WebSocket subprotocol");
+    }
 }
 
 class BidiClient {
@@ -1122,7 +1207,11 @@ class BidiClient {
                 if (message.type === "success") {
                     pending.resolve(message.result);
                 } else {
-                    pending.reject(new Error(JSON.stringify(message)));
+                    const category = SAFE_BIDI_ERROR_CODES.has(message.error)
+                        ? message.error : "unrecognized remote error";
+                    pending.reject(new Error(
+                        `WebDriver BiDi command failed: ${category}`,
+                    ));
                 }
             } else {
                 if (this.events.length >= MAX_BIDI_EVENTS) {
@@ -1215,6 +1304,35 @@ test("WebSocket upgrade rejects false status and forged accept headers",
     },
 );
 
+test("WebSocket upgrade rejection omits untrusted response text", () => {
+    const secretMarker = "synthetic-private-websocket-reply-1967";
+    const key = "dGhlIHNhbXBsZSBub25jZQ==";
+    const accepted = [
+        "HTTP/1.1 101 Switching Protocols",
+        "Upgrade: websocket",
+        "Connection: Upgrade",
+        "Sec-WebSocket-Accept: s3pPLMBiTxaQ9kYGzzhZRbK+xOo=",
+    ].join("\r\n");
+    const forged = [
+        accepted.replace("Switching Protocols", `\n${secretMarker}`),
+        accepted.replace("Upgrade: websocket", `Upgrade: ${secretMarker}`),
+        accepted.replace("Upgrade: websocket",
+            `X ${secretMarker}: websocket`),
+        accepted.replace("Connection: Upgrade",
+            `Connection: ${secretMarker}`),
+        accepted.replace("s3pPLMBiTxaQ9kYGzzhZRbK+xOo=", secretMarker),
+    ];
+    for (const head of forged) {
+        assert.throws(() => validateWebSocketUpgrade(head, key), (error) => {
+            assert.equal(error.message.includes(secretMarker), false);
+            assert.equal(JSON.stringify(error).includes(secretMarker), false);
+            assert.equal("actual" in error, false);
+            assert.equal("expected" in error, false);
+            return true;
+        });
+    }
+});
+
 test("WebSocket upgrade refuses malformed field names and values", () => {
     const key = "dGhlIHNhbXBsZSBub25jZQ==";
     const accepted = [
@@ -1303,7 +1421,8 @@ test(
         assert.notEqual(typeof address, "string");
         const client = new BidiClient(`ws://127.0.0.1:${address.port}/session`);
         try {
-            await assert.rejects(client.connect(), /HTTP\/1\.1 403/);
+            await assert.rejects(client.connect(),
+                /invalid WebSocket upgrade status/);
             assert.equal(client.socket.destroyed, true);
         } finally {
             client.socket?.destroy();
@@ -1346,6 +1465,39 @@ test("WebDriver errors and timeouts release their pending command slots",
         await assert.rejects(client.command("never.responds", {}, 20),
             /never.responds timed out/);
         assert.equal(client.pending.size, 0);
+    },
+);
+
+test("WebDriver BiDi command errors never reflect remote private fields",
+    async () => {
+        const privateText = "synthetic-private-bidi-error-marker-7529";
+        for (const [errorCode, expectedCode] of [
+            ["invalid argument", "invalid argument"],
+            [privateText, "unrecognized remote error"],
+        ]) {
+            const client = new BidiClient("ws://127.0.0.1:1234/session");
+            client.socket = { write: () => {}, destroy: () => {} };
+            const pending = client.command("script.evaluate", {}, 100);
+            const errorReply = {
+                id: 1,
+                type: "error",
+                error: errorCode,
+                message: privateText,
+                stacktrace: privateText,
+                data: { draft: privateText },
+            };
+            client.buffer = testServerFrame(JSON.stringify(errorReply));
+            client.drain();
+            await assert.rejects(pending, (error) => {
+                assert.match(error.message, /WebDriver BiDi command failed/u);
+                assert.ok(error.message.includes(expectedCode));
+                assert.equal(error.message.includes(privateText), false);
+                assert.deepEqual(Object.keys(error), []);
+                return true;
+            });
+            assert.equal(client.pending.size, 0);
+            client.close();
+        }
     },
 );
 

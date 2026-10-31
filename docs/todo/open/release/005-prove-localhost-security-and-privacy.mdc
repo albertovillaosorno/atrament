@@ -475,6 +475,22 @@ separators and an object-valued success result; Firefox's actual success
 responses remain valid. This prevents malformed automation replies from
 serving as readiness evidence without altering application protocol semantics.
 
+BiDi command errors no longer echo complete JSON error envelopes into test
+failures. A red-first fixture showed a remote peer could include private page
+text in `message`, `stacktrace`, `data`, or even the error category, which the
+client copied verbatim into the rejected command's Error.
+
+Only recognized protocol error categories are now surfaced; unrecognized
+categories become a constant diagnostic. The original command still fails and
+clears its timer. This is automation log containment, not production browser
+authentication.
+
+WebSocket upgrade validation now also avoids assertion errors that embed a
+remote status line, header token, or forged accept challenge. A red-first
+fixture proved an untrusted peer could inject private marker text into the
+assertion message and structured `actual` metadata. Static refusal messages
+preserve every existing HTTP and RFC 6455 admission rule without echoing input.
+
 The test harness also previously normalized malformed response header field
 names and Unicode whitespace into valid upgrade authority. Red-first probes
 cover leading/embedded name spaces, control bytes, bare newlines, and non-HTTP
@@ -500,10 +516,17 @@ budget. A focused fixture sends 1,025 fragments and verifies that the owned
 socket and pending commands fail closed without unbounded fragment retention.
 
 WebSocket upgrade-header scanning now inspects at most 16 KiB plus the
-four-byte terminator before identifying the header boundary. A large frame
+four-byte terminator before identifying the header boundary. A bounded frame
 coalesced into the same TCP response is still preserved byte-for-byte, while
 a similarly large unterminated header fails without copying the full chunk
 into the header buffer. Both cases have dedicated regression tests.
+
+A separate red-first fixture proved that a giant data frame sharing the
+upgrade chunk was copied into a second unbounded buffer even though header
+scanning was bounded. The reader now rejects a coalesced remainder larger
+than the 8 MiB frame budget plus ten header bytes before concatenating data,
+while the exact limit remains accepted. This protects disposable Firefox
+harness memory, not the production runtime's HTTP request buffer.
 
 A full-browser contention run reproduced intermittent Firefox readiness timeout
 before an explicit-end assertion, while the same case passed in isolation.
