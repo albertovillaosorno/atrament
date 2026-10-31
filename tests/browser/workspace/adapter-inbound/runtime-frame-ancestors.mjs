@@ -663,13 +663,20 @@ function validateWebSocketUpgrade(head, key) {
     for (const line of lines.slice(1)) {
         const colon = line.indexOf(":");
         assert.ok(colon > 0, "invalid WebSocket upgrade header syntax");
-        const name = line.slice(0, colon).trim().toLowerCase();
+        const rawName = line.slice(0, colon);
+        assert.match(rawName, /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/,
+            "invalid WebSocket upgrade header name");
+        const rawValue = line.slice(colon + 1);
+        assert.ok(!/[\x00-\x08\x0a-\x1f\x7f]/.test(rawValue),
+            "invalid WebSocket upgrade header value");
+        const name = rawName.toLowerCase();
         assert.ok(!headers.has(name), "duplicate WebSocket upgrade header");
-        headers.set(name, line.slice(colon + 1).trim());
+        headers.set(name, rawValue.replace(/^[ \t]+|[ \t]+$/g, ""));
     }
     assert.equal(headers.get("upgrade")?.toLowerCase(), "websocket");
     assert.ok(headers.get("connection")?.toLowerCase()
-        .split(",").some((token) => token.trim() === "upgrade"));
+        .split(",").some((token) =>
+            token.replace(/^[ \t]+|[ \t]+$/g, "") === "upgrade"));
     const expected = crypto.createHash("sha1")
         .update(`${key}258EAFA5-E914-47DA-95CA-C5AB0DC85B11`)
         .digest("base64");
@@ -1014,6 +1021,35 @@ test("WebSocket upgrade rejects false status and forged accept headers",
         ));
     },
 );
+
+test("WebSocket upgrade refuses malformed field names and values", () => {
+    const key = "dGhlIHNhbXBsZSBub25jZQ==";
+    const accepted = [
+        "HTTP/1.1 101 Switching Protocols",
+        "Upgrade: websocket",
+        "Connection: Upgrade",
+        "Sec-WebSocket-Accept: s3pPLMBiTxaQ9kYGzzhZRbK+xOo=",
+    ].join("\r\n");
+    for (const malformed of [
+        accepted.replace("Upgrade:", "Upgrade :"),
+        accepted.replace("Upgrade:", " Upgrade:"),
+        accepted.replace("Connection: Upgrade",
+            "Connection: Upgrade\u0000, Upgrade"),
+        accepted.replace("Connection: Upgrade",
+            "Connection: Upgrade\n, Upgrade"),
+        accepted.replace("Upgrade: websocket",
+            "Upgrade: \u00a0websocket\u00a0"),
+        accepted.replace("Connection: Upgrade",
+            "Connection: \u00a0Upgrade\u00a0"),
+    ]) {
+        assert.throws(() => validateWebSocketUpgrade(malformed, key));
+    }
+    // SP and HTAB are the only outer HTTP whitespace that may be trimmed.
+    assert.doesNotThrow(() => validateWebSocketUpgrade(
+        accepted.replace("Upgrade: websocket", "Upgrade:\twebsocket\t"),
+        key,
+    ));
+});
 
 test("WebSocket upgrade refuses malformed status-line controls", () => {
     const key = "dGhlIHNhbXBsZSBub25jZQ==";

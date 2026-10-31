@@ -440,6 +440,13 @@ separators and an object-valued success result; Firefox's actual success
 responses remain valid. This prevents malformed automation replies from
 serving as readiness evidence without altering application protocol semantics.
 
+The test harness also previously normalized malformed response header field
+names and Unicode whitespace into valid upgrade authority. Red-first probes
+cover leading/embedded name spaces, control bytes, bare newlines, and non-HTTP
+whitespace. The parser now checks exact HTTP token names, refuses invalid
+field-value controls, and trims only SP/HTAB on header values and tokens.
+Ordinary Firefox upgrade headers remain accepted; this is harness hardening.
+
 A full-browser stress run exposed that a 2-second forced-kill reap deadline
 was too short under workstation memory pressure. The bounded SIGKILL window
 is now 10 seconds, while a separate delayed-exit fixture proves successful
