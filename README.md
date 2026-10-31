@@ -180,6 +180,27 @@ apostrophes, ellipsis, en and em dashes, and the admitted mathematical symbols.
 Missing coverage is visible and blocking unless the user accepts a declared
 fallback.
 
+### Current local profile utilities (Linux)
+
+The present `atrament` binary offers two explicit local profile operations:
+
+```sh
+atrament profile inspect SOURCE.atrament
+atrament profile repack SOURCE.atrament NEW-TARGET.atrament
+```
+
+Inspection verifies a bounded source archive, manifest, entry digests, and
+JSON-section syntax before displaying the manifest and readable sections.
+Repack performs those same checks, then writes canonical ZIP bytes to a
+newly selected destination using atomic, synchronized file creation. Repack
+**never overwrites** an existing target; it preserves verified opaque assets
+and unknown optional features. Unsupported required features and malformed
+sections refuse.
+
+These are independent command-line utilities; neither accepts typed handwriting
+sections into the active workspace, creates a session Export receipt, or
+provides a notebook/PDF Export path.
+
 ## Rendering
 
 Rust produces authoritative geometry on the CPU:

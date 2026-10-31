@@ -9,30 +9,31 @@
 //
 // Boundary-Contract:
 // - Owns:
-//   - Process startup, browser launch and explicit profile inspection CLI.
+//   - Process startup, browser launch and deliberate local profile CLI effects.
 // - Must-Not:
-//   - Implement HTTP admission, browser process mechanics, session state
-//     or persistent profile Export.
+//   - Implement HTTP admission, browser process mechanics, session state,
+//     typed handwriting Import or revision-bound session Export.
 // - Allows:
 //   - Inputs: Runtime startup results or exact local profile CLI arguments.
-//   - Outputs: Secret-free startup records or verified profile inspection.
-//   - Side effects: Stdout/stderr, runtime coordination and read-only Import.
+//   - Outputs: Secret-free startup, verified inspection, or repack completion.
+//   - Side effects: Stdout/stderr, runtime coordination, verified Import and
+//     caller-selected, preserve-existing canonical profile repack only.
 // - Split-When:
-//   - Inspection command requires its own process composition owner.
+//   - Profile CLI grows independent typed-section or session policy.
 // - Merge-When:
 //   - Atrament no longer composes separate runtime and launcher components.
 // - Summary:
-//   - Wires disposable runtime and explicit local profile inspection.
+//   - Wires disposable runtime and explicit verified profile CLI operations.
 // - Description:
 //   - Keeps cross-adapter orchestration in the process composition root.
 // - Usage:
-//   - Run atrament normally, or atrament profile inspect PATH.
+//   - Run atrament normally, profile inspect PATH or profile repack SRC DEST.
 // - Defaults:
 //   - Reject unexpected command arguments before opening a browser.
 //   - Never publishes the session credential for manual recovery.
 //
 
-//! Atrament process composition for session startup or profile inspection.
+//! Atrament startup and caller-selected, independent profile CLI operations.
 
 use std::env;
 use std::ffi::{OsStr, OsString};
@@ -45,6 +46,13 @@ use atrament_explicit_file_path_intent::{
     ExplicitFilePathSource, ExplicitFilePurpose, ExplicitOverwriteIntent,
     classify_explicit_file_path_intent,
 };
+use atrament_profile_export_assembly::{
+    ProfileExportArtifact, ProfileExportAssemblyLimits,
+    ProfileExportPayload, assemble_profile_export_artifact,
+};
+use atrament_profile_file_commit::{
+    ProfileFileCommitDisposition, commit_profile_file,
+};
 use atrament_profile_import_preflight::ProfileImportBudget;
 use atrament_profile_json_syntax::ProfileJsonSyntaxLimits;
 use atrament_profile_manifest_json_codec::ProfileManifestJsonLimits;
@@ -54,12 +62,11 @@ use atrament_profile_manifest_json_writer::{
 use atrament_profile_open_file_import::{
     ProfileOpenFileImportLimits, inspect_selected_profile_import,
 };
+use atrament_profile_stored_zip_writer::ProfileStoredZipWriteLimits;
 use atrament_profile_zip_reader::ProfileZipReadLimits;
 
 #[cfg(test)]
 use atrament_profile_entry_sha256 as _;
-#[cfg(test)]
-use atrament_profile_stored_zip_writer as _;
 use atrament_session_application::SessionApplication;
 use atrament_session_handshake::{
     HandshakeService, PRODUCT_VERSION, PROTOCOL_VERSION,
@@ -67,8 +74,8 @@ use atrament_session_handshake::{
 use atrament_session_runtime::Runtime;
 use atrament_session_secret::SessionSecret;
 
-// This is a bounded, read-only inspection policy, not a general profile
-// ingestion or handwriting-section schema. No opaque asset data is emitted.
+// This is bounded source-verification policy, not a general profile ingestion
+// or handwriting-section schema. Inspection never emits opaque asset bytes.
 const PROFILE_INSPECT_MAX_ARCHIVE_BYTES: usize = 4 * 1024 * 1024;
 const PROFILE_INSPECT_MAX_ARCHIVE_BYTES_U64: u64 = 4 * 1024 * 1024;
 const PROFILE_INSPECT_MAX_ENTRIES: usize = 64;
@@ -129,7 +136,6 @@ fn new_session_secret() -> io::Result<SessionSecret> {
     })
 }
 
-
 const fn profile_inspection_limits() -> ProfileOpenFileImportLimits {
     ProfileOpenFileImportLimits {
         maximum_file_bytes: PROFILE_INSPECT_MAX_ARCHIVE_BYTES,
@@ -164,6 +170,110 @@ const fn profile_inspection_limits() -> ProfileOpenFileImportLimits {
     }
 }
 
+const fn profile_manifest_write_limits() -> ProfileManifestJsonWriteLimits {
+    ProfileManifestJsonWriteLimits {
+        maximum_bytes: PROFILE_INSPECT_MAX_ROOT_BYTES,
+        maximum_entries: PROFILE_INSPECT_MAX_ENTRIES - 1,
+        maximum_features: 32,
+        maximum_string_bytes: 1024,
+    }
+}
+
+const fn profile_repack_limits() -> ProfileExportAssemblyLimits {
+    ProfileExportAssemblyLimits {
+        manifest_json: profile_manifest_write_limits(),
+        section_json: profile_inspection_limits().section_json,
+        zip: ProfileStoredZipWriteLimits {
+            maximum_archive_bytes: PROFILE_INSPECT_MAX_ARCHIVE_BYTES,
+            maximum_entries: PROFILE_INSPECT_MAX_ENTRIES,
+            maximum_entry_bytes: PROFILE_INSPECT_MAX_MEMBER_BYTES_U64,
+            maximum_total_bytes: PROFILE_INSPECT_MAX_ARCHIVE_BYTES_U64,
+        },
+    }
+}
+
+/// Repack a fully verified, explicitly selected profile at a new exact path.
+///
+/// The two local CLI arguments are caller selections, not paths extracted
+/// from profile metadata or model, notebook, clipboard or diagnostic text.
+/// Every declared ZIP member, digest and JSON section must pass Import before
+/// any output commit. Unknown optional features and opaque asset bytes are
+/// preserved, but no handwriting sections are typed or accepted into session
+/// state. The output is a new canonical archive, not a profile modification
+/// or revision-bound session Export. Existing targets are never overwritten.
+///
+/// # Errors
+///
+/// Refuses source selection, full archive verification, canonical framing or
+/// secure target creation without printing partial output or private paths.
+pub(crate) fn repack_profile(
+    source_path: PathBuf,
+    destination_path: PathBuf,
+) -> io::Result<()> {
+    let source = classify_explicit_file_path_intent(
+        ExplicitFilePurpose::ImportProfile,
+        ExplicitFilePathSource::CallerSelection,
+        source_path,
+        ExplicitOverwriteIntent::PreserveExisting,
+    ).map_err(|error| io::Error::new(
+        io::ErrorKind::InvalidInput,
+        format!("invalid profile source: {error:?}"),
+    ))?;
+    let destination = classify_explicit_file_path_intent(
+        ExplicitFilePurpose::ExportProfile,
+        ExplicitFilePathSource::CallerSelection,
+        destination_path,
+        ExplicitOverwriteIntent::PreserveExisting,
+    ).map_err(|error| io::Error::new(
+        io::ErrorKind::InvalidInput,
+        format!("invalid profile destination: {error:?}"),
+    ))?;
+
+    // Fully verify the selected source before any writer can publish a file.
+    // The source-backed manifest and payload borrows cannot escape this gate.
+    let artifact = inspect_selected_profile_import(
+        &source,
+        &[],
+        profile_inspection_limits(),
+        |verified| -> io::Result<ProfileExportArtifact> {
+            let mut payloads = Vec::new();
+            payloads.try_reserve_exact(verified.manifest().entries.len())
+                .map_err(|_error| io::Error::other(
+                    "profile payload inventory allocation refused",
+                ))?;
+            for entry in &verified.manifest().entries {
+                let bytes = verified.verified_entry_bytes(&entry.path)
+                    .ok_or_else(|| io::Error::other(
+                        "missing SHA-verified profile member",
+                    ))?;
+                payloads.push(ProfileExportPayload {
+                    path: &entry.path,
+                    bytes,
+                });
+            }
+            assemble_profile_export_artifact(
+                verified.manifest(), &payloads, &[],
+                profile_repack_limits(),
+            ).map_err(|error| io::Error::other(format!(
+                "profile canonicalization refused: {error:?}",
+            )))
+        },
+    ).map_err(|error| io::Error::new(
+        io::ErrorKind::InvalidData,
+        format!("profile repack source refused: {error:?}"),
+    ))??;
+
+    let _commit = commit_profile_file(
+        destination.path(),
+        artifact.bytes(),
+        PROFILE_INSPECT_MAX_ARCHIVE_BYTES,
+        ProfileFileCommitDisposition::PreserveExisting,
+    ).map_err(|error| io::Error::other(format!(
+        "profile repack target refused: {error:?}",
+    )))?;
+    Ok(())
+}
+
 /// Verify an explicitly selected local profile before exposing readable JSON.
 ///
 /// The local command arguments are the caller's selection. Archive paths are
@@ -194,12 +304,7 @@ pub(crate) fn inspect_profile(path: PathBuf) -> io::Result<String> {
             let manifest = write_canonical_profile_manifest_json(
                 verified.manifest(),
                 &[],
-                ProfileManifestJsonWriteLimits {
-                    maximum_bytes: PROFILE_INSPECT_MAX_ROOT_BYTES,
-                    maximum_entries: PROFILE_INSPECT_MAX_ENTRIES - 1,
-                    maximum_features: 32,
-                    maximum_string_bytes: 1024,
-                },
+                profile_manifest_write_limits(),
             )
             .map_err(|error| io::Error::other(format!(
                 "cannot encode admitted manifest: {error:?}",
@@ -234,35 +339,52 @@ pub(crate) fn inspect_profile(path: PathBuf) -> io::Result<String> {
     ))?
 }
 
-/// Parse command-line arguments before startup has any side effects.
+/// Dispatch bounded CLI arguments before starting the disposable session.
 ///
-/// `None` means the normal disposable browser session; `Some` holds a
-/// completed, fully verified inspection to publish without starting a session.
+/// `None` means normal browser startup; `Some` holds printable output from
+/// an inspected profile or a successfully committed, independent repack.
+/// Repack arguments are exact OS-level local caller selections; no profile
+/// archive path can determine the selected filesystem target.
 ///
 /// # Errors
 ///
-/// Rejects unknown or incomplete commands before session startup. It reads
-/// at most four argument values without allocating an unbounded argv list.
+/// Rejects incomplete or unknown arguments before opening a browser. No more
+/// than five arguments are read; failed repacks publish no success message.
 pub(crate) fn inspect_cli_args(
     args: impl IntoIterator<Item = OsString>,
 ) -> io::Result<Option<String>> {
     let mut arguments = args.into_iter();
-    let Some(command) = arguments.next() else {
-        return Ok(None);
-    };
+    let command = arguments.next();
     let action = arguments.next();
-    let path = arguments.next();
-    let additional = arguments.next();
-    if command == "profile"
-        && action.as_deref() == Some(OsStr::new("inspect"))
-        && let Some(selected_path) = path
-        && additional.is_none()
-    {
-        return inspect_profile(PathBuf::from(selected_path)).map(Some);
+    let source = arguments.next();
+    let destination = arguments.next();
+    if command.as_deref() == Some(OsStr::new("profile")) {
+        if action.as_deref() == Some(OsStr::new("inspect"))
+            && let Some(path) = source.as_deref()
+            && destination.is_none()
+        {
+            return inspect_profile(PathBuf::from(path)).map(Some);
+        }
+        if action.as_deref() == Some(OsStr::new("repack"))
+            && let (Some(repack_source), Some(repack_destination)) =
+                (source.as_deref(), destination.as_deref())
+            && arguments.next().is_none()
+        {
+            repack_profile(
+                PathBuf::from(repack_source),
+                PathBuf::from(repack_destination),
+            )?;
+            return Ok(Some(String::from(
+                "profile repacked (verified; no session import)\n",
+            )));
+        }
+    }
+    if command.is_none() {
+        return Ok(None);
     }
     Err(io::Error::new(
         io::ErrorKind::InvalidInput,
-        "usage: atrament [profile inspect PATH]",
+        "usage: atrament [profile inspect PATH | profile repack SOURCE TARGET]",
     ))
 }
 

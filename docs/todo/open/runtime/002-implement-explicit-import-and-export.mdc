@@ -30,6 +30,17 @@ into background persistence. Keep paths mentioned only in notebook, source,
 diagnostic, clipboard, or model-response text as data rather than Export
 authority.
 
+An explicit Linux `atrament profile repack SOURCE TARGET` CLI now composes
+caller-supplied OS argument selections, no-symlink verified source opening,
+full ZIP/manifest/SHA and bounded JSON section verification, in-memory
+canonical reassembly, and a synced atomic preserve-existing file commit. It
+preserves unknown optional features and opaque asset contents; it never
+extracts archive paths as filesystem paths. Failure leaves stdout empty and
+never replaces an existing target. This narrowly reserializes verified source
+bytes at a newly selected destination; it does **not** import typed
+handwriting sections, bind an accepted session revision, or authorize
+notebook/PDF or session-profile Export.
+
 Current export design evidence freezes accepted-revision binding, caller-owned
 or explicit host-policy output intent, explicit path and overwrite behavior,
 blocking validation, temporary cleanup, file-commit semantics, output identity,

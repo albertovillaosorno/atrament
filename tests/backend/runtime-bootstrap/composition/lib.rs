@@ -64,6 +64,9 @@ use atrament_profile_stored_zip_writer::{
     ProfileStoredZipMember, ProfileStoredZipWriteLimits,
     write_stored_profile_zip,
 };
+use atrament_profile_zip_reader::{
+    ProfileZipReadLimits, read_stored_profile_zip,
+};
 
 static TEST_FILE_ID: AtomicU64 = AtomicU64::new(0);
 
@@ -89,6 +92,21 @@ impl OwnedProfileFile {
 impl Drop for OwnedProfileFile {
     fn drop(&mut self) {
         fs::remove_file(&self.0).expect("remove owned test profile only");
+    }
+}
+
+/// Own only the exact test-selected destination, not its parent directory.
+struct OwnedProfileDestination(PathBuf);
+
+impl Drop for OwnedProfileDestination {
+    fn drop(&mut self) {
+        match fs::remove_file(&self.0) {
+            Ok(()) => {}
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+            Err(error) => {
+                panic!("cannot remove test-owned destination: {error:?}")
+            }
+        }
     }
 }
 
@@ -205,6 +223,9 @@ fn cli_args_reject_unknown_and_incomplete_commands_without_startup() {
         vec!["inspect", "missing"],
         vec!["profile", "inspect"],
         vec!["profile", "inspect", "a", "extra"],
+        vec!["profile", "repack"],
+        vec!["profile", "repack", "a"],
+        vec!["profile", "repack", "a", "b", "extra"],
     ] {
         assert_eq!(
             bootstrap::inspect_cli_args(
@@ -231,6 +252,243 @@ fn cli_rejects_infinite_argument_stream_after_four_values() {
         io::ErrorKind::InvalidInput,
     );
     assert_eq!(pulls.get(), 4usize);
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn cli_repack_canonically_preserves_verified_sections_assets_and_features() {
+    let section = br#"{"private":"verified-section-9570"}"#;
+    let asset = b"\0\xffopaque-repack-asset-3262";
+    let original = profile_zip_with_optional_features(
+        section, asset, section, "application/json", r#"["future.writer"]"#,
+    );
+    let source = OwnedProfileFile::new(&original);
+    let destination = OwnedProfileDestination(
+        source.0.with_extension("canonical.atrament"),
+    );
+    let output = Command::new(env!("CARGO_BIN_EXE_atrament"))
+        .args(["profile", "repack"])
+        .arg(&source.0)
+        .arg(&destination.0)
+        .output()
+        .expect("repack selected source into exact new destination");
+    assert!(output.status.success());
+    assert_eq!(
+        output.stdout,
+        b"profile repacked (verified; no session import)\n",
+    );
+    assert!(output.stderr.is_empty());
+    assert_eq!(fs::read(&source.0).expect("source remains"), original);
+    let repacked = fs::read(&destination.0).expect("complete repacked ZIP");
+    assert_ne!(repacked, original, "noncanonical manifest is normalized");
+    let archive = read_stored_profile_zip(
+        &repacked,
+        ProfileZipReadLimits {
+            maximum_archive_bytes: 4096,
+            maximum_entries: 3,
+            maximum_entry_bytes: 2048,
+            maximum_total_bytes: 3000,
+        },
+    ).expect("repacked archive passes independent CRC framing");
+    assert!(archive.matches_stored_writer_framing());
+    let entries = archive.entries();
+    assert_eq!(entries.len(), 3);
+    assert_eq!(entries[0].name(), "assets/raw.bin");
+    assert_eq!(entries[0].bytes(), asset);
+    assert_eq!(entries[1].name(), "manifest.json");
+    assert_eq!(entries[2].name(), "sections/writer.json");
+    assert_eq!(entries[2].bytes(), section);
+    let root = archive.manifest_utf8(4096).expect("canonical manifest");
+    assert!(root.contains(r#""optional_features":["future.writer"]"#));
+    assert!(root.starts_with(
+        r#"{"container_version":"atrament.profile/1","entries":["#,
+    ));
+    let inspected = bootstrap::inspect_profile(destination.0.clone())
+        .expect("canonical selected output reimports with SHA verification");
+    assert!(inspected.contains("future.writer"));
+    assert!(inspected.contains("verified-section-9570"));
+    assert!(!inspected.contains("opaque-repack-asset-3262"));
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn cli_repack_preserves_exact_non_utf8_destination_selection() {
+    use std::os::unix::ffi::{OsStrExt as _, OsStringExt as _};
+
+    let section = br#"{"verified":true}"#;
+    let source = OwnedProfileFile::new(&profile_zip(
+        section, b"non-utf8-asset", section,
+    ));
+    let mut name = source.0.file_name()
+        .expect("owned source filename").as_bytes().to_vec();
+    name.extend_from_slice(b"-destination-");
+    name.push(0xff);
+    name.extend_from_slice(b".atrament");
+    let destination = OwnedProfileDestination(
+        source.0.with_file_name(OsString::from_vec(name)),
+    );
+    let executed = Command::new(env!("CARGO_BIN_EXE_atrament"))
+        .args(["profile", "repack"])
+        .arg(&source.0)
+        .arg(&destination.0)
+        .output()
+        .expect("OS argv can preserve non-UTF8 destination bytes");
+    assert!(executed.status.success());
+    assert!(executed.stderr.is_empty());
+    assert!(destination.0.is_file());
+    let observed = bootstrap::inspect_profile(destination.0.clone())
+        .expect("new exact output passes independent selected Import");
+    assert!(observed.contains("verified"));
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn cli_repack_refuses_existing_target_without_replacing_private_bytes() {
+    let section = br#"{"private":"profile-secret-1954"}"#;
+    let original = profile_zip(section, b"asset-secret-5688", section);
+    let source = OwnedProfileFile::new(&original);
+    let destination = OwnedProfileDestination(
+        source.0.with_extension("existing.atrament"),
+    );
+    fs::write(&destination.0, b"important original output")
+        .expect("pre-existing test-owned target");
+    let executed = Command::new(env!("CARGO_BIN_EXE_atrament"))
+        .args(["profile", "repack"])
+        .arg(&source.0)
+        .arg(&destination.0)
+        .output()
+        .expect("run existing-target repack");
+    assert!(!executed.status.success());
+    assert!(executed.stdout.is_empty());
+    assert!(String::from_utf8_lossy(&executed.stderr).contains("TargetExists"));
+    assert_eq!(
+        fs::read(&destination.0).expect("old target is untouched"),
+        b"important original output",
+    );
+    assert_eq!(fs::read(&source.0).expect("source remains"), original);
+    let stderr = String::from_utf8_lossy(&executed.stderr);
+    for private in ["profile-secret-1954", "asset-secret-5688"] {
+        assert!(!stderr.contains(private));
+    }
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn cli_repack_refuses_symlink_destination_without_touching_victim() {
+    use std::os::unix::fs::symlink;
+
+    let section = br#"{"private":"selection-3791"}"#;
+    let source = OwnedProfileFile::new(&profile_zip(
+        section, b"private-asset-9045", section,
+    ));
+    let victim = OwnedProfileDestination(
+        source.0.with_extension("victim.atrament"),
+    );
+    fs::write(&victim.0, b"victim must not change")
+        .expect("test-owned non-selected victim");
+    let destination = OwnedProfileDestination(
+        source.0.with_extension("linked.atrament"),
+    );
+    symlink(&victim.0, &destination.0)
+        .expect("attacker-controlled link at selected output");
+    let executed = Command::new(env!("CARGO_BIN_EXE_atrament"))
+        .args(["profile", "repack"])
+        .arg(&source.0)
+        .arg(&destination.0)
+        .output()
+        .expect("run repack into symlinked target");
+    assert!(!executed.status.success());
+    assert!(executed.stdout.is_empty());
+    assert_eq!(
+        fs::read_link(&destination.0).expect("symlink remains"),
+        victim.0,
+    );
+    assert_eq!(
+        fs::read(&victim.0).expect("original victim remains"),
+        b"victim must not change",
+    );
+    let stderr = String::from_utf8_lossy(&executed.stderr);
+    assert!(!stderr.contains("selection-3791"));
+    assert!(!stderr.contains("private-asset-9045"));
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn cli_repack_refuses_invalid_later_section_without_partial_target() {
+    let early = br#"{"private":"early-5726"}"#;
+    let late = b"[not-an-object]";
+    let root = format!(
+        concat!(
+            r#"{{"container_version":"atrament.profile/1", "#,
+            r#""profile_identity":"writer","required_features":[],"#,
+            r#""optional_features":[],"entries":["#,
+            r#"{{"path":"sections/a.json","media_type":"application/json", "#,
+            r#""byte_length":{},"sha256":"{}"}},"#,
+            r#"{{"path":"sections/z.json","media_type":"application/json", "#,
+            r#""byte_length":{},"sha256":"{}"}}]}}"#,
+        ),
+        early.len(), digest_hex(early), late.len(), digest_hex(late),
+    );
+    let source = OwnedProfileFile::new(&write_stored_profile_zip(
+        &[
+            ProfileStoredZipMember {
+                name: "manifest.json", bytes: root.as_bytes(),
+            },
+            ProfileStoredZipMember {
+                name: "sections/a.json", bytes: early,
+            },
+            ProfileStoredZipMember {
+                name: "sections/z.json", bytes: late,
+            },
+        ],
+        ProfileStoredZipWriteLimits {
+            maximum_archive_bytes: 4096,
+            maximum_entries: 3,
+            maximum_entry_bytes: 2048,
+            maximum_total_bytes: 3000,
+        },
+    ).expect("authentic SHA-valid but section-invalid source"));
+    let destination = OwnedProfileDestination(
+        source.0.with_extension("late-invalid.atrament"),
+    );
+    let executed = Command::new(env!("CARGO_BIN_EXE_atrament"))
+        .args(["profile", "repack"])
+        .arg(&source.0)
+        .arg(&destination.0)
+        .output()
+        .expect("run late-section-invalid repack");
+    assert!(!executed.status.success());
+    assert!(executed.stdout.is_empty());
+    assert!(!destination.0.exists());
+    let stderr = String::from_utf8_lossy(&executed.stderr);
+    assert!(stderr.contains("SectionJson { index: 1"));
+    assert!(!stderr.contains("early-5726"));
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn cli_repack_refuses_sha_forgery_without_creating_any_output() {
+    let actual = br#"{"valid":null}"#;
+    let claimed = br#"{"valid":true}"#;
+    assert_eq!(actual.len(), claimed.len());
+    let source = OwnedProfileFile::new(&profile_zip(
+        actual, b"opaque-private-7684", claimed,
+    ));
+    let destination = OwnedProfileDestination(
+        source.0.with_extension("forgery-out.atrament"),
+    );
+    let executed = Command::new(env!("CARGO_BIN_EXE_atrament"))
+        .args(["profile", "repack"])
+        .arg(&source.0)
+        .arg(&destination.0)
+        .output()
+        .expect("run forged source repack");
+    assert!(!executed.status.success());
+    assert!(executed.stdout.is_empty());
+    assert!(!destination.0.exists());
+    let stderr = String::from_utf8_lossy(&executed.stderr);
+    assert!(stderr.contains("DigestMismatch"));
+    assert!(!stderr.contains("opaque-private-7684"));
 }
 
 #[cfg(target_os = "linux")]

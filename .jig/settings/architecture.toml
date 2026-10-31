@@ -401,8 +401,9 @@ depends_on = ["atrament_explicit_file_path_intent", "atrament_handwriting_profil
 depends_on = []
 
 [component.atrament_runtime_bootstrap]
-# Profile archive fixture and SHA edges are CLI integration test dependencies.
-depends_on = ["atrament_browser_launch", "atrament_explicit_file_path_intent", "atrament_profile_entry_sha256", "atrament_profile_import_preflight", "atrament_profile_json_syntax", "atrament_profile_manifest_json_codec", "atrament_profile_manifest_json_writer", "atrament_profile_open_file_import", "atrament_profile_stored_zip_writer", "atrament_profile_zip_reader", "atrament_session_application", "atrament_session_handshake", "atrament_session_runtime", "atrament_session_secret"]
+# SHA is fixture-only; the profile assembly, commit and ZIP writer edges also
+# support the explicit canonical repack CLI without accepting session state.
+depends_on = ["atrament_browser_launch", "atrament_explicit_file_path_intent", "atrament_profile_entry_sha256", "atrament_profile_export_assembly", "atrament_profile_file_commit", "atrament_profile_import_preflight", "atrament_profile_json_syntax", "atrament_profile_manifest_json_codec", "atrament_profile_manifest_json_writer", "atrament_profile_open_file_import", "atrament_profile_stored_zip_writer", "atrament_profile_zip_reader", "atrament_session_application", "atrament_session_handshake", "atrament_session_runtime", "atrament_session_secret"]
 
 [component.atrament_session_application]
 # Additional direct imports are confined to the integration harness.
