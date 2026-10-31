@@ -66,9 +66,12 @@ Raw C1 control characters and Unicode line or paragraph separators are also
 escaped on inspection, since verified JSON can contain them and portable ZIP
 section names can contain the Unicode separators. A separate real-process
 fixture proves readable escapes, no raw separators and unchanged source bytes.
+
 The large-section CLI fixture also checks a near-2 MiB SHA-verified JSON
 payload that expands to nearly 4 MiB of printable terminal escapes. The
 complete expected display still matches and the source remains unchanged.
+A second near-2 MiB supplementary-control section expands to more than 5.7 MiB
+of printable surrogate-pair escapes and also matches the real CLI output.
 
 An asset-only profile regression confirms verified opaque payloads remain
 unprinted even when their archive names contain Unicode separators, and that

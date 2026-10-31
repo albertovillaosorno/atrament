@@ -1441,12 +1441,13 @@ fn cli_inspects_verified_section_without_extracting_opaque_assets() {
 #[cfg(target_os = "linux")]
 #[test]
 fn cli_inspection_preserves_exact_large_section_after_output_planning() {
-    // The second profile expands from ~1.9 MiB of raw UTF-8 to ~3.8 MiB
-    // of printable escapes. The output reservation must count that exact
-    // growth before appending any verified section display bytes.
+    // Near-2 MiB Unicode sections expand to either ~3.8 MiB of BMP
+    // escapes or ~5.8 MiB of surrogate-pair escapes. Every output
+    // reservation must count the complete display before any append.
     for section in [
         format!(r#"{{"large":"{}"}}"#, "v".repeat(130_000)),
         format!(r#"{{"large":"{}"}}"#, "\u{202e}".repeat(640_000)),
+        format!(r#"{{"large":"{}"}}"#, "\u{e0100}".repeat(480_000)),
     ] {
         let digest = digest_hex(section.as_bytes());
         let source_root = format!(
@@ -1491,7 +1492,9 @@ fn cli_inspection_preserves_exact_large_section_after_output_planning() {
         )
         .expect("long JSON section stays inside bounded profile size");
         let owned = OwnedProfileFile::new(&archive);
-        let printable_section = section.replace('\u{202e}', r"\u202e");
+        let printable_section = section
+            .replace('\u{202e}', r"\u202e")
+            .replace('\u{e0100}', r"\udb40\udd00");
         let expected = format!(
             "manifest.json (verified):\n{canonical_root}\nsections/long.json \
              (syntax-checked; untyped):\n{printable_section}\n",
@@ -1500,6 +1503,12 @@ fn cli_inspection_preserves_exact_large_section_after_output_planning() {
             assert!(
                 expected.len() > 3_800_000 && expected.len() > archive.len(),
                 "escaped terminal display must expand beyond source bytes",
+            );
+        }
+        if section.contains('\u{e0100}') {
+            assert!(
+                expected.len() > 5_700_000 && expected.len() > archive.len(),
+                "supplementary terminal escapes triple raw UTF-8 length",
             );
         }
         let readable = bootstrap::inspect_profile(owned.0.clone())
@@ -1515,6 +1524,7 @@ fn cli_inspection_preserves_exact_large_section_after_output_planning() {
         assert_eq!(executed.stdout, expected.as_bytes());
         assert_eq!(fs::read(&owned.0).expect("source not modified"), archive);
         assert!(!readable.contains('\u{202e}'), "no raw terminal controls");
+        assert!(!readable.contains('\u{e0100}'), "no raw invisible tags");
     }
 }
 
