@@ -300,7 +300,9 @@ mod linux {
                                 let entry = candidate.ok()?;
                                 let path = fs::read_link(entry.path()).ok()?;
                                 (path.starts_with(&dir.0)
-                                    && path.to_string_lossy().ends_with(" (deleted)"))
+                                    && path.to_string_lossy().ends_with(
+                                        " (deleted)",
+                                    ))
                                 .then(|| entry.path())
                             })
                             .expect("test-owned anonymous stage descriptor");
@@ -323,7 +325,10 @@ mod linux {
                     fs::read(&target).expect("old selected file survives"),
                     b"original selected profile",
                 );
-                assert_eq!(dir.entries(), vec![String::from("chosen.atrament")],);
+                assert_eq!(
+                    dir.entries(),
+                    vec![String::from("chosen.atrament")],
+                );
             } else {
                 assert!(!target.exists());
                 assert!(dir.entries().is_empty());

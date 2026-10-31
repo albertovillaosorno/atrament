@@ -344,7 +344,10 @@ fn observe_replace_target(
 }
 
 #[cfg(target_os = "linux")]
-fn staged_bytes_match(output: &File, artifact: &[u8]) -> Result<bool, ProfileFileCommitError> {
+fn staged_bytes_match(
+    output: &File,
+    artifact: &[u8],
+) -> Result<bool, ProfileFileCommitError> {
     use std::os::unix::fs::FileExt as _;
 
     // The stage is private but a same-user process can reach its descriptor.
@@ -354,8 +357,8 @@ fn staged_bytes_match(output: &File, artifact: &[u8]) -> Result<bool, ProfileFil
     let mut readback = [0u8; 16 * 1024];
     let mut offset = 0usize;
     for chunk in artifact.chunks(readback.len()) {
-        let position =
-            u64::try_from(offset).map_err(|_error| ProfileFileCommitError::StagedFileChanged)?;
+        let position = u64::try_from(offset)
+            .map_err(|_error| ProfileFileCommitError::StagedFileChanged)?;
         let part = readback
             .get_mut(..chunk.len())
             .ok_or(ProfileFileCommitError::StagedFileChanged)?;
