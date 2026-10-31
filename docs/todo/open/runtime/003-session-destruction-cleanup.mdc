@@ -125,6 +125,13 @@ Hydration leaves all three inputs disabled
 until every field passes and can never apply a partial snapshot. The independent
 browser transport fixture also pins case-insensitive exact media admission.
 
+Firefox also verifies that an incomplete HTTP `409` handshake exposes a
+same-tab retry without draft admission, while a subsequently valid, typed
+`409` version mismatch remains terminal. Neither response restores the
+scrubbed fragment, enables draft editing, or reads private fields. The
+terminal state remains inert even when a synthetic click event targets its
+hidden retry control.
+
 A real Firefox loopback fixture now returns an HTML media type with a
 successful status for the source draft after the task draft has arrived. It
 verifies the complete three-field snapshot stays blank and disabled, the

@@ -4945,6 +4945,125 @@ test(
 );
 
 test(
+    "Firefox retries malformed HTTP 409 but terminates a typed mismatch",
+    { skip: !FIREFOX_AVAILABLE, timeout: FIREFOX_CASE_TIMEOUT_MS },
+    async () => {
+        fs.mkdirSync(".temp", { recursive: true });
+        const profile = fs.mkdtempSync(".temp/session-handshake-conflict-");
+        const apiRequests = [];
+        let handshakes = 0;
+        const mismatch = JSON.stringify({
+            result: "incompatible",
+            diagnostics: {
+                version: "atrament.diagnostic/1",
+                completeness: "complete",
+                items: [{
+                    code: "atrament.handshake.version-mismatch",
+                    dimension: "prompt",
+                    expected: "atrament.prompt/1",
+                }],
+            },
+        });
+        const server = createSessionFixtureServer(
+            apiRequests, null, null, null, null, null, null, null, null,
+            (_request, response) => {
+                handshakes += 1;
+                response.writeHead(409, {
+                    "Cache-Control": "no-store",
+                    "Content-Type": "application/json; charset=utf-8",
+                });
+                response.end(handshakes === 1
+                    ? JSON.stringify({ result: "incompatible" })
+                    : mismatch);
+                return true;
+            },
+        );
+        const children = [];
+        let bidi;
+        try {
+            server.listen(0, "127.0.0.1");
+            await once(server, "listening");
+            const address = server.address();
+            assert.notEqual(address, null);
+            assert.notEqual(typeof address, "string");
+            bidi = await startBidiFirefox(profile, children);
+            const tab = await bidi.command("browsingContext.create", {
+                type: "tab",
+            });
+            await bidi.command("browsingContext.navigate", {
+                context: tab.context,
+                url: `http://127.0.0.1:${address.port}/` +
+                    `#session=${REFRESH_SECRET}`,
+                wait: "complete",
+            });
+            const invalid = await waitForSessionStatus(
+                bidi, tab.context,
+                "Invalid backend handshake · editing disabled",
+            );
+            assert.equal(invalid.hash, "");
+            for (const field of ["task", "source", "candidate"]) {
+                assert.deepEqual(invalid[field], {
+                    disabled: true, value: "",
+                });
+            }
+            assert.deepEqual(apiRequests, ["POST /api/handshake"]);
+
+            const retried = await bidi.command("script.evaluate", {
+                awaitPromise: false,
+                expression: `(() => {
+                    const retry = document.getElementById("retry-session");
+                    if (retry.hidden || retry.disabled
+                        || retry.textContent !== "Retry connection") {
+                        throw Error("malformed conflict must allow retry");
+                    }
+                    retry.click();
+                    return true;
+                })()`,
+                resultOwnership: "none",
+                target: { context: tab.context },
+            });
+            assert.equal(retried.type, "success");
+            const incompatible = await waitForSessionStatus(
+                bidi, tab.context,
+                "Incompatible prompt · expected atrament.prompt/1",
+            );
+            assert.equal(incompatible.hash, "");
+            for (const field of ["task", "source", "candidate"]) {
+                assert.deepEqual(incompatible[field], {
+                    disabled: true, value: "",
+                });
+            }
+            const terminal = await bidi.command("script.evaluate", {
+                awaitPromise: false,
+                expression: `(() => {
+                    const retry = document.getElementById("retry-session");
+                    if (!retry.hidden || !retry.disabled) {
+                        throw Error("typed mismatch exposed a retry");
+                    }
+                    retry.dispatchEvent(new MouseEvent("click"));
+                    return true;
+                })()`,
+                resultOwnership: "none",
+                target: { context: tab.context },
+            });
+            assert.equal(terminal.type, "success");
+            await new Promise((resolve) => setTimeout(resolve, 100));
+            assert.deepEqual(apiRequests, [
+                "POST /api/handshake",
+                "POST /api/handshake",
+            ]);
+        } finally {
+            bidi?.close();
+            await closeFixtureServer(server);
+            for (const child of children.reverse()) {
+                await stopChild(child);
+            }
+            fs.rmSync(profile, { recursive: true, force: true });
+        }
+    },
+);
+
+test(
     "Firefox aborts a stalled wrong-media handshake before in-tab retry",
     { skip: !FIREFOX_AVAILABLE, timeout: FIREFOX_CASE_TIMEOUT_MS },
     async () => {

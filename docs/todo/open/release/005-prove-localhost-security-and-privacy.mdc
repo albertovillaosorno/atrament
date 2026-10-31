@@ -53,6 +53,14 @@ Firefox confirms wrong-media and oversized responses never request private
 drafts before a later valid handshake. This is client recovery evidence, not a
 change to the session's HTTP authentication rules.
 
+A real Firefox HTTP `409` fixture now distinguishes a malformed
+incompatibility body, which permits an explicit same-tab retry, from a
+complete typed version-mismatch diagnostic, which is terminal. Both stages
+keep the launch fragment removed and all three draft fields blank and
+disabled; even a synthetic click on the hidden terminal retry control sends
+no further handshake or private draft request. This proves the browser
+state boundary, not independent backend version interoperability.
+
 A discarded-response browser regression now verifies that wrong-media
 handshakes, draft responses, and unexpected statuses are refused without
 reading their bodies, and that the browser explicitly cancels their
