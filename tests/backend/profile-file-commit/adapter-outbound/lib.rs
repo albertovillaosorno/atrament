@@ -864,6 +864,60 @@ mod linux {
     }
 
     #[test]
+    fn same_length_inplace_rewrite_with_restored_mtime_refuses_replace() {
+        use std::time::UNIX_EPOCH;
+
+        let dir = OwnedDir::new();
+        let target = dir.target();
+        fs::write(&target, b"original").expect("original target");
+        let before = fs::metadata(&target).expect("original metadata");
+        let original_mtime = UNIX_EPOCH
+            + Duration::new(
+                before.mtime().try_into().expect("positive seconds"),
+                before.mtime_nsec().try_into().expect("valid nanos"),
+            );
+        let mut observations = 0usize;
+        let result = commit_profile_file_cancellable(
+            &target,
+            b"exported",
+            8,
+            Mode::ReplaceExisting,
+            || {
+                observations += 1;
+                if observations == 3 {
+                    thread::sleep(Duration::from_millis(20));
+                    fs::write(&target, b"external")
+                        .expect("rewrite selected inode");
+                    fs::File::options()
+                        .write(true)
+                        .open(&target)
+                        .expect("open for timestamp restoration")
+                        .set_modified(original_mtime)
+                        .expect("restore modification timestamp");
+                    let current = fs::metadata(&target)
+                        .expect("externally modified metadata");
+                    assert_eq!(before.dev(), current.dev());
+                    assert_eq!(before.ino(), current.ino());
+                    assert_eq!(before.len(), current.len());
+                    assert_eq!(
+                        (before.mtime(), before.mtime_nsec()),
+                        (current.mtime(), current.mtime_nsec()),
+                    );
+                    assert_ne!(
+                        (before.ctime(), before.ctime_nsec()),
+                        (current.ctime(), current.ctime_nsec()),
+                    );
+                }
+                false
+            },
+        );
+        assert_eq!(result, Err(Error::SelectedTargetChanged));
+        assert_eq!(observations, 3);
+        assert_eq!(fs::read(&target).expect("external bytes"), b"external");
+        assert_eq!(dir.entries(), vec![String::from("chosen.atrament")]);
+    }
+
+    #[test]
     fn replacement_target_swap_to_directory_refuses_without_stage_leak() {
         let dir = OwnedDir::new();
         let target = dir.target();

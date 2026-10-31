@@ -1011,3 +1011,10 @@ successful, and all prelink refusals classify as no file effect.
 These checks reduce observed target-substitution risk but do not lock the
 entry after the last observation or eliminate the replacement
 link-before-rename crash window.
+
+A same-length in-place replacement regression additionally restores the
+selected inode's original mtime before the late prelink observation. It
+confirms unchanged device, inode, length and mtime with changed ctime, then
+requires `SelectedTargetChanged` without publishing Export bytes or losing the
+externally rewritten content. This covers the precommit history gate's use of
+ctime, not a guarantee against timestamp spoofing or changes after the check.
