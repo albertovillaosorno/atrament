@@ -33,10 +33,12 @@
 
 //! Theme safe title plan domain regression tests.
 
+use std::ptr;
+
 use atrament_theme_safe_title_plan::{
+    validate_theme_safe_title_plan, validate_theme_safe_title_plan_view,
     DigitalTitleTreatment, ThemeSafeTitlePlan, ThemeSafeTitlePlanError,
-    TitleProjection, validate_theme_safe_title_plan,
-    validate_theme_safe_title_plan_view,
+    TitleProjection,
 };
 
 type DigitalTreatment =
@@ -45,7 +47,7 @@ type Projection<Treatment> = TitleProjection<u8, &'static str, Treatment>;
 type Plan =
     ThemeSafeTitlePlan<Projection<DigitalTreatment>, Projection<&'static str>>;
 
-fn plan() -> Plan {
+const fn plan() -> Plan {
     ThemeSafeTitlePlan {
         digital: TitleProjection {
             hierarchy: 2,
@@ -99,12 +101,12 @@ fn hierarchy_mismatch_rejects_when_title_identity_matches() {
 
 #[test]
 fn mode_specific_treatment_may_differ_without_losing_shared_hierarchy() {
-    for hierarchy in 0_u8..=63 {
+    for hierarchy in 0u8..=63 {
         let mut plan = plan();
         plan.digital.hierarchy = hierarchy;
         plan.live.hierarchy = hierarchy;
         plan.digital.treatment.motif = hierarchy;
-        plan.live.treatment = if hierarchy % 2 == 0 {
+        plan.live.treatment = if hierarchy.rem_euclid(2) == 0 {
             "one-pen-large"
         } else {
             "one-pen-underlined"
@@ -115,9 +117,9 @@ fn mode_specific_treatment_may_differ_without_losing_shared_hierarchy() {
 
 #[test]
 fn every_compact_title_drift_case_matches_identity_hierarchy_oracle() {
-    let mut cases = 0_u16;
+    let mut cases = 0u16;
     let mut saw = [false; 3];
-    for hierarchy in 0_u8..=63 {
+    for hierarchy in 0u8..=63 {
         for identity_drift in [false, true] {
             for hierarchy_drift in [false, true] {
                 let mut plan = plan();
@@ -133,7 +135,7 @@ fn every_compact_title_drift_case_matches_identity_hierarchy_oracle() {
                     "title-17"
                 };
                 plan.digital.treatment.motif = hierarchy;
-                plan.live.treatment = if hierarchy % 2 == 0 {
+                plan.live.treatment = if hierarchy.rem_euclid(2) == 0 {
                     "one-pen-large"
                 } else {
                     "one-pen-underlined"
@@ -157,12 +159,19 @@ fn every_compact_title_drift_case_matches_identity_hierarchy_oracle() {
                 );
                 match expected {
                     Ok(()) => {
-                        let validated = validate_theme_safe_title_plan_view(
-                            &plan,
-                        )
-                        .expect("matching title plan seals");
-                        assert!(std::ptr::eq(validated.plan(), &plan));
-                    },
+                        let validation =
+                            validate_theme_safe_title_plan_view(&plan);
+                        assert!(
+                            validation.is_ok(),
+                            "matching title plan seals"
+                        );
+                        if let Ok(sealed) = validation {
+                            assert!(ptr::eq(
+                                sealed.plan(),
+                                ptr::from_ref(&plan)
+                            ));
+                        }
+                    }
                     Err(reason) => assert_eq!(
                         validate_theme_safe_title_plan_view(&plan),
                         Err(reason),

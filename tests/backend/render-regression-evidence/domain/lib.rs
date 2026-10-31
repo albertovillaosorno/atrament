@@ -33,11 +33,13 @@
 
 //! Visual render regression evidence contract tests.
 
+use std::ptr;
+
 use atrament_render_regression_evidence::{
-    RenderRegressionAxis, RenderRegressionComparison, RenderRegressionEvidence,
-    RenderRegressionEvidenceError, render_regression_mismatches,
-    validate_render_regression_evidence,
-    validate_render_regression_evidence_view,
+    render_regression_mismatches, validate_render_regression_evidence,
+    validate_render_regression_evidence_view, RenderRegressionAxis,
+    RenderRegressionComparison, RenderRegressionEvidence,
+    RenderRegressionEvidenceError,
 };
 
 const AXES: [RenderRegressionAxis; 9] = [
@@ -53,13 +55,12 @@ const AXES: [RenderRegressionAxis; 9] = [
 ];
 
 fn complete_evidence() -> Vec<RenderRegressionEvidence> {
-    AXES
-        .into_iter()
-    .map(|axis| RenderRegressionEvidence {
-        axis,
-        comparison: RenderRegressionComparison::Match,
-    })
-    .collect()
+    AXES.into_iter()
+        .map(|axis| RenderRegressionEvidence {
+            axis,
+            comparison: RenderRegressionComparison::Match,
+        })
+        .collect()
 }
 
 #[test]
@@ -100,12 +101,15 @@ fn every_axis_is_independently_required_even_when_other_axes_match() {
 fn every_duplicate_axis_rejects_before_completeness_is_claimed() {
     for duplicate in AXES {
         let mut evidence = complete_evidence();
-        let item = evidence
-            .iter()
-            .find(|item| item.axis == duplicate)
-            .copied()
-            .expect("complete evidence contains every axis");
-        evidence.insert(4, item);
+        let matched =
+            evidence.iter().find(|item| item.axis == duplicate).copied();
+        assert!(
+            matched.is_some(),
+            "complete evidence contains {duplicate:?}"
+        );
+        if let Some(item) = matched {
+            evidence.insert(4, item);
+        }
         let expected = Err(RenderRegressionEvidenceError::DuplicateAxis {
             axis: duplicate,
         });
@@ -151,17 +155,21 @@ fn every_match_mismatch_mask_projects_exact_canonical_axes() {
     const MASKS: usize = 1 << AXES.len();
     let mut saw_match = [false; AXES.len()];
     let mut saw_mismatch = [false; AXES.len()];
-    let mut cases = 0_usize;
+    let mut cases = 0usize;
     for mask in 0..MASKS {
         let mut evidence = AXES
             .into_iter()
             .enumerate()
             .map(|(index, axis)| {
                 let comparison = if mask & (1 << index) == 0 {
-                    saw_match[index] = true;
+                    if let Some(seen) = saw_match.get_mut(index) {
+                        *seen = true;
+                    }
                     RenderRegressionComparison::Match
                 } else {
-                    saw_mismatch[index] = true;
+                    if let Some(seen) = saw_mismatch.get_mut(index) {
+                        *seen = true;
+                    }
                     RenderRegressionComparison::Mismatch
                 };
                 RenderRegressionEvidence { axis, comparison }
@@ -180,14 +188,16 @@ fn every_match_mismatch_mask_projects_exact_canonical_axes() {
             Ok(()),
             "structural completeness for mask {mask:#011b}",
         );
-        let validated = validate_render_regression_evidence_view(&evidence)
-            .expect("complete evidence seals");
-        assert!(std::ptr::eq(validated.evidence(), evidence.as_slice()));
-        assert_eq!(
-            validated.mismatches(),
-            expected,
-            "sealed mismatch projection for mask {mask:#011b}",
-        );
+        let validation = validate_render_regression_evidence_view(&evidence);
+        assert!(validation.is_ok(), "complete evidence must seal");
+        if let Ok(sealed) = validation {
+            assert!(ptr::eq(sealed.evidence(), evidence.as_slice()));
+            assert_eq!(
+                sealed.mismatches(),
+                expected,
+                "sealed mismatch projection for mask {mask:#011b}",
+            );
+        }
         assert_eq!(
             render_regression_mismatches(&evidence),
             Ok(expected),

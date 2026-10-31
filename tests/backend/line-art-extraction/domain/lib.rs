@@ -33,15 +33,17 @@
 
 //! Line art extraction domain regression tests.
 
+use std::ptr;
+
 use atrament_line_art_extraction::{
+    validate_line_art_extraction_pair, validate_line_art_extraction_pair_view,
     LineArtAppearance, LineArtExtractionControls, LineArtExtractionPairError,
     LineArtExtractionRequest, LineArtExtractionResult,
-    validate_line_art_extraction_pair, validate_line_art_extraction_pair_view,
 };
 
 type Controls = LineArtExtractionControls<u8, u8, u8, u8, u8, u8>;
 
-fn controls() -> Controls {
+const fn controls() -> Controls {
     LineArtExtractionControls {
         cleanup: 3,
         detail: 4,
@@ -52,7 +54,7 @@ fn controls() -> Controls {
     }
 }
 
-fn request() -> LineArtExtractionRequest<Controls, &'static str> {
+const fn request() -> LineArtExtractionRequest<Controls, &'static str> {
     LineArtExtractionRequest {
         controls: controls(),
         source_identity: "photo-17",
@@ -91,7 +93,7 @@ fn result_is_transparent_black_source_linked_and_order_preserving() {
 
 #[test]
 fn every_extraction_control_is_part_of_exact_request_result_identity() {
-    for changed_index in 0..6 {
+    for changed_index in 0u8..6 {
         let request = request();
         let mut result = result();
         match changed_index {
@@ -101,7 +103,7 @@ fn every_extraction_control_is_part_of_exact_request_result_identity() {
             3 => result.controls.minimum_feature += 1,
             4 => result.controls.preview += 1,
             5 => result.controls.threshold += 1,
-            _ => unreachable!("six controls are enumerated"),
+            _ => assert!(changed_index < 6, "six controls are enumerated"),
         }
         assert_eq!(
             validate_line_art_extraction_pair(&request, &result),
@@ -144,9 +146,9 @@ fn exact_request_result_pair_is_valid_without_interpreting_controls() {
 
 #[test]
 fn every_control_and_source_drift_mask_matches_exact_pair_oracle() {
-    let mut cases = 0_u16;
+    let mut cases = 0u16;
     let mut saw = [false; 3];
-    for control_mask in 0_u8..64 {
+    for control_mask in 0u8..64 {
         for source_drift in [false, true] {
             let request = request();
             let mut result = result();
@@ -189,14 +191,24 @@ fn every_control_and_source_drift_mask_matches_exact_pair_oracle() {
             );
             match expected {
                 Ok(()) => {
-                    let validated = validate_line_art_extraction_pair_view(
-                        &request,
-                        &result,
-                    )
-                    .expect("exact extraction pair seals");
-                    assert!(std::ptr::eq(validated.request(), &request));
-                    assert!(std::ptr::eq(validated.result(), &result));
-                },
+                    let validation = validate_line_art_extraction_pair_view(
+                        &request, &result,
+                    );
+                    assert!(
+                        validation.is_ok(),
+                        "matching extraction pair seals"
+                    );
+                    if let Ok(sealed) = validation {
+                        assert!(ptr::eq(
+                            sealed.request(),
+                            ptr::from_ref(&request)
+                        ));
+                        assert!(ptr::eq(
+                            sealed.result(),
+                            ptr::from_ref(&result)
+                        ));
+                    }
+                }
                 Err(reason) => assert_eq!(
                     validate_line_art_extraction_pair_view(&request, &result),
                     Err(reason),

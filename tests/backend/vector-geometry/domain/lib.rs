@@ -35,8 +35,8 @@
 //! Vector geometry domain regression tests.
 
 use atrament_vector_geometry::{
-    VectorGeometryPage, VectorPrimitive, VectorPrimitiveKind,
-    semantic_origin_primitive_indices,
+    semantic_origin_primitive_indices, VectorGeometryPage, VectorPrimitive,
+    VectorPrimitiveKind,
 };
 
 #[test]
@@ -67,7 +67,7 @@ fn every_vector_primitive_retains_semantic_provenance() {
 #[test]
 fn page_keeps_caller_owned_physical_bounds_and_composition_order() {
     let page = VectorGeometryPage {
-        physical_bounds: (210_000_u64, 297_000_u64),
+        physical_bounds: (210_000u64, 297_000u64),
         primitives: vec![
             VectorPrimitive {
                 geometry: "box-a",
@@ -82,18 +82,28 @@ fn page_keeps_caller_owned_physical_bounds_and_composition_order() {
         ],
     };
     assert_eq!(page.physical_bounds, (210_000, 297_000));
-    assert_eq!(page.primitives[0].semantic_origin, "block-a");
-    assert_eq!(page.primitives[1].semantic_origin, "formula-a");
+    assert_eq!(
+        page.primitives
+            .first()
+            .map(|primitive| primitive.semantic_origin),
+        Some("block-a"),
+    );
+    assert_eq!(
+        page.primitives
+            .get(1)
+            .map(|primitive| primitive.semantic_origin),
+        Some("formula-a"),
+    );
 }
 
 #[test]
 fn vector_primitive_kind_does_not_rewrite_caller_geometry() {
     let contour = VectorPrimitive {
-        geometry: vec![(1_i32, 2_i32), (3_i32, 4_i32)],
+        geometry: vec![(1i32, 2i32), (3i32, 4i32)],
         kind: VectorPrimitiveKind::ExpandedInkContour,
-        semantic_origin: 7_u64,
+        semantic_origin: 7u64,
     };
-    assert_eq!(contour.geometry, [(1, 2), (3, 4)]);
+    assert_eq!(contour.geometry, [(1i32, 2i32), (3i32, 4i32)]);
     assert_eq!(contour.semantic_origin, 7);
 }
 #[test]
@@ -133,7 +143,6 @@ fn semantic_origin_projection_preserves_composition_order_and_duplicates() {
     assert_eq!(page.physical_bounds, "page-a");
 }
 
-
 #[test]
 fn every_twelve_primitive_origin_mask_projects_exact_composition_indices() {
     const PRIMITIVE_COUNT: usize = 12;
@@ -148,12 +157,16 @@ fn every_twelve_primitive_origin_mask_projects_exact_composition_indices() {
         VectorPrimitiveKind::Table,
     ];
 
-    let mut cases = 0_usize;
+    let mut cases = 0usize;
     for mask in 0..MASK_COUNT {
         let primitives = (0..PRIMITIVE_COUNT)
             .map(|index| VectorPrimitive {
                 geometry: index,
-                kind: KINDS[index % KINDS.len()],
+                kind: KINDS
+                    .into_iter()
+                    .cycle()
+                    .nth(index)
+                    .unwrap_or(VectorPrimitiveKind::DiagramPath),
                 semantic_origin: if mask & (1 << index) == 0 {
                     "other"
                 } else {
@@ -162,7 +175,7 @@ fn every_twelve_primitive_origin_mask_projects_exact_composition_indices() {
             })
             .collect::<Vec<_>>();
         let page = VectorGeometryPage {
-            physical_bounds: (210_000_u64, 297_000_u64),
+            physical_bounds: (210_000u64, 297_000u64),
             primitives,
         };
         let before = page.clone();

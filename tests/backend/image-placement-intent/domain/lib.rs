@@ -52,25 +52,25 @@ fn first_release_image_placement_modes_are_explicit() {
 fn placement_retains_all_accepted_source_and_editor_properties() {
     let placement = ImagePlacementIntent {
         color_handling: "preserve-profile",
-        crop: (10_i32, 20_i32, 300_i32, 200_i32),
+        crop: (10i32, 20i32, 300i32, 200i32),
         geometry: ImagePlacementGeometry {
-            position: (45_i32, 90_i32),
-            size: (320_u32, 240_u32),
+            position: (45i32, 90i32),
+            size: (320u32, 240u32),
             transform: "rotation-0",
         },
-        opacity: 85_u8,
+        opacity: 85u8,
         placement_constraints: ["inside-writable-region"],
         placement_mode: ImagePlacementMode::AboveText,
         resolution_policy: "retain-original-resolution",
         source_identity: "asset-photo-7",
-        z_order: 12_i32,
+        z_order: 12i32,
     };
     assert_eq!(placement.source_identity, "asset-photo-7");
-    assert_eq!(placement.geometry.position, (45, 90));
+    assert_eq!(placement.geometry.position, (45i32, 90i32));
     assert_eq!(placement.geometry.size, (320, 240));
-    assert_eq!(placement.crop, (10, 20, 300, 200));
+    assert_eq!(placement.crop, (10i32, 20i32, 300i32, 200i32));
     assert_eq!(placement.opacity, 85);
-    assert_eq!(placement.z_order, 12);
+    assert_eq!(placement.z_order, 12i32);
 }
 
 #[test]
@@ -79,22 +79,22 @@ fn placement_changes_do_not_require_a_new_source_identity() {
         color_handling: "preserve",
         crop: "full-image",
         geometry: ImagePlacementGeometry {
-            position: (0_i32, 0_i32),
-            size: (100_u32, 100_u32),
+            position: (0i32, 0i32),
+            size: (100u32, 100u32),
             transform: "identity",
         },
-        opacity: 100_u8,
+        opacity: 100u8,
         placement_constraints: "page-1",
         placement_mode: ImagePlacementMode::Inline,
         resolution_policy: "original",
         source_identity: "asset-3",
-        z_order: 1_i32,
+        z_order: 1i32,
     };
     let changed = ImagePlacementIntent {
         crop: "center-crop",
         opacity: 60,
         placement_mode: ImagePlacementMode::ClippedRegion,
-        z_order: 5,
+        z_order: 5i32,
         ..base.clone()
     };
     assert_eq!(base.source_identity, changed.source_identity);
