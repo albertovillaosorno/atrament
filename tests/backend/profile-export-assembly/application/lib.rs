@@ -67,6 +67,22 @@ use atrament_profile_zip_reader::{
     ProfileZipReadLimits, read_stored_profile_zip,
 };
 
+// Check every successful setup result without bypassing the test failure.
+macro_rules! require_ok {
+    ($expression:expr) => {{
+        let result = $expression;
+        assert!(
+            result.is_ok(),
+            "expected complete artifact: {:?}",
+            result.as_ref().err(),
+        );
+        let Ok(value) = result else {
+            return;
+        };
+        value
+    }};
+}
+
 const fn limits() -> ProfileExportAssemblyLimits {
     ProfileExportAssemblyLimits {
         manifest_json: ProfileManifestJsonWriteLimits {
@@ -92,7 +108,7 @@ const fn limits() -> ProfileExportAssemblyLimits {
 
 fn entry(path: &str, bytes: &[u8]) -> ProfileManifestEntry {
     ProfileManifestEntry {
-        byte_length: bytes.len() as u64,
+        byte_length: u64::try_from(bytes.len()).unwrap_or(u64::MAX),
         digest: sha256_profile_bytes(bytes),
         media_type: "application/json".into(),
         path: path.into(),
@@ -104,17 +120,17 @@ fn manifest() -> ProfileManifest {
         container_version: PROFILE_CONTAINER_VERSION.into(),
         entries: vec![],
         optional_features: vec!["future".into()],
-        profile_identity: "writer-🖋".into(),
+        profile_identity: "writer-\u{1f58b}".into(),
         required_features: vec!["strokes".into()],
     }
 }
 
 #[test]
 fn empty_profile_is_real_zip_with_exact_root_identity() {
-    let artifact = assemble_profile_export_artifact(
+    let artifact = require_ok!(assemble_profile_export_artifact(
         &manifest(), &[], &["strokes"], limits(),
-    ).unwrap();
-    let archive = read_stored_profile_zip(
+    ));
+    let archive = require_ok!(read_stored_profile_zip(
         artifact.bytes(),
         ProfileZipReadLimits {
             maximum_archive_bytes: 16384,
@@ -122,16 +138,16 @@ fn empty_profile_is_real_zip_with_exact_root_identity() {
             maximum_entry_bytes: 8192,
             maximum_total_bytes: 12000,
         },
-    ).unwrap();
+    ));
     assert_eq!(archive.observed_paths(), ["manifest.json"]);
     assert_eq!(archive.source_sha256(), artifact.archive_sha256());
     assert_eq!(archive.source_bytes(), artifact.bytes());
-    let root = archive.admitted_root_json(ProfileJsonSyntaxLimits {
+    let root = require_ok!(archive.admitted_root_json(ProfileJsonSyntaxLimits {
         maximum_bytes: 8192,
         maximum_nesting: 16,
         maximum_object_members: 32,
         maximum_values: 128,
-    }).unwrap();
+    }));
     assert_eq!(root.source_sha256(), artifact.root_sha256());
 }
 
@@ -144,11 +160,11 @@ fn debug_of_complete_export_and_borrowed_payload_redacts_private_bytes() {
         bytes: section,
         path: "sections/private.json",
     };
-    let artifact = assemble_profile_export_artifact(
+    let artifact = require_ok!(assemble_profile_export_artifact(
         &profile, &[payload], &["strokes"], limits(),
-    ).expect("complete private ZIP bytes");
+    ));
     let archived_bytes = format!("{:?}", artifact.bytes());
-    let payload_bytes = format!("{:?}", section);
+    let payload_bytes = format!("{section:?}");
     let debug = format!("{artifact:?} {payload:?}");
     assert!(debug.contains("ProfileExportArtifact"));
     assert!(debug.contains("ProfileExportPayload"));
@@ -176,50 +192,54 @@ fn complete_archive_is_order_independent_and_import_verifiable() {
             bytes: asset, path: "assets/ink.bin",
         },
     ];
-    let a = assemble_profile_export_artifact(
+    let first_artifact = require_ok!(assemble_profile_export_artifact(
         &first, &payloads, &["strokes"], limits(),
-    ).unwrap();
+    ));
     first.entries.reverse();
-    let b = assemble_profile_export_artifact(
+    let second_artifact = require_ok!(assemble_profile_export_artifact(
         &first, &payloads.into_iter().rev().collect::<Vec<_>>(),
         &["strokes"], limits(),
-    ).unwrap();
-    assert_eq!(a.bytes(), b.bytes());
-    assert_eq!(a.archive_sha256(), b.archive_sha256());
-    assert_eq!(a.root_sha256(), b.root_sha256());
+    ));
+    assert_eq!(first_artifact.bytes(), second_artifact.bytes());
+    assert_eq!(
+        first_artifact.archive_sha256(), second_artifact.archive_sha256(),
+    );
+    assert_eq!(first_artifact.root_sha256(), second_artifact.root_sha256());
 
-    let archive = read_stored_profile_zip(a.bytes(), ProfileZipReadLimits {
-        maximum_archive_bytes: a.bytes().len(),
+    let archive = require_ok!(read_stored_profile_zip(
+        first_artifact.bytes(),
+        ProfileZipReadLimits {
+        maximum_archive_bytes: first_artifact.bytes().len(),
         maximum_entries: 3,
         maximum_entry_bytes: 8192,
         maximum_total_bytes: 12000,
-    }).unwrap();
+    }));
     let names = archive.observed_paths();
     assert_eq!(names, [
         "assets/ink.bin", "manifest.json", "sections/strokes.json",
     ]);
-    let root = archive.admitted_root_json(ProfileJsonSyntaxLimits {
+    let root = require_ok!(archive.admitted_root_json(ProfileJsonSyntaxLimits {
         maximum_bytes: 8192,
         maximum_nesting: 16,
         maximum_object_members: 32,
         maximum_values: 128,
-    }).unwrap();
-    let attached = decode_attached_profile_manifest_json(
+    }));
+    let attached = require_ok!(decode_attached_profile_manifest_json(
         &root,
         ProfileManifestJsonLimits {
             maximum_entries: 8,
             maximum_features: 8,
             maximum_string_bytes: 256,
         },
-    ).unwrap();
-    let path = classify_explicit_file_path_intent(
+    ));
+    let path = require_ok!(classify_explicit_file_path_intent(
         ExplicitFilePurpose::ImportProfile,
         ExplicitFilePathSource::CallerSelection,
         PathBuf::from("profile.atrament"),
         ExplicitOverwriteIntent::PreserveExisting,
-    ).unwrap();
+    ));
     let mut observed = [""; 3];
-    let verified = verify_attached_profile_import(
+    let verified = require_ok!(verify_attached_profile_import(
         &path, &attached, &["strokes"],
         ProfileImportBudget {
             maximum_declared_bytes: 64,
@@ -227,10 +247,10 @@ fn complete_archive_is_order_independent_and_import_verifiable() {
             maximum_entry_bytes: 64,
         },
         &mut observed,
-    ).unwrap();
+    ));
     assert_eq!(verified.manifest(), &first);
-    assert_eq!(verified.root_sha256(), a.root_sha256());
-    assert_eq!(verified.archive_sha256(), a.archive_sha256());
+    assert_eq!(verified.root_sha256(), first_artifact.root_sha256());
+    assert_eq!(verified.archive_sha256(), first_artifact.archive_sha256());
     assert_eq!(
         verified.verified_entry_bytes("assets/ink.bin"), Some(&asset[..]),
     );
@@ -294,7 +314,11 @@ fn section_media_type_mismatch_refuses_all_writers_before_output() {
     ];
     // Opaque asset MIME metadata remains permitted, but JSON sections
     // must match the exact format admitted by selected-file Import.
-    profile.entries[1].media_type = "image/png".into();
+    assert_eq!(profile.entries.len(), 2);
+    let Some(asset_entry) = profile.entries.get_mut(1) else {
+        return;
+    };
+    asset_entry.media_type = "image/png".into();
     let payloads = [
         ProfileExportPayload {
             path: "sections/notes.json", bytes: json,
@@ -310,7 +334,10 @@ fn section_media_type_mismatch_refuses_all_writers_before_output() {
     for media_type in [
         "text/plain", "image/png", "application/json; charset=utf-8",
     ] {
-        profile.entries[0].media_type = media_type.into();
+        let Some(section_entry) = profile.entries.get_mut(0) else {
+            return;
+        };
+        section_entry.media_type = media_type.into();
         let expected = Error::SectionMediaType { index: 1 };
         assert_eq!(
             assemble_profile_export_artifact(
@@ -552,21 +579,21 @@ fn manifest_and_zip_budgets_fail_without_artifact() {
 fn caller_owned_archive_is_atomic_and_matches_exact_planned_size() {
     let mut profile = manifest();
     profile.entries = vec![
-        entry("sections/ñ.json", b"{\"ink\":1}"),
+        entry("sections/\u{f1}.json", b"{\"ink\":1}"),
         entry("assets/blank.bin", b""),
     ];
     let payloads = [
         ProfileExportPayload { path: "assets/blank.bin", bytes: b"" },
         ProfileExportPayload {
-            path: "sections/ñ.json", bytes: b"{\"ink\":1}",
+            path: "sections/\u{f1}.json", bytes: b"{\"ink\":1}",
         },
     ];
-    let expected = assemble_profile_export_artifact(
+    let expected = require_ok!(assemble_profile_export_artifact(
         &profile, &payloads, &["strokes"], limits(),
-    ).unwrap();
-    let required = planned_profile_export_artifact_bytes(
+    ));
+    let required = require_ok!(planned_profile_export_artifact_bytes(
         &profile, &payloads, &["strokes"], limits(),
-    ).unwrap();
+    ));
     assert_eq!(required, expected.bytes().len());
     for capacity in [0, 1, required - 1] {
         let mut destination = vec![0xa5u8; capacity];
@@ -583,15 +610,17 @@ fn caller_owned_archive_is_atomic_and_matches_exact_planned_size() {
     }
     for capacity in [required, required + 1, required + 20] {
         let mut destination = vec![0xa5u8; capacity];
-        let evidence = write_profile_export_artifact_into(
+        let evidence = require_ok!(write_profile_export_artifact_into(
             &profile, &payloads, &["strokes"],
             limits(), &mut destination,
-        ).unwrap();
+        ));
         assert_eq!(evidence.bytes_written, required);
         assert_eq!(evidence.root_sha256, expected.root_sha256());
         assert_eq!(evidence.archive_sha256, expected.archive_sha256());
-        assert_eq!(&destination[..required], expected.bytes());
-        assert!(destination[required..].iter().all(|&b| b == 0xa5));
+        assert_eq!(destination.get(..required), Some(expected.bytes()));
+        assert!(destination.get(required..).is_some_and(|tail| {
+            tail.iter().all(|&byte| byte == 0xa5)
+        }));
     }
 }
 
@@ -705,56 +734,67 @@ fn zip_preflight_refuses_unaffordable_input_before_hash_comparison() {
     assert_eq!(destination, [0xa7; 512]);
 }
 
+fn generated_payload(
+    case: usize,
+    index: usize,
+    state: u64,
+) -> (String, Vec<u8>) {
+    let name = if state & (1 << index.saturating_add(12)) == 0 {
+        format!("assets/{index:02}.bin")
+    } else {
+        format!("sections/{index:02}-\u{f1}.json")
+    };
+    let data = if name.starts_with("sections/") {
+        format!(r#"{{"case":{case},"index":{index}}}"#).into_bytes()
+    } else {
+        let byte = u8::try_from(index).unwrap_or(u8::MAX);
+        vec![byte; index.saturating_add(case).rem_euclid(13)]
+    };
+    (name, data)
+}
+
 #[test]
 fn generated_profile_archives_are_deterministic_and_sha_bound() {
     let mut state = 0x8ab5_41c0_9321_77b5u64;
     for case in 0..256 {
-        state = state.wrapping_mul(6364136223846793005).wrapping_add(1);
+        state = state.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(1);
         let mut profile = manifest();
-        let count = usize::try_from((state >> 4) % 5).unwrap();
+        let count = require_ok!(usize::try_from((state >> 4).rem_euclid(5)));
+        assert!(count <= 4, "generated entries remain bounded");
         let mut values = Vec::new();
         for index in 0..count {
-            let name = if state & (1 << (index + 12)) == 0 {
-                format!("assets/{index:02}.bin")
-            } else {
-                format!("sections/{index:02}-ñ.json")
-            };
-            let data = if name.starts_with("sections/") {
-                format!(r#"{{"case":{case},"index":{index}}}"#).into_bytes()
-            } else {
-                vec![index as u8; (index + case) % 13]
-            };
+            let (name, data) = generated_payload(case, index, state);
             profile.entries.push(entry(&name, &data));
             values.push((name, data));
         }
         let mut payloads = values.iter().map(|(path, bytes)| {
             ProfileExportPayload { path, bytes }
         }).collect::<Vec<_>>();
-        let expected = assemble_profile_export_artifact(
+        let expected = require_ok!(assemble_profile_export_artifact(
             &profile, &payloads, &["strokes"], limits(),
-        ).unwrap();
+        ));
         profile.entries.reverse();
         payloads.reverse();
-        let actual = assemble_profile_export_artifact(
+        let actual = require_ok!(assemble_profile_export_artifact(
             &profile, &payloads, &["strokes"], limits(),
-        ).unwrap();
+        ));
         assert_eq!(actual.bytes(), expected.bytes(), "case {case}");
         assert_eq!(actual.root_sha256(), expected.root_sha256());
         assert_eq!(actual.archive_sha256(), expected.archive_sha256());
-        let length = planned_profile_export_artifact_bytes(
+        let length = require_ok!(planned_profile_export_artifact_bytes(
             &profile, &payloads, &["strokes"], limits(),
-        ).unwrap();
+        ));
         assert_eq!(length, expected.bytes().len());
         let mut buffer = vec![0xceu8; length + 3];
-        let metadata = write_profile_export_artifact_into(
+        let metadata = require_ok!(write_profile_export_artifact_into(
             &profile, &payloads, &["strokes"], limits(),
             &mut buffer,
-        ).unwrap();
+        ));
         assert_eq!(metadata.bytes_written, length);
         assert_eq!(metadata.root_sha256, expected.root_sha256());
         assert_eq!(metadata.archive_sha256, expected.archive_sha256());
-        assert_eq!(&buffer[..length], expected.bytes());
-        assert_eq!(&buffer[length..], &[0xce; 3]);
+        assert_eq!(buffer.get(..length), Some(expected.bytes()));
+        assert_eq!(buffer.get(length..), Some(&[0xce; 3][..]));
         if let Some(entry) = values.first_mut() {
             entry.1.push(42);
             let altered = values.iter().map(|(path, bytes)| {
@@ -779,8 +819,8 @@ fn generated_profile_archives_are_deterministic_and_sha_bound() {
                 ),
                 Err(Error::PayloadVerification { .. }),
             ));
-            assert_eq!(&buffer[..length], expected.bytes());
-            assert_eq!(&buffer[length..], &[0xce; 3]);
+            assert_eq!(buffer.get(..length), Some(expected.bytes()));
+            assert_eq!(buffer.get(length..), Some(&[0xce; 3][..]));
         }
     }
 }
