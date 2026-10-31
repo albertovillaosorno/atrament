@@ -2892,6 +2892,8 @@ test(
                 wait: "complete",
             });
 
+            // Copying 1.4 MB can exceed the generic 10-second BiDi command
+            // budget under workstation CPU load, so bound this probe to 25s.
             const response = await bidi.command("script.evaluate", {
                 awaitPromise: true,
                 expression: `(async () => {
@@ -2990,7 +2992,7 @@ test(
                 })()`,
                 resultOwnership: "none",
                 target: { context: tab.context },
-            });
+            }, 25_000);
             assert.equal(response.type, "success");
             assert.equal(response.result.type, "string");
             const state = JSON.parse(response.result.value);
