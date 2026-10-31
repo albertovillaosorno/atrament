@@ -181,6 +181,22 @@ test(
     },
 );
 
+test("handshake refuses arrays posing as response or version records", () => {
+    const valid = {
+        result: "compatible",
+        versions: CURRENT_VERSIONS,
+    };
+    const arrayResponse = Object.assign([], valid);
+    const arrayVersions = Object.assign([], CURRENT_VERSIONS);
+    for (const value of [
+        arrayResponse,
+        { ...valid, versions: arrayVersions },
+    ]) {
+        assert.deepEqual(referenceHandshakeOutcome(value), { kind: "invalid" });
+        assert.deepEqual(parseHandshakePayload(value), { kind: "invalid" });
+    }
+});
+
 function referenceHandshakeOutcome(value) {
     if (typeof value !== "object" || value === null || Array.isArray(value)) {
         return { kind: "invalid" };

@@ -77,3 +77,10 @@ set and individual items, even when a JavaScript caller attaches properties
 that mimic object fields. A red-first fixture proved the prior guard accepted
 these non-object shapes, contrary to the independent fail-closed reference.
 This is local parser-shape correctness, not a claim of network exploitability.
+
+The same browser object-shape rule now also applies to handshake response and
+version records and to resource-limit response roots. Their own independent
+fail-closed reference tests already rejected arrays; red-first regressions
+confirm the former implementation incorrectly accepted augmented JavaScript
+arrays as compatible handshakes or known draft resource-limit errors. These
+shape guards do not change how valid JSON object payloads are interpreted.

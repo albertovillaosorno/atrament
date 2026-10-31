@@ -119,6 +119,19 @@ test("incomplete draft diagnostics still preserve known resource limit", () => {
     );
 });
 
+test("draft resource-limit response refuses array-shaped roots", () => {
+    const forged = Object.assign([], {
+        error: "resource_limit",
+        diagnostics: {
+            version: "atrament.diagnostic/1",
+            completeness: "complete",
+            items: [{ code: "atrament.session-draft.resource-limit" }],
+        },
+    });
+    assert.equal(referenceResourceLimit(forged), false);
+    assert.equal(isResourceLimit(forged), false);
+});
+
 function referenceResourceLimit(value) {
     if (
         typeof value !== "object"

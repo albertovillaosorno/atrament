@@ -53,7 +53,9 @@ export function draftMutationTarget(field) {
     return draftReadTarget(field);
 }
 function isRecord(value) {
-    return typeof value === "object" && value !== null;
+    return typeof value === "object"
+        && value !== null
+        && !Array.isArray(value);
 }
 export function isResourceLimit(value) {
     if (!isRecord(value) || value.error !== "resource_limit") {

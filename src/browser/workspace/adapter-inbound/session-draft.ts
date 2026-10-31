@@ -64,7 +64,9 @@ export function draftMutationTarget(field: DraftField): string {
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-    return typeof value === "object" && value !== null;
+    return typeof value === "object"
+        && value !== null
+        && !Array.isArray(value);
 }
 
 export function isResourceLimit(value: unknown): boolean {

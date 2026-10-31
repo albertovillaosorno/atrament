@@ -55,7 +55,9 @@ const CURRENT_VERSIONS = {
     renderer: RENDERER_VERSION,
 };
 function isRecord(value) {
-    return typeof value === "object" && value !== null;
+    return typeof value === "object"
+        && value !== null
+        && !Array.isArray(value);
 }
 function isVersionDimension(value) {
     return typeof value === "string"

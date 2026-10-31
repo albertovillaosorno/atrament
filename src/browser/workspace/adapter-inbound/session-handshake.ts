@@ -79,7 +79,9 @@ const CURRENT_VERSIONS: VersionRecord = {
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-    return typeof value === "object" && value !== null;
+    return typeof value === "object"
+        && value !== null
+        && !Array.isArray(value);
 }
 
 function isVersionDimension(value: unknown): value is VersionDimension {
