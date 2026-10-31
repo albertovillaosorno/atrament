@@ -59,6 +59,8 @@ pub struct ProfileManifestJsonLimits {
 /// A manifest schema violation, with stable structural field location.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ProfileManifestJsonError {
+    /// The bounded typed metadata could not be allocated.
+    AllocationFailed,
     /// An array has more members than the caller permits.
     ArrayLimitExceeded(&'static str),
     /// SHA-256 must be exactly 64 lowercase hexadecimal characters.
@@ -196,7 +198,10 @@ pub fn decode_profile_manifest_json(
         if entries.len() >= limits.maximum_entries {
             return Err(ProfileManifestJsonError::ArrayLimitExceeded("entries"));
         }
-        entries.push(decode_entry(entry, limits)?);
+        let parsed = decode_entry(entry, limits)?;
+        entries.try_reserve(1)
+            .map_err(|_error| ProfileManifestJsonError::AllocationFailed)?;
+        entries.push(parsed);
     }
     Ok(ProfileManifest {
         container_version,
@@ -258,7 +263,10 @@ fn read_strings(
         if strings.len() >= limits.maximum_features {
             return Err(ProfileManifestJsonError::ArrayLimitExceeded(location));
         }
-        strings.push(read_string(item, location, limits)?);
+        let parsed = read_string(item, location, limits)?;
+        strings.try_reserve(1)
+            .map_err(|_error| ProfileManifestJsonError::AllocationFailed)?;
+        strings.push(parsed);
     }
     Ok(strings)
 }
@@ -278,7 +286,9 @@ fn read_string(
             return Err(ProfileManifestJsonError::StringLimitExceeded(location));
         }
     }
-    let mut decoded = String::with_capacity(length);
+    let mut decoded = String::new();
+    decoded.try_reserve_exact(length)
+        .map_err(|_error| ProfileManifestJsonError::AllocationFailed)?;
     decoded.extend(chars);
     Ok(decoded)
 }

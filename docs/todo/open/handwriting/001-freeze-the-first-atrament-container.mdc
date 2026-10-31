@@ -22,6 +22,12 @@ migrated_from: TODO.md
 
 ## Current portable-container implementation status
 
+The typed manifest decoder uses fallible, checked allocations for every
+untrusted decoded string and metadata array. An allocation failure returns a
+typed refusal rather than panicking on a caller-admitted large declaration;
+exact decoded UTF-8 byte and entry/feature limits remain in force. This does
+not authenticate or accept any profile into session state.
+
 The pure typed manifest, canonical JSON writer, stored-ZIP byte writer and
 checked reader now exist, with SHA-256 verification of imported member bodies.
 The separate in-memory Export artifact assembly binds canonical root JSON to

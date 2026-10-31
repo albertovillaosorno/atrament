@@ -126,6 +126,92 @@ fn full_manifest_decodes_every_field_without_losing_optional_features() {
 }
 
 #[test]
+fn decoded_utf8_respects_exact_byte_budget_with_large_caller_limits() {
+    let source = concat!(
+        r#"{"container_version":"v1", "#,
+        r#""profile_identity":"\uD83D\uDD8B\u00f1", "#,
+        r#""required_features":["\u00f1"], "#,
+        r#""optional_features":["é"],"entries":[]}"#,
+    );
+    let mut limits = codec_limits();
+    limits.maximum_entries = usize::MAX;
+    limits.maximum_features = usize::MAX;
+    limits.maximum_string_bytes = 6;
+    let manifest = decode(source, limits).expect("decoded UTF-8 fits exactly");
+    assert_eq!(manifest.profile_identity, "🖋ñ");
+    assert_eq!(manifest.profile_identity.len(), 6);
+    assert_eq!(manifest.required_features, ["ñ"]);
+    assert_eq!(manifest.optional_features, ["é"]);
+
+    limits.maximum_string_bytes = 5;
+    assert_eq!(
+        decode(source, limits),
+        Err(Error::StringLimitExceeded("profile_identity")),
+    );
+}
+
+#[test]
+fn bounded_metadata_vectors_admit_all_entries_at_exact_limit() {
+    let member = format!(
+        concat!(
+            r#"{{"path":"sections/a.json","media_type":"application/json", "#,
+            r#""byte_length":2,"sha256":"{}"}}"#,
+        ),
+        ZERO_SHA,
+    );
+    let entries = vec![member; 32].join(",");
+    let features = vec![r#""feature""#; 32].join(",");
+    let source = format!(
+        concat!(
+            r#"{{"container_version":"v1","profile_identity":"writer", "#,
+            r#""required_features":[{features}],"optional_features":[],"#,
+            r#""entries":[{entries}]}}"#,
+        ),
+        features = features,
+        entries = entries,
+    );
+    let syntax = validate_profile_json_object(
+        source.as_bytes(),
+        ProfileJsonSyntaxLimits {
+            maximum_bytes: source.len(),
+            maximum_nesting: 12,
+            maximum_object_members: 20,
+            maximum_values: 512,
+        },
+    ).expect("large manifest syntax fits its explicit limits");
+    let limits = ProfileManifestJsonLimits {
+        maximum_entries: 32,
+        maximum_features: 32,
+        maximum_string_bytes: 64,
+    };
+    let admitted = decode_profile_manifest_json(syntax, limits)
+        .expect("bounded entries and features allocate within limits");
+    assert_eq!(admitted.entries.len(), 32);
+    assert_eq!(admitted.required_features.len(), 32);
+    assert!(admitted.entries.iter().all(|entry| entry.byte_length == 2));
+    assert_eq!(
+        decode_profile_manifest_json(
+            syntax,
+            ProfileManifestJsonLimits {
+                maximum_entries: 31,
+                ..limits
+            },
+        ),
+        Err(Error::ArrayLimitExceeded("entries")),
+    );
+    assert_eq!(
+        decode_profile_manifest_json(
+            syntax,
+            ProfileManifestJsonLimits {
+                maximum_features: 31,
+                ..limits
+            },
+        ),
+        Err(Error::ArrayLimitExceeded("required_features")),
+    );
+}
+
+#[test]
 fn keys_and_strings_decode_json_escapes_without_coercion() {
     let input = base_json()
         .replace(
