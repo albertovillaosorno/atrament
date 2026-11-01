@@ -1159,6 +1159,213 @@ test("backend Rust sources cannot redirect compilation out of inventory",
         "extra included Rust code needs source-level privacy review");
 });
 
+// Build-time embedding can disclose arbitrary local files or environment
+// values through the shipped binary without any runtime filesystem call.
+// Keep its reviewed source/asset inventory exact.
+function unreviewedBuildTimeInputs(source, sourcePath) {
+    source = normalizeRustRawIdentifiers(source);
+    // Reject macro aliases, including grouped imports from core and std.
+    // Aliases would otherwise obscure the embedded input's actual macro.
+    const aliasedMacro = new RegExp(
+        String.raw`\buse\s+(?:::)?(?:std|core)\s*::[^;]*` +
+            String.raw`\b(?:include_bytes|include_str|option_env)\b`,
+        "u",
+    );
+    if (aliasedMacro.test(source)
+        || /\buse\s+(?:::)?(?:std|core)\s*::[^;]*\benv\s+as\s+\w+/u
+            .test(source)) {
+        return true;
+    }
+    // Rust permits comments between a macro name, bang, and delimiter.
+    // Treat those comments as lexical whitespace, not as an escape hatch.
+    const rustTrivia = String.raw`(?:\s|/\*[\s\S]*?\*/|//[^\n]*\n)*`;
+    const invocation = new RegExp(
+        String.raw`\b(?:include_bytes|include_str|env|option_env)` +
+            rustTrivia + String.raw`!` + rustTrivia + String.raw`[([{]`,
+        "gu",
+    );
+    const invoked = [...source.matchAll(invocation)];
+    const quotedMacro = new RegExp(
+        String.raw`\b(?:include_bytes|include_str|env|option_env)` +
+            String.raw`\s*!\s*\(\s*"[^"\r\n]*"\s*\)`,
+        "gu",
+    );
+    const literals = [...source.matchAll(quotedMacro)];
+    // Dynamic paths such as concat!(env!("OUT_DIR"), ...) are never admitted.
+    if (invoked.length !== literals.length) {
+        return true;
+    }
+    const actual = literals.map((match) => match[0].replace(/\s+/gu, ""))
+        .sort();
+    let allowed = [];
+    const assetRoot = "../../../browser/workspace/adapter-inbound/";
+    if (sourcePath === LOOPBACK_RUNTIME) {
+        allowed = [
+            "index.html", "workspace.css", "generated/main.js",
+            "generated/session-diagnostic.js", "generated/session-draft.js",
+            "generated/session-fragment.js", "generated/session-handshake.js",
+        ].map((asset) =>
+            `include_bytes!("${assetRoot}${asset}")`
+        );
+    } else if (sourcePath === path.join(BACKEND_ROOT,
+        "session-handshake", "application", "lib.rs")) {
+        allowed = ['option_env!("CARGO_PKG_VERSION")'];
+    }
+    return JSON.stringify(actual) !== JSON.stringify(allowed.sort());
+}
+
+test("backend build-time embed inventory refuses undeclared inputs", () => {
+    const versionSource = path.join(BACKEND_ROOT, "session-handshake",
+        "application", "lib.rs");
+    const assets = [
+        "index.html", "workspace.css", "generated/main.js",
+        "generated/session-diagnostic.js", "generated/session-draft.js",
+        "generated/session-fragment.js", "generated/session-handshake.js",
+    ];
+    const assetRoot = "../../../browser/workspace/adapter-inbound/";
+    const approvedAssets = assets.map((asset) =>
+        `include_bytes!("${assetRoot}${asset}")`
+    ).join(";\n");
+    assert.equal(unreviewedBuildTimeInputs(approvedAssets, LOOPBACK_RUNTIME),
+        false);
+    assert.equal(unreviewedBuildTimeInputs(
+        'option_env!("CARGO_PKG_VERSION")', versionSource), false);
+    for (const [source, sourcePath] of [
+        [`${approvedAssets}; include_bytes!("/etc/passwd")`,
+            LOOPBACK_RUNTIME],
+        [`${approvedAssets}; include_bytes!{"/etc/hostname"}`,
+            LOOPBACK_RUNTIME],
+        [`${approvedAssets}; include_bytes/* comment */!{"/etc/hostname"}`,
+            LOOPBACK_RUNTIME],
+        [`${approvedAssets}; include_str!["/etc/hostname"]`,
+            LOOPBACK_RUNTIME],
+        ['include_bytes!("/etc/passwd")', LOOPBACK_RUNTIME],
+        ['include_bytes!{"/etc/hostname"}', LOOPBACK_RUNTIME],
+        ['include_str!["/etc/hostname"]', LOOPBACK_RUNTIME],
+        ['include_str!("/etc/passwd")', versionSource],
+        ['env!("PRIVATE_BUILD_SECRET")', versionSource],
+        ['env!["PRIVATE_BUILD_SECRET"]', versionSource],
+        ['option_env!("PRIVATE_BUILD_SECRET")', versionSource],
+        ['option_env!("CARGO_PKG_VERSION"); env!("PRIVATE")',
+            versionSource],
+        ['option_env!("CARGO_PKG_VERSION"); env!["PRIVATE"]',
+            versionSource],
+        ['option_env!("CARGO_PKG_VERSION"); env /* comment */ !["HOME"]',
+            versionSource],
+        ['include_bytes!(concat!(env!("OUT_DIR"), "/private"))',
+            LOOPBACK_RUNTIME],
+        ['use std::include_bytes as embed;', versionSource],
+        ['use std::env as embedded;', versionSource],
+        ['use r#std::r#include_bytes as embed;', versionSource],
+        ['use core::{include_str as embed};', versionSource],
+    ]) {
+        assert.equal(unreviewedBuildTimeInputs(source, sourcePath), true,
+            source);
+    }
+    assert.equal(unreviewedBuildTimeInputs(
+        'std::env::var_os("HOME")', path.join(BACKEND_ROOT,
+            "session-secret", "adapter-outbound", "lib.rs")), false);
+});
+
+test("backend build-time file and environment inputs are pinned", async () => {
+    const unreviewed = [];
+    for (const sourcePath of await rustSources(BACKEND_ROOT)) {
+        const source = await readFile(sourcePath, "utf8");
+        if (unreviewedBuildTimeInputs(source, sourcePath)) {
+            unreviewed.push(path.relative(BACKEND_ROOT, sourcePath));
+        }
+    }
+    assert.deepEqual(unreviewed, [],
+        "new compile-time inputs need explicit privacy review");
+});
+
+// Console output can disclose session text without opening a file or network
+// socket. The CLI bootstrap alone owns its two fixed startup/status writes.
+function unreviewedConsoleOutput(source, sourcePath) {
+    source = normalizeRustRawIdentifiers(source);
+    // Rust macros accept all three delimiters and comments as whitespace.
+    const rustTrivia = String.raw`(?:\s|/\*[\s\S]*?\*/|//[^\n]*\n)*`;
+    const outputMacro = new RegExp(
+        String.raw`\b(?:print|println|eprint|eprintln|dbg)` +
+            rustTrivia + String.raw`!` + rustTrivia + String.raw`[([{]`,
+        "u",
+    );
+    const importedMacro = new RegExp(
+        String.raw`\buse\s+(?:::)?(?:std|core)\s*::[^;]*` +
+            String.raw`\b(?:print|println|eprint|eprintln|dbg)\b`,
+        "u",
+    );
+    const renamedIo = new RegExp(
+        String.raw`\buse\s+(?:::)?std\s*::[^;]*\bio\s*` +
+            String.raw`(?:as\b|::\s*\{[^;]*\bself\s+as\b)`,
+        "u",
+    );
+    const groupedStream = new RegExp(
+        String.raw`\buse\s+(?:::)?std\s*::[^;]*\bio\s*::` +
+            String.raw`\s*\{[^;]*\b(?:stdout|stderr)\b`,
+        "u",
+    );
+    if (outputMacro.test(source) || importedMacro.test(source)
+        || renamedIo.test(source) || groupedStream.test(source)) {
+        return true;
+    }
+    const stdout = [...source.matchAll(
+        /\b(?:std\s*::\s*)?io\s*::\s*stdout\b/gu,
+    )].length;
+    const stderr = [...source.matchAll(
+        /\b(?:std\s*::\s*)?io\s*::\s*stderr\b/gu,
+    )].length;
+    const expectedStdout = sourcePath === path.join(BACKEND_ROOT,
+        "runtime-bootstrap", "composition", "main.rs") ? 2 : 0;
+    return stderr !== 0 || stdout !== expectedStdout;
+}
+
+test("backend console output inventory blocks unreviewed disclosure", () => {
+    const bootstrap = path.join(BACKEND_ROOT, "runtime-bootstrap",
+        "composition", "main.rs");
+    const privateModule = path.join(BACKEND_ROOT, "session-secret",
+        "adapter-outbound", "lib.rs");
+    assert.equal(unreviewedConsoleOutput(
+        "io::stdout(); io::stdout();", bootstrap), false);
+    for (const [source, sourcePath] of [
+        ['println!("session text")', privateModule],
+        ['eprintln!("session text")', privateModule],
+        ['dbg!(secret)', privateModule],
+        ['print!{"private"}', privateModule],
+        ['eprint!["private"]', privateModule],
+        ['use std::println as leak;', privateModule],
+        ['use ::std::{eprintln as leak};', privateModule],
+        ['use core::dbg as leak;', privateModule],
+        ['std::io::stderr()', privateModule],
+        ['io::stdout()', privateModule],
+        ['use std::io::stderr as leak;', privateModule],
+        ['use std::io::{stdout as leak};', privateModule],
+        ['use ::std::{io::{stderr as leak}};', privateModule],
+        ['use std::io as hidden;', privateModule],
+        ['use std::{io as hidden};', privateModule],
+        ['use std::io::{self as hidden, Write};', privateModule],
+        ['io::stdout(); io::stdout(); io::stdout();', bootstrap],
+        ['io::stdout(); io::stdout(); eprintln!("private")', bootstrap],
+    ]) {
+        assert.equal(unreviewedConsoleOutput(source, sourcePath), true,
+            source);
+    }
+    assert.equal(unreviewedConsoleOutput('format!("visible")',
+        privateModule), false);
+});
+
+test("backend console output stays in fixed CLI startup markers", async () => {
+    const unreviewed = [];
+    for (const sourcePath of await rustSources(BACKEND_ROOT)) {
+        const source = await readFile(sourcePath, "utf8");
+        if (unreviewedConsoleOutput(source, sourcePath)) {
+            unreviewed.push(path.relative(BACKEND_ROOT, sourcePath));
+        }
+    }
+    assert.deepEqual(unreviewed, [],
+        "backend console output requires explicit privacy review");
+});
+
 // Cargo can point a new library or executable at an arbitrary .rs file.
 // Without this admission, the backend file inventory can miss that code even
 // with an unchanged dependency set and no build.rs target. Resolve paths and

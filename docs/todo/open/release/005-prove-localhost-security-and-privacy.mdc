@@ -925,3 +925,60 @@ inventory and were restored byte-for-byte. The pinned Rust 1.97.1 std source
 confirms these APIs are stable; no Windows runtime test was performed. This
 is source-level filesystem mutation review, not Windows syscall confinement
 or proof of the overall release privacy boundary.
+
+A Firefox localhost policy fixture intermittently timed out its initial
+`browsingContext.navigate` command after ten seconds, before policy
+assertions, yet passed in isolation. A red-first fake-timer regression now
+pins the finite 25-second Firefox startup budget for tab navigation as well
+as creation, without extending the normal 10-second BiDi command deadline.
+The exact policy fixture passes with the revised harness budget; this changes
+no production runtime behavior or browser security policy.
+
+Compile-time `include_bytes!`, `include_str!`, `env!`, and `option_env!`
+can embed unrelated local files or environment values into the executable
+without making a runtime filesystem call. An exact source inventory now
+admits only the seven existing browser workspace assets and the backend's
+`CARGO_PKG_VERSION` option, rejecting new input paths, macros, aliases,
+and dynamic macro arguments pending explicit privacy review.
+
+Two inactive `session-secret` source mutations embedding a host file or the
+`HOME` environment variable each failed this inventory and were restored
+byte-for-byte. The earlier source inclusion guard accepted those embeddings.
+This is a compile-time input review gate, not a guarantee against external
+build behavior, opaque dependencies, or the browser-opener argv leak.
+
+The backend console is a second privacy boundary: an unreviewed print macro
+or stderr handle could reveal session text without any network or file-open
+API. A red-first source inventory now refuses print, eprint, and debug
+macros, imported aliases, any stderr access, and additional stdout access
+beyond the bootstrap's two existing marker writes.
+
+Two inactive `session-secret` mutations adding `eprintln!` or a direct
+stderr handle failed this new source guard, then were restored byte-for-byte.
+This pins declared Rust output paths for review, not the behavior of opaque
+dependencies, native syscalls, or subprocesses. It does not address the
+known browser-opener argv exposure.
+
+The backend console is a second privacy boundary: an unreviewed print macro
+or stderr handle could reveal session text without any network or file-open
+API. A red-first source inventory now refuses print, eprint, and debug
+macros, imported aliases, any stderr access, and additional stdout access
+beyond the bootstrap's two existing marker writes.
+
+Two inactive `session-secret` mutations adding `eprintln!` or a direct
+stderr handle failed this new source guard, then were restored byte-for-byte.
+This pins declared Rust output paths for review, not the behavior of opaque
+dependencies, native syscalls, or subprocesses. It does not address the
+known browser-opener argv exposure.
+
+The backend console is a second privacy boundary: an unreviewed print macro
+or stderr handle could reveal session text without any network or file-open
+API. A red-first source inventory now refuses print, eprint, and debug
+macros, imported aliases, any stderr access, and additional stdout access
+beyond the bootstrap's two existing marker writes.
+
+Two inactive `session-secret` mutations adding `eprintln!` or a direct
+stderr handle failed this new source guard, then were restored byte-for-byte.
+This pins declared Rust output paths for review, not the behavior of opaque
+dependencies, native syscalls, or subprocesses. It does not address the
+known browser-opener argv exposure.

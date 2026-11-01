@@ -911,12 +911,13 @@ function validateWebSocketUpgrade(head, key) {
     }
 }
 
-// Firefox may announce BiDi readiness and create a session before its first
-// browsing context is responsive on a highly contended workstation. Keep the
+// Firefox may announce BiDi readiness and create a session before the first
+// tab can complete navigation on a highly contended workstation. Keep the
 // ordinary command deadline unchanged, but permit the same bounded startup
-// budget for tab creation as for session.new.
+// budget for tab creation and navigation as for session.new.
 function defaultBidiCommandTimeout(method) {
     return method === "browsingContext.create"
+        || method === "browsingContext.navigate"
         ? FIREFOX_BIDI_READY_TIMEOUT_MS
         : 10_000;
 }
@@ -1331,7 +1332,7 @@ test("WebDriver upgrade headers use finite Firefox startup budget",
 });
 
 test(
-    "WebDriver initial tab creation uses finite Firefox readiness budget",
+    "WebDriver initial tab creation and navigation use readiness budget",
     async () => {
         const originalSetTimeout = globalThis.setTimeout;
         const observed = [];
@@ -1342,6 +1343,7 @@ test(
             };
             for (const [method, timeout] of [
                 ["browsingContext.create", undefined],
+                ["browsingContext.navigate", undefined],
                 ["script.evaluate", undefined],
                 ["browsingContext.create", 75],
             ]) {
@@ -1357,7 +1359,7 @@ test(
             globalThis.setTimeout = originalSetTimeout;
         }
         assert.deepEqual(observed, [FIREFOX_BIDI_READY_TIMEOUT_MS,
-            10_000, 75]);
+            FIREFOX_BIDI_READY_TIMEOUT_MS, 10_000, 75]);
     },
 );
 
