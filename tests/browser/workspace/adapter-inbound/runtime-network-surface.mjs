@@ -72,7 +72,7 @@ function usesStandardLibraryNetworking(source) {
         return true;
     }
     const groupedImports = source.matchAll(
-        /\buse\s+(?:::)?std\s*::\s*\{([\s\S]*?)\}\s*;/gu,
+        /\buse\s+(?:::\s*)?std\s*::\s*\{([\s\S]*?)\}\s*;/gu,
     );
     for (const importMatch of groupedImports) {
         if (/\bnet\b\s*(?:::|,|$|\bas\b)/u.test(importMatch[1])) {
@@ -91,7 +91,7 @@ function usesUnixDomainNetworking(source) {
     }
     // Grouped Rust imports may place `os`, `unix`, and `net` in nested
     // braces; normalize only std-rooted use declarations for review.
-    for (const match of source.matchAll(/\buse\s+(?:::)?std\s*::[^;]+;/gu)) {
+    for (const match of source.matchAll(/\buse\s+(?:::\s*)?std\s*::[^;]+;/gu)) {
         const qualified = match[0].replace(/[{}\s]/gu, "")
             .replace(/:{3,}/gu, "::");
         if (qualified.includes("std::os::unix::net")) {
@@ -104,14 +104,14 @@ function usesUnixDomainNetworking(source) {
 // Renaming the std root can hide net/process/fs uses from the narrow source
 // detectors. This guard requires review before adding any root alias.
 function renamesStandardLibraryRoot(source) {
-    const directAlias = /\buse\s+(?:::)?std\s+as\s+\S+/u;
+    const directAlias = /\buse\s+(?:::\s*)?std\s+as\s+\S+/u;
     const externAlias = /\bextern\s+crate\s+std\s+as\s+\S+/u;
     if (directAlias.test(source) || externAlias.test(source)) {
         return true;
     }
     // A root-level `self as` inside a grouped import also renames std.
     // Ignore nested `io::{self as alias}`: that does not rename std itself.
-    for (const match of source.matchAll(/\buse\s+(?:::)?std\s*::\s*\{/gu)) {
+    for (const match of source.matchAll(/\buse\s+(?:::\s*)?std\s*::\s*\{/gu)) {
         let depth = 1;
         let item = "";
         for (let index = match.index + match[0].length;
@@ -144,7 +144,7 @@ function usesStandardLibraryProcessAuthority(source) {
         return true;
     }
     const groupedImports = source.matchAll(
-        /\buse\s+(?:::)?std\s*::\s*\{([\s\S]*?)\}\s*;/gu,
+        /\buse\s+(?:::\s*)?std\s*::\s*\{([\s\S]*?)\}\s*;/gu,
     );
     for (const importMatch of groupedImports) {
         if (/\bprocess\b\s*(?:::|,|$|\bas\b)/u.test(importMatch[1])) {
@@ -165,6 +165,21 @@ const MUTATING_FS_FUNCTIONS = new Set([
 ]);
 
 function usesDirectFilesystemMutationAuthority(source) {
+    // Renaming std::fs or its File constructor hides subsequent mutations
+    // behind names the ordinary write-call inventory cannot recognize.
+    for (const match of source.matchAll(
+        /\buse\s+(?:::\s*)?std\s*::([^;]+);/gu,
+    )) {
+        const imported = match[1];
+        const moduleAlias = /^\s*fs\s+as\b/u.test(imported)
+            || /^\s*\{[^;]*\bfs\s+as\b/u.test(imported);
+        const fsPath = /^\s*fs\s*::/u.test(imported)
+            || /^\s*\{[^;]*\bfs\s*::/u.test(imported);
+        const fileAlias = /\b(?:File|self)\s+as\b/u.test(imported);
+        if (moduleAlias || (fsPath && fileAlias)) {
+            return true;
+        }
+    }
     // Also recognize imports such as `use std::fs::write` rather than only
     // call sites, so an alias cannot evade the source review boundary.
     const paths = source.matchAll(/\bfs\s*::\s*([a-z_]+)\b/gu);
@@ -210,6 +225,7 @@ test("standard-library network detector covers equivalent imports", () => {
         "use std::{fmt, net as network};",
         "use ::std::{net::TcpStream};",
         "use ::std::{net as network};",
+        "use :: std::{net::TcpStream};",
     ]) {
         assert.equal(usesStandardLibraryNetworking(source), true, source);
     }
@@ -245,6 +261,7 @@ test("standard-library process detector covers equivalent imports", () => {
         "use std::{fmt, process as operating_system_process};",
         "use ::std::{process::Command};",
         "use ::std::{process as operating_system_process};",
+        "use :: std::{process::Command};",
         "std::process::Command::new(\"curl\");",
         "Command::new(\"curl\");",
     ]) {
@@ -281,6 +298,13 @@ test("direct filesystem mutation detector covers write authority", () => {
         'File::create_new("state");',
         'use std::fs::write as hidden_write;',
         'use std::{fs::{read, write as hidden_write}};',
+        'use std::fs as disk;',
+        'use std::{io, fs as disk};',
+        'use :: std::{fs as disk};',
+        'use std::fs::File as Writable;',
+        'use std::fs::{File as Writable, Metadata};',
+        'use std::{fs::{File as Writable}, fmt};',
+        'use std::fs::{self as disk, Metadata};',
         'use std::os::unix::fs::symlink;',
         'File::options().write(true);',
         'use std::fs::OpenOptions;',
@@ -294,6 +318,10 @@ test("direct filesystem mutation detector covers write authority", () => {
     }
     for (const source of [
         'use std::fs::{File, Metadata};',
+        'use std::fs;',
+        'use std::os::unix::fs::FileExt as _;',
+        'use std::os::unix::fs as unix_fs;',
+        'use crate::fs as disk;',
         'File::open("state");',
         'fs::read("state");',
         'std::fs::metadata("state");',
@@ -362,6 +390,7 @@ test("standard-library root aliases require explicit review", () => {
         "use std::{io::{Read, Write}, self as platform};",
         "use std as λ;",
         "use std::{self as λ, io};",
+        "use :: std as alias;",
     ]) {
         assert.equal(renamesStandardLibraryRoot(source), true, source);
     }

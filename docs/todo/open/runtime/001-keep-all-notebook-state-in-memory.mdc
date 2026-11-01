@@ -106,6 +106,18 @@ source returns the focused suite to green. This complements descriptor
 snapshots but does not prove the absence of every indirect or FFI file effect,
 nor cleanup of future media intermediates.
 
+An additional red-first source regression now refuses aliased `std::fs`
+modules and `File` constructors, including nested grouped imports. Previously,
+`use std::fs as disk` could conceal a later `disk::write`, and
+`use std::fs::File as Writer` could conceal `Writer::create` from the
+common-write inventory. Temporary imports of each kind in `session-secret`
+now fail the focused backend scan and are restored byte-for-byte.
+
+Network, process, and standard-library-root alias scanners also recognize
+optional whitespace in absolute `use :: std` imports. A separate temporary
+network import was rejected. This remains a conservative source-level review
+gate, not a complete Rust parser or a proof about indirect filesystem effects.
+
 Browser edits send complete authenticated replacements and use no browser
 persistence API. A control-handshake `408` now offers an explicit connection
 retry without parsing an irrelevant response body or resubmitting a draft,
