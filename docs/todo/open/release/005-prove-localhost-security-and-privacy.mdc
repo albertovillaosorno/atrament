@@ -1096,3 +1096,21 @@ the browser-launch adapter remain admitted. Four inactive `session-secret`
 mutations were rejected by the new owner inventory and restored byte-for-byte.
 This is a source review gate, not a kernel-level thread prohibition, and it
 neither establishes temporal runtime confinement nor fixes opener argv leakage.
+
+Path and file metadata methods can probe host files or resolve symlinks
+without the direct `std::fs` calls covered by the earlier inventory. A
+red-first inactive `Path::exists` addition in `session-secret` passed the old
+36-case privacy suite; the pinned Rust compiler independently accepts the
+stable Path metadata, read-directory, and link-query methods.
+
+The source review now also covers method calls and associated-function calls
+for filesystem existence, identity, metadata, directory listing, and symlink
+resolution, including raw identifiers and aliased `std::path` imports. The
+existing selected-file reader is an explicitly reviewed metadata owner, along
+with the prior profile adapters. Four inactive backend probes for existence,
+read-link, grouped aliases, and commented/raw path syntax failed and were
+restored byte-for-byte.
+
+This is a conservative source review, not type-based proof of actual file
+access or protection against native syscalls. The browser opener's
+credential-bearing argv remains unresolved.

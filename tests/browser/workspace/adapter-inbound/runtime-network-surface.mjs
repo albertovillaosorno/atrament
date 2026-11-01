@@ -622,11 +622,38 @@ function usesDirectFilesystemMutationAuthority(source) {
 
 // Opening a host file, enumerating a directory, or resolving metadata can
 // disclose private host content or path identity without changing it. Keep
-// direct standard-library path reads within the reviewed profile adapters.
+// direct and method-based path reads within the reviewed profile adapters.
 function usesAmbientFilesystemReading(source) {
     source = normalizeRustRawIdentifiers(source);
     if (/\bFile\s*::\s*open\s*\(/u.test(source)) {
         return true;
+    }
+    // Path/DirEntry/File metadata methods do not need an `fs::` qualifier.
+    // This deliberately reviews similarly named methods on other receivers:
+    // without Rust type resolution, a newly added host-path read must not be
+    // silently accepted as an unrelated local method.
+    const pathQuery = new RegExp(
+        String.raw`(?:\.|\b(?:Path|PathBuf|File|DirEntry)\s*::)\s*` +
+            String.raw`(?:exists|try_exists|is_file|is_dir|is_symlink|` +
+            String.raw`metadata|symlink_metadata|canonicalize|read_dir|` +
+            String.raw`read_link)\s*\(`,
+        "u",
+    );
+    if (pathQuery.test(source)) {
+        return true;
+    }
+    // A Path/PathBuf namespace alias can hide UFCS path probes from the
+    // method inventory even without using a direct std::fs function.
+    for (const match of source.matchAll(
+        /\buse\s+(?:::\s*)?std\s*::\s*([^;]+);/gu,
+    )) {
+        const imported = match[1];
+        if (/\bpath\s+as\b/u.test(imported)
+            || /\bpath\s*::\s*Path(?:Buf)?\s+as\b/u.test(imported)
+            || /\bpath\s*::\s*\{[^;]*\b(?:self|Path|PathBuf)\s+as\b/u
+                .test(imported)) {
+            return true;
+        }
     }
     // In a use path, an imported std::fs read can be renamed to hide the
     // eventual call. Grouped imports retain an fs:: prefix after normalization.
@@ -666,6 +693,27 @@ test("ambient filesystem read detector distinguishes read-only APIs", () => {
         'use r#std::r#fs::r#symlink_metadata as probe;',
         'File::open("private")',
         'File :: r#open ("private")',
+        'std::path::Path::new("/private").exists()',
+        'path.try_exists()',
+        'path.is_file()',
+        'path.is_dir()',
+        'path.is_symlink()',
+        'path.metadata()',
+        'path.symlink_metadata()',
+        'path.canonicalize()',
+        'path.read_dir()',
+        'path.read_link()',
+        'Path::exists(path)',
+        'PathBuf::try_exists(&path)',
+        'File::metadata(&file)',
+        'DirEntry::metadata(&entry)',
+        'path.r#is_symlink()',
+        'path /* comment */ . is_file()',
+        'use std::path as host_path;',
+        'use std::path::Path as HiddenPath;',
+        'use std::{path::{PathBuf as HiddenPath}, io};',
+        'use ::std::{path::{self as host_path, Path}};',
+        'use r#std::r#path::r#Path as HiddenPath;',
         'use std::fs::read as leak;',
         'use ::std::{fs::{read_dir as enumerate}};',
         'use r#std::r#fs::r#read_to_string as leak;',
@@ -675,8 +723,11 @@ test("ambient filesystem read detector distinguishes read-only APIs", () => {
     for (const source of [
         'File::create("output")',
         'use std::fs::{File, Metadata};',
-        'file.metadata();',
-        'metadata.is_file();',
+        'Path::new("/private").file_name();',
+        'path.ancestors();',
+        'file.read_exact(&mut bytes);',
+        'metadata.len();',
+        'use std::path::{Path, PathBuf};',
         'std::io::Read::read_to_end(&mut input, &mut bytes);',
     ]) {
         assert.equal(usesAmbientFilesystemReading(source), false, source);
@@ -695,6 +746,7 @@ test("ambient filesystem reads stay in reviewed profile adapters", async () => {
         "profile-export-target-check/composition/lib.rs",
         "profile-export-session/composition/lib.rs",
         "profile-file-commit/adapter-outbound/lib.rs",
+        "profile-file-reader/adapter-outbound/lib.rs",
         "profile-selected-file-open/adapter-outbound/lib.rs",
         "profile-open-file-import/composition/lib.rs",
     ].map((relative) => path.join(BACKEND_ROOT, relative)).sort());
