@@ -1299,3 +1299,19 @@ source mutations in the unreviewed `session-secret` adapter failed the updated
 guard, and its original bytes were restored exactly. This does not type-resolve
 method receivers, enforce syscalls, or remedy the browser opener argv
 credential exposure.
+
+Rust 1.97.1 accepts first-class `Read` and `Write` trait method items,
+including `<File as std::io::Read>::read_to_end` and `<File as
+std::io::Write>::write_all`, which can later consume or mutate a borrowed File
+with no corresponding method-call token in the source module. It also accepts
+`Read::bytes` and `BufRead::lines` as stored iterator adapters. The previous
+stream inventories overlooked these item references without adjacent
+parentheses or a local trait import.
+
+Red-first detector tests now require reviewed reader/writer ownership for
+direct and fully qualified stream method items, including generic reader types,
+raw identifiers, and captured iterator adapters. Ten cfg-inactive
+`session-secret` source mutations were rejected and byte-restored (five
+borrowed-read items, three stream-write items, and two iterator variants). This
+static rule does not resolve actual receiver types, enforce descriptor
+provenance, or address the browser opener argv leak.

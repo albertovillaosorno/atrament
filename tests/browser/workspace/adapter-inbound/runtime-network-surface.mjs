@@ -244,11 +244,22 @@ function usesStandardLibraryStreamWriting(source) {
     source = normalizeRustRawIdentifiers(source);
     // Writing and flushing a caller-supplied File do not require a new open.
     // std::io::copy delegates writes without importing the Write trait.
-    const writing = String.raw`(?:write|write_all|write_vectored|` +
-        String.raw`write_fmt|flush)\s*\(`;
+    const writeMethod = String.raw`(?:write|write_all|write_vectored|` +
+        String.raw`write_fmt|flush)`;
+    const writing = writeMethod + String.raw`\s*\(`;
+    // Rust permits method items (and fully-qualified trait items) without
+    // a local call; the value may be invoked later under a different name.
+    const traitItem = new RegExp(
+        String.raw`\bWrite\s*::\s*` + writeMethod + String.raw`\b`,
+        "u",
+    );
+    const qualifiedItem = new RegExp(
+        String.raw`<[^;{}]*\bas\s+(?:::)?std\s*::\s*io\s*::` +
+            String.raw`\s*Write\s*>\s*::\s*` + writeMethod +
+            String.raw`\b`, "u",
+    );
     if (new RegExp(String.raw`\.\s*` + writing, "u").test(source)
-        || new RegExp(String.raw`\bWrite\s*::\s*` + writing, "u")
-            .test(source)
+        || traitItem.test(source) || qualifiedItem.test(source)
         || /\bio\s*::\s*(?:copy\b|\{[^}]*\bcopy\b)/u.test(source)) {
         return true;
     }
@@ -1168,13 +1179,28 @@ function usesBorrowedStreamReading(source) {
     const readMethod = String.raw`(?:read|read_exact|read_to_end|` +
         String.raw`read_to_string|read_vectored|read_buf|read_buf_exact|` +
         String.raw`read_line|read_until|fill_buf|read_at|read_exact_at|` +
-        String.raw`read_vectored_at|seek_read)\s*\(`;
+        String.raw`read_vectored_at|seek_read)`;
+    const readCall = readMethod + String.raw`\s*\(`;
+    const iteratorMethod = String.raw`(?:bytes|lines|split|take|chain|by_ref)`;
+    // Trait method items can read a borrowed descriptor in a later call,
+    // even when no `Read` import or `.read(...)` occurs in this module.
+    const traitItem = new RegExp(
+        String.raw`\b(?:Read|BufRead|FileExt)\s*::\s*` +
+            String.raw`(?:` + readMethod + String.raw`|` +
+            iteratorMethod + String.raw`)\b`, "u",
+    );
+    const qualifiedItem = new RegExp(
+        String.raw`<[^;{}]*\bas\s+(?:::)?std\s*::\s*(?:io\s*::` +
+            String.raw`\s*(?:Read|BufRead)|os\s*::\s*(?:unix|windows)` +
+            String.raw`\s*::\s*fs\s*::\s*FileExt)\s*>\s*::\s*` +
+            String.raw`(?:` + readMethod + String.raw`|` +
+            iteratorMethod + String.raw`)\b`, "u",
+    );
     // UFCS iterator adapters can consume an inherited File via `.next()`
     // without ever calling a visible `.read()` method in this module.
     const iteratingReader = new RegExp(
         String.raw`\b(?:Read|BufRead)\s*::\s*` +
-            String.raw`(?:bytes|lines|split|take|chain|by_ref)\s*\(`,
-        "u",
+            iteratorMethod + String.raw`\b`, "u",
     );
     // Qualified calls, function-item imports and whole-module aliases can
     // consume an inherited descriptor without any std::io read call. Only
@@ -1196,11 +1222,8 @@ function usesBorrowedStreamReading(source) {
             return true;
         }
     }
-    if (new RegExp(String.raw`\.\s*` + readMethod, "u").test(source)
-        || new RegExp(
-            String.raw`\b(?:Read|BufRead|FileExt)\s*::\s*` + readMethod,
-            "u",
-        ).test(source)
+    if (new RegExp(String.raw`\.\s*` + readCall, "u").test(source)
+        || traitItem.test(source) || qualifiedItem.test(source)
         || iteratingReader.test(source)) {
         return true;
     }
@@ -1249,6 +1272,15 @@ test("borrowed stream-reading detector reviews std and nix APIs", () => {
         "std::io::BufRead::split(buffer, b',').next();",
         'FileExt::read_at(&file, &mut bytes, 0);',
         'std/* comment */::io::Read::read(&mut file, &mut bytes);',
+        'let query = std::io::Read::read_to_end;',
+        'let query = ::std::io::BufRead::fill_buf;',
+        'let query = <File as std::io::Read>::read_to_end;',
+        'let query = <File as ::std::io::Read>::read_exact;',
+        'let query = <File as std::os::unix::fs::FileExt>::read_at;',
+        'let query = r#std::r#io::r#Read::r#read_to_end;',
+        'let lines = std::io::BufRead::lines;',
+        'let bytes = std::io::Read::bytes;',
+        'let lines = <BufReader<File> as std::io::BufRead>::lines;',
         'nix::unistd::read(&borrowed_file, &mut bytes);',
         '::nix::unistd::read(&borrowed_file, &mut bytes);',
         'use nix::unistd::read as consume;',
@@ -1320,6 +1352,10 @@ test("std::io stream-writing detector distinguishes reviewed authority", () => {
         'file.flush();',
         'file.r#flush();',
         'Write::flush(&mut file);',
+        'let save = std::io::Write::write_all;',
+        'let save = <File as std::io::Write>::write_all;',
+        'let save = <File as ::std::io::Write>::flush;',
+        'let save = r#std::r#io::r#Write::r#write_all;',
     ]) {
         assert.equal(usesStandardLibraryStreamWriting(source), true, source);
     }
