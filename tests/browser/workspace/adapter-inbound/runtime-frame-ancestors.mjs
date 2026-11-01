@@ -968,7 +968,10 @@ class BidiClient {
             throw error;
         }
         const key = crypto.randomBytes(16).toString("base64");
-        const upgrade = readWebSocketUpgrade(this.socket);
+        const upgrade = readWebSocketUpgrade(
+            this.socket,
+            FIREFOX_BIDI_READY_TIMEOUT_MS,
+        );
         this.socket.write([
             `GET ${this.url.pathname} HTTP/1.1`,
             `Host: ${this.url.host}`,
@@ -1287,6 +1290,44 @@ test("Firefox BiDi client refuses off-loopback debugging endpoints", () => {
             /invalid Firefox BiDi loopback endpoint/,
             endpoint);
     }
+});
+
+test("WebDriver upgrade headers use finite Firefox startup budget",
+    async () => {
+    const server = net.createServer((peer) => {
+        peer.once("data", () => peer.end(
+            "HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n",
+        ));
+    });
+    server.listen(0, "127.0.0.1");
+    await once(server, "listening");
+    const address = server.address();
+    assert.notEqual(address, null);
+    assert.notEqual(typeof address, "string");
+    const bidi = new BidiClient(
+        `ws://127.0.0.1:${address.port}/session`,
+    );
+    const originalSetTimeout = globalThis.setTimeout;
+    const deadlines = [];
+    try {
+        globalThis.setTimeout = (callback, delay, ...args) => {
+            deadlines.push(delay);
+            return originalSetTimeout(callback, delay, ...args);
+        };
+        await assert.rejects(bidi.connect());
+    } finally {
+        globalThis.setTimeout = originalSetTimeout;
+        bidi.close();
+        await new Promise((resolve, reject) => server.close((error) => {
+            if (error) {
+                reject(error);
+            } else {
+                resolve();
+            }
+        }));
+    }
+    assert.ok(deadlines.includes(FIREFOX_BIDI_READY_TIMEOUT_MS),
+        "Firefox WebSocket upgrade must use a finite startup budget");
 });
 
 test(

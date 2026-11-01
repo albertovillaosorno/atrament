@@ -690,6 +690,14 @@ Other commands retain ten seconds, explicit overrides still apply, and the
 50-second case deadline remains intact. This is disposable test-harness
 scheduling tolerance rather than a workspace runtime or security change.
 
+A further high-contention run passed the previously failing divider case but
+exposed an earlier startup seam: the Firefox WebSocket upgrade-header reader
+still used its 10-second default and timed out before any session or private
+handshake assertion. A red-first fake loopback debugger response now verifies
+that the BiDi client uses the same 25-second finite readiness budget for its
+upgrade. Low-level reader tests retain their explicitly shorter deadlines;
+no product runtime network authority or retry behavior changes.
+
 Client-side session calls now have a six-second abort deadline spanning both
 `fetch()` and any valid-media response-body stream. A stream that sends a
 partial compatible handshake, text draft, or `413` diagnostic and never closes
