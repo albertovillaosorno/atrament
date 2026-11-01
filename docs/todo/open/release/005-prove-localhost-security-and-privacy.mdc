@@ -191,6 +191,16 @@ alias, and removal restores the original source bytes. Ordinary reviewed
 conservative source scanner, not a Rust AST analysis, syscall sandbox,
 packet-level isolation proof, or a fix for opener-argv exposure.
 
+Rust source-inventory completeness now also rejects unreviewed `include!`
+macro expansion and `#[path]`/`#[cfg_attr]` source redirection in any backend
+`.rs` file, without prohibiting the reviewed static `include_bytes!` assets.
+Cargo metadata admission rejects new workspace custom build-script targets,
+which could run code outside the inspected runtime sources. Red-first source
+injections and a test-only explicit Cargo build target all passed the old
+inventory and fail the new guards; the original Rust source and Cargo manifest
+were restored byte-for-byte. These are conservative declaration-level checks,
+not an exhaustive compiler-expansion audit or a build sandbox.
+
 A Linux process-composition fixture now admits a deterministic successful
 platform opener, waits for the live Atrament process to publish `ready`, and
 resolves only its `/proc/<pid>/fd` socket inodes through that process's kernel

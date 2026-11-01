@@ -226,6 +226,15 @@ function usesUnreviewedNativeAuthority(source) {
     return nativePatterns.some((pattern) => pattern.test(source));
 }
 
+// Scan all authored backend .rs files; embedding a separate Rust source via
+// include! or a redirected module path could bypass that inventory. Binary and
+// text asset inclusion remains deliberately separate from Rust compilation.
+function redirectsBackendRustSource(source) {
+    return /\binclude\s*!\s*\(/u.test(source)
+        || /#\s*\[\s*path\s*=/u.test(source)
+        || /#\s*\[\s*cfg_attr\s*\(/u.test(source);
+}
+
 async function rustSources(directory) {
     const sources = [];
     for (const entry of await readdir(directory, { withFileTypes: true })) {
@@ -490,6 +499,39 @@ test("backend raw native authority requires explicit review", async () => {
         "libc, native extern, and assembly bypass reviewed Rust authority");
 });
 
+test("backend source inclusion requires explicit review", () => {
+    for (const source of [
+        'include!("separate.inc");',
+        'include ! ( concat!(env!("OUT_DIR"), "/generated.rs") );',
+        '#[path = "../../unreviewed.rs"] mod external;',
+        '# [ path = "../../unreviewed.rs" ] mod external;',
+        '#[cfg_attr(target_os = "linux", path = "other.rs")] mod extra;',
+    ]) {
+        assert.equal(redirectsBackendRustSource(source), true, source);
+    }
+    for (const source of [
+        'include_bytes!("workspace.html");',
+        'include_str!("notes.txt");',
+        '#[cfg(target_os = "linux")] mod local;',
+        'mod semantic_model;',
+    ]) {
+        assert.equal(redirectsBackendRustSource(source), false, source);
+    }
+});
+
+test("backend Rust sources cannot redirect compilation out of inventory",
+    async () => {
+    const redirectFiles = [];
+    for (const sourcePath of await rustSources(BACKEND_ROOT)) {
+        const source = await readFile(sourcePath, "utf8");
+        if (redirectsBackendRustSource(source)) {
+            redirectFiles.push(sourcePath);
+        }
+    }
+    assert.deepEqual(redirectFiles, [],
+        "extra included Rust code needs source-level privacy review");
+});
+
 test("backend registry dependencies remain explicitly reviewed", () => {
     const cargo = path.join(
         REPOSITORY_ROOT,
@@ -516,6 +558,13 @@ test("backend registry dependencies remain explicitly reviewed", () => {
     assert.equal(result.status, 0, result.stderr);
     const metadata = JSON.parse(result.stdout);
     const workspaceIds = new Set(metadata.workspace_members);
+    const unreviewedBuildScripts = metadata.packages
+        .filter((pkg) => workspaceIds.has(pkg.id))
+        .flatMap((pkg) => pkg.targets
+            .filter((target) => target.kind.includes("custom-build"))
+            .map((target) => `${pkg.name}:${target.name}`));
+    assert.deepEqual(unreviewedBuildScripts, [],
+        "new Cargo build scripts can execute unreviewed native code");
     const registryDependencies = [];
     const resolvedRegistryPackages = [];
     for (const packageValue of metadata.packages) {
