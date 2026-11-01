@@ -176,6 +176,21 @@ positive checks; ordinary Unix filesystem and descriptor metadata imports
 remain permitted. This closes known source-scan gaps, not arbitrary local IPC,
 FFI use, or the unrelated opener-argv credential exposure.
 
+A further backend privacy inventory now flags unreviewed native authority:
+`libc` and `nix::libc` raw syscall access (including aliased imports),
+`nix::sys::socket` references, renamed `nix` roots, C/system extern blocks,
+and direct inline assembly. The pinned `nix` dependency exposes libc even
+without new socket Cargo features, so a new FFI path can bypass both std-only
+source guards and locked dependency inventory.
+
+A test-owned inactive
+`nix::libc::socket` import in `session-secret` passed the prior guard; the
+new guard rejects it, a native extern declaration, and a grouped `nix::libc`
+alias, and removal restores the original source bytes. Ordinary reviewed
+`nix::fcntl` and `nix::sys::stat` imports remain permitted. This is a
+conservative source scanner, not a Rust AST analysis, syscall sandbox,
+packet-level isolation proof, or a fix for opener-argv exposure.
+
 A Linux process-composition fixture now admits a deterministic successful
 platform opener, waits for the live Atrament process to publish `ready`, and
 resolves only its `/proc/<pid>/fd` socket inodes through that process's kernel

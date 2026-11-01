@@ -203,6 +203,29 @@ function usesDirectFilesystemMutationAuthority(source) {
         || unixMutator.test(source);
 }
 
+// The locked nix dependency exposes libc raw syscalls even without the nix
+// socket feature. A direct extern block or inline assembly can bypass the
+// reviewed standard-library net/process/fs APIs with no Cargo diff. Require
+// explicit review before introducing native authority to any backend file.
+// This is deliberately conservative source inventory, not Rust parsing or a
+// runtime syscall sandbox.
+function usesUnreviewedNativeAuthority(source) {
+    const nativePatterns = [
+        /\b(?:nix\s*::\s*)?libc\s*::/u,
+        /\b(?:use\s+(?:::)?\s*|extern\s+crate\s+)(?:nix\s*::\s*)?libc\b/u,
+        /\buse\s+(?:::)?\s*nix\s*::\s*\{[^;]*\blibc\b/u,
+        /\b(?:use\s+(?:::)?\s*|extern\s+crate\s+)nix\s+as\s+\w+/u,
+        /\buse\s+(?:::)?\s*nix\s*::\s*\{[^;]*\bself\s+as\s+\w+/u,
+        /\bnix\s*::\s*sys\s*::\s*socket\b/u,
+        /\bnix\s*::\s*sys\s*::\s*\{[^;]*\bsocket\b/u,
+        /\bnix\s*::\s*\{[^;]*\bsys\s*::\s*socket\b/u,
+        /\b(?:unsafe\s+)?extern\s*(?:"[^"]+"\s*)?(?:\{|fn\b)/u,
+        /\b(?:core|std)\s*::\s*arch\b/u,
+        /\b(?:asm|global_asm)\s*!/u,
+    ];
+    return nativePatterns.some((pattern) => pattern.test(source));
+}
+
 async function rustSources(directory) {
     const sources = [];
     for (const entry of await readdir(directory, { withFileTypes: true })) {
@@ -415,6 +438,56 @@ test("backend never renames the standard-library root", async () => {
     }
     assert.deepEqual(aliasedFiles, [],
         "renaming std would bypass reviewed network/process/file guards");
+});
+
+test("native authority detector covers raw syscall escape hatches", () => {
+    for (const source of [
+        "use nix::libc::socket;",
+        "nix :: libc :: sendto(fd, data, flags, addr, len);",
+        "use nix::libc as native;",
+        "use ::nix::{libc as native, errno::Errno};",
+        "use nix::{errno::Errno, libc};",
+        "use ::libc as native;",
+        "extern crate libc as raw;",
+        "extern crate nix as native;",
+        "use nix as native;",
+        "use nix::{self as native, errno::Errno};",
+        "nix::sys::socket::socket(domain, ty, flags, None);",
+        "use nix::sys::{socket as sockets, stat};",
+        "use nix::{sys::socket::socket, errno::Errno};",
+        'unsafe extern "C" { fn socket(); }',
+        'unsafe extern "C-unwind" { fn socket(); }',
+        'unsafe extern { fn socket(); }',
+        'extern "system" fn native_entry() {}',
+        'use core::arch::asm as native;',
+        'std::arch::asm!("syscall");',
+        'global_asm!("syscall");',
+    ]) {
+        assert.equal(usesUnreviewedNativeAuthority(source), true, source);
+    }
+    for (const source of [
+        "use nix::errno::Errno;",
+        "use nix::fcntl::{OFlag, openat2};",
+        "use nix::sys::stat::{SFlag, fstatat};",
+        "use std::os::fd::AsRawFd;",
+        "use std::ffi::OsStr;",
+        'fn interface() { let syscall = "unavailable"; }',
+        'let socket_addr = "127.0.0.1:80";',
+    ]) {
+        assert.equal(usesUnreviewedNativeAuthority(source), false, source);
+    }
+});
+
+test("backend raw native authority requires explicit review", async () => {
+    const nativeFiles = [];
+    for (const sourcePath of await rustSources(BACKEND_ROOT)) {
+        const source = await readFile(sourcePath, "utf8");
+        if (usesUnreviewedNativeAuthority(source)) {
+            nativeFiles.push(sourcePath);
+        }
+    }
+    assert.deepEqual(nativeFiles, [],
+        "libc, native extern, and assembly bypass reviewed Rust authority");
 });
 
 test("backend registry dependencies remain explicitly reviewed", () => {
