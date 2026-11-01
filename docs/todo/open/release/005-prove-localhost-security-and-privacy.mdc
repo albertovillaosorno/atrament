@@ -1114,3 +1114,20 @@ restored byte-for-byte.
 This is a conservative source review, not type-based proof of actual file
 access or protection against native syscalls. The browser opener's
 credential-bearing argv remains unresolved.
+
+Inherited raw file descriptors can disclose host input or act as filesystem
+or socket authority even when no new `std::fs::open`, `stdin`, or network
+constructor is present. The pinned Rust compiler accepts unsafe
+`File::from_raw_fd(0)`, which can adopt standard input as a File.
+An inactive backend `FromRawFd` import and constructor passed the earlier
+36-case privacy inventory before the new review gate was added.
+
+A zero-owner source scanner now rejects raw FD, socket, and native handle
+adoption constructors and imports, including owned and borrowed wrappers,
+renamed namespaces, grouped imports, and raw identifiers. Ordinary `AsRawFd`,
+`AsFd`, and raw-descriptor observation remain admitted. Four temporary backend
+mutations were rejected by the new guard and restored byte-for-byte.
+
+This is static authority review, not a runtime FD isolation sandbox or a
+proof against arbitrary unsafe casts. The browser-opener argv credential
+exposure remains open.

@@ -1496,6 +1496,89 @@ test("backend raw native authority requires explicit review", async () => {
         "libc, native extern, and assembly bypass reviewed Rust authority");
 });
 
+// A raw inherited descriptor can be adopted as a File or socket without an
+// fs::open, stdin(), or std::net constructor in the adopting module. This is
+// distinct from observing an existing descriptor via AsRawFd or AsFd.
+function usesUnreviewedRawDescriptorAuthority(source) {
+    source = normalizeRustRawIdentifiers(source);
+    const rawType = new RegExp(
+        String.raw`\b(?:FromRawFd|FromRawHandle|FromRawSocket|from_raw_fd|` +
+            String.raw`from_raw_handle|from_raw_socket|borrow_raw|BorrowedFd|` +
+            String.raw`BorrowedHandle|BorrowedSocket|OwnedFd|OwnedHandle|` +
+            String.raw`OwnedSocket)\b`,
+        "u",
+    );
+    if (rawType.test(source)) {
+        return true;
+    }
+    // A renamed whole os::fd or platform io namespace hides its raw-ownership
+    // constructors behind arbitrary identifiers in later source.
+    for (const match of source.matchAll(
+        /\buse\s+(?:::\s*)?std\s*::\s*([^;]+);/gu,
+    )) {
+        const imported = match[1].replace(/[{}\s]/gu, "");
+        const rawModule = /\bos::(?:fd|unix::io|windows::io)/u;
+        const wholeModule = /(?:fd|io)(?:as[^,:]+|::selfas[^,:]+|,|$)/u;
+        if (rawModule.test(imported) && wholeModule.test(imported)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+test("raw descriptor inventory rejects unreviewed host FD adoption", () => {
+    for (const source of [
+        'use std::os::fd::FromRawFd;',
+        'use r#std::r#os::r#fd::r#FromRawFd as _;',
+        'use ::std::{os::{fd::{FromRawFd as Adopt}}};',
+        'let file = unsafe { File::from_raw_fd(0) };',
+        'let owned = unsafe { OwnedFd::from_raw_fd(0) };',
+        'let input = unsafe { BorrowedFd::borrow_raw(0) };',
+        'let input = unsafe { BorrowedFd::borrow_raw/* x */(0) };',
+        'use std::os::fd as borrowed_descriptor;',
+        'use std::os::fd::{self as borrowed_descriptor, AsRawFd};',
+        'use std::{os::{fd as borrowed_descriptor}, fmt};',
+        'use std::os::unix::io as inherited;',
+        'use ::std::{os::{windows::io as inherited}};',
+        'use std::os::windows::io::FromRawHandle;',
+        'use std::os::windows::io::FromRawSocket;',
+        'unsafe { File::from_raw_handle(handle) }',
+        'unsafe { TcpStream::from_raw_socket(socket) }',
+        'unsafe { BorrowedHandle::borrow_raw(handle) }',
+    ]) {
+        assert.equal(usesUnreviewedRawDescriptorAuthority(source), true,
+            source);
+    }
+    for (const source of [
+        'use std::os::fd::AsRawFd;',
+        'use std::os::fd::RawFd;',
+        'use std::os::fd::{AsFd, AsRawFd};',
+        'use std::os::unix::io::AsRawFd;',
+        'use std::os::windows::io::AsRawHandle;',
+        'file.as_raw_fd();',
+        'file.as_fd();',
+        'file.into_raw_fd();',
+        'use std::{os::unix::fs::MetadataExt, fmt};',
+        'let output = buffer.borrow();',
+    ]) {
+        assert.equal(usesUnreviewedRawDescriptorAuthority(source), false,
+            source);
+    }
+});
+
+test("backend cannot adopt inherited raw descriptors without review",
+    async () => {
+    const descriptorFiles = [];
+    for (const sourcePath of await rustSources(BACKEND_ROOT)) {
+        const source = await readFile(sourcePath, "utf8");
+        if (usesUnreviewedRawDescriptorAuthority(source)) {
+            descriptorFiles.push(path.relative(BACKEND_ROOT, sourcePath));
+        }
+    }
+    assert.deepEqual(descriptorFiles, [],
+        "raw descriptor adoption bypasses reviewed host input boundaries");
+});
+
 test("backend source inclusion requires explicit review", () => {
     for (const source of [
         'include!("separate.inc");',
