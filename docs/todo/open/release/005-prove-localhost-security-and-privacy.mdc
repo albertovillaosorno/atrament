@@ -698,6 +698,21 @@ that the BiDi client uses the same 25-second finite readiness budget for its
 upgrade. Low-level reader tests retain their explicitly shorter deadlines;
 no product runtime network authority or retry behavior changes.
 
+The subsequent high-contention full Firefox run reached 210 of 211 cases,
+but the direct workspace tab's first DOM read was blank immediately after
+WebDriver BiDi reported a completed navigation. The actual failure was not the
+blocked hostile iframe. A red-first fixture now supplies 21 transient blank
+document reads before the expected Atrament title and workspace structure,
+and separately requires a persistent unrelated document to fail closed.
+Only this direct-workspace readiness observation gains up to 40 bounded
+quarter-second polls. The framing and CSP assertions remain unchanged; this
+is test-harness scheduling tolerance, not a product policy relaxation.
+
+A temporary one-line relaxation of the runtime HTTP header to
+`frame-ancestors *` makes the same real Firefox fixture fail at the
+hostile iframe content assertion. The original runtime source was
+restored byte-for-byte after this mutation proof.
+
 Client-side session calls now have a six-second abort deadline spanning both
 `fetch()` and any valid-media response-body stream. A stream that sends a
 partial compatible handshake, text draft, or `413` diagnostic and never closes

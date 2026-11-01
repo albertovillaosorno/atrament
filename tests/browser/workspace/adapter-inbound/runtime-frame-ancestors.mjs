@@ -2079,6 +2079,22 @@ async function evaluateDocument(client, context) {
     return JSON.parse(response.result.value);
 }
 
+async function waitForWorkspaceDocument(client, context) {
+    let documentState = null;
+    for (let attempt = 0; attempt < 40; attempt += 1) {
+        documentState = await evaluateDocument(client, context);
+        if (documentState.hasControl === false
+            && documentState.hasWorkspace === true
+            && documentState.title === "Atrament") {
+            return documentState;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+    throw new Error(
+        `workspace navigation did not settle: ${JSON.stringify(documentState)}`,
+    );
+}
+
 async function waitForChildContext(client, root) {
     for (let attempt = 0; attempt < 100; attempt += 1) {
         const tree = await client.command("browsingContext.getTree", {
@@ -2117,6 +2133,64 @@ async function navigateFromDocument(client, context, url) {
         target: { context },
     });
 }
+
+test("Firefox direct workspace navigation survives transient blanks", async () => {
+    const source = fs.readFileSync(new URL(import.meta.url), "utf8");
+    const start = source.indexOf("async function evaluateDocument(");
+    const end = source.indexOf("async function waitForChildContext(", start);
+    assert.ok(start >= 0 && end > start);
+    const wait = runInNewContext(
+        `${source.slice(start, end)}; waitForWorkspaceDocument`,
+        {
+            assert,
+            setTimeout(callback) { callback(); },
+        },
+    );
+    const blank = { hasControl: false, hasWorkspace: false, title: "" };
+    const workspace = {
+        hasControl: false,
+        hasWorkspace: true,
+        title: "Atrament",
+    };
+    let observed = 0;
+    const client = {
+        async command(method) {
+            assert.equal(method, "script.evaluate");
+            observed += 1;
+            return {
+                type: "success",
+                result: {
+                    type: "string",
+                    value: JSON.stringify(observed <= 21 ? blank : workspace),
+                },
+            };
+        },
+    };
+    assert.equal(
+        JSON.stringify(await wait(client, "direct-context")),
+        JSON.stringify(workspace),
+    );
+    assert.equal(observed, 22);
+
+    // An unrelated document must not satisfy readiness by merely having a
+    // title; missing workspace content remains a bounded failure.
+    const unrelated = {
+        hasControl: true,
+        hasWorkspace: false,
+        title: "Permissive frame",
+    };
+    await assert.rejects(
+        wait({
+            async command() {
+                return {
+                    type: "success",
+                    result: { type: "string", value: JSON.stringify(unrelated) },
+                };
+            },
+        }, "wrong-document"),
+        /workspace navigation did not settle/,
+    );
+});
 
 test("observedWithin releases timers after settlement", async () => {
     const source = fs.readFileSync(new URL(import.meta.url), "utf8");
@@ -5659,7 +5733,7 @@ test(
                 wait: "complete",
             });
             assert.deepEqual(
-                await evaluateDocument(bidi, direct.context),
+                await waitForWorkspaceDocument(bidi, direct.context),
                 {
                     hasControl: false,
                     hasWorkspace: true,
