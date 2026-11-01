@@ -1187,3 +1187,17 @@ Four inactive source mutations of the unprivileged `session-secret` adapter
 were rejected by the updated inventory and restored byte-for-byte. Purely
 lexical `Path::is_absolute` remains outside that review. This static source
 check does not prove native call confinement or fix opener argv exposure.
+
+Pinned `nix` 0.31.3 with its `fs` feature exposes additional ambient path
+queries through `unistd::access`, `faccessat`, and `getcwd`, metadata probes
+through `sys::stat`, and link-target reads through `fcntl::readlink`.
+The previous standard-library path inventory did not detect those direct
+calls or renamed nested imports, allowing an unreviewed backend module to
+probe host path permissions, metadata, or the working directory.
+
+Red-first source regressions now confine those queries to the same reviewed
+profile adapters as standard-library path readers. Seven inactive
+`session-secret` source mutations were rejected and restored byte-for-byte.
+Read-only `nix::unistd::read`, `nix::sys::stat::Mode`, and
+`nix::fcntl::openat2` remain outside this specific query inventory; their
+separate authority rules continue to apply.

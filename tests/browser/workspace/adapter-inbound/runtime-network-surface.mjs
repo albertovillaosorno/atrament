@@ -649,7 +649,16 @@ function usesAmbientFilesystemReading(source) {
     // CWD without a direct env::current_dir call in the importing module.
     const absolutePath =
         /\bpath\s*::\s*(?:absolute\b|\{[^;]*\babsolute\b)/u;
-    if (pathQuery.test(source) || absolutePath.test(source)) {
+    // The pinned nix fs feature also offers host existence, metadata, and
+    // symlink-target queries without using std::fs or Path methods.
+    const nixPathQuery = new RegExp(
+        String.raw`\b(?:unistd|fcntl|stat)\s*::\s*` +
+            String.raw`(?:\{[^;]*\b)?(?:access|faccessat|getcwd|` +
+            String.raw`stat|lstat|fstat|fstatat|readlink|readlinkat)\b`,
+        "u",
+    );
+    if (pathQuery.test(source) || absolutePath.test(source)
+        || nixPathQuery.test(source)) {
         return true;
     }
     // A Path/PathBuf namespace alias can hide UFCS path probes from the
@@ -696,6 +705,23 @@ test("ambient filesystem read detector distinguishes read-only APIs", () => {
         'std::fs::read_dir("private")',
         'std::fs::exists("private")',
         'std::path::absolute("private")',
+        'nix::unistd::access("/private", flags);',
+        'nix::unistd::faccessat(&dir, "private", flags, options);',
+        'nix::unistd::getcwd();',
+        'use nix::unistd::getcwd as reveal_cwd;',
+        'use ::nix::{unistd::{getcwd as reveal_cwd}};',
+        'use nix::unistd::access as query;',
+        'use ::nix::{unistd::{faccessat as query}};',
+        'nix::sys::stat::stat("/private");',
+        'nix::sys::stat::lstat("/private");',
+        'nix::sys::stat::fstatat(&dir, "private", flags);',
+        'use nix::sys::stat::stat as query;',
+        'use nix::sys::stat::{lstat as query};',
+        'use ::nix::{sys::{stat::{fstatat as query}}};',
+        'nix::fcntl::readlink("/private");',
+        'nix::fcntl::readlinkat(&dir, "private");',
+        'use nix::fcntl::{readlinkat as query};',
+        'use r#nix::r#unistd::r#access as query;',
         'path::absolute("private")',
         'use std::path::absolute as resolve_host;',
         'use ::std::{path::{absolute as resolve_host}};',
@@ -750,6 +776,9 @@ test("ambient filesystem read detector distinguishes read-only APIs", () => {
         'file.read_exact(&mut bytes);',
         'metadata.len();',
         'use std::path::{Path, PathBuf};',
+        'use nix::unistd::read;',
+        'use nix::sys::stat::Mode;',
+        'use nix::fcntl::openat2;',
         'std::io::Read::read_to_end(&mut input, &mut bytes);',
     ]) {
         assert.equal(usesAmbientFilesystemReading(source), false, source);
