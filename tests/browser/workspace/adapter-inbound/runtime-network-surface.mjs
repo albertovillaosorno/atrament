@@ -1088,6 +1088,98 @@ test("backend process authority stays in browser launch", async () => {
     assert.deepEqual(spawningFiles, [BROWSER_LAUNCH]);
 });
 
+// A borrowed File or stream can be read without opening it in the current
+// module. Review Read/BufRead, positional FileExt reads, and delegated reads
+// separately from selected path opening; the receiver is not type-resolved.
+function usesStandardLibraryStreamReading(source) {
+    source = normalizeRustRawIdentifiers(source);
+    const readMethod = String.raw`(?:read|read_exact|read_to_end|` +
+        String.raw`read_to_string|read_vectored|read_buf|read_buf_exact|` +
+        String.raw`read_line|read_until|fill_buf|read_at|read_exact_at|` +
+        String.raw`read_vectored_at|seek_read)\s*\(`;
+    if (new RegExp(String.raw`\.\s*` + readMethod, "u").test(source)
+        || new RegExp(
+            String.raw`\b(?:Read|BufRead|FileExt)\s*::\s*` + readMethod,
+            "u",
+        ).test(source)) {
+        return true;
+    }
+    for (const match of source.matchAll(
+        /\buse\s+(?:::\s*)?std\s*::[^;]+;/gu,
+    )) {
+        const imported = match[0];
+        if (/\bio\s*::\s*(?:Read|BufRead)\b/u.test(imported)
+            || /\bio\s*::\s*\{[^;]*\b(?:Read|BufRead)\b/u
+                .test(imported)
+            || (/\b(?:unix|windows)\b/u.test(imported)
+                && /\bfs\b/u.test(imported)
+                && /\bFileExt\b/u.test(imported))) {
+            return true;
+        }
+    }
+    return false;
+}
+
+test("std::io stream-reading detector reviews borrowed descriptors", () => {
+    for (const source of [
+        'use std::io::Read as _;',
+        'use r#std::r#io::r#Read as _;',
+        'use ::std::{io::{Read as _, Cursor}};',
+        'use std::io::{self, BufRead as _};',
+        'use std::os::unix::fs::FileExt;',
+        'use ::std::{os::{unix::{fs::{FileExt as _}}}};',
+        'use std::os::windows::fs::FileExt as _;',
+        'file.read(&mut bytes);',
+        'file.r#read_exact(&mut bytes);',
+        'file.read_to_end(&mut bytes);',
+        'file.read_to_string(&mut text);',
+        'file.read_vectored(&mut buffers);',
+        'file.read_buf(&mut buffer);',
+        'file.read_line(&mut text);',
+        'file.fill_buf();',
+        'file.read_at(&mut bytes, 0);',
+        'file.read_exact_at(&mut bytes, 0);',
+        'file.seek_read(&mut bytes, 0);',
+        'Read::read_to_end(&mut file, &mut bytes);',
+        'FileExt::read_at(&file, &mut bytes, 0);',
+        'std/* comment */::io::Read::read(&mut file, &mut bytes);',
+    ]) {
+        assert.equal(usesStandardLibraryStreamReading(source), true, source);
+    }
+    for (const source of [
+        'use std::io::{self, Write as _};',
+        'use std::fmt::Write as _;',
+        'use crate::io::Read as _;',
+        'use std::os::unix::fs::MetadataExt;',
+        'use nix::unistd::read as input;',
+        'file.read_metadata();',
+        'file.write_all(b"private");',
+        'buffer.bytes();',
+        'file.read_exact_size();',
+    ]) {
+        assert.equal(usesStandardLibraryStreamReading(source), false,
+            source);
+    }
+});
+
+test("backend stream reads stay in reviewed input adapters", async () => {
+    const readers = [];
+    for (const sourcePath of await rustSources(BACKEND_ROOT)) {
+        const source = await readFile(sourcePath, "utf8");
+        if (usesStandardLibraryStreamReading(source)) {
+            readers.push(sourcePath);
+        }
+    }
+    assert.deepEqual(readers.sort(), [
+        FILESYSTEM_COMMIT,
+        path.join(BACKEND_ROOT, "profile-file-reader", "adapter-outbound",
+            "lib.rs"),
+        path.join(BACKEND_ROOT, "profile-entry-stream-reader",
+            "adapter-inbound", "lib.rs"),
+        LOOPBACK_RUNTIME,
+    ].sort(), "new stream reads require privacy review");
+});
+
 test("std::io stream-writing detector distinguishes reviewed authority", () => {
     for (const source of [
         'use std::io::Write as _;',

@@ -1201,3 +1201,16 @@ profile adapters as standard-library path readers. Seven inactive
 Read-only `nix::unistd::read`, `nix::sys::stat::Mode`, and
 `nix::fcntl::openat2` remain outside this specific query inventory; their
 separate authority rules continue to apply.
+
+An already-open File or socket can also be read through `std::io::Read`
+without an `fs::open`, `File::open`, or `stdin()` call in the consuming
+module. The prior 38-case backend inventory admitted a disabled
+`File::read` call on a borrowed descriptor. The new stream-reading review
+guards direct and aliased `Read`/`BufRead` imports, borrowed stream methods,
+and Unix/Windows positional `FileExt` readers.
+
+The reviewed reader owners are the profile file reader, bounded profile
+entry stream reader, explicit profile file-commit readback, and loopback
+HTTP runtime. Seven inactive `session-secret` stream-read mutations were
+rejected and restored byte-for-byte. This is a static owner inventory, not a
+proof of descriptor provenance or a remedy for the opener argv leak.
