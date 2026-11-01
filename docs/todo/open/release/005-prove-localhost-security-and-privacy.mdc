@@ -1285,3 +1285,17 @@ opener, a real nix dependency owner, were rejected and the file restored
 byte-for-byte. No backend module currently owns descriptor rebinding. This is
 conservative source review, not a kernel-enforced descriptor policy or a fix
 for the browser-launch argv credential leak.
+
+The pinned Rust 1.97.1 compiler permits `Path::exists`, `Path::canonicalize`,
+`File::metadata`, and `DirEntry::metadata` as first-class function items. A
+module can store one and later call its binding without the original method
+name followed by `(`, bypassing the prior host-path read source detector. A
+red-first scanner regression reproduced this omission.
+
+The path-read inventory now also reviews inherited filesystem metadata and path
+query method items, including raw-identifier spellings; unrelated lexical
+methods and file synchronization remain outside this rule. Seven cfg-inactive
+source mutations in the unreviewed `session-secret` adapter failed the updated
+guard, and its original bytes were restored exactly. This does not type-resolve
+method receivers, enforce syscalls, or remedy the browser opener argv
+credential exposure.

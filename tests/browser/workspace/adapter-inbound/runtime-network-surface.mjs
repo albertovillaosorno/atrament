@@ -667,11 +667,18 @@ function usesAmbientFilesystemReading(source) {
     // This deliberately reviews similarly named methods on other receivers:
     // without Rust type resolution, a newly added host-path read must not be
     // silently accepted as an unrelated local method.
+    const queryMethod = String.raw`(?:exists|try_exists|is_file|` +
+        String.raw`is_dir|is_symlink|metadata|symlink_metadata|` +
+        String.raw`canonicalize|read_dir|read_link)`;
     const pathQuery = new RegExp(
-        String.raw`(?:\.|\b(?:Path|PathBuf|File|DirEntry)\s*::)\s*` +
-            String.raw`(?:exists|try_exists|is_file|is_dir|is_symlink|` +
-            String.raw`metadata|symlink_metadata|canonicalize|read_dir|` +
-            String.raw`read_link)\s*\(`,
+        String.raw`\.\s*` + queryMethod + String.raw`\s*\(`,
+        "u",
+    );
+    // Inherent Path/File/DirEntry methods can be captured as function items
+    // and later invoked by another name without a `method(` token here.
+    const pathFunctionItem = new RegExp(
+        String.raw`\b(?:Path|PathBuf|File|DirEntry)\s*::\s*` +
+            queryMethod + String.raw`\b`,
         "u",
     );
     // Stable std::path::absolute resolves relative paths from the process
@@ -686,8 +693,8 @@ function usesAmbientFilesystemReading(source) {
             String.raw`stat|lstat|fstat|fstatat|readlink|readlinkat)\b`,
         "u",
     );
-    if (pathQuery.test(source) || absolutePath.test(source)
-        || nixPathQuery.test(source)) {
+    if (pathQuery.test(source) || pathFunctionItem.test(source)
+        || absolutePath.test(source) || nixPathQuery.test(source)) {
         return true;
     }
     // A Path/PathBuf namespace alias can hide UFCS path probes from the
@@ -801,6 +808,14 @@ test("ambient filesystem read detector distinguishes read-only APIs", () => {
         'path.read_dir()',
         'path.read_link()',
         'Path::exists(path)',
+        'let probe = Path::exists; probe(path);',
+        'let query = std::path::Path::canonicalize;',
+        'let query = Path::try_exists;',
+        'let query = Path::read_link;',
+        'let query = std::fs::File::metadata;',
+        'let query = File::metadata;',
+        'let query = DirEntry::metadata;',
+        'let query = r#Path::r#exists;',
         'PathBuf::try_exists(&path)',
         'File::metadata(&file)',
         'DirEntry::metadata(&entry)',
@@ -825,6 +840,8 @@ test("ambient filesystem read detector distinguishes read-only APIs", () => {
         'use std::fs::{File, Metadata};',
         'Path::new("/private").file_name();',
         'Path::new("/private").is_absolute();',
+        'let check = Path::is_absolute;',
+        'let flush = File::sync_all;',
         'path.ancestors();',
         'file.read_exact(&mut bytes);',
         'metadata.len();',
