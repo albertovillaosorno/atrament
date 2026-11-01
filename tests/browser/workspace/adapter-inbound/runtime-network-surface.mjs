@@ -2015,11 +2015,42 @@ test("backend build-time file and environment inputs are pinned", async () => {
         "new compile-time inputs need explicit privacy review");
 });
 
+// A locked nix fs dependency can rebind process-wide stdin/stdout/stderr
+// using AsFd alone, or `dup` a file descriptor without CLOEXEC. No backend
+// module owns that authority; it also bypasses the std::io stream inventory.
+function usesNixDescriptorDuplication(source) {
+    const duplicator = String.raw`(?:dup|dup2|dup2_raw|dup2_stdin|` +
+        String.raw`dup2_stdout|dup2_stderr|dup3|dup3_raw)`;
+    if (new RegExp(
+        String.raw`\bnix\s*::\s*unistd\s*::\s*` + duplicator +
+            String.raw`\b`, "u",
+    ).test(source)) {
+        return true;
+    }
+    for (const match of source.matchAll(
+        /\buse\s+(?:::\s*)?nix\s*::\s*([^;]+);/gu,
+    )) {
+        const imported = match[1];
+        if (/\bunistd\s*(?:as\b|[,}]|$)/u.test(imported)
+            || /\bunistd\s*::\s*\{[^;]*\bself\s+as\b/u
+                .test(imported)
+            || /\bunistd\s*::\s*\*/u.test(imported)
+            || new RegExp(String.raw`\bunistd\s*::\s*\{[^;]*\b` +
+                duplicator + String.raw`\b`, "u").test(imported)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 // Standard streams can disclose session text or read inherited host data
 // without filesystem or network APIs. Only the CLI bootstrap's two startup
 // and status writes are admitted; all stdin and stderr need source review.
 function unreviewedStandardStreamAuthority(source, sourcePath) {
     source = normalizeRustRawIdentifiers(source);
+    if (usesNixDescriptorDuplication(source)) {
+        return true;
+    }
     // Rust macros accept all three delimiters and comments as whitespace.
     const rustTrivia = String.raw`(?:\s|/\*[\s\S]*?\*/|//[^\n]*\n)*`;
     const outputMacro = new RegExp(
@@ -2090,6 +2121,13 @@ test("standard stream inventory blocks unreviewed host I/O", () => {
         ['use std::io as hidden;', privateModule],
         ['use std::{io as hidden};', privateModule],
         ['use std::io::{self as hidden, Write};', privateModule],
+        ['nix::unistd::dup2_stdout(&file);', privateModule],
+        ['use nix::unistd::dup2_stderr as redirect;', privateModule],
+        ['use nix::unistd::{dup2_stdin as redirect};', privateModule],
+        ['use ::nix::{unistd::{dup3_raw as redirect}};', privateModule],
+        ['use r#nix::r#unistd::r#dup2 as redirect;', privateModule],
+        ['use nix::unistd as descriptor_ops;', privateModule],
+        ['use nix::{unistd as descriptor_ops};', privateModule],
         ['io::stdout(); io::stdout(); io::stdout();', bootstrap],
         ['io::stdout(); io::stdout(); eprintln!("private")', bootstrap],
         ['io::stdout(); io::stdout(); io::stdin()', bootstrap],
@@ -2101,6 +2139,16 @@ test("standard stream inventory blocks unreviewed host I/O", () => {
     }
     assert.equal(unreviewedStandardStreamAuthority('format!("visible")',
         privateModule), false);
+    for (const source of [
+        'use nix::unistd::getpid;',
+        'use nix::unistd::read as input;',
+        'nix::unistd::read(&file, bytes);',
+        'use nix::sys::stat::Mode;',
+        'use std::os::fd::AsRawFd;',
+    ]) {
+        assert.equal(unreviewedStandardStreamAuthority(source, privateModule),
+            false, source);
+    }
 });
 
 test("backend standard-stream policy stays pinned", async () => {

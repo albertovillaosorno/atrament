@@ -1270,3 +1270,18 @@ Six cfg-inactive mutations of the selected-profile opener, which already
 depends on nix, were rejected before restoring its original bytes exactly. This
 is static source review, not runtime descriptor provenance, syscall
 confinement, or a remedy for the browser-opener argv credential exposure.
+
+The pinned nix 0.31.3 `fs` feature also exposes descriptor duplication and
+standard-stream redirection through `dup`, `dup2_*`, and `dup3` functions.
+These can copy inherited file descriptors without close-on-exec or rebind
+process-wide stdin, stdout, and stderr from an existing `AsFd`, without a
+`std::io` or `std::process` import. The earlier zero-owner standard-stream
+policy admitted `nix::unistd::dup2_stdout(&file)`.
+
+Red-first source regressions now review direct, grouped, renamed,
+raw-identifier, and whole-module nix duplication imports as unreviewed
+standard-stream authority. Eight disabled mutations in the selected-profile
+opener, a real nix dependency owner, were rejected and the file restored
+byte-for-byte. No backend module currently owns descriptor rebinding. This is
+conservative source review, not a kernel-enforced descriptor policy or a fix
+for the browser-launch argv credential leak.
