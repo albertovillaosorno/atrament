@@ -1540,9 +1540,10 @@ test("backend build-time file and environment inputs are pinned", async () => {
         "new compile-time inputs need explicit privacy review");
 });
 
-// Console output can disclose session text without opening a file or network
-// socket. The CLI bootstrap alone owns its two fixed startup/status writes.
-function unreviewedConsoleOutput(source, sourcePath) {
+// Standard streams can disclose session text or read inherited host data
+// without filesystem or network APIs. Only the CLI bootstrap's two startup
+// and status writes are admitted; all stdin and stderr need source review.
+function unreviewedStandardStreamAuthority(source, sourcePath) {
     source = normalizeRustRawIdentifiers(source);
     // Rust macros accept all three delimiters and comments as whitespace.
     const rustTrivia = String.raw`(?:\s|/\*[\s\S]*?\*/|//[^\n]*\n)*`;
@@ -1563,7 +1564,7 @@ function unreviewedConsoleOutput(source, sourcePath) {
     );
     const groupedStream = new RegExp(
         String.raw`\buse\s+(?:::)?std\s*::[^;]*\bio\s*::` +
-            String.raw`\s*\{[^;]*\b(?:stdout|stderr)\b`,
+            String.raw`\s*\{[^;]*\b(?:stdin|stdout|stderr)\b`,
         "u",
     );
     if (outputMacro.test(source) || importedMacro.test(source)
@@ -1576,17 +1577,20 @@ function unreviewedConsoleOutput(source, sourcePath) {
     const stderr = [...source.matchAll(
         /\b(?:std\s*::\s*)?io\s*::\s*stderr\b/gu,
     )].length;
+    const stdin = [...source.matchAll(
+        /\b(?:std\s*::\s*)?io\s*::\s*stdin\b/gu,
+    )].length;
     const expectedStdout = sourcePath === path.join(BACKEND_ROOT,
         "runtime-bootstrap", "composition", "main.rs") ? 2 : 0;
-    return stderr !== 0 || stdout !== expectedStdout;
+    return stderr !== 0 || stdin !== 0 || stdout !== expectedStdout;
 }
 
-test("backend console output inventory blocks unreviewed disclosure", () => {
+test("standard stream inventory blocks unreviewed host I/O", () => {
     const bootstrap = path.join(BACKEND_ROOT, "runtime-bootstrap",
         "composition", "main.rs");
     const privateModule = path.join(BACKEND_ROOT, "session-secret",
         "adapter-outbound", "lib.rs");
-    assert.equal(unreviewedConsoleOutput(
+    assert.equal(unreviewedStandardStreamAuthority(
         "io::stdout(); io::stdout();", bootstrap), false);
     for (const [source, sourcePath] of [
         ['println!("session text")', privateModule],
@@ -1598,6 +1602,12 @@ test("backend console output inventory blocks unreviewed disclosure", () => {
         ['use ::std::{eprintln as leak};', privateModule],
         ['use core::dbg as leak;', privateModule],
         ['std::io::stderr()', privateModule],
+        ['std::io::stdin()', privateModule],
+        ['io::stdin().lock()', privateModule],
+        ['use std::io::stdin as input;', privateModule],
+        ['use std::io::{stdin as input};', privateModule],
+        ['use ::std::{io::{stdin as input}};', privateModule],
+        ['use r#std::r#io::r#stdin as input;', privateModule],
         ['io::stdout()', privateModule],
         ['use std::io::stderr as leak;', privateModule],
         ['use std::io::{stdout as leak};', privateModule],
@@ -1607,24 +1617,27 @@ test("backend console output inventory blocks unreviewed disclosure", () => {
         ['use std::io::{self as hidden, Write};', privateModule],
         ['io::stdout(); io::stdout(); io::stdout();', bootstrap],
         ['io::stdout(); io::stdout(); eprintln!("private")', bootstrap],
+        ['io::stdout(); io::stdout(); io::stdin()', bootstrap],
     ]) {
-        assert.equal(unreviewedConsoleOutput(source, sourcePath), true,
-            source);
+        assert.equal(
+            unreviewedStandardStreamAuthority(source, sourcePath),
+            true, source,
+        );
     }
-    assert.equal(unreviewedConsoleOutput('format!("visible")',
+    assert.equal(unreviewedStandardStreamAuthority('format!("visible")',
         privateModule), false);
 });
 
-test("backend console output stays in fixed CLI startup markers", async () => {
+test("backend standard-stream policy stays pinned", async () => {
     const unreviewed = [];
     for (const sourcePath of await rustSources(BACKEND_ROOT)) {
         const source = await readFile(sourcePath, "utf8");
-        if (unreviewedConsoleOutput(source, sourcePath)) {
+        if (unreviewedStandardStreamAuthority(source, sourcePath)) {
             unreviewed.push(path.relative(BACKEND_ROOT, sourcePath));
         }
     }
     assert.deepEqual(unreviewed, [],
-        "backend console output requires explicit privacy review");
+        "new backend standard-stream authority needs explicit review");
 });
 
 // Cargo can point a new library or executable at an arbitrary .rs file.

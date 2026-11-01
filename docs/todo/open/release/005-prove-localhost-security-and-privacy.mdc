@@ -1035,3 +1035,15 @@ argument iterator, and an `std::env::*` wildcard import. All three fail the
 source inventory and were restored byte-for-byte. This gates new declared
 argument readers but does not hide process arguments from the operating
 system or resolve the platform opener's known credential-bearing argv.
+
+Standard input is another inherited host boundary. Unlike CLI argument
+inspection, `std::io::stdin()` can read arbitrary bytes passed to a process.
+A red-first test showed that the prior stdout/stderr disclosure guard admitted
+new stdin reads from unreviewed backend modules.
+
+The standard-stream source guard now rejects direct, grouped, aliased, and raw
+identifier stdin uses while retaining the two reviewed CLI status writes.
+Three cfg-disabled `session-secret` source mutations using stdin handles and
+imports each failed the updated scanner before byte-for-byte restoration.
+This is static source review, not an operating-system sandbox, and does not
+resolve the known browser-opener credential in child argv.
