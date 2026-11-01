@@ -37,6 +37,7 @@ import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
 import { EventEmitter } from "node:events";
 import fs from "node:fs";
+import net from "node:net";
 import { PassThrough } from "node:stream";
 import path from "node:path";
 import test from "node:test";
@@ -46,6 +47,9 @@ const PINNED_CARGO = path.resolve(
 );
 const TARGET_DIR = path.resolve(".cache/cargo-target");
 const RUNTIME_BINARY = path.join(TARGET_DIR, "debug", "atrament");
+const { handshakeHeaders } = await import(path.resolve(
+    "src/browser/workspace/adapter-inbound/generated/session-handshake.js",
+));
 
 function buildRuntime() {
     const build = spawnSync(
@@ -628,6 +632,169 @@ test(
             if (child !== null) {
                 await terminateChild(child);
             }
+            fs.rmSync(fixture, { recursive: true, force: true });
+        }
+    },
+);
+
+// A synthetic opener passes its test-only URL over a Unix socket. Unlike an
+// argv probe, this fixture never saves the credential in a file or test log.
+// The production opener still has the independently documented argv defect.
+test(
+    "live Linux runtime keeps loopback-only sockets through private draft use",
+    { skip: process.platform !== "linux" },
+    async () => {
+        buildRuntime();
+        fs.mkdirSync(".temp", { recursive: true });
+        const fixture = fs.mkdtempSync(".temp/startup-private-network-");
+        const ipcPath = path.join(fixture, "opener.sock");
+        const server = net.createServer();
+        let child = null;
+        try {
+            await new Promise((resolve, reject) => {
+                server.once("error", reject);
+                server.listen(ipcPath, resolve);
+            });
+            const launchUrl = new Promise((resolve, reject) => {
+                server.once("connection", (stream) => {
+                    const parts = [];
+                    let totalBytes = 0;
+                    stream.on("data", (bytes) => {
+                        totalBytes += bytes.length;
+                        if (totalBytes > 256) {
+                            stream.destroy();
+                            reject(new Error("opener URL exceeded IPC budget"));
+                        } else {
+                            parts.push(bytes);
+                        }
+                    });
+                    stream.once("end", () => {
+                        resolve(Buffer.concat(parts).toString("utf8"));
+                    });
+                    stream.once("error", () => reject(new Error(
+                        "opener IPC failed before delivering a URL",
+                    )));
+                });
+            });
+            const openerDirectory = path.join(fixture, "bin");
+            fs.mkdirSync(openerDirectory);
+            const opener = path.join(openerDirectory, "xdg-open");
+            // The path is test-owned and the secret arrives exclusively over
+            // the socket; no opener output is inherited by Atrament.
+            fs.writeFileSync(opener, [
+                "#!/usr/bin/env node",
+                'import net from "node:net";',
+                `const stream = net.createConnection(${JSON.stringify(ipcPath)}`
+                    + ");",
+                'stream.on("connect", () => stream.end(process.argv[2]));',
+                'stream.on("error", () => { process.exitCode = 1; });',
+                "",
+            ].join("\n"), { mode: 0o755 });
+            const environment = {
+                ...process.env,
+                DISPLAY: ":atrament-test",
+                PATH: `${openerDirectory}:${process.env.PATH ?? ""}`,
+            };
+            delete environment.WAYLAND_DISPLAY;
+            child = spawn(RUNTIME_BINARY, [], {
+                env: environment,
+                stdio: ["ignore", "pipe", "pipe"],
+            });
+            const [ready, launched] = await Promise.all([
+                waitForReady(child), launchUrl,
+            ]);
+            // Validate before URL parsing so a malformed credential-bearing
+            // input can never appear in the test runner's URL exception.
+            assert.equal(
+                /^http:\/\/127\.0\.0\.1:[1-9][0-9]{0,4}#session=[0-9a-f]{64}$/u
+                    .test(launched),
+                true,
+            );
+            const address = new URL(launched);
+            assert.equal(address.origin, ready.origin);
+            const secret = address.hash.slice("#session=".length);
+            const port = Number.parseInt(address.port, 10)
+                .toString(16).toUpperCase().padStart(4, "0");
+            const local = `0100007F:${port}`;
+            const assertOnlySessionSockets = () => {
+                const inodes = processSocketInodes(child.pid);
+                const rows = processInternetSocketRows(child.pid, inodes);
+                const listeners = rows.filter((row) => row.state === "0A");
+                assert.equal(listeners.length, 1);
+                assert.equal(rows.length <= 2, true);
+                for (const row of rows) {
+                    assert.equal(row.protocol, "tcp");
+                    assert.equal(row.local, local);
+                    if (row.state === "0A") {
+                        assert.equal(row.remote, "00000000:0000");
+                    } else {
+                        assert.match(row.remote, /^0100007F:[0-9A-F]{4}$/u);
+                    }
+                }
+            };
+            const request = async (target, init) => {
+                const response = await fetch(new URL(target, ready.origin), {
+                    ...init,
+                    signal: AbortSignal.timeout(3_000),
+                });
+                const body = await response.text();
+                assertOnlySessionSockets();
+                return { response, body };
+            };
+            assertOnlySessionSockets();
+            const authenticated = {
+                Authorization: `Bearer ${secret}`,
+                Origin: ready.origin,
+            };
+            const handshake = await request("/api/handshake", {
+                method: "POST",
+                headers: { ...handshakeHeaders(secret), Origin: ready.origin },
+            });
+            assert.equal(handshake.response.status, 200);
+            assert.equal(JSON.parse(handshake.body).result, "compatible");
+            const draftText = "private-loopback-only-fixture";
+            const wrote = await request("/api/session/task", {
+                method: "POST",
+                headers: {
+                    ...authenticated,
+                    "Content-Type": "text/plain; charset=utf-8",
+                },
+                body: draftText,
+            });
+            assert.equal(wrote.response.status, 204);
+            const read = await request("/api/session/task", {
+                headers: authenticated,
+            });
+            assert.equal(read.response.status, 200);
+            assert.equal(read.body, draftText);
+            const ended = await fetch(
+                new URL("/api/session/end", ready.origin), {
+                    method: "POST",
+                    headers: authenticated,
+                    signal: AbortSignal.timeout(3_000),
+                },
+            );
+            assert.equal(ended.status, 204);
+            assert.equal(await ended.text(), "");
+            await new Promise((resolve, reject) => {
+                if (child.exitCode !== null) {
+                    resolve();
+                    return;
+                }
+                const timeout = setTimeout(() => reject(new Error(
+                    "ended runtime did not exit",
+                )), 2_000);
+                child.once("exit", () => {
+                    clearTimeout(timeout);
+                    resolve();
+                });
+            });
+            assert.equal(child.exitCode, 0);
+        } finally {
+            if (child !== null) {
+                await terminateChild(child);
+            }
+            await new Promise((resolve) => server.close(resolve));
             fs.rmSync(fixture, { recursive: true, force: true });
         }
     },
