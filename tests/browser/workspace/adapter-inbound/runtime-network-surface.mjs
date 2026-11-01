@@ -514,6 +514,24 @@ function usesNixFcntlAuthority(source) {
     return false;
 }
 
+// Rust `type Host = File` aliases preserve associated open/create methods
+// but erase their original type name from a later `Host::open` source scan.
+// Without Rust type resolution, even an unqualified File/Path/DirEntry alias
+// needs review before it can hide host reads or filesystem mutations.
+const FILE_TYPE_ALIAS = new RegExp(
+    String.raw`\btype\s+[\p{ID_Start}_][\p{ID_Continue}]*\s*=\s*` +
+        String.raw`(?:::)?(?:(?:std\s*::\s*)?fs\s*::\s*)?File\b`,
+    "u",
+);
+const PATH_QUERY_TYPE_ALIAS = new RegExp(
+    String.raw`\btype\s+[\p{ID_Start}_][\p{ID_Continue}]*\s*=\s*` +
+        String.raw`(?:::)?(?:` +
+        String.raw`(?:(?:std\s*::\s*)?fs\s*::\s*)?DirEntry|` +
+        String.raw`(?:(?:std\s*::\s*)?path\s*::\s*)?Path(?:Buf)?` +
+        String.raw`)\b`,
+    "u",
+);
+
 // Short-lived writes can vanish before a process descriptor snapshot. This
 // conservative source guard covers the ordinary direct Rust filesystem write
 // constructors and this workspace's Linux profile-commit mutation operations.
@@ -527,6 +545,9 @@ const MUTATING_FS_FUNCTIONS = new Set([
 
 function usesDirectFilesystemMutationAuthority(source) {
     source = normalizeRustRawIdentifiers(source);
+    if (FILE_TYPE_ALIAS.test(source)) {
+        return true;
+    }
     // Aliasing std::fs or std::os::unix::fs, or its File constructor,
     // hides subsequent mutations behind unqualified names.
     for (const match of source.matchAll(
@@ -634,6 +655,9 @@ function usesDirectFilesystemMutationAuthority(source) {
 // direct and method-based path reads within the reviewed profile adapters.
 function usesAmbientFilesystemReading(source) {
     source = normalizeRustRawIdentifiers(source);
+    if (FILE_TYPE_ALIAS.test(source) || PATH_QUERY_TYPE_ALIAS.test(source)) {
+        return true;
+    }
     // `File::open` is also a first-class function item: it can be assigned
     // to a local variable before invocation without an `open(` token.
     if (/\bFile\s*::\s*open\b/u.test(source)) {
@@ -750,6 +774,13 @@ test("ambient filesystem read detector distinguishes read-only APIs", () => {
         'use ::std::{fs::{canonicalize as probe}};',
         'use r#std::r#fs::r#symlink_metadata as probe;',
         'File::open("private")',
+        'type HostFile = std::fs::File;',
+        'type HostFile = File;',
+        'type HostFile = ::std::fs::File;',
+        'type HostEntry = std::fs::DirEntry;',
+        'type HostPath = std::path::Path;',
+        'type HostPathBuf = path::PathBuf;',
+        'type λ = r#std::r#path::r#Path;',
         'let opener = File::open; opener("/private");',
         'let opener = std::fs::File::open; opener("/private");',
         'use std::fs::File as HostFile;',
@@ -788,6 +819,9 @@ test("ambient filesystem read detector distinguishes read-only APIs", () => {
     }
     for (const source of [
         'File::create("output")',
+        'type Local = crate::File;',
+        'type Local = crate::PathBuf;',
+        'type Local = Metadata;',
         'use std::fs::{File, Metadata};',
         'Path::new("/private").file_name();',
         'Path::new("/private").is_absolute();',
@@ -1469,6 +1503,11 @@ test("direct filesystem mutation detector covers write authority", () => {
         'let creator = std::fs::File::create_new;',
         'let options = File::options;',
         'let changer = File::set_permissions;',
+        'type HiddenFile = std::fs::File;',
+        'type HiddenFile = File;',
+        'type HiddenFile = ::std::fs::File;',
+        'type HiddenFile = fs::File;',
+        'type λ = r#std::r#fs::r#File;',
         'File::create_new("state");',
         'use std::fs::write as hidden_write;',
         'use std::{fs::{read, write as hidden_write}};',
@@ -1515,6 +1554,9 @@ test("direct filesystem mutation detector covers write authority", () => {
         'use std::os::unix::fs::MetadataExt as _;',
         'use crate::fs as disk;',
         'File::open("state");',
+        'type Local = crate::File;',
+        'type Local = std::fs::Metadata;',
+        'type Local = FileInfo;',
         'file.metadata();',
         'file.sync_all();',
         'fs::read("state");',

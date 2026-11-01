@@ -1241,3 +1241,20 @@ were rejected and restored byte-for-byte, including two read constructors,
 two alias forms, and writable file or permission function items. This remains
 static source review, not a type-resolved filesystem sandbox, and does not
 address the known browser-opener credential exposure in process arguments.
+
+Rust `type` aliases retain the associated functions of filesystem types. A
+module can alias `std::fs::File` or an imported `File` and invoke
+`HostFile::open` or `HostFile::create` without the original `File::` token.
+Aliases of `Path`, `PathBuf`, and `DirEntry` likewise hide UFCS path queries.
+Red-first read and write authority tests reproduced both omissions, and the
+pinned Rust 1.97.1 compiler admitted all three File aliases and associated
+open/create/options function items.
+
+The static backend source review now flags filesystem `type` aliases even when
+only an unqualified standard type is named, while unrelated crate-local types
+and metadata aliases remain permitted. Five inactive `session-secret` probes
+covering File, Path, DirEntry, raw identifiers, and Unicode alias names were
+rejected, then removed with exact original backend bytes restored. This is
+conservative source gating without Rust type resolution, not a guarantee
+against dynamically constructed native authority or the browser-opener argv
+credential exposure.
