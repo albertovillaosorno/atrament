@@ -1047,3 +1047,15 @@ Three cfg-disabled `session-secret` source mutations using stdin handles and
 imports each failed the updated scanner before byte-for-byte restoration.
 This is static source review, not an operating-system sandbox, and does not
 resolve the known browser-opener credential in child argv.
+
+Host path discovery exposes process working directories, executable paths,
+and temporary or home directories without opening a file. A red-first
+source fixture showed that `std::env::current_dir()` and imported
+`temp_dir` aliases evaded the previous environment/argv source inventory.
+
+The ambient-input review now covers `current_dir`, `current_exe`, `home_dir`,
+and `temp_dir`, including renamed or grouped imports and raw identifiers.
+Three inactive backend mutations for working-directory, temporary-directory,
+and executable-path reads failed the new guard and were restored exactly.
+No production host-path readers are admitted; source review does not prove
+absence of native or indirect path discovery or fix the opener argv leak.

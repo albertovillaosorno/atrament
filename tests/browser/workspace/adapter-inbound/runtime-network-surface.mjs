@@ -365,10 +365,15 @@ function usesProcessWideEnvironmentMutation(source) {
 // Confine reads to the two GUI markers and explicit CLI argument inspection.
 function unreviewedAmbientProcessInputReads(source, sourcePath) {
     source = normalizeRustRawIdentifiers(source);
-    const anyRead = /\benv\s*::\s*(?:var|var_os|vars|vars_os)\s*\(/gu;
+    const readers = String.raw`(?:var|var_os|vars|vars_os|current_dir|` +
+        String.raw`current_exe|home_dir|temp_dir)`;
+    const anyRead = new RegExp(
+        String.raw`\benv\s*::\s*` + readers + String.raw`\s*\(`,
+        "gu",
+    );
     const importedRead = new RegExp(
         String.raw`\buse\s+(?:::)?std\s*::[^;]*\benv\s*::` +
-            String.raw`\s*(?:\{[^;]*\b)?(?:var|var_os|vars|vars_os)\b`,
+            String.raw`\s*(?:\{[^;]*\b)?` + readers + String.raw`\b`,
         "u",
     );
     // Host CLI arguments can contain explicitly selected private paths.
@@ -415,6 +420,15 @@ test("ambient process input guard rejects unreviewed reads", () => {
         false);
     for (const [source, file] of [
         ['std::env::var("PRIVATE_KEY")', privateModule],
+        ['std::env::current_dir()', privateModule],
+        ['std::env::current_exe()', privateModule],
+        ['std::env::home_dir()', privateModule],
+        ['std::env::temp_dir()', privateModule],
+        ['use std::env::temp_dir as read_path;', privateModule],
+        ['use ::std::{env::{current_exe as read_path}};', privateModule],
+        ['use r#std::r#env::r#home_dir as read_path;', privateModule],
+        ['env::current_dir()', RUNTIME_BOOTSTRAP],
+        ['env::temp_dir()', BROWSER_LAUNCH],
         ['std/**/::env::var("PRIVATE_KEY")', privateModule],
         ['env::var_os("HOME")', privateModule],
         ['std::env::vars()', privateModule],
@@ -431,6 +445,8 @@ test("ambient process input guard rejects unreviewed reads", () => {
     }
     assert.equal(unreviewedAmbientProcessInputReads(
         'env::args_os().skip(1)', privateModule), true);
+    assert.equal(unreviewedAmbientProcessInputReads(
+        'std::env::split_paths(paths)', privateModule), false);
     assert.equal(unreviewedAmbientProcessInputReads(
         'env::args_os().skip(1)', RUNTIME_BOOTSTRAP), false);
     for (const [source, file] of [
@@ -457,7 +473,7 @@ test("backend ambient input reads stay in reviewed adapters", async () => {
         }
     }
     assert.deepEqual(unreviewed, [],
-        "new host environment or argv readers need explicit review");
+        "new environment, argv, or host-path reads need privacy review");
 });
 
 // Locked nix::fcntl can open read-only files, but also supports O_RDWR,
