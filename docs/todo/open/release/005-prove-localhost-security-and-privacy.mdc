@@ -1008,3 +1008,19 @@ value or importing an environment iterator each failed the updated guard.
 The backend source was restored byte-for-byte. This is static declaration
 evidence, not proof against native environment access or inherited opener
 state, and the known credential-bearing opener argv remains unresolved.
+
+Rust permits comments as lexical whitespace inside paths. Before this fix,
+`use std/**/::net::TcpStream` and a nested-comment process import escaped
+the backend source inventories, despite compiling under the pinned Rust
+1.97.1 toolchain. A red-first scanner fixture reproduced both misses.
+
+The source review now removes line and nested block comments while retaining
+normal, byte, and raw string literals, before normalizing Rust raw identifiers.
+Its source-inclusion guard uses the same normalization so commented macro
+separators cannot redirect compilation without review.
+
+Three separate inactive `session-secret` mutations with comment-separated
+network, process, and environment imports each failed the updated inventory.
+All source bytes were restored afterward; the scanner passes 36 cases. This
+is still a conservative source gate, not a complete Rust parser or syscall
+sandbox, and it does not resolve the browser-opener argv credential leak.

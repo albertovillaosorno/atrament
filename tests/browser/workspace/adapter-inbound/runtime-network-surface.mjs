@@ -68,12 +68,94 @@ const FILESYSTEM_COMMIT = path.join(
 );
 
 
-// Rust accepts `r#` on ordinary identifiers, not just keywords. Canonicalize
-// that spelling before source-level authority review; raw string delimiters
-// are untouched because they are not followed by an identifier character.
-function normalizeRustRawIdentifiers(source) {
-    return source.replace(/\br#(?=[A-Za-z_])/gu, "");
+// Comments are lexical whitespace in Rust, including between a module name
+// and `::`. Ignore them without damaging ordinary or raw string literals;
+// Rust block comments nest, so a non-greedy regex is insufficient. This is a
+// conservative source review, not a replacement for a Rust syntax parser.
+function replaceRustCommentsWithWhitespace(source) {
+    let normalized = "";
+    let cursor = 0;
+    while (cursor < source.length) {
+        const remaining = source.slice(cursor);
+        const raw = /^(?:b?r)(#+)?"/u.exec(remaining);
+        if (raw !== null) {
+            const delimiter = `"${raw[1] ?? ""}`;
+            const end = source.indexOf(delimiter, cursor + raw[0].length);
+            const next = end < 0 ? source.length : end + delimiter.length;
+            normalized += source.slice(cursor, next);
+            cursor = next;
+            continue;
+        }
+        if (source[cursor] === '"') {
+            const start = cursor++;
+            while (cursor < source.length) {
+                if (source[cursor] === "\\") {
+                    cursor += 2;
+                } else if (source[cursor++] === '"') {
+                    break;
+                }
+            }
+            normalized += source.slice(start, cursor);
+            continue;
+        }
+        if (remaining.startsWith("//")) {
+            const end = source.indexOf("\n", cursor + 2);
+            cursor = end < 0 ? source.length : end;
+            normalized += " ";
+            continue;
+        }
+        if (remaining.startsWith("/*")) {
+            let depth = 1;
+            const start = cursor;
+            cursor += 2;
+            while (cursor < source.length && depth > 0) {
+                if (source.startsWith("/*", cursor)) {
+                    depth += 1;
+                    cursor += 2;
+                } else if (source.startsWith("*/", cursor)) {
+                    depth -= 1;
+                    cursor += 2;
+                } else {
+                    cursor += 1;
+                }
+            }
+            const removed = source.slice(start, cursor);
+            const newlines = (removed.match(/\n/gu) ?? []).length;
+            normalized += ` ${"\n".repeat(newlines)}`;
+            continue;
+        }
+        normalized += source[cursor];
+        cursor += 1;
+    }
+    return normalized;
 }
+
+// Rust also accepts `r#` on ordinary identifiers, not just keywords.
+// Strip that prefix after comment normalization, preserving raw strings.
+function normalizeRustRawIdentifiers(source) {
+    return replaceRustCommentsWithWhitespace(source)
+        .replace(/\br#(?=[A-Za-z_])/gu, "");
+}
+
+test("Rust source scan treats nested comments as lexical whitespace", () => {
+    const source = [
+        "use std/* outer /* inner */ rest */::net::TcpListener;",
+        "use std// line comment\n::process::Command;",
+        'let url = "http://127.0.0.1/* not a comment */";',
+        'let raw = r###"// not a comment /* either */"###;',
+        'let bytes = br#"/* not a comment */"#;',
+        "/* use std::fs::write; */",
+        "// std::fs::create_dir_all",
+    ].join("\n");
+    const normalized = normalizeRustRawIdentifiers(source);
+    assert.match(normalized, /std\s+::net::TcpListener/u);
+    assert.match(normalized, /std\s+::process::Command/u);
+    assert.equal(normalized.includes("/* not a comment */"), true);
+    assert.equal(normalized.includes('r###"// not a comment'), true);
+    assert.equal(normalized.includes('br#"/* not a comment'), true);
+    assert.equal(normalized.includes("fs::write"), false);
+    assert.equal(normalized.includes("fs::create_dir_all"), false);
+});
 
 function usesStandardLibraryNetworking(source) {
     source = normalizeRustRawIdentifiers(source);
@@ -308,6 +390,7 @@ test("environment read guard rejects unreviewed host variables", () => {
         false);
     for (const [source, file] of [
         ['std::env::var("PRIVATE_KEY")', privateModule],
+        ['std/**/::env::var("PRIVATE_KEY")', privateModule],
         ['env::var_os("HOME")', privateModule],
         ['std::env::vars()', privateModule],
         ['env::vars_os()', privateModule],
@@ -570,6 +653,7 @@ function usesUnreviewedNativeAuthority(source) {
 // include! or a redirected module path could bypass that inventory. Binary and
 // text asset inclusion remains deliberately separate from Rust compilation.
 function redirectsBackendRustSource(source) {
+    source = normalizeRustRawIdentifiers(source);
     return /\binclude\s*!\s*\(/u.test(source)
         || /#\s*\[\s*path\s*=/u.test(source)
         || /#\s*\[\s*cfg_attr\s*\(/u.test(source);
@@ -686,6 +770,9 @@ test("backend authority namespaces cannot be glob-imported", async () => {
 test("standard-library network detector covers equivalent imports", () => {
     for (const source of [
         "use std::net::TcpListener;",
+        "use std/**/::net::TcpListener;",
+        "use std/* hidden */::net::TcpListener;",
+        "use std// split module\n::net::TcpListener;",
         "use std::r#net::TcpListener;",
         "use r#std::r#net::TcpStream;",
         "use r#std::{r#net::TcpStream};",
@@ -725,6 +812,7 @@ test(
 test("standard-library process detector covers equivalent imports", () => {
     for (const source of [
         "use std::process::Command;",
+        "use std/* nested /* comment */ still */::process::Command;",
         "use std::r#process::Command;",
         "use r#std::r#process::r#Command;",
         "use r#std::{r#process::Command};",
@@ -993,6 +1081,7 @@ test("direct filesystem mutation detector covers write authority", () => {
         'use ::nix::{sys::{stat::{mknod as create_inode}}};',
         'use r#nix::r#sys::r#stat::r#mknodat;',
         'std::fs::write("state", b"private");',
+        'std/**/::fs::write("state", b"private");',
         'std::fs::r#write("state", b"private");',
         'use std::fs::r#write as hidden_write;',
         'use std::fs::{read, r#write as hidden_write};',
@@ -1258,6 +1347,7 @@ test("backend raw native authority requires explicit review", async () => {
 test("backend source inclusion requires explicit review", () => {
     for (const source of [
         'include!("separate.inc");',
+        'include/* comment */!("separate.inc");',
         'include ! ( concat!(env!("OUT_DIR"), "/generated.rs") );',
         '#[path = "../../unreviewed.rs"] mod external;',
         '# [ path = "../../unreviewed.rs" ] mod external;',
