@@ -894,3 +894,19 @@ Three inactive `session-secret` mutations (a Unix `CommandExt` import,
 a platform-module alias, and a delegated `spawn` call) each failed the
 unreviewed-process inventory. The original backend source was restored
 byte-for-byte after every probe. No production process-launch code changed.
+
+The backend authority scanner now also validates Cargo workspace target source
+paths, not only dependency versions and build-script presence. A new `lib` or
+`bin` target could otherwise compile Rust outside the reviewed `src/backend`
+walk; `[[test]]` roots are separately confined to `tests/backend`. The guard
+resolves `..` segments and filesystem symlinks before admitting each target,
+rejecting missing files, non-Rust targets, and unexpected Cargo target kinds.
+
+Synthetic target metadata verifies that a library or binary redirected to a
+backend test source is refused, while ordinary source roots and Cargo's
+existing relative test paths remain admitted. The source walker additionally
+refuses symbolic-link entries, which could otherwise hide imported module
+files outside its directory recursion. The locked workspace's 132 library,
+one binary, and 131 external test targets pass this inventory. This is
+build-source confinement evidence, not a native execution sandbox, validation
+of arbitrary build tool behavior, or a fix for opener-argv credential exposure.

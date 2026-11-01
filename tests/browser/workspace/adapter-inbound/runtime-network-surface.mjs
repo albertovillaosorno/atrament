@@ -35,6 +35,7 @@
 //     registry set also includes their pinned transitive packages.
 //
 import assert from "node:assert/strict";
+import { realpathSync } from "node:fs";
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
@@ -443,10 +444,21 @@ function redirectsBackendRustSource(source) {
         || /#\s*\[\s*cfg_attr\s*\(/u.test(source);
 }
 
+// Rust `mod child;` may follow a symbolic link into code absent from the
+// backend source walk. Require review of any alias in the scanned tree.
+function rejectBackendSourceLink(entry, sourcePath) {
+    if (entry.isSymbolicLink()) {
+        throw new Error(
+            `backend symbolic links need explicit source review: ${sourcePath}`,
+        );
+    }
+}
+
 async function rustSources(directory) {
     const sources = [];
     for (const entry of await readdir(directory, { withFileTypes: true })) {
         const child = path.join(directory, entry.name);
+        rejectBackendSourceLink(entry, child);
         if (entry.isDirectory()) {
             sources.push(...await rustSources(child));
         } else if (entry.isFile() && entry.name.endsWith(".rs")) {
@@ -1131,6 +1143,97 @@ test("backend Rust sources cannot redirect compilation out of inventory",
         "extra included Rust code needs source-level privacy review");
 });
 
+// Cargo can point a new library or executable at an arbitrary .rs file.
+// Without this admission, the backend file inventory can miss that code even
+// with an unchanged dependency set and no build.rs target. Resolve paths and
+// symbolic links before deciding whether a target stays in the scanned tree.
+function unreviewedCargoSourceTargets(metadata, resolveSource = realpathSync) {
+    const owners = new Set(metadata.workspace_members);
+    const backend = `${realpathSync(BACKEND_ROOT)}${path.sep}`;
+    const tests = `${realpathSync(path.join(REPOSITORY_ROOT,
+        "tests", "backend"))}${path.sep}`;
+    const unreviewed = [];
+    for (const pkg of metadata.packages) {
+        if (!owners.has(pkg.id)) continue;
+        for (const target of pkg.targets) {
+            const [kind] = target.kind;
+            const root = target.kind.length !== 1 ? null
+                : kind === "test" ? tests
+                : kind === "lib" || kind === "bin" ? backend : null;
+            let source = null;
+            try {
+                source = resolveSource(target.src_path);
+            } catch {
+                // Missing or unresolved sources cannot prove confinement.
+            }
+            if (root === null || source === null
+                || !source.startsWith(root) || !source.endsWith(".rs")) {
+                unreviewed.push(`${pkg.name}:${target.name}`);
+            }
+        }
+    }
+    return unreviewed;
+}
+
+test("backend source inventory refuses symlinked module files", () => {
+    const link = {
+        isSymbolicLink: () => true,
+    };
+    const regular = {
+        isSymbolicLink: () => false,
+    };
+    assert.throws(() => rejectBackendSourceLink(link, "alias.rs"),
+        /symbolic links need explicit source review/);
+    assert.doesNotThrow(() => rejectBackendSourceLink(regular, "lib.rs"));
+});
+
+test("Cargo executable source targets cannot escape reviewed trees", () => {
+    const backend = path.join(BACKEND_ROOT, "session-secret",
+        "adapter-outbound", "lib.rs");
+    const testRoot = path.join(REPOSITORY_ROOT, "tests", "backend",
+        "session-secret", "adapter-outbound", "lib.rs");
+    const metadata = (kind, source) => ({
+        workspace_members: ["owned"],
+        packages: [{
+            id: "owned",
+            name: "test_owner",
+            targets: [{
+                kind: [kind],
+                name: "test_target",
+                src_path: source,
+            }],
+        }],
+    });
+    for (const [kind, source] of [
+        ["lib", backend],
+        ["bin", backend],
+        ["test", testRoot],
+        ["test", path.join(BACKEND_ROOT, "session-secret",
+            "../../../tests/backend/session-secret/adapter-outbound/lib.rs")],
+    ]) {
+        assert.deepEqual(unreviewedCargoSourceTargets(metadata(kind, source)),
+            [], `${kind}: ${source}`);
+    }
+    // A symlink may look inside src/backend lexically but resolve outside it.
+    const alias = path.join(BACKEND_ROOT, "injected.rs");
+    const aliasTarget = (source) => source === alias
+        ? testRoot : realpathSync(source);
+    assert.deepEqual(unreviewedCargoSourceTargets(
+        metadata("lib", alias), aliasTarget,
+    ), ["test_owner:test_target"]);
+    for (const [kind, source] of [
+        ["lib", testRoot],
+        ["bin", testRoot],
+        ["test", backend],
+        ["example", backend],
+        ["lib", path.join(REPOSITORY_ROOT, "README.md")],
+        ["bin", path.join(BACKEND_ROOT, "missing.rs")],
+    ]) {
+        assert.deepEqual(unreviewedCargoSourceTargets(metadata(kind, source)),
+            ["test_owner:test_target"], `${kind}: ${source}`);
+    }
+});
+
 test("backend registry dependencies remain explicitly reviewed", () => {
     const cargo = path.join(
         REPOSITORY_ROOT,
@@ -1156,6 +1259,8 @@ test("backend registry dependencies remain explicitly reviewed", () => {
     );
     assert.equal(result.status, 0, result.stderr);
     const metadata = JSON.parse(result.stdout);
+    assert.deepEqual(unreviewedCargoSourceTargets(metadata), [],
+        "Cargo targets must remain inside reviewed Rust source trees");
     const workspaceIds = new Set(metadata.workspace_members);
     const unreviewedBuildScripts = metadata.packages
         .filter((pkg) => workspaceIds.has(pkg.id))
