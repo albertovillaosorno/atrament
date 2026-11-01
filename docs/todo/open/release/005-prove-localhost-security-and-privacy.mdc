@@ -1059,3 +1059,16 @@ Three inactive backend mutations for working-directory, temporary-directory,
 and executable-path reads failed the new guard and were restored exactly.
 No production host-path readers are admitted; source review does not prove
 absence of native or indirect path discovery or fix the opener argv leak.
+
+Host filesystem metadata and path resolution can also reveal file existence,
+identity, or the resolved target of a caller-supplied path. A red-first scan
+showed that `std::fs::metadata`, `symlink_metadata`, and `canonicalize` were
+previously excluded from the direct-file intake inventory.
+
+These named direct functions and their grouped or aliased imports now require
+review. The existing Export session's current-directory identity check is
+explicitly admitted alongside the four previously reviewed profile adapters.
+Three inactive `session-secret` mutations using direct metadata, an alias,
+and nested canonicalization imports failed before byte-for-byte restoration.
+This is source-level evidence, not a proof about indirect `Path` methods or
+native metadata system calls; the opener argv leak remains outstanding.
