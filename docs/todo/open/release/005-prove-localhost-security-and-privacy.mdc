@@ -679,6 +679,17 @@ client fixture asserts both the handshake budget and connect-before-command
 ordering without launching Firefox. The existing 50-second per-case ceiling
 and actual browser/session transport admission remain unchanged.
 
+Another full-browser contention run finished 206 of 207 cases but timed out
+while Firefox created its first browsing context, before any divider key or
+zoom assertion ran. The failing integration passed alone in about four
+seconds. A red-first fake BiDi command fixture proved context creation still
+had a 10-second default deadline while `session.new` had 25 seconds; only
+`browsingContext.create` now uses that same finite 25-second startup budget.
+
+Other commands retain ten seconds, explicit overrides still apply, and the
+50-second case deadline remains intact. This is disposable test-harness
+scheduling tolerance rather than a workspace runtime or security change.
+
 Client-side session calls now have a six-second abort deadline spanning both
 `fetch()` and any valid-media response-body stream. A stream that sends a
 partial compatible handshake, text draft, or `413` diagnostic and never closes

@@ -911,6 +911,16 @@ function validateWebSocketUpgrade(head, key) {
     }
 }
 
+// Firefox may announce BiDi readiness and create a session before its first
+// browsing context is responsive on a highly contended workstation. Keep the
+// ordinary command deadline unchanged, but permit the same bounded startup
+// budget for tab creation as for session.new.
+function defaultBidiCommandTimeout(method) {
+    return method === "browsingContext.create"
+        ? FIREFOX_BIDI_READY_TIMEOUT_MS
+        : 10_000;
+}
+
 class BidiClient {
     constructor(url) {
         this.buffer = Buffer.alloc(0);
@@ -1018,7 +1028,8 @@ class BidiClient {
         this.fragmentedBytes = 0;
     }
 
-    command(method, params = {}, timeoutMs = 10_000) {
+    command(method, params = {},
+        timeoutMs = defaultBidiCommandTimeout(method)) {
         if (this.closed) {
             return Promise.reject(new Error("WebDriver BiDi client closed"));
         }
@@ -1277,6 +1288,37 @@ test("Firefox BiDi client refuses off-loopback debugging endpoints", () => {
             endpoint);
     }
 });
+
+test(
+    "WebDriver initial tab creation uses finite Firefox readiness budget",
+    async () => {
+        const originalSetTimeout = globalThis.setTimeout;
+        const observed = [];
+        try {
+            globalThis.setTimeout = (callback, delay) => {
+                observed.push(delay);
+                return originalSetTimeout(callback, delay);
+            };
+            for (const [method, timeout] of [
+                ["browsingContext.create", undefined],
+                ["script.evaluate", undefined],
+                ["browsingContext.create", 75],
+            ]) {
+                const bidi = new BidiClient("ws://127.0.0.1:1234/session");
+                bidi.socket = { write() {} };
+                const pending = timeout === undefined
+                    ? bidi.command(method)
+                    : bidi.command(method, {}, timeout);
+                bidi.close();
+                await assert.rejects(pending, /WebDriver BiDi client closed/);
+            }
+        } finally {
+            globalThis.setTimeout = originalSetTimeout;
+        }
+        assert.deepEqual(observed, [FIREFOX_BIDI_READY_TIMEOUT_MS,
+            10_000, 75]);
+    },
+);
 
 test("WebSocket upgrade rejects false status and forged accept headers",
     () => {
