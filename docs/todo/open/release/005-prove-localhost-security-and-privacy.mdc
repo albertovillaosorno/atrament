@@ -183,6 +183,14 @@ rejected before exact restoration; read-only imports remain admitted. The
 result only narrows declared Rust source authority, not ambient file access
 or the separately documented browser-opener argument leak.
 
+An additional red-first source gate inventories generic `std::io::Write`
+imports and stream-writing methods, including raw names and grouped imports.
+It keeps the browser bootstrap, loopback HTTP transport, and explicit profile
+file-commit adapter as the only reviewed owners. Six transient writes or
+aliases in `session-secret` fail before byte-identical restoration, while
+`std::fmt::Write` and read-only I/O imports remain permitted. This is not a
+file-descriptor dataflow analysis or a fix for the opener-argument leak.
+
 The inventory now also detects grouped absolute-root `use ::std::{...}`
 network and process imports, plus recognized Unix-domain socket creation
 and `std::os::unix::net` imports. Initially, all three synthetic import forms

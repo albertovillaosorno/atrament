@@ -145,6 +145,32 @@ function renamesStandardLibraryRoot(source) {
     return false;
 }
 
+// A generic std::io::Write import can mutate an already-open File. Review
+// new stream-writing sites regardless of whether their actual receiver is a
+// file, a socket, or an in-memory buffer.
+function usesStandardLibraryStreamWriting(source) {
+    source = normalizeRustRawIdentifiers(source);
+    // A writing method can affect a caller-supplied File without a new open.
+    if (/\.\s*(?:write|write_all|write_vectored|write_fmt)\s*\(/u.test(source)
+        || /\bWrite\s*::\s*(?:write|write_all|write_vectored|write_fmt)\s*\(/u
+            .test(source)) {
+        return true;
+    }
+    for (const match of source.matchAll(
+        /\buse\s+(?:::\s*)?std\s*::[^;]+;/gu,
+    )) {
+        const imported = match[0];
+        if (/\bio\s*::\s*Write\b/u.test(imported)
+            || /\bio\s*::\s*\{[^}]*\bWrite\b/u.test(imported)
+            || /\bio\s+as\b/u.test(imported)
+            || /\bio\s*::\s*\{[^}]*\bself\s+as\b/u
+                .test(imported)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 // A child process can bypass std::net through an external program. Require
 // explicit review for all standard-library process authority outside the
 // platform browser-launch adapter, including grouped imports and constructors.
@@ -390,6 +416,50 @@ test("backend process authority stays in browser launch", async () => {
         }
     }
     assert.deepEqual(spawningFiles, [BROWSER_LAUNCH]);
+});
+
+test("std::io stream-writing detector distinguishes reviewed authority", () => {
+    for (const source of [
+        'use std::io::Write as _;',
+        'use r#std::r#io::r#Write as _;',
+        'use ::std::io::{Read, Write as _};',
+        'use :: std::{fmt, io::{Read as _, Write as _}};',
+        'use std::{io as stream_io, fmt};',
+        'use std::io::{self as stream_io, Read};',
+        'std::io::Write::write_all(&mut file, b"private");',
+        'file.write_all(b"private");',
+        'file.r#write(b"private");',
+        'file.write_vectored(&slices);',
+        'Write::write_all(&mut file, b"private");',
+    ]) {
+        assert.equal(usesStandardLibraryStreamWriting(source), true, source);
+    }
+    for (const source of [
+        'use std::fmt::Write as _;',
+        'use std::io::{self, Read as _, ErrorKind};',
+        'use std::{fmt::Write as _, io::Read as _};',
+        'use crate::io::Write as _;',
+        'file.read_exact(buffer);',
+        'file.sync_all();',
+        'file.write_all_at(b"private", 0);',
+    ]) {
+        assert.equal(usesStandardLibraryStreamWriting(source), false, source);
+    }
+});
+
+test("std::io stream writing stays in reviewed output adapters", async () => {
+    const writers = [];
+    for (const sourcePath of await rustSources(BACKEND_ROOT)) {
+        const source = await readFile(sourcePath, "utf8");
+        if (usesStandardLibraryStreamWriting(source)) {
+            writers.push(sourcePath);
+        }
+    }
+    assert.deepEqual(writers.sort(), [
+        FILESYSTEM_COMMIT,
+        path.join(BACKEND_ROOT, "runtime-bootstrap", "composition", "main.rs"),
+        LOOPBACK_RUNTIME,
+    ].sort());
 });
 
 test("direct filesystem mutation detector covers write authority", () => {

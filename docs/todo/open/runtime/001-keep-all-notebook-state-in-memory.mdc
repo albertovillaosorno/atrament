@@ -138,6 +138,14 @@ imports, and module aliases while preserving read-only `fstatat`, `read`, and
 check and were restored byte-for-byte. This remains static source review,
 not a complete Rust parser, dataflow proof, or filesystem sandbox.
 
+A follow-up guard requires review of `std::io::Write` imports and generic
+stream-write calls in any backend module beyond the three existing admitted
+output adapters. A compile-only Rust probe confirms `File::write_all` mutates
+an already-open file, bypassing earlier constructor and positional-write
+checks; six temporary `session-secret` source variants now fail the allowlist
+and are restored exactly. This remains conservative source review, not a
+guarantee about receiver types, indirect effects, or runtime isolation.
+
 Rust also admits `r#` spellings of ordinary library function and method
 names. A compile-only Rust probe confirmed `std::fs::r#write` and
 `file.r#set_len` are valid calls; neither was recognized by the prior regular
