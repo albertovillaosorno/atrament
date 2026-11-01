@@ -32,7 +32,7 @@
 //   - Treats Web Storage, IndexedDB, cookies, caches, and workers as forbidden.
 //
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 import test from "node:test";
 import { runInNewContext as runVmContext } from "node:vm";
 
@@ -51,6 +51,40 @@ const MAIN_MODULE = new URL(
     "../../../../src/browser/workspace/adapter-inbound/generated/main.js",
     import.meta.url,
 );
+// Privacy review covers both authored TypeScript and generated JavaScript.
+// Standalone Node tests can run before the TypeScript is rebuilt.
+const REVIEWED_MODULES = [
+    "main.js",
+    "session-diagnostic.js",
+    "session-draft.js",
+    "session-fragment.js",
+    "session-handshake.js",
+];
+const REVIEWED_TYPESCRIPT = REVIEWED_MODULES.map((filename) =>
+    filename.replace(/\.js$/u, ".ts"));
+
+async function browserModuleSources() {
+    const generatedDirectory = new URL(".", MAIN_MODULE);
+    const sourceDirectory = new URL("../", MAIN_MODULE);
+    const generated = (await readdir(generatedDirectory)).sort();
+    const typescript = (await readdir(sourceDirectory))
+        .filter((filename) => filename.endsWith(".ts")).sort();
+    assert.deepEqual(generated, REVIEWED_MODULES,
+        "generated module inventory requires privacy review");
+    assert.deepEqual(typescript, REVIEWED_TYPESCRIPT,
+        "TypeScript module inventory requires privacy review");
+    const moduleUrls = [
+        ...generated.map((filename) =>
+            [filename, new URL(filename, generatedDirectory)]),
+        ...typescript.map((filename) =>
+            [filename, new URL(filename, sourceDirectory)]),
+    ];
+    return Promise.all(moduleUrls.map(async ([filename, url]) => ({
+        filename,
+        source: await readFile(url, "utf8"),
+    })));
+}
+
 const {
     isDraftReadContentType,
     decodeDraftReadResponse,
@@ -96,64 +130,55 @@ test("static workspace starts session controls disabled", async () => {
     }
 });
 
-test(
-    "workspace module has no undeclared outbound browser transport",
+test("browser source and generated modules reject undeclared transport",
     async () => {
-    const source = await readFile(MAIN_MODULE, "utf8");
-    const fetchCalls = source.match(/\bfetch\(/gu) ?? [];
-    assert.equal(
-        fetchCalls.length,
-        4,
-        "only handshake, draft, and session end fetches exist",
-    );
-
-    for (const required of [
-        'cache: "no-store"',
-        'credentials: "omit"',
-        'mode: "same-origin"',
-        'redirect: "error"',
-    ]) {
-        const occurrences = source.split(required).length - 1;
-        assert.equal(
-            occurrences,
-            4,
-            `all admitted fetches must retain ${required}`,
-        );
+    for (const { filename, source } of await browserModuleSources()) {
+        const main = filename === "main.ts" || filename === "main.js";
+        const fetchCalls = source.match(/\bfetch\s*\(/gu) ?? [];
+        assert.equal(fetchCalls.length, main ? 4 : 0,
+            `${filename} must retain only four reviewed fetch sites`);
+        if (main) {
+            for (const required of [
+                'cache: "no-store"',
+                'credentials: "omit"',
+                'mode: "same-origin"',
+                'redirect: "error"',
+            ]) {
+                const occurrences = source.split(required).length - 1;
+                assert.equal(occurrences, 4,
+                    `${filename} must retain ${required} on all fetches`);
+            }
+            assert.ok(source.includes('fetch("./api/session/end"'),
+                `${filename}: session end stays explicit and same-origin`);
+            assert.equal(source.includes('keepalive: true'), false,
+                `${filename}: session end requires live page authority`);
+            assert.equal(
+                source.split('referrerPolicy: "origin"').length - 1, 3,
+                `${filename}: POST referrers disclose only the origin`,
+            );
+            assert.equal(
+                source.split('referrerPolicy: "no-referrer"').length - 1, 1,
+                `${filename}: draft reads never send referrers`,
+            );
+        }
+        for (const forbidden of [
+            "http://",
+            "https://",
+            "sendBeacon",
+            "XMLHttpRequest",
+            "WebSocket",
+            "EventSource",
+            "WebTransport",
+            "RTCPeerConnection",
+        ]) {
+            assert.equal(source.includes(forbidden), false,
+                `${filename} uses undeclared transport ${forbidden}`);
+        }
     }
+});
 
-    assert.ok(source.includes('fetch("./api/session/end"'),
-        "session end remains same-origin and explicit");
-    assert.equal(source.includes('keepalive: true'), false,
-        "session end must require live document authority");
-
-    assert.equal(
-        source.split('referrerPolicy: "origin"').length - 1, 3,
-        "all credentialed POST requests disclose only the loopback origin",
-    );
-    assert.equal(
-        source.split('referrerPolicy: "no-referrer"').length - 1, 1,
-        "read-only hydration never sends a referrer",
-    );
-
-    for (const forbidden of [
-        "http://",
-        "https://",
-        "navigator.sendBeacon",
-        "XMLHttpRequest",
-        "new WebSocket",
-        "new EventSource",
-    ]) {
-        assert.equal(
-            source.includes(forbidden),
-            false,
-            `generated workspace uses undeclared transport ${forbidden}`,
-        );
-    }
-    },
-);
-
-test("workspace module contains no browser persistence API", async () => {
-    const source = await readFile(MAIN_MODULE, "utf8");
+test("browser source and generated modules reject persistence APIs",
+    async () => {
     const forbidden = [
         "localStorage",
         "sessionStorage",
@@ -161,14 +186,15 @@ test("workspace module contains no browser persistence API", async () => {
         "document.cookie",
         "serviceWorker",
         "CacheStorage",
-        "caches.open",
+        "caches.",
+        "navigator.storage",
+        "window.name",
     ];
-    for (const capability of forbidden) {
-        assert.equal(
-            source.includes(capability),
-            false,
-            `generated workspace uses ${capability}`,
-        );
+    for (const { filename, source } of await browserModuleSources()) {
+        for (const capability of forbidden) {
+            assert.equal(source.includes(capability), false,
+                `${filename} uses ${capability}`);
+        }
     }
 });
 

@@ -96,9 +96,17 @@ Browser privacy regression evidence also pins the generated workspace to exactly
 four admitted same-origin `fetch` call sites: handshake, draft read,
 draft write, and explicit session end. All four omit ambient credentials,
 reject redirects, and use no-store behavior. The three POSTs use origin-only
-referrers, while the read-only draft GET uses no-referrer. The generated
-module has no absolute HTTP(S), beacon, XHR, WebSocket, or EventSource
-transport path.
+referrers, while the read-only draft GET uses no-referrer. The browser
+source and generated modules have no absolute HTTP(S), beacon, XHR,
+WebSocket, or EventSource transport path.
+
+A follow-up regression inventories all five authored TypeScript modules and
+their five emitted JavaScript counterparts. New source or emitted modules
+require review, and only the main module may retain four admitted fetch sites
+and their security metadata. Inert network and persistent-storage additions to
+a helper separately fail the guard in either representation, including before
+a TypeScript rebuild. These are source-level checks, not continuous outbound
+network observation.
 
 Malformed or misdeclared browser handshake responses cannot grant edit
 authority. The in-memory client now offers explicit same-tab retry on rejected
