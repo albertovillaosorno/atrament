@@ -851,3 +851,16 @@ inventory and were restored byte-for-byte. The previous committed scanner
 accepted an aliased Unix `chown` import that the updated scanner rejects.
 The pinned Rust compiler accepted all four stable Unix API calls. This is
 source inventory only, not filesystem access control or a closed P8 task.
+
+Process-global pathname changes also affect the selected CWD and export
+anchors, so a separate zero-owner inventory now checks `std::env`
+`set_current_dir` and locked `nix` `chdir`, `fchdir`, `chroot`, and `umask`.
+It rejects direct calls, grouped and renamed imports, raw identifiers, and
+module aliases while continuing to admit read-only environment and stat
+queries.
+
+Six injected changes in the unreviewed `session-secret` module each failed;
+the exact source bytes were restored afterward. The previous source guard
+admitted an injected `std::env::set_current_dir` call; the new one fails.
+This review gate does not prove syscall-level confinement or close the
+release security task.

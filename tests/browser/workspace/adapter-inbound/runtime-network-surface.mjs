@@ -191,6 +191,45 @@ function usesStandardLibraryProcessAuthority(source) {
     return false;
 }
 
+// The selected-parent and CWD anchors assume no other backend authority
+// changes process-wide pathname resolution or the default creation mask.
+// These global effects require a dedicated zero-owner source inventory.
+function usesProcessWidePathAuthority(source) {
+    source = normalizeRustRawIdentifiers(source);
+    const mutation = /\b(?:chdir|fchdir|chroot|umask)\b/u;
+    if (/\b(?:set_current_dir|chdir|fchdir|chroot|umask)\s*\(/u.test(source)
+        || /\b(?:std\s*::\s*)?env\s*::\s*set_current_dir\b/u.test(source)) {
+        return true;
+    }
+    for (const match of source.matchAll(
+        /\buse\s+(?:::\s*)?std\s*::\s*([^;]+);/gu,
+    )) {
+        const imported = match[1];
+        if (/\benv\s+as\b/u.test(imported)
+            || /\benv\s*::\s*(?:\{[^;]*\b)?set_current_dir\b/u.test(imported)) {
+            return true;
+        }
+    }
+    for (const match of source.matchAll(
+        /\bnix\s*::\s*(?:unistd|sys\s*::\s*stat)\s*::\s*([a-z_]+)\b/gu,
+    )) {
+        if (mutation.test(match[1])) {
+            return true;
+        }
+    }
+    for (const match of source.matchAll(
+        /\buse\s+(?:::\s*)?nix\s*::\s*([^;]+);/gu,
+    )) {
+        const imported = match[1];
+        if (/\b(?:unistd|stat)\s+as\b/u.test(imported)
+            || (/\b(?:unistd|stat)\b/u.test(imported)
+                && mutation.test(imported))) {
+            return true;
+        }
+    }
+    return false;
+}
+
 // Locked nix::fcntl can open read-only files, but also supports O_RDWR,
 // O_CREAT, O_TRUNC and anonymous writable staging. Scope *all* fcntl usage
 // to the selected-file reader and explicit commit adapter; import-only tests
@@ -620,6 +659,54 @@ test("nix descriptor-open authority stays in reviewed adapters", async () => {
         path.join(BACKEND_ROOT, "profile-selected-file-open",
             "adapter-outbound", "lib.rs"),
     ].sort());
+});
+
+test("process-global path detector covers cwd and umask", () => {
+    for (const source of [
+        'std::env::set_current_dir("/untrusted");',
+        'env::set_current_dir("/untrusted");',
+        'use std::env::set_current_dir as change_cwd;',
+        'use ::std::{env::{set_current_dir as change_cwd}};',
+        'use std::env as environment;',
+        'use std::{env as environment, fs::File};',
+        'nix::unistd::chdir("/untrusted");',
+        'nix::unistd::fchdir(&directory);',
+        'nix::unistd::chroot("/untrusted");',
+        'nix::sys::stat::umask(mode);',
+        'use nix::unistd::{chdir as change_cwd, fchdir as change_fd};',
+        'use ::nix::{unistd::{chroot as change_root}};',
+        'use r#nix::r#sys::r#stat::r#umask;',
+        'use nix::sys::stat::umask as change_mask;',
+        'use nix::{sys::{stat::{umask as change_mask}}};',
+        'use nix::unistd as operating_system;',
+        'use nix::sys::stat as metadata;',
+        'use nix::{unistd as operating_system, errno::Errno};',
+    ]) {
+        assert.equal(usesProcessWidePathAuthority(source), true, source);
+    }
+    for (const source of [
+        'use std::env;',
+        'std::env::current_dir();',
+        'env::var_os("TMPDIR");',
+        'use std::env::var_os as get_env;',
+        'use nix::unistd::{read, getpid};',
+        'nix::unistd::read(&file, bytes);',
+        'use nix::sys::stat::{SFlag, fstatat};',
+        'nix::sys::stat::fstatat(&dir, path, flags);',
+    ]) {
+        assert.equal(usesProcessWidePathAuthority(source), false, source);
+    }
+});
+
+test("backend has no process-global path mutation authority", async () => {
+    const authorityFiles = [];
+    for (const sourcePath of await rustSources(BACKEND_ROOT)) {
+        const source = await readFile(sourcePath, "utf8");
+        if (usesProcessWidePathAuthority(source)) {
+            authorityFiles.push(sourcePath);
+        }
+    }
+    assert.deepEqual(authorityFiles, []);
 });
 
 test("direct filesystem mutation detector covers write authority", () => {
