@@ -208,6 +208,27 @@ function usesDirectFilesystemMutationAuthority(source) {
             return true;
         }
     }
+    // FileExt positional writes can mutate a caller-supplied descriptor even
+    // when it was opened elsewhere. Reading through the same trait is safe.
+    if (/\b(?:write_at|write_all_at|write_vectored_at)\s*\(/u.test(source)) {
+        return true;
+    }
+    // The locked nix fs feature exposes fd writes and truncation directly.
+    // A renamed function or module must not escape the source-level review.
+    if (/\bnix\s*::\s*unistd\s*::\s*(?:ftruncate|truncate|write)\b/u
+        .test(source) || /\bftruncate\s*\(/u.test(source)) {
+        return true;
+    }
+    for (const match of source.matchAll(
+        /\buse\s+(?:::\s*)?nix\s*::\s*([^;]+);/gu,
+    )) {
+        const imported = match[1];
+        if (/\bunistd\s+as\b/u.test(imported)
+            || (/\bunistd\b/u.test(imported)
+                && /\b(?:ftruncate|truncate|write)\b/u.test(imported))) {
+            return true;
+        }
+    }
     // An already-open descriptor can mutate on-disk content or metadata
     // without opening a new writable file. Keep these direct File methods in
     // the same explicit review boundary as File::create and fs::write.
@@ -363,6 +384,17 @@ test("direct filesystem mutation detector covers write authority", () => {
         'file.r#set_permissions(mode);',
         'file.r#set_modified(time);',
         'file.r#set_times(times);',
+        'file.write_at(b"secret", 0);',
+        'file.r#write_all_at(b"secret", 0);',
+        'FileExt::write_at(&file, b"secret", 0);',
+        'FileExt :: write_all_at ( &file, b"secret", 0 );',
+        'nix::unistd::ftruncate(&file, 0);',
+        'use nix::unistd::ftruncate as hidden_truncate;',
+        'use nix::unistd::{read, truncate as hidden_truncate};',
+        'use nix::unistd::{read, write as hidden_write};',
+        'use nix::unistd as unix_io;',
+        'use ::nix::{unistd::{ftruncate as hidden_truncate}};',
+        'use r#nix::r#unistd::r#ftruncate;',
         'file . r#set_modified(time);',
         'File :: r#set_permissions(&file, mode);',
         'fs :: remove_file ("state");',
@@ -410,6 +442,10 @@ test("direct filesystem mutation detector covers write authority", () => {
         'fs::read("state");',
         'std::fs::r#read("state");',
         'file.r#metadata();',
+        'file.read_at(bytes, 0);',
+        'file.read_exact_at(bytes, 0);',
+        'use nix::unistd::read as input;',
+        'use nix::unistd::{read, getpid};',
         'std::fs::metadata("state");',
         'OFlag::O_RDONLY | OFlag::O_CLOEXEC',
     ]) {

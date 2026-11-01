@@ -122,6 +122,14 @@ injections each fail the backend-file mutation allowlist before restoration.
 This is conservative source review, not runtime enforcement or a guarantee
 against indirect writes or all file-ownership aliases.
 
+The source mutation inventory now also covers Unix `FileExt` positional
+`write_at`/`write_all_at` calls and the locked `nix::unistd` file-write and
+truncation functions or aliases. The earlier scanner missed these ways to
+mutate an already-open descriptor. A compile-only Rust probe confirmed both
+stable positional methods, and five temporary `session-secret` variants each
+failed the backend allowlist before byte-identical restoration. This remains
+source-level review, not proof against all indirect filesystem writes.
+
 Rust also admits `r#` spellings of ordinary library function and method
 names. A compile-only Rust probe confirmed `std::fs::r#write` and
 `file.r#set_len` are valid calls; neither was recognized by the prior regular

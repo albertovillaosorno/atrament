@@ -166,6 +166,15 @@ renamed `std::net` type was rejected, then fully restored; nested unrelated
 `self as` imports remain permitted. This is static inventory evidence, not a
 Rust parser, runtime syscall boundary, or solution for the opener-argv leak.
 
+A follow-up red-first source regression detects Unix `FileExt` positional
+writes and `nix::unistd` write/truncate functions imported directly, in
+groups, or behind a module alias. The actual Rust compiler accepts stable
+`write_at` and `write_all_at` methods, and five transient backend source
+variants each trigger the confined file-mutation allowlist before restoration.
+Normal positional reads and `nix::unistd::read` remain admitted. This is a
+review gate, not a full dataflow proof, syscall sandbox, or fix for opener
+argument visibility.
+
 The inventory now also detects grouped absolute-root `use ::std::{...}`
 network and process imports, plus recognized Unix-domain socket creation
 and `std::os::unix::net` imports. Initially, all three synthetic import forms
