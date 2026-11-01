@@ -1148,3 +1148,15 @@ remain the only admitted stream-writing owners.
 This source-level contract cannot prove the concrete destination type or
 runtime persistence absence. The browser-opener argv credential exposure
 remains unresolved.
+
+The pinned Rust 1.97.1 standard library also exposes `std::fs::exists`,
+which queries private host path existence without opening a file. The prior
+ambient filesystem review detected `Path::exists` but admitted a direct
+`std::fs::exists` call. A red-first detector test reproduced that gap; the
+read-side authority inventory now reviews direct, renamed, grouped, and
+raw-identifier `fs::exists` imports. Four inactive `session-secret` source
+mutations were rejected, then restored byte-for-byte.
+
+This remains a source-level privacy review gate, not a sandbox for indirect
+metadata syscalls or a remedy for the browser-opener argv credential
+exposure.

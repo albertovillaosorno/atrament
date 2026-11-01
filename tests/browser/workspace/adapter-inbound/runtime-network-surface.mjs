@@ -662,7 +662,8 @@ function usesAmbientFilesystemReading(source) {
     // In a use path, an imported std::fs read can be renamed to hide the
     // eventual call. Grouped imports retain an fs:: prefix after normalization.
     const direct = new RegExp(
-        String.raw`\bfs\s*::\s*(?:read|read_to_string|read_dir|read_link|` +
+        String.raw`\bfs\s*::\s*(?:exists|read|read_to_string|read_dir|` +
+            String.raw`read_link|` +
             String.raw`metadata|symlink_metadata|canonicalize)\b`,
         "u",
     );
@@ -670,7 +671,7 @@ function usesAmbientFilesystemReading(source) {
         return true;
     }
     const pathRead = new RegExp(
-        String.raw`(?:^|,)\s*(?:read|read_to_string|read_dir|` +
+        String.raw`(?:^|,)\s*(?:exists|read|read_to_string|read_dir|` +
             String.raw`read_link|metadata|symlink_metadata|canonicalize)\b`,
         "u",
     );
@@ -687,6 +688,11 @@ test("ambient filesystem read detector distinguishes read-only APIs", () => {
         'std::fs::read("private")',
         'fs::read_to_string("private")',
         'std::fs::read_dir("private")',
+        'std::fs::exists("private")',
+        'fs::exists("private")',
+        'use std::fs::exists as probe;',
+        'use ::std::{fs::{exists as probe}};',
+        'use r#std::r#fs::r#exists as probe;',
         'fs::read_link("private")',
         'std::fs::metadata("private")',
         'std::fs::symlink_metadata("private")',
