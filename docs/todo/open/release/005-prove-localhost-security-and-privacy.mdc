@@ -1160,3 +1160,19 @@ mutations were rejected, then restored byte-for-byte.
 This remains a source-level privacy review gate, not a sandbox for indirect
 metadata syscalls or a remedy for the browser-opener argv credential
 exposure.
+
+The `include!` macro can pull unreviewed Rust into a backend module despite
+all tracked `.rs` files passing the source inventory. The pinned Rust compiler
+accepts braces and bracket-with-semicolon forms, as well as imports of the
+macro under another name from `std` or `core`. The previous redirect scanner
+only matched parenthesized `include!`, while the crate-root alias guard only
+rejected renaming `std`.
+
+Red-first regressions now reject all three `include!` delimiters, macro
+imports from either standard-library root, and renamed `core` root imports.
+Seven inactive backend source mutations were rejected, then restored
+byte-for-byte.
+
+These are static source inclusion checks, not a substitute for compiler
+expansion auditing, syscall confinement, or the unresolved browser-opener
+argv credential handoff.

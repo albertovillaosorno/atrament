@@ -200,18 +200,20 @@ function usesUnixDomainNetworking(source) {
     return false;
 }
 
-// Renaming the std root can hide net/process/fs uses from the narrow source
-// detectors. This guard requires review before adding any root alias.
+// Renaming the std or core root can hide native operations and compiler
+// macros from the narrow source detectors. Review any such root alias.
 function renamesStandardLibraryRoot(source) {
     source = normalizeRustRawIdentifiers(source);
-    const directAlias = /\buse\s+(?:::\s*)?std\s+as\s+\S+/u;
-    const externAlias = /\bextern\s+crate\s+std\s+as\s+\S+/u;
+    const directAlias = /\buse\s+(?:::\s*)?(?:std|core)\s+as\s+\S+/u;
+    const externAlias = /\bextern\s+crate\s+(?:std|core)\s+as\s+\S+/u;
     if (directAlias.test(source) || externAlias.test(source)) {
         return true;
     }
     // A root-level `self as` inside a grouped import also renames std.
     // Ignore nested `io::{self as alias}`: that does not rename std itself.
-    for (const match of source.matchAll(/\buse\s+(?:::\s*)?std\s*::\s*\{/gu)) {
+    for (const match of source.matchAll(
+        /\buse\s+(?:::\s*)?(?:std|core)\s*::\s*\{/gu,
+    )) {
         let depth = 1;
         let item = "";
         for (let index = match.index + match[0].length;
@@ -795,12 +797,15 @@ function usesUnreviewedNativeAuthority(source) {
     return nativePatterns.some((pattern) => pattern.test(source));
 }
 
-// Scan all authored backend .rs files; embedding a separate Rust source via
-// include! or a redirected module path could bypass that inventory. Binary and
-// text asset inclusion remains deliberately separate from Rust compilation.
+// Scan all authored backend .rs files; including Rust code by a macro or a
+// redirected module path could bypass that inventory. Include! accepts all
+// three macro delimiters; its std/core exports can also be imported by alias.
+// Binary and text asset inclusion has a separate exact inventory.
 function redirectsBackendRustSource(source) {
     source = normalizeRustRawIdentifiers(source);
-    return /\binclude\s*!\s*\(/u.test(source)
+    return /\binclude\s*!\s*[([{]/u.test(source)
+        || /\buse\s+(?:::)?(?:std|core)\s*::[^;]*\binclude\b/u
+            .test(source)
         || /#\s*\[\s*path\s*=/u.test(source)
         || /#\s*\[\s*cfg_attr\s*\(/u.test(source);
 }
@@ -1420,6 +1425,10 @@ test("backend Unix-domain socket authority needs explicit review", async () => {
 test("standard-library root aliases require explicit review", () => {
     for (const source of [
         "use std as platform;",
+        "use core as platform;",
+        "extern crate core as platform;",
+        "use core::{self as platform, fmt};",
+        "use ::core::{fmt, self as platform};",
         "use r#std as platform;",
         "use ::r#std as platform;",
         "extern crate r#std as platform;",
@@ -1605,7 +1614,14 @@ test("backend cannot adopt inherited raw descriptors without review",
 test("backend source inclusion requires explicit review", () => {
     for (const source of [
         'include!("separate.inc");',
+        'include!{"separate.inc"}',
+        'include!["separate.inc"];',
         'include/* comment */!("separate.inc");',
+        'use std::include as hidden; hidden!("separate.inc");',
+        'use core::include as hidden; hidden!("separate.inc");',
+        'use ::std::{include as hidden};',
+        'use ::core::{include as hidden};',
+        'use r#std::r#include as hidden;',
         'include ! ( concat!(env!("OUT_DIR"), "/generated.rs") );',
         '#[path = "../../unreviewed.rs"] mod external;',
         '# [ path = "../../unreviewed.rs" ] mod external;',
