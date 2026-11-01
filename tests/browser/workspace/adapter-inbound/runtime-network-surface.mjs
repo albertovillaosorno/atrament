@@ -180,11 +180,30 @@ function usesStandardLibraryProcessAuthority(source) {
         || /\bCommand\s*::\s*new\s*\(/u.test(source)) {
         return true;
     }
-    const groupedImports = source.matchAll(
-        /\buse\s+(?:::\s*)?std\s*::\s*\{([\s\S]*?)\}\s*;/gu,
-    );
-    for (const importMatch of groupedImports) {
-        if (/\bprocess\b\s*(?:::|,|$|\bas\b)/u.test(importMatch[1])) {
+    // A previously constructed Command can spawn through delegated methods
+    // without a new Command::new or std::process reference in this module.
+    if (/\.\s*(?:spawn|exec|status|output|pre_exec|before_exec)\s*\(/u
+        .test(source)
+        || /\bCommandExt\s*::\s*(?:exec|pre_exec|before_exec)\s*\(/u
+            .test(source)) {
+        return true;
+    }
+    for (const match of source.matchAll(
+        /\buse\s+(?:::\s*)?std\s*::\s*([^;]+);/gu,
+    )) {
+        // Flatten Rust grouped imports while retaining module hierarchy.
+        const imported = match[1].replace(/[{}\s]/gu, "");
+        // A renamed os root can hide a platform process extension.
+        if (/(?:^|,)process(?:::|as|,|$)/u.test(imported)
+            || /(?:^|,)os(?:as\w+|(?=,|$))/u.test(imported)
+            || /(?:^|,)os::selfas\w+/u.test(imported)
+            || /\bos::(?:unix|windows)(?:as\w+|::selfas\w+|::\*|(?=,|$))/u
+                .test(imported)
+            || /(?:^|,)os::\*/u.test(imported)
+            || /\bos::(?:unix|windows)::process(?:as\w+|(?:,|$))/u
+                .test(imported)
+            || /\bos::(?:unix|windows)::process::(?:CommandExt|self|\*)/u
+                .test(imported)) {
             return true;
         }
     }
@@ -573,6 +592,30 @@ test("standard-library process detector covers equivalent imports", () => {
         "use ::std::{process::Command};",
         "use ::std::{process as operating_system_process};",
         "use :: std::{process::Command};",
+        'launcher.spawn();',
+        'launcher.exec();',
+        'launcher.status();',
+        'launcher.output();',
+        'launcher.pre_exec(|| Ok(()));',
+        'CommandExt::before_exec(&mut launcher, || Ok(()));',
+        'CommandExt::exec(&mut launcher);',
+        'use std::os::unix::process::CommandExt;',
+        'use std::os::windows::process::CommandExt as _;',
+        'use ::std::{os::{unix::{process::{CommandExt as _}}}};',
+        'use std::os::unix::process as native_process;',
+        'use std::{os::unix::process, fmt};',
+        'use std::os::unix::process::{self as native, ExitStatusExt};',
+        'use std::{os as operating_system, fmt};',
+        'use std::os::unix as native_unix;',
+        'use std::os::{unix as native_unix, fd::AsRawFd};',
+        'use std::os::unix::{self as native_unix, fs::MetadataExt};',
+        'use std::os::unix::process::*;',
+        'use std::{os::unix::*};',
+        'use std::os::*;',
+        'use std::os;',
+        'use std::{os, fmt};',
+        'use std::os::unix;',
+        'use std::{os::{unix, fd::AsRawFd}};',
         "std::process::Command::new(\"curl\");",
         "Command::new(\"curl\");",
     ]) {
@@ -583,6 +626,14 @@ test("standard-library process detector covers equivalent imports", () => {
         "use std::{fmt, io};",
         "use crate::process::Policy;",
         "let process = false;",
+        'use std::os::unix::process::ExitStatusExt;',
+        'use std::os::unix::fs::MetadataExt;',
+        'use std::{os::fd::AsRawFd, fmt};',
+        'use ::std::{os::{unix::{process::ExitStatusExt}}};',
+        'use std::os::windows::process::ExitStatusExt;',
+        'use crate::os::unix::process::CommandExt;',
+        'launcher.spawn_preview();',
+        'launcher.preview_exec();',
     ]) {
         assert.equal(usesStandardLibraryProcessAuthority(source), false,
             source);

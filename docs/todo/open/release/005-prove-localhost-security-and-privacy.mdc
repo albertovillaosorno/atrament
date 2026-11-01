@@ -876,3 +876,21 @@ new zero-owner inventory and were restored byte-for-byte. The previous path
 scanner admitted `std::env::set_var`; the new guard refuses it. This is
 static source review, not assurance about external launcher environments,
 indirect native mutations, or the unresolved opener-argv credential leak.
+
+A further red-first process inventory closes delegated launch calls that need
+no direct `std::process` reference in the invoking backend module. It now
+reviews `.spawn`, `.status`, `.output`, `.exec`, `pre_exec`, and `before_exec`
+methods, Unix/Windows `CommandExt`, and imports or aliases of parent
+platform-process namespaces. Read-only `ExitStatusExt` imports remain allowed.
+
+A compile-only pinned Rust fixture accepted a module that imports only Unix
+`CommandExt` and an application-supplied `Command` type before calling
+`exec` and `spawn`. The previous scanner admitted the method call, while
+the new cases require explicit process-owner review. This remains source
+inventory rather than complete Rust name resolution, runtime spawn
+confinement, or a remedy for the opener-argv credential leak.
+
+Three inactive `session-secret` mutations (a Unix `CommandExt` import,
+a platform-module alias, and a delegated `spawn` call) each failed the
+unreviewed-process inventory. The original backend source was restored
+byte-for-byte after every probe. No production process-launch code changed.
