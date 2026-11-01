@@ -272,6 +272,71 @@ function usesProcessWideEnvironmentMutation(source) {
     return false;
 }
 
+// Environment values can contain private host keys or tokens. Read only the
+// two existing GUI-session markers needed by the platform browser launcher;
+// CLI argv inspection is a separate, explicitly reviewed authority.
+function unreviewedProcessEnvironmentReads(source, sourcePath) {
+    source = normalizeRustRawIdentifiers(source);
+    const anyRead = /\benv\s*::\s*(?:var|var_os|vars|vars_os)\s*\(/gu;
+    const importedRead = new RegExp(
+        String.raw`\buse\s+(?:::)?std\s*::[^;]*\benv\s*::` +
+            String.raw`\s*(?:\{[^;]*\b)?(?:var|var_os|vars|vars_os)\b`,
+        "u",
+    );
+    if (importedRead.test(source)) {
+        return true;
+    }
+    const reads = [...source.matchAll(anyRead)];
+    if (sourcePath !== BROWSER_LAUNCH) {
+        return reads.length > 0;
+    }
+    const markers = [...source.matchAll(
+        /\benv\s*::\s*var_os\s*\(\s*"([^"]+)"\s*\)/gu,
+    )].map((match) => match[1]).sort();
+    return reads.length !== 2 || JSON.stringify(markers) !==
+        JSON.stringify(["DISPLAY", "WAYLAND_DISPLAY"]);
+}
+
+test("environment read guard rejects unreviewed host variables", () => {
+    const privateModule = path.join(BACKEND_ROOT, "session-secret",
+        "adapter-outbound", "lib.rs");
+    const accepted = [
+        'env::var_os("DISPLAY")',
+        'env::var_os("WAYLAND_DISPLAY")',
+    ].join(";\n");
+    assert.equal(unreviewedProcessEnvironmentReads(accepted, BROWSER_LAUNCH),
+        false);
+    for (const [source, file] of [
+        ['std::env::var("PRIVATE_KEY")', privateModule],
+        ['env::var_os("HOME")', privateModule],
+        ['std::env::vars()', privateModule],
+        ['env::vars_os()', privateModule],
+        ['use std::env::var as read_key;', privateModule],
+        ['use ::std::{env::{vars_os as leaked}};', privateModule],
+        ['use r#std::r#env::r#var_os as read_key;', privateModule],
+        ['env::var_os("HOME")', BROWSER_LAUNCH],
+        ['env::var_os("DISPLAY"); env::var("SECRET")',
+            BROWSER_LAUNCH],
+    ]) {
+        assert.equal(unreviewedProcessEnvironmentReads(source, file), true,
+            source);
+    }
+    assert.equal(unreviewedProcessEnvironmentReads(
+        'env::args_os().skip(1)', privateModule), false);
+});
+
+test("backend environment reads are limited to GUI markers", async () => {
+    const unreviewed = [];
+    for (const sourcePath of await rustSources(BACKEND_ROOT)) {
+        const source = await readFile(sourcePath, "utf8");
+        if (unreviewedProcessEnvironmentReads(source, sourcePath)) {
+            unreviewed.push(path.relative(BACKEND_ROOT, sourcePath));
+        }
+    }
+    assert.deepEqual(unreviewed, [],
+        "new environment reads require explicit privacy review");
+});
+
 // Locked nix::fcntl can open read-only files, but also supports O_RDWR,
 // O_CREAT, O_TRUNC and anonymous writable staging. Scope *all* fcntl usage
 // to the selected-file reader and explicit commit adapter; import-only tests

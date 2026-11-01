@@ -995,3 +995,16 @@ tried file read, directory enumeration, and direct file open. All failed the
 new inventory and were restored byte-for-byte. Read-only metadata lookups
 remain permitted. This guards reviewed source declarations, not indirect
 filesystem access, native calls, or the unresolved opener-argv credential.
+
+Runtime environment values may contain unrelated host credentials despite
+requiring no file-open or network API to read them. A red-first source guard
+now admits only the two existing GUI-session marker reads, `DISPLAY` and
+`WAYLAND_DISPLAY`, in the browser launcher. Other `std::env` value and
+iterator reads, including direct, grouped, and aliased imports, require
+privacy review. CLI argument inspection remains a distinct reviewed path.
+
+Two inactive `session-secret` mutations requesting a private environment
+value or importing an environment iterator each failed the updated guard.
+The backend source was restored byte-for-byte. This is static declaration
+evidence, not proof against native environment access or inherited opener
+state, and the known credential-bearing opener argv remains unresolved.
