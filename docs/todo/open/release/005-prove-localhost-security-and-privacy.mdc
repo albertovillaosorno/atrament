@@ -839,3 +839,15 @@ import aliases, nested imports, and raw-identifier spellings. Five temporary
 `session-secret` source mutations were rejected and restored byte-for-byte.
 The pinned Rust compiler accepted an actual `DirBuilder` creation expression.
 This does not establish runtime write isolation or close the P8 task.
+
+The pinned stable Rust standard library also exposes Unix `chown`,
+`lchown`, `fchown`, and `chroot`. These can change file ownership or the
+process root without calling an ordinary `std::fs` write function.
+The source guard now includes direct and renamed imports, nested imports,
+raw identifiers, and aliases of the Unix filesystem module.
+
+Five temporary `session-secret` source mutations each failed the updated
+inventory and were restored byte-for-byte. The previous committed scanner
+accepted an aliased Unix `chown` import that the updated scanner rejects.
+The pinned Rust compiler accepted all four stable Unix API calls. This is
+source inventory only, not filesystem access control or a closed P8 task.

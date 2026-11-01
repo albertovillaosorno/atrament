@@ -216,21 +216,21 @@ function usesNixFcntlAuthority(source) {
 // constructors and this workspace's Linux profile-commit mutation operations.
 // It does not claim to analyze arbitrary FFI or every indirect file effect.
 const MUTATING_FS_FUNCTIONS = new Set([
-    "copy", "create_dir", "create_dir_all", "hard_link", "remove_dir",
+    "chown", "chroot", "copy", "create_dir", "create_dir_all", "fchown",
+    "hard_link", "lchown", "remove_dir",
     "remove_dir_all", "remove_file", "rename", "set_permissions", "symlink",
     "write",
 ]);
 
 function usesDirectFilesystemMutationAuthority(source) {
     source = normalizeRustRawIdentifiers(source);
-    // Renaming std::fs or its File constructor hides subsequent mutations
-    // behind names the ordinary write-call inventory cannot recognize.
+    // Aliasing std::fs or std::os::unix::fs, or its File constructor,
+    // hides subsequent mutations behind unqualified names.
     for (const match of source.matchAll(
         /\buse\s+(?:::\s*)?std\s*::([^;]+);/gu,
     )) {
         const imported = match[1];
-        const moduleAlias = /^\s*fs\s+as\b/u.test(imported)
-            || /^\s*\{[^;]*\bfs\s+as\b/u.test(imported);
+        const moduleAlias = /\bfs\s+as\b/u.test(imported);
         const fsPath = /^\s*fs\s*::/u.test(imported)
             || /^\s*\{[^;]*\bfs\s*::/u.test(imported);
         const fileAlias = /\b(?:File|self)\s+as\b/u.test(imported);
@@ -624,6 +624,18 @@ test("nix descriptor-open authority stays in reviewed adapters", async () => {
 
 test("direct filesystem mutation detector covers write authority", () => {
     for (const source of [
+        'use std::os::unix::fs as unix_fs;',
+        'use std::os::unix::{fs as unix_fs};',
+        'use ::std::{os::unix::fs as private_fs};',
+        'std::os::unix::fs::chown("path", Some(1), Some(2));',
+        'std::os::unix::fs::lchown("path", None, Some(2));',
+        'std::os::unix::fs::fchown(&file, None, Some(2));',
+        'std::os::unix::fs::chroot("/private");',
+        'use std::os::unix::fs::{chown as owner, fchown as file_owner};',
+        'use std::os::unix::fs::lchown as link_owner;',
+        'use std::os::unix::fs::chroot as change_root;',
+        'use r#std::r#os::r#unix::r#fs::r#fchown;',
+        'use ::std::{os::{unix::{fs::{chown as owner}}}};',
         'use std::fs::DirBuilder;',
         'use std::fs::DirBuilder as HiddenBuilder;',
         'use std::{fs::{DirBuilder as HiddenBuilder}};',
@@ -711,7 +723,7 @@ test("direct filesystem mutation detector covers write authority", () => {
         'use std::fs::{File, Metadata};',
         'use std::fs;',
         'use std::os::unix::fs::FileExt as _;',
-        'use std::os::unix::fs as unix_fs;',
+        'use std::os::unix::fs::MetadataExt as _;',
         'use crate::fs as disk;',
         'File::open("state");',
         'file.metadata();',
