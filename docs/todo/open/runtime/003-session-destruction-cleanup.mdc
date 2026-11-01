@@ -186,6 +186,11 @@ Import path in a fresh process owner. The ZIP includes a syntax-valid JSON
 section and opaque binary asset, both independently SHA-verified after process
 death.
 
+The same process-death fixture now covers authorized replacement of a distinct,
+previously valid profile ZIP as well as preserve-existing creation. After
+SIGKILL, a fresh selected-profile Import independently verifies both replacement
+members and their archive digest, with no staging name or prior process receipt.
+
 The new owner has no inherited Export
 retry receipt and cannot replay the same key over a preserve-existing target;
 no Export staging file remains after the successful commit. The readiness

@@ -42,7 +42,8 @@ mod linux {
     use std::fs;
     use std::io::{self, Read as _};
     use std::os::unix::ffi::OsStringExt as _;
-    use std::os::unix::fs::{MetadataExt as _, symlink};
+    use std::os::unix::fs::{MetadataExt as _, PermissionsExt as _, symlink};
+    use std::os::unix::process::ExitStatusExt as _;
     use std::panic::{AssertUnwindSafe, catch_unwind};
     use std::process::{self, Command, Stdio};
     use std::sync::atomic::{AtomicU64, Ordering};
@@ -55,6 +56,8 @@ mod linux {
     static NEXT: AtomicU64 = AtomicU64::new(0);
 
     const CRASH_EXPORT_TARGET: &str = "ATRAMENT_TEST_CRASH_EXPORT_TARGET";
+    const CRASH_EXPORT_REPLACE: &str = "ATRAMENT_TEST_CRASH_EXPORT_REPLACE";
+    const LINUX_SIGKILL: i32 = 9;
     const CRASH_EXPORT_TEST: &str =
         "linux::completed_export_survives_forced_process_death";
     const RETRY_CWD_ALTERNATE: &str = "ATRAMENT_TEST_RETRY_CWD_ALTERNATE";
@@ -843,7 +846,12 @@ mod linux {
         if let Some(path) = env::var_os(CRASH_EXPORT_TARGET) {
             let chosen = PathBuf::from(path);
             let original = full_artifact(b"{\"ink\":1}");
-            let request = intent(chosen.clone(), PreserveExisting);
+            let overwrite = if env::var_os(CRASH_EXPORT_REPLACE).is_some() {
+                ReplaceExisting
+            } else {
+                PreserveExisting
+            };
+            let request = intent(chosen.clone(), overwrite);
             let mut session = ProfileExportSession::new(1);
             let result = session.export(
                 "crash-key", revision(), &request, &original, 8192,
@@ -858,18 +866,36 @@ mod linux {
             return;
         }
 
+        for replace_existing in [false, true] {
+            assert_export_survives_forced_death(replace_existing);
+        }
+    }
+
+    fn assert_export_survives_forced_death(replace_existing: bool) {
         let root = fixture();
         let chosen = root.0.join("export.atrament");
         let ready = chosen.with_extension("ready");
+        if replace_existing {
+            // Explicit replacement must discard a different, previously
+            // valid profile archive, not merely create a missing file.
+            let previous = full_artifact(b"{\"ink\":0}");
+            fs::write(&chosen, previous.bytes())
+                .expect("seed verified older profile");
+        }
         let executable = env::current_exe().expect("test executable");
-        let mut child = Command::new(executable)
+        let mut command = Command::new(executable);
+        let _configured = command
             .arg("--exact")
             .arg(CRASH_EXPORT_TEST)
             .env(CRASH_EXPORT_TARGET, &chosen)
+            .env_remove(CRASH_EXPORT_REPLACE)
             .stdin(Stdio::piped())
             .stdout(Stdio::null())
-            .spawn()
-            .expect("spawn Export-owning process");
+            .stderr(Stdio::null());
+        if replace_existing {
+            let _replace = command.env(CRASH_EXPORT_REPLACE, "yes");
+        }
+        let mut child = command.spawn().expect("spawn Export-owning process");
         let mut synced = false;
         for _ in 0..200u16 {
             if ready.exists() {
@@ -889,15 +915,38 @@ mod linux {
         }
         let status = child.wait().expect("reap Export process");
         assert!(synced, "child never completed its explicit Export");
-        assert!(!status.success(), "the Export process was forcibly stopped");
-        assert_eq!(fs::read(&ready).expect("sync marker"), b"synced");
+        assert_eq!(
+            status.signal(),
+            Some(LINUX_SIGKILL),
+            "the Export process died by Linux SIGKILL",
+        );
+        assert_eq!(
+            fs::read(&ready).expect("sync marker"),
+            b"synced",
+            "child finished synced Export",
+        );
         fs::remove_file(&ready).expect("remove test-only marker");
-        assert_eq!(fs::read_dir(&root.0).expect("export files").count(), 1);
+        assert_eq!(
+            fs::read_dir(&root.0).expect("export files").count(),
+            1,
+            "no staging names survive death",
+        );
 
+        assert_surviving_export_is_importable(&chosen);
+    }
+
+    fn assert_surviving_export_is_importable(chosen: &PathBuf) {
         let original = full_artifact(b"{\"ink\":1}");
         assert_eq!(
-            fs::read(&chosen).expect("surviving file"),
+            fs::read(chosen).expect("surviving file"),
             original.bytes(),
+            "exact committed ZIP must survive process death",
+        );
+        assert_eq!(
+            fs::metadata(chosen).expect("committed target").permissions()
+                .mode() & 0o777,
+            0o600,
+            "exported file must remain owner-only",
         );
         let import = classify_explicit_file_path_intent(
             ExplicitFilePurpose::ImportProfile,
@@ -912,30 +961,43 @@ mod linux {
                 &[],
                 import_limits(),
                 |verified| {
-                    assert_eq!(verified.verified_entry_count(), 2);
+                    assert_eq!(
+                        verified.verified_entry_count(),
+                        2,
+                        "both ZIP members survive",
+                    );
                     assert_eq!(
                         verified.verified_entry_bytes("sections/ink.json"),
                         Some(&b"{\"ink\":1}"[..]),
+                        "JSON section bytes survive",
                     );
                     assert_eq!(
                         verified.verified_entry_bytes("assets/sample.bin"),
                         Some(BINARY_ASSET),
+                        "opaque asset bytes survive",
                     );
                     verified.archive_sha256()
                 },
             ),
             Ok(original.archive_sha256()),
+            "fresh Import verifies the committed archive digest",
         );
 
-        // A fresh process owner did not inherit the dead process's receipt.
+        // A fresh process owner did not inherit the dead process's
+        // receipt, regardless of its previous overwrite disposition.
         let mut fresh = ProfileExportSession::new(1);
-        assert!(fresh.is_empty());
+        assert!(fresh.is_empty(), "new owner has no inherited Export receipts");
         let request = intent(chosen.clone(), PreserveExisting);
         assert_eq!(
             fresh.export("crash-key", revision(), &request, &original, 8192),
             Err(Error::Commit(ProfileFileCommitError::TargetExists)),
+            "new owner cannot replay an unowned prior Export effect",
         );
-        assert_eq!(fs::read(&chosen).expect("original file"), original.bytes());
+        assert_eq!(
+            fs::read(chosen).expect("surviving file"),
+            original.bytes(),
+            "failed replay must preserve committed ZIP",
+        );
     }
 
     #[test]
