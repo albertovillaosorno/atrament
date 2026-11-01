@@ -230,6 +230,28 @@ function usesProcessWidePathAuthority(source) {
     return false;
 }
 
+// Process-wide environment mutation can replace the launcher's PATH, GUI
+// session markers, or other inherited subprocess variables. The runtime only
+// reads its environment; a new writer must undergo explicit privacy review.
+function usesProcessWideEnvironmentMutation(source) {
+    source = normalizeRustRawIdentifiers(source);
+    if (/\b(?:set_var|remove_var)\s*\(/u.test(source)) {
+        return true;
+    }
+    for (const match of source.matchAll(
+        /\buse\s+(?:::\s*)?std\s*::\s*([^;]+);/gu,
+    )) {
+        const imported = match[1];
+        if (/\benv\s+as\b/u.test(imported)
+            || /\benv\s*::\s*\{[^;]*\bself\s+as\b/u.test(imported)
+            || /\benv\s*::\s*(?:\{[^;]*\b)?(?:set_var|remove_var)\b/u
+                .test(imported)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 // Locked nix::fcntl can open read-only files, but also supports O_RDWR,
 // O_CREAT, O_TRUNC and anonymous writable staging. Scope *all* fcntl usage
 // to the selected-file reader and explicit commit adapter; import-only tests
@@ -703,6 +725,46 @@ test("backend has no process-global path mutation authority", async () => {
     for (const sourcePath of await rustSources(BACKEND_ROOT)) {
         const source = await readFile(sourcePath, "utf8");
         if (usesProcessWidePathAuthority(source)) {
+            authorityFiles.push(sourcePath);
+        }
+    }
+    assert.deepEqual(authorityFiles, []);
+});
+
+test("process-wide environment mutators require source review", () => {
+    for (const source of [
+        'std::env::set_var("PATH", "untrusted");',
+        'env::remove_var("DISPLAY");',
+        'r#std::r#env::r#set_var("PATH", "untrusted");',
+        'use std::env::set_var;',
+        'use std::env::remove_var as forget;',
+        'use ::std::env::{set_var as change, remove_var};',
+        'use std::{env::{remove_var as forget}};',
+        'use std::{env as process_env, fs::File};',
+        'use std::env::{self as process_env, var_os};',
+    ]) {
+        assert.equal(usesProcessWideEnvironmentMutation(source), true,
+            source);
+    }
+    for (const source of [
+        'use std::env;',
+        'std::env::var_os("DISPLAY");',
+        'use std::env::{current_dir, var_os};',
+        'use std::{env::{var_os, args_os}, fs::File};',
+        'use crate::env::remove_var;',
+        'let set_var = false;',
+    ]) {
+        assert.equal(usesProcessWideEnvironmentMutation(source), false,
+            source);
+    }
+});
+
+test("backend has no process-global environment mutation authority",
+    async () => {
+    const authorityFiles = [];
+    for (const sourcePath of await rustSources(BACKEND_ROOT)) {
+        const source = await readFile(sourcePath, "utf8");
+        if (usesProcessWideEnvironmentMutation(source)) {
             authorityFiles.push(sourcePath);
         }
     }

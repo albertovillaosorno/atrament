@@ -864,3 +864,15 @@ the exact source bytes were restored afterward. The previous source guard
 admitted an injected `std::env::set_current_dir` call; the new one fails.
 This review gate does not prove syscall-level confinement or close the
 release security task.
+
+Process-wide environment changes can redirect the browser opener through
+`PATH` or alter inherited GUI session markers without calling a process or
+filesystem API directly. A red-first source regression now requires review
+of `std::env::set_var`, `remove_var`, renamed imports, raw identifiers, and
+module aliases, while leaving environment reads admitted.
+
+Three deliberately inactive `session-secret` source mutations each failed the
+new zero-owner inventory and were restored byte-for-byte. The previous path
+scanner admitted `std::env::set_var`; the new guard refuses it. This is
+static source review, not assurance about external launcher environments,
+indirect native mutations, or the unresolved opener-argv credential leak.

@@ -320,3 +320,14 @@ parser through HTTP `409`: a valid diagnostic shows the expected protocol
 version without offering a retry or hydrating private drafts. The same
 mismatch on HTTP `200`, or a malformed mismatch on `409`, remains fail-closed
 and retryable rather than silently accepting an inconsistent status.
+
+An additional backend inventory now requires explicit review before adding
+process-global `std::env::set_var` or `remove_var` authority, including
+renamed imports and module aliases. Changing inherited process variables
+could redirect the browser opener or influence later file operations without
+using a direct filesystem writer.
+
+The previous source guard admitted a `set_var` call; three temporary
+`session-secret` mutations now fail the zero-owner check and were restored
+byte-for-byte. This is source-level evidence only, not a proof that an
+untrusted parent environment is safe or that all private data stays in RAM.
