@@ -175,6 +175,14 @@ Normal positional reads and `nix::unistd::read` remain admitted. This is a
 review gate, not a full dataflow proof, syscall sandbox, or fix for opener
 argument visibility.
 
+The pinned `nix` crate also exposes metadata, ownership, link, directory, and
+rename effects through `sys::stat`, `unistd`, and `fcntl`. Red-first source
+checks now catch those named calls and disguised imports, including grouped
+aliases of a whole module. Six temporary `session-secret` variants were
+rejected before exact restoration; read-only imports remain admitted. The
+result only narrows declared Rust source authority, not ambient file access
+or the separately documented browser-opener argument leak.
+
 The inventory now also detects grouped absolute-root `use ::std::{...}`
 network and process imports, plus recognized Unix-domain socket creation
 and `std::os::unix::net` imports. Initially, all three synthetic import forms

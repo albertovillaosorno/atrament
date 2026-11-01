@@ -130,6 +130,14 @@ stable positional methods, and five temporary `session-secret` variants each
 failed the backend allowlist before byte-identical restoration. This remains
 source-level review, not proof against all indirect filesystem writes.
 
+A second source audit of the pinned `nix` filesystem API found unreviewed
+`sys::stat` metadata mutators, `fcntl` renames, and `unistd` link, ownership,
+and directory mutations. The inventory now reviews these calls, grouped
+imports, and module aliases while preserving read-only `fstatat`, `read`, and
+`openat2` imports. Six temporary backend variants failed the confinement
+check and were restored byte-for-byte. This remains static source review,
+not a complete Rust parser, dataflow proof, or filesystem sandbox.
+
 Rust also admits `r#` spellings of ordinary library function and method
 names. A compile-only Rust probe confirmed `std::fs::r#write` and
 `file.r#set_len` are valid calls; neither was recognized by the prior regular

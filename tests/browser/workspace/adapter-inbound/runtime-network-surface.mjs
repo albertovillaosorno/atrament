@@ -213,19 +213,38 @@ function usesDirectFilesystemMutationAuthority(source) {
     if (/\b(?:write_at|write_all_at|write_vectored_at)\s*\(/u.test(source)) {
         return true;
     }
-    // The locked nix fs feature exposes fd writes and truncation directly.
-    // A renamed function or module must not escape the source-level review.
-    if (/\bnix\s*::\s*unistd\s*::\s*(?:ftruncate|truncate|write)\b/u
-        .test(source) || /\bftruncate\s*\(/u.test(source)) {
+    // The locked nix fs feature also exposes direct directory, inode and
+    // metadata mutations. Check grouped imports, renamed functions, and
+    // module aliases, while allowing read-only imports in the same modules.
+    const nixMutations = new RegExp(
+        String.raw`\b(?:chown|fchown|fchownat|fchmod|fchmodat|ftruncate|` +
+            String.raw`futimens|linkat|mkdir|mkdirat|mkfifo|mkfifoat|` +
+            String.raw`renameat|renameat2|rmdir|symlinkat|truncate|` +
+            String.raw`unlink|unlinkat|utimensat|write)\b`,
+        "u",
+    );
+    if (/\bftruncate\s*\(/u.test(source)) {
         return true;
+    }
+    for (const pathMatch of source.matchAll(
+        /\bnix\s*::\s*(?:unistd|fcntl|sys\s*::\s*stat)\s*::\s*([a-z_]+)\b/gu,
+    )) {
+        if (nixMutations.test(pathMatch[1])) {
+            return true;
+        }
     }
     for (const match of source.matchAll(
         /\buse\s+(?:::\s*)?nix\s*::\s*([^;]+);/gu,
     )) {
         const imported = match[1];
-        if (/\bunistd\s+as\b/u.test(imported)
-            || (/\bunistd\b/u.test(imported)
-                && /\b(?:ftruncate|truncate|write)\b/u.test(imported))) {
+        const module = /\b(?:unistd|fcntl|stat)\b/u;
+        const moduleAlias = /\b(?:unistd|fcntl|stat)\s+as\b/u;
+        const groupedAlias =
+            /\b(?:unistd|fcntl|stat)\s*::\s*\{[^;]*\bself\s+as\b/u;
+        const wholeModule = /\b(?:unistd|fcntl|stat)\s*(?:,|\}|$)/u;
+        if (moduleAlias.test(imported) || groupedAlias.test(imported)
+            || wholeModule.test(imported)
+            || (module.test(imported) && nixMutations.test(imported))) {
             return true;
         }
     }
@@ -395,6 +414,21 @@ test("direct filesystem mutation detector covers write authority", () => {
         'use nix::unistd as unix_io;',
         'use ::nix::{unistd::{ftruncate as hidden_truncate}};',
         'use r#nix::r#unistd::r#ftruncate;',
+        'nix::sys::stat::fchmod(&file, mode);',
+        'use nix::sys::stat::fchmod as change_mode;',
+        'use ::nix::{sys::{stat::{futimens as change_times}}};',
+        'use r#nix::r#sys::r#stat::r#fchmodat;',
+        'use nix::unistd::{fchown as change_owner};',
+        'use nix::unistd::{symlinkat as create_link};',
+        'use nix::unistd::{unlinkat as remove_link};',
+        'use nix::fcntl::renameat2 as move_file;',
+        'use nix::{fcntl::{renameat as move_file}};',
+        'use nix::unistd::{self as unix_io, read};',
+        'use nix::sys::stat as file_metadata;',
+        'use nix::fcntl as file_control;',
+        'use nix::{sys::{stat as metadata}, errno::Errno};',
+        'use nix::unistd;',
+        'use nix::{fcntl, errno::Errno};',
         'file . r#set_modified(time);',
         'File :: r#set_permissions(&file, mode);',
         'fs :: remove_file ("state");',
@@ -446,6 +480,9 @@ test("direct filesystem mutation detector covers write authority", () => {
         'file.read_exact_at(bytes, 0);',
         'use nix::unistd::read as input;',
         'use nix::unistd::{read, getpid};',
+        'use nix::sys::stat::{fstatat, Mode};',
+        'use nix::fcntl::{OpenHow, OFlag, openat2};',
+        'nix::sys::stat::fstatat(&dir, path, flags);',
         'std::fs::metadata("state");',
         'OFlag::O_RDONLY | OFlag::O_CLOEXEC',
     ]) {
