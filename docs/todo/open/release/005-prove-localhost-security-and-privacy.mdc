@@ -1083,3 +1083,16 @@ This is live-process evidence during actual private text use, not a source
 inventory or proof that a short-lived thread could never appear between
 samples. The synthetic opener still carries the test URL over IPC, and the
 production browser-opener argv credential disclosure remains unresolved.
+
+The live Linux one-thread snapshots cannot exclude workers created between
+observations or introduced later. A red-first source mutation added a
+`std::thread::spawn` call under an inactive backend configuration; the
+previous 36-case privacy suite passed despite that unreviewed authority.
+
+The existing process-owner source review now also covers direct and renamed
+Rust thread spawn entrypoints, grouped `std::thread` imports, thread builders,
+and delegated scoped or unchecked spawn methods. Read-only thread sleeps in
+the browser-launch adapter remain admitted. Four inactive `session-secret`
+mutations were rejected by the new owner inventory and restored byte-for-byte.
+This is a source review gate, not a kernel-level thread prohibition, and it
+neither establishes temporal runtime confinement nor fixes opener argv leakage.

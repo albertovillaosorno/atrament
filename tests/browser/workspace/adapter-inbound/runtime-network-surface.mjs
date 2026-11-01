@@ -261,19 +261,22 @@ function usesStandardLibraryStreamWriting(source) {
     return false;
 }
 
-// A child process can bypass std::net through an external program. Require
-// explicit review for all standard-library process authority outside the
-// platform browser-launch adapter, including grouped imports and constructors.
+// A child process can bypass std::net through an external program, while a
+// background Rust worker can outlive the observed single-thread snapshots.
+// Keep both execution authorities within the reviewed browser launcher.
 function usesStandardLibraryProcessAuthority(source) {
     source = normalizeRustRawIdentifiers(source);
     if (/\bstd\s*::\s*process\b/u.test(source)
-        || /\bCommand\s*::\s*new\s*\(/u.test(source)) {
+        || /\bCommand\s*::\s*new\s*\(/u.test(source)
+        || /\b(?:std\s*::\s*)?thread\s*::\s*(?:spawn|Builder)\b/u
+            .test(source)) {
         return true;
     }
     // A previously constructed Command can spawn through delegated methods
     // without a new Command::new or std::process reference in this module.
     if (/\.\s*(?:spawn|exec|status|output|pre_exec|before_exec)\s*\(/u
         .test(source)
+        || /\.\s*spawn_(?:scoped|unchecked)\s*\(/u.test(source)
         || /\bCommandExt\s*::\s*(?:exec|pre_exec|before_exec)\s*\(/u
             .test(source)) {
         return true;
@@ -281,10 +284,19 @@ function usesStandardLibraryProcessAuthority(source) {
     for (const match of source.matchAll(
         /\buse\s+(?:::\s*)?std\s*::\s*([^;]+);/gu,
     )) {
-        // Flatten Rust grouped imports while retaining module hierarchy.
+        // Keep raw braces for grouped thread imports, then flatten for the
+        // existing process-extension checks below.
+        const threadImport = /\bthread\s+as\b/u.test(match[1])
+            || /\bthread\s*::\s*\{[^;]*\bself\s+as\b/u
+                .test(match[1])
+            || /\bthread\s*::\s*(?:spawn|Builder|\*)/u
+                .test(match[1])
+            || /\bthread\s*::\s*\{[^;]*(?:\bspawn\b|\bBuilder\b|\*)/u
+                .test(match[1]);
         const imported = match[1].replace(/[{}\s]/gu, "");
         // A renamed os root can hide a platform process extension.
-        if (/(?:^|,)process(?:::|as|,|$)/u.test(imported)
+        if (threadImport
+            || /(?:^|,)process(?:::|as|,|$)/u.test(imported)
             || /(?:^|,)os(?:as\w+|(?=,|$))/u.test(imported)
             || /(?:^|,)os::selfas\w+/u.test(imported)
             || /\bos::(?:unix|windows)(?:as\w+|::selfas\w+|::\*|(?=,|$))/u
@@ -897,6 +909,16 @@ test("standard-library process detector covers equivalent imports", () => {
         "use ::std::{process::Command};",
         "use ::std::{process as operating_system_process};",
         "use :: std::{process::Command};",
+        'std::thread::spawn(|| {});',
+        'thread::spawn(|| {});',
+        'use std::thread::spawn as launch_worker;',
+        'use std::{thread::{spawn as launch_worker}, fmt};',
+        'use ::std::{thread::{Builder as WorkerBuilder}};',
+        'use std::thread as worker_thread;',
+        'use std::{thread::{self as worker_thread}, fmt};',
+        'use std::thread::*;',
+        'builder.spawn_scoped(scope, || {});',
+        'builder.spawn_unchecked(|| {});',
         'launcher.spawn();',
         'launcher.exec();',
         'launcher.status();',
@@ -937,6 +959,10 @@ test("standard-library process detector covers equivalent imports", () => {
         'use ::std::{os::{unix::{process::ExitStatusExt}}};',
         'use std::os::windows::process::ExitStatusExt;',
         'use crate::os::unix::process::CommandExt;',
+        'thread::sleep(std::time::Duration::ZERO);',
+        'use std::{fmt, io, thread};',
+        'use std::thread::sleep;',
+        'use std::thread::{self, sleep};',
         'launcher.spawn_preview();',
         'launcher.preview_exec();',
     ]) {
