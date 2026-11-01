@@ -300,7 +300,7 @@ const MUTATING_FS_FUNCTIONS = new Set([
     "chown", "chroot", "copy", "create_dir", "create_dir_all", "fchown",
     "hard_link", "lchown", "remove_dir",
     "remove_dir_all", "remove_file", "rename", "set_permissions", "symlink",
-    "write",
+    "symlink_dir", "symlink_file", "write",
 ]);
 
 function usesDirectFilesystemMutationAuthority(source) {
@@ -343,8 +343,10 @@ function usesDirectFilesystemMutationAuthority(source) {
         }
     }
     // FileExt positional writes can mutate a caller-supplied descriptor even
-    // when it was opened elsewhere. Reading through the same trait is safe.
-    if (/\b(?:write_at|write_all_at|write_vectored_at)\s*\(/u.test(source)) {
+    // when it was opened elsewhere. This includes Windows seek_write as well
+    // as Unix write_at; read-only seek_read remains allowed.
+    if (/\b(?:seek_write|write_at|write_all_at|write_vectored_at)\s*\(/u
+        .test(source)) {
         return true;
     }
     // The locked nix fs feature also exposes direct directory, inode and
@@ -914,6 +916,15 @@ test("direct filesystem mutation detector covers write authority", () => {
         'use std::{fs::{File as Writable}, fmt};',
         'use std::fs::{self as disk, Metadata};',
         'use std::os::unix::fs::symlink;',
+        'std::os::windows::fs::symlink_file("src", "dest");',
+        'std::os::windows::fs::symlink_dir("src", "dest");',
+        'use std::os::windows::fs::symlink_file as file_link;',
+        'use std::os::windows::fs::{symlink_dir as dir_link};',
+        'use ::std::{os::{windows::{fs::{symlink_file as link}}}};',
+        'use r#std::r#os::r#windows::r#fs::r#symlink_dir;',
+        'file.seek_write(b"private", 0);',
+        'FileExt::seek_write(&file, b"private", 0);',
+        'file.r#seek_write(b"private", 0);',
         'File::options().write(true);',
         'file.set_len(0);',
         'file.set_permissions(mode);',
@@ -945,6 +956,11 @@ test("direct filesystem mutation detector covers write authority", () => {
         'file.r#metadata();',
         'file.read_at(bytes, 0);',
         'file.read_exact_at(bytes, 0);',
+        'use std::os::windows::fs::FileExt as _;',
+        'use std::os::windows::fs::MetadataExt as _;',
+        'file.seek_read(bytes, 0);',
+        'FileExt::seek_read(&file, bytes, 0);',
+        'std::fs::symlink_metadata("state");',
         'use nix::unistd::read as input;',
         'use nix::unistd::{read, getpid};',
         'use nix::sys::stat::{fstatat, Mode};',

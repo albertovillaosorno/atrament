@@ -910,3 +910,18 @@ files outside its directory recursion. The locked workspace's 132 library,
 one binary, and 131 external test targets pass this inventory. This is
 build-source confinement evidence, not a native execution sandbox, validation
 of arbitrary build tool behavior, or a fix for opener-argv credential exposure.
+
+The pinned Rust standard library also exposes stable Windows filesystem APIs
+`std::os::windows::fs::symlink_file`, `symlink_dir`, and
+`FileExt::seek_write`. These create links or write through already-open file
+handles without calling the Unix positional-write or generic `std::fs`
+functions. The prior source detector admitted `symlink_file`; a red-first
+regression now requires review of both Windows link constructors and
+positional writes, while retaining read-only `seek_read` admission.
+
+Three inactive `session-secret` source mutations using direct or nested
+Windows link imports and a delegated `seek_write` each failed the new
+inventory and were restored byte-for-byte. The pinned Rust 1.97.1 std source
+confirms these APIs are stable; no Windows runtime test was performed. This
+is source-level filesystem mutation review, not Windows syscall confinement
+or proof of the overall release privacy boundary.
