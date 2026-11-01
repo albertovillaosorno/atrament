@@ -302,3 +302,20 @@ session erasure or clearing the user's editable draft. A fresh confirmed End
 in the same tab succeeds and then clears the page's private text. The first
 request's backend outcome is unknown, so this does not demonstrate server-side
 idempotency or actual media cleanup after an interrupted End operation.
+
+Replacement to an originally absent profile target now requests Linux
+`RENAME_NOREPLACE` at the final atomic rename. A separate actor creating that
+selected destination after the last metadata check cannot have its new file
+overwritten by the Export; `EEXIST` is a proven precommit
+`SelectedTargetChanged` refusal; the ordinary error path attempts to remove
+the owned random sibling stage. Replacement of an existing, expressly
+admitted regular target continues using ordinary atomic rename.
+
+A red-first profile-commit source contract reproduced the missing no-overwrite
+flag; an independent real Linux rename fixture verifies the kernel refuses a
+late destination while preserving both byte sequences. All 41 file-commit
+tests pass, including existing initially absent and present replacement cases.
+This does not simulate an injected race *inside* the full Export syscall
+sequence. An initially present target may still change after the last check,
+and SIGKILL between the temporary link and rename can still strand a stage;
+therefore the P1 session-destruction and cleanup task remains open.

@@ -843,6 +843,60 @@ mod linux {
     }
 
     #[test]
+    fn initially_absent_replacement_must_use_atomic_no_overwrite() {
+        // The target can appear after its final metadata observation.
+        // A normal rename would overwrite that unselected target.
+        let implementation = include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/adapter-outbound/lib.rs",
+        ));
+        assert!(
+            implementation.contains("replace_target_before == Some(None)"),
+            "only an originally absent target chooses no-overwrite"
+        );
+        assert!(
+            implementation.contains("RenameFlags::RENAME_NOREPLACE"),
+            "an initially absent target must use kernel no-replace at rename"
+        );
+        assert!(
+            implementation.contains("Err(Errno::EEXIST)"),
+            "a competing selected entry needs a typed precommit refusal"
+        );
+    }
+
+    #[test]
+    fn linux_no_replace_rename_preserves_late_destination() {
+        use nix::errno::Errno;
+        use nix::fcntl::{RenameFlags, renameat2};
+
+        let dir = OwnedDir::new();
+        let staged = dir.0.join("complete-staged-profile");
+        let target = dir.target();
+        fs::write(&staged, b"synced staged profile").expect("seed stage");
+        fs::write(&target, b"late unselected profile")
+            .expect("insert a competing destination");
+        let parent = fs::File::open(&dir.0).expect("open test directory");
+        assert_eq!(
+            renameat2(
+                &parent,
+                "complete-staged-profile",
+                &parent,
+                "chosen.atrament",
+                RenameFlags::RENAME_NOREPLACE,
+            ),
+            Err(Errno::EEXIST),
+        );
+        assert_eq!(
+            fs::read(&target).expect("late file remains unchanged"),
+            b"late unselected profile",
+        );
+        assert_eq!(
+            fs::read(&staged).expect("failed rename retains stage"),
+            b"synced staged profile",
+        );
+    }
+
+    #[test]
     fn authorized_replacement_is_atomic_and_leaves_no_temp() {
         let dir = OwnedDir::new();
         let target = dir.target();

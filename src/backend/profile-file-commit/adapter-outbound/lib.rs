@@ -206,8 +206,9 @@ pub fn commit_profile_file(
 /// linking, including changes made during staged writes. Its identity, size
 /// and times must remain unchanged since its completed sync; observed drift
 /// before linking is a proven precommit refusal without selected-target effect.
-/// Another actor can change the entry after this final observation; the
-/// recheck is not an atomic compare-and-replace guarantee.
+/// If the selected replacement target was absent, Linux atomically refuses
+/// a new competing entry at final rename. An initially present target can
+/// still be swapped after the last check: no compare-and-replace guarantee.
 /// Linux stages bytes through `O_TMPFILE`, so cancellation or process death
 /// during writing cannot
 /// leave a named temporary file. Preserve-existing links the completed file
@@ -612,16 +613,35 @@ fn commit_platform(
             }
             let mut temp =
                 linked.ok_or(ProfileFileCommitError::RandomUnavailable)?;
-            renameat2(
+            // An absent selected target is not permission to overwrite a
+            // different entry created after the final nofollow observation.
+            // Let the kernel refuse that race at the irreversible rename.
+            // An existing target still needs the separately admitted normal
+            // replacement; Linux rename cannot compare its prior inode.
+            let rename_flags = if replace_target_before == Some(None) {
+                RenameFlags::RENAME_NOREPLACE
+            } else {
+                RenameFlags::empty()
+            };
+            match renameat2(
                 &directory,
                 temp.name.as_str(),
                 &directory,
                 name,
-                RenameFlags::empty(),
-            )
-            .map_err(|error| {
-                ProfileFileCommitError::FileIo(io::Error::from(error).kind())
-            })?;
+                rename_flags,
+            ) {
+                Ok(()) => {}
+                Err(Errno::EEXIST)
+                    if rename_flags == RenameFlags::RENAME_NOREPLACE =>
+                {
+                    return Err(ProfileFileCommitError::SelectedTargetChanged);
+                }
+                Err(error) => {
+                    return Err(ProfileFileCommitError::FileIo(
+                        io::Error::from(error).kind(),
+                    ));
+                }
+            }
             temp.committed = true;
         }
     }
