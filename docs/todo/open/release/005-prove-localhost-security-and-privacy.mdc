@@ -812,3 +812,19 @@ and draft-diagnostic content types into accepted media declarations. The
 corrected paths retain case-insensitive matching and valid ASCII outer OWS.
 This narrows browser response metadata admission; it does not authenticate a
 misrouted response or alter backend media validation.
+
+The locked `nix` filesystem feature also exposes `fcntl::openat` and
+`fcntl::openat2`, whose writable or creation flags are chosen at each call.
+The previous mutation scanner admitted those imports in unrelated modules
+because its direct-function list focused on explicit writes and renames.
+
+A separate source inventory now confines every `nix::fcntl` use, including
+nested/grouped imports, aliases, and raw Rust identifiers, to the reviewed
+selected-profile file-open and explicit file-commit adapters. Five injected
+unreviewed declarations or calls in `session-secret` each failed that guard;
+the production file was restored byte-for-byte. Read-only imports of other
+`nix` namespaces remain admitted.
+
+This is source-level review evidence, not
+runtime syscall confinement or proof of safe flags inside the reviewed
+adapters. The P8 end-to-end security and privacy task remains open.

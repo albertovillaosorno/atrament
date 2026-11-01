@@ -191,6 +191,26 @@ function usesStandardLibraryProcessAuthority(source) {
     return false;
 }
 
+// Locked nix::fcntl can open read-only files, but also supports O_RDWR,
+// O_CREAT, O_TRUNC and anonymous writable staging. Scope *all* fcntl usage
+// to the selected-file reader and explicit commit adapter; import-only tests
+// cannot prove how a future caller configures its descriptor flags.
+function usesNixFcntlAuthority(source) {
+    source = normalizeRustRawIdentifiers(source);
+    if (/\bnix\s*::\s*fcntl\b/u.test(source)) {
+        return true;
+    }
+    // Nested grouped imports can omit `nix::` before an inner fcntl path.
+    for (const match of source.matchAll(
+        /\buse\s+(?:::\s*)?nix\s*::\s*\{([^;]+);/gu,
+    )) {
+        if (/\bfcntl\b/u.test(match[1])) {
+            return true;
+        }
+    }
+    return false;
+}
+
 // Short-lived writes can vanish before a process descriptor snapshot. This
 // conservative source guard covers the ordinary direct Rust filesystem write
 // constructors and this workspace's Linux profile-commit mutation operations.
@@ -552,6 +572,45 @@ test("std::io stream writing stays in reviewed output adapters", async () => {
         FILESYSTEM_COMMIT,
         path.join(BACKEND_ROOT, "runtime-bootstrap", "composition", "main.rs"),
         LOOPBACK_RUNTIME,
+    ].sort());
+});
+
+test("nix fcntl authority includes writable descriptor constructors", () => {
+    for (const source of [
+        'use nix::fcntl::{OFlag, OpenHow, openat2};',
+        'use nix::fcntl::openat;',
+        'use nix::fcntl as descriptor_api;',
+        'use ::nix::{errno::Errno, fcntl::{OFlag, openat2}};',
+        'use r#nix::{r#fcntl::r#openat};',
+        'use nix::{fcntl as descriptor_api, errno};',
+        'nix::fcntl::openat(&directory, path, flags, mode);',
+        '::nix::fcntl::openat2(&directory, path, options);',
+    ]) {
+        assert.equal(usesNixFcntlAuthority(source), true, source);
+    }
+    for (const source of [
+        'use nix::errno::Errno;',
+        'use nix::{errno::Errno, unistd::read};',
+        'use crate::fcntl::openat2;',
+        'std::fs::read("path");',
+        'File::open("path");',
+    ]) {
+        assert.equal(usesNixFcntlAuthority(source), false, source);
+    }
+});
+
+test("nix descriptor-open authority stays in reviewed adapters", async () => {
+    const fcntlFiles = [];
+    for (const sourcePath of await rustSources(BACKEND_ROOT)) {
+        const source = await readFile(sourcePath, "utf8");
+        if (usesNixFcntlAuthority(source)) {
+            fcntlFiles.push(sourcePath);
+        }
+    }
+    assert.deepEqual(fcntlFiles.sort(), [
+        FILESYSTEM_COMMIT,
+        path.join(BACKEND_ROOT, "profile-selected-file-open",
+            "adapter-outbound", "lib.rs"),
     ].sort());
 });
 
