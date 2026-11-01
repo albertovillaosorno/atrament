@@ -828,3 +828,14 @@ the production file was restored byte-for-byte. Read-only imports of other
 This is source-level review evidence, not
 runtime syscall confinement or proof of safe flags inside the reviewed
 adapters. The P8 end-to-end security and privacy task remains open.
+
+Another source-level filesystem check covers `std::fs::DirBuilder`, whose
+`create` method can create directories without calling `fs::create_dir`.
+The locked `nix` stat module also exposes `mknod` and `mknodat` for file
+creation, even when callers rename those imported functions.
+
+The direct filesystem authority inventory now includes these constructors,
+import aliases, nested imports, and raw-identifier spellings. Five temporary
+`session-secret` source mutations were rejected and restored byte-for-byte.
+The pinned Rust compiler accepted an actual `DirBuilder` creation expression.
+This does not establish runtime write isolation or close the P8 task.

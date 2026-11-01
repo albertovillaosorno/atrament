@@ -238,6 +238,13 @@ function usesDirectFilesystemMutationAuthority(source) {
             return true;
         }
     }
+    // DirBuilder can create directories without a direct fs::create_dir
+    // call. Its constructor and imported aliases need the same review gate.
+    if (/\bDirBuilder\s*::\s*new\s*\(/u.test(source)
+        || /\bfs\s*::\s*DirBuilder\b/u.test(source)
+        || /\bfs\s*::\s*\{[^;]*\bDirBuilder\b/u.test(source)) {
+        return true;
+    }
     // Also recognize imports such as `use std::fs::write` rather than only
     // call sites, so an alias cannot evade the source review boundary.
     const paths = source.matchAll(/\bfs\s*::\s*(?:r#)?([a-z_]+)\b/gu);
@@ -265,6 +272,7 @@ function usesDirectFilesystemMutationAuthority(source) {
     const nixMutations = new RegExp(
         String.raw`\b(?:chown|fchown|fchownat|fchmod|fchmodat|ftruncate|` +
             String.raw`futimens|linkat|mkdir|mkdirat|mkfifo|mkfifoat|` +
+            String.raw`mknod|mknodat|` +
             String.raw`renameat|renameat2|rmdir|symlinkat|truncate|` +
             String.raw`unlink|unlinkat|utimensat|write)\b`,
         "u",
@@ -616,6 +624,19 @@ test("nix descriptor-open authority stays in reviewed adapters", async () => {
 
 test("direct filesystem mutation detector covers write authority", () => {
     for (const source of [
+        'use std::fs::DirBuilder;',
+        'use std::fs::DirBuilder as HiddenBuilder;',
+        'use std::{fs::{DirBuilder as HiddenBuilder}};',
+        'use ::std::{fs::{DirBuilder}};',
+        'use r#std::r#fs::r#DirBuilder;',
+        'DirBuilder::new().recursive(true).create("private");',
+        'std::fs::DirBuilder::new().create("private");',
+        'nix::sys::stat::mknod("private", kind, perms, dev);',
+        'nix::sys::stat::mknodat(&dir, "private", kind, perms, dev);',
+        'use nix::sys::stat::mknod as create_inode;',
+        'use nix::sys::stat::{mknodat as create_inode};',
+        'use ::nix::{sys::{stat::{mknod as create_inode}}};',
+        'use r#nix::r#sys::r#stat::r#mknodat;',
         'std::fs::write("state", b"private");',
         'std::fs::r#write("state", b"private");',
         'use std::fs::r#write as hidden_write;',
