@@ -1097,11 +1097,19 @@ function usesStandardLibraryStreamReading(source) {
         String.raw`read_to_string|read_vectored|read_buf|read_buf_exact|` +
         String.raw`read_line|read_until|fill_buf|read_at|read_exact_at|` +
         String.raw`read_vectored_at|seek_read)\s*\(`;
+    // UFCS iterator adapters can consume an inherited File via `.next()`
+    // without ever calling a visible `.read()` method in this module.
+    const iteratingReader = new RegExp(
+        String.raw`\b(?:Read|BufRead)\s*::\s*` +
+            String.raw`(?:bytes|lines|split|take|chain|by_ref)\s*\(`,
+        "u",
+    );
     if (new RegExp(String.raw`\.\s*` + readMethod, "u").test(source)
         || new RegExp(
             String.raw`\b(?:Read|BufRead|FileExt)\s*::\s*` + readMethod,
             "u",
-        ).test(source)) {
+        ).test(source)
+        || iteratingReader.test(source)) {
         return true;
     }
     for (const match of source.matchAll(
@@ -1141,6 +1149,12 @@ test("std::io stream-reading detector reviews borrowed descriptors", () => {
         'file.read_exact_at(&mut bytes, 0);',
         'file.seek_read(&mut bytes, 0);',
         'Read::read_to_end(&mut file, &mut bytes);',
+        'std::io::Read::bytes(file).next();',
+        'std::io::Read::take(file, 2);',
+        'std::io::Read::chain(file, other);',
+        'std::io::Read::by_ref(&mut file);',
+        'std::io::BufRead::lines(buffer).next();',
+        "std::io::BufRead::split(buffer, b',').next();",
         'FileExt::read_at(&file, &mut bytes, 0);',
         'std/* comment */::io::Read::read(&mut file, &mut bytes);',
     ]) {

@@ -1214,3 +1214,14 @@ entry stream reader, explicit profile file-commit readback, and loopback
 HTTP runtime. Seven inactive `session-secret` stream-read mutations were
 rejected and restored byte-for-byte. This is a static owner inventory, not a
 proof of descriptor provenance or a remedy for the opener argv leak.
+
+Stable `Read::bytes` and `BufRead::lines` turn borrowed file input into
+iterators, so `.next()` consumes file bytes without a local `.read()` call or
+trait import. A pinned Rust compile probe confirmed those fully qualified
+calls; an inactive source injection passed the former 40-case scanner.
+
+The stream-reading review now also checks fully qualified iterator adapters
+such as `bytes`, `lines`, `split`, `take`, `chain`, and `by_ref`. Four inactive
+backend mutations were rejected, then restored byte-for-byte. Unrelated
+in-memory `str::bytes` remains permitted; this static policy is not a
+runtime descriptor-provenance proof.
