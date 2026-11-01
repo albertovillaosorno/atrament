@@ -404,6 +404,70 @@ function usesDirectFilesystemMutationAuthority(source) {
         || unixMutator.test(source);
 }
 
+// Opening a host file or enumerating a directory can expose private data
+// without mutating it. Keep direct standard-library intake in the reviewed
+// profile Import/Export adapters and nowhere else in the backend.
+function usesAmbientFilesystemReading(source) {
+    source = normalizeRustRawIdentifiers(source);
+    if (/\bFile\s*::\s*open\s*\(/u.test(source)) {
+        return true;
+    }
+    // In a use path, an imported std::fs read can be renamed to hide the
+    // eventual call. Grouped imports retain an fs:: prefix after normalization.
+    const direct = /\bfs\s*::\s*(?:read|read_to_string|read_dir|read_link)\b/u;
+    if (direct.test(source)) {
+        return true;
+    }
+    for (const match of source.matchAll(/\bfs\s*::\s*\{([^}]*)\}/gu)) {
+        if (/(?:^|,)\s*(?:read|read_to_string|read_dir|read_link)\b/u
+            .test(match[1])) {
+            return true;
+        }
+    }
+    return false;
+}
+
+test("ambient filesystem read detector distinguishes read-only APIs", () => {
+    for (const source of [
+        'std::fs::read("private")',
+        'fs::read_to_string("private")',
+        'std::fs::read_dir("private")',
+        'fs::read_link("private")',
+        'File::open("private")',
+        'File :: r#open ("private")',
+        'use std::fs::read as leak;',
+        'use ::std::{fs::{read_dir as enumerate}};',
+        'use r#std::r#fs::r#read_to_string as leak;',
+    ]) {
+        assert.equal(usesAmbientFilesystemReading(source), true, source);
+    }
+    for (const source of [
+        'std::fs::metadata("private")',
+        'File::create("output")',
+        'std::fs::symlink_metadata("private")',
+        'use std::fs::{File, Metadata};',
+        'std::io::Read::read_to_end(&mut input, &mut bytes);',
+    ]) {
+        assert.equal(usesAmbientFilesystemReading(source), false, source);
+    }
+});
+
+test("ambient filesystem reads stay in reviewed profile adapters", async () => {
+    const readingFiles = [];
+    for (const sourcePath of await rustSources(BACKEND_ROOT)) {
+        const source = await readFile(sourcePath, "utf8");
+        if (usesAmbientFilesystemReading(source)) {
+            readingFiles.push(sourcePath);
+        }
+    }
+    assert.deepEqual(readingFiles.sort(), [
+        "profile-export-target-check/composition/lib.rs",
+        "profile-file-commit/adapter-outbound/lib.rs",
+        "profile-selected-file-open/adapter-outbound/lib.rs",
+        "profile-open-file-import/composition/lib.rs",
+    ].map((relative) => path.join(BACKEND_ROOT, relative)).sort());
+});
+
 // The locked nix dependency exposes libc raw syscalls even without the nix
 // socket feature. A direct extern block or inline assembly can bypass the
 // reviewed standard-library net/process/fs APIs with no Cargo diff. Require

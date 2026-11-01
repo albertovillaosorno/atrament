@@ -982,3 +982,16 @@ stderr handle failed this new source guard, then were restored byte-for-byte.
 This pins declared Rust output paths for review, not the behavior of opaque
 dependencies, native syscalls, or subprocesses. It does not address the
 known browser-opener argv exposure.
+
+Direct ambient filesystem reads need privacy review even when no write or
+network API is visible in the module. A red-first backend source regression
+now catches `File::open`, `std::fs::read`, `read_to_string`, `read_dir`, and
+`read_link`, including grouped or renamed imports and raw identifiers. Only
+the four existing profile target, commit, selected-open, and import adapters
+currently own these direct read paths.
+
+Three inactive source mutations in the unreviewed `session-secret` adapter
+tried file read, directory enumeration, and direct file open. All failed the
+new inventory and were restored byte-for-byte. Read-only metadata lookups
+remain permitted. This guards reviewed source declarations, not indirect
+filesystem access, native calls, or the unresolved opener-argv credential.
