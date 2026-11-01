@@ -148,6 +148,15 @@ Direct or transitive dependency changes therefore
 require explicit privacy-surface review. This does not replace packet-level
 offline execution evidence.
 
+The backend source guard also confines standard-library process authority to
+the single browser-launch adapter. A synthetic `std::process::Command` in the
+session-secret adapter passed the earlier network/dependency suite, but the new
+process inventory rejects it; restoring the source returns the suite to green.
+Equivalent direct, grouped and aliased process imports are covered separately.
+This is a conservative source-level spawn guard, not a guarantee against every
+native or indirect process API, nor a fix for the known browser-opener
+argv leak.
+
 A Linux process-composition fixture now admits a deterministic successful
 platform opener, waits for the live Atrament process to publish `ready`, and
 resolves only its `/proc/<pid>/fd` socket inodes through that process's kernel

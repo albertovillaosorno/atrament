@@ -10,7 +10,7 @@
 // Boundary-Contract:
 // - Owns:
 //   - Source-level regression evidence for the production backend network
-//     dependency surface.
+//     and process-launch dependency surface.
 // - Must-Not:
 //   - Claim packet-level isolation, open sockets, or exercise external network
 //     access.
@@ -26,8 +26,8 @@
 // - Summary:
 //   - Prevents silent expansion of Atrament's backend network surface.
 // - Description:
-//   - Keeps standard-library networking confined to the loopback runtime and
-//     requires review when direct or resolved registry dependencies change.
+//   - Confines standard-library networking to the loopback runtime, process
+//     creation to browser launch, and registry dependency changes to review.
 // - Usage:
 //   - Execute through the repository frontend test script.
 // - Defaults:
@@ -52,6 +52,13 @@ const LOOPBACK_RUNTIME = path.join(
     "lib.rs",
 );
 
+const BROWSER_LAUNCH = path.join(
+    BACKEND_ROOT,
+    "browser-launch",
+    "adapter-outbound",
+    "lib.rs",
+);
+
 
 function usesStandardLibraryNetworking(source) {
     if (/\bstd\s*::\s*net\b/u.test(source)) {
@@ -62,6 +69,25 @@ function usesStandardLibraryNetworking(source) {
     );
     for (const importMatch of groupedImports) {
         if (/\bnet\b\s*(?:::|,|$|\bas\b)/u.test(importMatch[1])) {
+            return true;
+        }
+    }
+    return false;
+}
+
+// A child process can bypass std::net through an external program. Require
+// explicit review for all standard-library process authority outside the
+// platform browser-launch adapter, including grouped imports and constructors.
+function usesStandardLibraryProcessAuthority(source) {
+    if (/\bstd\s*::\s*process\b/u.test(source)
+        || /\bCommand\s*::\s*new\s*\(/u.test(source)) {
+        return true;
+    }
+    const groupedImports = source.matchAll(
+        /\buse\s+std\s*::\s*\{([\s\S]*?)\}\s*;/gu,
+    );
+    for (const importMatch of groupedImports) {
+        if (/\bprocess\b\s*(?:::|,|$|\bas\b)/u.test(importMatch[1])) {
             return true;
         }
     }
@@ -113,6 +139,40 @@ test(
     assert.deepEqual(networkFiles, [LOOPBACK_RUNTIME]);
     },
 );
+
+test("standard-library process detector covers equivalent imports", () => {
+    for (const source of [
+        "use std::process::Command;",
+        "use std :: process :: Command;",
+        "use std::{io, process::Command};",
+        "use std::{io::{Read, Write}, process::{Child, Command}};",
+        "use std::{fmt, process as operating_system_process};",
+        "std::process::Command::new(\"curl\");",
+        "Command::new(\"curl\");",
+    ]) {
+        assert.equal(usesStandardLibraryProcessAuthority(source), true,
+            source);
+    }
+    for (const source of [
+        "use std::{fmt, io};",
+        "use crate::process::Policy;",
+        "let process = false;",
+    ]) {
+        assert.equal(usesStandardLibraryProcessAuthority(source), false,
+            source);
+    }
+});
+
+test("backend process authority stays in browser launch", async () => {
+    const spawningFiles = [];
+    for (const sourcePath of await rustSources(BACKEND_ROOT)) {
+        const source = await readFile(sourcePath, "utf8");
+        if (usesStandardLibraryProcessAuthority(source)) {
+            spawningFiles.push(sourcePath);
+        }
+    }
+    assert.deepEqual(spawningFiles, [BROWSER_LAUNCH]);
+});
 
 test("backend registry dependencies remain explicitly reviewed", () => {
     const cargo = path.join(
