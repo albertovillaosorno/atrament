@@ -67,7 +67,15 @@ const FILESYSTEM_COMMIT = path.join(
 );
 
 
+// Rust accepts `r#` on ordinary identifiers, not just keywords. Canonicalize
+// that spelling before source-level authority review; raw string delimiters
+// are untouched because they are not followed by an identifier character.
+function normalizeRustRawIdentifiers(source) {
+    return source.replace(/\br#(?=[A-Za-z_])/gu, "");
+}
+
 function usesStandardLibraryNetworking(source) {
+    source = normalizeRustRawIdentifiers(source);
     if (/\bstd\s*::\s*net\b/u.test(source)) {
         return true;
     }
@@ -85,6 +93,7 @@ function usesStandardLibraryNetworking(source) {
 // Unix-domain sockets can transfer private state to unreviewed local IPC
 // endpoints without using std::net. Keep this platform path explicit.
 function usesUnixDomainNetworking(source) {
+    source = normalizeRustRawIdentifiers(source);
     if (/\bstd\s*::\s*os\s*::\s*unix\s*::\s*net\b/u.test(source)
         || /\bUnix(?:Stream|Listener|Datagram)\s*::/u.test(source)) {
         return true;
@@ -104,6 +113,7 @@ function usesUnixDomainNetworking(source) {
 // Renaming the std root can hide net/process/fs uses from the narrow source
 // detectors. This guard requires review before adding any root alias.
 function renamesStandardLibraryRoot(source) {
+    source = normalizeRustRawIdentifiers(source);
     const directAlias = /\buse\s+(?:::\s*)?std\s+as\s+\S+/u;
     const externAlias = /\bextern\s+crate\s+std\s+as\s+\S+/u;
     if (directAlias.test(source) || externAlias.test(source)) {
@@ -139,6 +149,7 @@ function renamesStandardLibraryRoot(source) {
 // explicit review for all standard-library process authority outside the
 // platform browser-launch adapter, including grouped imports and constructors.
 function usesStandardLibraryProcessAuthority(source) {
+    source = normalizeRustRawIdentifiers(source);
     if (/\bstd\s*::\s*process\b/u.test(source)
         || /\bCommand\s*::\s*new\s*\(/u.test(source)) {
         return true;
@@ -165,6 +176,7 @@ const MUTATING_FS_FUNCTIONS = new Set([
 ]);
 
 function usesDirectFilesystemMutationAuthority(source) {
+    source = normalizeRustRawIdentifiers(source);
     // Renaming std::fs or its File constructor hides subsequent mutations
     // behind names the ordinary write-call inventory cannot recognize.
     for (const match of source.matchAll(
@@ -222,6 +234,7 @@ function usesDirectFilesystemMutationAuthority(source) {
 // This is deliberately conservative source inventory, not Rust parsing or a
 // runtime syscall sandbox.
 function usesUnreviewedNativeAuthority(source) {
+    source = normalizeRustRawIdentifiers(source);
     const nativePatterns = [
         /\b(?:nix\s*::\s*)?libc\s*::/u,
         /\b(?:use\s+(?:::)?\s*|extern\s+crate\s+)(?:nix\s*::\s*)?libc\b/u,
@@ -263,6 +276,9 @@ async function rustSources(directory) {
 test("standard-library network detector covers equivalent imports", () => {
     for (const source of [
         "use std::net::TcpListener;",
+        "use std::r#net::TcpListener;",
+        "use r#std::r#net::TcpStream;",
+        "use r#std::{r#net::TcpStream};",
         "use std :: net :: TcpStream;",
         "use std::{io, net::TcpListener};",
         "use std::{io::{Read, Write}, net::{TcpListener, TcpStream}};",
@@ -299,6 +315,9 @@ test(
 test("standard-library process detector covers equivalent imports", () => {
     for (const source of [
         "use std::process::Command;",
+        "use std::r#process::Command;",
+        "use r#std::r#process::r#Command;",
+        "use r#std::{r#process::Command};",
         "use std :: process :: Command;",
         "use std::{io, process::Command};",
         "use std::{io::{Read, Write}, process::{Child, Command}};",
@@ -353,6 +372,8 @@ test("direct filesystem mutation detector covers write authority", () => {
         'use std::fs::write as hidden_write;',
         'use std::{fs::{read, write as hidden_write}};',
         'use std::fs as disk;',
+        'use r#std::r#fs as disk;',
+        'use r#std::r#fs::r#File as Writable;',
         'use std::{io, fs as disk};',
         'use :: std::{fs as disk};',
         'use std::fs::File as Writable;',
@@ -412,6 +433,8 @@ test("direct filesystem mutation stays in explicit profile commit",
 test("Unix-domain socket detector covers common Rust constructors", () => {
     for (const source of [
         "use std::os::unix::net::UnixStream;",
+        "use std::r#os::r#unix::r#net::UnixStream;",
+        "use r#std::{r#os::r#unix::r#net::UnixDatagram};",
         "use ::std::{os::unix::net::UnixListener};",
         "use std::os::{unix::net::UnixDatagram};",
         "use std::os::unix::{net::UnixStream};",
@@ -448,6 +471,10 @@ test("backend Unix-domain socket authority needs explicit review", async () => {
 test("standard-library root aliases require explicit review", () => {
     for (const source of [
         "use std as platform;",
+        "use r#std as platform;",
+        "use ::r#std as platform;",
+        "extern crate r#std as platform;",
+        "use r#std::{self as platform, fmt};",
         "pub use ::std as platform;",
         "extern crate std as platform;",
         "use std::{self as platform, fmt};",
@@ -485,6 +512,8 @@ test("backend never renames the standard-library root", async () => {
 test("native authority detector covers raw syscall escape hatches", () => {
     for (const source of [
         "use nix::libc::socket;",
+        "use r#nix::r#libc::socket;",
+        "use nix::r#sys::r#socket::socket;",
         "nix :: libc :: sendto(fd, data, flags, addr, len);",
         "use nix::libc as native;",
         "use ::nix::{libc as native, errno::Errno};",

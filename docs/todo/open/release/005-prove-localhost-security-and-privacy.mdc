@@ -176,6 +176,17 @@ positive checks; ordinary Unix filesystem and descriptor metadata imports
 remain permitted. This closes known source-scan gaps, not arbitrary local IPC,
 FFI use, or the unrelated opener-argv credential exposure.
 
+Rust also permits `r#` spellings of ordinary library module and crate
+identifiers, including `r#std`, `r#net`, and `r#process`; the pinned compiler
+accepts these spellings. Red-first source regressions now canonicalize the
+raw-identifier form before reviewing networking, process creation, Unix
+sockets, standard-library root aliases, filesystem mutation, and native FFI.
+
+Six transient `session-secret` imports using these bypass spellings each fail
+the backend allowlist, and the tracked source is restored byte-for-byte.
+This extends conservative source review; it is not a Rust parser or a syscall
+sandbox and does not settle launcher-argument credential exposure.
+
 A further backend privacy inventory now flags unreviewed native authority:
 `libc` and `nix::libc` raw syscall access (including aliased imports),
 `nix::sys::socket` references, renamed `nix` roots, C/system extern blocks,
