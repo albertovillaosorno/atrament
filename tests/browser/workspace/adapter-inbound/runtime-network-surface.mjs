@@ -307,6 +307,15 @@ function usesUnreviewedNativeAuthority(source) {
         /\buse\s+(?:::)?\s*nix\s*::\s*\{[^;]*\blibc\b/u,
         /\b(?:use\s+(?:::)?\s*|extern\s+crate\s+)nix\s+as\s+\w+/u,
         /\buse\s+(?:::)?\s*nix\s*::\s*\{[^;]*\bself\s+as\s+\w+/u,
+        // Importing nix::sys itself hides its stat/socket modules from the
+        // reviewed nix-qualified source paths. Review namespace aliases too.
+        /\buse\s+(?:::\s*)?nix\s*::\s*sys\s*(?:as\b|;)/u,
+        /\buse\s+(?:::\s*)?nix\s*::\s*\{[^;]*\bsys\s*(?:as\s+\w+)?\s*[,}]/u,
+        new RegExp(
+            String.raw`\buse\s+(?:::\s*)?nix\s*::[^;]*\bsys\s*::` +
+                String.raw`\s*\{[^;]*\bself\s*(?:as\s+\w+)?\s*[,}]`,
+            "u",
+        ),
         /\bnix\s*::\s*sys\s*::\s*socket\b/u,
         /\bnix\s*::\s*sys\s*::\s*\{[^;]*\bsocket\b/u,
         /\bnix\s*::\s*\{[^;]*\bsys\s*::\s*socket\b/u,
@@ -666,6 +675,14 @@ test("native authority detector covers raw syscall escape hatches", () => {
         "extern crate nix as native;",
         "use nix as native;",
         "use nix::{self as native, errno::Errno};",
+        "use nix::sys as native_sys;",
+        "use ::r#nix::r#sys as native_sys;",
+        "use nix::sys;",
+        "use nix::{sys, errno::Errno};",
+        "use nix::{sys as native_sys, errno::Errno};",
+        "use nix::sys::{self as native_sys, stat::fstatat};",
+        "use nix::{sys::{self as native_sys, stat::Mode}};",
+        "use nix::sys::{self, stat::Mode};",
         "nix::sys::socket::socket(domain, ty, flags, None);",
         "use nix::sys::{socket as sockets, stat};",
         "use nix::{sys::socket::socket, errno::Errno};",
@@ -683,6 +700,7 @@ test("native authority detector covers raw syscall escape hatches", () => {
         "use nix::errno::Errno;",
         "use nix::fcntl::{OFlag, openat2};",
         "use nix::sys::stat::{SFlag, fstatat};",
+        "use nix::{sys::stat::Mode, errno::Errno};",
         "use std::os::fd::AsRawFd;",
         "use std::ffi::OsStr;",
         'fn interface() { let syscall = "unavailable"; }',

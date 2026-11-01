@@ -146,6 +146,13 @@ checks; six temporary `session-secret` source variants now fail the allowlist
 and are restored exactly. This remains conservative source review, not a
 guarantee about receiver types, indirect effects, or runtime isolation.
 
+The native-authority source scan also rejects renamed or whole-module
+`nix::sys` imports. These can conceal reviewed filesystem metadata operations
+behind unrelated paths without a dependency change. Six temporary backend
+namespace variants now fail the allowlist and are restored byte-identically;
+ordinary specific read-only `nix::sys::stat` imports remain permitted. This
+is conservative module inventory rather than complete Rust name resolution.
+
 Rust also admits `r#` spellings of ordinary library function and method
 names. A compile-only Rust probe confirmed `std::fs::r#write` and
 `file.r#set_len` are valid calls; neither was recognized by the prior regular
