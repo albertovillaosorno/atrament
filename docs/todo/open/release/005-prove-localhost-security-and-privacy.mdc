@@ -1258,3 +1258,15 @@ rejected, then removed with exact original backend bytes restored. This is
 conservative source gating without Rust type resolution, not a guarantee
 against dynamically constructed native authority or the browser-opener argv
 credential exposure.
+
+The locked nix 0.31.3 `fs` dependency also exposes `nix::unistd::read` on any
+borrowed `AsFd`, without importing `std::io::Read` or opening a path in the
+consuming module. The prior source inventory admitted a direct borrowed-File
+read in an unreviewed backend adapter.
+
+A red-first regression now covers direct, renamed, grouped, raw-identifier, and
+whole-module nix read imports under the same four-owner stream-reading review.
+Six cfg-inactive mutations of the selected-profile opener, which already
+depends on nix, were rejected before restoring its original bytes exactly. This
+is static source review, not runtime descriptor provenance, syscall
+confinement, or a remedy for the browser-opener argv credential exposure.

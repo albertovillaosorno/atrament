@@ -1144,7 +1144,9 @@ test("backend process authority stays in browser launch", async () => {
 // A borrowed File or stream can be read without opening it in the current
 // module. Review Read/BufRead, positional FileExt reads, and delegated reads
 // separately from selected path opening; the receiver is not type-resolved.
-function usesStandardLibraryStreamReading(source) {
+// The locked nix fs dependency also exposes `unistd::read` on any AsFd,
+// independently of std::io::Read trait imports or method-call spelling.
+function usesBorrowedStreamReading(source) {
     source = normalizeRustRawIdentifiers(source);
     const readMethod = String.raw`(?:read|read_exact|read_to_end|` +
         String.raw`read_to_string|read_vectored|read_buf|read_buf_exact|` +
@@ -1157,6 +1159,26 @@ function usesStandardLibraryStreamReading(source) {
             String.raw`(?:bytes|lines|split|take|chain|by_ref)\s*\(`,
         "u",
     );
+    // Qualified calls, function-item imports and whole-module aliases can
+    // consume an inherited descriptor without any std::io read call. Only
+    // check nix-rooted imports so unrelated crate-local `unistd` is inert.
+    if (/\bnix\s*::\s*unistd\s*::\s*read\b/u.test(source)) {
+        return true;
+    }
+    for (const match of source.matchAll(
+        /\buse\s+(?:::\s*)?nix\s*::\s*([^;]+);/gu,
+    )) {
+        const imported = match[1];
+        if (/\bunistd\s*::\s*(?:read\b|\{[^;]*\bread\b)/u
+            .test(imported)
+            || /\bunistd\s+as\b/u.test(imported)
+            || /\bunistd\s*::\s*\{[^;]*\bself\s+as\b/u
+                .test(imported)
+            || /\bunistd\s*(?:[,}]|$)/u.test(imported)
+            || /\bunistd\s*::\s*\*/u.test(imported)) {
+            return true;
+        }
+    }
     if (new RegExp(String.raw`\.\s*` + readMethod, "u").test(source)
         || new RegExp(
             String.raw`\b(?:Read|BufRead|FileExt)\s*::\s*` + readMethod,
@@ -1181,7 +1203,7 @@ function usesStandardLibraryStreamReading(source) {
     return false;
 }
 
-test("std::io stream-reading detector reviews borrowed descriptors", () => {
+test("borrowed stream-reading detector reviews std and nix APIs", () => {
     for (const source of [
         'use std::io::Read as _;',
         'use r#std::r#io::r#Read as _;',
@@ -1210,30 +1232,41 @@ test("std::io stream-reading detector reviews borrowed descriptors", () => {
         "std::io::BufRead::split(buffer, b',').next();",
         'FileExt::read_at(&file, &mut bytes, 0);',
         'std/* comment */::io::Read::read(&mut file, &mut bytes);',
+        'nix::unistd::read(&borrowed_file, &mut bytes);',
+        '::nix::unistd::read(&borrowed_file, &mut bytes);',
+        'use nix::unistd::read as consume;',
+        'use nix::unistd::{read as consume, getpid};',
+        'use ::nix::{unistd::{read as consume}};',
+        'use r#nix::r#unistd::r#read as consume;',
+        'use nix::unistd as native_io;',
+        'use nix::{unistd as native_io, errno::Errno};',
     ]) {
-        assert.equal(usesStandardLibraryStreamReading(source), true, source);
+        assert.equal(usesBorrowedStreamReading(source), true, source);
     }
     for (const source of [
         'use std::io::{self, Write as _};',
         'use std::fmt::Write as _;',
         'use crate::io::Read as _;',
         'use std::os::unix::fs::MetadataExt;',
-        'use nix::unistd::read as input;',
+        'use nix::unistd::getpid as process_id;',
+        'use nix::unistd::readlink as target;',
+        'use nix::sys::stat::Mode;',
         'file.read_metadata();',
         'file.write_all(b"private");',
         'buffer.bytes();',
         'file.read_exact_size();',
     ]) {
-        assert.equal(usesStandardLibraryStreamReading(source), false,
+        assert.equal(usesBorrowedStreamReading(source), false,
             source);
     }
 });
 
-test("backend stream reads stay in reviewed input adapters", async () => {
+test("backend borrowed stream reads stay in reviewed adapters",
+    async () => {
     const readers = [];
     for (const sourcePath of await rustSources(BACKEND_ROOT)) {
         const source = await readFile(sourcePath, "utf8");
-        if (usesStandardLibraryStreamReading(source)) {
+        if (usesBorrowedStreamReading(source)) {
             readers.push(sourcePath);
         }
     }
