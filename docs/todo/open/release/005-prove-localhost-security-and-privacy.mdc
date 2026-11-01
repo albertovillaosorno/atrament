@@ -166,6 +166,16 @@ renamed `std::net` type was rejected, then fully restored; nested unrelated
 `self as` imports remain permitted. This is static inventory evidence, not a
 Rust parser, runtime syscall boundary, or solution for the opener-argv leak.
 
+The inventory now also detects grouped absolute-root `use ::std::{...}`
+network and process imports, plus recognized Unix-domain socket creation
+and `std::os::unix::net` imports. Initially, all three synthetic import forms
+escaped the respective checks; a red-first fixture then rejected each form
+in the temporary `session-secret` source before restoring its exact bytes.
+Nested Unix socket imports and non-ASCII `std` root aliases have independent
+positive checks; ordinary Unix filesystem and descriptor metadata imports
+remain permitted. This closes known source-scan gaps, not arbitrary local IPC,
+FFI use, or the unrelated opener-argv credential exposure.
+
 A Linux process-composition fixture now admits a deterministic successful
 platform opener, waits for the live Atrament process to publish `ready`, and
 resolves only its `/proc/<pid>/fd` socket inodes through that process's kernel

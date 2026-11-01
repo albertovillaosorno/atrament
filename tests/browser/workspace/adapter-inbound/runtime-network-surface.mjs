@@ -72,7 +72,7 @@ function usesStandardLibraryNetworking(source) {
         return true;
     }
     const groupedImports = source.matchAll(
-        /\buse\s+std\s*::\s*\{([\s\S]*?)\}\s*;/gu,
+        /\buse\s+(?:::)?std\s*::\s*\{([\s\S]*?)\}\s*;/gu,
     );
     for (const importMatch of groupedImports) {
         if (/\bnet\b\s*(?:::|,|$|\bas\b)/u.test(importMatch[1])) {
@@ -82,11 +82,31 @@ function usesStandardLibraryNetworking(source) {
     return false;
 }
 
+// Unix-domain sockets can transfer private state to unreviewed local IPC
+// endpoints without using std::net. Keep this platform path explicit.
+function usesUnixDomainNetworking(source) {
+    if (/\bstd\s*::\s*os\s*::\s*unix\s*::\s*net\b/u.test(source)
+        || /\bUnix(?:Stream|Listener|Datagram)\s*::/u.test(source)) {
+        return true;
+    }
+    // Grouped Rust imports may place `os`, `unix`, and `net` in nested
+    // braces; normalize only std-rooted use declarations for review.
+    for (const match of source.matchAll(/\buse\s+(?:::)?std\s*::[^;]+;/gu)) {
+        const qualified = match[0].replace(/[{}\s]/gu, "")
+            .replace(/:{3,}/gu, "::");
+        if (qualified.includes("std::os::unix::net")) {
+            return true;
+        }
+    }
+    return false;
+}
+
 // Renaming the std root can hide net/process/fs uses from the narrow source
 // detectors. This guard requires review before adding any root alias.
 function renamesStandardLibraryRoot(source) {
-    if (/\b(?:use\s+(?:::)?std|extern\s+crate\s+std)\s+as\s+\w+/u
-        .test(source)) {
+    const directAlias = /\buse\s+(?:::)?std\s+as\s+\S+/u;
+    const externAlias = /\bextern\s+crate\s+std\s+as\s+\S+/u;
+    if (directAlias.test(source) || externAlias.test(source)) {
         return true;
     }
     // A root-level `self as` inside a grouped import also renames std.
@@ -103,7 +123,7 @@ function renamesStandardLibraryRoot(source) {
                 depth -= 1;
             }
             if ((depth === 1 && character === ",") || depth === 0) {
-                if (/^\s*self\s+as\s+\w+\s*$/u.test(item)) {
+                if (/^\s*self\s+as\s+\S+\s*$/u.test(item)) {
                     return true;
                 }
                 item = "";
@@ -124,7 +144,7 @@ function usesStandardLibraryProcessAuthority(source) {
         return true;
     }
     const groupedImports = source.matchAll(
-        /\buse\s+std\s*::\s*\{([\s\S]*?)\}\s*;/gu,
+        /\buse\s+(?:::)?std\s*::\s*\{([\s\S]*?)\}\s*;/gu,
     );
     for (const importMatch of groupedImports) {
         if (/\bprocess\b\s*(?:::|,|$|\bas\b)/u.test(importMatch[1])) {
@@ -188,6 +208,8 @@ test("standard-library network detector covers equivalent imports", () => {
         "use std::{io, net::TcpListener};",
         "use std::{io::{Read, Write}, net::{TcpListener, TcpStream}};",
         "use std::{fmt, net as network};",
+        "use ::std::{net::TcpStream};",
+        "use ::std::{net as network};",
     ]) {
         assert.equal(usesStandardLibraryNetworking(source), true, source);
     }
@@ -221,6 +243,8 @@ test("standard-library process detector covers equivalent imports", () => {
         "use std::{io, process::Command};",
         "use std::{io::{Read, Write}, process::{Child, Command}};",
         "use std::{fmt, process as operating_system_process};",
+        "use ::std::{process::Command};",
+        "use ::std::{process as operating_system_process};",
         "std::process::Command::new(\"curl\");",
         "Command::new(\"curl\");",
     ]) {
@@ -292,6 +316,42 @@ test("direct filesystem mutation stays in explicit profile commit",
     assert.deepEqual(mutationFiles, [FILESYSTEM_COMMIT]);
 });
 
+test("Unix-domain socket detector covers common Rust constructors", () => {
+    for (const source of [
+        "use std::os::unix::net::UnixStream;",
+        "use ::std::{os::unix::net::UnixListener};",
+        "use std::os::{unix::net::UnixDatagram};",
+        "use std::os::unix::{net::UnixStream};",
+        "use ::std::{os::{unix::{net::UnixStream}}};",
+        "std::os::unix::net::UnixDatagram::unbound();",
+        'UnixStream::connect("/run/private.sock");',
+        'UnixListener::bind("/run/private.sock");',
+        "UnixDatagram::pair();",
+    ]) {
+        assert.equal(usesUnixDomainNetworking(source), true, source);
+    }
+    for (const source of [
+        "use std::os::unix::fs::PermissionsExt;",
+        "use std::{os::unix::fs::MetadataExt, fmt};",
+        "use std::os::fd::AsRawFd;",
+        "use crate::net::UnixDatagram;",
+    ]) {
+        assert.equal(usesUnixDomainNetworking(source), false, source);
+    }
+});
+
+test("backend Unix-domain socket authority needs explicit review", async () => {
+    const socketFiles = [];
+    for (const sourcePath of await rustSources(BACKEND_ROOT)) {
+        const source = await readFile(sourcePath, "utf8");
+        if (usesUnixDomainNetworking(source)) {
+            socketFiles.push(sourcePath);
+        }
+    }
+    assert.deepEqual(socketFiles, [],
+        "Unix-domain socket creation is not admitted in backend source");
+});
+
 test("standard-library root aliases require explicit review", () => {
     for (const source of [
         "use std as platform;",
@@ -300,6 +360,8 @@ test("standard-library root aliases require explicit review", () => {
         "use std::{self as platform, fmt};",
         "use std::{fmt, self as platform};",
         "use std::{io::{Read, Write}, self as platform};",
+        "use std as λ;",
+        "use std::{self as λ, io};",
     ]) {
         assert.equal(renamesStandardLibraryRoot(source), true, source);
     }
