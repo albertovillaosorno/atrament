@@ -156,11 +156,15 @@ session termination against the real compiled runtime.
 
 At startup and after
 each completed stateful request, the runtime process owns exactly one IPv4
-loopback listener plus at most one closing inbound loopback connection, with
-no outbound, non-loopback, IPv6, or UDP Internet socket descriptor. The process
-exits after authenticated End. These are stage-wise socket snapshots, not
-continuous packet observation or proof that the production browser opener
-protects its credential from process-argument inspection.
+loopback listener plus at most one inbound loopback connection, with no
+outbound, non-loopback, IPv6, or UDP Internet socket descriptor. An
+intentionally incomplete public request is held open until the process has one
+accepted
+inbound socket alongside that listener, then completed successfully.
+
+The process exits after authenticated End. These stage-wise socket snapshots
+are not continuous packet observation. They also do not prove the production
+browser opener protects its credential from process-argument inspection.
 
 A checked-in scripted Firefox fixture without a session credential now observes
 exactly seven same-origin resource requests: the document, stylesheet, main

@@ -35,7 +35,7 @@
 //
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
-import { EventEmitter } from "node:events";
+import { EventEmitter, once } from "node:events";
 import fs from "node:fs";
 import net from "node:net";
 import { PassThrough } from "node:stream";
@@ -741,6 +741,46 @@ test(
                 assertOnlySessionSockets();
                 return { response, body };
             };
+            assertOnlySessionSockets();
+            // Keep an incomplete public request live so /proc observes an
+            // actual accepted connection, not just an idle listener.
+            const held = net.createConnection({
+                host: "127.0.0.1",
+                port: Number(address.port),
+            });
+            try {
+                held.setTimeout(2_500, () => held.destroy(new Error(
+                    "held public request exceeded fixture deadline",
+                )));
+                await once(held, "connect");
+                held.write(`GET /health HTTP/1.1\r\nHost: ${address.host}\r\n`);
+                let observed = false;
+                for (let attempt = 0; attempt < 40; attempt += 1) {
+                    const inodes = processSocketInodes(child.pid);
+                    const rows = processInternetSocketRows(child.pid, inodes);
+                    if (rows.length === 2) {
+                        observed = true;
+                        assertOnlySessionSockets();
+                        break;
+                    }
+                    await new Promise((resolve) => setTimeout(resolve, 10));
+                }
+                assert.equal(observed, true,
+                    "live loopback request owns one accepted socket");
+                const reply = [];
+                held.on("data", (bytes) => reply.push(bytes));
+                const finished = once(held, "end");
+                held.end("\r\n");
+                await finished;
+                assert.equal(
+                    Buffer.concat(reply).toString("utf8").startsWith(
+                        "HTTP/1.1 200 OK\r\n",
+                    ),
+                    true,
+                );
+            } finally {
+                held.destroy();
+            }
             assertOnlySessionSockets();
             const authenticated = {
                 Authorization: `Bearer ${secret}`,
