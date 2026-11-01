@@ -334,6 +334,13 @@ test("startup readiness requires ordered secret-free loopback records",
     },
 );
 
+// Linux task IDs expose every live thread in the exact runtime process.
+// Sampling at each fixture step can catch persistent background workers,
+// but not a thread that starts and exits between observations.
+function processThreadIds(pid) {
+    return fs.readdirSync(`/proc/${pid}/task`).sort();
+}
+
 function processSocketInodes(pid) {
     const descriptors = fs.readdirSync(`/proc/${pid}/fd`);
     const inodes = [];
@@ -613,6 +620,7 @@ test(
                 stdio: ["ignore", "pipe", "pipe"],
             });
             const ready = await waitForReady(child);
+            assert.deepEqual(processThreadIds(child.pid), [String(child.pid)]);
             const socketInodes = processSocketInodes(child.pid);
             const rows = processInternetSocketRows(
                 child.pid,
@@ -722,6 +730,9 @@ test(
                 .toString(16).toUpperCase().padStart(4, "0");
             const local = `0100007F:${port}`;
             const assertOnlySessionSockets = () => {
+                assert.deepEqual(processThreadIds(child.pid),
+                    [String(child.pid)],
+                    "private draft runtime must have only its main thread");
                 const inodes = processSocketInodes(child.pid);
                 const rows = processInternetSocketRows(child.pid, inodes);
                 // A Unix, netlink, packet, or other unclassified socket FD

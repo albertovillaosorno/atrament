@@ -1072,3 +1072,14 @@ Three inactive `session-secret` mutations using direct metadata, an alias,
 and nested canonicalization imports failed before byte-for-byte restoration.
 This is source-level evidence, not a proof about indirect `Path` methods or
 native metadata system calls; the opener argv leak remains outstanding.
+
+The live Linux socket-confinement fixture now also inventories `/proc` task
+IDs at readiness, while a public request is held open, and throughout the
+authenticated handshake and private-draft read/write sequence. At each
+observation, the runtime owns exactly its main thread, and no persistent
+background thread appears alongside the reviewed loopback sockets.
+
+This is live-process evidence during actual private text use, not a source
+inventory or proof that a short-lived thread could never appear between
+samples. The synthetic opener still carries the test URL over IPC, and the
+production browser-opener argv credential disclosure remains unresolved.
