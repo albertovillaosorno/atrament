@@ -338,6 +338,11 @@ function processSocketInodes(pid) {
     const descriptors = fs.readdirSync(`/proc/${pid}/fd`);
     const inodes = [];
     for (const descriptor of descriptors) {
+        // Node supplies inherited stdout/stderr through Unix socketpairs.
+        // Only inspect sockets opened beyond the three standard streams.
+        if (Number(descriptor) <= 2) {
+            continue;
+        }
         let target;
         try {
             target = fs.readlinkSync(`/proc/${pid}/fd/${descriptor}`);
@@ -358,7 +363,7 @@ function processSocketInodes(pid) {
 function processInternetSocketRows(pid, inodes) {
     const wanted = new Set(inodes);
     const rows = [];
-    for (const protocol of ["tcp", "tcp6", "udp", "udp6"]) {
+    for (const protocol of ["tcp", "tcp6", "udp", "udp6", "raw", "raw6"]) {
         const tablePath = `/proc/${pid}/net/${protocol}`;
         if (!fs.existsSync(tablePath)) {
             continue;
@@ -614,7 +619,7 @@ test(
                 socketInodes,
             );
             assert.equal(rows.length, 1);
-            assert.equal(socketInodes.includes(rows[0].inode), true);
+            assert.deepEqual(socketInodes, rows.map((row) => row.inode));
             const origin = new URL(ready.origin);
             assert.equal(origin.hostname, "127.0.0.1");
             const expectedPort = Number.parseInt(origin.port, 10)
@@ -719,6 +724,9 @@ test(
             const assertOnlySessionSockets = () => {
                 const inodes = processSocketInodes(child.pid);
                 const rows = processInternetSocketRows(child.pid, inodes);
+                // A Unix, netlink, packet, or other unclassified socket FD
+                // cannot disappear from the Internet-only table count.
+                assert.deepEqual(inodes, rows.map((row) => row.inode).sort());
                 const listeners = rows.filter((row) => row.state === "0A");
                 assert.equal(listeners.length, 1);
                 assert.equal(rows.length <= 2, true);

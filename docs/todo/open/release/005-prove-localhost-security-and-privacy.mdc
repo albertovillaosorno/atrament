@@ -158,9 +158,12 @@ At startup and after
 each completed stateful request, the runtime process owns exactly one IPv4
 loopback listener plus at most one inbound loopback connection, with no
 outbound, non-loopback, IPv6, or UDP Internet socket descriptor. An
-intentionally incomplete public request is held open until the process has one
-accepted
-inbound socket alongside that listener, then completed successfully.
+intentionally incomplete public request stays open with an accepted inbound
+socket alongside that listener, then completes successfully. Every
+socket descriptor beyond the inherited standard streams must appear in the
+matching TCP, UDP, or raw kernel tables. The harness's standard output and
+error streams use Unix socketpairs, so descriptors 0-2 are excluded explicitly;
+future unclassified product-owned socket descriptors still fail the fixture.
 
 The process exits after authenticated End. These stage-wise socket snapshots
 are not continuous packet observation. They also do not prove the production
