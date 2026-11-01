@@ -240,10 +240,14 @@ function renamesStandardLibraryRoot(source) {
 // file, a socket, or an in-memory buffer.
 function usesStandardLibraryStreamWriting(source) {
     source = normalizeRustRawIdentifiers(source);
-    // A writing method can affect a caller-supplied File without a new open.
-    if (/\.\s*(?:write|write_all|write_vectored|write_fmt)\s*\(/u.test(source)
-        || /\bWrite\s*::\s*(?:write|write_all|write_vectored|write_fmt)\s*\(/u
-            .test(source)) {
+    // Writing and flushing a caller-supplied File do not require a new open.
+    // std::io::copy delegates writes without importing the Write trait.
+    const writing = String.raw`(?:write|write_all|write_vectored|` +
+        String.raw`write_fmt|flush)\s*\(`;
+    if (new RegExp(String.raw`\.\s*` + writing, "u").test(source)
+        || new RegExp(String.raw`\bWrite\s*::\s*` + writing, "u")
+            .test(source)
+        || /\bio\s*::\s*(?:copy\b|\{[^}]*\bcopy\b)/u.test(source)) {
         return true;
     }
     for (const match of source.matchAll(
@@ -1047,6 +1051,16 @@ test("std::io stream-writing detector distinguishes reviewed authority", () => {
         'file.r#write(b"private");',
         'file.write_vectored(&slices);',
         'Write::write_all(&mut file, b"private");',
+        'std::io::copy(&mut source, &mut file);',
+        'io::copy(&mut source, &mut file);',
+        'use std::io::copy as delegated_write;',
+        'use std::io::{Read, copy as delegated_write};',
+        'use ::std::{io::{copy as delegated_write}, fmt};',
+        'use r#std::r#io::r#copy as delegated_write;',
+        'std/* comment */::io::copy(&mut input, &mut output);',
+        'file.flush();',
+        'file.r#flush();',
+        'Write::flush(&mut file);',
     ]) {
         assert.equal(usesStandardLibraryStreamWriting(source), true, source);
     }
@@ -1058,6 +1072,9 @@ test("std::io stream-writing detector distinguishes reviewed authority", () => {
         'file.read_exact(buffer);',
         'file.sync_all();',
         'file.write_all_at(b"private", 0);',
+        'file.flush_pending_buffer();',
+        'use std::io::{self, Read as _, Cursor};',
+        'source.read_to_end(&mut data);',
     ]) {
         assert.equal(usesStandardLibraryStreamWriting(source), false, source);
     }

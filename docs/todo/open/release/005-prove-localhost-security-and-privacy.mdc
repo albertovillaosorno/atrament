@@ -1131,3 +1131,20 @@ mutations were rejected by the new guard and restored byte-for-byte.
 This is static authority review, not a runtime FD isolation sandbox or a
 proof against arbitrary unsafe casts. The browser-opener argv credential
 exposure remains open.
+
+A caller-provided File or socket can be written through `std::io::copy`
+without importing the `Write` trait or calling a `.write` method in the
+current module. The pinned compiler accepts an in-memory Cursor copied into
+a borrowed File; an inactive backend source mutation of that call passed the
+prior 38-case security inventory.
+
+The stream-writing owner inventory now also reviews direct and grouped
+`std::io::copy` imports and calls, including raw identifiers, plus delegated
+`flush` methods that could persist caller-owned buffered output. Four
+inactive backend mutations were rejected and restored byte-for-byte.
+The existing bootstrap, loopback response, and explicit profile commit
+remain the only admitted stream-writing owners.
+
+This source-level contract cannot prove the concrete destination type or
+runtime persistence absence. The browser-opener argv credential exposure
+remains unresolved.
