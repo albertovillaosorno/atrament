@@ -82,6 +82,39 @@ function usesStandardLibraryNetworking(source) {
     return false;
 }
 
+// Renaming the std root can hide net/process/fs uses from the narrow source
+// detectors. This guard requires review before adding any root alias.
+function renamesStandardLibraryRoot(source) {
+    if (/\b(?:use\s+(?:::)?std|extern\s+crate\s+std)\s+as\s+\w+/u
+        .test(source)) {
+        return true;
+    }
+    // A root-level `self as` inside a grouped import also renames std.
+    // Ignore nested `io::{self as alias}`: that does not rename std itself.
+    for (const match of source.matchAll(/\buse\s+(?:::)?std\s*::\s*\{/gu)) {
+        let depth = 1;
+        let item = "";
+        for (let index = match.index + match[0].length;
+            index < source.length && depth > 0; index += 1) {
+            const character = source[index];
+            if (character === "{") {
+                depth += 1;
+            } else if (character === "}") {
+                depth -= 1;
+            }
+            if ((depth === 1 && character === ",") || depth === 0) {
+                if (/^\s*self\s+as\s+\w+\s*$/u.test(item)) {
+                    return true;
+                }
+                item = "";
+            } else if (depth === 1) {
+                item += character;
+            }
+        }
+    }
+    return false;
+}
+
 // A child process can bypass std::net through an external program. Require
 // explicit review for all standard-library process authority outside the
 // platform browser-launch adapter, including grouped imports and constructors.
@@ -257,6 +290,40 @@ test("direct filesystem mutation stays in explicit profile commit",
         }
     }
     assert.deepEqual(mutationFiles, [FILESYSTEM_COMMIT]);
+});
+
+test("standard-library root aliases require explicit review", () => {
+    for (const source of [
+        "use std as platform;",
+        "pub use ::std as platform;",
+        "extern crate std as platform;",
+        "use std::{self as platform, fmt};",
+        "use std::{fmt, self as platform};",
+        "use std::{io::{Read, Write}, self as platform};",
+    ]) {
+        assert.equal(renamesStandardLibraryRoot(source), true, source);
+    }
+    for (const source of [
+        "use std::fmt;",
+        "use std::{fmt, io};",
+        "extern crate std;",
+        "use std::{io::{self as io_alias}, fmt};",
+        "use crate::std as domain_model;",
+    ]) {
+        assert.equal(renamesStandardLibraryRoot(source), false, source);
+    }
+});
+
+test("backend never renames the standard-library root", async () => {
+    const aliasedFiles = [];
+    for (const sourcePath of await rustSources(BACKEND_ROOT)) {
+        const source = await readFile(sourcePath, "utf8");
+        if (renamesStandardLibraryRoot(source)) {
+            aliasedFiles.push(sourcePath);
+        }
+    }
+    assert.deepEqual(aliasedFiles, [],
+        "renaming std would bypass reviewed network/process/file guards");
 });
 
 test("backend registry dependencies remain explicitly reviewed", () => {

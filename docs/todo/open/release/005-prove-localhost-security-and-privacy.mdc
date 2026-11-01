@@ -157,6 +157,15 @@ This is a conservative source-level spawn guard, not a guarantee against every
 native or indirect process API, nor a fix for the known browser-opener
 argv leak.
 
+A further source-level guard refuses renaming the `std` crate root anywhere in
+backend Rust, including direct `use std as ...`, `extern crate std as ...`, and
+grouped `use std::{self as ...}` imports. Such aliases could hide network,
+process, or filesystem authority from the reviewed detectors without adding a
+new dependency. A red-first tracked-source fixture in `session-secret` using a
+renamed `std::net` type was rejected, then fully restored; nested unrelated
+`self as` imports remain permitted. This is static inventory evidence, not a
+Rust parser, runtime syscall boundary, or solution for the opener-argv leak.
+
 A Linux process-composition fixture now admits a deterministic successful
 platform opener, waits for the live Atrament process to publish `ready`, and
 resolves only its `/proc/<pid>/fd` socket inodes through that process's kernel
