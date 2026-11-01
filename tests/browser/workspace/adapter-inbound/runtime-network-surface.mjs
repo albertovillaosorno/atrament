@@ -182,7 +182,7 @@ function usesDirectFilesystemMutationAuthority(source) {
     }
     // Also recognize imports such as `use std::fs::write` rather than only
     // call sites, so an alias cannot evade the source review boundary.
-    const paths = source.matchAll(/\bfs\s*::\s*([a-z_]+)\b/gu);
+    const paths = source.matchAll(/\bfs\s*::\s*(?:r#)?([a-z_]+)\b/gu);
     for (const match of paths) {
         if (MUTATING_FS_FUNCTIONS.has(match[1])) {
             return true;
@@ -191,13 +191,25 @@ function usesDirectFilesystemMutationAuthority(source) {
     const grouped = source.matchAll(/\bfs\s*::\s*\{([^}]*)\}/gu);
     for (const match of grouped) {
         if (match[1].split(",").some((field) =>
-            MUTATING_FS_FUNCTIONS.has(field.trim().split(/\s+/u)[0]))) {
+            MUTATING_FS_FUNCTIONS.has(
+                field.trim().split(/\s+/u)[0].replace(/^r#/u, "")))) {
             return true;
         }
     }
+    // An already-open descriptor can mutate on-disk content or metadata
+    // without opening a new writable file. Keep these direct File methods in
+    // the same explicit review boundary as File::create and fs::write.
+    const fileMutator = new RegExp(
+        String.raw`(?:\.|\bFile\s*::)\s*(?:r#)?set_` +
+            String.raw`(?:len|modified|permissions|times)\s*\(`,
+        "u",
+    );
     const unixMutator =
         /\b(?:linkat|unlinkat|renameat|renameat2|mkdirat|mknodat)\s*\(/u;
-    return /\bFile\s*::\s*(?:create|create_new|options)\s*\(/u.test(source)
+    const fileConstructor =
+        /\bFile\s*::\s*(?:r#)?(?:create|create_new|options)\s*\(/u;
+    return fileMutator.test(source)
+        || fileConstructor.test(source)
         || /\bOpenOptions\b/u.test(source)
         || /\bO_(?:TMPFILE|CREAT|TRUNC)\b/u.test(source)
         || unixMutator.test(source);
@@ -324,6 +336,16 @@ test("backend process authority stays in browser launch", async () => {
 test("direct filesystem mutation detector covers write authority", () => {
     for (const source of [
         'std::fs::write("state", b"private");',
+        'std::fs::r#write("state", b"private");',
+        'use std::fs::r#write as hidden_write;',
+        'use std::fs::{read, r#write as hidden_write};',
+        'File::r#create("state");',
+        'file.r#set_len(0);',
+        'file.r#set_permissions(mode);',
+        'file.r#set_modified(time);',
+        'file.r#set_times(times);',
+        'file . r#set_modified(time);',
+        'File :: r#set_permissions(&file, mode);',
         'fs :: remove_file ("state");',
         'std::fs::create_dir_all("state");',
         'File::create("state");',
@@ -339,6 +361,13 @@ test("direct filesystem mutation detector covers write authority", () => {
         'use std::fs::{self as disk, Metadata};',
         'use std::os::unix::fs::symlink;',
         'File::options().write(true);',
+        'file.set_len(0);',
+        'file.set_permissions(mode);',
+        'file.set_modified(time);',
+        'file.set_times(times);',
+        'File::set_len(&file, 0);',
+        'File::set_permissions(&file, mode);',
+        'File::set_times(&file, times);',
         'use std::fs::OpenOptions;',
         'OFlag::O_TMPFILE | OFlag::O_RDWR',
         'linkat(&file, "", &parent, "out", flags);',
@@ -355,7 +384,11 @@ test("direct filesystem mutation detector covers write authority", () => {
         'use std::os::unix::fs as unix_fs;',
         'use crate::fs as disk;',
         'File::open("state");',
+        'file.metadata();',
+        'file.sync_all();',
         'fs::read("state");',
+        'std::fs::r#read("state");',
+        'file.r#metadata();',
         'std::fs::metadata("state");',
         'OFlag::O_RDONLY | OFlag::O_CLOEXEC',
     ]) {

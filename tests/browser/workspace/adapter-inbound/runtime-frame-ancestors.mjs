@@ -2134,7 +2134,8 @@ async function navigateFromDocument(client, context, url) {
     });
 }
 
-test("Firefox direct workspace navigation survives transient blanks", async () => {
+test("Firefox direct workspace navigation survives transient blanks",
+    async () => {
     const source = fs.readFileSync(new URL(import.meta.url), "utf8");
     const start = source.indexOf("async function evaluateDocument(");
     const end = source.indexOf("async function waitForChildContext(", start);
@@ -2184,7 +2185,10 @@ test("Firefox direct workspace navigation survives transient blanks", async () =
             async command() {
                 return {
                     type: "success",
-                    result: { type: "string", value: JSON.stringify(unrelated) },
+                    result: {
+                        type: "string",
+                        value: JSON.stringify(unrelated),
+                    },
                 };
             },
         }, "wrong-document"),

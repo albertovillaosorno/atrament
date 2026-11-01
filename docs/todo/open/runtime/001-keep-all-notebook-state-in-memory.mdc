@@ -113,6 +113,26 @@ modules and `File` constructors, including nested grouped imports. Previously,
 common-write inventory. Temporary imports of each kind in `session-secret`
 now fail the focused backend scan and are restored byte-for-byte.
 
+An additional source-only regression covers mutations through an already
+opened `File`: `set_len`, `set_modified`, `set_permissions`, and
+`set_times` can change disk content or metadata without a new file-opening
+constructor. All four were missed by the earlier guard; a red-first method
+corpus now requires them. Three transient `session-secret` source
+injections each fail the backend-file mutation allowlist before restoration.
+This is conservative source review, not runtime enforcement or a guarantee
+against indirect writes or all file-ownership aliases.
+
+Rust also admits `r#` spellings of ordinary library function and method
+names. A compile-only Rust probe confirmed `std::fs::r#write` and
+`file.r#set_len` are valid calls; neither was recognized by the prior regular
+expressions. The inventory now normalizes raw spellings in standalone and
+grouped filesystem function imports, `File` constructors, and descriptor
+mutators.
+
+Four temporary injected backend variants fail the source scan and are
+restored exactly. This covers named syntax, not all possible native or
+indirect file effects.
+
 Network, process, and standard-library-root alias scanners also recognize
 optional whitespace in absolute `use :: std` imports. A separate temporary
 network import was rejected. This remains a conservative source-level review

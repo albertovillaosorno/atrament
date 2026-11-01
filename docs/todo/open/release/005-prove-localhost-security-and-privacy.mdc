@@ -701,7 +701,9 @@ no product runtime network authority or retry behavior changes.
 The subsequent high-contention full Firefox run reached 210 of 211 cases,
 but the direct workspace tab's first DOM read was blank immediately after
 WebDriver BiDi reported a completed navigation. The actual failure was not the
-blocked hostile iframe. A red-first fixture now supplies 21 transient blank
+blocked hostile iframe.
+
+A red-first fixture now supplies 21 transient blank
 document reads before the expected Atrament title and workspace structure,
 and separately requires a persistent unrelated document to fail closed.
 Only this direct-workspace readiness observation gains up to 40 bounded
