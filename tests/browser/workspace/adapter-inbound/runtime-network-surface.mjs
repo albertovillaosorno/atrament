@@ -348,6 +348,90 @@ async function rustSources(directory) {
     return sources;
 }
 
+// A glob import can conceal a later filesystem, process, native, or network
+// effect behind an unqualified symbol even without any direct API import.
+function importsUnreviewedAuthorityGlob(source) {
+    source = normalizeRustRawIdentifiers(source);
+    for (const match of source.matchAll(
+        /\buse\s+(?:::\s*)?(std|nix)\s*::\s*([^;]+);/gu,
+    )) {
+        const imported = match[2];
+        const authorityModule = match[1] === "std"
+            ? /\b(?:fs|io|net|process)\s*::\s*(?:\*|\{[^}]*\*)/u
+            : /\b(?:unistd|fcntl|stat|sys)\s*::\s*(?:\*|\{[^}]*\*)/u;
+        if (authorityModule.test(imported) || /^\s*\*\s*$/u.test(imported)) {
+            return true;
+        }
+        // A crate-root grouped glob is a top-level `*` item, not e.g.
+        // `fmt::*` or `errno::*`, which remain outside this guard.
+        const groupedRoot = /^\s*\{([\s\S]*)\}\s*$/u.exec(imported);
+        if (groupedRoot === null) {
+            continue;
+        }
+        let nestedDepth = 0;
+        let field = "";
+        for (const character of groupedRoot[1]) {
+            if (character === "{") nestedDepth += 1;
+            if (character === "}") nestedDepth -= 1;
+            if (character === "," && nestedDepth === 0) {
+                if (field.trim() === "*") return true;
+                field = "";
+            } else {
+                field += character;
+            }
+        }
+        if (field.trim() === "*") return true;
+    }
+    return false;
+}
+
+test("authority glob-import detector covers direct and nested syntax", () => {
+    for (const source of [
+        'use std::*;',
+        'use ::std::{fmt, *};',
+        'use r#std::r#fs::*;',
+        'use std::fs::{read, *};',
+        'use std::{io::{Read, *}, fmt};',
+        'use std::process::*;',
+        'use std::os::unix::net::{UnixStream, *};',
+        'use nix::*;',
+        'use ::nix::{errno::Errno, *};',
+        'use nix::unistd::*;',
+        'use nix::{unistd::{read, *}, errno::Errno};',
+        'use nix::sys::stat::*;',
+        'use nix::{sys::{stat::{SFlag, *}}};',
+        'use nix::fcntl::*;',
+        'use nix::sys::*;',
+        'use nix::{sys::{stat, *}};',
+    ]) {
+        assert.equal(importsUnreviewedAuthorityGlob(source), true, source);
+    }
+    for (const source of [
+        'use std::fmt::*;',
+        'use std::{fmt::*, io::Read};',
+        'use std::fs::File;',
+        'use std::io::{self, Read as _, ErrorKind};',
+        'use crate::fs::*;',
+        'use nix::errno::*;',
+        'use nix::sys::stat::{fstatat, SFlag};',
+        'use nix::{errno::Errno, sys::stat::SFlag};',
+    ]) {
+        assert.equal(importsUnreviewedAuthorityGlob(source), false, source);
+    }
+});
+
+test("backend authority namespaces cannot be glob-imported", async () => {
+    const unreviewed = [];
+    for (const sourcePath of await rustSources(BACKEND_ROOT)) {
+        const source = await readFile(sourcePath, "utf8");
+        if (importsUnreviewedAuthorityGlob(source)) {
+            unreviewed.push(sourcePath);
+        }
+    }
+    assert.deepEqual(unreviewed, [],
+        "glob imports can bypass individual authority review");
+});
+
 test("standard-library network detector covers equivalent imports", () => {
     for (const source of [
         "use std::net::TcpListener;",

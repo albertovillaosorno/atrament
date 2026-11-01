@@ -153,6 +153,14 @@ namespace variants now fail the allowlist and are restored byte-identically;
 ordinary specific read-only `nix::sys::stat` imports remain permitted. This
 is conservative module inventory rather than complete Rust name resolution.
 
+A further source guard rejects glob imports of `std` or `nix` roots and their
+filesystem, I/O, process, network, or native submodules. Rust accepts these
+imports and they can hide a later effect behind an unqualified symbol;
+previous method and module-name inventories could miss them. Six temporary
+`session-secret` imports now fail closed, with byte-identical restoration.
+Concrete read-only imports and unrelated `std::fmt::*` remain permitted;
+this remains declaration-level review rather than a compiler name resolver.
+
 Rust also admits `r#` spellings of ordinary library function and method
 names. A compile-only Rust probe confirmed `std::fs::r#write` and
 `file.r#set_len` are valid calls; neither was recognized by the prior regular

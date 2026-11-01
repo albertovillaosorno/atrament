@@ -199,6 +199,15 @@ exact byte restoration; specific read-only stat imports are still allowed.
 This adds a source-review boundary, not a Rust name resolver, syscall sandbox,
 or protection for opener command-line credentials.
 
+Globbed authority imports now also require review: `std::*`,
+`std::fs::*`, `std::io::*`, and the corresponding locked `nix` modules may
+expose filesystem or native operations without naming the individual API in
+the importing file. A compile-only Rust probe confirmed root and nested
+glob syntax, and six temporary `session-secret` additions fail the new
+backend inventory before exact restoration. Read-only explicit imports and
+unrelated formatting globs remain allowed. This is static declaration review,
+not runtime syscall confinement or a remedy for the known opener-argv leak.
+
 The inventory now also detects grouped absolute-root `use ::std::{...}`
 network and process imports, plus recognized Unix-domain socket creation
 and `std::os::unix::net` imports. Initially, all three synthetic import forms
