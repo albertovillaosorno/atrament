@@ -60,6 +60,13 @@ const BROWSER_LAUNCH = path.join(
     "lib.rs",
 );
 
+const RUNTIME_BOOTSTRAP = path.join(
+    BACKEND_ROOT,
+    "runtime-bootstrap",
+    "composition",
+    "main.rs",
+);
+
 const FILESYSTEM_COMMIT = path.join(
     BACKEND_ROOT,
     "profile-file-commit",
@@ -354,10 +361,9 @@ function usesProcessWideEnvironmentMutation(source) {
     return false;
 }
 
-// Environment values can contain private host keys or tokens. Read only the
-// two existing GUI-session markers needed by the platform browser launcher;
-// CLI argv inspection is a separate, explicitly reviewed authority.
-function unreviewedProcessEnvironmentReads(source, sourcePath) {
+// Environment and argv values can contain private host tokens or paths.
+// Confine reads to the two GUI markers and explicit CLI argument inspection.
+function unreviewedAmbientProcessInputReads(source, sourcePath) {
     source = normalizeRustRawIdentifiers(source);
     const anyRead = /\benv\s*::\s*(?:var|var_os|vars|vars_os)\s*\(/gu;
     const importedRead = new RegExp(
@@ -365,10 +371,29 @@ function unreviewedProcessEnvironmentReads(source, sourcePath) {
             String.raw`\s*(?:\{[^;]*\b)?(?:var|var_os|vars|vars_os)\b`,
         "u",
     );
-    if (importedRead.test(source)) {
+    // Host CLI arguments can contain explicitly selected private paths.
+    // The entrypoint owns precisely one OsString iterator, skipping argv[0].
+    const importedArguments = new RegExp(
+        String.raw`\buse\s+(?:::)?std\s*::[^;]*\benv\s*::` +
+            String.raw`\s*(?:\{[^;]*\b)?(?:args|args_os)\b`,
+        "u",
+    );
+    if (importedRead.test(source) || importedArguments.test(source)) {
         return true;
     }
+    const argumentsRead = [...source.matchAll(
+        /\b(?:std\s*::\s*)?env\s*::\s*(args|args_os)\s*\(/gu,
+    )];
     const reads = [...source.matchAll(anyRead)];
+    if (sourcePath === RUNTIME_BOOTSTRAP) {
+        return reads.length !== 0 || argumentsRead.length !== 1
+            || argumentsRead[0][1] !== "args_os"
+            || !/\benv\s*::\s*args_os\s*\(\s*\)\s*\.\s*skip\s*\(\s*1\s*\)/u
+                .test(source);
+    }
+    if (argumentsRead.length > 0) {
+        return true;
+    }
     if (sourcePath !== BROWSER_LAUNCH) {
         return reads.length > 0;
     }
@@ -379,14 +404,14 @@ function unreviewedProcessEnvironmentReads(source, sourcePath) {
         JSON.stringify(["DISPLAY", "WAYLAND_DISPLAY"]);
 }
 
-test("environment read guard rejects unreviewed host variables", () => {
+test("ambient process input guard rejects unreviewed reads", () => {
     const privateModule = path.join(BACKEND_ROOT, "session-secret",
         "adapter-outbound", "lib.rs");
     const accepted = [
         'env::var_os("DISPLAY")',
         'env::var_os("WAYLAND_DISPLAY")',
     ].join(";\n");
-    assert.equal(unreviewedProcessEnvironmentReads(accepted, BROWSER_LAUNCH),
+    assert.equal(unreviewedAmbientProcessInputReads(accepted, BROWSER_LAUNCH),
         false);
     for (const [source, file] of [
         ['std::env::var("PRIVATE_KEY")', privateModule],
@@ -401,23 +426,38 @@ test("environment read guard rejects unreviewed host variables", () => {
         ['env::var_os("DISPLAY"); env::var("SECRET")',
             BROWSER_LAUNCH],
     ]) {
-        assert.equal(unreviewedProcessEnvironmentReads(source, file), true,
+        assert.equal(unreviewedAmbientProcessInputReads(source, file), true,
             source);
     }
-    assert.equal(unreviewedProcessEnvironmentReads(
-        'env::args_os().skip(1)', privateModule), false);
+    assert.equal(unreviewedAmbientProcessInputReads(
+        'env::args_os().skip(1)', privateModule), true);
+    assert.equal(unreviewedAmbientProcessInputReads(
+        'env::args_os().skip(1)', RUNTIME_BOOTSTRAP), false);
+    for (const [source, file] of [
+        ['env::args()', privateModule],
+        ['std::env::args_os()', privateModule],
+        ['use std::env::args as read_cli;', privateModule],
+        ['use ::std::{env::{args_os as leak}};', privateModule],
+        ['use r#std::r#env::r#args_os as read_cli;', privateModule],
+        ['env::args_os()', RUNTIME_BOOTSTRAP],
+        ['env::args_os().skip(0)', RUNTIME_BOOTSTRAP],
+        ['env::args_os().skip(1); env::args()', RUNTIME_BOOTSTRAP],
+    ]) {
+        assert.equal(unreviewedAmbientProcessInputReads(source, file), true,
+            source);
+    }
 });
 
-test("backend environment reads are limited to GUI markers", async () => {
+test("backend ambient input reads stay in reviewed adapters", async () => {
     const unreviewed = [];
     for (const sourcePath of await rustSources(BACKEND_ROOT)) {
         const source = await readFile(sourcePath, "utf8");
-        if (unreviewedProcessEnvironmentReads(source, sourcePath)) {
+        if (unreviewedAmbientProcessInputReads(source, sourcePath)) {
             unreviewed.push(path.relative(BACKEND_ROOT, sourcePath));
         }
     }
     assert.deepEqual(unreviewed, [],
-        "new environment reads require explicit privacy review");
+        "new host environment or argv readers need explicit review");
 });
 
 // Locked nix::fcntl can open read-only files, but also supports O_RDWR,
@@ -692,7 +732,7 @@ function importsUnreviewedAuthorityGlob(source) {
     )) {
         const imported = match[2];
         const authorityModule = match[1] === "std"
-            ? /\b(?:fs|io|net|process)\s*::\s*(?:\*|\{[^}]*\*)/u
+            ? /\b(?:env|fs|io|net|process)\s*::\s*(?:\*|\{[^}]*\*)/u
             : /\b(?:unistd|fcntl|stat|sys)\s*::\s*(?:\*|\{[^}]*\*)/u;
         if (authorityModule.test(imported) || /^\s*\*\s*$/u.test(imported)) {
             return true;
@@ -723,6 +763,8 @@ function importsUnreviewedAuthorityGlob(source) {
 test("authority glob-import detector covers direct and nested syntax", () => {
     for (const source of [
         'use std::*;',
+        'use std::env::*;',
+        'use std::{env::{args_os, *}, fmt};',
         'use ::std::{fmt, *};',
         'use r#std::r#fs::*;',
         'use std::fs::{read, *};',

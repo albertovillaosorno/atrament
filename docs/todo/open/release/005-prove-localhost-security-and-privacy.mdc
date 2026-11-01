@@ -1024,3 +1024,14 @@ network, process, and environment imports each failed the updated inventory.
 All source bytes were restored afterward; the scanner passes 36 cases. This
 is still a conservative source gate, not a complete Rust parser or syscall
 sandbox, and it does not resolve the browser-opener argv credential leak.
+
+The host CLI argv can also contain explicitly selected private paths and
+untrusted user input. A red-first source test showed that a new
+`env::args_os()` call in `session-secret` escaped the prior environment-only
+inventory. Only `env::args_os().skip(1)` in runtime bootstrap is now admitted.
+
+Three inactive backend mutations introduced a direct argv read, a renamed
+argument iterator, and an `std::env::*` wildcard import. All three fail the
+source inventory and were restored byte-for-byte. This gates new declared
+argument readers but does not hide process arguments from the operating
+system or resolve the platform opener's known credential-bearing argv.
