@@ -9,8 +9,8 @@
 //
 // Boundary-Contract:
 // - Owns:
-//   - Source-level regression evidence for the production backend network
-//     and process-launch dependency surface.
+//   - Source-level regression evidence for backend network, process-launch,
+//     and filesystem-mutation authority.
 // - Must-Not:
 //   - Claim packet-level isolation, open sockets, or exercise external network
 //     access.
@@ -26,8 +26,8 @@
 // - Summary:
 //   - Prevents silent expansion of Atrament's backend network surface.
 // - Description:
-//   - Confines standard-library networking to the loopback runtime, process
-//     creation to browser launch, and registry dependency changes to review.
+//   - Confines network, process and direct filesystem mutation APIs to their
+//     admitted adapters and registry dependency changes to review.
 // - Usage:
 //   - Execute through the repository frontend test script.
 // - Defaults:
@@ -55,6 +55,13 @@ const LOOPBACK_RUNTIME = path.join(
 const BROWSER_LAUNCH = path.join(
     BACKEND_ROOT,
     "browser-launch",
+    "adapter-outbound",
+    "lib.rs",
+);
+
+const FILESYSTEM_COMMIT = path.join(
+    BACKEND_ROOT,
+    "profile-file-commit",
     "adapter-outbound",
     "lib.rs",
 );
@@ -92,6 +99,40 @@ function usesStandardLibraryProcessAuthority(source) {
         }
     }
     return false;
+}
+
+// Short-lived writes can vanish before a process descriptor snapshot. This
+// conservative source guard covers the ordinary direct Rust filesystem write
+// constructors and this workspace's Linux profile-commit mutation operations.
+// It does not claim to analyze arbitrary FFI or every indirect file effect.
+const MUTATING_FS_FUNCTIONS = new Set([
+    "copy", "create_dir", "create_dir_all", "hard_link", "remove_dir",
+    "remove_dir_all", "remove_file", "rename", "set_permissions", "symlink",
+    "write",
+]);
+
+function usesDirectFilesystemMutationAuthority(source) {
+    // Also recognize imports such as `use std::fs::write` rather than only
+    // call sites, so an alias cannot evade the source review boundary.
+    const paths = source.matchAll(/\bfs\s*::\s*([a-z_]+)\b/gu);
+    for (const match of paths) {
+        if (MUTATING_FS_FUNCTIONS.has(match[1])) {
+            return true;
+        }
+    }
+    const grouped = source.matchAll(/\bfs\s*::\s*\{([^}]*)\}/gu);
+    for (const match of grouped) {
+        if (match[1].split(",").some((field) =>
+            MUTATING_FS_FUNCTIONS.has(field.trim().split(/\s+/u)[0]))) {
+            return true;
+        }
+    }
+    const unixMutator =
+        /\b(?:linkat|unlinkat|renameat|renameat2|mkdirat|mknodat)\s*\(/u;
+    return /\bFile\s*::\s*(?:create|create_new|options)\s*\(/u.test(source)
+        || /\bOpenOptions\b/u.test(source)
+        || /\bO_(?:TMPFILE|CREAT|TRUNC)\b/u.test(source)
+        || unixMutator.test(source);
 }
 
 async function rustSources(directory) {
@@ -172,6 +213,50 @@ test("backend process authority stays in browser launch", async () => {
         }
     }
     assert.deepEqual(spawningFiles, [BROWSER_LAUNCH]);
+});
+
+test("direct filesystem mutation detector covers write authority", () => {
+    for (const source of [
+        'std::fs::write("state", b"private");',
+        'fs :: remove_file ("state");',
+        'std::fs::create_dir_all("state");',
+        'File::create("state");',
+        'File::create_new("state");',
+        'use std::fs::write as hidden_write;',
+        'use std::{fs::{read, write as hidden_write}};',
+        'use std::os::unix::fs::symlink;',
+        'File::options().write(true);',
+        'use std::fs::OpenOptions;',
+        'OFlag::O_TMPFILE | OFlag::O_RDWR',
+        'linkat(&file, "", &parent, "out", flags);',
+        'renameat2(&parent, "old", &parent, "new", flags);',
+        'unlinkat(Some(&parent), "old", flags);',
+    ]) {
+        assert.equal(usesDirectFilesystemMutationAuthority(source), true,
+            source);
+    }
+    for (const source of [
+        'use std::fs::{File, Metadata};',
+        'File::open("state");',
+        'fs::read("state");',
+        'std::fs::metadata("state");',
+        'OFlag::O_RDONLY | OFlag::O_CLOEXEC',
+    ]) {
+        assert.equal(usesDirectFilesystemMutationAuthority(source), false,
+            source);
+    }
+});
+
+test("direct filesystem mutation stays in explicit profile commit",
+    async () => {
+    const mutationFiles = [];
+    for (const sourcePath of await rustSources(BACKEND_ROOT)) {
+        const source = await readFile(sourcePath, "utf8");
+        if (usesDirectFilesystemMutationAuthority(source)) {
+            mutationFiles.push(sourcePath);
+        }
+    }
+    assert.deepEqual(mutationFiles, [FILESYSTEM_COMMIT]);
 });
 
 test("backend registry dependencies remain explicitly reviewed", () => {
