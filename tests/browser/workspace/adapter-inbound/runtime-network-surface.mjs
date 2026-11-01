@@ -645,7 +645,11 @@ function usesAmbientFilesystemReading(source) {
             String.raw`read_link)\s*\(`,
         "u",
     );
-    if (pathQuery.test(source)) {
+    // Stable std::path::absolute resolves relative paths from the process
+    // CWD without a direct env::current_dir call in the importing module.
+    const absolutePath =
+        /\bpath\s*::\s*(?:absolute\b|\{[^;]*\babsolute\b)/u;
+    if (pathQuery.test(source) || absolutePath.test(source)) {
         return true;
     }
     // A Path/PathBuf namespace alias can hide UFCS path probes from the
@@ -691,6 +695,11 @@ test("ambient filesystem read detector distinguishes read-only APIs", () => {
         'fs::read_to_string("private")',
         'std::fs::read_dir("private")',
         'std::fs::exists("private")',
+        'std::path::absolute("private")',
+        'path::absolute("private")',
+        'use std::path::absolute as resolve_host;',
+        'use ::std::{path::{absolute as resolve_host}};',
+        'use r#std::r#path::r#absolute as resolve_host;',
         'fs::exists("private")',
         'use std::fs::exists as probe;',
         'use ::std::{fs::{exists as probe}};',
@@ -736,6 +745,7 @@ test("ambient filesystem read detector distinguishes read-only APIs", () => {
         'File::create("output")',
         'use std::fs::{File, Metadata};',
         'Path::new("/private").file_name();',
+        'Path::new("/private").is_absolute();',
         'path.ancestors();',
         'file.read_exact(&mut bytes);',
         'metadata.len();',

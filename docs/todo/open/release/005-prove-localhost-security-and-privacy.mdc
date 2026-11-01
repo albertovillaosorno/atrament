@@ -1176,3 +1176,14 @@ byte-for-byte.
 These are static source inclusion checks, not a substitute for compiler
 expansion auditing, syscall confinement, or the unresolved browser-opener
 argv credential handoff.
+
+The stable `std::path::absolute` function can resolve a relative path using
+the host process CWD without an explicit `std::env::current_dir` call in the
+importing module. The previous path-read scanner admitted this indirect host
+path discovery. A red-first regression now requires direct, grouped, renamed,
+and raw-identifier imports of `path::absolute` to undergo privacy review.
+
+Four inactive source mutations of the unprivileged `session-secret` adapter
+were rejected by the updated inventory and restored byte-for-byte. Purely
+lexical `Path::is_absolute` remains outside that review. This static source
+check does not prove native call confinement or fix opener argv exposure.
