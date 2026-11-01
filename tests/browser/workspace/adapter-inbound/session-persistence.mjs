@@ -199,6 +199,26 @@ test("browser source and generated modules reject persistence APIs",
 });
 
 
+test("browser modules reject unreviewed cross-context authority", async () => {
+    // Workers and cross-tab channels can outlive a session page or perform
+    // network activity outside the four reviewed client fetch sites.
+    const forbidden = [
+        "Worker",
+        "SharedWorker",
+        "BroadcastChannel",
+        "MessageChannel",
+        "MessagePort",
+        "postMessage",
+        "window.open(",
+    ];
+    for (const { filename, source } of await browserModuleSources()) {
+        for (const capability of forbidden) {
+            assert.equal(source.includes(capability), false,
+                `${filename} uses unreviewed cross-context ${capability}`);
+        }
+    }
+});
+
 test("page exit invalidates credential, work, and session text", async () => {
     const source = await readFile(MAIN_MODULE, "utf8");
     const start = source.indexOf(

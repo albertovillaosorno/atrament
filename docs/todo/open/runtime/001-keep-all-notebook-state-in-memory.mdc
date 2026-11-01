@@ -124,6 +124,14 @@ retry without parsing an irrelevant response body or resubmitting a draft,
 matching the existing retry path for server errors. A red-first browser-module
 fixture distinguishes that transient timeout from an ordinary `403` refusal.
 
+A source-and-generated browser module guard now rejects unreviewed workers,
+cross-tab channels, message ports, `postMessage`, and scripted new windows.
+A short-lived `BroadcastChannel` in the authored client passed the old
+transport and persistence inventories but fails the new check; equivalent
+`SharedWorker` and `postMessage` injections were rejected and all source bytes
+were restored exactly. This is conservative source review, not a complete
+browser-engine or extension isolation guarantee.
+
 This evidence establishes raw-byte ownership after a separate ingestion
 boundary and several semantic review lifecycles; it does not implement
 media decoding, format validation, clipboard or file intake, or temporary
