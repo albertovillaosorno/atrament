@@ -1225,3 +1225,19 @@ such as `bytes`, `lines`, `split`, `take`, `chain`, and `by_ref`. Four inactive
 backend mutations were rejected, then restored byte-for-byte. Unrelated
 in-memory `str::bytes` remains permitted; this static policy is not a
 runtime descriptor-provenance proof.
+
+Rust file constructors are first-class function items: a backend module can
+capture `File::open` or `File::create`, then invoke the local binding without
+an immediate `open(` or `create(` token. The former read-side and write-side
+source detectors missed those forms, while a renamed `std::fs` module or
+`std::fs::File` type could also conceal a host file read. Red-first tests
+reproduced both gaps; pinned Rust 1.97.1 accepted the aliased constructor,
+`create_new`, `options`, and permission-setting method items.
+
+The source inventory now reviews these file operations even when referenced as
+function items and treats renamed standard filesystem modules and file types
+as requiring host-read review. Five inactive `session-secret` source probes
+were rejected and restored byte-for-byte, including two read constructors,
+two alias forms, and writable file or permission function items. This remains
+static source review, not a type-resolved filesystem sandbox, and does not
+address the known browser-opener credential exposure in process arguments.

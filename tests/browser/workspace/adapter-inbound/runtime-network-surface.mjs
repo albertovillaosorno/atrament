@@ -611,14 +611,17 @@ function usesDirectFilesystemMutationAuthority(source) {
     // without opening a new writable file. Keep these direct File methods in
     // the same explicit review boundary as File::create and fs::write.
     const fileMutator = new RegExp(
-        String.raw`(?:\.|\bFile\s*::)\s*(?:r#)?set_` +
-            String.raw`(?:len|modified|permissions|times)\s*\(`,
+        String.raw`(?:\.\s*(?:r#)?set_(?:len|modified|permissions|` +
+            String.raw`times)\s*\(|\bFile\s*::\s*(?:r#)?set_` +
+            String.raw`(?:len|modified|permissions|times)\b)`,
         "u",
     );
     const unixMutator =
         /\b(?:linkat|unlinkat|renameat|renameat2|mkdirat|mknodat)\s*\(/u;
+    // Associated constructors can be stored as function items and invoked
+    // later without a visible `File::create(...)` call.
     const fileConstructor =
-        /\bFile\s*::\s*(?:r#)?(?:create|create_new|options)\s*\(/u;
+        /\bFile\s*::\s*(?:r#)?(?:create|create_new|options)\b/u;
     return fileMutator.test(source)
         || fileConstructor.test(source)
         || /\bOpenOptions\b/u.test(source)
@@ -631,7 +634,9 @@ function usesDirectFilesystemMutationAuthority(source) {
 // direct and method-based path reads within the reviewed profile adapters.
 function usesAmbientFilesystemReading(source) {
     source = normalizeRustRawIdentifiers(source);
-    if (/\bFile\s*::\s*open\s*\(/u.test(source)) {
+    // `File::open` is also a first-class function item: it can be assigned
+    // to a local variable before invocation without an `open(` token.
+    if (/\bFile\s*::\s*open\b/u.test(source)) {
         return true;
     }
     // Path/DirEntry/File metadata methods do not need an `fs::` qualifier.
@@ -667,7 +672,13 @@ function usesAmbientFilesystemReading(source) {
         /\buse\s+(?:::\s*)?std\s*::\s*([^;]+);/gu,
     )) {
         const imported = match[1];
-        if (/\bpath\s+as\b/u.test(imported)
+        // Renaming fs or File hides read constructors and path readers
+        // behind names whose subsequent calls cannot be type-resolved here.
+        if (/\bfs\s+as\b/u.test(imported)
+            || /\bfs\s*::\s*File\s+as\b/u.test(imported)
+            || /\bfs\s*::\s*\{[^;]*\b(?:self|File)\s+as\b/u
+                .test(imported)
+            || /\bpath\s+as\b/u.test(imported)
             || /\bpath\s*::\s*Path(?:Buf)?\s+as\b/u.test(imported)
             || /\bpath\s*::\s*\{[^;]*\b(?:self|Path|PathBuf)\s+as\b/u
                 .test(imported)) {
@@ -739,6 +750,14 @@ test("ambient filesystem read detector distinguishes read-only APIs", () => {
         'use ::std::{fs::{canonicalize as probe}};',
         'use r#std::r#fs::r#symlink_metadata as probe;',
         'File::open("private")',
+        'let opener = File::open; opener("/private");',
+        'let opener = std::fs::File::open; opener("/private");',
+        'use std::fs::File as HostFile;',
+        'use ::std::{fs::{File as HostFile}};',
+        'use r#std::r#fs::r#File as HostFile;',
+        'use std::fs as host_fs;',
+        'use std::fs::{self as host_fs, File};',
+        'use ::std::{fs as host_fs};',
         'File :: r#open ("private")',
         'std::path::Path::new("/private").exists()',
         'path.try_exists()',
@@ -1446,6 +1465,10 @@ test("direct filesystem mutation detector covers write authority", () => {
         'fs :: remove_file ("state");',
         'std::fs::create_dir_all("state");',
         'File::create("state");',
+        'let creator = File::create; creator("private");',
+        'let creator = std::fs::File::create_new;',
+        'let options = File::options;',
+        'let changer = File::set_permissions;',
         'File::create_new("state");',
         'use std::fs::write as hidden_write;',
         'use std::{fs::{read, write as hidden_write}};',
