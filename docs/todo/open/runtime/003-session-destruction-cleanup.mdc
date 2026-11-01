@@ -206,6 +206,14 @@ remains unchanged. The harness verifies actual SIGKILL termination, not only
 an unsuccessful exit. This extends the precommit crash proof to synced bytes;
 it still does not cover a crash in the later link-before-rename window.
 
+A separate Linux process fixture now blocks only after an authorized
+replacement returns a fully synced file-commit result. The parent verifies
+SIGKILL termination, then reads the exact complete 131,073-byte replacement
+under owner-only `0600` permissions, with no random staging name left behind.
+Both an originally present target and an absent target are exercised. This
+proves survival after successful replacement, not durability at the earlier
+link-before-rename crash point where an orphaned stage may still survive.
+
 A red-first browser adapter regression found that an already-rejected
 handshake, draft GET, or draft POST response could retain an unread body while
 editing remained disabled or a retry was offered. The browser now explicitly

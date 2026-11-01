@@ -55,6 +55,10 @@ mod linux {
     static NEXT: AtomicU64 = AtomicU64::new(0);
 
     const CRASH_STAGE_TARGET: &str = "ATRAMENT_TEST_ANONYMOUS_STAGE_TARGET";
+    const POSTCOMMIT_REPLACE_TARGET: &str =
+        "ATRAMENT_TEST_POSTCOMMIT_REPLACE_TARGET";
+    const POSTCOMMIT_REPLACE_TEST: &str =
+        "linux::forced_death_after_synced_replace_preserves_complete_target";
     const CRASH_STAGE_REPLACE: &str = "ATRAMENT_TEST_ANONYMOUS_REPLACE";
     const CRASH_STAGE_AFTER_SYNC: &str = "ATRAMENT_TEST_AFTER_STAGE_SYNC";
     const CRASH_STAGE_TEST: &str =
@@ -736,6 +740,87 @@ mod linux {
                     "preserve mode cannot publish before the final link",
                 );
             }
+        }
+    }
+
+    #[test]
+    fn forced_death_after_synced_replace_preserves_complete_target() {
+        let replacement = vec![0xa7u8; 131_073];
+        if let Some(path) = env::var_os(POSTCOMMIT_REPLACE_TARGET) {
+            let target = PathBuf::from(path);
+            let evidence = commit_profile_file(
+                &target,
+                &replacement,
+                replacement.len(),
+                Mode::ReplaceExisting,
+            )
+            .expect("replacement must complete and sync before child blocks");
+            assert_eq!(evidence.byte_length, replacement.len());
+            fs::write(target.with_extension("ready"), b"committed")
+                .expect("notify parent only after successful commit");
+            let mut release = [0u8; 1];
+            let _ignored = io::stdin().read_exact(&mut release);
+            return;
+        }
+
+        // Both replacing an existing entry and creating an absent one require
+        // an anonymous stage, a brief private name, and a synced rename.
+        for existing in [false, true] {
+            let dir = OwnedDir::new();
+            let target = dir.target();
+            let marker = target.with_extension("ready");
+            if existing {
+                fs::write(&target, b"old artifact")
+                    .expect("seed authorized replacement target");
+            }
+            let mut child = Command::new(
+                env::current_exe().expect("running test executable"),
+            )
+            .arg("--exact")
+            .arg(POSTCOMMIT_REPLACE_TEST)
+            .env(POSTCOMMIT_REPLACE_TARGET, &target)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("spawn replacing process");
+            let mut committed = false;
+            for _ in 0..200u16 {
+                if marker.exists() {
+                    committed = true;
+                    break;
+                }
+                if child.try_wait().expect("check child status").is_some() {
+                    break;
+                }
+                thread::sleep(Duration::from_millis(50));
+            }
+            if child.try_wait().expect("check child before kill").is_none() {
+                child.kill().expect("kill process after completed commit");
+            }
+            let status = child.wait().expect("reap killed child");
+            assert!(committed, "child did not finish the file commit");
+            assert_eq!(status.signal(), Some(SIGKILL));
+            assert_eq!(fs::read(&marker).expect("commit marker"), b"committed");
+            fs::remove_file(&marker).expect("remove test-only marker");
+            assert_eq!(
+                dir.entries(),
+                vec![String::from("chosen.atrament")],
+                "crash after complete replacement cannot leave staging names",
+            );
+            assert_eq!(
+                fs::read(&target).expect("read committed replacement"),
+                replacement,
+                "replacement must survive the writing process's death",
+            );
+            assert_eq!(
+                fs::symlink_metadata(&target)
+                    .expect("committed regular target")
+                    .permissions()
+                    .mode()
+                    & 0o777,
+                0o600,
+            );
         }
     }
 
