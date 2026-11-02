@@ -1814,3 +1814,18 @@ new guard and restored byte-for-byte.
 This does not demonstrate runtime permission denial, cover dynamically
 assembled names, or fix the browser
 launcher's credential-bearing argv. P8 acceptance remains open.
+
+Browser motion and ambient-sensor authority was also absent from the host-input
+review. Nine read-only synthetic probes for motion/orientation events and
+ambient sensor constructors passed the prior guard. No browser sensor was
+opened during this source-policy review.
+
+The source inventory now requires explicit review for device motion and
+orientation event names and named motion and environmental sensors. Six
+inactive additions across authored and emitted main modules were rejected
+by the new guard and restored byte-for-byte. Sixteen syntactic variants
+across all ten browser modules check this lexical inventory.
+
+This does not prove runtime sensor permission denial, cover dynamically
+assembled names, or resolve the browser-launch argv credential exposure.
+P8 acceptance remains open.

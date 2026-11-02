@@ -627,10 +627,18 @@ function usesUnreviewedBrowserHostInput(source, main) {
             String.raw`MIDIOutput|MIDIMessageEvent|NDEFReader|NDEFMessage|` +
             String.raw`NDEFRecord|NDEFReadingEvent|ContactsManager|` +
             String.raw`queryLocalFonts|FontData|EyeDropper|` +
-            String.raw`getScreenDetails|IdleDetector)\b`, "u",
+            String.raw`getScreenDetails|IdleDetector|DeviceMotionEvent|` +
+            String.raw`DeviceOrientationEvent|Accelerometer|` +
+            String.raw`LinearAccelerationSensor|GravitySensor|Gyroscope|` +
+            String.raw`Magnetometer|AmbientLightSensor|ProximitySensor|` +
+            String.raw`AbsoluteOrientationSensor|RelativeOrientationSensor)\b`,
+        "u",
     );
+    const motionEvents =
+        /\b(?:on)?(?:devicemotion|deviceorientation(?:absolute)?)\b/u;
     if (ambientRead.test(source)
         || directCapture.test(source)
+        || motionEvents.test(source)
         || /\breadText\b/u.test(source)
         || /\bclipboard\s*(?:\?\.|\.)\s*read\b/u.test(source)
         || /\bclipboard\s*(?:\?\.)?\[\s*['"]read['"]\s*\]/u
@@ -783,6 +791,40 @@ test("browser contact and desktop host-data references need review",
             assert.equal(usesUnreviewedBrowserHostInput(
                 `${source}\n${candidate}`, main), true,
             `${filename}: ${candidate} escaped desktop host-data review`);
+        }
+    }
+});
+
+// Browser motion/orientation events and ambient sensor constructors can
+// reveal device movement or surroundings without any mediaDevices access.
+// Requiring source review does not assert that permissions are unavailable.
+test("browser ambient motion and sensor references need review", async () => {
+    const probes = [
+        'window.addEventListener("devicemotion", handler)',
+        'window.addEventListener("deviceorientation", handler)',
+        'window.addEventListener("deviceorientationabsolute", handler)',
+        "window.ondevicemotion = handler;",
+        'globalThis["ondeviceorientation"] = handler;',
+        "new DeviceMotionEvent('devicemotion');",
+        "void DeviceOrientationEvent;",
+        "new Accelerometer();",
+        "new LinearAccelerationSensor();",
+        "new GravitySensor();",
+        "new Gyroscope();",
+        "new Magnetometer();",
+        "new AmbientLightSensor();",
+        "new ProximitySensor();",
+        "new AbsoluteOrientationSensor();",
+        "new RelativeOrientationSensor();",
+    ];
+    for (const { filename, source } of await browserModuleSources()) {
+        const main = filename === "main.ts" || filename === "main.js";
+        assert.equal(usesUnreviewedBrowserHostInput(source, main), false,
+            `${filename} gained an unreviewed ambient sensor read`);
+        for (const candidate of probes) {
+            assert.equal(usesUnreviewedBrowserHostInput(
+                `${source}\n${candidate}`, main), true,
+            `${filename}: ${candidate} escaped ambient sensor review`);
         }
     }
 });
