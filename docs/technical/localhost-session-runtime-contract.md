@@ -66,9 +66,9 @@ Each process startup creates a new session secret from a cryptographically
 secure operating-system random source. The secret has at least 256 bits of
 unpredictable material before encoding and is never reused after shutdown.
 
-The secret exists only in process and browser memory. It is not written to a
-notebook, log, cache, crash-recovery file, shell history, exported document,
-render manifest, or URL query string.
+The required privacy boundary keeps the secret only in process and browser
+memory. It must not be written to a notebook, log, cache, crash-recovery file,
+shell history, exported document, render manifest, or URL query string.
 
 The launcher delivers the secret to the initial browser document without making
 it a normal HTTP request target. A URL fragment is an admitted first-release
@@ -83,6 +83,14 @@ observable through facilities such as `/proc` or process-listing tools. An
 admitted launcher
 must therefore use an operating-system handoff whose credential payload is not
 exposed through child argv, environment, a temporary file, or shell history.
+
+**Known implementation gap:** The current platform opener receives the
+credential-bearing URL in its argv. A disposable Firefox profile also retained
+the original fragment-bearing navigation in `places.sqlite-wal` after End,
+including a run with `Clear-Site-Data: "storage"`. Scrubbing the visible
+fragment and clearing web storage therefore do not satisfy the required
+argv secrecy or browser-history non-retention. Both failures remain open under
+ATR-P8-005; this contract does not assert that the implementation passes.
 
 ### Request authentication
 
