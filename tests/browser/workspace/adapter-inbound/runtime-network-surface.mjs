@@ -757,6 +757,20 @@ function usesAmbientFilesystemReading(source) {
             String.raw`stat|lstat|fstat|fstatat|readlink|readlinkat)\b`,
         "u",
     );
+    // Pinned nix `fs` also exposes path and descriptor volume statistics.
+    // Review the module itself: its function items and aliases can be called
+    // later without an adjacent statfs/statvfs invocation in this source.
+    if (/\bnix\s*::\s*sys\s*::\s*stat(?:fs|vfs)\b/u.test(source)) {
+        return true;
+    }
+    for (const match of source.matchAll(
+        /\buse\s+(?:::\s*)?nix\s*::\s*([^;]+);/gu,
+    )) {
+        if (/\bsys\b/u.test(match[1])
+            && /\bstat(?:fs|vfs)\b/u.test(match[1])) {
+            return true;
+        }
+    }
     if (pathQuery.test(source) || pathFunctionItem.test(source)
         || absolutePath.test(source) || nixPathQuery.test(source)) {
         return true;
@@ -818,6 +832,19 @@ test("ambient filesystem read detector distinguishes read-only APIs", () => {
         'use ::nix::{unistd::{getcwd as reveal_cwd}};',
         'use nix::unistd::access as query;',
         'use ::nix::{unistd::{faccessat as query}};',
+        // Pinned nix `fs` enables filesystem statistics independent of
+        // std::fs and the narrower nix::sys::stat path metadata readers.
+        'nix::sys::statfs::statfs("/private");',
+        'nix::sys::statvfs::statvfs("/private");',
+        'nix::sys::statfs::fstatfs(&borrowed_file);',
+        'nix::sys::statvfs::fstatvfs(&borrowed_file);',
+        'let query = nix::sys::statfs::statfs::<str>;',
+        'let query = nix::sys::statvfs::statvfs::<str>;',
+        'use nix::sys::statfs as filesystem_stats;',
+        'use nix::sys::{statvfs as volume_stats};',
+        'use ::nix::{sys::{statfs::{statfs as query}}};',
+        'use r#nix::r#sys::r#statvfs::r#statvfs as query;',
+        'nix/**/::sys::statfs::statfs("/private");',
         'nix::sys::stat::stat("/private");',
         'nix::sys::stat::lstat("/private");',
         'nix::sys::stat::fstatat(&dir, "private", flags);',

@@ -1410,3 +1410,19 @@ each mutation was restored byte-for-byte.
 No production code changed. This source review does not prove syscall
 isolation, clean up temporary files, or resolve the browser opener's
 exposed credential in child argv.
+
+The pinned `nix` 0.31.3 `fs` feature exposes `sys::statfs` and
+`sys::statvfs` to query mounted filesystem capacity, type and identity by
+path or inherited descriptor. These APIs were absent from the narrower
+`sys::stat`/`fcntl` ambient-host-read inventory. Rust 1.97.1 compiled all
+four function-item forms (`statfs`, `fstatfs`, `statvfs`, `fstatvfs`).
+
+The red-first read test exposed this gap; the strengthened inventory now
+reviews direct references and nested, renamed or raw-identifier module imports.
+Seven inactive `session-secret` probes failed the owner check, and every
+injected source was restored byte-for-byte. No production adapter gained
+ambient filesystem statistics authority.
+
+This remains a static source-review gate, not runtime syscall confinement.
+It does not resolve the known session credential exposure in browser-opener
+argv or certify all possible host filesystem information channels.
