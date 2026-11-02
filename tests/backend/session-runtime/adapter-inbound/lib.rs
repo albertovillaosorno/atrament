@@ -2083,15 +2083,21 @@ fn serves_embedded_frontend_resources_without_caching() {
 // runtime must deny these ambient capabilities even when the public page
 // loads without its HTML and before any client code executes.
 const EXPECTED_PERMISSIONS_POLICY_HEADER: &str = concat!(
-    "Permissions-Policy: accelerometer=(), autoplay=(), bluetooth=(), ",
-    "camera=(), deferred-fetch=(), deferred-fetch-minimal=(), ",
-    "display-capture=(), encrypted-media=(), fullscreen=(), gamepad=(), ",
-    "geolocation=(), gyroscope=(), hid=(), idle-detection=(), ",
-    "local-fonts=(), magnetometer=(), microphone=(), midi=(), ",
-    "payment=(), picture-in-picture=(), publickey-credentials-create=(), ",
-    "publickey-credentials-get=(), screen-wake-lock=(), serial=(), ",
-    "speaker-selection=(), storage-access=(), usb=(), web-share=(), ",
-    "window-management=(), xr-spatial-tracking=()\r\n",
+    "Permissions-Policy: accelerometer=(), ambient-light-sensor=(), ",
+    "attribution-reporting=(), autoplay=(), bluetooth=(), ",
+    "browsing-topics=(), camera=(), captured-surface-control=(), ",
+    "ch-ua-high-entropy-values=(), compute-pressure=(), ",
+    "deferred-fetch=(), deferred-fetch-minimal=(), display-capture=(), ",
+    "encrypted-media=(), fullscreen=(), gamepad=(), geolocation=(), ",
+    "gyroscope=(), hid=(), identity-credentials-get=(), ",
+    "idle-detection=(), local-fonts=(), magnetometer=(), microphone=(), ",
+    "midi=(), on-device-speech-recognition=(), otp-credentials=(), ",
+    "payment=(), picture-in-picture=(), ",
+    "private-state-token-issuance=(), private-state-token-redemption=(), ",
+    "publickey-credentials-create=(), publickey-credentials-get=(), ",
+    "screen-wake-lock=(), serial=(), speaker-selection=(), ",
+    "storage-access=(), usb=(), web-share=(), window-management=(), ",
+    "xr-spatial-tracking=()\r\n",
 );
 
 const EXPECTED_CSP_HEADER: &str = concat!(

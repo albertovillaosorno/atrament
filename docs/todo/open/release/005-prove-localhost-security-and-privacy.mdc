@@ -1969,3 +1969,18 @@ that same server's permissive control document but cannot embed the XFO-only
 document. This isolates browser enforcement of the legacy header without
 claiming that every engine supports it. The launcher argv credential exposure
 and P8 acceptance remain unresolved.
+
+The HTTP `Permissions-Policy` also now denies eleven unused host and
+browser-private features that were absent from its explicit deny list:
+ambient light, attribution reporting, browsing topics, captured-surface
+control, high-entropy user-agent data, compute pressure, federated identity,
+on-device speech recognition, one-time passwords, and private-state token
+issuance and redemption. A red-first Rust transport regression failed on the
+previous response policy; the exact header check now covers seven success,
+error, and empty status classes. A Firefox runtime fixture additionally
+inspects the actual HTTP response for each new declaration.
+
+These declarations are defense in depth where browsers implement them, not
+proof of runtime enforcement in all engines. In particular some APIs are
+experimental or deprecated, and this change does not address the known
+opener argv credential exposure or close P8 acceptance.

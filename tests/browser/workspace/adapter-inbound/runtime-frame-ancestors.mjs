@@ -5065,6 +5065,12 @@ test(
                 responsePermissions.split(", "),
             );
             for (const capability of [
+                "ambient-light-sensor", "attribution-reporting",
+                "browsing-topics", "captured-surface-control",
+                "ch-ua-high-entropy-values", "compute-pressure",
+                "identity-credentials-get", "on-device-speech-recognition",
+                "otp-credentials", "private-state-token-issuance",
+                "private-state-token-redemption",
                 "deferred-fetch", "deferred-fetch-minimal", "gamepad",
                 "idle-detection", "local-fonts", "picture-in-picture",
                 "publickey-credentials-create", "publickey-credentials-get",

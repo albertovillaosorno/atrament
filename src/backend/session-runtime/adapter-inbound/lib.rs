@@ -78,15 +78,21 @@ const RESPONSE_TRAILERS: &str = concat!(
     // Browser authority not needed for text editing or the explicit Copy
     // prompt action is denied at the HTTP boundary. Unsupported policy
     // features are ignored by older engines; this is defense in depth.
-    "Permissions-Policy: accelerometer=(), autoplay=(), bluetooth=(), ",
-    "camera=(), deferred-fetch=(), deferred-fetch-minimal=(), ",
-    "display-capture=(), encrypted-media=(), fullscreen=(), gamepad=(), ",
-    "geolocation=(), gyroscope=(), hid=(), idle-detection=(), ",
-    "local-fonts=(), magnetometer=(), microphone=(), midi=(), ",
-    "payment=(), picture-in-picture=(), publickey-credentials-create=(), ",
-    "publickey-credentials-get=(), screen-wake-lock=(), serial=(), ",
-    "speaker-selection=(), storage-access=(), usb=(), web-share=(), ",
-    "window-management=(), xr-spatial-tracking=()\r\n",
+    "Permissions-Policy: accelerometer=(), ambient-light-sensor=(), ",
+    "attribution-reporting=(), autoplay=(), bluetooth=(), ",
+    "browsing-topics=(), camera=(), captured-surface-control=(), ",
+    "ch-ua-high-entropy-values=(), compute-pressure=(), ",
+    "deferred-fetch=(), deferred-fetch-minimal=(), display-capture=(), ",
+    "encrypted-media=(), fullscreen=(), gamepad=(), geolocation=(), ",
+    "gyroscope=(), hid=(), identity-credentials-get=(), ",
+    "idle-detection=(), local-fonts=(), magnetometer=(), microphone=(), ",
+    "midi=(), on-device-speech-recognition=(), otp-credentials=(), ",
+    "payment=(), picture-in-picture=(), ",
+    "private-state-token-issuance=(), private-state-token-redemption=(), ",
+    "publickey-credentials-create=(), publickey-credentials-get=(), ",
+    "screen-wake-lock=(), serial=(), speaker-selection=(), ",
+    "storage-access=(), usb=(), web-share=(), window-management=(), ",
+    "xr-spatial-tracking=()\r\n",
     "Referrer-Policy: no-referrer\r\n",
     // Legacy framing refusal complements CSP frame-ancestors for engines
     // that do not enforce that HTTP CSP directive.
