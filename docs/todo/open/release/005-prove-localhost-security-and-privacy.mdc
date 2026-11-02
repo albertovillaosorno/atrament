@@ -2359,6 +2359,19 @@ privileged observers or other operating systems. The opener argv credential,
 Firefox browser-history retention, and remaining P1 cleanup obligations are
 unchanged, so P8 remains open.
 
+The Linux kernel-admission suite now also probes `PTRACE_ATTACH` and
+`PTRACE_SEIZE` explicitly. Ordinary dumpable same-parent children accept both
+variants and can be stopped, detached without memory inspection, and reaped.
+Otherwise identical children running the production `PR_SET_DUMPABLE(0)` guard
+return `EPERM` for both operations.
+
+The compiled Atrament CLI also refuses both debugger attachment paths after
+publishing `ready`. `nix`'s `ptrace` feature is confined to the Linux dev
+dependency alongside `uio`; production features remain unchanged. These
+tests neither inspect operator data nor establish resistance to privileged
+debuggers, and they do not resolve browser launch argv/history risks. P8
+remains open.
+
 A new real Firefox disposable-profile fixture now sends the same
 `Clear-Site-Data: "storage"` header as the production End response. Before
 End, it seeds one test-owned entry in each of localStorage, sessionStorage,

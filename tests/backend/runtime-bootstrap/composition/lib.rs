@@ -91,6 +91,7 @@ static TEST_FILE_ID: AtomicU64 = AtomicU64::new(0);
 #[test]
 fn linux_ready_cli_refuses_remote_memory_syscalls() {
     use nix::errno::Errno;
+    use nix::sys::ptrace;
     use nix::sys::uio::{RemoteIoVec, process_vm_readv, process_vm_writev};
     use nix::unistd::Pid;
     use std::os::unix::fs::PermissionsExt as _;
@@ -182,6 +183,16 @@ fn linux_ready_cli_refuses_remote_memory_syscalls() {
         Err(Errno::EPERM),
         "ready CLI must reject same-parent remote-memory write first",
     );
+    assert_eq!(
+        ptrace::attach(pid),
+        Err(Errno::EPERM),
+        "ready CLI must reject same-parent debugger attachment",
+    );
+    assert_eq!(
+        ptrace::seize(pid, ptrace::Options::empty()),
+        Err(Errno::EPERM),
+        "ready CLI must reject debugger seizure without a stop signal",
+    );
     drop(cli);
     reader.join().expect("complete bounded startup observer");
 }
@@ -271,6 +282,97 @@ fn linux_remote_memory_read_and_write_require_a_dumpable_target() {
     let (write_denied, _) = probe_marker(true, true);
     assert_eq!(write_denied, Err(Errno::EPERM),
         "hardened child must reject process_vm_writev from its own parent");
+}
+
+// PTRACE_ATTACH and PTRACE_SEIZE permit inspection without process_vm or
+// procfs. Verify both variants against dumpable and protected same-parent
+// children. No memory is read.
+#[cfg(target_os = "linux")]
+#[test]
+fn linux_ptrace_attach_and_seize_require_a_dumpable_target() {
+    use nix::errno::Errno;
+    use nix::sys::ptrace;
+    use nix::sys::signal::Signal;
+    use nix::sys::wait::{WaitStatus, waitpid};
+    use nix::unistd::Pid;
+
+    struct Probe(Child);
+    impl Drop for Probe {
+        fn drop(&mut self) {
+            drop(self.0.kill());
+            drop(self.0.wait());
+        }
+    }
+
+    for (mode, allowed, seize) in [
+        ("control", true, false),
+        ("protected", false, false),
+        ("control", true, true),
+        ("protected", false, true),
+    ] {
+        let mut child = Probe(
+            Command::new(env::current_exe().expect("test executable"))
+                .args([
+                    "--exact",
+                    "linux_remote_memory_probe_child",
+                    "--nocapture",
+                ])
+                .env("ATRAMENT_REMOTE_MEMORY_PROBE", mode)
+                .stdin(Stdio::piped())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::null())
+                .spawn()
+                .expect("spawn isolated ptrace admission probe"),
+        );
+        let output = child.0.stdout.take().expect("child stdout pipe");
+        let mut lines = BufReader::new(output).lines();
+        let ready = (&mut lines).take(8).any(|line| {
+            line.expect("test-owned child readiness is UTF-8")
+                .contains("ATRAMENT_PROBE_ADDR=")
+        });
+        assert!(ready, "child must apply dumpability policy before probing");
+        let pid = Pid::from_raw(
+            i32::try_from(child.0.id()).expect("Linux child PID fits i32"),
+        );
+        let attempt = if seize {
+            ptrace::seize(pid, ptrace::Options::empty())
+        } else {
+            ptrace::attach(pid)
+        };
+        if allowed {
+            attempt.expect("parent must be able to trace dumpable control");
+            if seize {
+                ptrace::interrupt(pid).expect("stop seized test control");
+                assert!(
+                    matches!(
+                        waitpid(pid, None).expect("observe seized ptrace stop"),
+                        WaitStatus::PtraceEvent(stopped, Signal::SIGTRAP, _)
+                            if stopped == pid
+                    ),
+                    "seized control must enter a ptrace event stop",
+                );
+            } else {
+                assert_eq!(
+                    waitpid(pid, None).expect("observe ptrace stop"),
+                    WaitStatus::Stopped(pid, Signal::SIGSTOP),
+                    "attached control must enter ptrace-stop",
+                );
+            }
+            ptrace::detach(pid, None)
+                .expect("detach control without inspection");
+        } else {
+            assert_eq!(
+                attempt,
+                Err(Errno::EPERM),
+                "production guard must refuse both ptrace attach variants",
+            );
+        }
+        drop(child.0.stdin.take());
+        assert!(
+            child.0.wait().expect("reap ptrace probe").success(),
+            "child must exit cleanly after refused or detached probe"
+        );
+    }
 }
 
 #[cfg(target_os = "linux")]

@@ -2659,10 +2659,10 @@ test("backend registry dependencies remain explicitly reviewed", () => {
             target: 'cfg(target_os = "linux")',
         },
         {
-            // process_vm_readv is used only in the isolated Linux test;
+            // process_vm and ptrace attach run in isolated Linux tests;
             // production retains the narrower `process` feature set.
             defaultFeatures: false,
-            features: ["fs", "process", "uio"],
+            features: ["fs", "process", "ptrace", "uio"],
             kind: "dev",
             name: "nix",
             optional: false,
