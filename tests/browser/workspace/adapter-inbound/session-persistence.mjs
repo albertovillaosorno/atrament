@@ -110,6 +110,8 @@ function usesUnreviewedMarkupRequests(source) {
     return [
         /<\s*(?:a|link|script|base|form|iframe|frame|portal|img)\b/iu,
         /<\s*(?:source|picture|video|audio|track|embed|object)\b/iu,
+        /<\s*input\b[^>]*\btype\s*=\s*(?:["']file["']|file\b)/iu,
+        /<\s*input\b[^>]*\b(?:webkitdirectory|directory|capture)\b/iu,
         /\b(?:href|src|srcset|srcdoc|action|formaction|poster)\s*=/iu,
         /\b(?:ping|background|manifest)\s*=/iu,
         /\b(?:style|on[a-z]+)\s*=/iu,
@@ -151,6 +153,10 @@ test("static asset inventory rejects unreviewed markup and CSS requests",
         '<div onclick="location.assign(42)"></div>',
         '<svg><image href="/extra.svg" /></svg>',
         '<source srcset="/extra.webp 1x">',
+        '<input type="file" id="unreviewed">',
+        "<input type='FILE' accept='image/png'>",
+        '<input type=file multiple>',
+        '<input webkitdirectory>',
     ]) {
         assert.equal(usesUnreviewedMarkupRequests(
             html.replace("</body>", `${candidate}</body>`)), true,
@@ -396,6 +402,61 @@ test("browser filesystem authority inventory rejects unreviewed access", () => {
     ]) {
         assert.equal(hasUnreviewedBrowserFileAuthority(candidate), true,
             candidate);
+    }
+});
+
+// Ordinary HTML file inputs, drag-and-drop FileList, and FileReader are
+// distinct paths from the File System Access pickers reviewed above.
+// Requiring review does not imply the user selected any local file.
+function hasUnreviewedBrowserFileIntake(source) {
+    return [
+        new RegExp(
+            String.raw`\b(?:FileReader|FileReaderSync|FileList|` +
+                String.raw`DataTransfer|DataTransferItem|Blob|` +
+                String.raw`getAsFile|webkitGetAsEntry|createObjectURL)\b`,
+            "u",
+        ),
+        /\.\s*files\b/u,
+        /\[\s*['"]files['"]\s*\]/u,
+    ].some((pattern) => pattern.test(source));
+}
+
+test("browser ordinary file input and drag-file reads require review",
+    async () => {
+    const html = await readFile(INDEX_HTML, "utf8");
+    assert.equal(usesUnreviewedMarkupRequests(html), false);
+    for (const candidate of [
+        '<input type="file">',
+        "<input type='FILE' accept='image/jpeg'>",
+        '<input type=file multiple>',
+        '<input webkitdirectory>',
+    ]) {
+        assert.equal(usesUnreviewedMarkupRequests(
+            html.replace("</body>", `${candidate}</body>`)), true,
+        candidate);
+    }
+    for (const { filename, source } of await browserModuleSources()) {
+        assert.equal(hasUnreviewedBrowserFileIntake(source), false,
+            `${filename} gained an unreviewed local-file read`);
+        for (const candidate of [
+            "void FileReader;",
+            "new FileReader();",
+            "new FileReaderSync();",
+            "void FileList;",
+            "void DataTransfer;",
+            "void DataTransferItem;",
+            "void Blob;",
+            "item.getAsFile();",
+            "item.webkitGetAsEntry();",
+            "URL.createObjectURL(blob);",
+            "input.files;",
+            'input["files"];',
+            "dragEvent.dataTransfer.files;",
+        ]) {
+            assert.equal(hasUnreviewedBrowserFileIntake(
+                `${source}\n${candidate}`), true,
+            `${filename}: ${candidate} escaped ordinary-file review`);
+        }
     }
 });
 

@@ -1635,3 +1635,19 @@ synthetic probes and six restored inactive TypeScript/JavaScript mutations
 exercise the guard. This is a static review of declared browser sources, not
 an OS clipboard/notification inspection, leak-free-browser proof, or fix for
 the known opener argv exposure.
+
+The File System Access picker inventory did not cover ordinary browser file
+inputs, FileReader, or drag-and-drop FileList intake. A red-first source probe
+added `<input type="file">` to the static HTML, `FileReader` in authored
+TypeScript, and a drag-event `.files` access in emitted JavaScript. Existing
+HTML-resource and browser file-authority checks accepted all three changes;
+they were restored byte-for-byte.
+
+The HTML resource guard now also requires review for file-type inputs and
+browser directory/capture input attributes. A separate source review covers
+FileReader, drag-and-drop file handles and lists, binary blobs, and object URL
+creation across all ten authored/emitted modules. Four static-markup and
+thirteen browser-code probes plus six individually restored source mutations
+verify rejection. This is a conservative lexical source review, not proof of
+browser file-picker permission, drag-and-drop dataflow, or complete local-file
+intake confinement. P8 acceptance remains open.
