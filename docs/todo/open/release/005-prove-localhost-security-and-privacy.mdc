@@ -2496,3 +2496,18 @@ all possible opener descendants: a helper can escape to a new group/session,
 or a shell can exit before the timeout while leaving background processes.
 It does not remove the launch URL from opener argv or Firefox history and
 therefore does not close P1/P8 credential-handling acceptance.
+
+A second red-first Linux launcher regression exercised an opener that starts a
+background helper and exits unsuccessfully without waiting. Although launch
+returned its typed `Unsuccessful` result, the helper kept running long enough
+to write a delayed marker after its failed parent had exited. The timeout
+cleanup alone did not cover this exit-status path.
+
+On Linux, an observed nonzero opener exit now sends `SIGKILL` to the opener
+process group before returning the typed failure; the already-reaped parent
+need not remain alive for a same-group helper to be terminated. The same
+project-local test fixture proves that both timeout and explicit nonzero exit
+leave no delayed same-group helper executing. This does not address helpers
+that deliberately detach or successful openers that retain child processes,
+nor does it remove fragment credentials from argv or Firefox history. P8
+remains open.

@@ -124,18 +124,19 @@ fn credential_echoing_stderr_opener_is_silenced_and_typed() {
     assert!(!error.to_string().contains(PRIVATE_LAUNCH_URL));
 }
 
-// A timed-out opener can spawn a child before it stops responding. The
-// child's delayed marker must never appear after the launch failure: killing
-// only the direct opener leaves an unowned helper running.
+// A failed opener must not leave a child capable of using its inherited
+// credential. This includes both timeout and a nonzero opener exit.
 #[cfg(target_os = "linux")]
-#[test]
 #[expect(
     clippy::expect_used,
     clippy::missing_trait_methods,
     clippy::create_dir,
     reason = "test-only helper directory and fail-fast cleanup",
 )]
-fn timed_out_linux_opener_does_not_leave_a_running_descendant() {
+fn assert_linux_failed_opener_reaps_descendant(
+    trailer: &str,
+    timeout: Duration,
+) -> browser_launch::LaunchError {
     use std::fs;
     use std::os::unix::fs::PermissionsExt as _;
     use std::path::PathBuf;
@@ -154,7 +155,7 @@ fn timed_out_linux_opener_does_not_leave_a_running_descendant() {
         .join("../../../.temp");
     fs::create_dir_all(&root).expect("project-local scratch exists");
     let scratch = Scratch(root.join(format!(
-        "opener-timeout-{}-{}",
+        "opener-descendant-{}-{}",
         process::id(),
         FIXTURE_ID.fetch_add(1, Ordering::Relaxed),
     )));
@@ -169,10 +170,11 @@ fn timed_out_linux_opener_does_not_leave_a_running_descendant() {
                 "#!/bin/sh\n",
                 "(sleep 0.4; printf continued > '{}') &\n",
                 "printf started > '{}'\n",
-                "wait\n",
+                "{}\n",
             ),
             marker.display(),
             started.display(),
+            trailer,
         ),
     )
     .expect("write test opener");
@@ -181,10 +183,9 @@ fn timed_out_linux_opener_does_not_leave_a_running_descendant() {
     let error = browser_launch::launch_with_timeout(
         opener.as_os_str(),
         PRIVATE_LAUNCH_URL,
-        Duration::from_millis(80),
+        timeout,
     )
-    .expect_err("hung helper must fail closed");
-    assert!(matches!(error, browser_launch::LaunchError::TimedOut));
+    .expect_err("test opener must fail");
     assert!(started.exists(), "opener must have spawned its child");
     assert!(!error.to_string().contains(PRIVATE_LAUNCH_URL));
     thread::sleep(Duration::from_millis(700));
@@ -192,6 +193,30 @@ fn timed_out_linux_opener_does_not_leave_a_running_descendant() {
         !marker.exists(),
         "a failed opener must not leave its child executing",
     );
+    error
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn timed_out_linux_opener_does_not_leave_a_running_descendant() {
+    let error = assert_linux_failed_opener_reaps_descendant(
+        "wait",
+        Duration::from_millis(80),
+    );
+    assert!(matches!(error, browser_launch::LaunchError::TimedOut));
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn unsuccessful_linux_opener_does_not_leave_a_running_descendant() {
+    let error = assert_linux_failed_opener_reaps_descendant(
+        "exit 7",
+        Duration::from_secs(1),
+    );
+    assert!(matches!(
+        error,
+        browser_launch::LaunchError::Unsuccessful(_)
+    ));
 }
 
 #[cfg(target_os = "linux")]

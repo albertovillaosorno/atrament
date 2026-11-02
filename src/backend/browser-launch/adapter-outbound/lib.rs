@@ -29,7 +29,7 @@
 // - Defaults:
 //   - Uses the platform opener and refuses Linux launch without a GUI session.
 //   - Bounds opener completion to five seconds before failing startup closed.
-//   - On Linux, kills the opener group on timeout or wait failure.
+//   - On Linux, kills the opener group on unsuccessful exit or failure.
 //   - Currently exposes the fragment in opener argv (known P1 defect).
 //
 
@@ -212,7 +212,7 @@ fn launch_status(status: ExitStatus) -> Result<(), LaunchError> {
     }
 }
 
-// Keep launcher helpers in a separate group so a timed-out opener cannot
+// Keep launcher helpers in a separate group so a failed opener cannot
 // strand its own descendants with authority it inherited at launch. A helper
 // that deliberately starts a new session is outside this process-group bound.
 #[cfg(target_os = "linux")]
@@ -255,7 +255,15 @@ pub(crate) fn launch_with_timeout(
     let started = Instant::now();
     loop {
         match child.try_wait() {
-            Ok(Some(status)) => return launch_status(status),
+            Ok(Some(status)) => {
+                // An opener can fail after starting a same-group helper. Do
+                // not leave that helper running with the inherited URL.
+                #[cfg(target_os = "linux")]
+                if !status.success() {
+                    terminate_opener_group(&child);
+                }
+                return launch_status(status);
+            },
             Ok(None) => {},
             Err(error) => {
                 terminate_after_launch_error(&mut child);
