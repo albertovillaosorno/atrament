@@ -2374,6 +2374,12 @@ assertion was not retained in the passing regression suite. Unlike the earlier
 End fixture without `Clear-Site-Data`, this observation includes the header,
 although the server remains test-owned rather than the compiled runtime.
 
+The same Firefox fixture now runs a separate disposable no-header control:
+with otherwise identical authenticated End behavior, all four seeded stores
+remain nonempty. The header-bearing case clears all four. This contrast
+attributes the observed origin-store cleanup to the HTTP storage directive,
+not merely page-side End logic or the act of closing the tab.
+
 This is direct evidence that this Firefox version's storage clear does not
 establish removal of the credential-bearing navigation from its profile. The
 opener argv channel is separately exposed; P8 remains open for a redesigned

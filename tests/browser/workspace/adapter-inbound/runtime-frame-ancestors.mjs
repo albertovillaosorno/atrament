@@ -8219,116 +8219,119 @@ test(
 );
 
 // End's production response asks the browser to clear this origin's storage.
-// Seed test-only storage first: an empty-store assertion alone cannot prove
-// that the response header was honored by the browser engine.
-test(
-    "Firefox End storage header clears seeded origin stores",
-    { skip: !FIREFOX_AVAILABLE, timeout: FIREFOX_CASE_TIMEOUT_MS },
-    async () => {
-        fs.mkdirSync(".temp", { recursive: true });
-        const profile = fs.mkdtempSync(".temp/session-clear-storage-");
-        const calls = [];
-        let markEnded;
-        const ended = new Promise((resolve) => { markEnded = resolve; });
-        const server = createSessionFixtureServer(
-            calls, null, null, null, null, null, null, null,
-            null, null, null,
-            (_request, response) => {
-                response.writeHead(204, {
-                    "Cache-Control": "no-store",
-                    "Clear-Site-Data": '"storage"',
-                });
-                response.end();
-                markEnded();
-                return true;
-            },
-        );
-        const children = [];
-        let bidi;
-        try {
-            server.listen(0, "127.0.0.1");
-            await once(server, "listening");
-            const address = server.address();
-            assert.notEqual(address, null);
-            assert.notEqual(typeof address, "string");
-            bidi = await startBidiFirefox(profile, children);
-            const tab = await bidi.command("browsingContext.create", {
-                type: "tab",
-            });
-            await bidi.command("browsingContext.navigate", {
-                context: tab.context,
-                url: `http://127.0.0.1:${address.port}/` +
-                    `#session=${REFRESH_SECRET}`,
-                wait: "complete",
-            });
-            await waitForSessionStatus(bidi, tab.context, "Session ready");
-            const seeded = await bidi.command("script.evaluate", {
-                awaitPromise: true,
-                expression: `(async () => {
-                    localStorage.setItem("atrament-test", "probe");
-                    sessionStorage.setItem("atrament-test", "probe");
-                    const cache = await caches.open("atrament-test");
-                    await cache.put("/test", new Response("probe"));
-                    await new Promise((resolve, reject) => {
-                        const request = indexedDB.open("atrament-test", 1);
-                        request.onerror = () => reject(request.error);
-                        request.onsuccess = () => {
-                            request.result.close();
-                            resolve();
-                        };
-                    });
+// Seed test-only storage first, and contrast the identical End response
+// without the header: an empty-store assertion alone cannot prove the cause.
+for (const clearStorage of [false, true]) {
+    test(
+        clearStorage
+            ? "Firefox End storage header clears seeded origin stores"
+            : "Firefox End without storage header preserves seeded stores",
+        { skip: !FIREFOX_AVAILABLE, timeout: FIREFOX_CASE_TIMEOUT_MS },
+        async () => {
+            fs.mkdirSync(".temp", { recursive: true });
+            const profile = fs.mkdtempSync(".temp/session-clear-storage-");
+            const calls = [];
+            let markEnded;
+            const ended = new Promise((resolve) => { markEnded = resolve; });
+            const server = createSessionFixtureServer(
+                calls, null, null, null, null, null, null, null,
+                null, null, null,
+                (_request, response) => {
+                    const headers = { "Cache-Control": "no-store" };
+                    if (clearStorage) headers["Clear-Site-Data"] = '"storage"';
+                    response.writeHead(204, headers);
+                    response.end();
+                    markEnded();
                     return true;
-                })()`,
-                resultOwnership: "none",
-                target: { context: tab.context },
-            });
-            assert.equal(seeded.type, "success");
-            assert.deepEqual(seeded.result,
-                { type: "boolean", value: true });
-            assert.deepEqual(
-                await browserStorageInventory(bidi, tab.context), {
-                    localStorage: 1,
-                    sessionStorage: 1,
-                    cookie: "",
-                    indexedDB: 1,
-                    cacheStorage: 1,
                 },
-                "fresh test profile must contain all seeded origin stores",
             );
-            const confirmation = await bidi.command("script.evaluate", {
-                awaitPromise: false,
-                expression: `(() => {
-                    const end = document.getElementById("end-session");
-                    end.click();
-                    end.click();
-                })()`,
-                resultOwnership: "none",
-                target: { context: tab.context },
-            });
-            assert.equal(confirmation.type, "success");
-            await observedWithin(ended, "storage-clear session End");
-            await waitForSessionStatus(bidi, tab.context, "Session ended");
-            const stores = await browserStorageInventory(bidi, tab.context);
-            assert.equal(stores.localStorage, 0,
-                "End storage header must clear the local store");
-            assert.equal(stores.sessionStorage, 0,
-                "End storage header must clear the tab store");
-            assert.equal(stores.indexedDB, 0,
-                "End storage header must clear IndexedDB databases");
-            assert.equal(stores.cacheStorage, 0,
-                "End storage header must clear CacheStorage buckets");
-            assert.ok(calls.includes("POST /api/session/end"));
-            await bidi.command("browsingContext.close", {
-                context: tab.context,
-            });
-        } finally {
-            bidi?.close();
-            await closeFixtureServer(server);
-            for (const child of children.reverse()) await stopChild(child);
-            fs.rmSync(profile, { recursive: true, force: true });
+            const children = [];
+            let bidi;
+            try {
+                server.listen(0, "127.0.0.1");
+                await once(server, "listening");
+                const address = server.address();
+                assert.notEqual(address, null);
+                assert.notEqual(typeof address, "string");
+                bidi = await startBidiFirefox(profile, children);
+                const tab = await bidi.command("browsingContext.create", {
+                    type: "tab",
+                });
+                await bidi.command("browsingContext.navigate", {
+                    context: tab.context,
+                    url: `http://127.0.0.1:${address.port}/` +
+                        `#session=${REFRESH_SECRET}`,
+                    wait: "complete",
+                });
+                await waitForSessionStatus(bidi, tab.context, "Session ready");
+                const seeded = await bidi.command("script.evaluate", {
+                    awaitPromise: true,
+                    expression: `(async () => {
+                        localStorage.setItem("atrament-test", "probe");
+                        sessionStorage.setItem("atrament-test", "probe");
+                        const cache = await caches.open("atrament-test");
+                        await cache.put("/test", new Response("probe"));
+                        await new Promise((resolve, reject) => {
+                            const request = indexedDB.open("atrament-test", 1);
+                            request.onerror = () => reject(request.error);
+                            request.onsuccess = () => {
+                                request.result.close();
+                                resolve();
+                            };
+                        });
+                        return true;
+                    })()`,
+                    resultOwnership: "none",
+                    target: { context: tab.context },
+                });
+                assert.equal(seeded.type, "success");
+                assert.deepEqual(seeded.result,
+                    { type: "boolean", value: true });
+                assert.deepEqual(
+                    await browserStorageInventory(bidi, tab.context), {
+                        localStorage: 1,
+                        sessionStorage: 1,
+                        cookie: "",
+                        indexedDB: 1,
+                        cacheStorage: 1,
+                    },
+                    "fresh test profile must contain all seeded origin stores",
+                );
+                const confirmation = await bidi.command("script.evaluate", {
+                    awaitPromise: false,
+                    expression: `(() => {
+                        const end = document.getElementById("end-session");
+                        end.click();
+                        end.click();
+                    })()`,
+                    resultOwnership: "none",
+                    target: { context: tab.context },
+                });
+                assert.equal(confirmation.type, "success");
+                await observedWithin(ended, "storage policy session End");
+                await waitForSessionStatus(bidi, tab.context, "Session ended");
+                const stores = await browserStorageInventory(bidi, tab.context);
+                const count = clearStorage ? 0 : 1;
+                assert.deepEqual(stores, {
+                    localStorage: count,
+                    sessionStorage: count,
+                    cookie: "",
+                    indexedDB: count,
+                    cacheStorage: count,
+                }, "End storage behavior must depend on response header");
+                assert.ok(calls.includes("POST /api/session/end"));
+                await bidi.command("browsingContext.close", {
+                    context: tab.context,
+                });
+            } finally {
+                bidi?.close();
+                await closeFixtureServer(server);
+                for (const child of children.reverse()) await stopChild(child);
+                fs.rmSync(profile, { recursive: true, force: true });
         }
     },
 );
+}
 
 test(
     "Firefox End does not leave literal private drafts in its disk profile",
