@@ -558,7 +558,7 @@ function usesUnreviewedBrowserHostInput(source, main) {
     const hostProperty = String.raw`(?:geolocation|mediaDevices|credentials|` +
         String.raw`hardwareConcurrency|deviceMemory|userAgent(?:Data)?|` +
         String.raw`connection|getBattery|getGamepads|bluetooth|usb|` +
-        String.raw`serial|hid|gpu|permissions)`;
+        String.raw`serial|hid|gpu|permissions|requestMIDIAccess)`;
     const ambientRead = new RegExp(
         String.raw`\bnavigator\s*(?:(?:\?\.|\.)\s*|(?:\?\.)?\[\s*['"])` +
             hostProperty + String.raw`\b`,
@@ -570,7 +570,10 @@ function usesUnreviewedBrowserHostInput(source, main) {
         String.raw`\b(?:SpeechRecognition|webkitSpeechRecognition|` +
             String.raw`SpeechGrammarList|webkitSpeechGrammarList|` +
             String.raw`getUserMedia|webkitGetUserMedia|` +
-            String.raw`mozGetUserMedia|msGetUserMedia)\b`, "u",
+            String.raw`mozGetUserMedia|msGetUserMedia|` +
+            String.raw`requestMIDIAccess|MIDIAccess|MIDIPort|MIDIInput|` +
+            String.raw`MIDIOutput|MIDIMessageEvent|NDEFReader|NDEFMessage|` +
+            String.raw`NDEFRecord|NDEFReadingEvent)\b`, "u",
     );
     if (ambientRead.test(source)
         || directCapture.test(source)
@@ -676,6 +679,20 @@ test("browser host-input inventory refuses unreviewed reads", () => {
         "navigator.mozGetUserMedia({ audio: true }, yes, no)",
         "navigator.msGetUserMedia({ audio: true }, yes, no)",
         'const capture = navigator["getUserMedia"];',
+        "navigator.requestMIDIAccess({ sysex: true })",
+        'const midi = navigator["requestMIDIAccess"];',
+        "const request = navigator?.requestMIDIAccess;",
+        "void requestMIDIAccess;",
+        "void MIDIAccess;",
+        "void MIDIInput;",
+        "void MIDIOutput;",
+        "void MIDIPort;",
+        "void MIDIMessageEvent;",
+        "new NDEFReader();",
+        'const reader = globalThis["NDEFReader"];',
+        "void NDEFMessage;",
+        "void NDEFRecord;",
+        "void NDEFReadingEvent;",
     ]) {
         assert.equal(usesUnreviewedBrowserHostInput(
             allowedWrite + candidate, true), true, candidate);

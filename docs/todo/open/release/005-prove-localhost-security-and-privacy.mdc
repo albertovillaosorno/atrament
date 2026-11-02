@@ -1757,3 +1757,15 @@ Comment-only mentions are inert. This is lexical drift detection, not proof
 against computed property names or complete browser navigation confinement.
 The platform opener's known credential-bearing argv and wider P8 acceptance
 remain open.
+
+Browser host-input policy also omitted Web MIDI and Web NFC device access.
+Inactive `navigator.requestMIDIAccess` and `NDEFReader` references passed all
+50 prior focused browser source tests in authored and emitted main modules.
+Both source files were restored byte-for-byte after the red-first run.
+
+The host-input inventory now requires review for MIDI permission entrypoints,
+device/port/message objects, and NFC reader, record, and reading-event names.
+Fourteen syntactic probes and independently restored authored/emitted source
+mutations exercise this rule. This is lexical policy, not a runtime device
+permission test, proof against computed names, or resolution of the browser
+launcher argv credential leak. P8 acceptance remains open.
