@@ -123,7 +123,7 @@ const COMPATIBLE_HANDSHAKE = JSON.stringify({
 // or reflect their contents through a test failure's diagnostics.
 const MAX_READINESS_OUTPUT_BYTES = 65_536;
 
-function waitForLine(stream, select, timeoutMs = 15_000) {
+function waitForLine(stream, select, timeoutMs = 15_000, child = null) {
     return new Promise((resolve, reject) => {
         let buffered = "";
         let observedBytes = 0;
@@ -134,6 +134,7 @@ function waitForLine(stream, select, timeoutMs = 15_000) {
             stream.off("error", onError);
             stream.off("end", onEnd);
             stream.off("close", onEnd);
+            child?.off("error", onChildError);
             if (error === null) {
                 resolve(value);
             } else {
@@ -144,6 +145,11 @@ function waitForLine(stream, select, timeoutMs = 15_000) {
         // messages fixed instead of propagating untrusted exception text.
         const onError = () => finish(new Error(
             "process readiness stream failed",
+        ));
+        // A child may fail before its stdout/stderr stream closes. Observe
+        // the process event without propagating its private spawn metadata.
+        const onChildError = () => finish(new Error(
+            "readiness child process failed",
         ));
         const onEnd = () => finish(new Error(
             "process output ended before readiness",
@@ -189,6 +195,7 @@ function waitForLine(stream, select, timeoutMs = 15_000) {
         stream.once("error", onError);
         stream.once("end", onEnd);
         stream.once("close", onEnd);
+        child?.once("error", onChildError);
     });
 }
 
@@ -533,6 +540,45 @@ test("readiness stream errors never disclose private error text", async () => {
     assert.equal(stream.listenerCount("error"), 0);
     stream.destroy();
 });
+
+test("readiness child errors cannot crash or expose test process text",
+    async () => {
+        const marker = "private-firefox-spawn-error-marker-3479";
+        const child = new EventEmitter();
+        const stream = new PassThrough();
+        const pending = waitForLine(stream, () => null, 100, child);
+        let escaped = false;
+        try {
+            child.emit("error", new Error(`spawn failed: ${marker}`));
+        } catch {
+            escaped = true;
+            stream.end();
+        }
+        await assert.rejects(pending, (error) => {
+            assert.equal(error.message.includes(marker), false);
+            assert.equal("cause" in error, false);
+            assert.equal(error.message, "readiness child process failed");
+            return true;
+        });
+        assert.equal(escaped, false, "child failure needs an observer");
+        assert.equal(child.listenerCount("error"), 0);
+        assert.equal(stream.listenerCount("data"), 0);
+        assert.equal(stream.listenerCount("error"), 0);
+        stream.destroy();
+    });
+
+test("successful readiness releases the child process error observer",
+    async () => {
+        const child = new EventEmitter();
+        const stream = new PassThrough();
+        const pending = waitForLine(stream, (line) =>
+            line === "ready: valid" ? "valid" : null, 100, child);
+        stream.write("ready: valid\n");
+        assert.equal(await pending, "valid");
+        assert.equal(child.listenerCount("error"), 0);
+        assert.equal(stream.listenerCount("data"), 0);
+        stream.destroy();
+    });
 
 test("readiness failures never reflect untrusted process output", async () => {
     const marker = "private-process-output-marker";
@@ -2647,7 +2693,7 @@ async function startBidiFirefox(profile, children) {
         return line.startsWith(prefix)
             ? line.slice(prefix.length)
             : null;
-    }, FIREFOX_BIDI_READY_TIMEOUT_MS);
+    }, FIREFOX_BIDI_READY_TIMEOUT_MS, firefox);
     const bidi = new BidiClient(`${remote}/session`);
     try {
         await initializeBidiSession(bidi);
@@ -5362,7 +5408,7 @@ test(
                 } catch {
                     return null;
                 }
-            });
+            }, 15_000, runtime);
             assert.deepEqual(
                 startupRecords.map((record) => record.state),
                 ["starting", "listening", "ready"],

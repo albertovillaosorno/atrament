@@ -2596,3 +2596,18 @@ exit code or signal metadata cannot appear in the startup failure message.
 This narrows test-log exposure during failed launches, not the production
 browser-opener argv or Firefox navigation-history credential-retention risks.
 P8 remains open.
+
+The Firefox integration fixture's readiness helper also had no parent
+`ChildProcess` error observer while reading startup streams. A failed Firefox
+or runtime spawn could emit an unhandled event rather than settle the
+bounded readiness promise. A red-first test-owned child event reproduced the
+escape. The helper now observes the owning process during readiness, emits
+only a fixed diagnostic, and releases the listener on failure or success.
+
+Both actual process-readiness call sites use this observer; a second synthetic
+success case checks that the observer is removed after accepting readiness.
+
+The integration still awaits stream closure rather than treating an early
+process `exit` event as failure: Node can deliver buffered final output after
+`exit`. This change protects test harness failures, not production argv or
+Firefox history retention. P8 remains open.
