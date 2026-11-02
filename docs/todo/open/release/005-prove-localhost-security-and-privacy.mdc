@@ -1426,3 +1426,19 @@ ambient filesystem statistics authority.
 This remains a static source-review gate, not runtime syscall confinement.
 It does not resolve the known session credential exposure in browser-opener
 argv or certify all possible host filesystem information channels.
+
+The pinned `nix` `sys::sysinfo` module is enabled on Linux without the
+optional `signal` or `process` features. It returns machine load averages,
+uptime, process count and RAM/swap totals without reading environment,
+filesystem paths or standard input. The prior ambient-input inventory
+missed this host-status source; Rust 1.97.1 compiled its function item.
+
+A red-first regression now requires review of direct calls, captured items,
+grouped module aliases, raw identifiers and comment-separated imports.
+Five disabled `session-secret` probes failed the updated input-owner check;
+all temporary source bytes were restored exactly. No backend module owns
+ambient host machine-status reads, and no production code changed.
+
+This is an inventory for explicit privacy review, not runtime prevention
+of hardware fingerprinting, native syscalls, or the existing browser-opener
+argv credential disclosure.

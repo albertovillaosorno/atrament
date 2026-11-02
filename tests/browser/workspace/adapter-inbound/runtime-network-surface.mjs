@@ -422,6 +422,19 @@ function usesProcessWideEnvironmentMutation(source) {
 // Confine reads to the two GUI markers and explicit CLI argument inspection.
 function unreviewedAmbientProcessInputReads(source, sourcePath) {
     source = normalizeRustRawIdentifiers(source);
+    // Pinned nix exposes Linux machine load, memory, uptime and process count
+    // even with only `fs` enabled. Such ambient host-status reads have no
+    // admitted owner; review direct, captured and renamed module access.
+    if (/\bnix\s*::\s*sys\s*::\s*sysinfo\b/u.test(source)) {
+        return true;
+    }
+    for (const match of source.matchAll(
+        /\buse\s+(?:::\s*)?nix\s*::\s*([^;]+);/gu,
+    )) {
+        if (/\bsysinfo\b/u.test(match[1])) {
+            return true;
+        }
+    }
     const readers = String.raw`(?:var|var_os|vars|vars_os|current_dir|` +
         String.raw`current_exe|home_dir|temp_dir)`;
     // `var::<&str>`, `current_dir`, and the argument iterator functions can
@@ -479,6 +492,13 @@ test("ambient process input guard rejects unreviewed reads", () => {
         false);
     for (const [source, file] of [
         ['std::env::var("PRIVATE_KEY")', privateModule],
+        ['nix::sys::sysinfo::sysinfo()', privateModule],
+        ['let read = nix::sys::sysinfo::sysinfo;', privateModule],
+        ['use nix::sys::sysinfo as host_info;', privateModule],
+        ['use nix::sys::sysinfo::sysinfo as host_probe;', privateModule],
+        ['use ::nix::{sys::{sysinfo as host_info}};', privateModule],
+        ['use r#nix::r#sys::r#sysinfo as host_info;', privateModule],
+        ['nix/**/::sys::sysinfo::sysinfo()', privateModule],
         ['std::env::current_dir()', privateModule],
         ['let get = std::env::current_dir;', privateModule],
         ['let get = std::env::var::<&str>;', privateModule],
@@ -540,7 +560,7 @@ test("backend ambient input reads stay in reviewed adapters", async () => {
         }
     }
     assert.deepEqual(unreviewed, [],
-        "new environment, argv, or host-path reads need privacy review");
+        "environment, argv, host-path or host-status reads need privacy review");
 });
 
 // Locked nix::fcntl can open read-only files, but also supports O_RDWR,
