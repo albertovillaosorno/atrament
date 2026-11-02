@@ -212,6 +212,35 @@ test("static workspace starts session controls disabled", async () => {
     }
 });
 
+// Count all literal fetch references, not just direct fetch(...) calls.
+// Captured or bracket-indexed fetch values can be invoked later under an
+// unrelated identifier. Full-line comments are not executable authority.
+function hasUnreviewedFetchReference(source, main) {
+    const executable = source.replace(/^\s*\/\/[^\n]*$/gmu, "");
+    const references = executable.match(/\bfetch\b/gu) ?? [];
+    return references.length !== (main ? 4 : 0);
+}
+
+test("browser transport review rejects first-class fetch references", () => {
+    const reviewed = "fetch(0); fetch(1); fetch(2); fetch(3);";
+    assert.equal(hasUnreviewedFetchReference(reviewed, true), false);
+    assert.equal(hasUnreviewedFetchReference("// fetch only", false), false);
+    for (const candidate of [
+        "const send = fetch;",
+        "const send = window.fetch;",
+        'const send = globalThis["fetch"];',
+        'const send = window?.["fetch"];',
+        "const { fetch: send } = globalThis;",
+        "fetch.call(window, target);",
+        "fetch /* review */ (target);",
+    ]) {
+        assert.equal(hasUnreviewedFetchReference(
+            `${reviewed}\n${candidate}`, true), true, candidate);
+        assert.equal(hasUnreviewedFetchReference(candidate, false),
+            true, candidate);
+    }
+});
+
 test("browser source and generated modules reject undeclared transport",
     async () => {
     for (const { filename, source } of await browserModuleSources()) {
@@ -219,6 +248,8 @@ test("browser source and generated modules reject undeclared transport",
         const fetchCalls = source.match(/\bfetch\s*\(/gu) ?? [];
         assert.equal(fetchCalls.length, main ? 4 : 0,
             `${filename} must retain only four reviewed fetch sites`);
+        assert.equal(hasUnreviewedFetchReference(source, main), false,
+            `${filename} gained an unreviewed fetch reference`);
         if (main) {
             for (const required of [
                 'cache: "no-store"',

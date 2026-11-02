@@ -1566,3 +1566,15 @@ import, image-set) individually failed the
 new guard and were restored exactly. This is conservative text-level source
 review, not a DOM/CSS parser, runtime network trace, or substitute for CSP.
 The opener-argv credential exposure and wider P8 acceptance remain open.
+
+The four-direct-`fetch(...)` inventory overlooked first-class fetch function
+references. An inactive `globalThis["fetch"]` in authored TypeScript and a
+captured bare `fetch` in emitted JavaScript each passed all 41 prior
+session-persistence tests, before both modules were byte-restored.
+
+The browser transport review now counts every literal `fetch` identifier
+outside standalone comments, in both authored and emitted modules, while
+retaining exactly four direct calls in each main module. Seven synthetic
+references, including property access, destructuring, call, and comment-
+separated invocation, fail the new regression. The review does not resolve
+computed names assembled at runtime or guarantee packet-level confinement.
