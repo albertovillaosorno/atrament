@@ -316,8 +316,12 @@ function usesUnreviewedBrowserNavigation(source, main) {
     const locationMethod = String.raw`(?:assign|replace|reload)`;
     const locationWritable = String.raw`(?:href|search|hash|pathname|` +
         String.raw`host|hostname|protocol)`;
+    const locationAccess = String.raw`\b(?:` +
+        String.raw`(?:(?:window|document|globalThis)\s*\.\s*)?location|` +
+        String.raw`(?:window|document|globalThis)\s*(?:\?\.)?` +
+        String.raw`\[\s*['"]location['"]\s*\])\s*`;
     const locationNavigation = new RegExp(
-        String.raw`\b(?:window\s*\.\s*|document\s*\.\s*)?location\s*` +
+        locationAccess +
             String.raw`(?:=(?!=)|\.\s*` + locationMethod +
             String.raw`\s*\(|\.\s*` + locationWritable +
             String.raw`\s*=(?!=)|\[\s*['"](?:href|search|hash|pathname|` +
@@ -327,8 +331,12 @@ function usesUnreviewedBrowserNavigation(source, main) {
     );
     const historyMethod = String.raw`(?:pushState|replaceState|go|` +
         String.raw`back|forward)`;
+    const historyAccess = String.raw`\b(?:` +
+        String.raw`(?:(?:window|globalThis)\s*\.\s*)?history|` +
+        String.raw`(?:window|globalThis)\s*(?:\?\.)?` +
+        String.raw`\[\s*['"]history['"]\s*\])\s*`;
     const historyNavigation = new RegExp(
-        String.raw`\b(?:window\s*\.\s*)?history\s*` +
+        historyAccess +
             String.raw`(?:\.\s*` + historyMethod + String.raw`\s*\(|` +
             String.raw`\[\s*['"]` + historyMethod +
             String.raw`['"]\s*\]\s*\()`,
@@ -368,6 +376,10 @@ test("browser navigation inventory distinguishes reviewed local calls", () => {
         "window.location.assign(destination)",
         "location.assign(destination)",
         "document.location.replace(destination)",
+        "window['location'].assign(destination)",
+        "document['location']['href'] = destination",
+        "globalThis.location.assign(destination)",
+        "globalThis['location'].replace(destination)",
         "window.location.replace(destination)",
         "window.location.reload()",
         "window.location.href = destination",
@@ -379,6 +391,8 @@ test("browser navigation inventory distinguishes reviewed local calls", () => {
         "window.history.replaceState(null, '', destination)",
         "history.go(-1)",
         "history['back']()",
+        "window['history'].go(-1)",
+        "globalThis.history.pushState(null, '', destination)",
         "form.submit()",
         "form.requestSubmit()",
         "form['submit']()",

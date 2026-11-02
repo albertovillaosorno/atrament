@@ -1539,3 +1539,9 @@ then each mutated file was restored byte-for-byte. The source inventory is
 not a DOM flow analysis or browser network sandbox; dynamically aliased and
 other unmodeled request paths remain outside the proof. The known browser
 opener argv credential exposure is unchanged, and P8 remains open.
+
+A follow-up red-first mutation proved the navigation inventory initially
+missed `window['location'].assign(...)`. The review now includes literal
+bracket access and `globalThis` for location and history navigation; direct,
+computed-literal and globalThis probes pass the stricter regression. Arbitrary
+computed property names and indirect aliases remain outside the static proof.
