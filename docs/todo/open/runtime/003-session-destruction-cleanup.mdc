@@ -433,6 +433,12 @@ child invokes the production `PR_SET_DUMPABLE(0)` guard. Both children
 terminate through the test-owned stdin pipe without private draft data,
 crashes, core files, or persistent probe artifacts.
 
+The same Linux fixture also tests `process_vm_writev`: a dumpable child
+accepts the parent-side replacement of its marker and confirms the new bytes.
+With the production guard enabled, the write returns `EPERM` and the child
+confirms its original marker survived. This adds memory-integrity admission
+evidence without accessing any real application session bytes.
+
 This is direct Linux
 process-memory denial evidence for the isolated guarded child, not a scan of
 the real runtime's resident data, a protection against privileged inspection,

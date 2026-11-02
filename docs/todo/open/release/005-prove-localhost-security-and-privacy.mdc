@@ -2321,8 +2321,13 @@ without modifying the destination buffer. `nix`'s `uio` feature is declared
 only as a Linux test dependency; the exact registry-owner inventory pins it
 separately from the narrower production dependency.
 
-This verifies one
-independent ptrace-credential-gated syscall on this Linux host, not global
+The companion `process_vm_writev` syscall succeeds against a dumpable child,
+and the child independently confirms that the parent changed its test marker.
+After the production guard, the write returns `EPERM` and the marker remains
+unchanged. Both tests involve only synthetic data and same-parent access.
+
+This verifies two independently tested ptrace-credential-gated syscalls on
+this Linux host, not global
 process isolation or confidentiality against privileged observers. It does
 not address the browser-launch argv/history credential risks or prove Firefox
 storage erasure; P8 remains open.
