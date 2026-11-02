@@ -1621,3 +1621,17 @@ The guard covers the five authored and five emitted modules, not browser DOM
 execution, arbitrary computed method names, or complete CSSOM dataflow.
 CSP enforcement, the opener argv credential defect, and wider P8 criteria
 remain separate.
+
+The browser source inventory also previously allowed console access and OS
+error reporting, which could expose private session data without a fetch or
+browser-storage operation. Inactive authored `console` and emitted
+`globalThis["reportError"]` references passed the preceding transport,
+host-input and cross-context source checks; both were restored exactly.
+
+An additional zero-owner private-output inventory now requires review before
+browser modules gain logging, debugging, error reporting, dialogs, printing,
+notifications, native sharing, or clipboard binary-write authority. Fourteen
+synthetic probes and six restored inactive TypeScript/JavaScript mutations
+exercise the guard. This is a static review of declared browser sources, not
+an OS clipboard/notification inspection, leak-free-browser proof, or fix for
+the known opener argv exposure.

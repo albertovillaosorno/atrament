@@ -682,6 +682,58 @@ test("browser dynamic markup and CSSOM request sinks require review",
     }
 });
 
+// Logging, browser dialogs, notifications and OS sharing are separate
+// private-data output surfaces from network requests and clipboard copying.
+// Only the reviewed Copy prompt clipboard.writeText handoff is admitted.
+function hasUnreviewedBrowserDisclosure(source) {
+    const executable = source.replace(/^\s*\/\/[^\n]*$/gmu, "");
+    const navigatorShare = new RegExp(
+        String.raw`\bnavigator\s*(?:\?\.|\.)\s*(?:share|canShare)\b|` +
+            String.raw`\bnavigator\s*(?:\?\.)?\[\s*` +
+            String.raw`['"](?:share|canShare)['"]\s*\]`,
+        "u",
+    );
+    return [
+        new RegExp(
+            String.raw`\b(?:console|debugger|reportError|` +
+                String.raw`Notification|alert|confirm|print)\b`, "u",
+        ),
+        /\bprompt\s*\(/u,
+        /\b(?:window|globalThis)\s*(?:\?\.|\.)\s*prompt\b/u,
+        /\b(?:window|globalThis)\s*(?:\?\.)?\[\s*['"]prompt['"]\s*\]/u,
+        navigatorShare,
+        /\bclipboard\s*(?:\?\.|\.)\s*write\b/u,
+        /\bclipboard\s*(?:\?\.)?\[\s*['"]write['"]\s*\]/u,
+    ].some((pattern) => pattern.test(executable));
+}
+
+test("browser private-output sinks require explicit review", async () => {
+    for (const { filename, source } of await browserModuleSources()) {
+        assert.equal(hasUnreviewedBrowserDisclosure(source), false,
+            `${filename} gained an unreviewed private-output sink`);
+        for (const candidate of [
+            "void console;",
+            'void globalThis["console"];',
+            "debugger;",
+            "void reportError;",
+            "void Notification;",
+            "alert('dialog');",
+            "confirm('dialog');",
+            "window['print']();",
+            "prompt('dialog');",
+            'globalThis["prompt"]("dialog");',
+            'navigator.share({ text: "example" });',
+            'void navigator["share"];',
+            "clipboard.write([]);",
+            'clipboard?.["write"]([]);',
+        ]) {
+            assert.equal(hasUnreviewedBrowserDisclosure(
+                `${source}\n${candidate}`), true,
+            `${filename}: ${candidate} escaped private-output review`);
+        }
+    }
+});
+
 test("page exit invalidates credential, work, and session text", async () => {
     const source = await readFile(MAIN_MODULE, "utf8");
     const start = source.indexOf(
