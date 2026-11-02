@@ -303,7 +303,9 @@ function hasUnreviewedBrowserPersistenceReference(source) {
     const ambientStores = new RegExp(
         String.raw`\b(?:cookieStore|caches|sharedStorage|SharedStorage|` +
             String.raw`requestStorageAccess|requestStorageAccessFor|` +
-            String.raw`hasStorageAccess|StorageAccessHandle)\b`, "u",
+            String.raw`hasStorageAccess|StorageAccessHandle|` +
+            String.raw`storageBuckets|StorageBucket|StorageBucketManager|` +
+            String.raw`StorageManager)\b`, "u",
     );
     const windowName = new RegExp(
         String.raw`\b(?:window|globalThis)\s*(?:(?:\?\.|\.)\s*name\b|` +
@@ -396,6 +398,30 @@ test("browser storage access and shared storage require review", async () => {
             assert.equal(hasUnreviewedBrowserPersistenceReference(
                 `${source}\n${candidate}`), true,
             `${filename}: ${candidate} escaped storage access review`);
+        }
+    }
+});
+
+// Storage Buckets may retain origin data beyond a disposable tab. The bare
+// navigator.storage spelling does not cover optional or indexed access to
+// navigator.storageBuckets and its separate bucket interfaces.
+test("browser storage buckets require explicit persistence review", async () => {
+    const probes = [
+        'navigator["storageBuckets"].open("drafts")',
+        "navigator?.storageBuckets.open('drafts')",
+        'const buckets = navigator?.["storageBuckets"];',
+        'const buckets = globalThis.navigator["storageBuckets"];',
+        "void StorageBucket;",
+        "void StorageBucketManager;",
+        "void StorageManager;",
+    ];
+    for (const { filename, source } of await browserModuleSources()) {
+        assert.equal(hasUnreviewedBrowserPersistenceReference(source), false,
+            `${filename} gained unreviewed origin storage`);
+        for (const candidate of probes) {
+            assert.equal(hasUnreviewedBrowserPersistenceReference(
+                `${source}\n${candidate}`), true,
+            `${filename}: ${candidate} escaped storage-bucket review`);
         }
     }
 });

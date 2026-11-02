@@ -1857,3 +1857,16 @@ Twelve probes across all ten modules pin those declaration shapes. This is
 lexical source review, not a WebXR runtime permission test or a guarantee
 against computed property names. P8 remains open, including the unresolved
 browser-launcher argv credential exposure.
+
+Browser Storage Buckets can retain origin data beyond this disposable
+workspace. Existing literal `navigator.storage` review caught direct
+`navigator.storageBuckets` as a prefix, but missed indexed and optional
+references plus named bucket interfaces. Six inactive authored/emitted
+mutations passed the previous checks; the tightened guard rejected each
+mutation before byte-identical restoration.
+
+The persistence source gate now covers `storageBuckets`, `StorageBucket`,
+`StorageBucketManager`, and `StorageManager` names. Seven distinct probes
+run against all ten browser modules. This is lexical authority inventory,
+not a browser persistence experiment, and it cannot establish confinement
+for dynamically assembled names. The opener argv leak and P8 remain open.
