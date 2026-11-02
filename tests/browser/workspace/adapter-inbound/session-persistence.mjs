@@ -318,6 +318,86 @@ test("browser source and generated modules reject undeclared transport",
     }
 });
 
+// Executable code loading can bypass the four reviewed fetch sites. The
+// browser uses only statically declared modules; no runtime code compilation
+// or dynamic import is admitted without a fresh authority review.
+function hasUnreviewedExecutableCode(source, filename) {
+    // All seven import declarations are fixed local module dependencies.
+    // Review any new declaration or dynamic import before it can fetch code.
+    const imports = {
+        "main": [
+            'import { parseBoundedJsonResponse } from ' +
+                '"./session-diagnostic.js";',
+            'import * as sessionDraft from "./session-draft.js";',
+            'import * as sessionHandshake from "./session-handshake.js";',
+            'import { sessionSecretFromFragment } from ' +
+                '"./session-fragment.js";',
+        ],
+        "session-draft": [
+            'import { decodeBoundedUtf8Response } from ' +
+                '"./session-diagnostic.js";',
+            'import { ownDataField, parseDiagnosticSet } from ' +
+                '"./session-diagnostic.js";',
+        ],
+        "session-handshake": [
+            'import { ownDataField, parseDiagnosticSet } from ' +
+                '"./session-diagnostic.js";',
+        ],
+    };
+    const moduleName = filename.replace(/\.(?:ts|js)$/u, "");
+    let remaining = source.replace(/^\s*\/\/[^\n]*$/gmu, "");
+    for (const site of imports[moduleName] ?? []) {
+        if (remaining.split(site).length - 1 !== 1) {
+            return true;
+        }
+        remaining = remaining.replace(site, "");
+    }
+    // Only two callback-based viewport timers are admitted in the editor.
+    for (const site of [
+        "window.setTimeout(resetLocalViewportState, 0)",
+        "window.setTimeout(() => {",
+    ]) {
+        if (remaining.split(site).length - 1 !==
+            (moduleName === "main" ? 1 : 0)) {
+            return true;
+        }
+        remaining = remaining.replace(site, "");
+    }
+    const dynamicCode = new RegExp(
+        String.raw`\b(?:import|eval|Function|AsyncFunction|GeneratorFunction|` +
+            String.raw`AsyncGeneratorFunction|importScripts|WebAssembly|` +
+            String.raw`setTimeout|setInterval)\b`, "u",
+    );
+    return dynamicCode.test(remaining);
+}
+
+test("browser runtime code loading requires explicit review", async () => {
+    for (const { filename, source } of await browserModuleSources()) {
+        assert.equal(hasUnreviewedExecutableCode(source, filename), false,
+            `${filename} gained a code-loading or execution path`);
+        for (const candidate of [
+            'import("./unreviewed.js")',
+            'import /* delayed */ ("./unreviewed.js")',
+            'const moduleUrl = import.meta.url;',
+            'eval(privateDraft)',
+            'const execute = globalThis["eval"];',
+            'new Function(privateDraft)()',
+            'const make = globalThis["Function"];',
+            'new AsyncFunction(privateDraft)',
+            'new GeneratorFunction(privateDraft)',
+            'new AsyncGeneratorFunction(privateDraft)',
+            'importScripts("/unreviewed.js")',
+            'WebAssembly.compile(bytes)',
+            'setInterval(privateDraft, 0)',
+            'window.setTimeout(privateDraft, 0)',
+        ]) {
+            assert.equal(hasUnreviewedExecutableCode(
+                `${source}\n${candidate}`, filename), true,
+            `${filename}: ${candidate} escaped executable-code review`);
+        }
+    }
+});
+
 // A page can retain text through window.name, cookies, cache and shared
 // browser storage APIs without Web Storage. Bracket access and first-class
 // global references must not bypass this literal storage inventory.

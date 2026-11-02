@@ -2120,3 +2120,20 @@ module trigger review, including unknown indexed properties, while full-line
 comments remain inert. This is lexical drift detection, not an AST or
 browser sandbox and not a guarantee against dynamically constructed names.
 The separate opener argv credential leak and P8 acceptance remain unresolved.
+
+
+The browser module inventory previously pinned only fetch call sites and
+module filenames. A dynamic `import()` could request executable JavaScript
+outside those fetch sites; `eval`, function constructors, and string-based
+timers could also bypass review of the code that ultimately handles data.
+A synthetic dynamic-import addition failed red-first against the old guard.
+
+The new source review permits only seven exact, static module imports and
+two callback-based viewport timers in both TypeScript and emitted JavaScript.
+Fourteen added code-loading probes per module require review, including
+runtime import, module metadata, evaluation, WebAssembly, script imports,
+and unreviewed timer calls. The production browser implementation is unchanged.
+
+This remains lexical drift detection and does not prove protection against
+computed aliases or compromised browser extensions. The launcher argv secret
+exposure, browser-storage erasure, and P8 acceptance remain unresolved.
