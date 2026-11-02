@@ -1578,3 +1578,15 @@ retaining exactly four direct calls in each main module. Seven synthetic
 references, including property access, destructuring, call, and comment-
 separated invocation, fail the new regression. The review does not resolve
 computed names assembled at runtime or guarantee packet-level confinement.
+
+The cross-context browser source guard previously checked literal
+`window.open(` only. An inactive `globalThis["open"]` in TypeScript and a
+captured bare `open` in emitted JavaScript each passed all 42 prior
+session-persistence tests, then the source bytes were restored exactly.
+
+The zero-owner popup review now catches direct and captured global `open`
+identifiers in every authored and emitted module, including bracket access,
+optional chaining and destructuring. Eight syntactic probes and four separate
+inactive source mutations confirm this guard detects new popup authority.
+This is static review rather than a user-gesture or live-browser popup test;
+computed runtime names are not exhaustively covered.

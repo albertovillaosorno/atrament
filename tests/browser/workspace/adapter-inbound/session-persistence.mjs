@@ -312,6 +312,30 @@ test("browser source and generated modules reject persistence APIs",
 });
 
 
+// A popup can navigate to an unrelated URL without using the reviewed
+// fetch sites. The bare global open and window.open are both capturable;
+// bracket indexing cannot be approved merely because it lacks a call.
+function hasUnreviewedPopupOpen(source) {
+    const executable = source.replace(/^\s*\/\/[^\n]*$/gmu, "");
+    return /\bopen\b/u.test(executable);
+}
+
+test("browser cross-context review rejects popup opener aliases", () => {
+    assert.equal(hasUnreviewedPopupOpen("// open is not used"), false);
+    for (const candidate of [
+        "open(target)",
+        "window.open(target)",
+        "globalThis.open(target)",
+        'window["open"](target)',
+        'globalThis?.["open"](target)',
+        "const launch = open;",
+        "const launch = window.open;",
+        "const { open: launch } = globalThis;",
+    ]) {
+        assert.equal(hasUnreviewedPopupOpen(candidate), true, candidate);
+    }
+});
+
 test("browser modules reject unreviewed cross-context authority", async () => {
     // Workers and cross-tab channels can outlive a session page or perform
     // network activity outside the four reviewed client fetch sites.
@@ -329,6 +353,8 @@ test("browser modules reject unreviewed cross-context authority", async () => {
             assert.equal(source.includes(capability), false,
                 `${filename} uses unreviewed cross-context ${capability}`);
         }
+        assert.equal(hasUnreviewedPopupOpen(source), false,
+            `${filename} gained popup navigation authority`);
     }
 });
 
