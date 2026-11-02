@@ -2014,3 +2014,20 @@ trigger cleanup. Actual browser storage deletion remains engine-dependent and
 is not established by these HTTP response tests. This adds a best-effort
 session-end cleanup signal, not a substitute for in-memory disposal or a fix
 for the independently known browser-opener argv credential exposure.
+
+A further non-committed Firefox 158.0 experiment checked the actual browser
+behavior of that storage-only `Clear-Site-Data` signal over HTTP loopback.
+A disposable headless profile loaded an isolated origin, seeded synthetic
+`sessionStorage` and then `localStorage` values, and verified an ordinary
+`204` control preserved them. A separate `204` carried the quoted
+`"storage"` directive; same-origin browser script observed both the response
+header and a `true` secure-context flag, yet the storage values remained after
+the bounded follow-up checks. Both temporary test variants were removed and
+the disposable profiles destroyed.
+
+Consequently this header cannot be counted as proof of local browser storage
+erasure in Firefox 158.0 on this HTTP loopback fixture. The explicitly
+confirmed End still destroys process-owned state independently of any browser
+storage cleanup, and current authored workspace sources forbid storage APIs.
+Actual cross-browser storage removal remains unverified; P8 acceptance and the
+browser-opener argv credential exposure remain open.
