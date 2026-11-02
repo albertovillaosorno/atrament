@@ -2384,3 +2384,26 @@ This is direct evidence that this Firefox version's storage clear does not
 establish removal of the credential-bearing navigation from its profile. The
 opener argv channel is separately exposed; P8 remains open for a redesigned
 credential handoff and verified non-retention, not merely empty web storage.
+
+A live Firefox back-navigation regression covers another browser-session
+reentry path: after a private synthetic draft is hydrated, navigating to a
+separate document and returning through browser history yields an empty,
+disabled workspace with no new authenticated requests. The original fragment
+is absent from the returned location, and all three fields were populated
+before navigation. The browser process and fixture server stay alive for the
+history traversal; this is not equivalent to shutting down the runtime.
+
+The test also confirms an intervening document is loaded before returning.
+An independent VM execution of the generated `pageshow` handler checks that a
+persisted restore requests immediate reload before local UI restoration.
+
+A fresh random synthetic task marker also remains absent from a bounded
+literal-byte scan of regular files in that disposable Firefox profile after
+navigation, tab close and browser shutdown. A test-owned positive-control file
+shows the same scan would find the marker if present. This does not rule out
+compressed, encrypted, swapped or external browser copies.
+
+This is scoped to Firefox, the fixture's `Cache-Control: no-store` policy, and
+normal history traversal. It does not prove bfcache eligibility, remove the
+initial credential URL from Firefox's profile database, protect the browser
+opener's argv, or settle the known P8 credential-retention defect.

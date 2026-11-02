@@ -1867,6 +1867,42 @@ test("bfcache restore cannot resume an invalidated page session", async () => {
             && ordinaryRestore > returnAfterReload,
         "persisted pages must reload before ordinary pageshow restoration",
     );
+
+    // Execute the emitted callback in a bounded VM as well as checking its
+    // textual order. A persisted page must not run ordinary restore effects.
+    const effects = [];
+    let onPageShow;
+    runInNewContext(source.slice(start, end + "\n});".length), {
+        window: {
+            addEventListener(name, callback) {
+                assert.equal(name, "pageshow");
+                onPageShow = callback;
+            },
+            location: {
+                reload() { effects.push("reload"); },
+            },
+            setTimeout(callback, delay) {
+                assert.equal(delay, 0);
+                assert.equal(typeof callback, "function");
+                effects.push("schedule-reset");
+            },
+        },
+        discardLocalNavigationFragment() {
+            effects.push("discard-fragment");
+            return true;
+        },
+        resetLocalViewportState() {
+            effects.push("reset-viewport");
+        },
+    });
+    assert.equal(typeof onPageShow, "function");
+    onPageShow({ persisted: true });
+    assert.deepEqual(effects, ["reload"]);
+    effects.length = 0;
+    onPageShow({ persisted: false });
+    assert.deepEqual(effects, [
+        "discard-fragment", "reset-viewport", "schedule-reset",
+    ]);
 });
 
 

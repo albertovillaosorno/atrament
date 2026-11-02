@@ -473,3 +473,28 @@ This automated test covers compiled startup admission at `ready`, not a live
 memory read, a process holding private drafts, privileged observers, crash
 erasure, Firefox history cleanup, or the browser-opener argv risk. P1 stays
 open for remaining session media and crash lifecycles.
+
+A real Firefox WebDriver BiDi regression now navigates away from a populated,
+fragment-scrubbed workspace to a different document and traverses browser
+history back to the original tab. All three synthetic private draft fields are
+empty and disabled on return. No new handshake or draft request is made even
+though the test loopback server is still running. This checks actual navigation
+rather than only dispatching a synthetic `pagehide` event.
+
+A complementary generated-JavaScript VM test executes the `pageshow`
+handler: a persisted-page event invokes only a reload, while an ordinary event
+performs local-fragment and viewport cleanup without reloading. The real
+navigation test independently confirms the intervening document has no draft
+controls before requesting history traversal.
+
+The same test uses a fresh random draft marker, closes the browser after
+history traversal, and scans only regular files in its disposable Firefox
+profile for those literal UTF-8 bytes. The marker is absent, while a
+browser-profile control file containing it is detected before removal. No
+explicit End request is sent, so backend destruction is not inferred.
+
+The fixture uses the production-like `Cache-Control: no-store` resource policy,
+so the observed result does not establish which Firefox bfcache path ran or
+whether other engines restore a cached page differently. It cannot prove
+browser-history removal of the initial launch URL, crash erasure, or automatic
+backend destruction on tab close. P1 remains open.

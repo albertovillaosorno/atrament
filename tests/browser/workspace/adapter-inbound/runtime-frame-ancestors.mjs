@@ -7261,6 +7261,110 @@ test(
 );
 
 test(
+    "Firefox history return clears page and leaves no literal draft",
+    { skip: !FIREFOX_AVAILABLE, timeout: FIREFOX_CASE_TIMEOUT_MS },
+    async () => {
+        fs.mkdirSync(".temp", { recursive: true });
+        const profile = fs.mkdtempSync(".temp/session-back-");
+        const apiRequests = [];
+        const marker = `atrament-history-private-` +
+            crypto.randomBytes(24).toString("hex");
+        const server = createSessionFixtureServer(
+            apiRequests, null, null, null, null, null, null,
+            (field) => field === "task" ? marker : REFRESH_DRAFT[field],
+        );
+        const children = [];
+        let bidi;
+        try {
+            server.listen(0, "127.0.0.1");
+            await once(server, "listening");
+            const address = server.address();
+            assert.notEqual(address, null);
+            assert.notEqual(typeof address, "string");
+            const origin = `http://127.0.0.1:${address.port}`;
+            bidi = await startBidiFirefox(profile, children);
+            const tab = await bidi.command("browsingContext.create", {
+                type: "tab",
+            });
+            await bidi.command("browsingContext.navigate", {
+                context: tab.context,
+                url: `${origin}/#session=${REFRESH_SECRET}`,
+                wait: "complete",
+            });
+            const ready = await waitForSessionStatus(
+                bidi, tab.context, "Session ready",
+            );
+            assert.equal(ready.task.value === marker, true);
+            assert.equal(ready.source.value, REFRESH_DRAFT.source);
+            assert.equal(ready.candidate.value, REFRESH_DRAFT.candidate);
+            assert.equal(ready.hash, "");
+            // Use real document navigation so pagehide and browser history
+            // restoration run under Firefox rather than a synthetic event.
+            await bidi.command("browsingContext.navigate", {
+                context: tab.context,
+                url: `${origin}/missing`,
+                wait: "complete",
+            });
+            const away = await bidi.command("script.evaluate", {
+                awaitPromise: false,
+                expression: `JSON.stringify({
+                    path: location.pathname,
+                    hasTask: document.querySelector("#task-input") !== null
+                })`,
+                resultOwnership: "none",
+                target: { context: tab.context },
+            });
+            assert.equal(away.type, "success");
+            assert.equal(away.result.type, "string");
+            assert.deepEqual(JSON.parse(away.result.value), {
+                path: "/missing", hasTask: false,
+            });
+            await bidi.command("browsingContext.traverseHistory", {
+                context: tab.context, delta: -1,
+            });
+            const returned = await waitForSessionStatus(
+                bidi, tab.context, "Frontend ready · credential unavailable",
+            );
+            assert.equal(returned.hash, "");
+            for (const field of ["task", "source", "candidate"]) {
+                assert.deepEqual(returned[field], {
+                    disabled: true, value: "",
+                });
+            }
+            await new Promise((resolve) => setTimeout(resolve, 100));
+            assert.deepEqual(apiRequests, [
+                "POST /api/handshake",
+                "GET /api/session/task",
+                "GET /api/session/source",
+                "GET /api/session/candidate",
+            ]);
+            await bidi.command("browsingContext.close", {
+                context: tab.context,
+            });
+            bidi.close();
+            bidi = null;
+            for (const child of children.reverse()) await stopChild(child);
+            children.length = 0;
+
+            const control = path.join(profile, "history-control.bin");
+            fs.writeFileSync(control, Buffer.from(marker, "utf8"));
+            assert.equal(
+                firefoxProfileContainsPlaintext(profile, marker), true);
+            fs.rmSync(control);
+            assert.equal(
+                firefoxProfileContainsPlaintext(profile, marker), false,
+                "history navigation retained literal private draft bytes",
+            );
+        } finally {
+            bidi?.close();
+            await closeFixtureServer(server);
+            for (const child of children.reverse()) await stopChild(child);
+            fs.rmSync(profile, { recursive: true, force: true });
+        }
+    },
+);
+
+test(
     "Firefox scrubs credential fragments added after session startup",
     { skip: !FIREFOX_AVAILABLE, timeout: FIREFOX_CASE_TIMEOUT_MS },
     async () => {
