@@ -313,15 +313,24 @@ function hasUnreviewedBrowserPersistenceReference(source) {
         /\{\s*name\s*(?::\s*[\w$]+)?\s*\}\s*=\s*(?:window|globalThis)\b/u;
     const destructuredDocumentCookie =
         /\{\s*cookie\s*(?::\s*[\w$]+)?\s*\}\s*=\s*document\b/u;
+    // Protocol handlers can outlive this disposable tab in the browser's
+    // profile. An indexed or first-class method reference needs review too.
+    const protocolRegistry =
+        /\b(?:registerProtocolHandler|unregisterProtocolHandler)\b/u;
+    const executable = source.replace(/^\s*\/\/[^\n]*$/gmu, "");
     return [ambientStores, windowName, documentCookie,
         destructuredWindowName, destructuredDocumentCookie]
-        .some((pattern) => pattern.test(source));
+        .some((pattern) => pattern.test(source))
+        || protocolRegistry.test(executable);
 }
 
 test("browser persistence review rejects indexed cookie, cache and name APIs",
     async () => {
     const allowed = "function f(name) { return name; }";
     assert.equal(hasUnreviewedBrowserPersistenceReference(allowed), false);
+    assert.equal(hasUnreviewedBrowserPersistenceReference(
+        "// registerProtocolHandler is not used\nexport const x = 1;"),
+        false);
     const probes = [
         'window["name"] = privateText;',
         'globalThis?.["name"] = privateText;',
@@ -336,6 +345,14 @@ test("browser persistence review rejects indexed cookie, cache and name APIs",
         'const store = globalThis["cookieStore"];',
         'caches.open("workspace");',
         'const storage = window["caches"];',
+        'navigator.registerProtocolHandler("web+sample", "/?url=%s");',
+        'const register = navigator.registerProtocolHandler;',
+        'const method = navigator["registerProtocolHandler"];',
+        'const { registerProtocolHandler: register } = navigator;',
+        'navigator.unregisterProtocolHandler("web+sample", "/?url=%s");',
+        'const unregister = navigator?.unregisterProtocolHandler;',
+        'const method = globalThis.navigator["unregisterProtocolHandler"];',
+        'const { unregisterProtocolHandler: remove } = navigator;',
     ];
     for (const { filename, source } of await browserModuleSources()) {
         assert.equal(hasUnreviewedBrowserPersistenceReference(source), false,

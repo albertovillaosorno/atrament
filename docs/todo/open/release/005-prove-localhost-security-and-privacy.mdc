@@ -1769,3 +1769,18 @@ Fourteen syntactic probes and independently restored authored/emitted source
 mutations exercise this rule. This is lexical policy, not a runtime device
 permission test, proof against computed names, or resolution of the browser
 launcher argv credential leak. P8 acceptance remains open.
+
+Browser persistence review also omitted protocol-handler registration. A
+page may request browser-profile protocol registration beyond its disposable
+session without using localStorage or IndexedDB. Inactive registration and
+unregistration references in both authored and emitted main modules passed all
+50 prior browser persistence tests and were restored byte-for-byte.
+
+The updated source inventory rejects eight direct, indexed, first-class, and
+destructured method references across both protocol-handler methods.
+Comment-only mentions remain inert. This is source-level permission review,
+not proof about browser prompts, user permission, runtime persistence, or
+computed property-name construction. Six individually injected authored and
+emitted source mutations then failed the new guard and were byte-restored.
+
+The launcher argv leak and P8 acceptance remain open.
