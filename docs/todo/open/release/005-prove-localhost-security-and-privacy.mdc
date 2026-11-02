@@ -1744,3 +1744,16 @@ syntactic probes cover direct, first-class and literal-indexed references.
 This is lexical source policy, not proof that a particular browser exposes
 those APIs or that arbitrary runtime-computed names cannot escape review.
 The browser-launch argv credential leak and P8 acceptance remain open.
+
+The browser navigation source inventory also omitted the newer Navigation
+API. An inactive `window.navigation.navigate` reference in both authored and
+emitted main modules passed all 50 prior focused browser privacy tests and was
+restored byte-for-byte. The navigation guard now requires review for direct,
+indexed, and first-class `navigation` references in all ten authored/emitted
+modules. Five syntactic variants and six individually restored authored and
+emitted source mutations check the newly guarded path.
+
+Comment-only mentions are inert. This is lexical drift detection, not proof
+against computed property names or complete browser navigation confinement.
+The platform opener's known credential-bearing argv and wider P8 acceptance
+remain open.

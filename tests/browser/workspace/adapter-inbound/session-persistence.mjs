@@ -744,6 +744,9 @@ function usesUnreviewedBrowserNavigation(source, main) {
     const navigation = [
         locationNavigation,
         historyNavigation,
+        // The newer Navigation API can leave the page or reload without
+        // calling location/history. Review both direct and captured access.
+        /\bnavigation\b/u,
         /\.\s*(?:submit|requestSubmit|click)\s*\(/u,
         /\[\s*['"](?:submit|requestSubmit|click)['"]\s*\]\s*\(/u,
         /\bnew\s+(?:Image|Audio)\s*\(/u,
@@ -756,7 +759,8 @@ function usesUnreviewedBrowserNavigation(source, main) {
             "u",
         ),
     ];
-    return navigation.some((pattern) => pattern.test(remaining));
+    const executable = remaining.replace(/^\s*\/\/[^\n]*$/gmu, "");
+    return navigation.some((pattern) => pattern.test(executable));
 }
 
 test("browser navigation inventory distinguishes reviewed local calls", () => {
@@ -770,7 +774,7 @@ test("browser navigation inventory distinguishes reviewed local calls", () => {
     ].join("\n");
     assert.equal(usesUnreviewedBrowserNavigation(reviewed, true), false);
     assert.equal(usesUnreviewedBrowserNavigation(
-        "const draft = 'text';", false),
+        "// harmless navigation comment\nconst draft = 'text';", false),
         false);
     for (const candidate of [
         "window.location.assign(destination)",
@@ -801,6 +805,11 @@ test("browser navigation inventory distinguishes reviewed local calls", () => {
         "new Image()",
         "new Audio()",
         "const navigatorTarget = window.location;",
+        'navigation.navigate("https://example.invalid/private");',
+        'window.navigation.reload();',
+        'globalThis["navigation"].navigate(target);',
+        'const { navigation: nav } = window;',
+        "const nav = navigation;",
     ]) {
         assert.equal(usesUnreviewedBrowserNavigation(
             reviewed + candidate, true), true, candidate);
