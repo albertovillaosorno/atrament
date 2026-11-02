@@ -1984,3 +1984,20 @@ These declarations are defense in depth where browsers implement them, not
 proof of runtime enforcement in all engines. In particular some APIs are
 experimental or deprecated, and this change does not address the known
 opener argv credential exposure or close P8 acceptance.
+
+A separate browser-source review found twelve inactive ad attribution,
+interest-group, and private-state token references absent from all previous
+host-input, disclosure, and persistence detectors. Those prior tests still
+passed, although the omitted APIs can retain browser state or submit reports
+independently of the four reviewed workspace fetches.
+
+The amended test now inventories literal Attribution Reporting parameters,
+protected-audience group and auction methods, and legacy/current private-state
+token references across all five authored and five generated browser modules.
+Seventeen synthetic forms cover direct calls, first-class indexed aliases, and
+request options. Six separately injected authored/emitted main-module
+references failed the new guard and were restored byte-for-byte.
+This is conservative lexical drift detection, not browser
+runtime proof, coverage of computed API names, or a claim that browser support
+for these evolving APIs is uniform; the known launcher argv credential leak
+and P8 acceptance remain open.

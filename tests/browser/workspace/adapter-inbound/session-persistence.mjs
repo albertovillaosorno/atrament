@@ -471,6 +471,56 @@ test("browser source and generated modules reject persistence APIs",
 });
 
 
+// Browser-managed attribution, interest groups and Private State Tokens can
+// retain data or schedule reports outside the four reviewed fetch sites.
+// Named constructors, options and first-class method references require
+// review even without an explicit cross-origin request in workspace source.
+function hasUnreviewedBrowserTrackingReference(source) {
+    const executable = source.replace(/^\s*\/\/[^\n]*$/gmu, "");
+    return new RegExp(
+        String.raw`\b(?:attributionSrc|attributionsrc|attributionReporting|` +
+            String.raw`setAttributionReporting|joinAdInterestGroup|` +
+            String.raw`leaveAdInterestGroup|runAdAuction|` +
+            String.raw`updateAdInterestGroups|hasTrustToken|` +
+            String.raw`hasPrivateToken|hasRedemptionRecord|privateToken)\b`,
+        "u",
+    ).test(executable);
+}
+
+test("browser deferred reporting and private-token APIs require review",
+    async () => {
+    assert.equal(hasUnreviewedBrowserTrackingReference(
+        "// privateToken is not used\nconst value = 1;"), false);
+    const probes = [
+        "navigator.joinAdInterestGroup({ owner: origin }, 1000);",
+        'const join = navigator["joinAdInterestGroup"];',
+        "navigator.leaveAdInterestGroup({ owner: origin, name: 'x' });",
+        "navigator.updateAdInterestGroups();",
+        "navigator.runAdAuction({ seller: origin });",
+        'const auction = navigator?.["runAdAuction"];',
+        "document.hasTrustToken(origin);",
+        'const token = document["hasTrustToken"];',
+        "document.hasPrivateToken(origin);",
+        'const record = document?.["hasRedemptionRecord"];',
+        "new Request(path, { privateToken: { operation: 'token-request' } });",
+        "const hint = { attributionReporting: { eventSourceEligible: true } };",
+        "const attribute = anchor.attributionSrc;",
+        'anchor["attributionSrc"] = destination;',
+        'const markup = "attributionsrc";',
+        "xhr.setAttributionReporting(options);",
+        'const report = xhr["setAttributionReporting"];',
+    ];
+    for (const { filename, source } of await browserModuleSources()) {
+        assert.equal(hasUnreviewedBrowserTrackingReference(source), false,
+            `${filename} gained browser-managed reporting or token storage`);
+        for (const candidate of probes) {
+            assert.equal(hasUnreviewedBrowserTrackingReference(
+                `${source}\n${candidate}`), true,
+            `${filename}: ${candidate} escaped browser-private data review`);
+        }
+    }
+});
+
 // A popup can navigate to an unrelated URL without using the reviewed
 // fetch sites. The bare global open and window.open are both capturable;
 // bracket indexing cannot be approved merely because it lacks a call.
