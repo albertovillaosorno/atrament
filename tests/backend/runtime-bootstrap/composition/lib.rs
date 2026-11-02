@@ -667,6 +667,27 @@ fn browser_launch_timeout_requires_restart_without_publishing_access() {
     assert_recovery_error_is_secret_free(&LaunchError::TimedOut);
 }
 
+#[test]
+fn browser_launch_io_failures_keep_cli_recovery_secret_free() {
+    use std::error::Error as _;
+
+    // Simulate an I/O diagnostic supplied by an untrusted opener without
+    // ever creating or logging a real session credential.
+    const PRIVATE_MARKER: &str = "synthetic-private-opener#session=abc";
+    for launch_error in [
+        LaunchError::Spawn(io::Error::other(PRIVATE_MARKER)),
+        LaunchError::Lifecycle(io::Error::other(PRIVATE_MARKER)),
+    ] {
+        assert_recovery_error_is_secret_free(&launch_error);
+        let recovery = bootstrap::browser_launch_failure(&launch_error);
+        assert!(!recovery.to_string().contains(PRIVATE_MARKER));
+        assert!(!format!("{recovery:?}").contains(PRIVATE_MARKER));
+        assert!(!format!("{launch_error:?}").contains(PRIVATE_MARKER));
+        assert!(launch_error.source().is_none());
+        assert!(recovery.source().is_none());
+    }
+}
+
 fn digest_hex(bytes: &[u8]) -> String {
     sha256_profile_bytes(bytes)
         .bytes()

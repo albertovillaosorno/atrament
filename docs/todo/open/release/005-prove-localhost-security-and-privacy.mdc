@@ -2648,3 +2648,11 @@ internal recovery decisions, including test-only busy-executable retries.
 All launcher cases still pass. This prevents additional startup diagnostic
 leakage, but does not hide the opener URL from argv or remove it from
 Firefox navigation history; P8 remains open.
+
+A separate runtime-bootstrap composition test now constructs both launcher
+I/O failure variants with a synthetic `#session=` marker and passes them
+through the production startup recovery-message builder. It asserts that
+formatted recovery, debug text, and error-chain inspection never publish
+that marker, while still requiring restart. This pins the outer CLI boundary
+independently of the launcher's own unit regression; the unresolved
+credential-bearing opener argv and Firefox history remain outside its scope.
