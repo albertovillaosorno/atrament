@@ -2453,6 +2453,96 @@ fn session_end_terminates_listener_and_destroys_process_owned_draft() {
     assert_eq!(new_listener.local_addr().expect("rebound address"), address);
 }
 
+// Observe disposal of the actual draft owner, not just listener closure.
+struct DropObservedDraft {
+    inner: SessionDraftService,
+    dropped: Arc<AtomicBool>,
+}
+
+impl SessionDraft for DropObservedDraft {
+    fn replace(&mut self, field: DraftField, value: String) -> DraftMutation {
+        self.inner.replace(field, value)
+    }
+
+    fn value(&self, field: DraftField) -> &str {
+        self.inner.value(field)
+    }
+}
+
+impl Drop for DropObservedDraft {
+    fn drop(&mut self) {
+        self.dropped.store(true, Ordering::SeqCst);
+    }
+}
+
+#[test]
+fn abandoned_end_reply_still_drops_private_draft_after_complete_request() {
+    let runtime = runtime::Runtime::bind().expect("runtime binds");
+    let address = runtime.local_addr().expect("loopback address exists");
+    let host = runtime.expected_host().to_owned();
+    let origin = runtime.origin().to_owned();
+    let dropped = Arc::new(AtomicBool::new(false));
+    let server_dropped = Arc::clone(&dropped);
+    let server = thread::spawn(move || {
+        let mut draft = DropObservedDraft {
+            inner: seeded_private_draft(),
+            dropped: server_dropped,
+        };
+        runtime.serve(EXPECTED_SECRET, &HANDSHAKE, &mut draft);
+        assert_private_draft_unchanged(&draft.inner);
+        // The owner is disposed even if the End acknowledgement is unread.
+    });
+
+    // A premature disconnect with an incomplete End body is not authority
+    // to destroy a session, even if its headers name the End endpoint.
+    let mut truncated = TcpStream::connect(address)
+        .expect("loopback accepts truncated request");
+    truncated.set_read_timeout(Some(Duration::from_secs(3)))
+        .expect("client response deadline configures");
+    let incomplete = format!(
+        concat!(
+            "POST /api/session/end HTTP/1.1\r\n",
+            "Host: {}\r\nOrigin: {}\r\n",
+            "Authorization: Bearer {}\r\n",
+            "Content-Length: 1\r\n\r\n",
+        ),
+        host, origin, EXPECTED_SECRET,
+    );
+    truncated.write_all(incomplete.as_bytes())
+        .expect("truncated request head writes");
+    truncated.shutdown(Shutdown::Write)
+        .expect("client half-closes incomplete request");
+    let mut rejected = Vec::new();
+    let _received = truncated.read_to_end(&mut rejected)
+        .expect("truncated request receives terminal response");
+    assert_eq!(status_line(&rejected), "HTTP/1.1 400 Bad Request");
+    assert!(!dropped.load(Ordering::SeqCst));
+
+    // An entirely delivered, authenticated End request is terminal even
+    // when the client closes before reading any response bytes.
+    let mut abandoned = TcpStream::connect(address)
+        .expect("loopback survives rejected request");
+    let complete = format!(
+        concat!(
+            "POST /api/session/end HTTP/1.1\r\n",
+            "Host: {}\r\nOrigin: {}\r\n",
+            "Authorization: Bearer {}\r\n",
+            "Content-Length: 0\r\n\r\n",
+        ),
+        host, origin, EXPECTED_SECRET,
+    );
+    abandoned.write_all(complete.as_bytes())
+        .expect("complete End request writes");
+    abandoned.shutdown(Shutdown::Both)
+        .expect("client abandons End response");
+    drop(abandoned);
+    server.join().expect("accepted End disposes the session owner");
+    assert!(dropped.load(Ordering::SeqCst));
+    let rebound = TcpListener::bind(address)
+        .expect("accepted End releases the exact loopback endpoint");
+    assert_eq!(rebound.local_addr().expect("rebound address"), address);
+}
+
 #[test]
 fn explicit_session_end_requires_current_credential_origin_and_empty_body() {
     let authorization = format!("Bearer {EXPECTED_SECRET}");

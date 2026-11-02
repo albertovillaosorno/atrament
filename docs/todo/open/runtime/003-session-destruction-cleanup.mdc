@@ -135,6 +135,12 @@ A real Firefox fixture withholds End response headers, then dispatches
 scrubbing. This proves client teardown without relying on browser navigation
 behavior; it does not prove backend erasure or rollback.
 
+A further real loopback fixture distinguishes a truncated authenticated End
+request (400, session still running) from a complete End request whose client
+closes without reading the acknowledgement. Only the latter ends the accept
+loop, drops the observed private draft owner, and releases the exact socket.
+This does not prove disk erasure or browser history clearance.
+
 A real socket regression verifies that an unauthorized attempt cannot end the
 session and that an authorized request releases the exact endpoint. Firefox
 coverage verifies confirmation before any mutation, authenticated termination,
