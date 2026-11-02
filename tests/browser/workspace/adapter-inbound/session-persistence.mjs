@@ -610,7 +610,7 @@ function usesUnreviewedBrowserHostInput(source, main) {
     const hostProperty = String.raw`(?:geolocation|mediaDevices|credentials|` +
         String.raw`hardwareConcurrency|deviceMemory|userAgent(?:Data)?|` +
         String.raw`connection|getBattery|getGamepads|bluetooth|usb|` +
-        String.raw`serial|hid|gpu|permissions|requestMIDIAccess|contacts)`;
+        String.raw`serial|hid|gpu|permissions|requestMIDIAccess|contacts|xr)`;
     const ambientRead = new RegExp(
         String.raw`\bnavigator\s*(?:(?:\?\.|\.)\s*|(?:\?\.)?\[\s*['"])` +
             hostProperty + String.raw`\b`,
@@ -631,7 +631,8 @@ function usesUnreviewedBrowserHostInput(source, main) {
             String.raw`DeviceOrientationEvent|Accelerometer|` +
             String.raw`LinearAccelerationSensor|GravitySensor|Gyroscope|` +
             String.raw`Magnetometer|AmbientLightSensor|ProximitySensor|` +
-            String.raw`AbsoluteOrientationSensor|RelativeOrientationSensor)\b`,
+            String.raw`AbsoluteOrientationSensor|RelativeOrientationSensor|` +
+            String.raw`XR[A-Z][A-Za-z0-9_]*)\b`,
         "u",
     );
     const motionEvents =
@@ -825,6 +826,36 @@ test("browser ambient motion and sensor references need review", async () => {
             assert.equal(usesUnreviewedBrowserHostInput(
                 `${source}\n${candidate}`, main), true,
             `${filename}: ${candidate} escaped ambient sensor review`);
+        }
+    }
+});
+
+// WebXR exposes device pose, input controllers, and potentially camera pixels.
+// Its navigator.xr entrypoint and first-class XR handles do not require
+// navigator.mediaDevices or a generic permissions reference in source.
+test("browser XR device sensing requires explicit source review", async () => {
+    const probes = [
+        "navigator.xr.requestSession('immersive-ar')",
+        "const device = navigator?.xr;",
+        'const device = navigator["xr"];',
+        'const device = globalThis.navigator?.["xr"];',
+        "void XRSystem;",
+        "void XRSession;",
+        "void XRFrame;",
+        "void XRReferenceSpace;",
+        "void XRInputSource;",
+        "void XRHitTestSource;",
+        "void XRCamera;",
+        "void XRWebGLLayer;",
+    ];
+    for (const { filename, source } of await browserModuleSources()) {
+        const main = filename === "main.ts" || filename === "main.js";
+        assert.equal(usesUnreviewedBrowserHostInput(source, main), false,
+            `${filename} gained unreviewed device sensing authority`);
+        for (const candidate of probes) {
+            assert.equal(usesUnreviewedBrowserHostInput(
+                `${source}\n${candidate}`, main), true,
+            `${filename}: ${candidate} escaped WebXR review`);
         }
     }
 });

@@ -1844,3 +1844,16 @@ injected main-module references were rejected and byte-restored.
 This is lexical source evidence, not proof of browser payment/presentation
 availability, user authorization, or rejection of computed API names. The
 browser-launch argv credential exposure and broader P8 acceptance remain open.
+
+Browser WebXR device sensing is another authority outside the existing
+`navigator.mediaDevices` and browser hardware inventory. Inactive references
+to `navigator.xr` and first-class `XRSession` handles passed the previous
+source guard in both the authored TypeScript and emitted JavaScript; all six
+authored/emitted mutations were later rejected and byte-restored.
+
+The expanded browser host-input gate now requires review for `navigator.xr`
+and literal-indexed equivalents, as well as named WebXR `XR...` API objects.
+Twelve probes across all ten modules pin those declaration shapes. This is
+lexical source review, not a WebXR runtime permission test or a guarantee
+against computed property names. P8 remains open, including the unresolved
+browser-launcher argv credential exposure.
