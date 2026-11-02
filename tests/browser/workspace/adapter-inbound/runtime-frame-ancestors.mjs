@@ -671,7 +671,9 @@ function waitForSocketConnection(socket, timeoutMs = 10_000) {
         const onClose = () => finish(new Error(
             "remote debugging socket closed before TCP connect",
         ));
-        const onError = (error) => finish(error);
+        const onError = () => finish(new Error(
+            "remote debugging TCP connect failed",
+        ));
         const timer = setTimeout(() => {
             socket.destroy();
             finish(new Error("timed out connecting to WebDriver socket"));
@@ -699,7 +701,9 @@ function readWebSocketUpgrade(socket, timeoutMs = 10_000) {
                 reject(error);
             }
         };
-        const onError = (error) => finish(error);
+        const onError = () => finish(new Error(
+            "WebSocket upgrade socket failed",
+        ));
         const onEnd = () => finish(new Error(
             "remote WebSocket endpoint closed before its upgrade response",
         ));
@@ -768,6 +772,44 @@ test("TCP debugging connection fails closed on early close and timeout",
             /timed out connecting to WebDriver socket/);
         assert.equal(silent.destroyed, true);
         assert.equal(silent.listenerCount("connect"), 0);
+    },
+);
+
+test("TCP connect socket errors redact private exception details",
+    async () => {
+        const marker = "private-bidi-connect-marker-1945";
+        const stream = new PassThrough();
+        const pending = waitForSocketConnection(stream, 500);
+        stream.emit("error", new Error(`TCP connect error: ${marker}`));
+        await assert.rejects(pending, (error) => {
+            assert.equal(error.message.includes(marker), false);
+            assert.equal("cause" in error, false);
+            assert.match(error.message, /debugging TCP connect failed/);
+            return true;
+        });
+        assert.equal(stream.listenerCount("connect"), 0);
+        assert.equal(stream.listenerCount("error"), 0);
+        assert.equal(stream.listenerCount("close"), 0);
+        stream.destroy();
+    },
+);
+
+test("WebSocket upgrade socket errors redact private exception details",
+    async () => {
+        const marker = "private-bidi-upgrade-marker-2145";
+        const stream = new PassThrough();
+        const pending = readWebSocketUpgrade(stream, 500);
+        stream.emit("error", new Error(`upgrade error: ${marker}`));
+        await assert.rejects(pending, (error) => {
+            assert.equal(error.message.includes(marker), false);
+            assert.equal("cause" in error, false);
+            assert.match(error.message, /WebSocket upgrade socket failed/);
+            return true;
+        });
+        assert.equal(stream.listenerCount("data"), 0);
+        assert.equal(stream.listenerCount("error"), 0);
+        assert.equal(stream.listenerCount("close"), 0);
+        stream.destroy();
     },
 );
 

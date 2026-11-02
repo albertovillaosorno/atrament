@@ -2533,3 +2533,12 @@ cleanup. The existing peer-disconnect regression remains covered separately.
 These are Firefox automation-harness diagnostics, not production browser
 transport or a fix for launcher argv and browser-history credential retention;
 P8 remains open.
+
+A further red-first test-harness check caught untrusted socket exception text
+leaking through the pre-WebSocket TCP connect and HTTP upgrade readiness
+promises. Test-owned stream errors with synthetic private markers originally
+reached their rejection messages unchanged; both paths now use fixed failure
+messages and release their connect/data/error/close observers on rejection.
+Focused connect, upgrade, and header-framing checks pass. This changes only
+test diagnostics; it does not secure the browser-opener argv handoff or erase
+Firefox navigation history, so P8 remains open.
