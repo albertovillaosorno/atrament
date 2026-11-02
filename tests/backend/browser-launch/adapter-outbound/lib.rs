@@ -52,6 +52,46 @@ const PRIVATE_LAUNCH_URL: &str = concat!(
     "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
 );
 
+// Launch success is admitted only while the budget is still live. A late
+// successful exit cannot turn an expired launch into a ready session.
+#[cfg(unix)]
+#[test]
+fn observed_launch_status_respects_the_deadline_even_on_success() {
+    use std::os::unix::process::ExitStatusExt as _;
+    use std::process::ExitStatus;
+
+    let budget = Duration::from_millis(50);
+    let success = ExitStatus::from_raw(0);
+    let failure = ExitStatus::from_raw(7 << 8);
+    assert!(browser_launch::launch_status(
+        success, Duration::from_millis(49), budget,
+    ).is_ok());
+    assert!(matches!(
+        browser_launch::launch_status(
+            success, Duration::from_millis(50), budget,
+        ),
+        Err(browser_launch::LaunchError::TimedOut),
+    ));
+    assert!(matches!(
+        browser_launch::launch_status(
+            success, Duration::from_millis(51), budget,
+        ),
+        Err(browser_launch::LaunchError::TimedOut),
+    ));
+    assert!(matches!(
+        browser_launch::launch_status(
+            failure, Duration::from_millis(49), budget,
+        ),
+        Err(browser_launch::LaunchError::Unsuccessful(_)),
+    ));
+    assert!(matches!(
+        browser_launch::launch_status(
+            failure, Duration::from_millis(51), budget,
+        ),
+        Err(browser_launch::LaunchError::TimedOut),
+    ));
+}
+
 #[cfg(unix)]
 #[test]
 fn explicit_successful_opener_is_accepted() {

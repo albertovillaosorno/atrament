@@ -204,8 +204,16 @@ pub fn launch_with(program: &OsStr, url: &str) -> Result<(), LaunchError> {
     launch_with_timeout(program, url, DEFAULT_LAUNCH_TIMEOUT)
 }
 
-fn launch_status(status: ExitStatus) -> Result<(), LaunchError> {
-    if status.success() {
+// An exit observed after the deadline cannot authorize a live session, even
+// if the opener happened to return success just before it was reaped.
+pub(crate) fn launch_status(
+    status: ExitStatus,
+    elapsed: Duration,
+    timeout: Duration,
+) -> Result<(), LaunchError> {
+    if elapsed >= timeout {
+        Err(LaunchError::TimedOut)
+    } else if status.success() {
         Ok(())
     } else {
         Err(LaunchError::Unsuccessful(status))
@@ -256,13 +264,15 @@ pub(crate) fn launch_with_timeout(
     loop {
         match child.try_wait() {
             Ok(Some(status)) => {
-                // An opener can fail after starting a same-group helper. Do
-                // not leave that helper running with the inherited URL.
+                let elapsed = started.elapsed();
+                // An opener can fail or complete after its deadline while a
+                // same-group helper still holds the inherited URL. Neither
+                // state authorizes a ready session or a surviving helper.
                 #[cfg(target_os = "linux")]
-                if !status.success() {
+                if elapsed >= timeout || !status.success() {
                     terminate_opener_group(&child);
                 }
-                return launch_status(status);
+                return launch_status(status, elapsed, timeout);
             },
             Ok(None) => {},
             Err(error) => {
@@ -281,7 +291,9 @@ pub(crate) fn launch_with_timeout(
                     return Err(LaunchError::TimedOut);
                 },
                 Err(kill_error) => match child.try_wait() {
-                    Ok(Some(status)) => return launch_status(status),
+                    // The deadline already expired; a successful exit in
+                    // the kill race must not convert timeout to success.
+                    Ok(Some(_status)) => return Err(LaunchError::TimedOut),
                     Ok(None) | Err(_) => {
                         return Err(LaunchError::Lifecycle(kill_error));
                     },

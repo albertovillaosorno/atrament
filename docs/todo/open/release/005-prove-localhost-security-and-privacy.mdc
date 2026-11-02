@@ -2623,3 +2623,16 @@ Two synthetic tests proved the old false-positive behavior, then passed with
 strict selection and listener cleanup. This is fixture correctness and
 failure-diagnostic containment, not proof of production credential erasure.
 P8 remains open.
+
+A bounded browser-launch deadline regression also pins the result of an
+opener exit observed after the permitted launch interval. The original
+launcher checked for completed exits before checking elapsed time, so a
+successful opener observed just past the deadline could report success; the
+kill-error fallback similarly could turn a timed-out launch into success.
+
+The result classifier now refuses all statuses at or after the deadline, and
+Linux sends its existing process-group termination signal when a late opener
+completes. Synthetic success/failure statuses exercise both sides of the
+50 ms boundary without depending on host scheduler timing. This tightens
+startup fail-closed behavior; it does not hide the credential from opener
+argv or remove it from Firefox history, so P8 remains open.
