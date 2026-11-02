@@ -8511,24 +8511,32 @@ test(
     async () => {
         fs.mkdirSync(".temp", { recursive: true });
         const profile = fs.mkdtempSync(".temp/session-profile-plaintext-");
-        // This value exists only in the disposable browser fixture; neither
-        // assertion nor test failure should print its private content.
-        const marker = `atrament-private-` +
-            crypto.randomBytes(24).toString("hex");
+        // Distinct synthetic content covers all private textarea surfaces.
+        // No assertion or failure should print a marker's private content.
+        const drafts = Object.fromEntries(
+            ["task", "source", "candidate"].map((field) => [
+                field, `atrament-${field}-end-private-` +
+                    crypto.randomBytes(24).toString("hex"),
+            ]),
+        );
         const calls = [];
-        let markWritten;
-        const written = new Promise((resolve) => { markWritten = resolve; });
+        const writtenFields = new Set();
+        let markAllWritten;
+        const allWritten = new Promise((resolve) => {
+            markAllWritten = resolve;
+        });
         let markEnded;
         const ended = new Promise((resolve) => { markEnded = resolve; });
         const server = createSessionFixtureServer(
             calls,
             (request, response, field) => {
-                assert.equal(field, "task");
+                assert.ok(Object.hasOwn(drafts, field));
                 request.resume();
                 request.once("end", () => {
                     response.writeHead(204, { "Cache-Control": "no-store" });
                     response.end();
-                    markWritten();
+                    writtenFields.add(field);
+                    if (writtenFields.size === 3) markAllWritten();
                 });
             },
             () => markEnded(),
@@ -8555,15 +8563,34 @@ test(
             const edit = await bidi.command("script.evaluate", {
                 awaitPromise: false,
                 expression: `(() => {
-                    const task = document.getElementById("task-input");
-                    task.value = ${JSON.stringify(marker)};
-                    task.dispatchEvent(new Event("input", { bubbles: true }));
+                    const drafts = ${JSON.stringify(drafts)};
+                    for (const [field, value] of Object.entries(drafts)) {
+                        const input = document.getElementById(field + "-input");
+                        input.value = value;
+                        input.dispatchEvent(new Event("input", {
+                            bubbles: true
+                        }));
+                    }
                 })()`,
                 resultOwnership: "none",
                 target: { context: tab.context },
             });
             assert.equal(edit.type, "success");
-            await observedWithin(written, "private synthetic draft write");
+            await observedWithin(allWritten, "three private End draft writes");
+            await waitForSessionStatus(bidi, tab.context, "Session ready");
+            const resident = await bidi.command("script.evaluate", {
+                awaitPromise: false,
+                expression: `(() => {
+                    const drafts = ${JSON.stringify(drafts)};
+                    return Object.entries(drafts).every(([field, value]) =>
+                        document.getElementById(field + "-input").value
+                            === value);
+                })()`,
+                resultOwnership: "none",
+                target: { context: tab.context },
+            });
+            assert.equal(resident.type, "success");
+            assert.deepEqual(resident.result, { type: "boolean", value: true });
             const end = await bidi.command("script.evaluate", {
                 awaitPromise: false,
                 expression: `(() => {
@@ -8578,7 +8605,11 @@ test(
             await observedWithin(ended, "private synthetic session end");
             const final = await waitForSessionStatus(
                 bidi, tab.context, "Session ended");
-            assert.deepEqual(final.task, { disabled: true, value: "" });
+            for (const field of Object.keys(drafts)) {
+                assert.deepEqual(final[field], { disabled: true, value: "" },
+                    `${field} cleared and disabled after confirmed End`);
+                assert.ok(calls.includes(`POST /api/session/${field}`));
+            }
             await bidi.command("browsingContext.close", {
                 context: tab.context,
             });
@@ -8591,14 +8622,18 @@ test(
             // read boundary. Remove this test-owned seed before the real scan.
             const control = path.join(profile, "plaintext-control.bin");
             fs.writeFileSync(control, Buffer.concat([
-                Buffer.alloc(64 * 1024 - 8), Buffer.from(marker, "utf8"),
-            ]));
-            assert.equal(
-                firefoxProfileContainsPlaintext(profile, marker), true);
+                Buffer.alloc(64 * 1024 - 8),
+                Buffer.from(Object.values(drafts).join("\n"), "utf8"),
+            ]), { mode: 0o600 });
+            for (const marker of Object.values(drafts)) {
+                assert.equal(firefoxProfileContainsPlaintext(profile, marker),
+                    true, "test-owned private marker must be detectable");
+            }
             fs.rmSync(control);
-            assert.equal(
-                firefoxProfileContainsPlaintext(profile, marker), false,
-                "ended Firefox profile retained a literal private draft");
+            for (const [field, marker] of Object.entries(drafts)) {
+                assert.equal(firefoxProfileContainsPlaintext(profile, marker),
+                    false, `ended Firefox profile retained ${field} draft`);
+            }
         } finally {
             bidi?.close();
             await closeFixtureServer(server);
@@ -8614,20 +8649,28 @@ test(
     async () => {
         fs.mkdirSync(".temp", { recursive: true });
         const profile = fs.mkdtempSync(".temp/session-profile-hard-stop-");
-        const marker = `atrament-private-` +
-            crypto.randomBytes(24).toString("hex");
-        let markWritten;
-        const written = new Promise((resolve) => { markWritten = resolve; });
+        const drafts = Object.fromEntries(
+            ["task", "source", "candidate"].map((field) => [
+                field, `atrament-${field}-private-` +
+                    crypto.randomBytes(24).toString("hex"),
+            ]),
+        );
+        const writtenFields = new Set();
+        let markAllWritten;
+        const allWritten = new Promise((resolve) => {
+            markAllWritten = resolve;
+        });
         const calls = [];
         const server = createSessionFixtureServer(
             calls,
             (request, response, field) => {
-                assert.equal(field, "task");
+                assert.ok(Object.hasOwn(drafts, field));
                 request.resume();
                 request.once("end", () => {
                     response.writeHead(204, { "Cache-Control": "no-store" });
                     response.end();
-                    markWritten();
+                    writtenFields.add(field);
+                    if (writtenFields.size === 3) markAllWritten();
                 });
             },
         );
@@ -8653,20 +8696,29 @@ test(
             const edited = await bidi.command("script.evaluate", {
                 awaitPromise: false,
                 expression: `(() => {
-                    const task = document.getElementById("task-input");
-                    task.value = ${JSON.stringify(marker)};
-                    task.dispatchEvent(new Event("input", { bubbles: true }));
+                    const drafts = ${JSON.stringify(drafts)};
+                    for (const [field, value] of Object.entries(drafts)) {
+                        const input = document.getElementById(field + "-input");
+                        input.value = value;
+                        input.dispatchEvent(new Event("input", {
+                            bubbles: true
+                        }));
+                    }
                 })()`,
                 resultOwnership: "none",
                 target: { context: tab.context },
             });
             assert.equal(edited.type, "success");
-            await observedWithin(written, "hard-stop private draft write");
+            await observedWithin(allWritten, "hard-stop three draft writes");
             await waitForSessionStatus(bidi, tab.context, "Session ready");
             const resident = await bidi.command("script.evaluate", {
                 awaitPromise: false,
-                expression: `document.getElementById("task-input").value` +
-                    ` === ${JSON.stringify(marker)}`,
+                expression: `(() => {
+                    const drafts = ${JSON.stringify(drafts)};
+                    return Object.entries(drafts).every(([field, value]) =>
+                        document.getElementById(field + "-input").value
+                            === value);
+                })()`,
                 resultOwnership: "none",
                 target: { context: tab.context },
             });
@@ -8682,11 +8734,22 @@ test(
                 "test-owned Firefox hard stop");
             bidi.close();
             bidi = null;
-            assert.equal(
-                firefoxProfileContainsPlaintext(profile, marker), false,
-                "aborted Firefox profile retained a literal private draft");
-            assert.ok(calls.includes("POST /api/session/task"),
-                "hard stop must follow acknowledged private draft write");
+            const control = path.join(profile, "hard-stop-control.bin");
+            // A positive control for each independently edited field proves
+            // the bounded scanner would detect literal data if it survived.
+            fs.writeFileSync(control,
+                Object.values(drafts).join("\n"), { mode: 0o600 });
+            for (const marker of Object.values(drafts)) {
+                assert.equal(firefoxProfileContainsPlaintext(profile, marker),
+                    true, "test-owned private marker must be detectable");
+            }
+            fs.rmSync(control);
+            for (const [field, marker] of Object.entries(drafts)) {
+                assert.equal(firefoxProfileContainsPlaintext(profile, marker),
+                    false, `aborted Firefox profile retained ${field} draft`);
+                assert.ok(calls.includes(`POST /api/session/${field}`),
+                    `hard stop must follow acknowledged ${field} write`);
+            }
             assert.ok(!calls.includes("POST /api/session/end"),
                 "hard stop must not imply confirmed backend erasure");
         } finally {
@@ -8707,20 +8770,28 @@ test(
     async () => {
         fs.mkdirSync(".temp", { recursive: true });
         const profile = fs.mkdtempSync(".temp/session-away-hard-stop-");
-        const marker = `atrament-away-private-` +
-            crypto.randomBytes(24).toString("hex");
+        const drafts = Object.fromEntries(
+            ["task", "source", "candidate"].map((field) => [
+                field, `atrament-${field}-away-private-` +
+                    crypto.randomBytes(24).toString("hex"),
+            ]),
+        );
         const calls = [];
-        let markWritten;
-        const written = new Promise((resolve) => { markWritten = resolve; });
+        const writtenFields = new Set();
+        let markAllWritten;
+        const allWritten = new Promise((resolve) => {
+            markAllWritten = resolve;
+        });
         const server = createSessionFixtureServer(
             calls,
             (request, response, field) => {
-                assert.equal(field, "task");
+                assert.ok(Object.hasOwn(drafts, field));
                 request.resume();
                 request.once("end", () => {
                     response.writeHead(204, { "Cache-Control": "no-store" });
                     response.end();
-                    markWritten();
+                    writtenFields.add(field);
+                    if (writtenFields.size === 3) markAllWritten();
                 });
             },
         );
@@ -8750,20 +8821,29 @@ test(
             const edited = await bidi.command("script.evaluate", {
                 awaitPromise: false,
                 expression: `(() => {
-                    const input = document.getElementById("task-input");
-                    input.value = ${JSON.stringify(marker)};
-                    input.dispatchEvent(new Event("input", { bubbles: true }));
+                    const drafts = ${JSON.stringify(drafts)};
+                    for (const [field, value] of Object.entries(drafts)) {
+                        const input = document.getElementById(field + "-input");
+                        input.value = value;
+                        input.dispatchEvent(new Event("input", {
+                            bubbles: true
+                        }));
+                    }
                 })()`,
                 resultOwnership: "none",
                 target: { context: tab.context },
             });
             assert.equal(edited.type, "success");
-            await observedWithin(written, "accepted departed-page draft");
+            await observedWithin(allWritten, "accepted three departed drafts");
             await waitForSessionStatus(bidi, tab.context, "Session ready");
             const resident = await bidi.command("script.evaluate", {
                 awaitPromise: false,
-                expression: `document.getElementById("task-input").value` +
-                    ` === ${JSON.stringify(marker)}`,
+                expression: `(() => {
+                    const drafts = ${JSON.stringify(drafts)};
+                    return Object.entries(drafts).every(([field, value]) =>
+                        document.getElementById(field + "-input").value
+                            === value);
+                })()`,
                 resultOwnership: "none",
                 target: { context: tab.context },
             });
@@ -8787,13 +8867,17 @@ test(
             assert.deepEqual(JSON.parse(away.result.value), {
                 path: "/missing", hasTask: false,
             });
-            assert.deepEqual(calls, [
+            assert.deepEqual(calls.slice(0, 4), [
                 "POST /api/handshake",
                 "GET /api/session/task",
                 "GET /api/session/source",
                 "GET /api/session/candidate",
-                "POST /api/session/task",
             ]);
+            assert.deepEqual(calls.slice(4).sort(), [
+                "POST /api/session/task",
+                "POST /api/session/source",
+                "POST /api/session/candidate",
+            ].sort());
             // No End, tab close, or history return: terminate the actual
             // browser after the private page has left the active document.
             const firefox = children[0];
@@ -8804,13 +8888,17 @@ test(
             bidi.close();
             bidi = null;
             const control = path.join(profile, "away-control.bin");
-            fs.writeFileSync(control, Buffer.from(marker, "utf8"));
-            assert.equal(
-                firefoxProfileContainsPlaintext(profile, marker), true);
+            fs.writeFileSync(control,
+                Object.values(drafts).join("\n"), { mode: 0o600 });
+            for (const marker of Object.values(drafts)) {
+                assert.equal(firefoxProfileContainsPlaintext(profile, marker),
+                    true, "test-owned departed marker must be detectable");
+            }
             fs.rmSync(control);
-            assert.equal(
-                firefoxProfileContainsPlaintext(profile, marker), false,
-                "Firefox recovery retained a literal departed-page draft");
+            for (const [field, marker] of Object.entries(drafts)) {
+                assert.equal(firefoxProfileContainsPlaintext(profile, marker),
+                    false, `Firefox recovery retained ${field} draft`);
+            }
             assert.equal(calls.includes("POST /api/session/end"), false,
                 "hard stop must not imply backend erasure");
         } finally {

@@ -511,3 +511,21 @@ stop and orderly back-navigation paths. No server-side session End occurs;
 the test does not claim backend destruction. Firefox recovery data may contain
 compressed or encoded state, and other engines and host crash collectors are
 not covered. P1 remains open for the full cleanup lifecycle.
+
+The Firefox literal-profile regressions now cover each of the three private
+`task`, `source`, and `candidate` fields, not only the task editor. Each case
+posts a distinct random synthetic marker, waits for all three acknowledged
+replacements and client readiness, and checks that each marker was resident
+before the lifecycle transition. Confirmed End additionally requires all
+three fields to be blank and disabled; both forced-death cases verify that no
+End request was made. The third case first navigates to an unrelated document.
+
+For confirmed End, direct Firefox `SIGKILL`, and `SIGKILL` after navigation,
+the disposable profile scan finds none of the three literal UTF-8 markers.
+Per-marker test-owned positive controls demonstrate scanner detection before
+removal.
+
+These observations do not prove erasure of encoded or compressed
+copies, initial credential-bearing URL history, host crash snapshots, or
+backend memory without explicit End. Other browsers and actual temporary
+media files remain outside this evidence. P1 remains open.
