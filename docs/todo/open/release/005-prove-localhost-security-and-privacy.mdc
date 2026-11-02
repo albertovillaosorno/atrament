@@ -2044,3 +2044,22 @@ response contains the denial without denying `clipboard-write`. This is
 header configuration evidence, not proof that every browser recognizes or
 enforces the feature. The launcher argv leak and broader P8 acceptance
 remain unresolved.
+
+The physical keyboard layout is another host input. The experimental
+Keyboard Map API can disclose localized key labels through
+`navigator.keyboard.getLayoutMap()` without draft transport or another
+reviewed device entrypoint. The previous browser source guard accepted
+the direct reference.
+
+A red-first browser regression now inventories `navigator.keyboard`,
+first-class `getLayoutMap` references, and `KeyboardLayoutMap` across all
+five TypeScript sources and five emitted JavaScript modules. Eight
+synthetic entrypoint and alias probes per module exercise the guard; no
+production browser code was added. The HTTP `Permissions-Policy` also
+requests `keyboard-map=()` denial while retaining trusted keyboard events
+for editing. Its exact Rust response policy failed red-first and now
+passes; a Firefox runtime fixture checks the served header.
+
+Browser support and enforcement vary, so this is not proof of browser-level
+denial or protection against computed property aliases. The opener argv
+leak and broader P8 acceptance remain unresolved.

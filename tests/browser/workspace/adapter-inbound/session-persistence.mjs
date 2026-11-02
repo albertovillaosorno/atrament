@@ -709,7 +709,8 @@ function usesUnreviewedBrowserHostInput(source, main) {
     const hostProperty = String.raw`(?:geolocation|mediaDevices|credentials|` +
         String.raw`hardwareConcurrency|deviceMemory|userAgent(?:Data)?|` +
         String.raw`connection|getBattery|getGamepads|bluetooth|usb|` +
-        String.raw`serial|hid|gpu|permissions|requestMIDIAccess|contacts|xr)`;
+        String.raw`serial|hid|gpu|keyboard|permissions|requestMIDIAccess|` +
+        String.raw`contacts|xr)`;
     const ambientRead = new RegExp(
         String.raw`\bnavigator\s*(?:(?:\?\.|\.)\s*|(?:\?\.)?\[\s*['"])` +
             hostProperty + String.raw`\b`,
@@ -736,7 +737,7 @@ function usesUnreviewedBrowserHostInput(source, main) {
             String.raw`AuthenticatorAttestationResponse|CredentialsContainer|` +
             String.raw`PasswordCredential|FederatedCredential|` +
             String.raw`IdentityCredential|IdentityProvider|OTPCredential|` +
-            String.raw`DigitalCredential)\b`,
+            String.raw`DigitalCredential|KeyboardLayoutMap|getLayoutMap)\b`,
         "u",
     );
     const motionEvents =
@@ -869,6 +870,32 @@ test("browser host-input inventory refuses unreviewed reads", () => {
             allowedWrite + candidate, true), true, candidate);
         assert.equal(usesUnreviewedBrowserHostInput(candidate, false),
             true, candidate);
+    }
+});
+
+// Keyboard Map reveals the physical keyboard's localized labels without
+// reading a draft or using a reviewed network request. Keyboard locking
+// also captures host key input and needs an explicit source review.
+test("browser keyboard layout APIs require host-input review", async () => {
+    const probes = [
+        "navigator.keyboard.getLayoutMap()",
+        'const keyboard = navigator["keyboard"];',
+        "const keyboard = globalThis.navigator?.keyboard;",
+        "const keyboard = navigator?.['keyboard'];",
+        "const map = keyboard.getLayoutMap;",
+        'const map = keyboard["getLayoutMap"];',
+        "void KeyboardLayoutMap;",
+        "navigator.keyboard.lock(['KeyW']);",
+    ];
+    for (const { filename, source } of await browserModuleSources()) {
+        const main = filename === "main.ts" || filename === "main.js";
+        assert.equal(usesUnreviewedBrowserHostInput(source, main), false,
+            `${filename} gained an unreviewed host keyboard read`);
+        for (const candidate of probes) {
+            assert.equal(usesUnreviewedBrowserHostInput(
+                `${source}\n${candidate}`, main), true,
+            `${filename}: ${candidate} escaped keyboard authority review`);
+        }
     }
 });
 
