@@ -908,6 +908,12 @@ test(
                 body: draftText,
             });
             assert.equal(wrote.response.status, 204);
+            assert.deepEqual(
+                processMemoryProbe(child.pid).map((result) =>
+                    ["EACCES", "EPERM"].includes(result)),
+                [true, true, true],
+                "a runtime holding private draft text must remain protected",
+            );
             assert.equal(wrote.response.headers.has("clear-site-data"), false,
                 "draft writes must not trigger browser storage erasure");
             const read = await request("/api/session/task", {

@@ -363,4 +363,10 @@ on the running binary under this host's procfs policy, beyond the earlier
 isolated guard-function test. It cannot prove crash-collector behavior on
 other hosts, protect browser-opener argv, or establish complete erasure.
 
+The longer-lived Linux process fixture additionally checks that the
+`/proc/<pid>` maps, memory, and environment interfaces remain inaccessible
+after an authenticated task draft replacement has been accepted. This checks
+the guard while private draft text is resident, not only at startup. It
+does not show whether host crash collectors honor the policy.
+
 P1 is still open for broader cancellation, cleanup, and crash coverage.
