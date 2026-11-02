@@ -2084,10 +2084,14 @@ fn serves_embedded_frontend_resources_without_caching() {
 // loads without its HTML and before any client code executes.
 const EXPECTED_PERMISSIONS_POLICY_HEADER: &str = concat!(
     "Permissions-Policy: accelerometer=(), autoplay=(), bluetooth=(), ",
-    "camera=(), display-capture=(), encrypted-media=(), fullscreen=(), ",
-    "geolocation=(), gyroscope=(), hid=(), magnetometer=(), microphone=(), ",
-    "midi=(), payment=(), serial=(), usb=(), web-share=(), ",
-    "xr-spatial-tracking=()\r\n",
+    "camera=(), deferred-fetch=(), deferred-fetch-minimal=(), ",
+    "display-capture=(), encrypted-media=(), fullscreen=(), gamepad=(), ",
+    "geolocation=(), gyroscope=(), hid=(), idle-detection=(), ",
+    "local-fonts=(), magnetometer=(), microphone=(), midi=(), ",
+    "payment=(), picture-in-picture=(), publickey-credentials-create=(), ",
+    "publickey-credentials-get=(), screen-wake-lock=(), serial=(), ",
+    "speaker-selection=(), storage-access=(), usb=(), web-share=(), ",
+    "window-management=(), xr-spatial-tracking=()\r\n",
 );
 
 const EXPECTED_CSP_HEADER: &str = concat!(

@@ -1943,3 +1943,16 @@ popup handle to the runtime workspace is severed by COOP. These boundaries
 add browser-side isolation, not network-request prevention or proof against
 non-browser processes. They do not address the separate browser-opener argv
 credential exposure, and P8 acceptance remains open.
+
+The deny-only HTTP `Permissions-Policy` now also declares twelve unused
+browser capabilities unavailable: deferred fetching, gamepad and idle status,
+local fonts, picture-in-picture, platform identity credentials, screen wake
+locks, audio-output device selection, cross-context storage access, and window
+management. A red-first Rust header regression failed against the prior
+policy, then passed for all seven response classes after expansion. The real
+Firefox runtime fixture independently inspects the served header for all
+twelve directives, while retaining explicit Copy prompt clipboard authority.
+
+These checks prove configured restrictions, not browser enforcement for every
+feature: an unsupported directive may be ignored. This cannot remediate the
+known opener argv credential exposure or close P8 acceptance.

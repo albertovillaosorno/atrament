@@ -5055,6 +5055,25 @@ test(
             assert.equal(runtimeResponse.headers.get(
                 "cross-origin-resource-policy",
             ), "same-origin");
+            const responsePermissions = runtimeResponse.headers.get(
+                "permissions-policy",
+            );
+            assert.equal(typeof responsePermissions, "string");
+            const deniedPermissions = new Set(
+                responsePermissions.split(", "),
+            );
+            for (const capability of [
+                "deferred-fetch", "deferred-fetch-minimal", "gamepad",
+                "idle-detection", "local-fonts", "picture-in-picture",
+                "publickey-credentials-create", "publickey-credentials-get",
+                "screen-wake-lock", "speaker-selection", "storage-access",
+                "window-management",
+            ]) {
+                assert.equal(deniedPermissions.has(`${capability}=()`), true,
+                    `${capability} must be disallowed at the HTTP boundary`);
+            }
+            assert.equal(deniedPermissions.has("clipboard-write=()"), false,
+                "the explicit Copy prompt must remain available");
             await runtimeResponse.body?.cancel();
 
             let resolveControlForm;
