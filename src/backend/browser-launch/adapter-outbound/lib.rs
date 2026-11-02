@@ -53,7 +53,6 @@ const DEFAULT_LAUNCH_TIMEOUT: Duration = Duration::from_secs(5);
 const LAUNCH_POLL_INTERVAL: Duration = Duration::from_millis(10);
 
 /// A browser launch failure safe to present without session-private state.
-#[derive(Debug)]
 pub enum LaunchError {
     /// The current Linux process has no graphical-session environment marker.
     GraphicalSessionUnavailable,
@@ -69,6 +68,25 @@ pub enum LaunchError {
     UnsupportedPlatform,
 }
 
+// The raw I/O errors are retained for trusted typed inspection, but debug
+// formatting must be as private as the user-facing startup error message.
+impl fmt::Debug for LaunchError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::GraphicalSessionUnavailable => {
+                f.write_str("LaunchError::GraphicalSessionUnavailable")
+            },
+            Self::Spawn(_) => f.write_str("LaunchError::Spawn"),
+            Self::Lifecycle(_) => f.write_str("LaunchError::Lifecycle"),
+            Self::TimedOut => f.write_str("LaunchError::TimedOut"),
+            Self::Unsuccessful(_) => f.write_str("LaunchError::Unsuccessful"),
+            Self::UnsupportedPlatform => {
+                f.write_str("LaunchError::UnsupportedPlatform")
+            },
+        }
+    }
+}
+
 impl fmt::Display for LaunchError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -76,12 +94,8 @@ impl fmt::Display for LaunchError {
                 "no graphical session is available for automatic ",
                 "browser launch",
             )),
-            Self::Spawn(error) => {
-                write!(f, "browser opener could not start: {error}")
-            },
-            Self::Lifecycle(error) => {
-                write!(f, "browser opener process failed: {error}")
-            },
+            Self::Spawn(_) => f.write_str("browser opener could not start"),
+            Self::Lifecycle(_) => f.write_str("browser opener process failed"),
             Self::TimedOut => {
                 f.write_str("browser opener exceeded launch deadline")
             },
@@ -102,13 +116,9 @@ impl fmt::Display for LaunchError {
 )]
 impl Error for LaunchError {
     fn cause(&self) -> Option<&dyn Error> {
-        match self {
-            Self::Lifecycle(error) | Self::Spawn(error) => Some(error),
-            Self::GraphicalSessionUnavailable
-            | Self::TimedOut
-            | Self::Unsuccessful(_)
-            | Self::UnsupportedPlatform => None,
-        }
+        // Keep syscall details in the typed variant for internal callers,
+        // never in an externally traversable diagnostic error chain.
+        None
     }
 
     fn description(&self) -> &str {
@@ -125,13 +135,7 @@ impl Error for LaunchError {
     }
 
     fn source(&self) -> Option<&(dyn Error + 'static)> {
-        match self {
-            Self::Lifecycle(error) | Self::Spawn(error) => Some(error),
-            Self::GraphicalSessionUnavailable
-            | Self::TimedOut
-            | Self::Unsuccessful(_)
-            | Self::UnsupportedPlatform => None,
-        }
+        None
     }
 }
 

@@ -121,6 +121,34 @@ fn missing_opener_is_typed_without_exposing_the_origin() {
     assert!(!error.to_string().contains(ORIGIN));
 }
 
+#[test]
+fn opener_io_failure_diagnostics_never_expose_underlying_private_text() {
+    use std::error::Error as _;
+    use std::io;
+
+    const PRIVATE_MARKER: &str = "synthetic-private-opener-diagnostic";
+    let errors = [
+        browser_launch::LaunchError::Spawn(io::Error::other(PRIVATE_MARKER)),
+        browser_launch::LaunchError::Lifecycle(io::Error::other(
+            PRIVATE_MARKER,
+        )),
+    ];
+    for error in errors {
+        assert!(
+            !error.to_string().contains(PRIVATE_MARKER),
+            "formatted error must not reveal private error detail",
+        );
+        assert!(
+            !format!("{error:?}").contains(PRIVATE_MARKER),
+            "debug formatting must not reveal private error detail",
+        );
+        assert!(
+            error.source().is_none(),
+            "chained error source must not reveal private detail",
+        );
+    }
+}
+
 #[cfg(unix)]
 #[test]
 fn zero_launch_budget_rejects_before_spawning_any_opener() {

@@ -2636,3 +2636,15 @@ completes. Synthetic success/failure statuses exercise both sides of the
 50 ms boundary without depending on host scheduler timing. This tightens
 startup fail-closed behavior; it does not hide the credential from opener
 argv or remove it from Firefox history, so P8 remains open.
+
+A red-first browser-opener privacy regression injects synthetic private text
+into both `LaunchError::Spawn` and `LaunchError::Lifecycle`. Previously,
+Display and derived Debug formatting exposed the raw `io::Error`; the
+standard `Error::source()` and legacy `cause()` also exposed it through the
+error chain. The launcher now returns only stable failure-class diagnostics
+through those channels, retaining typed underlying errors for trusted
+internal recovery decisions, including test-only busy-executable retries.
+
+All launcher cases still pass. This prevents additional startup diagnostic
+leakage, but does not hide the opener URL from argv or remove it from
+Firefox navigation history; P8 remains open.
