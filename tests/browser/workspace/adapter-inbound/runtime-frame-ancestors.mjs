@@ -5067,7 +5067,8 @@ test(
             for (const capability of [
                 "ambient-light-sensor", "attribution-reporting",
                 "browsing-topics", "captured-surface-control",
-                "ch-ua-high-entropy-values", "compute-pressure",
+                "ch-ua-high-entropy-values", "clipboard-read",
+                "compute-pressure",
                 "identity-credentials-get", "on-device-speech-recognition",
                 "otp-credentials", "private-state-token-issuance",
                 "private-state-token-redemption",

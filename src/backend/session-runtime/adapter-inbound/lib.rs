@@ -81,7 +81,7 @@ const RESPONSE_TRAILERS: &str = concat!(
     "Permissions-Policy: accelerometer=(), ambient-light-sensor=(), ",
     "attribution-reporting=(), autoplay=(), bluetooth=(), ",
     "browsing-topics=(), camera=(), captured-surface-control=(), ",
-    "ch-ua-high-entropy-values=(), compute-pressure=(), ",
+    "ch-ua-high-entropy-values=(), clipboard-read=(), compute-pressure=(), ",
     "deferred-fetch=(), deferred-fetch-minimal=(), display-capture=(), ",
     "encrypted-media=(), fullscreen=(), gamepad=(), geolocation=(), ",
     "gyroscope=(), hid=(), identity-credentials-get=(), ",

@@ -2031,3 +2031,16 @@ confirmed End still destroys process-owned state independently of any browser
 storage cleanup, and current authored workspace sources forbid storage APIs.
 Actual cross-browser storage removal remains unverified; P8 acceptance and the
 browser-opener argv credential exposure remain open.
+
+The runtime browser policy also denies `clipboard-read=()` before any page
+script executes. The workspace only needs the explicit Copy prompt
+clipboard write. The previous HTTP policy lacked this declaration even
+though the browser source inventory already rejected clipboard reads.
+
+A red-first Rust response-header regression failed before adding the deny
+directive; it now pins the exact header across successful, error and empty
+responses. The actual Firefox runtime fixture also checks that the HTTP
+response contains the denial without denying `clipboard-write`. This is
+header configuration evidence, not proof that every browser recognizes or
+enforces the feature. The launcher argv leak and broader P8 acceptance
+remain unresolved.
