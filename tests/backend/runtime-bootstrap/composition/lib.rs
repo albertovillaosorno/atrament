@@ -11,11 +11,13 @@
 // - Owns:
 //   - Browser launch recovery, profile CLI and Linux crash-policy probes.
 // - Must-Not:
-//   - Launch a real browser or read live application memory/credentials.
+//   - Launch a real browser, inspect application memory, or persist/log
+//     the transient test-owned session credential.
 // - Allows:
-//   - Inputs: Typed launch errors, test-owned ZIP files and CLI arguments.
+//   - Inputs: Typed launch errors, test-owned ZIP files and CLI arguments,
+//     test-only opener credentials passed through an in-memory FIFO.
 //   - Outputs: Assertions over recovery, profile and kernel memory admission.
-//   - Side effects: Test-owned files, CLI processes and a loopback listener.
+//   - Side effects: Test-owned files, CLI processes, a FIFO and loopback I/O.
 // - Split-When:
 //   - Profile CLI grows separate argument or section-decoding policies.
 // - Merge-When:
@@ -104,20 +106,31 @@ fn assert_ready_cli_refuses_ptrace(pid: Pid) {
     );
 }
 
-// Exercise the compiled CLI startup path, not only the isolated guard helper.
-// The fake opener never records its credential-bearing argument. Address zero
-// is deliberately invalid, so even a dumpability regression reads no memory.
+// Exercise the compiled CLI before and after a real authenticated draft edit.
+// The fake opener passes its generated credential only through a test-owned
+// FIFO, never into a regular file or output. Address zero is invalid, so
+// even a dumpability regression reads no application memory.
 #[cfg(target_os = "linux")]
 #[test]
-fn linux_ready_cli_refuses_remote_memory_syscalls() {
+#[expect(
+    clippy::too_many_lines,
+    reason = "one process lifecycle tests ready and live-draft admission",
+)]
+fn linux_ready_and_private_cli_refuse_remote_memory_syscalls() {
     use nix::errno::Errno;
+    use nix::sys::stat::Mode;
     use nix::sys::uio::{RemoteIoVec, process_vm_readv, process_vm_writev};
-    use nix::unistd::Pid;
+    use nix::unistd::{Pid, mkfifo};
+    use std::net::TcpStream;
     use std::os::unix::fs::PermissionsExt as _;
+
+    const PRIVATE_DRAFT: &[u8] = b"synthetic-live-kernel-denial-private-draft";
 
     struct TestOpener(PathBuf);
     impl Drop for TestOpener {
         fn drop(&mut self) {
+            fs::remove_file(self.0.join("launch-url.fifo"))
+                .expect("remove only test-owned credential pipe");
             fs::remove_file(self.0.join("xdg-open"))
                 .expect("remove only test-owned opener");
             fs::remove_dir(&self.0).expect("remove test-owned directory");
@@ -143,9 +156,22 @@ fn linux_ready_cli_refuses_remote_memory_syscalls() {
     fs::create_dir(&opener_directory)
         .expect("unique test opener directory");
     let opener = TestOpener(opener_directory);
+    let fifo_path = opener.0.join("launch-url.fifo");
+    mkfifo(&fifo_path, Mode::S_IRUSR | Mode::S_IWUSR)
+        .expect("private test-only credential pipe");
+    // Linux O_RDWR opens the FIFO without blocking; its contents remain
+    // solely in the kernel pipe and are read only after the opener exits.
+    let mut launch_pipe = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .open(&fifo_path)
+        .expect("hold the test-only credential pipe");
     let script = opener.0.join("xdg-open");
-    fs::write(&script, b"#!/bin/sh\nexit 0\n")
-        .expect("write no-op browser opener");
+    fs::write(
+        &script,
+        b"#!/bin/sh\nprintf '%s\\n' \"$1\" > \"$ATRAMENT_TEST_OPENER_FIFO\"\n",
+    )
+        .expect("write in-memory browser opener");
     fs::set_permissions(&script, fs::Permissions::from_mode(0o700))
         .expect("make test opener executable");
 
@@ -153,6 +179,7 @@ fn linux_ready_cli_refuses_remote_memory_syscalls() {
         Command::new(env!("CARGO_BIN_EXE_atrament"))
             .env("PATH", &opener.0)
             .env("DISPLAY", ":atrament-test")
+            .env("ATRAMENT_TEST_OPENER_FIFO", &fifo_path)
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::null())
@@ -201,6 +228,92 @@ fn linux_ready_cli_refuses_remote_memory_syscalls() {
         process_vm_writev(pid, &[IoSlice::new(&[0x5a])], &remote),
         Err(Errno::EPERM),
         "ready CLI must reject same-parent remote-memory write first",
+    );
+    assert_ready_cli_refuses_ptrace(pid);
+
+    // The opener completed before the CLI published ready. Its URL never
+    // reaches a regular file, process output, or an assertion message.
+    let mut initial_url = String::new();
+    let _received = BufReader::new(&mut launch_pipe)
+        .read_line(&mut initial_url)
+        .expect("read test-only in-memory launch handoff");
+    let (origin, secret) = initial_url
+        .trim_end_matches('\n')
+        .split_once("#session=")
+        .expect("test opener received a session fragment");
+    assert_eq!(secret.len(), 64, "encoded credential length");
+    assert!(
+        secret.bytes().all(|digit| {
+            digit.is_ascii_digit() || (b'a'..=b'f').contains(&digit)
+        }),
+        "test opener received a hexadecimal credential",
+    );
+    let port = origin
+        .strip_prefix("http://127.0.0.1:")
+        .expect("CLI origin must be IPv4 loopback")
+        .parse::<u16>()
+        .expect("CLI origin has a port");
+    let host = format!("127.0.0.1:{port}");
+    let exchange = |method: &str, body: &[u8]| {
+        let mut stream = TcpStream::connect(("127.0.0.1", port))
+            .expect("test parent connects to live CLI loopback");
+        stream.set_read_timeout(Some(Duration::from_secs(2)))
+            .expect("bounded CLI response read");
+        let request = format!(
+            concat!(
+                "{} /api/session/task HTTP/1.1\r\n",
+                "Host: {}\r\nOrigin: {}\r\n",
+                "Authorization: Bearer {}\r\n",
+                "Content-Type: text/plain; charset=utf-8\r\n",
+                "Content-Length: {}\r\n\r\n",
+            ),
+            method,
+            host,
+            origin,
+            secret,
+            body.len(),
+        );
+        stream.write_all(request.as_bytes())
+            .expect("send admitted private draft request");
+        stream.write_all(body)
+            .expect("send complete private draft body");
+        let mut response = Vec::new();
+        let _read = stream.read_to_end(&mut response)
+            .expect("read bounded private draft response");
+        response
+    };
+    let accepted = exchange("POST", PRIVATE_DRAFT);
+    assert!(
+        accepted.starts_with(b"HTTP/1.1 204 No Content\r\n"),
+        "compiled CLI must accept a private draft replacement",
+    );
+    let readback = exchange("GET", b"");
+    assert!(
+        readback.starts_with(b"HTTP/1.1 200 OK\r\n"),
+        "compiled CLI must allow authenticated private draft readback",
+    );
+    let payload_offset = readback
+        .windows(4)
+        .position(|bytes| bytes == b"\r\n\r\n")
+        .expect("draft HTTP response has complete headers")
+        + 4;
+    assert_eq!(
+        readback.get(payload_offset..),
+        Some(PRIVATE_DRAFT),
+        "kernel probe must run with accepted private draft resident",
+    );
+    // Probes use an invalid address and cannot read or overwrite draft data.
+    byte[0] = 0xa5;
+    assert_eq!(
+        process_vm_readv(pid, &mut [IoSliceMut::new(&mut byte)], &remote),
+        Err(Errno::EPERM),
+        "private CLI must still reject remote-memory read first",
+    );
+    assert_eq!(byte, [0xa5], "denied read leaves the caller unchanged");
+    assert_eq!(
+        process_vm_writev(pid, &[IoSlice::new(&[0x5a])], &remote),
+        Err(Errno::EPERM),
+        "private CLI must still reject remote-memory write first",
     );
     assert_ready_cli_refuses_ptrace(pid);
     drop(cli);

@@ -2461,3 +2461,18 @@ it. The original assertion failed before the redaction fix.
 This protects test failure output, not runtime credential handoff, browser
 history, production logging, or other arbitrary assertions over test-owned
 private values. P8 remains open.
+
+The compiled Linux CLI memory and ptrace regression now performs a real
+Bearer-authenticated task draft replacement and confirms identical private
+bytes through an authenticated readback before repeating both kernel
+remote-memory syscalls and both debugger-attach probes. All four operations
+still return `EPERM` against the running CLI; the read target is intentionally
+an invalid remote address, and the caller's sentinel remains untouched. A
+test-only FIFO conveys the automatically generated launch credential only in
+memory between the disposable opener and test parent, with no logged or
+regular-file copy. The fixture destroys its processes and FIFO afterward.
+
+This strengthens evidence while a draft is actually resident, but does not
+remove the production opener's argument exposure, Firefox navigation-history
+retention, privileged inspection, or other operating systems' risks. Neither
+P8 nor the linked P1 cleanup task is complete.

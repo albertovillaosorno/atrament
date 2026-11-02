@@ -541,3 +541,22 @@ These observations do not prove erasure of encoded or compressed
 copies, initial credential-bearing URL history, host crash snapshots, or
 backend memory without explicit End. Other browsers and actual temporary
 media files remain outside this evidence. P1 remains open.
+
+The real compiled Linux CLI kernel-admission fixture now covers an accepted
+private draft, not only startup readiness. Its test-owned `xdg-open` adapter
+sends the generated launch URL through an owner-only FIFO whose contents
+remain in kernel memory; it never prints or writes the credential to a
+regular file. The test parent authenticates an actual loopback draft POST,
+then reads back the same synthetic bytes before probing the still-running
+CLI.
+
+Both `process_vm_readv` and `process_vm_writev` return `EPERM` at an
+invalid remote address; neither the caller's sentinel nor the CLI's private
+memory is read or overwritten. `PTRACE_ATTACH` and `PTRACE_SEIZE` also
+return `EPERM`, both before and after the accepted draft. The fixture kills
+and reaps its CLI, and removes the FIFO and opener.
+
+This is live Linux same-parent admission evidence with private session data
+resident, not proof of memory erasure on exit, privileged-host resistance,
+filesystem media cleanup, or launcher-argument confidentiality. P1 remains
+open for the broader lifecycle and temporary-file obligations.
