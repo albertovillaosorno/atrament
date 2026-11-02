@@ -1071,7 +1071,11 @@ function hasUnreviewedBrowserDisclosure(source) {
                 String.raw`SpeechSynthesisUtterance|AudioContext|` +
                 String.raw`webkitAudioContext|AudioWorkletNode|` +
                 String.raw`MediaMetadata|MediaSession|mediaSession|` +
-                String.raw`setAppBadge|clearAppBadge)\b`, "u",
+                String.raw`setAppBadge|clearAppBadge|Presentation|` +
+                String.raw`PresentationRequest|PresentationConnection|` +
+                String.raw`PresentationReceiver|presentation|PaymentRequest|` +
+                String.raw`PaymentResponse|PaymentAddress|` +
+                String.raw`PaymentMethodChangeEvent)\b`, "u",
         ),
         /\bprompt\s*\(/u,
         /\b(?:window|globalThis)\s*(?:\?\.|\.)\s*prompt\b/u,
@@ -1118,6 +1122,36 @@ test("browser private-output sinks require explicit review", async () => {
             assert.equal(hasUnreviewedBrowserDisclosure(
                 `${source}\n${candidate}`), true,
             `${filename}: ${candidate} escaped private-output review`);
+        }
+    }
+});
+
+// Browser Presentation can send document-selected data to another display.
+// Payment Request can invoke the host's payment UI outside the notebook.
+// These are distinct from the reviewed Copy prompt output action.
+test("browser remote presentation and payment APIs require review",
+    async () => {
+    const probes = [
+        'new PresentationRequest(["https://example.invalid"]);',
+        'navigator.presentation.defaultRequest = request;',
+        'const p = navigator["presentation"];',
+        "void Presentation;",
+        "void PresentationConnection;",
+        "void PresentationReceiver;",
+        'const request = globalThis["PresentationRequest"];',
+        "new PaymentRequest(methods, details);",
+        'const request = window["PaymentRequest"];',
+        "void PaymentResponse;",
+        "void PaymentAddress;",
+        "void PaymentMethodChangeEvent;",
+    ];
+    for (const { filename, source } of await browserModuleSources()) {
+        assert.equal(hasUnreviewedBrowserDisclosure(source), false,
+            `${filename} gained an unreviewed presentation or payment API`);
+        for (const candidate of probes) {
+            assert.equal(hasUnreviewedBrowserDisclosure(
+                `${source}\n${candidate}`), true,
+            `${filename}: ${candidate} escaped host-output review`);
         }
     }
 });

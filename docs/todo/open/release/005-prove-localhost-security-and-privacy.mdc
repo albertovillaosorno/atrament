@@ -1829,3 +1829,18 @@ across all ten browser modules check this lexical inventory.
 This does not prove runtime sensor permission denial, cover dynamically
 assembled names, or resolve the browser-launch argv credential exposure.
 P8 acceptance remains open.
+
+Browser private-output review also omitted Presentation and Payment Request
+entrypoints. A presentation can target an external display, and the payment
+request flow can open host-owned payment UI outside the notebook.
+Read-only presentation and payment probes passed the previous inventory.
+
+The expanded zero-owner guard now requires review for Presentation request,
+connection and receiver objects, `navigator.presentation`, and named payment
+request, response and change-event objects. Twelve syntactic variants are
+checked against all authored and emitted browser modules. Six separately
+injected main-module references were rejected and byte-restored.
+
+This is lexical source evidence, not proof of browser payment/presentation
+availability, user authorization, or rejection of computed API names. The
+browser-launch argv credential exposure and broader P8 acceptance remain open.
