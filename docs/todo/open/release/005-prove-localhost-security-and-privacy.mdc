@@ -2520,3 +2520,16 @@ private readiness-line marker. The harness now emits fixed error messages
 for both cases and drops stream observers after rejection. This is a test
 logging boundary, not a change to production process or browser credential
 transport, and it does not close the existing P8 acceptance gaps.
+
+A follow-up red-first WebDriver BiDi test-harness privacy check found that
+command-send and peer-ping write exceptions could echo synthetic private
+request or remote payload bytes into test failure messages. Both paths now
+reject with fixed text, close their socket, and clear every outstanding
+command instead of propagating the thrown exception.
+
+An additional real loopback WebSocket fixture injects a private-marker
+socket `error` event after handshake and confirms the same redaction and
+cleanup. The existing peer-disconnect regression remains covered separately.
+These are Firefox automation-harness diagnostics, not production browser
+transport or a fix for launcher argv and browser-history credential retention;
+P8 remains open.

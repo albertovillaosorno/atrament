@@ -1045,7 +1045,9 @@ class BidiClient {
         });
         // A dead peer must settle pending commands immediately instead of
         // leaving every caller to wait for its separate command timeout.
-        this.socket.on("error", (error) => this.close(error));
+        this.socket.on("error", () => this.close(new Error(
+            "WebDriver BiDi socket failed",
+        )));
         this.socket.on("close", () => this.close(new Error(
             "WebDriver BiDi socket closed before command completion",
         )));
@@ -1097,10 +1099,10 @@ class BidiClient {
                     method,
                     params,
                 })));
-            } catch (error) {
-                this.pending.delete(id);
-                clearTimeout(timer);
-                reject(error);
+            } catch {
+                // A failed write invalidates every outstanding command.
+                // Never reflect socket exceptions, which can echo the request.
+                this.close(new Error("WebDriver BiDi socket write failed"));
             }
         });
     }
@@ -1168,8 +1170,9 @@ class BidiClient {
             if (opcode === 0x9) {
                 try {
                     this.socket.write(this.textFrame(payload, 0xa));
-                } catch (error) {
-                    this.close(error);
+                } catch {
+                    // Socket exceptions can contain untrusted ping bytes.
+                    this.close(new Error("WebDriver BiDi socket write failed"));
                     return;
                 }
                 continue;
@@ -2030,18 +2033,71 @@ test("WebDriver client close rejects commands and destroys its socket",
     },
 );
 
-test("WebDriver client rejects a failed socket write without a timer leak",
+test("WebDriver socket write failures redact private request data",
     async () => {
+        const marker = "private-command-write-marker-8442";
         const client = new BidiClient("ws://127.0.0.1:1234/session");
-        const fault = new Error("injected disconnected socket");
+        let destroyed = 0;
+        let writes = 0;
         client.socket = {
-            write: () => { throw fault; },
-            destroy: () => {},
+            write: () => {
+                writes += 1;
+                if (writes === 2) {
+                    throw new Error(`socket rejected ${marker}`);
+                }
+            },
+            destroy: () => { destroyed += 1; },
         };
-        await assert.rejects(client.command("session.status", {}, 30_000),
-            (error) => error === fault);
+        const waiting = client.command("session.status", {}, 30_000);
+        const redacted = (error) => {
+            assert.equal(error.message.includes(marker), false);
+            assert.equal("cause" in error, false);
+            assert.match(error.message, /WebDriver BiDi socket write failed/);
+            return true;
+        };
+        const waitingRejected = assert.rejects(waiting, redacted);
+        const failed = client.command("script.evaluate", {
+            expression: marker,
+        }, 30_000);
+        const failedRejected = assert.rejects(failed, redacted);
+        await Promise.all([waitingRejected, failedRejected]);
+        assert.equal(writes, 2);
         assert.equal(client.pending.size, 0);
-        client.close();
+        assert.equal(client.closed, true);
+        assert.equal(destroyed, 1);
+    },
+);
+
+test("WebDriver ping-write failures redact private remote payloads",
+    async () => {
+        const marker = "private-ping-write-marker-9231";
+        const client = new BidiClient("ws://127.0.0.1:1234/session");
+        let failWrite = false;
+        let destroyed = 0;
+        client.socket = {
+            write: () => {
+                if (failWrite) {
+                    throw new Error(`socket rejected ${marker}`);
+                }
+            },
+            destroy: () => { destroyed += 1; },
+        };
+        const pending = client.command("session.status", {}, 30_000);
+        failWrite = true;
+        const ping = Buffer.from(marker);
+        client.buffer = Buffer.concat([
+            Buffer.from([0x89, ping.length]), ping,
+        ]);
+        client.drain();
+        await assert.rejects(pending, (error) => {
+            assert.equal(error.message.includes(marker), false);
+            assert.equal("cause" in error, false);
+            assert.match(error.message, /WebDriver BiDi socket write failed/);
+            return true;
+        });
+        assert.equal(client.pending.size, 0);
+        assert.equal(client.closed, true);
+        assert.equal(destroyed, 1);
     },
 );
 
@@ -2087,10 +2143,70 @@ test("WebDriver peer disconnect rejects its pending command immediately",
             }
             await assert.rejects(
                 command,
-                /socket closed before command|ECONNRESET/,
+                /socket closed before command|socket failed/,
             );
             assert.equal(client.pending.size, 0);
             assert.equal(client.closed, true);
+        } finally {
+            client.close();
+            for (const peer of peers) {
+                peer.destroy();
+            }
+            await new Promise((resolve) => server.close(resolve));
+        }
+    },
+);
+
+test("WebDriver socket error events redact private peer exceptions",
+    { timeout: 5_000 },
+    async () => {
+        const marker = "private-bidi-socket-error-marker-4239";
+        const peers = new Set();
+        const server = net.createServer((peer) => {
+            peers.add(peer);
+            peer.once("data", (request) => {
+                const key = request.toString("latin1").match(
+                    /Sec-WebSocket-Key: ([^\r\n]+)/i,
+                )?.[1];
+                if (key === undefined) {
+                    peer.destroy();
+                    return;
+                }
+                const accepted = crypto.createHash("sha1")
+                    .update(`${key}258EAFA5-E914-47DA-95CA-C5AB0DC85B11`)
+                    .digest("base64");
+                peer.write([
+                    "HTTP/1.1 101 Switching Protocols",
+                    "Upgrade: websocket",
+                    "Connection: Upgrade",
+                    `Sec-WebSocket-Accept: ${accepted}`,
+                    "", "",
+                ].join("\r\n"));
+            });
+            peer.on("close", () => peers.delete(peer));
+        });
+        server.listen(0, "127.0.0.1");
+        await once(server, "listening");
+        const address = server.address();
+        assert.notEqual(address, null);
+        assert.notEqual(typeof address, "string");
+        const client = new BidiClient(`ws://127.0.0.1:${address.port}/session`);
+        try {
+            await client.connect();
+            const command = client.command("script.evaluate", {
+                expression: marker,
+            }, 30_000);
+            assert.equal(client.pending.size, 1);
+            client.socket.emit("error", new Error(`socket failed ${marker}`));
+            await assert.rejects(command, (error) => {
+                assert.equal(error.message.includes(marker), false);
+                assert.equal("cause" in error, false);
+                assert.match(error.message, /WebDriver BiDi socket failed/);
+                return true;
+            });
+            assert.equal(client.pending.size, 0);
+            assert.equal(client.closed, true);
+            assert.equal(client.socket.destroyed, true);
         } finally {
             client.close();
             for (const peer of peers) {
