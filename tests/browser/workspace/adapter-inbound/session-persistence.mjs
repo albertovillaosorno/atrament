@@ -358,6 +358,47 @@ test("browser modules reject unreviewed cross-context authority", async () => {
     }
 });
 
+// Browser-selected files and origin-private filesystem directories are
+// separate from the backend's explicit, selected-path import/export API.
+// Require source review before new filesystem handles appear in the UI.
+function hasUnreviewedBrowserFileAuthority(source) {
+    const namedFileAuthority = new RegExp(
+        String.raw`\b(?:showOpenFilePicker|showSaveFilePicker|` +
+            String.raw`showDirectoryPicker|requestFileSystem|` +
+            String.raw`webkitRequestFileSystem|chooseFileSystemEntries|` +
+            String.raw`getAsFileSystemHandle|FileSystemHandle|` +
+            String.raw`FileSystemFileHandle|FileSystemDirectoryHandle)\b`,
+        "u",
+    );
+    const indexedStorage = new RegExp(
+        String.raw`\bnavigator\s*(?:\?\.)?\[\s*['"]storage['"]\s*\]`,
+        "u",
+    );
+    return namedFileAuthority.test(source) || indexedStorage.test(source);
+}
+
+test("browser filesystem authority inventory rejects unreviewed access", () => {
+    assert.equal(hasUnreviewedBrowserFileAuthority(
+        "const source = document.querySelector('textarea');"), false);
+    for (const candidate of [
+        "window.showOpenFilePicker()",
+        'const select = globalThis["showSaveFilePicker"];',
+        "showDirectoryPicker()",
+        "window.webkitRequestFileSystem(type, size, ok, fail)",
+        "requestFileSystem(type, size, ok, fail)",
+        'window["chooseFileSystemEntries"]()',
+        "item.getAsFileSystemHandle()",
+        "const handle = FileSystemFileHandle;",
+        "const directory = FileSystemDirectoryHandle;",
+        "const handle = FileSystemHandle;",
+        'navigator["storage"].getDirectory()',
+        "navigator?.['storage']?.getDirectory()",
+    ]) {
+        assert.equal(hasUnreviewedBrowserFileAuthority(candidate), true,
+            candidate);
+    }
+});
+
 // Browser modules need the user's clipboard only to write the deliberate
 // Copy prompt result. Reads of clipboard contents, device identifiers or
 // permission-bearing host resources are not part of the admitted session.
@@ -432,6 +473,8 @@ test("browser source and emitted modules reject unreviewed host reads",
         const main = filename === "main.ts" || filename === "main.js";
         assert.equal(usesUnreviewedBrowserHostInput(source, main), false,
             `${filename} gained clipboard or ambient device read authority`);
+        assert.equal(hasUnreviewedBrowserFileAuthority(source), false,
+            `${filename} gained unreviewed browser file authority`);
     }
 });
 

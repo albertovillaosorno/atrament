@@ -1590,3 +1590,17 @@ optional chaining and destructuring. Eight syntactic probes and four separate
 inactive source mutations confirm this guard detects new popup authority.
 This is static review rather than a user-gesture or live-browser popup test;
 computed runtime names are not exhaustively covered.
+
+A separate browser file-authority review found that first-class
+`globalThis["showOpenFilePicker"]` in authored TypeScript and
+`navigator["storage"].getDirectory()` in emitted JavaScript passed all 43
+previous session-persistence tests. The original modules were restored.
+
+The new browser source guard reviews named File System Access pickers, legacy
+filesystem methods, drag-and-drop filesystem handles, and indexed navigator
+storage references across both TypeScript and emitted JavaScript. Twelve
+syntactic variants and four temporary inactive source mutations now fail
+before exact restoration. A picker still requires user participation, while
+origin-private file access can persist without the backend's selected-path
+Export authority. This is a conservative text scan, not proof of runtime
+permission enforcement or exhaustive dynamic property resolution.
