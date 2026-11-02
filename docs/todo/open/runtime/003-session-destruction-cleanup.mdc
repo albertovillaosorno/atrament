@@ -141,6 +141,11 @@ closes without reading the acknowledgement. Only the latter ends the accept
 loop, drops the observed private draft owner, and releases the exact socket.
 This does not prove disk erasure or browser history clearance.
 
+A separate loopback adapter check disables the server socket's write half
+before routing an admitted End, forcing its acknowledgement to fail while
+preserving request readability. The connection still returns a terminal
+session outcome; this proves the End decision is not contingent on delivery.
+
 A real socket regression verifies that an unauthorized attempt cannot end the
 session and that an authorized request releases the exact endpoint. Firefox
 coverage verifies confirmation before any mutation, authenticated termination,

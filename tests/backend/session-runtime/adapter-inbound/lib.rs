@@ -2544,6 +2544,45 @@ fn abandoned_end_reply_still_drops_private_draft_after_complete_request() {
 }
 
 #[test]
+fn accepted_end_is_terminal_when_acknowledgement_cannot_be_written() {
+    let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0))
+        .expect("loopback listener binds");
+    let address = listener.local_addr().expect("loopback address exists");
+    let host = format!("127.0.0.1:{}", address.port());
+    let origin = format!("http://{host}");
+    let request = format!(
+        concat!(
+            "POST /api/session/end HTTP/1.1\r\n",
+            "Host: {}\r\nOrigin: {}\r\n",
+            "Authorization: Bearer {}\r\n",
+            "Content-Length: 0\r\n\r\n",
+        ),
+        host, origin, EXPECTED_SECRET,
+    );
+    let mut client = TcpStream::connect(address)
+        .expect("test client connects to loopback");
+    client.write_all(request.as_bytes())
+        .expect("complete authenticated End reaches the listener");
+    let (mut server, _) = listener.accept()
+        .expect("server accepts test-owned connection");
+    runtime::configure_connection_deadline(&server)
+        .expect("server read and write deadlines configure");
+    // This deterministically blocks the acknowledgement write without
+    // preventing the server from reading the complete accepted request.
+    server.shutdown(Shutdown::Write)
+        .expect("disable only the server response direction");
+    assert!(server.write_all(b"probe").is_err(),
+        "disabled server socket cannot send acknowledgement bytes");
+    let context = runtime::RouteRequestContext::new(
+        &host, &origin, EXPECTED_SECRET, &HANDSHAKE,
+    );
+    let mut draft = seeded_private_draft();
+    assert!(runtime::serve_connection(&mut server, &context, &mut draft)
+        .expect("accepted End is terminal despite failed response write"));
+    assert_private_draft_unchanged(&draft);
+}
+
+#[test]
 fn explicit_session_end_requires_current_credential_origin_and_empty_body() {
     let authorization = format!("Bearer {EXPECTED_SECRET}");
     let end_request = |method: &str,
