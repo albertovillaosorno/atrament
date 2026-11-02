@@ -65,6 +65,10 @@ const TEXT_CONTENT_TYPE: &str = "text/plain; charset=utf-8";
 const JSON_CONTENT_TYPE: &str = "application/json; charset=utf-8";
 const RESPONSE_TRAILERS: &str = concat!(
     "Cache-Control: no-store\r\n",
+    // A hostile local page must not keep an opener reference to the
+    // workspace, or embed its response as an opaque cross-origin resource.
+    "Cross-Origin-Opener-Policy: same-origin\r\n",
+    "Cross-Origin-Resource-Policy: same-origin\r\n",
     "Content-Security-Policy: frame-ancestors 'none'; ",
     "default-src 'self'; base-uri 'none'; connect-src 'self'; ",
     "font-src 'none'; form-action 'none'; frame-src 'none'; ",

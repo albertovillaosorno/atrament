@@ -5049,6 +5049,12 @@ test(
                 "x-content-type-options",
             );
             assert.equal(responseNoSniff, "nosniff");
+            assert.equal(runtimeResponse.headers.get(
+                "cross-origin-opener-policy",
+            ), "same-origin");
+            assert.equal(runtimeResponse.headers.get(
+                "cross-origin-resource-policy",
+            ), "same-origin");
             await runtimeResponse.body?.cancel();
 
             let resolveControlForm;
@@ -5180,6 +5186,13 @@ test(
                 `http://127.0.0.1:${permissiveAddress.port}`;
 
             hostile = http.createServer((request, response) => {
+                if (request.url === "/corp-css-control") {
+                    response.writeHead(200, {
+                        "Content-Type": "text/css; charset=utf-8",
+                    });
+                    response.end("body { color: black; }");
+                    return;
+                }
                 if (request.url === "/csp-probe") {
                     outboundRequests += 1;
                     response.writeHead(200, {
@@ -5297,6 +5310,66 @@ test(
                 "response header alone must prevent cross-origin fetch");
             assert.equal(outboundRequests, 1,
                 "no-meta document must not contact external endpoint");
+
+            // Stylesheets ordinarily load cross-origin without CORS. The
+            // runtime's CORP must block that embedding, while an otherwise
+            // equivalent host resource without CORP remains loadable.
+            const stylesheetProbe = (target) => `(async () => {
+                const node = document.createElement("link");
+                node.rel = "stylesheet";
+                node.href = ${JSON.stringify(target)};
+                return await new Promise((resolve) => {
+                    const timer = setTimeout(() => resolve(false), 3000);
+                    const finish = (loaded) => {
+                        clearTimeout(timer);
+                        node.remove();
+                        resolve(loaded);
+                    };
+                    node.onload = () => finish(true);
+                    node.onerror = () => finish(false);
+                    document.head.append(node);
+                });
+            })()`;
+            const checkStyle = async (target) => {
+                const result = await bidi.command("script.evaluate", {
+                    awaitPromise: true,
+                    expression: stylesheetProbe(target),
+                    resultOwnership: "none",
+                    target: { context: networkControl.context },
+                });
+                assert.equal(result.type, "success");
+                return result.result.value;
+            };
+            assert.equal(await checkStyle(
+                `${hostileOrigin}/corp-css-control`,
+            ), true, "control cross-origin stylesheet must load");
+            assert.equal(await checkStyle(`${origin}/workspace.css`), false,
+                "runtime CORP must deny cross-origin CSS embedding");
+
+            // A different-origin opener must lose its cross-window handle
+            // when the actual runtime document declares COOP same-origin.
+            const openerProbe = (target) => `(async () => {
+                const opened = window.open(${JSON.stringify(target)}, "_blank");
+                if (opened === null) return "blocked";
+                await new Promise(resolve => setTimeout(resolve, 600));
+                const severed = opened.closed;
+                if (!severed) opened.close();
+                return severed;
+            })()`;
+            const checkOpener = async (target) => {
+                const result = await bidi.command("script.evaluate", {
+                    awaitPromise: true,
+                    expression: openerProbe(target),
+                    resultOwnership: "none",
+                    target: { context: networkControl.context },
+                });
+                assert.equal(result.type, "success");
+                return result.result.value;
+            };
+            assert.equal(await checkOpener(permissiveOrigin), false,
+                "control same-origin popup must retain its opener handle");
+            assert.equal(await checkOpener(origin), true,
+                "COOP must sever a hostile opener's workspace handle");
 
             const assetTargets = JSON.stringify({
                 image: `${hostileOrigin}/csp-image`,

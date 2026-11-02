@@ -1929,3 +1929,17 @@ permission denial or protection against computed property names.
 
 P8 remains open, and the browser launcher still exposes its
 credential-bearing URL in child process argv.
+
+The runtime also now sends `Cross-Origin-Opener-Policy: same-origin` and
+`Cross-Origin-Resource-Policy: same-origin` on all response classes. A
+red-first Rust regression failed when the headers were absent; it now pins
+exactly one of each on seven success, error, and empty-response classes.
+
+Real Firefox verifies the browser behavior against an actual runtime: a
+separate loopback origin can load an ordinary cross-origin CSS control, but
+cannot load the runtime's `workspace.css` when CORP is present. A permissive
+same-origin popup keeps its JavaScript opener handle, while a foreign page's
+popup handle to the runtime workspace is severed by COOP. These boundaries
+add browser-side isolation, not network-request prevention or proof against
+non-browser processes. They do not address the separate browser-opener argv
+credential exposure, and P8 acceptance remains open.

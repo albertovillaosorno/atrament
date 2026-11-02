@@ -2155,6 +2155,16 @@ fn http_csp_enforces_the_document_resource_policy_without_meta() {
 fn assert_security_headers(response: &[u8]) {
     let (head, _body) = response_parts(response);
     assert!(head.contains("Cache-Control: no-store\r\n"));
+    for policy in [
+        "Cross-Origin-Opener-Policy: same-origin",
+        "Cross-Origin-Resource-Policy: same-origin",
+    ] {
+        assert_eq!(
+            head.lines().filter(|line| *line == policy).count(),
+            1,
+            "exactly one {policy} must be sent on every response",
+        );
+    }
     assert!(head.contains(
         EXPECTED_CSP_HEADER,
     ));
