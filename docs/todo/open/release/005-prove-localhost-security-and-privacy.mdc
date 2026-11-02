@@ -1521,3 +1521,21 @@ new owner check, then restored byte-for-byte. This is deliberately conservative
 source-level evidence, not an AST or alias-flow proof, a browser permission
 sandbox, packet-level isolation, or a fix for the known opener argv credential
 exposure. The release task remains open pending its wider acceptance criteria.
+
+The browser transport inventory previously covered four same-origin fetch
+calls but did not review URL navigation, form submission or element-driven
+requests that can bypass fetch entirely. A red-first probe inserted an inactive
+`window.location.assign(dynamicTarget)` into an authored browser helper; the
+existing transport and cross-context guards both passed it.
+
+A second browser source inventory now pins the main module's two local-path
+`history.replaceState` fragment scrub calls, one local-path
+`location.replace` fallback, and one bfcache `location.reload`. New direct or
+computed location changes, history navigation, form submission, synthetic
+anchor clicks and dynamic image/audio constructors require review across
+both the authored TypeScript and emitted JavaScript trees. Five inert
+TypeScript navigation probes and one emitted-JavaScript probe were rejected,
+then each mutated file was restored byte-for-byte. The source inventory is
+not a DOM flow analysis or browser network sandbox; dynamically aliased and
+other unmodeled request paths remain outside the proof. The known browser
+opener argv credential exposure is unchanged, and P8 remains open.

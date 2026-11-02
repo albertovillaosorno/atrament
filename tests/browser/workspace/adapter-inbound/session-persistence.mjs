@@ -296,6 +296,114 @@ test("browser source and emitted modules reject unreviewed host reads",
     }
 });
 
+// Navigation, dynamic element loading, and form submission can send a
+// request without invoking the four reviewed fetch sites. Only fragment
+// scrubbing and bfcache reload are approved in the main workspace module.
+// This guards obvious source drift, not dynamically aliased objects or the
+// browser's complete navigation and network execution paths.
+function usesUnreviewedBrowserNavigation(source, main) {
+    let remaining = source;
+    for (const [site, count] of [
+        ["window.location.replace(localUrl)", 1],
+        ["window.location.reload()", 1],
+        ['window.history.replaceState(null, "", localUrl)', 2],
+    ]) {
+        if (remaining.split(site).length - 1 !== (main ? count : 0)) {
+            return true;
+        }
+        remaining = remaining.replaceAll(site, "");
+    }
+    const locationMethod = String.raw`(?:assign|replace|reload)`;
+    const locationWritable = String.raw`(?:href|search|hash|pathname|` +
+        String.raw`host|hostname|protocol)`;
+    const locationNavigation = new RegExp(
+        String.raw`\b(?:window\s*\.\s*|document\s*\.\s*)?location\s*` +
+            String.raw`(?:=(?!=)|\.\s*` + locationMethod +
+            String.raw`\s*\(|\.\s*` + locationWritable +
+            String.raw`\s*=(?!=)|\[\s*['"](?:href|search|hash|pathname|` +
+            String.raw`host|assign|replace|reload)['"]\s*\]` +
+            String.raw`\s*(?:\(|=(?!=)))`,
+        "u",
+    );
+    const historyMethod = String.raw`(?:pushState|replaceState|go|` +
+        String.raw`back|forward)`;
+    const historyNavigation = new RegExp(
+        String.raw`\b(?:window\s*\.\s*)?history\s*` +
+            String.raw`(?:\.\s*` + historyMethod + String.raw`\s*\(|` +
+            String.raw`\[\s*['"]` + historyMethod +
+            String.raw`['"]\s*\]\s*\()`,
+        "u",
+    );
+    const navigation = [
+        locationNavigation,
+        historyNavigation,
+        /\.\s*(?:submit|requestSubmit|click)\s*\(/u,
+        /\[\s*['"](?:submit|requestSubmit|click)['"]\s*\]\s*\(/u,
+        /\bnew\s+(?:Image|Audio)\s*\(/u,
+        // Renaming a location/history object hides subsequent methods from
+        // these surface checks; require review of the alias itself.
+        new RegExp(
+            String.raw`\b(?:const|let|var)\s+[\w$]+\s*=\s*` +
+                String.raw`(?:window\s*\.\s*)?(?:location|history)` +
+                String.raw`\b(?!\s*[.[])`,
+            "u",
+        ),
+    ];
+    return navigation.some((pattern) => pattern.test(remaining));
+}
+
+test("browser navigation inventory distinguishes reviewed local calls", () => {
+    const reviewed = [
+        'window.history.replaceState(null, "", localUrl);',
+        'window.history.replaceState(null, "", localUrl);',
+        "window.location.replace(localUrl);",
+        "window.location.reload();",
+        "const hash = window.location.hash;",
+        "const local = window.location.pathname + window.location.search;",
+    ].join("\n");
+    assert.equal(usesUnreviewedBrowserNavigation(reviewed, true), false);
+    assert.equal(usesUnreviewedBrowserNavigation("const draft = 'text';", false),
+        false);
+    for (const candidate of [
+        "window.location.assign(destination)",
+        "location.assign(destination)",
+        "document.location.replace(destination)",
+        "window.location.replace(destination)",
+        "window.location.reload()",
+        "window.location.href = destination",
+        "window.location['href'] = destination",
+        "window.location.hash = destination",
+        "window.location = destination",
+        "location = destination",
+        "window.history.pushState(null, '', destination)",
+        "window.history.replaceState(null, '', destination)",
+        "history.go(-1)",
+        "history['back']()",
+        "form.submit()",
+        "form.requestSubmit()",
+        "form['submit']()",
+        "anchor.click()",
+        "anchor['click']()",
+        "new Image()",
+        "new Audio()",
+        "const navigatorTarget = window.location;",
+    ]) {
+        assert.equal(usesUnreviewedBrowserNavigation(
+            reviewed + candidate, true), true, candidate);
+        assert.equal(usesUnreviewedBrowserNavigation(candidate, false),
+            true, candidate);
+    }
+});
+
+test("browser source and emitted modules reject unreviewed navigation",
+    async () => {
+    for (const { filename, source } of await browserModuleSources()) {
+        const main = filename === "main.ts" || filename === "main.js";
+        assert.equal(usesUnreviewedBrowserNavigation(source, main), false,
+            `${filename} gained an unreviewed navigation or form request`);
+    }
+});
+
 test("page exit invalidates credential, work, and session text", async () => {
     const source = await readFile(MAIN_MODULE, "utf8");
     const start = source.indexOf(
