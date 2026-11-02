@@ -1730,3 +1730,17 @@ legacy unprefixed and vendor-prefixed `getUserMedia` methods. Ten syntactic
 probes cover first-class, direct and indexed references. The guard is a
 lexical review boundary, not proof that microphone permissions are denied by
 all browsers or that computed runtime names are exhaustively detected.
+
+The browser private-output review also lacked Media Session metadata and
+application badging. These OS-facing APIs can present page-selected status or
+metadata beyond the notebook UI without invoking the permitted Copy prompt
+clipboard operation. Three inactive output references in each of the authored
+and emitted main modules passed all 50 old source-persistence tests; all six
+mutations were restored byte-for-byte.
+
+The zero-owner source inventory now requires review for `MediaMetadata`,
+`MediaSession` / `mediaSession`, and the two app badge methods. Eight
+syntactic probes cover direct, first-class and literal-indexed references.
+This is lexical source policy, not proof that a particular browser exposes
+those APIs or that arbitrary runtime-computed names cannot escape review.
+The browser-launch argv credential leak and P8 acceptance remain open.

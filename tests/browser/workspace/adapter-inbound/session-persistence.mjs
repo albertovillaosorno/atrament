@@ -915,7 +915,9 @@ function hasUnreviewedBrowserDisclosure(source) {
             String.raw`\b(?:console|debugger|reportError|` +
                 String.raw`Notification|alert|confirm|print|speechSynthesis|` +
                 String.raw`SpeechSynthesisUtterance|AudioContext|` +
-                String.raw`webkitAudioContext|AudioWorkletNode)\b`, "u",
+                String.raw`webkitAudioContext|AudioWorkletNode|` +
+                String.raw`MediaMetadata|MediaSession|mediaSession|` +
+                String.raw`setAppBadge|clearAppBadge)\b`, "u",
         ),
         /\bprompt\s*\(/u,
         /\b(?:window|globalThis)\s*(?:\?\.|\.)\s*prompt\b/u,
@@ -946,6 +948,14 @@ test("browser private-output sinks require explicit review", async () => {
             "new AudioContext();",
             "new webkitAudioContext();",
             "new AudioWorkletNode(context, 'processor');",
+            "new MediaMetadata({ title: privateDraft });",
+            "void window.MediaMetadata;",
+            "void MediaSession;",
+            "navigator.mediaSession.metadata = metadata;",
+            'const session = navigator["mediaSession"];',
+            "navigator.setAppBadge(privateCount);",
+            "navigator.clearAppBadge();",
+            'const badge = navigator["setAppBadge"];',
             'navigator.share({ text: "example" });',
             'void navigator["share"];',
             "clipboard.write([]);",
