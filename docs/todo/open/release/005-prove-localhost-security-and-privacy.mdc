@@ -1870,3 +1870,17 @@ The persistence source gate now covers `storageBuckets`, `StorageBucket`,
 run against all ten browser modules. This is lexical authority inventory,
 not a browser persistence experiment, and it cannot establish confinement
 for dynamically assembled names. The opener argv leak and P8 remain open.
+
+The browser's document and video Picture-in-Picture APIs can create a
+separate OS-managed view outside the notebook's own workspace. Nine
+synthetic direct, indexed, and first-class method/constructor references
+passed the earlier output inventory. Six inactive authored/emitted main
+module mutations were then rejected by the expanded guard and restored
+byte-for-byte, with no production behavior changes.
+
+The private-output source gate now inventories `documentPictureInPicture`,
+`requestPictureInPicture`, the named Picture-in-Picture objects, and the
+legacy video presentation setter. This is lexical review, not evidence of
+browser availability, an OS display permission sandbox, or resistance to
+dynamically constructed property names. The known opener-argv credential
+exposure and P8 acceptance remain unresolved.

@@ -1132,7 +1132,10 @@ function hasUnreviewedBrowserDisclosure(source) {
                 String.raw`PresentationRequest|PresentationConnection|` +
                 String.raw`PresentationReceiver|presentation|PaymentRequest|` +
                 String.raw`PaymentResponse|PaymentAddress|` +
-                String.raw`PaymentMethodChangeEvent)\b`, "u",
+                String.raw`PaymentMethodChangeEvent|documentPictureInPicture|` +
+                String.raw`DocumentPictureInPicture|PictureInPictureWindow|` +
+                String.raw`PictureInPictureEvent|requestPictureInPicture|` +
+                String.raw`webkitSetPresentationMode)\b`, "u",
         ),
         /\bprompt\s*\(/u,
         /\b(?:window|globalThis)\s*(?:\?\.|\.)\s*prompt\b/u,
@@ -1179,6 +1182,32 @@ test("browser private-output sinks require explicit review", async () => {
             assert.equal(hasUnreviewedBrowserDisclosure(
                 `${source}\n${candidate}`), true,
             `${filename}: ${candidate} escaped private-output review`);
+        }
+    }
+});
+
+// Picture-in-Picture can present content in a separate OS-managed window
+// without the admitted Copy prompt flow. Its methods and first-class handles
+// need explicit source review even when no video element exists in the shell.
+test("browser picture-in-picture surfaces require review", async () => {
+    const probes = [
+        "window.documentPictureInPicture.requestWindow()",
+        'const pip = globalThis["documentPictureInPicture"];',
+        "const pip = window?.documentPictureInPicture;",
+        "video.requestPictureInPicture()",
+        'const start = video["requestPictureInPicture"];',
+        "void DocumentPictureInPicture;",
+        "void PictureInPictureWindow;",
+        "void PictureInPictureEvent;",
+        'video.webkitSetPresentationMode("picture-in-picture")',
+    ];
+    for (const { filename, source } of await browserModuleSources()) {
+        assert.equal(hasUnreviewedBrowserDisclosure(source), false,
+            `${filename} gained an unreviewed OS display output`);
+        for (const candidate of probes) {
+            assert.equal(hasUnreviewedBrowserDisclosure(
+                `${source}\n${candidate}`), true,
+            `${filename}: ${candidate} escaped picture-in-picture review`);
         }
     }
 });
