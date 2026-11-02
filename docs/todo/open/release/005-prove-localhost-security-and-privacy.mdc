@@ -1798,3 +1798,17 @@ variants are checked across every authored and emitted module. This is not
 runtime evidence of third-party storage permission, exhaustive dynamic alias
 confinement, or a fix for the known browser-launch argv credential exposure.
 P8 acceptance remains open.
+
+The browser host-input inventory also omitted browser Contact Picker,
+Local Font Access, EyeDropper screen sampling, Window Management screen
+inspection, and idle detection. Eight synthetic references to these APIs
+were allowed by the prior source guard, without making any browser calls.
+
+The updated inventory requires review for `navigator.contacts`,
+`ContactsManager`, `queryLocalFonts`, `FontData`, `EyeDropper`,
+`getScreenDetails`, and `IdleDetector`. Thirteen direct, indexed, and
+first-class variants are tested across authored and emitted modules. Six
+individual additions in authored/emitted main source were rejected by the
+new guard and restored byte-for-byte. This does not demonstrate runtime
+permission denial, cover dynamically assembled names, or fix the browser
+launcher's credential-bearing argv. P8 acceptance remains open.

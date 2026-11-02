@@ -610,14 +610,14 @@ function usesUnreviewedBrowserHostInput(source, main) {
     const hostProperty = String.raw`(?:geolocation|mediaDevices|credentials|` +
         String.raw`hardwareConcurrency|deviceMemory|userAgent(?:Data)?|` +
         String.raw`connection|getBattery|getGamepads|bluetooth|usb|` +
-        String.raw`serial|hid|gpu|permissions|requestMIDIAccess)`;
+        String.raw`serial|hid|gpu|permissions|requestMIDIAccess|contacts)`;
     const ambientRead = new RegExp(
         String.raw`\bnavigator\s*(?:(?:\?\.|\.)\s*|(?:\?\.)?\[\s*['"])` +
             hostProperty + String.raw`\b`,
         "u",
     );
-    // Legacy camera/microphone capture and speech recognition can request
-    // device input without touching navigator.mediaDevices.
+    // Legacy media, contacts, local fonts, screen pixels and idle status
+    // can reveal host data without touching navigator.mediaDevices.
     const directCapture = new RegExp(
         String.raw`\b(?:SpeechRecognition|webkitSpeechRecognition|` +
             String.raw`SpeechGrammarList|webkitSpeechGrammarList|` +
@@ -625,7 +625,9 @@ function usesUnreviewedBrowserHostInput(source, main) {
             String.raw`mozGetUserMedia|msGetUserMedia|` +
             String.raw`requestMIDIAccess|MIDIAccess|MIDIPort|MIDIInput|` +
             String.raw`MIDIOutput|MIDIMessageEvent|NDEFReader|NDEFMessage|` +
-            String.raw`NDEFRecord|NDEFReadingEvent)\b`, "u",
+            String.raw`NDEFRecord|NDEFReadingEvent|ContactsManager|` +
+            String.raw`queryLocalFonts|FontData|EyeDropper|` +
+            String.raw`getScreenDetails|IdleDetector)\b`, "u",
     );
     if (ambientRead.test(source)
         || directCapture.test(source)
@@ -750,6 +752,38 @@ test("browser host-input inventory refuses unreviewed reads", () => {
             allowedWrite + candidate, true), true, candidate);
         assert.equal(usesUnreviewedBrowserHostInput(candidate, false),
             true, candidate);
+    }
+});
+
+// The contact picker, local font enumeration, screen picker, window
+// placement and idle detection expose user or host data beyond draft text.
+// They need explicit admission even if a browser will prompt the user.
+test("browser contact and desktop host-data references need review",
+    async () => {
+    const probes = [
+        'navigator.contacts.select(["name"])',
+        'const contacts = navigator?.["contacts"];',
+        "const picker = navigator.contacts;",
+        "void ContactsManager;",
+        "window.queryLocalFonts()",
+        'const fonts = globalThis["queryLocalFonts"];',
+        "void FontData;",
+        "new EyeDropper();",
+        'const picker = window["EyeDropper"];',
+        "window.getScreenDetails()",
+        'const details = window["getScreenDetails"];',
+        "new IdleDetector();",
+        'const detector = globalThis["IdleDetector"];',
+    ];
+    for (const { filename, source } of await browserModuleSources()) {
+        const main = filename === "main.ts" || filename === "main.js";
+        assert.equal(usesUnreviewedBrowserHostInput(source, main), false,
+            `${filename} gained an unreviewed host-data read`);
+        for (const candidate of probes) {
+            assert.equal(usesUnreviewedBrowserHostInput(
+                `${source}\n${candidate}`, main), true,
+            `${filename}: ${candidate} escaped desktop host-data review`);
+        }
     }
 });
 
